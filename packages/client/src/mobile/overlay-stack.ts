@@ -1,7 +1,10 @@
 /*
  * A LIFO registry of the overlays that are open right now — dialogs, the nav
- * drawer, anything that covers the screen and should absorb one press of
- * Android's hardware back button before the app navigates or exits.
+ * drawer, anything that covers the screen and should absorb the next press of
+ * Android's hardware back button that reaches the WebView, before the app
+ * navigates or exits. "That reaches the WebView" is load-bearing: with the IME
+ * showing, Android spends the first press dismissing the keyboard and never
+ * delivers it here — see the press contract in mobile/back-button.ts.
  *
  * Why a registry and not the URL: a WebView reload always lands on `/`
  * (ios/App/App/Router.swift serves the root index.html for any extensionless

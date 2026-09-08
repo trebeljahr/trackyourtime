@@ -200,7 +200,7 @@ web assets (`ios/App/App/public`, `android/app/src/main/assets/public`) and
 `android/capacitor-cordova-android-plugins/`. A checkout that has never run
 `pnpm build:mobile` therefore cannot open in Xcode or Gradle — build first.
 
-Two Android-only notes. Its **document origin is `https://localhost`**, iOS's
+Three Android-only notes. Its **document origin is `https://localhost`**, iOS's
 is `capacitor://localhost`; both are in the dev trust list. Never set a custom
 `iosScheme`/`androidScheme` — the scheme *is* the origin, so changing it later
 orphans every stored Preference and invalidates the trust list at once. And
@@ -209,6 +209,15 @@ runtime no longer reads `server.cleartext` at all, so a dev build talking to a
 local API needs `app/src/debug/res/xml/network_security_config.xml`. It is in
 the **debug** source set: release builds get no cleartext exception, which is
 stricter than the iOS side's `Info.plist`.
+
+And the **hardware back button takes two presses with the keyboard up**, one
+without. Android gives the first press to the IME, which dismisses the
+keyboard; the WebView is never told, so `mobile/back-button.ts` is not called
+and the open dialog stays open. The second press reaches it and closes it. That
+is the platform's ordering and the one users expect — do not import
+`@capacitor/keyboard` to collapse it into one press, which would take back away
+from the keyboard. A test in `back-button.test.ts` pins that the module never
+does.
 
 **Release signing is environment-driven and optional.**
 `android/app/build.gradle` builds a `signingConfigs.release` only when

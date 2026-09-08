@@ -24,6 +24,19 @@ export type BackButtonDeps = {
  * survive a reload not the ones the user would expect. Root-tab-then-exit is
  * the platform convention and it is the one that can be reasoned about.
  *
+ * HOW MANY PRESSES THIS TAKES, because it is asked as though it were one.
+ * With the soft keyboard up — or a field focused while a hardware keyboard is
+ * attached — Android gives the first press to the IME, which dismisses the
+ * keyboard; the WebView is never told, so this function is not called and the
+ * dialog stays open. The second press arrives here and closes it. With nothing
+ * focused it is one press. That ordering is the platform's and it is the one
+ * users expect: back takes the keyboard away first.
+ *
+ * Which is why nothing here touches `@capacitor/keyboard`. Hiding the IME
+ * ourselves so that one press could close the dialog would mean stealing the
+ * press Android had already spent, leaving the user with a keyboard they
+ * cannot dismiss with the button that dismisses keyboards.
+ *
  * Returns whether the app consumed the press; `false` means exit.
  */
 export function handleBackPress({

@@ -280,11 +280,22 @@ NEXT_PUBLIC_API_URL=http://localhost:51590 pnpm build:mobile ios
   AAB it produces is unsigned and that the three keystore secrets it passes are
   read by nothing, so a green build cannot be mistaken for an uploadable one.
 - **The hardware back button behaves as designed**, verified on an emulator for
-  all three rules. One caveat worth writing down: the *first* press with a
-  dialog open is consumed by the IME whenever a field inside it is focused,
-  even when no keyboard is visible (a hardware keyboard is attached). That is
-  Android's own ordering, not a gap in the overlay stack, and it cost an hour
-  of misdiagnosis — `dumpsys input_method | grep mInputShown` settles it.
+  all three rules. The press contract is not one press, though, and the
+  acceptance criterion in stage 9 said it was; it now says this instead. With
+  the IME showing — or a field focused while a hardware keyboard is attached,
+  which is the emulator's default and is what cost an hour of misdiagnosis —
+  Android gives the *first* press to the input method, which dismisses the
+  keyboard. The WebView never receives that press, so `handleBackPress` is not
+  called and the dialog is still open, exactly as it should be: back dismissing
+  the keyboard before anything else is what a phone user expects. The second
+  press reaches the app and closes the dialog. With nothing focused, one press.
+  `dumpsys input_method | grep mInputShown` settles which case you are in.
+- **Do not "fix" that by hiding the keyboard from the back handler.** Calling
+  `Keyboard.hide()` so the dialog can close on the first press spends the press
+  Android had already spent, and takes away the only button that dismisses an
+  IME. `mobile/back-button.ts` therefore imports nothing from
+  `@capacitor/keyboard`, and a test asserts it stays that way — the correction
+  here is to the criterion, not to the code.
 
 **Phone-UI review corrections** (post-implementation, from the adversarial
 review). Each of these contradicts something written above; the code is right
@@ -594,7 +605,7 @@ Fix both dev scripts while here. Neither exports `NEXT_PUBLIC_API_URL` nor start
 
 **Verification**
 
-Emulator: build and launch, sign in, start and stop a timer, confirm the entry on the web app. Press the hardware back button with a dialog open — it closes the dialog (stage 3's overlay stack); press it on the Track tab with no history — the app exits rather than blanking. `bash scripts/android-dev.sh` reaches a login form that returns a real 4xx from the API rather than a 404 from the Next dev server, and running it does not kill an unrelated `adb` or a `pnpm dev:desktop` session started beforehand. `./gradlew bundleRelease` with the keystore env set produces a signed AAB (`jarsigner -verify`). Web untouched: no client file changes in this stage.
+Emulator: build and launch, sign in, start and stop a timer, confirm the entry on the web app. Press the hardware back button with a dialog open and **nothing focused** — one press closes the dialog (stage 3's overlay stack). With a field in that dialog focused it takes **two**: Android gives the first press to the IME, which dismisses the keyboard, and the WebView is never told about it. Both are correct; a criterion of "one press" is only right for the unfocused case, and reading it as universal sends you looking for a bug in the overlay stack that is not there. Press it on the Track tab with no history — the app exits rather than blanking. `bash scripts/android-dev.sh` reaches a login form that returns a real 4xx from the API rather than a 404 from the Next dev server, and running it does not kill an unrelated `adb` or a `pnpm dev:desktop` session started beforehand. `./gradlew bundleRelease` with the keystore env set produces a signed AAB (`jarsigner -verify`). Web untouched: no client file changes in this stage.
 
 ### Stage 10 — Store release pipeline — DEFERRABLE, gated on open questions 2 and 4
 
