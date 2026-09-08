@@ -113,6 +113,13 @@ export async function authenticateUpgrade(
  *    cookie cache, and without this flag a revoked web session would keep
  *    answering from that cache instead of from the session table. A socket
  *    re-check that reads a cache is not a re-check.
+ *  - `disableRefresh` — this is a question, not a use. Without it the probe
+ *    also *extends* the session it is asking about, once a minute, for as long
+ *    as the socket is open: an open browser tab would renew its own session
+ *    forever, and every renewal is a write. It costs nothing to give up,
+ *    because the same lookup still reads the session row and still reports a
+ *    deleted or expired one as `revoked` — better-auth checks that before it
+ *    looks at this flag (`api/routes/session.mjs`).
  *  - a throw is `"unknown"`, never `"revoked"` — a database hiccup must not
  *    sign every connected device out. Only a clean "no session" closes a
  *    socket.
@@ -123,7 +130,7 @@ export async function probeUpgradeSession(
   try {
     const session = await getAuth().api.getSession({
       headers,
-      query: { disableCookieCache: true },
+      query: { disableCookieCache: true, disableRefresh: true },
     });
     return session?.user ? "live" : "revoked";
   } catch {

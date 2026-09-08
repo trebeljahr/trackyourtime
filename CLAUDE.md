@@ -527,18 +527,28 @@ the very thing being replaced.
   marker (which does not) is what tells a fresh install from a relaunch, so
   delete-and-reinstall means signed out rather than resuming a previous — possibly
   a previous *user's* — session.
-- Session lifetime is set explicitly in `auth/session-lifetime.ts` (30 days,
-  refreshed at most daily), not inherited from better-auth's 7-day default: a
+- Session lifetime is **per client kind**, in `auth/session-lifetime.ts`:
+  thirty days for a stored-token client (mobile, desktop, Raycast, extension,
+  CLI), seven for a browser cookie session. The long window exists because a
   phone left in a drawer over a holiday would otherwise come back to a session
   row the next lookup deletes, and replay a day of offline-tracked time into
-  401s. **`session.expiresIn` is global**, so this is not a mobile setting: it
-  moved every browser cookie session on the web app from 7 days to 30 at the
-  same time, cookie `max-age` included. Accepted deliberately — solo-user,
-  self-hosted, and revocation is independent of the window (Settings → Devices
-  deletes the row; the next request 401s and the socket closes within a
-  minute). better-auth 1.6.11 offers no clean per-client scope: a per-session
-  `expiresAt` written in `databaseHooks` is recomputed from the global value on
-  the session's first refresh. The full argument is in the module.
+  401s; the short one exists because nothing about a browser needs a month, and
+  a laptop signed in once and never touched again should not stay signed in
+  that long.
+  `session.expiresIn` really is a single global number, but it is not the last
+  word: `databaseHooks.session.create.before` **and** `.update.before` both get
+  to rewrite `expiresAt`, and between them they cover the two places better-auth
+  reads the global (row creation, and the refresh in `api/routes/session.mjs`).
+  The create hook alone is the trap — a shortened row comes back at the global
+  value the first time it is used. The refresh reads the client **stamped on
+  the session row**, never the request that triggered it, so a WebSocket
+  re-check (whose handshake carries no `x-tracktime-client`) cannot demote a
+  phone, and a browser cannot promote itself later. The global stays at the
+  long value on purpose — the refresh *trigger* is computed against it — and
+  `ws/auth.ts` asks with `disableRefresh` so a socket's liveness probe stops
+  renewing the session it is only supposed to be checking. All of it is argued
+  in the module and run against the real library in
+  `tests/session-lifetime-integration.test.ts`.
 - An expired or revoked session **stops** the offline flush and keeps the rows
   (`isAuthError` in `lib/offline.ts`). Dropping them is the default for a server
   refusal and is right for a validation error; it is never right for "we do not

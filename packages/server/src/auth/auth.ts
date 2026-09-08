@@ -6,15 +6,16 @@ import { organization } from "better-auth/plugins/organization";
 import { MongoClient } from "mongodb";
 import { env, getTrustedOrigins } from "../config/env.js";
 import { isEmailDeliveryConfigured, sendEmail } from "../services/email.js";
-import {
-  DEVICE_FLOW_CLIENT_IDS,
-  clientKindFromHeaders,
-  normalizeClientKind,
-} from "./client-label.js";
+import { DEVICE_FLOW_CLIENT_IDS } from "./client-label.js";
 import { createPersonalWorkspace } from "./personal-workspace.js";
 import {
-  SESSION_EXPIRES_IN_SECONDS,
+  clientKindForNewSession,
+  expiryForNewSession,
+  expiryForSessionRefresh,
+} from "./session-hooks.js";
+import {
   SESSION_UPDATE_AGE_SECONDS,
+  TOKEN_CLIENT_SESSION_SECONDS,
 } from "./session-lifetime.js";
 
 /**
@@ -113,13 +114,16 @@ export async function initAuth(): Promise<void> {
 
     session: {
       /**
-       * Thirty days rather than better-auth's seven, and **global** — this
-       * lengthens the web app's browser cookie sessions exactly as much as the
-       * mobile app's stored tokens. The argument for the number, the web
-       * consequence, and why better-auth 1.6.11 cannot scope it per client are
-       * all in `auth/session-lifetime.ts`. Read that before changing it.
+       * The **ceiling**, not the answer: thirty days, which is what a token
+       * client (mobile, desktop, Raycast, the extension, the CLI) gets.
+       * Browser cookie sessions are cut back to seven by the `session` hooks
+       * below, which rewrite `expiresAt` on create and on every refresh.
+       *
+       * Why the global has to be the long one rather than the short one — the
+       * refresh trigger is computed against it — is argued in
+       * `auth/session-lifetime.ts`. Read that before changing either number.
        */
-      expiresIn: SESSION_EXPIRES_IN_SECONDS,
+      expiresIn: TOKEN_CLIENT_SESSION_SECONDS,
       updateAge: SESSION_UPDATE_AGE_SECONDS,
       cookieCache: {
         enabled: true,
@@ -244,25 +248,45 @@ export async function initAuth(): Promise<void> {
       session: {
         create: {
           /**
-           * Stamp each new session with the client that created it, so the
-           * devices list can say "Raycast" rather than guessing from a user
-           * agent that non-browser clients barely set.
+           * Stamp each new session with the client that created it, and give
+           * it that client's session window.
            *
-           * Password sign-in carries `x-tracktime-client`; the device flow
-           * carries `client_id` in the /device/token body. Cosmetic only.
+           * The stamp is what lets the devices list say "Raycast" rather than
+           * guessing from a user agent that non-browser clients barely set,
+           * and it is cosmetic. The window is not: `expiresAt` here is what
+           * makes a browser session seven days and a phone's thirty, since
+           * better-auth's `session.expiresIn` is one global number. See
+           * `auth/session-lifetime.ts`.
            */
           before: async (session, context) => {
-            const fromHeader = clientKindFromHeaders(
-              context?.headers ?? context?.request?.headers,
-            );
-            const body: unknown = context?.body;
-            const clientId =
-              typeof body === "object" && body !== null
-                ? (body as { client_id?: unknown }).client_id
-                : undefined;
-            const fromBody = normalizeClientKind(clientId);
-            const client = fromHeader !== "unknown" ? fromHeader : fromBody;
-            return { data: { ...session, client } };
+            const client = clientKindForNewSession(context);
+            return {
+              data: {
+                ...session,
+                client,
+                expiresAt: expiryForNewSession(context),
+              },
+            };
+          },
+        },
+        update: {
+          /**
+           * Keep a refreshed session on its own window.
+           *
+           * Without this the split above would last exactly one refresh:
+           * better-auth re-expires a session to the *global* `expiresIn`
+           * (`api/routes/session.mjs`), so a seven-day browser row would come
+           * back as thirty the first time the browser was used — scoped in
+           * appearance, global in behaviour.
+           *
+           * The client is read off the session row, not off the request that
+           * triggered the refresh; `auth/session-hooks.ts` says why. Updates
+           * that are not moving `expiresAt` — the organization plugin writing
+           * the active workspace, say — are left untouched.
+           */
+          before: async (update, context) => {
+            const expiresAt = expiryForSessionRefresh(update, context);
+            return expiresAt ? { data: { ...update, expiresAt } } : undefined;
           },
         },
       },
