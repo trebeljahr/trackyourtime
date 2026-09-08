@@ -21,11 +21,12 @@ import type { WebSocket } from "ws";
 /**
  * Close code for a socket dropped because its session is gone.
  *
- * In the application range (4000-4999) and deliberately echoing HTTP 401, so
- * a client can tell "you were signed out" from "the network died" — the
- * upgrade path already answers a bare 401 for the same reason.
+ * Defined in `@starter/shared` and re-exported here, because the client half
+ * of this — stop reconnecting, forget the token, say so — has to match the
+ * number exactly, and a client that got it wrong would just reconnect-loop in
+ * silence. One definition, on the protocol both ends already import.
  */
-export const SESSION_REVOKED_CLOSE_CODE = 4401;
+export { SESSION_REVOKED_CLOSE_CODE } from "@starter/shared";
 
 /**
  * What a re-check concluded.

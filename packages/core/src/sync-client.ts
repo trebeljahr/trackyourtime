@@ -1,5 +1,6 @@
 import {
   isSyncMessage,
+  SESSION_REVOKED_CLOSE_CODE,
   type ServerToClientMessage,
   type SyncEvent,
 } from "@starter/shared";
@@ -22,6 +23,27 @@ export type SyncClientOptions = {
    * token that arrived from secure storage after the socket was created.
    */
   token?: string | (() => string | undefined);
+  /**
+   * The server closed this socket with `SESSION_REVOKED_CLOSE_CODE` — the
+   * session behind it no longer exists (signed out from Settings → Devices,
+   * expired, or deleted). Called at most once per client.
+   *
+   * Reconnection stops before this fires, and stays stopped: the credential
+   * this client was built with will never be accepted again, so a backoff is
+   * pure noise and a sync indicator that never settles is a lie. That halt
+   * applies whether or not a host passes this callback, which is why the
+   * hosts that do not — Raycast, the browser extension — inherit the fix
+   * safely. What they cannot inherit is the clearing: the token lives in
+   * Keychain, `chrome.storage` or Raycast's own store depending on who is
+   * asking, so forgetting it is the host's job and this is the notification
+   * that it needs doing.
+   *
+   * Recovery is by construction: every host builds a NEW client when its
+   * session changes (`useSync` is keyed on the token, the extension's
+   * `reload()` rebuilds the runtime, a Raycast command is a fresh process),
+   * so nothing has to un-latch this one.
+   */
+  onSessionRevoked?: () => void;
   /** Injectable for Node tests and non-DOM hosts. */
   WebSocketImpl?: typeof WebSocket;
   minBackoffMs?: number;
@@ -71,6 +93,7 @@ export const createSyncClient = ({
   onEvent,
   onStatus,
   token,
+  onSessionRevoked,
   WebSocketImpl,
   minBackoffMs = 1000,
   maxBackoffMs = 30_000,
@@ -83,6 +106,12 @@ export const createSyncClient = ({
   let attempt = 0;
   let retryHandle: ReturnType<typeof setTimeout> | null = null;
   let closedByCaller = false;
+  /**
+   * Latched by a 4401 close. Nothing clears it — see `onSessionRevoked`.
+   * `connect()` and `reconnect()` become no-ops rather than throwing, so the
+   * extension's 30-second "is the socket up?" nudge stays harmless.
+   */
+  let revoked = false;
 
   const setStatus = (next: SyncStatus): void => {
     if (status === next) return;
@@ -97,7 +126,7 @@ export const createSyncClient = ({
   };
 
   const scheduleReconnect = (): void => {
-    if (closedByCaller || retryHandle) return;
+    if (closedByCaller || revoked || retryHandle) return;
     const delay = backoffMs();
     attempt += 1;
     retryHandle = setTimeout(() => {
@@ -125,6 +154,7 @@ export const createSyncClient = ({
   };
 
   const open = (): void => {
+    if (revoked) return;
     if (!SocketCtor) {
       setStatus("closed");
       return;
@@ -170,9 +200,40 @@ export const createSyncClient = ({
     created.onerror = () => {
       /* the close handler drives reconnection */
     };
-    created.onclose = () => {
+    created.onclose = (event?: { code?: number }) => {
       if (!isCurrent()) return;
       socket = null;
+
+      /*
+       * "You were signed out" is not "the network died".
+       *
+       * Everything else here — a dropped Wi-Fi, a server restart, a phone
+       * that went into a tunnel — is worth retrying, and the backoff above
+       * exists for exactly those. A revoked session is the one close this
+       * client can never recover from on its own, so retrying it is a
+       * reconnect loop that no amount of waiting resolves, hidden behind a
+       * sync dot that never settles.
+       *
+       * `event` is read defensively: a close event always carries a code in a
+       * browser and in `ws`, but this handler is also driven directly by test
+       * doubles and by hosts with their own socket shims, and an absent code
+       * must mean "ordinary close" rather than "signed out".
+       */
+      if (event?.code === SESSION_REVOKED_CLOSE_CODE) {
+        revoked = true;
+        if (retryHandle) {
+          clearTimeout(retryHandle);
+          retryHandle = null;
+        }
+        setStatus("closed");
+        try {
+          onSessionRevoked?.();
+        } catch {
+          // A throwing host must not leave the latch half-applied.
+        }
+        return;
+      }
+
       setStatus("closed");
       scheduleReconnect();
     };
@@ -180,10 +241,12 @@ export const createSyncClient = ({
 
   return {
     connect: () => {
+      if (revoked) return;
       closedByCaller = false;
       open();
     },
     reconnect: () => {
+      if (revoked) return;
       closedByCaller = true;
       if (retryHandle) {
         clearTimeout(retryHandle);

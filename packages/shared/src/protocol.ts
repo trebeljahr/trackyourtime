@@ -97,3 +97,16 @@ export const isSyncMessage = (
     typeof (event as { kind?: unknown }).kind === "string"
   );
 };
+
+/**
+ * Close code for a socket the server dropped because its session is gone —
+ * signed out from Settings → Devices, expired, or deleted outright.
+ *
+ * In the application range (4000-4999) and deliberately echoing HTTP 401, so
+ * a client can tell "you were signed out" from "the network died". It lives
+ * here, in the protocol, rather than beside either end of it: the server
+ * writes the number and every client reads it, and a client that reconnects
+ * forever because the two disagreed by one digit is a silent failure on the
+ * device, not a build error anywhere.
+ */
+export const SESSION_REVOKED_CLOSE_CODE = 4401;

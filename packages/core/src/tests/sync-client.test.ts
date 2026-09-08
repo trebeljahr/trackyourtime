@@ -14,7 +14,7 @@ import { createServer, type Server } from "node:http";
 import { after, test } from "node:test";
 import { WebSocketServer } from "ws";
 import { createSyncClient } from "../sync-client.js";
-import type { SyncEvent } from "@starter/shared";
+import { SESSION_REVOKED_CLOSE_CODE, type SyncEvent } from "@starter/shared";
 
 const BEARER = "bearer.";
 
@@ -22,15 +22,24 @@ type Harness = {
   url: string;
   /** Subprotocols the last connection offered. */
   offered: string[];
+  /** How many times a client has completed the upgrade. */
+  connections: () => number;
   send: (event: SyncEvent, originId?: string) => void;
   sendRaw: (payload: string) => void;
+  /** Close every live socket with a specific code, as the sweep does. */
+  closeAll: (code: number, reason: string) => void;
   close: () => Promise<void>;
 };
 
 const harness = async (): Promise<Harness> => {
   const http: Server = createServer();
-  const state: { offered: string[]; sockets: Set<import("ws").WebSocket> } = {
+  const state: {
+    offered: string[];
+    connections: number;
+    sockets: Set<import("ws").WebSocket>;
+  } = {
     offered: [],
+    connections: 0,
     sockets: new Set(),
   };
 
@@ -47,6 +56,7 @@ const harness = async (): Promise<Harness> => {
   });
 
   wss.on("connection", (socket) => {
+    state.connections += 1;
     state.sockets.add(socket);
     socket.on("close", () => state.sockets.delete(socket));
   });
@@ -60,6 +70,7 @@ const harness = async (): Promise<Harness> => {
     get offered() {
       return state.offered;
     },
+    connections: () => state.connections,
     send: (event, originId) => {
       const payload = JSON.stringify({
         type: "tt:sync",
@@ -70,6 +81,9 @@ const harness = async (): Promise<Harness> => {
     },
     sendRaw: (payload) => {
       for (const socket of state.sockets) socket.send(payload);
+    },
+    closeAll: (code, reason) => {
+      for (const socket of state.sockets) socket.close(code, reason);
     },
     close: () =>
       new Promise<void>((resolve) => {
@@ -180,4 +194,115 @@ test("a malformed frame is ignored rather than killing the socket", async () => 
 
   assert.equal(client.status(), "open");
   assert.deepEqual(received, [{ kind: "favorites.changed" }]);
+});
+
+
+/** Resolves once `predicate` holds, or rejects at the deadline. */
+const until = (predicate: () => boolean, label: string): Promise<void> =>
+  new Promise<void>((resolve, reject) => {
+    const started = Date.now();
+    const id = setInterval(() => {
+      if (predicate()) {
+        clearInterval(id);
+        resolve();
+        return;
+      }
+      if (Date.now() - started > 3000) {
+        clearInterval(id);
+        reject(new Error(`timed out waiting for ${label}`));
+      }
+    }, 5);
+  });
+
+const idle = (ms: number): Promise<void> =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+/**
+ * Revocation, over a real socket closed with the real code.
+ *
+ * The server sweeps live sockets and closes a revoked session's with 4401
+ * (`ws/session-watch.ts`). Before this, the client read that as any other
+ * disconnect and went into backoff — so a device signed out in Settings →
+ * Devices reconnected forever against a credential the server had
+ * permanently rejected, showing a sync dot that never settled and saying
+ * nothing. The number is shared through `@starter/shared` precisely so the
+ * two ends cannot disagree; this asserts the client end of it end to end.
+ */
+test("a 4401 close stops the reconnect loop and reports the revocation", async () => {
+  const server = await harness();
+  after(() => server.close());
+
+  let revoked = 0;
+  const client = createSyncClient({
+    url: server.url,
+    token: "revoked-token",
+    onEvent: () => undefined,
+    onSessionRevoked: () => {
+      revoked += 1;
+    },
+    // Tight, so a retry this test is asserting the absence of would have had
+    // several chances to happen before the assertion runs.
+    minBackoffMs: 10,
+    maxBackoffMs: 10,
+  });
+  after(() => client.close());
+
+  client.connect();
+  await until(() => client.status() === "open", "the socket to open");
+  assert.equal(server.connections(), 1);
+
+  server.closeAll(SESSION_REVOKED_CLOSE_CODE, "session revoked");
+  await until(() => revoked === 1, "the revocation callback");
+
+  assert.equal(client.status(), "closed");
+
+  // The host is told once, and the socket stays down. A nudge — which is
+  // exactly what the browser extension's 30-second alarm does — must not
+  // resurrect a session the server has thrown away.
+  await idle(150);
+  client.connect();
+  client.reconnect();
+  await idle(150);
+
+  assert.equal(server.connections(), 1, "no socket was reopened");
+  assert.equal(revoked, 1, "the host was told exactly once");
+  assert.equal(client.status(), "closed");
+});
+
+/**
+ * The negative control, and the more dangerous half.
+ *
+ * "Any disconnect signs you out" would be far worse than the bug being fixed:
+ * a phone that loses signal for a moment would land on the login screen with
+ * its token wiped. An ordinary close must still go through the backoff.
+ */
+test("an ordinary close still reconnects and never reports a revocation", async () => {
+  const server = await harness();
+  after(() => server.close());
+
+  let revoked = 0;
+  const client = createSyncClient({
+    url: server.url,
+    token: "good-token",
+    onEvent: () => undefined,
+    onSessionRevoked: () => {
+      revoked += 1;
+    },
+    minBackoffMs: 10,
+    maxBackoffMs: 10,
+  });
+  after(() => client.close());
+
+  client.connect();
+  await until(() => client.status() === "open", "the first socket to open");
+  assert.equal(server.connections(), 1);
+
+  // 1001 "going away" — a server restart, a proxy recycling a connection.
+  server.closeAll(1001, "going away");
+
+  await until(() => server.connections() === 2, "the automatic reconnect");
+  await until(() => client.status() === "open", "the socket to come back");
+  assert.equal(revoked, 0, "an ordinary close is not a revocation");
 });
