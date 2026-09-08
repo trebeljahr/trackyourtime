@@ -1,201 +1,55 @@
 /**
- * The shape an entry mutation writes into the cache before the server answers.
+ * The web client's binding for the shared optimistic-entry shapes.
  *
- * Every optimistic write has to guess what the server is about to store, and
- * the money fields are the part that must not be guessed differently in two
- * places: `hourlyRate` and `currency` are SNAPSHOTS taken at create/stop time,
- * so a screen that shapes them its own way shows one number for a second and a
- * different one after the round trip. These builders are pure and shared, so
- * the tracker and the timesheet cannot drift apart.
- *
- * Pure on purpose — they take the catalog and settings they need rather than
- * reading a query cache, which is what makes them testable and reusable from
- * any screen.
+ * The builders themselves live in `@starter/core` so that Raycast — which
+ * queues the same mutations offline and has to guess the same money snapshot —
+ * cannot shape an entry differently from the tracker or the timesheet grid.
+ * What stays here is the one thing core cannot know: which client this is.
+ * `source` is stamped once at write time and is not backfillable, so it is
+ * injected on every call rather than defaulted anywhere.
  */
 
-import { deviceTimeZone } from "@starter/core";
 import {
-  entryAmount,
-  resolveHourlyRate,
-  type DetailedEntry,
-  type ResolvedSettings,
-  type TimeEntry,
-} from "@starter/shared";
+  buildOptimisticEntry as buildOptimisticEntryCore,
+  decorateEntry as decorateEntryCore,
+  projectFacts as projectFactsCore,
+  stoppedEntryShape as stoppedEntryShapeCore,
+  type EntryShapeContext as CoreEntryShapeContext,
+  type OptimisticEntryArgs,
+  type ProjectFacts,
+  type ShapeableProject,
+  type ShapeableTask,
+} from "@starter/core";
+import type { DetailedEntry, TimeEntry } from "@starter/shared";
 import { entrySource } from "@/lib/entry-source";
 
-/** The catalog fields an optimistic entry needs. Matches `projects.list`. */
-export type ShapeableProject = {
-  id: string;
-  name: string;
-  color: string;
-  clientName?: string | null;
-  hourlyRate?: number | null;
-};
+export type { OptimisticEntryArgs, ProjectFacts, ShapeableProject, ShapeableTask };
 
-/** Matches `tasks.list`; used only to label a row before the server replies. */
-export type ShapeableTask = {
-  id: string;
-  name: string;
-};
+/** Core's context minus `source`, which this module supplies. */
+export type EntryShapeContext = Omit<CoreEntryShapeContext, "source">;
 
-export type EntryShapeContext = {
-  projects: readonly ShapeableProject[];
-  /** Optional: without it a fresh entry's `taskName` is null until it syncs. */
-  tasks?: readonly ShapeableTask[];
-  /** Null while `settings.get` is still in flight. */
-  settings: Pick<
-    ResolvedSettings,
-    "workspaceId" | "userId" | "currency" | "defaultHourlyRate"
-  > | null;
-};
-
-export type ProjectFacts = {
-  projectName: string | null;
-  projectColor: string | null;
-  clientName: string | null;
-  /** The project's configured rate — an input to the snapshot, not a value. */
-  projectRate: number | null;
-};
-
-const NO_PROJECT: ProjectFacts = {
-  projectName: null,
-  projectColor: null,
-  clientName: null,
-  projectRate: null,
-};
+const withSource = (context: EntryShapeContext): CoreEntryShapeContext => ({
+  ...context,
+  source: entrySource(),
+});
 
 export const projectFacts = (
   context: EntryShapeContext,
   projectId: string | null
-): ProjectFacts => {
-  if (projectId === null) return NO_PROJECT;
-  const project = context.projects.find(
-    (candidate) => candidate.id === projectId
-  );
-  return {
-    projectName: project?.name ?? null,
-    projectColor: project?.color ?? null,
-    clientName: project?.clientName ?? null,
-    projectRate: project?.hourlyRate ?? null,
-  };
-};
+): ProjectFacts => projectFactsCore(withSource(context), projectId);
 
-const taskName = (
-  context: EntryShapeContext,
-  taskId: string | null
-): string | null => {
-  if (taskId === null) return null;
-  return context.tasks?.find((task) => task.id === taskId)?.name ?? null;
-};
-
-const durationBetween = (start: string, end: string): number =>
-  Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000));
-
-/** Decorate a server entry with the catalog labels a list renders. */
 export const decorateEntry = (
   context: EntryShapeContext,
   entry: TimeEntry
-): DetailedEntry => {
-  const project = projectFacts(context, entry.projectId);
-  return {
-    ...entry,
-    projectName: project.projectName,
-    projectColor: project.projectColor,
-    clientName: project.clientName,
-    taskName: taskName(context, entry.taskId),
-    amount: entryAmount(entry.durationSec, entry.hourlyRate),
-  };
-};
+): DetailedEntry => decorateEntryCore(withSource(context), entry);
 
-export type OptimisticEntryArgs = {
-  id: string;
-  description: string;
-  projectId: string | null;
-  taskId: string | null;
-  billable: boolean;
-  start: string;
-  end: string | null;
-  /** Tags the caller asked for. Omitted means untagged. */
-  tagIds?: string[];
-};
-
-/** The entry the server is about to create, as far as this client can tell. */
 export const buildOptimisticEntry = (
   context: EntryShapeContext,
   args: OptimisticEntryArgs
-): DetailedEntry => {
-  const { settings } = context;
-  const project = projectFacts(context, args.projectId);
-  const hourlyRate = resolveHourlyRate({
-    billable: args.billable,
-    projectRate: project.projectRate,
-    defaultRate: settings?.defaultHourlyRate ?? null,
-  });
-  const durationSec =
-    args.end === null ? 0 : durationBetween(args.start, args.end);
-  const stamp = new Date().toISOString();
+): DetailedEntry => buildOptimisticEntryCore(withSource(context), args);
 
-  return {
-    id: args.id,
-    workspaceId: settings?.workspaceId ?? "",
-    authorId: settings?.userId ?? "",
-    description: args.description,
-    projectId: args.projectId,
-    taskId: args.taskId,
-    billable: args.billable,
-    start: args.start,
-    end: args.end,
-    durationSec,
-    hourlyRate,
-    currency: settings?.currency ?? "EUR",
-    source: entrySource(),
-    timeZone: deviceTimeZone(),
-    // Server-owned: only the runaway guard ever writes it.
-    runaway: null,
-    // Echo the tags the caller asked for, so the row is not briefly untagged
-    // before the server answers — which reads as the tag failing to stick.
-    tagIds: args.tagIds ?? [],
-    // Freshly created time is never on an invoice yet.
-    invoiceId: null,
-    importId: null,
-    createdAt: stamp,
-    updatedAt: stamp,
-    projectName: project.projectName,
-    projectColor: project.projectColor,
-    clientName: project.clientName,
-    taskName: taskName(context, args.taskId),
-    amount: entryAmount(durationSec, hourlyRate),
-  };
-};
-
-/** The stopped shape the server would write for a running entry. */
 export const stoppedEntryShape = (
   context: EntryShapeContext,
   running: TimeEntry,
   end: string
-): DetailedEntry => {
-  const { settings } = context;
-  const project = projectFacts(context, running.projectId);
-  const safeEnd =
-    Date.parse(end) > Date.parse(running.start) ? end : running.start;
-  const hourlyRate = resolveHourlyRate({
-    billable: running.billable,
-    projectRate: project.projectRate,
-    defaultRate: settings?.defaultHourlyRate ?? null,
-  });
-  const durationSec = durationBetween(running.start, safeEnd);
-
-  return {
-    ...running,
-    end: safeEnd,
-    durationSec,
-    hourlyRate,
-    currency: settings?.currency ?? running.currency,
-    updatedAt: safeEnd,
-    projectName: project.projectName,
-    projectColor: project.projectColor,
-    clientName: project.clientName,
-    taskName: taskName(context, running.taskId),
-    amount: entryAmount(durationSec, hourlyRate),
-  };
-};
+): DetailedEntry => stoppedEntryShapeCore(withSource(context), running, end);

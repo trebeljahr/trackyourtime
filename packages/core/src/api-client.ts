@@ -38,6 +38,24 @@ const PERMANENT_REJECTIONS = new Set([400, 404, 409, 410, 422]);
 export const isPermanentRejection = (error: unknown): boolean =>
   error instanceof ApiError && PERMANENT_REJECTIONS.has(error.httpStatus);
 
+/**
+ * True when a call never reached the server, so keeping the mutation is safe.
+ *
+ * `createApiClient` throws `ApiError` for everything the server answered —
+ * 4xx and 5xx included — and lets the transport's own failure through
+ * untouched. So "not an ApiError" is exactly "no answer came back", with no
+ * message sniffing and no `navigator.onLine` to be wrong about. That matters
+ * on Node, where `fetch` reports every transport failure as the same bare
+ * "fetch failed": unreachable host, refused connection and bad DNS are
+ * indistinguishable by message and identical in what they mean for a queue.
+ *
+ * A caller with errors of its own to exclude — "no session stored", say, which
+ * is raised before a request exists — narrows this further rather than
+ * replacing it.
+ */
+export const isTransportFailure = (error: unknown): boolean =>
+  !(error instanceof ApiError);
+
 export type ApiClientOptions = {
   /** Origin of the server, e.g. `https://api.trackyourtime.dev`. */
   baseUrl: string;

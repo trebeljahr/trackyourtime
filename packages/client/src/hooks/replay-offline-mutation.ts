@@ -1,144 +1,16 @@
 /**
- * The web client's half of the offline replay: how a decoded queue row is
- * turned back into a real API call, and what has to be repaired once it lands.
+ * The web client's binding for the shared offline replay.
  *
- * It sits outside `use-offline-queue` because the repair is the part worth
- * testing and none of it needs React — the hook only supplies the tRPC
- * bindings and the tab's idle watcher.
+ * The runner moved to `@starter/core` when Raycast grew a queue of its own:
+ * the temp-id rename and the stale-stop refusal are decisions about the queue
+ * contract, not about React, and two clients replaying the same rows by
+ * different rules is how one of them writes entries the other cannot explain.
+ * This file stays so the hook and its tests keep one import path.
  */
-import {
-  noteReplayedServerId,
-  type IdleWatcher,
-  type OfflineMutation,
-  type OfflineOp,
-  type OfflinePayloadMap,
+export {
+  replayOfflineMutation,
+  StaleQueuedStopError,
+  STALE_STOP_MS,
 } from "@starter/core";
 
-/** One call per queued op. The hook binds these to its tRPC mutations. */
-export type OfflineReplayMutators = {
-  [K in OfflineOp]: (input: OfflinePayloadMap[K]) => Promise<unknown>;
-};
-
-/**
- * How old an id-less `entries.stop` may be before it is refused.
- *
- * The queue used to live in `localStorage` on a device that is rarely off, so
- * a row that could not be replayed evaporated. On a phone it survives an OS
- * kill indefinitely, which turns "stop whatever is running" from a shortcut
- * into a hazard: a stop queued on Monday, replayed on Friday, closes a timer
- * started on Thursday at Monday's timestamp — on another device, belonging to
- * a completely different piece of work.
- *
- * A day is long enough to cover a weekend of no signal for a stop that really
- * does belong to the start ahead of it in the queue, and short enough that a
- * row this old is better surfaced than guessed at.
- */
-export const STALE_STOP_MS = 24 * 60 * 60 * 1000;
-
-/**
- * A queued stop that names no entry and is too old to guess for. Thrown
- * rather than returned so it travels the same path as a server refusal: the
- * row is dropped, and the caller tells the user rather than silently ending
- * whatever happens to be running now.
- */
-export class StaleQueuedStopError extends Error {
-  readonly queuedAt: string;
-
-  constructor(queuedAt: string) {
-    super("Queued stop is too old to apply to an unidentified entry");
-    this.name = "StaleQueuedStopError";
-    this.queuedAt = queuedAt;
-  }
-}
-
-/**
- * Temp id → the real id its `entries.start` was given on replay.
- *
- * Held for the length of one flush. A start and the stop that ends it are
- * queued as a pair, and the pair only becomes targetable once the start has
- * actually landed — which is a few milliseconds earlier, in the same loop.
- */
-export type ReplayIdMap = Map<string, string>;
-
-/** The id of the entry a replayed start produced, read defensively. */
-const replayedId = (result: unknown): string | null => {
-  if (typeof result !== "object" || result === null) return null;
-  const { id } = result as { id?: unknown };
-  return typeof id === "string" && id.length > 0 ? id : null;
-};
-
-/**
- * Give a queued stop the entry it means, when that is knowable.
- *
- * A stop is enqueued with its `id` whenever the timer it ends already had a
- * real one. It is enqueued without one only for a timer that was itself
- * started offline, whose id at that moment is a temp id the server has never
- * seen — and the replayed start is what mints the real one, just above.
- */
-const targetedStopInput = (
-  mutation: Extract<OfflineMutation, { op: "entries.stop" }>,
-  resolved: ReplayIdMap,
-  queuedAt: string
-): OfflinePayloadMap["entries.stop"] => {
-  if (mutation.input.id) return mutation.input;
-
-  const realId = mutation.tempId ? resolved.get(mutation.tempId) : undefined;
-  if (realId) return { ...mutation.input, id: realId };
-
-  if (Date.now() - Date.parse(queuedAt) > STALE_STOP_MS) {
-    throw new StaleQueuedStopError(queuedAt);
-  }
-
-  // Recent and unidentifiable: the server's own "stop whatever is running"
-  // is still the best available answer, and it is what shipped before.
-  return mutation.input;
-};
-
-/**
- * Replay one queued mutation against the server.
- *
- * Rejections are the caller's problem — `flush` classifies them into "still
- * offline, keep the queue in order" and "the server refused it, drop it" — so
- * nothing is caught here.
- */
-export const replayOfflineMutation = async (
-  mutators: OfflineReplayMutators,
-  watcher: Pick<IdleWatcher, "noteServerId">,
-  mutation: OfflineMutation,
-  context: { createdAt: string; resolved: ReplayIdMap } = {
-    createdAt: new Date().toISOString(),
-    resolved: new Map(),
-  }
-): Promise<void> => {
-  switch (mutation.op) {
-    case "entries.start": {
-      // The result is not discarded, unlike every other op below: a start made
-      // while offline was claimed on the watcher against its temp id, and the
-      // real id only exists now. Without the rename the ownership check in
-      // `observe` fails against the named entry and idle detection silently
-      // never fires again for it.
-      const entry = await mutators["entries.start"](mutation.input);
-      noteReplayedServerId(watcher, mutation, entry);
-      const realId = replayedId(entry);
-      if (mutation.tempId && realId) context.resolved.set(mutation.tempId, realId);
-      return;
-    }
-    case "entries.stop":
-      await mutators["entries.stop"](
-        targetedStopInput(mutation, context.resolved, context.createdAt)
-      );
-      return;
-    case "entries.create":
-      await mutators["entries.create"](mutation.input);
-      return;
-    case "entries.update":
-      await mutators["entries.update"](mutation.input);
-      return;
-    case "entries.remove":
-      await mutators["entries.remove"](mutation.input);
-      return;
-    case "entries.discard":
-      await mutators["entries.discard"](mutation.input);
-      return;
-  }
-};
+export type { OfflineReplayMutators, ReplayIdMap } from "@starter/core";
