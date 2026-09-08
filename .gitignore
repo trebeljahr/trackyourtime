@@ -56,6 +56,15 @@ android/app/*.jks
 # and android/app/capacitor.build.gradle — a diff there after a build is
 # normal. Commit them when the plugin set changed.
 
+# Android release signing material. The upload keystore is decoded from
+# ANDROID_KEYSTORE_BASE64 in CI and copied to android/app/release.keystore by
+# hand locally; it is a private key and must never be committed. Repo-wide
+# rather than scoped to android/app, because the copy you keep beside the
+# project while generating it is the one most likely to get `git add -A`'d.
+*.keystore
+*.jks
+android/app/release.keystore
+
 # Next.js static export output.
 # out/        — web build (`pnpm build:client`), Playwright, and the
 #               Electron/Tauri shells (`pnpm build:desktop`).

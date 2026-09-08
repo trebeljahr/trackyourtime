@@ -27,6 +27,15 @@ env:
 jobs:
   android:
     runs-on: ubuntu-latest
+    # Job-level rather than step-level, so the `if:` guards below can read them.
+    # The four names on the right are the GitHub secrets to set; the four on the
+    # left are exactly what android/app/build.gradle's signing block reads.
+    # docs/deploy.md -> "Android release signing" has the commands.
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -50,26 +59,36 @@ jobs:
       - name: Build static export
         run: pnpm build:mobile android
 
+      # A keystore alone signs nothing: the other three secrets carry the
+      # passwords and the alias. Half a signing setup would otherwise fall
+      # through the gradle guard and produce an unsigned bundle with a green
+      # build — the exact trap this job used to be stuck in.
+      - name: Check the signing secrets are complete
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        run: |
+          missing=""
+          [ -n "$KEYSTORE_PASSWORD" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ] || missing="$missing ANDROID_KEY_ALIAS"
+          [ -n "$KEY_PASSWORD" ] || missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is set but these secrets are not:$missing"
+            exit 1
+          fi
+
       - name: Decode signing keystore
         if: env.ANDROID_KEYSTORE_BASE64 != ''
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           mkdir -p android/app
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
 
-      # Signed when the keystore step above wrote one, unsigned otherwise.
-      # `signingConfigs.release` in android/app/build.gradle reads exactly these
-      # three names out of the environment, and is conditional on
-      # android/app/release.keystore existing — so a local `./gradlew
-      # bundleRelease` with no keystore still builds, it just produces an
-      # artifact Play will not take.
+      # Signed when all four inputs are present, unsigned otherwise.
+      # `signingConfigs.release` in android/app/build.gradle is conditional on
+      # android/app/release.keystore existing AND these three names being set,
+      # so a half-configured set produces an unsigned bundle with a logged
+      # reason rather than a confusing Gradle failure — and a local `./gradlew
+      # bundleRelease` with no keystore at all still builds.
       - name: Build AAB
         working-directory: android
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew bundleRelease
 
       # Gradle signs with whatever config it was handed and says nothing when

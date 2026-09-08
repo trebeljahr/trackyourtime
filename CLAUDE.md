@@ -210,6 +210,16 @@ local API needs `app/src/debug/res/xml/network_security_config.xml`. It is in
 the **debug** source set: release builds get no cleartext exception, which is
 stricter than the iOS side's `Info.plist`.
 
+**Release signing is environment-driven and optional.**
+`android/app/build.gradle` builds a `signingConfigs.release` only when
+`android/app/release.keystore` exists *and* `KEYSTORE_PASSWORD`, `KEY_ALIAS`
+and `KEY_PASSWORD` are all exported; otherwise it logs and produces an
+unsigned bundle, so `./gradlew bundleRelease` works on a checkout with no key.
+`mobile-release.yml` supplies all four from secrets, refuses a half-configured
+set, and runs `jarsigner -verify` on the artifact — CI is where an unsigned AAB
+must not pass quietly. Generating the keystore and setting the four secrets is
+a manual, one-time step: `docs/deploy.md` → "Android release signing".
+
 `pnpm mobile:assets` also rewrites `ios/App/App.xcodeproj/project.pbxproj`,
 stripping the leading zero from `LastSwiftUpdateCheck`/`LastUpgradeCheck`.
 Harmless, but `git checkout` it rather than committing the churn.

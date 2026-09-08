@@ -1,18 +1,36 @@
 apply plugin: 'com.android.application'
 
-// Release signing.
+// Release signing, driven entirely by the environment.
 //
-// .github/workflows/mobile-release.yml decodes ANDROID_KEYSTORE_BASE64 into
-// android/app/release.keystore and passes the three credentials below in the
-// environment. A local `./gradlew bundleRelease` has neither and must still
-// build, so the config is conditional on the file actually being there rather
-// than required.
+// Four inputs and nothing else: the keystore file at android/app/release.keystore
+// plus KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD. .github/workflows/
+// mobile-release.yml decodes ANDROID_KEYSTORE_BASE64 into that path and exports
+// the other three from secrets; locally you copy the keystore in and export the
+// three yourself. See docs/deploy.md → "Android release signing".
 //
-// Until this existed gradle signed the release bundle with nothing at all: the
-// workflow decoded a keystore that no build script ever read, and produced —
-// from a completely green run — an .aab Play refuses to accept.
-def releaseKeystore = file('release.keystore')
-def hasReleaseKeystore = releaseKeystore.exists()
+// Nothing about a key is committed: the file is gitignored (`*.keystore`,
+// `*.jks`) and no password or alias appears in this file, which is what keeps
+// the release key out of a repo that anyone can clone.
+//
+// When any of the four is missing the release build stays UNSIGNED rather than
+// failing — a plain `./gradlew bundleRelease` on a fresh checkout has to work,
+// and an unsigned bundle is the honest result of having no key. CI is where
+// that must not pass silently, so mobile-release.yml checks the secrets are
+// complete and then runs `jarsigner -verify` on the artifact; a missing secret
+// fails the workflow instead of shipping an unsigned AAB with a green build.
+def releaseKeystoreFile = file("release.keystore")
+def releaseStorePassword = System.getenv("KEYSTORE_PASSWORD")
+def releaseKeyAlias = System.getenv("KEY_ALIAS")
+def releaseKeyPassword = System.getenv("KEY_PASSWORD")
+def canSignRelease = releaseKeystoreFile.exists() &&
+    releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+if (!canSignRelease) {
+    logger.lifecycle(
+        "tracktime: no release signing key (need android/app/release.keystore " +
+        "plus KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) — a release build " +
+        "will be UNSIGNED and cannot be uploaded to Play."
+    )
+}
 
 android {
     namespace = "com.trebeljahr.tracktime"
@@ -35,22 +53,26 @@ android {
         }
     }
     signingConfigs {
-        release {
-            if (hasReleaseKeystore) {
-                storeFile releaseKeystore
-                storePassword System.getenv('KEYSTORE_PASSWORD')
-                keyAlias System.getenv('KEY_ALIAS')
-                keyPassword System.getenv('KEY_PASSWORD')
+        if (canSignRelease) {
+            release {
+                storeFile releaseKeystoreFile
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
             }
         }
     }
     buildTypes {
         release {
-            if (hasReleaseKeystore) {
-                signingConfig signingConfigs.release
-            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Guarded by the same condition that created the config: naming a
+            // `signingConfigs.release` that was never declared is an unhelpful
+            // "Could not get unknown property" at configuration time, which
+            // would break every task in the project and not only this one.
+            if (canSignRelease) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

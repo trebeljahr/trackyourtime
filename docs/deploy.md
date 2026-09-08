@@ -211,6 +211,10 @@ Reading the failures:
   and its `host_permissions`.
 - `packages/raycast/src/lib/preferences.ts` — the Raycast extension's
   `apiUrl` / `webUrl` defaults (and the placeholders in its `package.json`).
+- `.github/workflows/mobile-release.yml` — `NEXT_PUBLIC_API_URL` is baked into
+  a store binary, so retargeting the mobile app means a new build and a new
+  review. That file also carries the Android signing secrets; see
+  [Android release signing](#android-release-signing).
 
 ## TRUSTED_ORIGINS
 
@@ -286,3 +290,91 @@ server. The E2E suite runs that same file (`e2e/serve-static.mjs` delegates to
 it), so the deployed server and the tested one cannot drift apart.
 
 `docker-compose.yml` is the legacy single-app layout, kept for reference.
+
+## Android release signing
+
+Play will not accept an unsigned bundle, and `.github/workflows/
+mobile-release.yml` builds one on every `v*` tag. The wiring is done —
+`android/app/build.gradle` has a `signingConfigs.release` block that reads the
+key material out of the environment, and the workflow passes it — but the key
+itself does not exist yet. **Generating it is yours to do**: it is a private
+key, it must never be committed, and it cannot be regenerated. The steps below
+are the whole of it.
+
+Losing this file is not a small problem. The upload key is how Play knows a new
+build is from you; if it is gone the only remedy is a key-reset request to
+Google, which takes days. Back it up somewhere that is not this repo and not
+this machine only — a password manager attachment is the usual answer.
+
+### 1. Generate the upload keystore
+
+Anywhere outside the repo (`~/keys/` is fine — `*.keystore` and `*.jks` are
+gitignored repo-wide, but a file that never enters the tree cannot be
+committed by accident at all):
+
+```bash
+keytool -genkeypair -v \
+  -keystore ~/keys/tracktime-upload.keystore \
+  -storetype PKCS12 \
+  -alias tracktime \
+  -keyalg RSA -keysize 2048 \
+  -validity 10000
+```
+
+It asks for a password and for a name/organisation (which end up in the
+certificate and are not otherwise used). Answer the password prompt twice and
+keep that value: `-storetype PKCS12` means the store password and the key
+password are the same, so the two secrets below get the same string. `-validity
+10000` is Play's own guidance — a key that expires before the app is retired
+locks you out of your own listing.
+
+### 2. Set the four GitHub secrets
+
+The names on the left are what the workflow reads. `gh secret set NAME` with no
+`--body` prompts for the value and does not echo it:
+
+```bash
+base64 -i ~/keys/tracktime-upload.keystore | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD   # the password from step 1
+gh secret set ANDROID_KEY_ALIAS --body tracktime
+gh secret set ANDROID_KEY_PASSWORD        # the same password, for PKCS12
+```
+
+On Linux, `base64 -w0 ~/keys/tracktime-upload.keystore | gh secret set …` —
+GNU `base64` wraps at 76 columns without `-w0` and macOS `base64` takes `-i`
+instead. Either way the workflow's `base64 -d` accepts wrapped input, so a
+newline in the secret is harmless; what matters is that the whole file is in
+there.
+
+`ANDROID_KEYSTORE_BASE64` is the switch: with it unset the workflow still
+builds and still uploads an artifact, just an unsigned one. With it set and any
+of the other three missing, the job now fails on the "Check the signing secrets
+are complete" step rather than building an unsigned bundle and discovering it
+at upload time.
+
+Play uploads need a fifth and sixth secret — `PLAY_SERVICE_ACCOUNT_JSON` and
+`ANDROID_PACKAGE_NAME` — and that step stays skipped until they exist. Signing
+and uploading are independent: a signed AAB downloaded from the workflow's
+artifacts can be uploaded to the Play Console by hand.
+
+### 3. Building a signed bundle locally
+
+The gradle block reads a keystore at `android/app/release.keystore` — the same
+path the workflow decodes to — plus three environment variables:
+
+```bash
+cp ~/keys/tracktime-upload.keystore android/app/release.keystore
+cd android
+KEYSTORE_PASSWORD='…' KEY_ALIAS=tracktime KEY_PASSWORD='…' ./gradlew bundleRelease
+jarsigner -verify -verbose:summary \
+  app/build/outputs/bundle/release/app-release.aab
+```
+
+`jarsigner` prints `jar verified.` for a signed bundle. It also warns that the
+certificate is self-signed — that is expected and correct for an upload key.
+
+**Without any of that, `./gradlew bundleRelease` still works.** It logs
+`tracktime: no release signing key …` and produces an unsigned bundle, which is
+what you want for a build you are only going to `bundletool` onto a device. The
+guard exists so that a fresh checkout is not a Gradle error; CI is where an
+unsigned artifact must not pass silently, and there it does not.
