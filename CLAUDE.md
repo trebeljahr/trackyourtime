@@ -980,7 +980,10 @@ What fails quietly if it is changed:
   These rows are this Mac's only copy of time tracked with no signal. The
   cached reads and the overlay ARE cleared on sign-out, so the next person to
   pair sees nothing of the last one's workspace; the timer surfaces only say
-  how many rows are waiting and that they are not theirs.
+  how many rows are waiting and that they are not theirs — and offer the same
+  way out the web app does, a discard that NAMES the work rather than counting
+  it (`describeQueuedMutation` in core is shared with Settings → Devices, so
+  the two clients cannot ask a person to approve two different deletions).
 - **`isTransportFailure` is a type test, not a string test.** `createApiClient`
   throws `ApiError` for everything the server answered, so "not an ApiError" is
   exactly "no answer came back" — which matters on Node, where every transport

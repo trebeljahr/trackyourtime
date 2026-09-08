@@ -265,3 +265,40 @@ export const noteReplayedServerId = (
   watcher.noteServerId(tempId, entryId);
   return true;
 };
+
+// ── describing a row ─────────────────────────────────────────────────
+
+/**
+ * A queued row as something a person can recognise.
+ *
+ * Needed wherever a client offers to destroy queued work: rows another account
+ * left behind are kept and never replayed, which on its own makes them
+ * immortal, and a permanent count nobody can act on is a scold. The way out
+ * has to name what it is destroying — deleting "3 changes" is not a decision
+ * anybody can make, and deleting two entries called "Invoicing" from 21 Aug
+ * is. Shared so the web app and Raycast describe the same row the same way.
+ */
+export type QueuedMutationSummary = {
+  queueId: string;
+  /** Null when the row was written by a build whose ops we no longer know. */
+  op: OfflineOp | null;
+  description: string | null;
+  /** When the work happened — the payload's own start, else when it queued. */
+  at: string;
+};
+
+export const describeQueuedMutation = (
+  row: QueuedMutation
+): QueuedMutationSummary => {
+  const decoded = decodeOfflineMutation(row);
+  if (decoded === null) {
+    return { queueId: row.id, op: null, description: null, at: row.createdAt };
+  }
+  const input = decoded.input as { description?: string; start?: string };
+  return {
+    queueId: row.id,
+    op: decoded.op,
+    description: input.description ?? null,
+    at: input.start ?? row.createdAt,
+  };
+};

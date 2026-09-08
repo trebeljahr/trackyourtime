@@ -18,6 +18,7 @@
 import {
   createOfflineQueue,
   decodeOfflineMutation,
+  describeQueuedMutation,
   isForeignTo,
   isReplayableBy,
   memoryStorage,
@@ -30,7 +31,7 @@ import {
   type OfflineOp,
   type OfflinePayloadMap,
   type OfflineQueue,
-  type QueuedMutation,
+  type QueuedMutationSummary,
   type StoredOfflinePayload,
 } from "@starter/core";
 
@@ -386,35 +387,19 @@ export const flushOfflineQueue = async (
  * Settings shows them, `discardForeignQueued` is the way out, and both need
  * these rows to be something a person can recognise: deleting "3 changes" is
  * not a decision anybody can make.
+ *
+ * The shape and the describing both live in `@starter/core`, because Raycast
+ * keeps a queue of its own and offers the same way out of it — two clients
+ * summarising the same row differently would be two clients asking a person
+ * to approve two different deletions.
  */
-export type ForeignQueuedRow = {
-  queueId: string;
-  /** null when the row was written by a build whose ops we no longer know. */
-  op: OfflineOp | null;
-  description: string | null;
-  /** When the work happened — the payload's own start, else when it queued. */
-  at: string;
-};
-
-const describeQueued = (row: QueuedMutation): ForeignQueuedRow => {
-  const decoded = decodeOfflineMutation(row);
-  if (decoded === null) {
-    return { queueId: row.id, op: null, description: null, at: row.createdAt };
-  }
-  const input = decoded.input as { description?: string; start?: string };
-  return {
-    queueId: row.id,
-    op: decoded.op,
-    description: input.description ?? null,
-    at: input.start ?? row.createdAt,
-  };
-};
+export type ForeignQueuedRow = QueuedMutationSummary;
 
 export const listForeignQueued = async (): Promise<ForeignQueuedRow[]> => {
   await hydrateLastOwner();
   const against = owner ?? lastOwner;
   const rows = await getOfflineQueue().list();
-  return rows.filter((row) => isForeignTo(row, against)).map(describeQueued);
+  return rows.filter((row) => isForeignTo(row, against)).map(describeQueuedMutation);
 };
 
 /**

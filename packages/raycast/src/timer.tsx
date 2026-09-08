@@ -25,8 +25,14 @@ import { SignedOutView } from "./components/signed-out.js";
 import { SignIn } from "./components/sign-in.js";
 import { StartTimer } from "./components/start-timer.js";
 import { getTracktime, type ProjectWithStats } from "./lib/api.js";
+import { discardForeign, listForeign } from "./lib/offline.js";
 import { isLocalEntry } from "./lib/overlay.js";
-import { formatClock, formatDurationShort, projectIcon } from "./lib/format.js";
+import {
+  formatClock,
+  formatDayHeading,
+  formatDurationShort,
+  projectIcon,
+} from "./lib/format.js";
 import { useApi, useNow, useReconciledRunning } from "./lib/hooks.js";
 import { webLink } from "./lib/preferences.js";
 import {
@@ -46,6 +52,14 @@ import {
 
 /** Long enough to cover a normal week of work without a scroll marathon. */
 const RECENT_LIMIT = 8;
+
+/**
+ * How many of another account's queued rows the discard dialog names.
+ *
+ * Enough to recognise the work; past that the list stops being read and the
+ * dialog stops being a decision. The rest are counted.
+ */
+const MAX_NAMED_FOREIGN = 5;
 
 /**
  * The live timer surface: what is running, ticking by the second, with
@@ -159,6 +173,56 @@ export default function Timer(): React.JSX.Element {
   const favorites = data?.favorites ?? [];
   const projects = data?.projects ?? [];
   const recent = data?.recent ?? [];
+
+  /**
+   * The only way to delete unsynced time from here, and it names what is
+   * going before it goes.
+   *
+   * Rows another account queued are kept and never replayed, both on purpose —
+   * which together makes them immortal, and a count nobody can act on is worse
+   * than saying nothing. The confirmation lists the work rather than counting
+   * it, because "discard 3 changes" is not a decision anybody can make.
+   */
+  const discardForeignWork = (): void => {
+    void (async () => {
+      const rows = await listForeign();
+      if (rows.length === 0) {
+        revalidate();
+        return;
+      }
+
+      const named = rows
+        .slice(0, MAX_NAMED_FOREIGN)
+        .map(
+          (row) =>
+            `${row.description?.trim() || "No description"} — ${formatDayHeading(row.at)}`,
+        );
+      const rest = rows.length - named.length;
+
+      const confirmed = await confirmAlert({
+        title: `Discard ${rows.length} change${rows.length === 1 ? "" : "s"}?`,
+        message: [
+          ...named,
+          ...(rest > 0 ? [`…and ${rest} more`] : []),
+          "",
+          "This work was tracked on this Mac and has never reached a server. It cannot be recovered.",
+        ].join("\n"),
+        icon: Icon.Trash,
+        primaryAction: {
+          title: "Discard",
+          style: Alert.ActionStyle.Destructive,
+        },
+      });
+      if (!confirmed) return;
+
+      const dropped = await discardForeign();
+      revalidate();
+      await showToast({
+        style: Toast.Style.Success,
+        title: `Discarded ${dropped} change${dropped === 1 ? "" : "s"}`,
+      });
+    })();
+  };
 
   const onSaved = (): void => {
     revalidate();
@@ -293,13 +357,19 @@ export default function Timer(): React.JSX.Element {
             <List.Item
               icon={{ source: Icon.Person, tintColor: Color.SecondaryText }}
               title={`${foreign} queued by another account`}
-              subtitle="Sign in as that account to send them"
+              subtitle="Sign in as that account to send them, or discard them"
               actions={
                 <ActionPanel>
                   <Action.Push
                     title="Account and Session…"
                     icon={Icon.Person}
                     target={<SignIn />}
+                  />
+                  <Action
+                    title="Discard Them…"
+                    icon={Icon.Trash}
+                    style={Action.Style.Destructive}
+                    onAction={discardForeignWork}
                   />
                   {commonActions}
                 </ActionPanel>

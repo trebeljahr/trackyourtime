@@ -17,6 +17,7 @@ import {
   ApiError,
   createOfflineQueue,
   decodeOfflineMutation,
+  describeQueuedMutation,
   isForeignTo,
   isPermanentRejection,
   isReplayableBy,
@@ -29,6 +30,7 @@ import {
   type OfflinePayloadMap,
   type OfflineQueue,
   type OfflineReplayMutators,
+  type QueuedMutationSummary,
   type ReplayIdMap,
   type StoredOfflinePayload,
 } from "@starter/core";
@@ -109,14 +111,55 @@ export type PendingCounts = {
   foreign: number;
 };
 
+/**
+ * How much is waiting, split by whether this session may send it.
+ *
+ * `getStoredUserId()` is a storage read rather than a session check, so a null
+ * here means genuinely signed out rather than "still resolving" — which is why
+ * this can call a stamped row foreign without qualification. Unowned rows are
+ * counted as ours: nobody has claimed them and the next sign-in adopts them.
+ */
 export async function pendingCounts(): Promise<PendingCounts> {
   const rows = await getOfflineQueue().list();
   const owner = await getStoredUserId();
-  // With no owner resolved nothing is called foreign: "we do not know who is
-  // signed in" must not render as "somebody else queued this".
-  if (owner === null) return { mine: rows.length, foreign: 0 };
   const foreign = rows.filter((row) => isForeignTo(row, owner)).length;
   return { mine: rows.length - foreign, foreign };
+}
+
+/**
+ * What another account left queued on this Mac, for a human to look at.
+ *
+ * Kept and never replayed, both deliberately — which on its own makes these
+ * rows immortal, and a count nobody can act on is a scold. `discardForeign` is
+ * the way out, and it has to name what it destroys: nobody can approve
+ * deleting "3 changes", and anybody can decide about two entries called
+ * "Invoicing" from 21 August.
+ */
+export async function listForeign(): Promise<QueuedMutationSummary[]> {
+  const owner = await getStoredUserId();
+  const rows = await getOfflineQueue().list();
+  return rows
+    .filter((row) => isForeignTo(row, owner))
+    .map(describeQueuedMutation);
+}
+
+/**
+ * Delete the rows queued by another account, and only those.
+ *
+ * The one deletion path for unsynced time here, and it exists only behind an
+ * explicit confirmation that names what is going. Nothing calls it on a timer,
+ * on a sign-out or on an age threshold: a silent drop is what this whole
+ * mechanism was built to avoid, and putting one behind a clock does not make
+ * it less silent.
+ */
+export async function discardForeign(): Promise<number> {
+  const owner = await getStoredUserId();
+  const offline = getOfflineQueue();
+  const theirs = (await offline.list()).filter((row) =>
+    isForeignTo(row, owner),
+  );
+  for (const row of theirs) await offline.remove(row.id);
+  return theirs.length;
 }
 
 /**
