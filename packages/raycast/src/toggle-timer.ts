@@ -1,5 +1,7 @@
 import { LaunchType, launchCommand, showHUD } from "@raycast/api";
+import { toQuickStart } from "@starter/core";
 import { getTracktime } from "./lib/api.js";
+import { pendingCounts } from "./lib/offline.js";
 import { formatDurationShort, isoDaysAgo } from "./lib/format.js";
 import { noteTimerEcho } from "./lib/storage.js";
 import { entryLabel, RECENT_DAYS } from "./lib/timer-data.js";
@@ -21,6 +23,19 @@ import {
  * working. The `timer` view is the surface for choosing *what* to start;
  * this one is for the case where there is nothing to choose.
  */
+/**
+ * " · queued" when this Mac is holding work no server has seen.
+ *
+ * The HUD is the only feedback a `no-view` command gets, so the difference
+ * between "stopped" and "stopped, and the server does not know yet" has to fit
+ * in it. Read after the action rather than inferred from it: a stop can also
+ * be queued behind an older row that has nothing to do with this press.
+ */
+const queuedSuffix = async (): Promise<string> => {
+  const { mine } = await pendingCounts();
+  return mine > 0 ? ` · ${mine} queued` : "";
+};
+
 export default async function ToggleTimer(): Promise<void> {
   try {
     const api = await getTracktime();
@@ -33,7 +48,7 @@ export default async function ToggleTimer(): Promise<void> {
         await showHUD(
           `⏹ Stopped — ${formatDurationShort(stopped.durationSec)}${
             stopped.description ? ` · ${stopped.description}` : ""
-          }`,
+          }${await queuedSuffix()}`,
         );
       } catch (error) {
         if (!isAlreadyStopped(error)) throw error;
@@ -62,12 +77,12 @@ export default async function ToggleTimer(): Promise<void> {
       return;
     }
 
-    await api.continue(last.id);
+    await api.continue(last.id, toQuickStart(last));
     await refreshMenuBar();
     // Labelled from the entry that was continued, not from the one that came
     // back: the list rows are joined with their project and client names, so
     // an entry with no description still reads as something.
-    await showHUD(`▶ Started — ${entryLabel(last)}`);
+    await showHUD(`▶ Started — ${entryLabel(last)}${await queuedSuffix()}`);
   } catch (error) {
     await showFailureToast(error, "Could not toggle the timer");
   }

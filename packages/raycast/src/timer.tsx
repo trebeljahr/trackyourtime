@@ -25,6 +25,7 @@ import { SignedOutView } from "./components/signed-out.js";
 import { SignIn } from "./components/sign-in.js";
 import { StartTimer } from "./components/start-timer.js";
 import { getTracktime, type ProjectWithStats } from "./lib/api.js";
+import { isLocalEntry } from "./lib/overlay.js";
 import { formatClock, formatDurationShort, projectIcon } from "./lib/format.js";
 import { useApi, useNow, useReconciledRunning } from "./lib/hooks.js";
 import { webLink } from "./lib/preferences.js";
@@ -153,6 +154,8 @@ export default function Timer(): React.JSX.Element {
 
   const elapsed = running ? entryDurationSec(running, now) : 0;
   const todaySec = data?.todaySec ?? 0;
+  const pending = data?.pending ?? 0;
+  const foreign = data?.foreign ?? 0;
   const favorites = data?.favorites ?? [];
   const projects = data?.projects ?? [];
   const recent = data?.recent ?? [];
@@ -214,6 +217,15 @@ export default function Timer(): React.JSX.Element {
   ): List.Item.Accessory[] => {
     const accessories: List.Item.Accessory[] = [];
 
+    // A timer started with no signal has no server id yet. Saying so is what
+    // keeps "the clock is running" from being read as "the server has it".
+    if (isLocalEntry(entry)) {
+      accessories.push({
+        icon: { source: Icon.Cloud, tintColor: Color.Orange },
+        tooltip: "Not synced yet — kept on this Mac",
+      });
+    }
+
     if (entry.billable) {
       accessories.push({
         icon: { source: Icon.BankNote, tintColor: Color.Green },
@@ -255,6 +267,47 @@ export default function Timer(): React.JSX.Element {
           </ActionPanel>
         }
       />
+
+      {/* Stated rather than hidden: what is queued is time the user tracked,
+          and a client holding it quietly looks like one that lost it. */}
+      {pending > 0 || foreign > 0 ? (
+        <List.Section title="Not synced">
+          {pending > 0 ? (
+            <List.Item
+              icon={{ source: Icon.Cloud, tintColor: Color.Orange }}
+              title={`${pending} change${pending === 1 ? "" : "s"} waiting to sync`}
+              subtitle="Kept on this Mac until the server answers"
+              actions={
+                <ActionPanel>
+                  <Action
+                    title="Try Again"
+                    icon={Icon.ArrowClockwise}
+                    onAction={revalidate}
+                  />
+                  {commonActions}
+                </ActionPanel>
+              }
+            />
+          ) : null}
+          {foreign > 0 ? (
+            <List.Item
+              icon={{ source: Icon.Person, tintColor: Color.SecondaryText }}
+              title={`${foreign} queued by another account`}
+              subtitle="Sign in as that account to send them"
+              actions={
+                <ActionPanel>
+                  <Action.Push
+                    title="Account and Session…"
+                    icon={Icon.Person}
+                    target={<SignIn />}
+                  />
+                  {commonActions}
+                </ActionPanel>
+              }
+            />
+          ) : null}
+        </List.Section>
+      ) : null}
 
       {running ? (
         <List.Section
@@ -431,7 +484,7 @@ export default function Timer(): React.JSX.Element {
                       onAction={() =>
                         run(async () => {
                           const api = await getTracktime();
-                          await api.continue(entry.id);
+                          await api.continue(entry.id, toQuickStart(entry));
                           return `Started — ${entryLabel(entry)}`;
                         }, "Could not start the timer")
                       }

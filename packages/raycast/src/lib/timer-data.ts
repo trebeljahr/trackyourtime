@@ -16,6 +16,7 @@ import {
 } from "@starter/core";
 import type { ProjectWithStats, Tracktime } from "./api.js";
 import { isoDaysAgo } from "./format.js";
+import { pendingCounts } from "./offline.js";
 import { loadTimerEcho } from "./storage.js";
 
 /** How far back the "continue" shortlist looks. */
@@ -31,6 +32,19 @@ export type TimerSnapshot = {
   fetchedAt: number;
   /** The echo knows a timer this snapshot does not — load again shortly. */
   refetch: boolean;
+  /**
+   * Mutations this account made that no server has seen yet.
+   *
+   * Surfaced rather than kept quiet: what is queued is time the user tracked,
+   * and a client that holds it silently is indistinguishable from one that
+   * lost it.
+   */
+  pending: number;
+  /**
+   * Rows queued by a different account on this Mac. Never replayed under this
+   * session and never deleted — somebody tracked that time.
+   */
+  foreign: number;
 };
 
 const startOfToday = (): number => {
@@ -77,6 +91,13 @@ export const loadTimerSnapshot = async (
 ): Promise<TimerSnapshot> => {
   const now = Date.now();
 
+  // Drain before reading, not after: a queued start that replays here is in
+  // the window this read is about to ask for, so the snapshot comes back
+  // already carrying it instead of showing the local copy for one more cycle.
+  // Failures are the queue's own business — it keeps the rows and the reads
+  // below fall back to what this Mac already knows.
+  await api.sync().catch(() => undefined);
+
   const [{ entries }, favorites, projects] = await Promise.all([
     api.list({
       from: isoDaysAgo(RECENT_DAYS),
@@ -105,6 +126,8 @@ export const loadTimerSnapshot = async (
     await loadTimerEcho(),
   );
 
+  const { mine, foreign } = await pendingCounts();
+
   return {
     running,
     recent: shortlist(entries, recentLimit),
@@ -113,6 +136,8 @@ export const loadTimerSnapshot = async (
     todaySec,
     fetchedAt: now,
     refetch,
+    pending: mine,
+    foreign,
   };
 };
 

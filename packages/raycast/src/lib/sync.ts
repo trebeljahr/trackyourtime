@@ -96,7 +96,14 @@ export function useSyncRevalidate(
         // Reported so the cheaper pollers underneath can stand down while the
         // socket is carrying, and pick straight back up when it drops.
         onStatus: (status) => {
-          if (!closed) setOpen(status === "open");
+          if (closed) return;
+          setOpen(status === "open");
+          // A socket that connects is the clearest proof available that the
+          // network is back — clearer than any poll, and earlier. Revalidating
+          // re-runs the snapshot load, which drains the offline queue before
+          // it reads, so work tracked with no signal goes out the moment there
+          // is signal rather than on the next 20-second tick.
+          if (status === "open") latest.current();
         },
       });
       created.connect();

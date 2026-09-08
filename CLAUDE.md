@@ -929,6 +929,69 @@ the browser extension and CLI inherit it; only Raycast UI belongs here.
   real value and "untouched" would be indistinguishable from "typed the
   production URL". A worktree runs on random ports — set both by hand there.
 
+### Raycast works offline
+
+The launcher is the surface people reach for without thinking — a hotkey, a
+menu bar item — which makes it the surface used on a train, on a plane and in a
+basement. It queues the same rows, under the same op contract, as the web app
+and the browser extension (`@starter/core/offline-ops`), so a start queued in
+Raycast is a row any of them could describe.
+
+Three stores, and they answer different questions. `lib/offline.ts` is the
+durable FIFO of mutations — what still has to be sent. `lib/overlay.ts` is
+their visible consequence — what the menu bar should be showing right now;
+without it a timer started with no signal is a row in storage and nothing on
+screen. `lib/local-cache.ts` is the last good answer to every read, which is
+what lets a `no-view` hotkey (with no rendered cache at all) work offline, and
+what gives `buildOptimisticEntry` the project rate and workspace currency it
+needs to guess the money snapshot the server is about to write.
+
+Everything host-free lives in core and is tested there:
+`offline-overlay.ts` (the overlay algebra), `offline-replay.ts` (the temp-id
+rename and the stale-stop refusal, moved out of the web client), `entry-shape.ts`
+(the optimistic shapes, moved out of `client/lib/entry-shape.ts`, which is now a
+shim that injects `source`). Raycast's own files are the storage bindings.
+
+What fails quietly if it is changed:
+
+- **`api.ts` is the only choke point.** Every surface already goes through
+  `Tracktime`, so the offline path is inside the wrappers rather than in each
+  command. Writes go through `writing()` — drain first, and queue if anything
+  is still waiting, because sending a new mutation ahead of older queued ones
+  lands it out of order and `entries.stop` in particular resolves against
+  whatever is running at the moment it arrives. Reads go through `reading()`,
+  which falls back to the cache on a transport failure only: a 401 is a real
+  answer and has to reach the sign-in handling.
+- **`entries.continue` takes an optional `QuickStart`.** The server resolves a
+  continue from the entry it names, and offline there is nobody to ask. Every
+  caller has the row on screen, so it hands the fields over — without that the
+  hotkey is dead on a train, which is where it is most wanted.
+- **A stop for a locally started timer carries NO id.** The server has never
+  seen the temp one. It rides on the same `tempId` as its start, which is what
+  lets the replay target the entry that start produces.
+- **Editing a temp entry is refused** (`StillSyncingError`), like the browser
+  extension. An `entries.update` naming a temp id is refused permanently on
+  replay, and the queue drops a permanent refusal — so the edit would vanish
+  with no error anywhere.
+- **Discarding or deleting a temp entry drops its queued rows** rather than
+  sending anything, or the create would resurrect the row a minute later.
+- **Every row is stamped with the account that queued it**, and the queue
+  survives sign-out — unlike the browser extension's, which clears its own.
+  These rows are this Mac's only copy of time tracked with no signal. The
+  cached reads and the overlay ARE cleared on sign-out, so the next person to
+  pair sees nothing of the last one's workspace; the timer surfaces only say
+  how many rows are waiting and that they are not theirs.
+- **`isTransportFailure` is a type test, not a string test.** `createApiClient`
+  throws `ApiError` for everything the server answered, so "not an ApiError" is
+  exactly "no answer came back" — which matters on Node, where every transport
+  failure is the same bare "fetch failed".
+- **The queue drains from the reads, not from a background loop.** Raycast has
+  no long-lived process to own one. `loadTimerSnapshot` drains before it reads
+  (so the snapshot comes back already carrying the replayed work), the menu
+  bar's own `interval` therefore drains once a minute, and `useSyncRevalidate`
+  revalidates the instant the sync socket connects — the earliest and clearest
+  proof available that the network is back.
+
 ### Deployment (two Coolify apps, two hosts)
 
 Production is two apps on **two hosts of one zone**: `tracktime-client` on

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- **Works offline.** Start, stop, edit and delete with no network; everything
+  is kept on this Mac and replayed in order once the server can be reached.
+  **Timer**, the menu bar and the hotkey's HUD say how much is still waiting.
 - **Log Past Time** (⌘⇧N in **Timer** and **Show All Time**) — record a block of
   work that was never timed, which until now meant opening the web app.
 - **Description autocomplete** (⌘⇧D in every form that composes an entry) —

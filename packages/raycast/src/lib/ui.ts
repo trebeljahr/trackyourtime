@@ -6,7 +6,7 @@ import {
   showToast,
 } from "@raycast/api";
 import { ApiError, AuthError } from "@starter/core";
-import { NotSignedInError } from "./api.js";
+import { NotSignedInError, StillSyncingError } from "./errors.js";
 import { apiUrl } from "./preferences.js";
 
 /**
@@ -75,6 +75,19 @@ export async function showFailureToast(
   error: unknown,
   title: string,
 ): Promise<void> {
+  // Not a failure of the network or the server: the entry is queued on this
+  // Mac and cannot be edited until it has an id the server would recognise.
+  // The preferences prompt every other failure carries would be actively
+  // misleading here — nothing is misconfigured.
+  if (error instanceof StillSyncingError) {
+    await showToast({
+      style: Toast.Style.Failure,
+      title: "Not synced yet",
+      message: "This entry can be edited once it reaches the server.",
+    });
+    return;
+  }
+
   if (isAuthFailure(error)) {
     await showToast({
       style: Toast.Style.Failure,

@@ -9,8 +9,13 @@ import {
   confirmAlert,
   showToast,
 } from "@raycast/api";
-import { entryDurationSec, type DetailedEntry } from "@starter/core";
+import {
+  entryDurationSec,
+  toQuickStart,
+  type DetailedEntry,
+} from "@starter/core";
 import { getTracktime } from "./lib/api.js";
+import { isLocalEntry } from "./lib/overlay.js";
 import {
   formatClock,
   formatDayHeading,
@@ -64,6 +69,16 @@ const accessoriesFor = (
 ): List.Item.Accessory[] => {
   const running = entry.end === null;
   const accessories: List.Item.Accessory[] = [];
+
+  // Tracked here and nowhere else yet. Worth a mark of its own: the row is
+  // otherwise indistinguishable from one the server has, and the difference
+  // decides whether this Mac is the only copy of it.
+  if (isLocalEntry(entry)) {
+    accessories.push({
+      icon: { source: Icon.Cloud, tintColor: Color.Orange },
+      tooltip: "Not synced yet — kept on this Mac",
+    });
+  }
 
   if (entry.billable) {
     accessories.push({
@@ -238,7 +253,7 @@ export default function Entries(): React.JSX.Element {
                           onAction={() =>
                             run(async () => {
                               const api = await getTracktime();
-                              await api.continue(entry.id);
+                              await api.continue(entry.id, toQuickStart(entry));
                               return "Timer started";
                             }, "Could not start the timer")
                           }

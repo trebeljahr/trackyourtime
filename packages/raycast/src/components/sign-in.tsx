@@ -28,6 +28,8 @@ import {
   webLink,
   webUrl,
 } from "../lib/preferences.js";
+import { getTracktime } from "../lib/api.js";
+import { getOfflineQueue } from "../lib/offline.js";
 import { describeFailure, refreshMenuBar } from "../lib/ui.js";
 
 /**
@@ -87,12 +89,31 @@ export function SignIn(): React.JSX.Element {
         if (cancelled) return;
 
         await storeSession(session);
+
+        /*
+         * Claim and send whatever this Mac queued before it had an account to
+         * stamp rows with — work from a build that predates ownership, or from
+         * the window between launching and the session resolving. Adoption
+         * comes first: the flush filter refuses a row it cannot attribute, so
+         * without it the very rows this pairing exists to rescue would sit
+         * there being counted as somebody else's.
+         */
+        const adopted = session.userId
+          ? await getOfflineQueue().adoptUnowned(session.userId)
+          : 0;
+        const stuck = await (await getTracktime()).sync().catch(() => 0);
+
         await refreshMenuBar();
         setPhase({ kind: "signedIn", email: session.email });
         await showToast({
           style: Toast.Style.Success,
           title: "Raycast paired with tracktime",
-          message: session.email ?? undefined,
+          message:
+            adopted > 0 && stuck === 0
+              ? `${session.email ?? "Signed in"} · ${adopted} queued change${
+                  adopted === 1 ? "" : "s"
+                } sent`
+              : (session.email ?? undefined),
         });
       } catch (error) {
         if (cancelled) return;

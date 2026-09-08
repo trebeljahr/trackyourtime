@@ -81,6 +81,38 @@ budgets — is web app work, and **Open Dashboard** is one keystroke away.
 Creating a row mid-timer is not: stopping to go to the browser is exactly the
 interruption the extension exists to avoid.
 
+### Working offline
+
+Start, stop, edit and delete keep working with no network. What you do is kept
+on this Mac and sent in the order you did it as soon as the server can be
+reached again — on the next command you open, on the menu bar's own once-a-
+minute refresh, or the instant the sync socket reconnects.
+
+While something is waiting, the surfaces say so rather than pretending it is
+sent: **Timer** and the menu bar carry a "Not synced" section with the count, a
+timer started offline wears a cloud mark, and the ⌥-hotkey's HUD says how many
+changes are queued. What is waiting is time you tracked — a client that holds
+it quietly is indistinguishable from one that lost it.
+
+Four things behave differently offline, each on purpose:
+
+- **An entry that has not synced yet cannot be edited.** It has no id the
+  server would recognise, so the edit would be refused on replay and lost
+  silently. Delete and discard *do* work — they drop the queued row instead of
+  sending anything.
+- **Creating a client, project, task or tag needs the network.** They mint ids
+  the server owns, and an entry cannot be filed under one that does not exist
+  yet. Pick an existing one, or file the entry later.
+- **Pinning a favorite needs the network** for the same reason. A pin that
+  failed is a button to press again, not lost work.
+- **Rates and totals are this Mac's best guess** until the entry syncs, taken
+  from the last project list and settings it saw. Everything the server
+  recomputes on replay.
+
+Signing out keeps anything still queued — it is the only copy of that time —
+but the next account to pair can neither send it nor read it. The surfaces just
+say how many rows are waiting and that they belong to somebody else.
+
 ## Setup
 
 0. Install it: `pnpm build:raycast` from the repo root. `pnpm dev:raycast`

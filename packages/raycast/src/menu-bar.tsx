@@ -139,6 +139,8 @@ export default function MenuBar(): React.JSX.Element | null {
   const favorites = data?.favorites ?? [];
   const projects = data?.projects ?? [];
   const pinned = running ? favoriteFor(running, favorites) : undefined;
+  const pending = data?.pending ?? 0;
+  const foreign = data?.foreign ?? 0;
 
   const title = ((): string | undefined => {
     // Idle and running are separate settings because they answer separate
@@ -216,6 +218,10 @@ export default function MenuBar(): React.JSX.Element | null {
         // fresh reading, so say so where the number is.
         error
           ? `tracktime — could not refresh · ${describeFailure(error)}`
+          : pending > 0
+            ? `${pending} change${pending === 1 ? "" : "s"} waiting to sync${
+                running ? ` · ${label} — ${clock}` : ""
+              }`
           : running
             ? `${label} — ${clock}`
             : `tracktime — no timer running · today ${formatDurationShort(
@@ -367,7 +373,7 @@ export default function MenuBar(): React.JSX.Element | null {
               onAction={() => {
                 void act(async () => {
                   const api = await getTracktime();
-                  await api.continue(entry.id);
+                  await api.continue(entry.id, toQuickStart(entry));
                   await showToast({
                     style: Toast.Style.Success,
                     title: "Timer started",
@@ -377,6 +383,31 @@ export default function MenuBar(): React.JSX.Element | null {
               }}
             />
           ))}
+        </MenuBarExtra.Section>
+      ) : null}
+
+      {/* Unsynced work is stated rather than hidden: what is queued is time
+          the user tracked, and a client holding it quietly looks exactly like
+          one that lost it. Retrying is what every other read here already
+          does, so the row simply refreshes. */}
+      {pending > 0 || foreign > 0 ? (
+        <MenuBarExtra.Section title="Not synced">
+          {pending > 0 ? (
+            <MenuBarExtra.Item
+              title={`${pending} change${pending === 1 ? "" : "s"} waiting`}
+              subtitle="Kept on this Mac until the server answers"
+              icon={Icon.Cloud}
+              onAction={revalidate}
+            />
+          ) : null}
+          {foreign > 0 ? (
+            <MenuBarExtra.Item
+              title={`${foreign} from another account`}
+              subtitle="Sign in as that account to send them"
+              icon={Icon.Person}
+              onAction={openTimer}
+            />
+          ) : null}
         </MenuBarExtra.Section>
       ) : null}
 
