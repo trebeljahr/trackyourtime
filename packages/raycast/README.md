@@ -5,7 +5,7 @@ timer in the macOS menu bar.
 
 ## Commands
 
-Four, on purpose. Everything else tracktime can do is better done in the web
+Five, on purpose. Everything else tracktime can do is better done in the web
 app, and a launcher that lists twelve of its own commands is a launcher you
 have to search inside of.
 
@@ -13,11 +13,17 @@ have to search inside of.
 | --- | --- | --- |
 | **Timer** | view | Start and stop. Running: the elapsed time ticking by the second, with stop, edit, refile, pin and discard. Idle: the start form, favorites and recent work. ⌘⇧N logs a block that was never timed. |
 | **Timer Menu Bar** | menu bar | The same picture at a glance, with the clock ticking by the second while a timer runs. Stop, edit, move to a project, pin, discard, continue recent work, today's total. |
+| **Start / Stop Timer** | no-view | The hotkey. Stops what is running, or continues the newest entry of the last 7 days — the same window the other surfaces call recent. Nothing to resume: it opens **Timer** rather than starting a nameless entry. Says what it did in a HUD, including how many changes are queued. |
 | **Show All Time** | view | Last 14 days grouped by day — continue, edit, delete, and ⌘⇧N to log past work. |
 | **Open Dashboard** | no-view | Jumps to the web app. |
 
-Bind **Timer** to a hotkey (⌥T works well) and it is the whole loop: press it,
-and ⏎ either stops what is running or opens the start form.
+Bind **Start / Stop Timer** to a hotkey (⌥T works well) and that is the whole
+loop from wherever you are: press it, read the HUD, keep working. It earns a
+command of its own because Raycast can only launch `no-view` and menu bar
+commands in the background, so it is the one surface a global hotkey can drive
+without opening a window — folding it into **Timer** would cost exactly that.
+**Timer** is where you choose *what* to start; this one is for when there is
+nothing to choose.
 
 ### Why start and stop are not two commands
 
