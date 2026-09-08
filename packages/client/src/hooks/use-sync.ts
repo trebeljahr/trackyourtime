@@ -13,9 +13,11 @@ import {
   type TimeEntry,
   type TimerState,
 } from "@starter/core";
+import { useRouter } from "next/navigation";
 import { useNativeSession } from "@/hooks/use-native-session";
 import { idleWatcher } from "@/lib/idle-watcher";
 import { getNativeToken } from "@/lib/native-session";
+import { revokeThisDevice } from "@/lib/revoke-this-device";
 import { writeRunningMirror } from "@/lib/running-mirror";
 import { trpc } from "@/lib/trpc";
 
@@ -164,6 +166,8 @@ const invalidateFor = (utils: Utils, event: SyncEvent): void => {
 export const useSync = (): SyncStatus => {
   const utils = trpc.useUtils();
   const utilsRef = React.useRef(utils);
+  const router = useRouter();
+  const routerRef = React.useRef(router);
   // Keyed on, not merely read: the native token arrives from the Keychain
   // after mount, so an effect with empty deps opens one tokenless socket, is
   // refused at the upgrade, and then retries that same refusal forever —
@@ -175,6 +179,10 @@ export const useSync = (): SyncStatus => {
   React.useEffect(() => {
     utilsRef.current = utils;
   }, [utils]);
+
+  React.useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
 
   React.useEffect(() => {
     if (!sessionReady) return;
@@ -191,6 +199,16 @@ export const useSync = (): SyncStatus => {
       // token this closure was created with.
       token: () => getNativeToken() ?? undefined,
       onStatus: setStatus,
+      /*
+       * The server closed us with 4401: this device's session no longer
+       * exists. The socket has already stopped reconnecting — without this
+       * the app would sit on a sync dot that never settles, against a
+       * credential the server has permanently rejected, and on native that
+       * dead token would still be in the Keychain at the next launch.
+       */
+      onSessionRevoked: () => {
+        void revokeThisDevice(() => routerRef.current.replace("/login"));
+      },
       onEvent: (event, originId) => {
         // Our own echo — the mutation's optimistic update already landed.
         if (originId !== undefined && originId === ORIGIN_ID) return;

@@ -632,6 +632,28 @@ every connected device out. A timer rather than a revoke event, because
 expiry and a row deleted straight out of the database are revocations too,
 and no event is published for either.
 
+The client half is in `@starter/core`'s sync client and is the reason 4401 is
+a number and not a comment: `SESSION_REVOKED_CLOSE_CODE` lives in
+`@starter/shared`, so the end that writes it and the ends that read it cannot
+drift. On that code the client stops reconnecting — permanently, for that
+client instance — instead of entering backoff, because the credential it was
+built with will never be accepted again and the alternative is a reconnect
+loop behind a sync dot that never settles. Hosts recover by *building a new
+client* when their session changes (`useSync` is keyed on the token, the
+extension's `reload()` rebuilds its runtime, a Raycast command is a fresh
+process), so nothing has to un-latch one. Clearing the credential is the
+host's job — Keychain, `chrome.storage`, Raycast's store — and
+`onSessionRevoked` is how it is asked; the web app wires that to
+`lib/revoke-this-device.ts`, which signs out, forgets the Keychain token,
+tells the user and lands them on /login.
+
+Only the *session* is discarded. The offline queue is kept: those rows are
+time the server has never seen, and "this device's access was revoked" is no
+verdict on it — the same rule `isAuthError` already follows mid-flush. The
+count of unsent changes is shown on the login screen rather than left for the
+user to discover, since keeping them silently and dropping them silently look
+identical from the outside.
+
 ### Catalog shape
 
 There is one hierarchy, and it is two levels deep: Client → Project. Tasks and
