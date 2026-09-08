@@ -17,6 +17,20 @@ import type { EntrySource } from "@starter/shared";
 
 export const OFFLINE_QUEUE_STORAGE_KEY = "tracktime.offline-queue";
 
+/**
+ * Where the last account to own the queue is remembered.
+ *
+ * Beside the queue, in the same store and with the same durability, because
+ * it is what a row is stamped with when a mutation is made before the session
+ * has resolved — a cold offline launch on a phone, which is the launch the
+ * queue exists for. Losing it would put those rows back to unowned, i.e.
+ * claimable by the next account to sign in.
+ *
+ * It is an id, not a credential: the token lives in the Keychain, this lives
+ * beside the data it describes.
+ */
+export const OFFLINE_QUEUE_OWNER_STORAGE_KEY = "tracktime.offline-queue-owner";
+
 /** Entries invented client-side carry this prefix until the server replies. */
 export const TEMP_ID_PREFIX = "temp-";
 

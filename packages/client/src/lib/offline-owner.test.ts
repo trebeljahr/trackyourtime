@@ -19,6 +19,7 @@ import {
   getOfflineQueueOwner,
   getPendingCount,
   refreshPendingCount,
+  sealOfflineQueueOwner,
   setOfflineQueueOwner,
   type OfflineMutation,
   type OfflineStartInput,
@@ -153,5 +154,121 @@ describe("queue ownership", () => {
     expect(await setOfflineQueueOwner("user-a")).toBe(2);
     // Nothing left to adopt, so a later switch claims nothing.
     expect(await setOfflineQueueOwner("user-b")).toBe(0);
+  });
+});
+
+/*
+ * `(protected)/layout.tsx` keeps a phone with a stored token inside the app
+ * when the session check cannot reach the server, so the tracker is fully
+ * usable while `useSession()` still says nothing. That is the launch the
+ * offline queue exists for, and it must not produce rows the next account can
+ * claim.
+ */
+describe("queue ownership before the session resolves", () => {
+  beforeEach(() => {
+    __resetOfflineQueueForTests();
+    __resetOfflineQueueOwnerForTests();
+  });
+
+  it("stamps a pre-resolution row with the account that owned the queue last", async () => {
+    await setOfflineQueueOwner("user-a");
+
+    // A relaunch: the queue and its owner stamp survive, `useSession()` does
+    // not. `__resetOfflineQueueOwnerForTests` drops the in-memory owner while
+    // leaving what was persisted, which is exactly a cold launch.
+    __resetOfflineQueueOwnerForTests();
+    await enqueueOffline("entries.start", startInput("offline launch"), "temp-1");
+
+    expect((await getOfflineQueue().list())[0].owner).toBe("user-a");
+
+    // So it is A's work, and B cannot take it.
+    await setOfflineQueueOwner("user-b");
+    expect(await replay()).toEqual([]);
+    expect(getForeignCount()).toBe(1);
+  });
+
+  it("counts a pre-resolution row as this device's own, not as somebody else's", async () => {
+    await setOfflineQueueOwner("user-a");
+    await enqueueOffline("entries.start", startInput("A's work"), "temp-1");
+    __resetOfflineQueueOwnerForTests();
+
+    // Cold launch, session unresolved: the badge must not accuse the person
+    // holding the phone of being a different account.
+    expect(await refreshPendingCount()).toBe(1);
+    expect(getForeignCount()).toBe(0);
+  });
+
+  it("still refuses to replay anything until a session resolves", async () => {
+    await setOfflineQueueOwner("user-a");
+    await enqueueOffline("entries.start", startInput("A's work"), "temp-1");
+    __resetOfflineQueueOwnerForTests();
+
+    // A stamp says who made a mutation. It is never a licence to send one.
+    expect(await replay()).toEqual([]);
+    expect(await getOfflineQueue().size()).toBe(1);
+  });
+
+  it("only leaves a row unowned on a device that has never had an account", async () => {
+    await enqueueOffline("entries.start", startInput("first ever"), "temp-1");
+    expect((await getOfflineQueue().list())[0].owner).toBeUndefined();
+  });
+});
+
+describe("sealing the queue on sign-out", () => {
+  beforeEach(() => {
+    __resetOfflineQueueForTests();
+    __resetOfflineQueueOwnerForTests();
+  });
+
+  it("claims what is still unowned for the departing account", async () => {
+    // Queued before this device ever resolved an account, then signed in.
+    await enqueueOffline("entries.start", startInput("legacy"), "temp-1");
+    await setOfflineQueueOwner("user-a");
+    // …and something queued while A was signed in.
+    await enqueueOffline("entries.start", startInput("A's work"), "temp-2");
+
+    await sealOfflineQueueOwner();
+
+    const rows = await getOfflineQueue().list();
+    expect(rows.map((row) => row.owner)).toEqual(["user-a", "user-a"]);
+
+    // Nothing was destroyed — that is the whole difference from the
+    // extension's forgetSession().
+    expect(rows).toHaveLength(2);
+  });
+
+  it("stops the next account inheriting the stamp", async () => {
+    await setOfflineQueueOwner("user-a");
+    await sealOfflineQueueOwner();
+
+    // B's cold-launch row is B's, not A's, even before B's session resolves.
+    await enqueueOffline("entries.start", startInput("B's work"), "temp-1");
+    expect((await getOfflineQueue().list())[0].owner).toBeUndefined();
+
+    await setOfflineQueueOwner("user-b");
+    expect(await replay()).toEqual(["B's work"]);
+  });
+
+  it("seals an account whose session never resolved this launch", async () => {
+    await setOfflineQueueOwner("user-a");
+    __resetOfflineQueueOwnerForTests();
+    await enqueueOffline("entries.start", startInput("offline launch"), "temp-1");
+
+    // `owner` is null here; the persisted stamp is what identifies the person
+    // signing out.
+    expect(await sealOfflineQueueOwner()).toBe(0);
+    expect((await getOfflineQueue().list())[0].owner).toBe("user-a");
+  });
+
+  it("forgets the persisted owner, not just the in-memory one", async () => {
+    await setOfflineQueueOwner("user-a");
+    await sealOfflineQueueOwner();
+
+    // A relaunch after the sign-out. Nothing is left in storage to stamp with,
+    // so the seal really did reach `OFFLINE_QUEUE_OWNER_STORAGE_KEY` rather
+    // than only clearing the module's own state.
+    __resetOfflineQueueOwnerForTests();
+    await enqueueOffline("entries.start", startInput("after relaunch"), "temp-1");
+    expect((await getOfflineQueue().list())[0].owner).toBeUndefined();
   });
 });

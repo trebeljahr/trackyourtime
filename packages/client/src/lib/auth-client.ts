@@ -6,6 +6,7 @@ import {
   getNativeToken,
   setNativeToken,
 } from "@/lib/native-session";
+import { sealOfflineQueueOwner } from "@/lib/offline";
 
 /**
  * better-auth validates its baseURL with `new URL()`, so a relative
@@ -112,11 +113,22 @@ export const { signIn, signUp, useSession, getSession } = authClient;
  * be re-read on the next launch and keep the app "signed in" against a
  * session that no longer exists, which is exactly the state the offline queue
  * cannot recover from.
+ *
+ * `sealOfflineQueueOwner()` is the other half, and this is the only place it
+ * belongs: an explicit sign-out is the one moment the device knows it has
+ * stopped being this person's. A `null` session anywhere else means "not
+ * resolved yet", which on a cold offline launch is routine. It stamps whatever
+ * is still unowned with the departing account and then forgets them — the
+ * QUEUE is left alone, deliberately, because those rows are time no server has
+ * ever seen.
  */
 export const signOut: typeof authClient.signOut = async (...args) => {
   try {
     return await authClient.signOut(...args);
   } finally {
+    // Both run whatever the server said: a sign-out the network never
+    // delivered still means this person is done with this device.
+    await sealOfflineQueueOwner();
     await clearNativeToken();
   }
 };

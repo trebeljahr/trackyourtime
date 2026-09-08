@@ -21,6 +21,7 @@ import {
   isForeignTo,
   isReplayableBy,
   memoryStorage,
+  OFFLINE_QUEUE_OWNER_STORAGE_KEY,
   OFFLINE_QUEUE_STORAGE_KEY,
   webStorage,
   type FlushResult,
@@ -38,6 +39,7 @@ export {
   isForeignTo,
   isReplayableBy,
   isTempId,
+  OFFLINE_QUEUE_OWNER_STORAGE_KEY,
   OFFLINE_QUEUE_STORAGE_KEY,
   TEMP_ID_PREFIX,
 } from "@starter/core";
@@ -82,7 +84,9 @@ import { isNative } from "@/mobile/bridge";
 const resolveStorage = (): KeyValueStorage => {
   if (typeof window === "undefined") return memoryStorage();
   if (shouldUseNativeStorage()) {
-    return preferencesStorage({ migrateKeys: [OFFLINE_QUEUE_STORAGE_KEY] });
+    return preferencesStorage({
+      migrateKeys: [OFFLINE_QUEUE_STORAGE_KEY, OFFLINE_QUEUE_OWNER_STORAGE_KEY],
+    });
   }
   try {
     return webStorage(window.localStorage);
@@ -92,12 +96,24 @@ const resolveStorage = (): KeyValueStorage => {
   }
 };
 
+/**
+ * One store for the queue and for the owner stamp beside it. They describe
+ * each other, so they must live or die together: an owner remembered in a
+ * store the queue is not in (or the reverse) is worse than neither.
+ */
+let storage: KeyValueStorage | null = null;
+
+const getStorage = (): KeyValueStorage => {
+  storage ??= resolveStorage();
+  return storage;
+};
+
 let queue: OfflineQueue | null = null;
 
 export const getOfflineQueue = (): OfflineQueue => {
   if (queue === null) {
     queue = createOfflineQueue({
-      storage: resolveStorage(),
+      storage: getStorage(),
       key: OFFLINE_QUEUE_STORAGE_KEY,
     });
   }
@@ -107,17 +123,16 @@ export const getOfflineQueue = (): OfflineQueue => {
 /** Test seam: drop the memoised queue so the next call re-resolves storage. */
 export const __resetOfflineQueueForTests = (): void => {
   queue = null;
+  storage = null;
 };
 
 // ── who queued what ──────────────────────────────────────────────────
 
 /*
- * The account this device is currently signed in as, or null while nobody is
- * (or while the session is still resolving — on native the Keychain answers
- * after mount).
+ * The account this device is currently signed in as, or null while nobody is.
  *
- * Every row is stamped with it on the way in and checked against it on the way
- * out, because the queue outlives a sign-out on purpose: `isAuthError` in
+ * Every row is stamped on the way in and checked against this on the way out,
+ * because the queue outlives a sign-out on purpose: `isAuthError` in
  * `hooks/use-offline-queue.ts` stops the flush and KEEPS the rows rather than
  * deleting time the server has never seen. Without a stamp, the next account
  * to sign in on this device replays the previous account's starts and stops
@@ -127,11 +142,42 @@ export const __resetOfflineQueueForTests = (): void => {
  * protect.
  *
  * Rows belonging to somebody else are neither replayed nor dropped. They are
- * counted separately and said out loud (see `foreign` in the queue state), so
- * a device with another account's unsynced time shows that rather than hiding
- * it or silently binning it.
+ * counted separately and said out loud (see `foreign` in the queue state), and
+ * Settings → Devices is where a human can look at them and decide.
  */
 let owner: string | null = null;
+
+/*
+ * The last account that owned this queue, remembered across launches.
+ *
+ * `owner` above comes from `useSession()`, and there is a window in which the
+ * app is fully usable while that is still null: `(protected)/layout.tsx` keeps
+ * a phone with a stored token *inside* the app when the session check cannot
+ * reach the server (`verdictForRejection`), which is precisely the cold
+ * offline launch the offline queue exists for. Stamping those rows with
+ * nothing would leave the flagship offline case producing claimable rows
+ * forever — the migration hole would never close.
+ *
+ * So a mutation queued before the session resolves is stamped with whoever
+ * owned the queue last. The device was theirs a moment ago, and the only
+ * alternatives are an unowned row or refusing to queue at all.
+ *
+ * Stamping only. Replay still requires a live session (`isReplayableBy` reads
+ * `owner`), because a stamp is a claim about who *made* a mutation and never a
+ * licence to send it.
+ */
+let lastOwner: string | null = null;
+let hydration: Promise<void> | null = null;
+
+const hydrateLastOwner = (): Promise<void> => {
+  hydration ??= (async () => {
+    const stored = await getStorage().getItem(OFFLINE_QUEUE_OWNER_STORAGE_KEY);
+    // A live owner set before the read landed always wins — it is the answer
+    // this remembers a stale version of.
+    if (lastOwner === null && stored) lastOwner = stored;
+  })();
+  return hydration;
+};
 
 export const getOfflineQueueOwner = (): string | null => owner;
 
@@ -144,13 +190,55 @@ export const getOfflineQueueOwner = (): string | null => owner;
  * account to sign in after the upgrade claims them. They are its own in every
  * realistic case — the alternative is stranding a day of tracked time forever,
  * or leaving it for whoever signs in two accounts from now.
+ *
+ * `null` here means "no session resolved", NOT "signed out" — the two are
+ * indistinguishable from `useAuth()`, and a cold offline launch produces the
+ * first. So it deliberately does not forget `lastOwner`; an explicit sign-out
+ * calls `sealOfflineQueueOwner` for that.
  */
 export const setOfflineQueueOwner = async (
   next: string | null
 ): Promise<number> => {
+  await hydrateLastOwner();
   if (next === owner) return 0;
   owner = next;
-  const adopted = next === null ? 0 : await getOfflineQueue().adoptUnowned(next);
+
+  let adopted = 0;
+  if (next !== null) {
+    if (next !== lastOwner) {
+      lastOwner = next;
+      await getStorage().setItem(OFFLINE_QUEUE_OWNER_STORAGE_KEY, next);
+    }
+    adopted = await getOfflineQueue().adoptUnowned(next);
+  }
+
+  await refreshPendingCount();
+  return adopted;
+};
+
+/**
+ * Close this account's window on the queue: claim whatever it queued before
+ * its session resolved, then forget it.
+ *
+ * Called from the `signOut` wrapper in `lib/auth-client.ts`, the one moment
+ * this device knows it has stopped being that person's. Adopting first is the
+ * point — an unowned row at sign-out was made in this session by definition,
+ * and leaving it unowned would hand it to whoever signs in next. Forgetting
+ * `lastOwner` afterwards is what keeps the next account's pre-resolution rows
+ * from being stamped with the departed one.
+ *
+ * The queue itself is untouched. That is the whole difference from the
+ * extension's `forgetSession()`.
+ */
+export const sealOfflineQueueOwner = async (): Promise<number> => {
+  await hydrateLastOwner();
+  const departing = owner ?? lastOwner;
+  const adopted =
+    departing === null ? 0 : await getOfflineQueue().adoptUnowned(departing);
+
+  owner = null;
+  lastOwner = null;
+  await getStorage().removeItem(OFFLINE_QUEUE_OWNER_STORAGE_KEY);
   await refreshPendingCount();
   return adopted;
 };
@@ -158,6 +246,8 @@ export const setOfflineQueueOwner = async (
 /** Test seam. */
 export const __resetOfflineQueueOwnerForTests = (): void => {
   owner = null;
+  lastOwner = null;
+  hydration = null;
 };
 
 // ── reactive pending count ───────────────────────────────────────────
@@ -205,11 +295,12 @@ export const getServerForeignCount = (): number => 0;
  */
 export const refreshPendingCount = async (): Promise<number> => {
   const rows = await getOfflineQueue().list();
-  if (owner === null) {
+  const against = owner ?? lastOwner;
+  if (against === null) {
     setCounts(rows.length, 0);
     return rows.length;
   }
-  const theirs = rows.filter((row) => isForeignTo(row, owner)).length;
+  const theirs = rows.filter((row) => isForeignTo(row, against)).length;
   setCounts(rows.length - theirs, theirs);
   return rows.length - theirs;
 };
@@ -221,10 +312,13 @@ export const enqueueOffline = async <K extends OfflineOp>(
   tempId?: string
 ): Promise<void> => {
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
-  // `owner ?? undefined` writes no stamp at all when the session has not
-  // resolved. That row is then adopted by the first account to claim the
-  // queue, which is the same rule legacy rows follow.
-  await getOfflineQueue().enqueue(op, payload, owner ?? undefined);
+  await hydrateLastOwner();
+  // `lastOwner` is the fallback for a mutation made before the session
+  // resolved — routine on a cold offline launch, where the app is usable and
+  // `useSession()` has nothing to say. Only a device that has never had an
+  // account writes an unowned row now, and the first account to sign in
+  // adopts it.
+  await getOfflineQueue().enqueue(op, payload, owner ?? lastOwner ?? undefined);
   await refreshPendingCount();
 };
 
@@ -242,7 +336,7 @@ export const cancelQueuedForTemp = async (tempId: string): Promise<boolean> => {
     // being deleted belongs to an entry in THIS session's cache. An unowned
     // row is fair game — it is one this session queued before the account
     // resolved, or one waiting to be adopted.
-    if (isForeignTo(row, owner)) continue;
+    if (isForeignTo(row, owner ?? lastOwner)) continue;
     const decoded = decodeOfflineMutation(row);
     if (decoded?.tempId !== tempId) continue;
     await offlineQueue.remove(row.id);
