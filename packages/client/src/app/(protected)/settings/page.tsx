@@ -9,6 +9,7 @@ import { ImportHistory } from "@/components/data/import-history";
 import { ImportPanel } from "@/components/data/import-panel";
 import { ApiTokensPanel } from "@/components/settings/api-tokens";
 import { DevicesPanel } from "@/components/settings/devices";
+import { ForeignQueuePanel } from "@/components/settings/foreign-queue";
 import { WebhooksPanel } from "@/components/settings/webhooks";
 import { BillingSettings } from "@/components/settings/billing-settings";
 import { GeneralSettings } from "@/components/settings/general-settings";
@@ -91,8 +92,16 @@ export default function SettingsPage() {
           <ImportHistory />
           <ExportPanel />
         </TabsContent>
-        <TabsContent value="devices" data-testid="settings-panel-devices">
+        <TabsContent
+          value="devices"
+          className="space-y-6"
+          data-testid="settings-panel-devices"
+        >
           <DevicesPanel />
+          {/* Renders nothing unless this device is holding somebody else's
+              unsynced work. It belongs beside the sessions rather than under
+              Data, which is about the workspace, not about this device. */}
+          <ForeignQueuePanel />
         </TabsContent>
         <TabsContent
           value="integrations"

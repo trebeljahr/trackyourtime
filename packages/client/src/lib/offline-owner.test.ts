@@ -12,12 +12,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   __resetOfflineQueueForTests,
   __resetOfflineQueueOwnerForTests,
+  discardForeignQueued,
   enqueueOffline,
   flushOfflineQueue,
   getForeignCount,
   getOfflineQueue,
   getOfflineQueueOwner,
   getPendingCount,
+  listForeignQueued,
   refreshPendingCount,
   sealOfflineQueueOwner,
   setOfflineQueueOwner,
@@ -270,5 +272,72 @@ describe("sealing the queue on sign-out", () => {
     __resetOfflineQueueOwnerForTests();
     await enqueueOffline("entries.start", startInput("after relaunch"), "temp-1");
     expect((await getOfflineQueue().list())[0].owner).toBeUndefined();
+  });
+});
+
+/*
+ * Keeping another account's rows forever is right and, on its own, a dead end:
+ * the tracker reports a count nobody can act on until the app is reinstalled.
+ * These cover the way out — which is explicit, human, and never automatic.
+ */
+describe("another account's queued rows", () => {
+  beforeEach(() => {
+    __resetOfflineQueueForTests();
+    __resetOfflineQueueOwnerForTests();
+  });
+
+  it("describes them well enough for a person to decide", async () => {
+    await setOfflineQueueOwner("user-a");
+    await enqueueOffline("entries.start", startInput("Design review"), "temp-1");
+    await enqueueOffline("entries.stop", {
+      end: "2026-08-21T10:00:00.000Z",
+      originId: "tab-1",
+    });
+    await setOfflineQueueOwner("user-b");
+
+    const rows = await listForeignQueued();
+    expect(rows.map((row) => row.op)).toEqual([
+      "entries.start",
+      "entries.stop",
+    ]);
+    // The start carries what the work was called and when it happened; a stop
+    // carries neither, so it falls back to when it was queued.
+    expect(rows[0].description).toBe("Design review");
+    expect(rows[0].at).toBe("2026-08-21T09:00:00.000Z");
+    expect(rows[1].description).toBeNull();
+    expect(Number.isNaN(Date.parse(rows[1].at))).toBe(false);
+  });
+
+  it("lists nothing while the rows are this account's own", async () => {
+    await setOfflineQueueOwner("user-a");
+    await enqueueOffline("entries.start", startInput("A's work"), "temp-1");
+    expect(await listForeignQueued()).toEqual([]);
+  });
+
+  it("discards only the other account's rows", async () => {
+    await setOfflineQueueOwner("user-a");
+    await enqueueOffline("entries.start", startInput("A's work"), "temp-a");
+    await setOfflineQueueOwner("user-b");
+    await enqueueOffline("entries.start", startInput("B's work"), "temp-b");
+
+    expect(await discardForeignQueued()).toBe(1);
+
+    // B keeps its own queue, and can still send it.
+    expect(getForeignCount()).toBe(0);
+    expect(getPendingCount()).toBe(1);
+    expect(await replay()).toEqual(["B's work"]);
+  });
+
+  it("leaves unowned rows alone — they are not somebody else's yet", async () => {
+    await enqueueOffline("entries.start", startInput("unowned"), "temp-1");
+    await setOfflineQueueOwner("user-a");
+    // Adoption already claimed it, so there is nothing foreign to discard.
+    expect(await discardForeignQueued()).toBe(0);
+    expect(await getOfflineQueue().size()).toBe(1);
+  });
+
+  it("discards nothing when there is nothing to discard", async () => {
+    await setOfflineQueueOwner("user-a");
+    expect(await discardForeignQueued()).toBe(0);
   });
 });

@@ -549,11 +549,26 @@ the very thing being replaced.
   replay the previous one's starts and stops into its own workspace. The field
   is optional and must stay so — `decodeOfflineMutation` reads rows written
   before it existed, and the first account to sign in adopts them
-  (`adoptUnowned`). A row belonging to somebody else is neither replayed nor
-  deleted: the tracker bar counts it (`foreign`) and says whose it is. The
-  browser extension solves the same problem by **clearing** its queue in
-  `forgetSession()`, which is the right trade there and the wrong one here —
-  these rows are the phone's only copy of the time.
+  (`adoptUnowned`). The browser extension solves the same problem by
+  **clearing** its queue in `forgetSession()`, which is the right trade there
+  and the wrong one here — these rows are the phone's only copy of the time.
+- **The stamp cannot come from `useSession()` alone.** `(protected)/layout.tsx`
+  keeps a phone with a stored token inside the app when the session check
+  cannot reach the server (`verdictForRejection`), so the tracker is fully
+  usable on a cold offline launch while `useAuth().user` is still null — which
+  is the launch the queue exists for. The last owner is therefore remembered
+  beside the queue (`OFFLINE_QUEUE_OWNER_STORAGE_KEY`, same store, same
+  durability) and used for stamping when the session has not resolved.
+  Stamping only: replay reads the live session, because a stamp says who *made*
+  a mutation and is never a licence to send it. Sign-out — the one moment the
+  device knows it has stopped being that person's — calls
+  `sealOfflineQueueOwner()`, which claims whatever is still unowned and then
+  forgets the stamp. A `null` session anywhere else means "not resolved yet".
+- **A row belonging to somebody else is neither replayed nor deleted**, which
+  on its own makes it immortal. The tracker bar counts it (`foreign`) and links
+  to Settings → Devices, where `ForeignQueuePanel` lists what the rows are and
+  offers the one deliberate way out. No age-based expiry: deleting somebody's
+  tracked time on a timer is still deleting it silently.
 
 ### Clients without a cookie jar (Raycast, CLI, extensions)
 

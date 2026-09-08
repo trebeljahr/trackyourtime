@@ -10,6 +10,7 @@ import {
   UserRoundX,
   WifiOff,
 } from "lucide-react";
+import Link from "next/link";
 import type { EntryFields } from "@starter/core";
 import { formatDuration } from "@starter/shared";
 
@@ -417,16 +418,20 @@ export function TrackerBar(): React.JSX.Element {
             to do silently, so the count is on screen with the reason.
           */}
           {foreign > 0 ? (
-            <Badge
-              variant="outline"
-              className="gap-1.5"
-              data-testid="offline-foreign"
-              data-foreign={foreign}
-              title="Queued by another account on this device. They are kept, and will sync when that account signs in here."
+            <Link
+              href="/settings?tab=devices"
+              title="Queued by another account on this device. They are kept, and never replayed under yours."
             >
-              <UserRoundX className="size-3" />
-              {foreign} change{foreign === 1 ? "" : "s"} from another account
-            </Badge>
+              <Badge
+                variant="outline"
+                className="gap-1.5 hover:bg-accent"
+                data-testid="offline-foreign"
+                data-foreign={foreign}
+              >
+                <UserRoundX className="size-3" />
+                {foreign} change{foreign === 1 ? "" : "s"} from another account
+              </Badge>
+            </Link>
           ) : null}
         </div>
       ) : null}

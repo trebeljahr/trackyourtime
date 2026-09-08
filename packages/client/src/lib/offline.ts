@@ -30,6 +30,7 @@ import {
   type OfflineOp,
   type OfflinePayloadMap,
   type OfflineQueue,
+  type QueuedMutation,
   type StoredOfflinePayload,
 } from "@starter/core";
 
@@ -375,6 +376,68 @@ export const flushOfflineQueue = async (
   );
   await refreshPendingCount();
   return result;
+};
+
+/**
+ * What another account left queued on this device, for a human to look at.
+ *
+ * The rows are kept and never replayed, which is right — but on its own that
+ * makes them immortal, and a permanent badge nobody can act on is a scold.
+ * Settings shows them, `discardForeignQueued` is the way out, and both need
+ * these rows to be something a person can recognise: deleting "3 changes" is
+ * not a decision anybody can make.
+ */
+export type ForeignQueuedRow = {
+  queueId: string;
+  /** null when the row was written by a build whose ops we no longer know. */
+  op: OfflineOp | null;
+  description: string | null;
+  /** When the work happened — the payload's own start, else when it queued. */
+  at: string;
+};
+
+const describeQueued = (row: QueuedMutation): ForeignQueuedRow => {
+  const decoded = decodeOfflineMutation(row);
+  if (decoded === null) {
+    return { queueId: row.id, op: null, description: null, at: row.createdAt };
+  }
+  const input = decoded.input as { description?: string; start?: string };
+  return {
+    queueId: row.id,
+    op: decoded.op,
+    description: input.description ?? null,
+    at: input.start ?? row.createdAt,
+  };
+};
+
+export const listForeignQueued = async (): Promise<ForeignQueuedRow[]> => {
+  await hydrateLastOwner();
+  const against = owner ?? lastOwner;
+  const rows = await getOfflineQueue().list();
+  return rows.filter((row) => isForeignTo(row, against)).map(describeQueued);
+};
+
+/**
+ * Delete the rows queued by another account, and only those.
+ *
+ * The one deletion path for unsynced time in this client, and it exists only
+ * behind an explicit human confirmation that names what is being destroyed
+ * (see `components/settings/foreign-queue.tsx`). Nothing calls it on a timer,
+ * on a sign-out or on an age threshold: a silent drop is the thing this whole
+ * mechanism was built to avoid, and putting one behind a clock does not make
+ * it less silent.
+ */
+export const discardForeignQueued = async (): Promise<number> => {
+  await hydrateLastOwner();
+  const against = owner ?? lastOwner;
+  const offlineQueue = getOfflineQueue();
+  const rows = await offlineQueue.list();
+  const theirs = rows.filter((row) => isForeignTo(row, against));
+
+  for (const row of theirs) await offlineQueue.remove(row.id);
+
+  if (theirs.length > 0) await refreshPendingCount();
+  return theirs.length;
 };
 
 export const clearOfflineQueue = async (): Promise<void> => {
