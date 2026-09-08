@@ -1,5 +1,19 @@
 apply plugin: 'com.android.application'
 
+// Release signing.
+//
+// .github/workflows/mobile-release.yml decodes ANDROID_KEYSTORE_BASE64 into
+// android/app/release.keystore and passes the three credentials below in the
+// environment. A local `./gradlew bundleRelease` has neither and must still
+// build, so the config is conditional on the file actually being there rather
+// than required.
+//
+// Until this existed gradle signed the release bundle with nothing at all: the
+// workflow decoded a keystore that no build script ever read, and produced —
+// from a completely green run — an .aab Play refuses to accept.
+def releaseKeystore = file('release.keystore')
+def hasReleaseKeystore = releaseKeystore.exists()
+
 android {
     namespace = "com.trebeljahr.tracktime"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -20,8 +34,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasReleaseKeystore) {
+                storeFile releaseKeystore
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (hasReleaseKeystore) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

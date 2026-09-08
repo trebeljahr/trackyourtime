@@ -30,6 +30,13 @@ src-tauri/gen/
 # the src-tauri/icons/ directory — re-include the Tauri icon set explicitly.
 !src-tauri/icons/
 
+# Release signing material. CI decodes ANDROID_KEYSTORE_BASE64 to this path
+# (.github/workflows/mobile-release.yml) and android/app/build.gradle signs with
+# it when it is present — so on a developer machine it is a real upload key
+# sitting inside a committed native tree.
+android/app/release.keystore
+android/app/*.jks
+
 # Capacitor-generated native projects (created by `cap add ios|android`).
 #
 # ios/ is COMMITTED. Every hand-edit a shipping app needs — the bundle

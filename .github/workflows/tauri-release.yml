@@ -20,8 +20,7 @@ name: Tauri Release
 #   plus a "signCommand" entry under bundle.windows in tauri.conf.json —
 #   `hatchkit signing apply` wires both ends.
 #
-# All platforms:
-#   NEXT_PUBLIC_API_URL               — API URL baked into the static client export
+# The API origin is NOT among them — see the env block below.
 
 on:
   push:
@@ -31,6 +30,16 @@ on:
 
 permissions:
   contents: read
+
+# The API origin baked into the static client export. See the long note in
+# desktop-release.yml: a repo VARIABLE with a literal fallback, because this was
+# read as `secrets.NEXT_PUBLIC_API_URL`, that secret is not set, and an unset
+# secret expands to the empty string rather than failing the run. Next inlines
+# NEXT_PUBLIC_* at build time, so an empty read ships a signed, notarized,
+# distributed binary that talks to nothing and can never be retargeted. Same
+# read as the main pipeline settled on in 33f4683.
+env:
+  NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
 
 jobs:
   macos:
@@ -96,10 +105,28 @@ jobs:
 
       - name: Build (Tauri, universal binary)
         env:
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_CERT_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERT_PASSWORD }}
         run: pnpm tauri build --target universal-apple-darwin
+
+      # `pnpm tauri build` runs `pnpm build:client` as its beforeBuildCommand,
+      # so the static export exists by now and can be checked. A release binary
+      # built against the wrong URL is worse than a failed build, because it is
+      # signed, notarized and handed to people.
+      - name: Verify the API URL reached the bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=packages/client/out
+          if [ -z "${NEXT_PUBLIC_API_URL:-}" ]; then
+            echo "::error::NEXT_PUBLIC_API_URL is empty" >&2
+            exit 1
+          fi
+          if ! grep -rqF "$NEXT_PUBLIC_API_URL" "$out/_next/static"; then
+            echo "::error::NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL never reached the bundle" >&2
+            exit 1
+          fi
+          echo "✓ built against $NEXT_PUBLIC_API_URL"
 
       - name: Verify signature + notarization
         if: env.APPLE_TEAM_ID != ''
@@ -170,9 +197,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build (Tauri)
-        env:
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         run: pnpm tauri build
+
+      # `pnpm tauri build` runs `pnpm build:client` as its beforeBuildCommand,
+      # so the static export exists by now and can be checked. A release binary
+      # built against the wrong URL is worse than a failed build, because it is
+      # signed, notarized and handed to people.
+      - name: Verify the API URL reached the bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=packages/client/out
+          if [ -z "${NEXT_PUBLIC_API_URL:-}" ]; then
+            echo "::error::NEXT_PUBLIC_API_URL is empty" >&2
+            exit 1
+          fi
+          if ! grep -rqF "$NEXT_PUBLIC_API_URL" "$out/_next/static"; then
+            echo "::error::NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL never reached the bundle" >&2
+            exit 1
+          fi
+          echo "✓ built against $NEXT_PUBLIC_API_URL"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -211,9 +255,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build (Tauri)
-        env:
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         run: pnpm tauri build
+
+      # `pnpm tauri build` runs `pnpm build:client` as its beforeBuildCommand,
+      # so the static export exists by now and can be checked. A release binary
+      # built against the wrong URL is worse than a failed build, because it is
+      # signed, notarized and handed to people.
+      - name: Verify the API URL reached the bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=packages/client/out
+          if [ -z "${NEXT_PUBLIC_API_URL:-}" ]; then
+            echo "::error::NEXT_PUBLIC_API_URL is empty" >&2
+            exit 1
+          fi
+          if ! grep -rqF "$NEXT_PUBLIC_API_URL" "$out/_next/static"; then
+            echo "::error::NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL never reached the bundle" >&2
+            exit 1
+          fi
+          echo "✓ built against $NEXT_PUBLIC_API_URL"
 
       - uses: actions/upload-artifact@v4
         with:

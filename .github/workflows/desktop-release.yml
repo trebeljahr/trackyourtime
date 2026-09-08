@@ -10,6 +10,22 @@ on:
       - "v*"
   workflow_dispatch:
 
+# The API origin the static export is built against.
+#
+# A repo VARIABLE with a literal fallback, not a secret — an API origin is not
+# one, and reading it as one was worse than merely wrong: `secrets.NEXT_PUBLIC_API_URL`
+# is not set on this repo, so it expanded to the empty string and every `v*`
+# tag would have packaged an app built against nothing. Next inlines
+# NEXT_PUBLIC_* at build time, so that binary cannot be retargeted after the
+# fact — it is downloaded, installed, and permanently talks to no API.
+#
+# The main pipeline shipped exactly this for months and settled on the form
+# below in 33f4683 (a `vars.` read that silently produced empty-API images,
+# plus a literal fallback so an unset variable cannot do it again). Same read
+# here, so the two cannot drift apart.
+env:
+  NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+
 jobs:
   build:
     strategy:
@@ -49,10 +65,55 @@ jobs:
       - name: Build client static export
         run: pnpm build:client
         env:
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          # `pnpm build:desktop` is `RELATIVE_ASSET_PREFIX=1 pnpm build:client`,
+          # and this workflow was running the inner half alone. Electron loads
+          # the export off file:// (`win.loadFile` in electron/main.ts), where a
+          # root-absolute "/_next/..." resolves against the FILESYSTEM root and
+          # every chunk 404s — a packaged app that opens a blank window from a
+          # perfectly green build.
+          #
+          # Set as step env rather than inline in the command because pnpm runs
+          # scripts through cmd.exe on the windows runner, where `VAR=1 pnpm ...`
+          # is not a command.
+          RELATIVE_ASSET_PREFIX: "1"
+
+      # A release artifact built against the wrong URL is worse than a failed
+      # build, because it gets distributed. Assert both build-time inlinings
+      # actually landed, before anything is packaged or pushed to itch.
+      - name: Verify the export is the export we asked for
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=packages/client/out
+
+          if [ -z "${NEXT_PUBLIC_API_URL:-}" ]; then
+            echo "::error::NEXT_PUBLIC_API_URL is empty — the app would resolve every request against file://" >&2
+            exit 1
+          fi
+          if ! grep -rqF "$NEXT_PUBLIC_API_URL" "$out/_next/static"; then
+            echo "::error::NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL never reached the bundle" >&2
+            exit 1
+          fi
+          echo "✓ built against $NEXT_PUBLIC_API_URL"
+
+          # The mirror image of the assertion in scripts/build-mobile.mjs, which
+          # fails when a relative prefix DOES leak into a Capacitor build.
+          if ! grep -rqF '"./_next' "$out" --include='*.html'; then
+            echo "::error::no emitted HTML references \"./_next — RELATIVE_ASSET_PREFIX did not apply, and the packaged app will load nothing off file://" >&2
+            exit 1
+          fi
+          echo "✓ assets are file://-safe (relative prefix)"
 
       - name: Compile Electron
         run: pnpm electron:compile
+
+      # build/icon.icns and build/icon.ico are generated from build/icon.png and
+      # gitignored as such (.gitignore: "source of truth is build/icon.png"), but
+      # the electron-builder config in package.json names all three. Without this
+      # step a mac or windows packaging run fails on a missing icon; linux uses
+      # the .png directly and needs nothing, so this is a no-op there.
+      - name: Generate desktop icons
+        run: pnpm icons:desktop
 
       - name: Package (electron-builder)
         run: pnpm exec electron-builder --${{ matrix.target }}

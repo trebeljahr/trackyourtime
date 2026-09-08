@@ -10,6 +10,20 @@ on:
       - "v*"
   workflow_dispatch:
 
+# The API origin baked into the static export. See the long note in
+# desktop-release.yml: a repo VARIABLE with a literal fallback, because this was
+# read as `secrets.NEXT_PUBLIC_API_URL`, that secret is not set, and an unset
+# secret expands to the empty string rather than failing — which for a
+# build-time-inlined NEXT_PUBLIC_* means shipping an app permanently pointed at
+# nothing. Same read as the main pipeline settled on in 33f4683.
+#
+# scripts/build-mobile.mjs owns the assertion here: it refuses to run with this
+# unset, rejects a value carrying a path, and afterwards greps the emitted
+# chunks for the literal. So an empty or misspelled value fails the job rather
+# than producing an .aab, and the workflow needs no separate check.
+env:
+  NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -35,8 +49,6 @@ jobs:
 
       - name: Build static export
         run: pnpm build:mobile android
-        env:
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
 
       - name: Decode signing keystore
         if: env.ANDROID_KEYSTORE_BASE64 != ''
@@ -46,20 +58,37 @@ jobs:
           mkdir -p android/app
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
 
-      # UNSIGNED. android/app/build.gradle has no `signingConfigs`, so gradle
-      # signs the release bundle with nothing and the three secrets below are
-      # read by no one — the keystore written above included. A signing stage
-      # has to add a `signingConfigs.release` block reading these from the
-      # environment and point `buildTypes.release.signingConfig` at it; until
-      # then this artifact cannot be uploaded to Play, and the upload step
-      # stays gated on a service-account secret that is not set.
-      - name: Build AAB (unsigned — see above)
+      # Signed when the keystore step above wrote one, unsigned otherwise.
+      # `signingConfigs.release` in android/app/build.gradle reads exactly these
+      # three names out of the environment, and is conditional on
+      # android/app/release.keystore existing — so a local `./gradlew
+      # bundleRelease` with no keystore still builds, it just produces an
+      # artifact Play will not take.
+      - name: Build AAB
         working-directory: android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew bundleRelease
+
+      # Gradle signs with whatever config it was handed and says nothing when
+      # that config is empty, so "the secrets are set" and "the bundle is
+      # signed" are two different facts. Assert the second one here, or the
+      # first Play upload is where we find out.
+      - name: Verify the AAB is signed
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          AAB=$(ls android/app/build/outputs/bundle/release/*.aab | head -n1)
+          if ! jarsigner -verify "$AAB" | grep -q 'jar verified'; then
+            echo "::error::$AAB is not signed — a keystore was decoded but gradle did not use it" >&2
+            jarsigner -verify "$AAB" >&2 || true
+            exit 1
+          fi
+          echo "✓ $AAB is signed"
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
@@ -97,8 +126,6 @@ jobs:
 
       - name: Build static export + sync
         run: pnpm build:mobile ios
-        env:
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
 
       # No `pod install`: Capacitor 8 generates an SPM project (there is no
       # Podfile and no App.xcworkspace), and CocoaPods is not installed on the
