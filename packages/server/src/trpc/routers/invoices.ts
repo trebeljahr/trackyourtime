@@ -824,7 +824,7 @@ export const invoicesRouter = router({
     .query(async ({ ctx, input }): Promise<InvoiceWire> => {
       const doc = await Invoice.findOne({
         _id: requireObjectId(input.id, "Invoice not found"),
-        workspaceId: ctx.user.id,
+        workspaceId: ctx.workspaceId,
       }).lean();
       if (!doc) throw notFound();
       return toClientInvoice(doc);
@@ -943,7 +943,7 @@ export const invoicesRouter = router({
     .query(async ({ ctx, input }): Promise<PdfExportResult> => {
       const doc = await Invoice.findOne({
         _id: requireObjectId(input.id, "Invoice not found"),
-        workspaceId: ctx.user.id,
+        workspaceId: ctx.workspaceId,
       }).lean();
       if (!doc) throw notFound();
 

@@ -102,3 +102,26 @@ test("the routers that opt out of workspace scoping each state why", () => {
     assert.ok(reason.length > 10, `${file} needs a real reason, not "${reason}"`);
   }
 });
+
+// A router can use `workspaceProcedure` and still be wrong: `ctx.user.id` is
+// in scope beside `ctx.workspaceId`, and the two are interchangeable in a
+// personal workspace, so a query keyed on the caller instead of the workspace
+// matches today and returns nothing the day a workspace has a second member.
+// `invoices.get` and `invoices.exportPdf` both did exactly that.
+//
+// Only the literal `workspaceId:` key is checked. Passing `ctx.user.id` as a
+// separate argument — `ownWebhookFilter(ctx.workspaceId, ctx.user.id)` — is
+// the deliberate within-workspace ownership check and stays legal.
+test("no router uses the caller's user id as a workspace id", () => {
+  for (const file of routerFiles) {
+    const source = read(file);
+    assert.ok(
+      !/workspaceId:\s*ctx\.user\.id/.test(source),
+      `${file} scopes a query with \`workspaceId: ctx.user.id\`. Those two ` +
+        `values coincide only while every workspace is personal — use ` +
+        `ctx.workspaceId. To restrict to what the CALLER owns within the ` +
+        `workspace, add a separate field (createdBy/authorId/userId) beside ` +
+        `ctx.workspaceId.`,
+    );
+  }
+});
