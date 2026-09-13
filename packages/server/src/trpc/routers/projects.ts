@@ -3,9 +3,12 @@
 import {
   createProjectSchema,
   idInputSchema,
+  projectBillingImpactSchema,
   projectListSchema,
-  updateProjectSchema,
+  updateProjectWithEntriesSchema,
   type Project as ProjectWire,
+  type ProjectBillingImpact,
+  type ProjectUpdateResult,
 } from "@starter/shared";
 import { scopeFromContext } from "../../services/scope.js";
 import {
@@ -13,9 +16,11 @@ import {
   createProject,
   listProjects,
   removeProject,
-  updateProject,
+  updateProjectWithEntries,
   type ProjectWithStats,
 } from "../../services/catalog/projects.js";
+import { projectBillingImpact } from "../../services/catalog/project-entry-billing.js";
+import { assertObjectId } from "../../services/catalog/guards.js";
 import { workspaceProcedure, router } from "../trpc.js";
 import type { CatalogRemoveResult } from "./catalog-cascade.js";
 import { archiveInputSchema } from "./clients.js";
@@ -36,11 +41,24 @@ export const projectsRouter = router({
       createProject(scopeFromContext(ctx), input),
     ),
 
+  /**
+   * `applyToEntries` also rewrites the billable flag and rate of the caller's
+   * un-invoiced entries on the project. REST has no equivalent on purpose —
+   * see `updateProjectWithEntriesSchema`.
+   */
   update: workspaceProcedure
-    .input(updateProjectSchema)
-    .mutation(async ({ ctx, input }): Promise<ProjectWire> =>
-      updateProject(scopeFromContext(ctx), input),
+    .input(updateProjectWithEntriesSchema)
+    .mutation(async ({ ctx, input }): Promise<ProjectUpdateResult> =>
+      updateProjectWithEntries(scopeFromContext(ctx), input),
     ),
+
+  /** What `update` with `applyToEntries` would reach, for the prompt. */
+  billingImpact: workspaceProcedure
+    .input(projectBillingImpactSchema)
+    .query(async ({ ctx, input }): Promise<ProjectBillingImpact> => {
+      assertObjectId(input.id);
+      return projectBillingImpact(scopeFromContext(ctx), input.id);
+    }),
 
   archive: workspaceProcedure
     .input(archiveInputSchema)

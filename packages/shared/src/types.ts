@@ -170,6 +170,24 @@ export type CatalogRemoveResult = {
 };
 
 /**
+ * The time a project billing change can reach: the caller's own entries on
+ * the project. Invoiced ones are counted apart because they are never
+ * rewritten — an issued invoice was calculated from them.
+ */
+export type ProjectBillingImpact = {
+  /** Entries a rewrite would touch. */
+  entries: number;
+  /** Entries on an invoice, which keep their billable flag and rate. */
+  invoiced: number;
+};
+
+/** What `projects.update` reports about an `applyToEntries` rewrite. */
+export type ProjectUpdateResult = Project & {
+  /** Null when the update did not carry the change onto booked time. */
+  entriesRewritten: ProjectBillingImpact | null;
+};
+
+/**
  * What removing a tag resolves to. A tag still on tracked time is archived
  * rather than deleted, so the caller has to be told which of the two happened.
  */

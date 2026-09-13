@@ -798,6 +798,26 @@ names are unique per workspace rather than per project, which existing
 duplicates across projects are grandfathered past — they only block a new
 create or rename.
 
+### Project billing and booked time
+
+The Projects table edits a project's billable default and rate in one cell
+(`project-billing-cell.tsx`), which shows the workspace default rate when the
+project has none. Entries snapshot flag and rate when saved, so a change reaches
+new time only — unless the person accepts the prompt in
+`apply-to-entries-prompt.tsx`, which the project dialog uses too. Accepting sends
+`applyToEntries` to `projects.update`; `services/catalog/project-entry-billing.ts`
+does the rewrite. Three limits, each an existing rule:
+
+- **Invoiced entries are skipped**, and counted on screen. `billable` is an
+  invoice-relevant field.
+- **Only the caller's own entries.** Entry editing is author-only.
+- **Each entry's flag moves only when the project default did.** A rate change
+  alone reprices billable entries and leaves a hand-set non-billable one alone.
+
+`applyToEntries` lives on `updateProjectWithEntriesSchema`, never on
+`updateProjectSchema`: REST validates with the latter and publishes it as
+OpenAPI, and a bulk rewrite of history is not part of the public API.
+
 ### Tags
 
 Tags are the other catalog dimension outside the client/project hierarchy:

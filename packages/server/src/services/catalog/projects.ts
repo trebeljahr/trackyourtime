@@ -15,7 +15,9 @@ import {
   rollupVisibility,
   type OwnCollateralCounts,
   type ProjectListInput,
+  type ProjectUpdateResult,
   type UpdateProjectInput,
+  type UpdateProjectWithEntriesInput,
 } from "@starter/shared";
 import { Favorite } from "../../models/Favorite.js";
 import {
@@ -37,6 +39,7 @@ import {
 } from "../../trpc/routers/project-budgets.js";
 import type { WorkspaceScope } from "../scope.js";
 import { assertClientOwned, assertObjectId } from "./guards.js";
+import { applyBillingToEntries } from "./project-entry-billing.js";
 import { assertUniqueCatalogName } from "./names.js";
 import { catalogEntryRollup } from "./rollup.js";
 
@@ -290,6 +293,63 @@ export async function updateProject(
     input.originId,
   );
   return toClientProject(updated);
+}
+
+/**
+ * `updateProject`, optionally carrying the billing change onto the time
+ * already booked on the project (`project-entry-billing.ts` for what that
+ * may and may not touch).
+ *
+ * The flag is a no-op for an update that changes neither the billable
+ * default nor the rate: nothing about the entries' billing would move.
+ */
+export async function updateProjectWithEntries(
+  scope: WorkspaceScope,
+  input: UpdateProjectWithEntriesInput,
+): Promise<ProjectUpdateResult> {
+  const { applyToEntries, ...update } = input;
+  const touchesBilling =
+    update.billableDefault !== undefined || update.hourlyRate !== undefined;
+
+  if (!applyToEntries || !touchesBilling) {
+    return { ...(await updateProject(scope, update)), entriesRewritten: null };
+  }
+
+  assertObjectId(update.id);
+  // Read before the write: whether the default changed decides whether each
+  // entry's own flag is overwritten or left alone.
+  const before = await Project.findOne({
+    _id: update.id,
+    workspaceId: scope.workspaceId,
+  })
+    .select("billableDefault")
+    .lean();
+  if (!before) throw notFound();
+
+  const project = await updateProject(scope, update);
+  const settings = await getOrCreateWorkspaceSettings(scope.workspaceId);
+  const entriesRewritten = await applyBillingToEntries(
+    scope,
+    project.id,
+    {
+      billableDefault: project.billableDefault,
+      billableChanged: project.billableDefault !== before.billableDefault,
+      projectRate: project.hourlyRate,
+    },
+    settings,
+  );
+
+  if (entriesRewritten.entries > 0) {
+    // Entry lists, reports and invoice previews all read the snapshot this
+    // just rewrote. `updateProject` already announced the catalog change; this
+    // one tells every other screen that entries moved with it.
+    void publishSync(
+      scope.workspaceId,
+      { kind: "catalog.changed", scope: "project", entriesTouched: true },
+      input.originId,
+    );
+  }
+  return { ...project, entriesRewritten };
 }
 
 export async function archiveProject(

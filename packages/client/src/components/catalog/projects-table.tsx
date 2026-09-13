@@ -13,7 +13,6 @@ import {
 
 import { BudgetMeterCell } from "@/components/budget-meter";
 import { EmptyState } from "@/components/empty-state";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,10 +33,12 @@ import {
 import { budgetView } from "@/lib/budget-view";
 import { formatMoney, useFormatSettings } from "@/lib/format";
 import { useAllTimeRange } from "@/lib/entry-links";
+import { useApplyToEntriesPrompt } from "./apply-to-entries-prompt";
 import { CatalogName } from "./catalog-name";
 import { ClientFormDialog } from "./client-form-dialog";
 import { ConfirmDialog } from "./confirm-dialog";
 import { EntriesLink, ShowEntriesItem } from "./entries-link";
+import { ProjectBillingCell } from "./project-billing-cell";
 import { ProjectFormDialog } from "./project-form-dialog";
 import type { ClientRow, ProjectRow } from "./types";
 import { useProjectMutations } from "./use-catalog-mutations";
@@ -59,7 +60,10 @@ export function ProjectsTable({
   onCreate,
 }: ProjectsTableProps): React.JSX.Element {
   const format = useFormatSettings();
-  const { setProjectArchived, removeProject } = useProjectMutations();
+  const { setProjectArchived, removeProject, updateProject } =
+    useProjectMutations();
+  // One prompt for every row's billing cell, so the table mounts one dialog.
+  const applyPrompt = useApplyToEntriesPrompt();
   // Both roll-up columns are lifetime totals, so the entry log they open has
   // to span the same thing.
   const allTime = useAllTimeRange();
@@ -125,8 +129,7 @@ export function ProjectsTable({
             <TableRow>
               <TableHead>Project</TableHead>
               <TableHead>Client</TableHead>
-              <TableHead>Billable</TableHead>
-              <TableHead className="text-right">Rate</TableHead>
+              <TableHead>Billing</TableHead>
               <TableHead className="text-right">Tracked</TableHead>
               <TableHead className="w-56">Budget</TableHead>
               <TableHead className="text-right">Entries</TableHead>
@@ -173,24 +176,11 @@ export function ProjectsTable({
                     </TableCell>
 
                     <TableCell>
-                      {project.billableDefault ? (
-                        <Badge variant="secondary">Billable</Badge>
-                      ) : (
-                        <span className="text-muted-foreground/70">
-                          Non-billable
-                        </span>
-                      )}
-                    </TableCell>
-
-                    <TableCell
-                      className="text-right tabular-nums"
-                      data-testid={`project-rate-${project.id}`}
-                    >
-                      {project.hourlyRate === null ? (
-                        <span className="text-muted-foreground/70">Default</span>
-                      ) : (
-                        format.money(project.hourlyRate)
-                      )}
+                      <ProjectBillingCell
+                        project={project}
+                        prompt={applyPrompt}
+                        updateProject={updateProject}
+                      />
                     </TableCell>
 
                     <TableCell
@@ -305,6 +295,8 @@ export function ProjectsTable({
         project={editing}
         clients={clients}
       />
+
+      {applyPrompt.dialog}
 
       <ConfirmDialog
         open={pendingDelete !== null}

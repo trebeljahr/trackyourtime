@@ -5,9 +5,10 @@ import type {
   CreateProjectInput,
   CreateTaskInput,
   Project,
+  ProjectUpdateResult,
   Task,
   UpdateClientInput,
-  UpdateProjectInput,
+  UpdateProjectWithEntriesInput,
   UpdateTaskInput,
 } from "@starter/shared";
 
@@ -53,12 +54,14 @@ export type RemoveResult = {
 
 // Mutation results are the bare documents — no joins, no rolled-up totals.
 export type CreatedProject = Project;
+/** `projects.update`, plus what an `applyToEntries` rewrite reached. */
+export type UpdatedProject = ProjectUpdateResult;
 export type CreatedClient = Client;
 export type CreatedTask = Task;
 
 // `originId` is stamped by the mutation hooks, never by a caller.
 export type CreateProjectVars = Omit<CreateProjectInput, "originId">;
-export type UpdateProjectVars = Omit<UpdateProjectInput, "originId">;
+export type UpdateProjectVars = Omit<UpdateProjectWithEntriesInput, "originId">;
 export type CreateClientVars = Omit<CreateClientInput, "originId">;
 export type UpdateClientVars = Omit<UpdateClientInput, "originId">;
 export type CreateTaskVars = Omit<CreateTaskInput, "originId">;

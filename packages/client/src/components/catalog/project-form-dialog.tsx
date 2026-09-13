@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
 import { useFormatSettings } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useApplyToEntriesPrompt } from "./apply-to-entries-prompt";
 import {
   useClientMutations,
   useProjectMutations,
@@ -104,7 +105,7 @@ function ProjectForm({
   clients,
   onDone,
 }: ProjectFormProps): React.JSX.Element {
-  const { currency } = useFormatSettings();
+  const { currency, money, settings } = useFormatSettings();
 
   const [name, setName] = React.useState(project?.name ?? "");
   const [color, setColor] = React.useState(project?.color ?? FALLBACK_COLOR);
@@ -156,6 +157,7 @@ function ProjectForm({
     onConflict: setNameError,
   });
   const { createClient, updateClient } = useClientMutations();
+  const applyPrompt = useApplyToEntriesPrompt();
 
   const clientOptions = React.useMemo<ComboboxOption[]>(
     () =>
@@ -223,22 +225,36 @@ function ProjectForm({
     const idle: IdleBehavior | null = idleBehavior === "" ? null : idleBehavior;
 
     if (project) {
-      void updateProject({
-        id: project.id,
-        name: trimmed,
-        color,
-        clientId,
-        billableDefault,
-        hourlyRate,
-        estimatedHours,
-        budgetAmount,
-        ...(budgetAmount === null ? {} : { budgetCurrency }),
-        idleBehavior: idle,
-      }).then((saved) => {
-        if (!saved) return;
-        toast.success("Project saved.");
-        onDone();
-      });
+      // A billing change asks first whether it reaches the time already
+      // booked here; backing out of that question leaves the form open.
+      void applyPrompt
+        .ask(project, { billableDefault, hourlyRate })
+        .then(async (choice) => {
+          if (choice === null) return;
+          const saved = await updateProject({
+            id: project.id,
+            name: trimmed,
+            color,
+            clientId,
+            billableDefault,
+            hourlyRate,
+            estimatedHours,
+            budgetAmount,
+            ...(budgetAmount === null ? {} : { budgetCurrency }),
+            idleBehavior: idle,
+            applyToEntries: choice === "entries",
+          });
+          if (!saved) return;
+          const rewritten = saved.entriesRewritten?.entries ?? 0;
+          toast.success(
+            rewritten > 0
+              ? `Project saved and ${rewritten} ${
+                  rewritten === 1 ? "entry" : "entries"
+                } updated.`
+              : "Project saved.",
+          );
+          onDone();
+        });
       return;
     }
 
@@ -391,7 +407,7 @@ function ProjectForm({
                 id="project-rate"
                 inputMode="decimal"
                 value={rate}
-                placeholder="Workspace default"
+                placeholder={`Default: ${money(settings.defaultHourlyRate)}`}
                 aria-invalid={rateError !== null}
                 onChange={(event) => {
                   setRate(event.target.value);
@@ -530,6 +546,7 @@ function ProjectForm({
           {project ? "Save changes" : "Create project"}
         </Button>
       </DialogFooter>
+      {applyPrompt.dialog}
     </form>
   );
 }

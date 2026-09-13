@@ -32,6 +32,7 @@ import {
   type UpdateClientVars,
   type UpdateProjectVars,
   type UpdateTaskVars,
+  type UpdatedProject,
 } from "./types";
 
 /**
@@ -114,7 +115,11 @@ function announceRemoval(result: RemoveResult, noun: string): void {
 export type ProjectMutations = {
   /** Resolves to the created project, or null when the server refused. */
   createProject: (vars: CreateProjectVars) => Promise<CreatedProject | null>;
-  updateProject: (vars: UpdateProjectVars) => Promise<CreatedProject | null>;
+  /**
+   * With `applyToEntries`, the project's billing is also written onto the
+   * caller's un-invoiced entries on it — see `apply-to-entries-prompt.tsx`.
+   */
+  updateProject: (vars: UpdateProjectVars) => Promise<UpdatedProject | null>;
   setProjectArchived: (id: string, archived: boolean) => void;
   removeProject: (id: string) => void;
   isSaving: boolean;
@@ -268,7 +273,17 @@ export function useProjectMutations(
       rollbackProjects(context?.previous);
       reportError(error, "Could not save the project.", handlers);
     },
-    onSettled: settleProjects,
+    // A rewrite moves every entry-backed number: the entry lists, report
+    // totals and the invoice preview's billable time.
+    onSettled: (_data, _error, vars) => {
+      settleProjects();
+      if (vars.applyToEntries) {
+        void utils.projects.billingImpact.invalidate();
+        void utils.entries.invalidate();
+        void utils.reports.invalidate();
+        void utils.invoices.invalidate();
+      }
+    },
   });
 
   const archive = trpc.projects.archive.useMutation({

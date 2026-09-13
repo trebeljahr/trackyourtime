@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { signUpViaUI } from "./helpers";
-import { cleanDatabase, closeDbConnection } from "./db-utils";
+import { cleanDatabase, closeDbConnection, getDb } from "./db-utils";
 
 const PASSWORD = "SecurePassword123!";
 
@@ -326,6 +326,86 @@ test.describe("Projects catalog", () => {
       .filter({ hasText: "Doomed project work" });
     await expect(entry).toHaveCount(1);
     await expect(entry.getByTestId("entry-project")).toContainText("No project");
+  });
+
+  test("edits billing in the table and asks before rewriting booked time", async ({
+    page,
+  }) => {
+    await page.getByTestId("new-project").click();
+    await page.getByTestId("project-name-input").fill(PROJECT_NAME);
+    await page.getByTestId("project-submit").click();
+    await expect(page.getByTestId("project-dialog")).toBeHidden();
+
+    const projectRow = page
+      .locator('[data-testid^="project-row-"]')
+      .filter({ hasText: PROJECT_NAME });
+    const projectId = await idFromTestId(projectRow, "project-row-");
+
+    // No rate of its own: the cell names the workspace default it falls back to.
+    await expect(page.getByTestId(`project-rate-${projectId}`)).toContainText(
+      "default",
+    );
+
+    // Book one entry so there is history for a billing change to reach.
+    await page.goto("/track");
+    await page.getByTestId("tracker-description").fill("Billed work");
+    await pickComboboxOption(page, "tracker-project", PROJECT_NAME);
+    await page.getByTestId("tracker-toggle").click();
+    await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
+      "data-state",
+      "running",
+    );
+    const stopped = page.waitForResponse(
+      (response) =>
+        response.url().includes("entries.stop") && response.status() === 200,
+    );
+    await page.getByTestId("tracker-toggle").click();
+    await stopped;
+
+    const entryRate = async (): Promise<unknown> => {
+      const db = await getDb();
+      const entry = await db
+        .collection("timeentries")
+        .findOne({ projectId, description: "Billed work" });
+      return entry?.hourlyRate;
+    };
+
+    await page.goto("/projects");
+    const billing = page.getByTestId(`project-billing-${projectId}`);
+
+    // "Only new entries" saves the rate and leaves the entry's snapshot alone.
+    await billing.click();
+    await page.getByTestId("project-billing-rate").fill(PROJECT_RATE);
+    await page.getByTestId("project-billing-save").click();
+    await expect(page.getByTestId("apply-to-entries-count")).toContainText(
+      "1 time entry",
+    );
+    await page.getByTestId("apply-to-entries-new-only").click();
+    await expect(page.getByTestId(`project-rate-${projectId}`)).toContainText(
+      PROJECT_RATE,
+    );
+    await expect(page.getByTestId(`project-rate-${projectId}`)).not.toContainText(
+      "default",
+    );
+    expect(await entryRate()).not.toBe(Number(PROJECT_RATE));
+
+    // Accepting carries the new rate onto the entry already booked.
+    await billing.click();
+    await page.getByTestId("project-billing-rate").fill("150");
+    await page.getByTestId("project-billing-save").click();
+    await page.getByTestId("apply-to-entries-accept").click();
+    await expect(page.getByTestId(`project-rate-${projectId}`)).toContainText(
+      "150",
+    );
+    await expect.poll(entryRate).toBe(150);
+
+    // Turning billable off and applying clears the entry's flag and rate.
+    await billing.click();
+    await page.getByTestId("project-billing-billable").click();
+    await page.getByTestId("project-billing-save").click();
+    await page.getByTestId("apply-to-entries-accept").click();
+    await expect(billing).toHaveAttribute("data-billable", "false");
+    await expect.poll(entryRate).toBeNull();
   });
 
   /**

@@ -209,6 +209,25 @@ export const updateProjectSchema = z.object({
   originId,
 });
 
+/**
+ * The tRPC form of a project update. `applyToEntries` carries a billing
+ * change (billable default, rate) onto the time already booked on the
+ * project, which by default keeps the snapshot it was stopped with.
+ *
+ * Kept off `updateProjectSchema` itself, which the public REST API validates
+ * with and publishes as its OpenAPI shape: rewriting history in bulk is a
+ * decision made on a screen that states what it will touch, not a flag a
+ * third party can set.
+ */
+export const updateProjectWithEntriesSchema = updateProjectSchema.extend({
+  applyToEntries: z.boolean().optional(),
+});
+
+/** Which project's booked time a billing change would reach. */
+export const projectBillingImpactSchema = z.object({
+  id: idString,
+});
+
 // ── tasks ────────────────────────────────────────────────────────────
 
 /**
@@ -621,6 +640,9 @@ export type UpdateClientInput = z.infer<typeof updateClientSchema>;
 export type ProjectListInput = z.infer<typeof projectListSchema>;
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
+export type UpdateProjectWithEntriesInput = z.infer<
+  typeof updateProjectWithEntriesSchema
+>;
 export type TaskListInput = z.infer<typeof taskListSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
