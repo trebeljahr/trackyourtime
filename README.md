@@ -90,13 +90,13 @@ Everything is scoped to a workspace, but today that is effectively one workspace
 | **Desktop** (Tauri) | Scaffolding only — 24 lines of Rust with an empty setup and a Steamworks block inherited from the starter this repo was generated from. Do not count it as a desktop app. |
 | **Mobile** (Capacitor) | Config and a small JS bridge only. No `ios/` or `android/` directory exists, the bundle id is still `com.example.tracktime`, and nothing has been run on a device — despite the `dev:ios` / `dev:android` / `build:mobile` scripts existing in `package.json`. |
 | **CLI** | Does not exist. `tracktime-cli` appears only as an allowlisted device-flow client id. |
+| **MCP server** (`packages/mcp`) | Working. Lets Claude Desktop, Claude Code or any MCP client start and stop timers, log time, list entries, manage the catalog and run the summary report, through the public REST API with an API token. stdio only, not published to npm — run it from a clone. See [MCP server](#mcp-server). |
 
 ## Not there yet
 
 Stated plainly, because the code has more scaffolding than product in these areas:
 
 - **Teams, invitations and workspace switching.** The substrate is real — every user gets a personal workspace, there is a member model with roles and visibility flags, and one middleware scopes every query — and better-auth's `organization` plugin is mounted, so its create-organization, invite-member, list-members and set-role endpoints are callable under `/api/auth/*`. What is missing is everything above them: **no tRPC router, no invite UI, no member list, no role editing and no workspace switcher**. The invitation email links to `/invite/<id>`, and that page does not exist, so an invitation sent today lands on a 404. The realtime layer is not ready either: every member currently receives the identical sync payload, which is only correct while a workspace has one member. Treat this as a single-user app.
-- **A public REST API.** The server mounts exactly four things: better-auth, tRPC, two newsletter routes and a health check. There is no versioned REST surface, no OpenAPI document, no API-key model and no rate limiting. tRPC is reachable with a bearer session token, but it is an internal contract typed against this repo, not a documented public API. (The `api` value in the `EntrySource` enum is reserved for third-party callers and nothing produces it today.)
 - **Timesheet approvals.** Nothing. No submitted/approved state, no approver role, no lock-after-approval, no notifications. The timesheet is an editing grid, not a submittable document. Invoice status is invoice lifecycle, not time approval.
 - **Time off, PTO, holidays, absence.** No model, no screen, no shared type. There is no non-working-day concept, so nothing computes capacity or utilization.
 - **Notifications of any kind.** No web push, no email digests, no scheduler, no job runner. The runaway guard is lazy on purpose and says so in its own source.
@@ -148,6 +148,22 @@ better-auth validates the `Origin` header on sign-in whenever the request carrie
 - `tauri://localhost` and `http://tauri.localhost` — Tauri on macOS/Linux and Windows
 
 Raycast and CLI clients need nothing here — their requests carry neither `Origin` nor `Sec-Fetch-*`. What guards them is the device flow plus the client-id allowlist in `packages/server/src/auth/client-label.ts`.
+
+## MCP server
+
+[`packages/mcp`](packages/mcp) is a [Model Context Protocol](https://modelcontextprotocol.io) server over the public REST API (`/api/v1`). An assistant can read the running timer, start and stop it, log past time, list and search entries, list and create clients, projects, tasks and tags, and run the summary report. There are no invoice tools, because v1 has no invoice routes.
+
+It authenticates with a personal API token from **Settings → Integrations → API tokens**, and offers only the tools that token's scopes allow. It works against the hosted API or any self-hosted origin.
+
+```bash
+pnpm install && pnpm build:mcp
+```
+
+```bash
+claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token --env TRACKYOURTIME_API_URL=https://api.trackyourtime.dev -- node "$PWD/packages/mcp/dist/index.js"
+```
+
+`TRACKYOURTIME_API_URL` defaults to `https://api.trackyourtime.dev`; set it to your own origin for a self-hosted instance. Claude Desktop and other clients, the tool list and the error table are in [`docs-site/docs/mcp.md`](docs-site/docs/mcp.md).
 
 ## Development
 
@@ -201,6 +217,7 @@ pnpm run dev:desktop         # Next dev + an Electron window
 pnpm run test:unit      # 21 server suites (node:test) — pure logic, no services needed
 pnpm run test:client    # 27 Vitest suites in the client — jsdom, no services needed
 pnpm run test:e2e       # 10 Playwright specs — REQUIRES DOCKER
+pnpm run test:mcp:integration  # MCP server over a real API — starts its own mongod
 pnpm test               # all three in sequence
 
 pnpm run typecheck      # builds shared + core, then tsc --noEmit everywhere else

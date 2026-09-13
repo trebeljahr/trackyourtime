@@ -947,6 +947,43 @@ create-time-only SSRF check is decorative against rebinding.
 `WEBHOOK_ALLOW_PRIVATE_TARGETS=true` lifts the https and private-address rules
 for a local listener and belongs nowhere else.
 
+### MCP server
+
+`packages/mcp` (`@starter/mcp`, binary `trackyourtime-mcp`) is an MCP server on
+stdio over `/api/v1`, configured by `TRACKYOURTIME_API_TOKEN` and
+`TRACKYOURTIME_API_URL` (default `https://api.trackyourtime.dev`). The user
+docs are `docs-site/docs/mcp.md`.
+
+```bash
+pnpm build:mcp                        # shared, then the server into packages/mcp/dist
+pnpm --filter @starter/mcp test       # fake API, in-memory MCP client; part of test:unit
+pnpm test:mcp:integration             # the real binary on stdio against a real API
+```
+
+Four rules, each of which fails quietly if broken:
+
+- **It is a REST client, never a tRPC one.** Everything goes through the token
+  path, so scopes, visibility and money projection are the server's decisions
+  and the MCP server cannot be the place one of them is skipped. No invoice
+  tools while v1 has no invoice routes.
+- **Input schemas come from `@starter/shared`**, minus `originId` and `source`
+  (the server stamps `api`). `createEntrySchema` is refined, and zod refuses
+  `.omit` on a refined object, so that one is rebuilt from `.shape`.
+- **Bare dates are resolved in the tool, not by the server.** `GET /entries`
+  reads `to=2026-09-30` as midnight UTC at the start of that day and the
+  reports read it as the end of that day in the server's zone. `resolveRange`
+  sends both routes full timestamps computed in the caller's zone, so "to" is
+  an inclusive day in every tool.
+- **Scopes are probed once at start (`GET /me`) and tools are filtered by
+  them.** A failed probe offers every tool rather than exiting: a client shows
+  "server exited" with no reason, while a tool call returns the real problem.
+  Stdout is the protocol — log to stderr only.
+
+`tools.test.ts` fails when the scope table in `docs-site/docs/mcp.md` stops
+matching `TOOLS`. The integration suite starts its own `mongod` on a random
+port with a temp data dir (or uses `MONGODB_URI`), signs up over better-auth
+and mints tokens through `apiTokens.create`, per the E2E isolation convention.
+
 ### Raycast extension
 
 `packages/raycast` is a Raycast extension with a deliberately small surface —

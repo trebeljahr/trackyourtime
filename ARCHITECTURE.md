@@ -53,6 +53,7 @@ browser / extension / Raycast
 | `packages/core` | Framework-free runtime shared by web, extension and Raycast — no React, no DOM, no tRPC of its own: `api-client`, `session-auth` (password + RFC 8628 device flow), `sync-client`, `sync-url`, `offline-queue`, `offline-ops`, `entry-fields`, `timer-store`, `idle`, `ids`, `storage` | Behaviour more than one client needs. Putting it in a client package instead is how the surfaces drift |
 | `packages/extension` | Chrome MV3 extension, popup only. `src/background/` (holds the sync client), `src/popup/`, `src/lib/`. API URL baked in at build time by `manifest.config.ts` | Extension UI or background behaviour. Its `chrome-extension://` origin must be in the server's `TRUSTED_ORIGINS` |
 | `packages/raycast` | Raycast (macOS) extension: `menu-bar.tsx`, `timer.tsx`, `entries.tsx`, `components/` (incl. catalog forms), `lib/` | Raycast commands and forms only — domain logic belongs in `core`/`shared` |
+| `packages/mcp` | MCP server on stdio over the public REST API (`/api/v1`) with an API token: `api-client`, `tools` (input schemas from `shared`), `server` (scope probe), `index` (the `trackyourtime-mcp` binary) | A new tool, or a REST change a tool depends on. It never calls tRPC |
 | `docs-site` | Docusaurus site, three pages, **not deployed** and still starter boilerplate | Rarely, and mostly to fix it |
 
 `shared` vs `core` is the boundary worth internalising: **`shared` is data and
