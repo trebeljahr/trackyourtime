@@ -136,7 +136,7 @@ const fetchTodaySec = async (
 
 export async function buildState(): Promise<BackgroundState> {
   const current = await ensureReady();
-  // Resolved even when signed out: "Open tracktime" is exactly what someone
+  // Resolved even when signed out: "Open Track Your Time" is exactly what someone
   // with no session reaches for, so the menu must work before sign-in.
   const webUrl = await resolveWebUrl();
   if (!current.session) return signedOutState(current.apiUrl, webUrl);

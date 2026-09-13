@@ -24,11 +24,11 @@ export function SignedOutView(): React.JSX.Element {
       <List.EmptyView
         icon={Icon.Key}
         title="Not signed in"
-        description="Pair this Mac with your tracktime account to start tracking from Raycast."
+        description="Pair this Mac with your Track Your Time account to start tracking from Raycast."
         actions={
           <ActionPanel>
             <Action.Push
-              title="Sign in to Tracktime"
+              title="Sign in to Track Your Time"
               icon={Icon.Key}
               target={<SignIn />}
             />

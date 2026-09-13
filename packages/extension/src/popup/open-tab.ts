@@ -2,7 +2,7 @@
  * Opening the web app from the popup.
  *
  * Lifted out of `menu.tsx` because the overflow menu is no longer the only
- * thing that links out: Settings → Account offers "Open tracktime", and the
+ * thing that links out: Settings → Account offers "Open Track Your Time", and the
  * entries list points at the web app for anything older than its window. One
  * copy of the join rule keeps a stray double slash from being possible in
  * three places instead of one.

@@ -985,7 +985,7 @@ const wrap = (client: ApiClient, originId: string): Tracktime => {
  * Build a caller bound to the stored session.
  *
  * Throws {@link NotSignedInError} when there is no token, which every command
- * turns into "run Sign in to tracktime" rather than a raw failure toast.
+ * turns into "run Sign in to Track Your Time" rather than a raw failure toast.
  */
 export async function getTracktime(): Promise<Tracktime> {
   const session = await getStoredSession();

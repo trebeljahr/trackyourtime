@@ -50,7 +50,7 @@ export default function SettingsPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">
-          Preferences apply to every tracktime client signed in as you. Changes
+          Preferences apply to every Track Your Time client signed in as you. Changes
           save as you make them.
         </p>
       </div>

@@ -5,9 +5,9 @@ import { join } from "node:path";
 
 const docsUrl = process.env.DOCS_SITE_URL ?? "https://docs.example.com";
 const usesPlaceholderUrl = docsUrl === "https://docs.example.com";
-const docsTitle = "tracktime docs";
+const docsTitle = "Track Your Time docs";
 const docsDescription =
-  "Documentation for tracktime — the time tracker, its web app, browser extension, Raycast extension, desktop and mobile builds, and the API they share.";
+  "Documentation for Track Your Time — the time tracker, its web app, browser extension, Raycast extension, desktop and mobile builds, and the API they share.";
 
 function generatedRobotsPlugin(): Plugin<void> {
   return {

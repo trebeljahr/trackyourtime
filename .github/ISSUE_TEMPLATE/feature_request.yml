@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest a change or an addition to tracktime.
+description: Suggest a change or an addition to Track Your Time.
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
@@ -34,7 +34,7 @@ body:
     id: solution
     attributes:
       label: Proposed solution
-      description: What you would like tracktime to do.
+      description: What you would like Track Your Time to do.
       placeholder: >-
         Show the project's hourly rate next to the project name in the picker,
         for projects that are billable.
@@ -82,7 +82,7 @@ body:
       label: Scope
       options:
         - label: >-
-            I understand tracktime has a deliberately narrow scope and that the
+            I understand Track Your Time has a deliberately narrow scope and that the
             maintainer may decline this request, or accept the problem but solve
             it differently.
           required: true

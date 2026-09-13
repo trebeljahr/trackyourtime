@@ -75,7 +75,7 @@ const formatRelative = (iso: string): string => {
 
 const SHARED_SESSION_HINT =
   "This session is shared with the web app, so signing out here signs out " +
-  "tracktime in this browser too.";
+  "Track Your Time in this browser too.";
 
 export function DevicesSection({
   devices,

@@ -21,6 +21,12 @@ import type { CapacitorConfig } from "@capacitor/cli";
  * are hand-edited in ios/ and android/ and must be kept in step with these by
  * hand.
  *
+ * appName is the home-screen label, so it is the short form "Track Time" rather
+ * than the product name "Track Your Time": fifteen characters are truncated
+ * under an iOS icon ("Track Your Ti…"). It matches short_name in the web
+ * manifest. CFBundleDisplayName and the Android app_name / title_activity_main
+ * strings carry the same value, and scripts/build-mobile.mjs asserts they do.
+ *
  * Live reload in dev: scripts/android-dev.sh / scripts/ios-dev.sh
  * set CAP_DEV_URL so the WebView loads from the Next dev server
  * on localhost, your LAN, or the hatchkit Tailscale dev URL instead
@@ -28,7 +34,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
  */
 const config: CapacitorConfig = {
   appId: "com.trebeljahr.tracktime",
-  appName: "Tracktime",
+  appName: "Track Time",
   webDir: "packages/client/out-mobile",
 
   android: {

@@ -46,7 +46,7 @@ route around it.
 If you disagree with a decision strongly enough, the licence has you covered:
 fork it. That is a legitimate outcome, not a hostile one —
 [TRADEMARK.md](TRADEMARK.md) explains how to do it cleanly, and "based on
-tracktime" is an accurate and welcome thing for a fork to say.
+Track Your Time" is an accurate and welcome thing for a fork to say.
 
 ## What gets a pull request merged
 
@@ -106,7 +106,7 @@ These are settled positions, not open questions.
   or selling proprietary exceptions to it, would require rights over your work
   that the DCO deliberately does not collect. Choosing the DCO over a CLA
   forfeits that option, knowingly.
-- **The marks are not covered by the licence.** The tracktime name, logo and
+- **The marks are not covered by the licence.** The Track Your Time name, logo and
   domain are governed by [TRADEMARK.md](TRADEMARK.md), which restricts nothing
   the AGPL grants you over the code.
 

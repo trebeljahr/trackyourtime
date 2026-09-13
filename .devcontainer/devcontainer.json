@@ -1,4 +1,4 @@
-// Dev container for tracktime. Opens in GitHub Codespaces or in VS Code via
+// Dev container for Track Your Time. Opens in GitHub Codespaces or in VS Code via
 // "Dev Containers: Reopen in Container".
 //
 // It gives you the toolchain and the backing services, nothing more: after the
@@ -12,7 +12,7 @@
 // localhost:5159. Codespaces forwards ports at generated *.github.dev URLs, so
 // those clients cannot reach the server from a Codespace. Develop them locally.
 {
-  "name": "tracktime",
+  "name": "Track Your Time",
 
   // Node 24 — matches .nvmrc (24) and package.json engines.node (>=24).
   "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",

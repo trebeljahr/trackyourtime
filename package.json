@@ -98,7 +98,7 @@
   },
   "build": {
     "appId": "com.trebeljahr.tracktime",
-    "productName": "tracktime",
+    "productName": "Track Your Time",
     "directories": {
       "output": "release",
       "buildResources": "build"

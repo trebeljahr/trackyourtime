@@ -248,7 +248,7 @@ function drawFooter(sheet: Sheet): void {
     .fontSize(META_SIZE)
     .fillColor(MUTED)
     .text(
-      `tracktime · ${sheet.meta.timeZone}`,
+      `Track Your Time · ${sheet.meta.timeZone}`,
       sheet.left,
       doc.page.height - MARGINS.bottom - 12,
       { width: sheet.width, align: "left", lineBreak: false },
@@ -479,7 +479,7 @@ async function bufferDocument(
 ): Promise<Buffer> {
   const doc = new PDFDocument(pageOptions(layout));
   doc.info.Title = sanitizePdfText(meta.title);
-  doc.info.Creator = "tracktime";
+  doc.info.Creator = "Track Your Time";
   const chunks: Buffer[] = [];
 
   return new Promise<Buffer>((resolve, reject) => {

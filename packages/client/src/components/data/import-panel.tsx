@@ -212,7 +212,7 @@ export function ImportPanel(): React.JSX.Element {
         <CardDescription>
           Bring in the time you tracked somewhere else. Export it from the
           other tool as CSV, drop the file here, and check what it would create
-          before anything is written. A tracktime export (CSV or JSON) works
+          before anything is written. A Track Your Time export (CSV or JSON) works
           too.
         </CardDescription>
       </CardHeader>

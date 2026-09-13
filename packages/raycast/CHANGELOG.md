@@ -1,6 +1,10 @@
-# tracktime Changelog
+# Track Your Time Changelog
 
 ## [Unreleased]
+
+- **Renamed to Track Your Time.** The extension title, command subtitles and
+  every visible string now use the new name. Your sign-in, preferences and
+  anything waiting to sync are kept.
 
 - **Works offline.** Start, stop, edit and delete with no network; everything
   is kept on this Mac and replayed in order once the server can be reached.

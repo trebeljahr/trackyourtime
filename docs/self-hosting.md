@@ -1,4 +1,4 @@
-# Self-hosting tracktime
+# Self-hosting Track Your Time
 
 Run your own instance on your own machine, with your own database. One VPS,
 one domain, one `docker compose up -d`.
@@ -285,7 +285,7 @@ Three things, all of them account-related: password reset, email verification
 time tracker sends mail — reports, invoices and exports are all downloaded in
 the browser.
 
-So email is not required to run tracktime. It is required to reset a password
+So email is not required to run Track Your Time. It is required to reset a password
 without shell access to the server.
 
 ### Configuring SMTP
@@ -635,7 +635,7 @@ at all and is guarded by the device-approval flow instead: it shows a short
 code, you approve it at `https://track.example.com/device` in a browser where
 you are already signed in.
 
-Set both preference fields in Raycast Settings → Extensions → tracktime:
+Set both preference fields in Raycast Settings → Extensions → Track Your Time:
 
 | Preference | Value under a single domain |
 |---|---|

@@ -276,7 +276,7 @@ export function EntriesScreen({
                       onClick={() => openTab(join(webUrl, "/track"))}
                       data-testid="entries-open-app"
                     >
-                      Open tracktime ↗
+                      Open Track Your Time ↗
                     </button>
                   )}
                 </p>

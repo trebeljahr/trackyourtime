@@ -58,7 +58,7 @@ export function AccountSection({
       {shared ? (
         <p className="setting__note" data-testid="account-shared-session">
           Signed in with the web app’s session — signing out here signs out
-          tracktime in this browser too.
+          Track Your Time in this browser too.
         </p>
       ) : null}
 
@@ -69,7 +69,7 @@ export function AccountSection({
           onClick={() => openTab(join(webUrl, "/track"))}
           data-testid="account-open-app"
         >
-          Open tracktime ↗
+          Open Track Your Time ↗
         </button>
       ) : null}
 
@@ -92,7 +92,7 @@ export function AccountSection({
           title="Sign out?"
           hint={
             shared
-              ? "This session is shared with the web app, so tracktime signs out in this browser too."
+              ? "This session is shared with the web app, so Track Your Time signs out in this browser too."
               : "Anything already tracked is kept. You sign in again to keep tracking."
           }
           confirmLabel="Sign out"

@@ -34,7 +34,7 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
     // The API port `pnpm run dev` pins. A git worktree runs on random ports
     // instead, which is what the popup's runtime override is for.
     apiUrl: "http://localhost:5159",
-    name: "tracktime (dev)",
+    name: "Track Your Time (dev)",
     hostPermissions: ["http://localhost/*", "http://127.0.0.1/*"],
     // Deliberately still `dist`: an unpacked extension's id is derived from
     // its path, so moving this would change the id, and with it the
@@ -53,7 +53,7 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
     // server still mounts at `/api`, so calls land on
     // `https://api.trackyourtime.dev/api/trpc`.
     apiUrl: "https://api.trackyourtime.dev",
-    name: "tracktime",
+    name: "Track Your Time",
     hostPermissions: ["https://api.trackyourtime.dev/*"],
     outDir: "dist-prod",
   },
@@ -88,7 +88,7 @@ export function buildManifest(mode: BuildMode): Record<string, unknown> {
     manifest_version: 3,
     name: target.name,
     version: VERSION,
-    description: "Start, stop and see your tracktime timer from the toolbar.",
+    description: "Start, stop and see your Track Your Time timer from the toolbar.",
     // WebSocket traffic only keeps an MV3 service worker alive from 116 on,
     // and the sync socket depends on that.
     minimum_chrome_version: "116",

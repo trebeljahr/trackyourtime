@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in tracktime does not behave the way it should.
+description: Something in Track Your Time does not behave the way it should.
 title: "[Bug]: "
 labels: ["bug"]
 body:

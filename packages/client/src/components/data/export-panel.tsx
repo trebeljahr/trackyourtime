@@ -67,7 +67,7 @@ export function ExportPanel(): React.JSX.Element {
     (kind: "json" | "csv", task: () => Promise<void>): void => {
       if (!canDownloadFiles()) {
         toast.error(
-          "This app can't save files yet — open tracktime in a browser to export.",
+          "This app can't save files yet — open Track Your Time in a browser to export.",
         );
         return;
       }

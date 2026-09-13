@@ -1,4 +1,4 @@
-# Deploying tracktime
+# Deploying Track Your Time
 
 Two Coolify apps on **two hosts of one zone**:
 

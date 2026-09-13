@@ -107,7 +107,7 @@ export function SignIn(): React.JSX.Element {
         setPhase({ kind: "signedIn", email: session.email });
         await showToast({
           style: Toast.Style.Success,
-          title: "Raycast paired with tracktime",
+          title: "Raycast paired with Track Your Time",
           message:
             adopted > 0 && stuck === 0
               ? `${session.email ?? "Signed in"} · ${adopted} queued change${
@@ -139,8 +139,8 @@ export function SignIn(): React.JSX.Element {
     return (
       <Detail
         isLoading
-        navigationTitle="tracktime"
-        markdown="Connecting to tracktime…"
+        navigationTitle="Track Your Time"
+        markdown="Connecting to Track Your Time…"
       />
     );
   }
@@ -148,7 +148,7 @@ export function SignIn(): React.JSX.Element {
   if (phase.kind === "signedIn") {
     return (
       <Detail
-        navigationTitle="tracktime"
+        navigationTitle="Track Your Time"
         markdown={[
           "# Paired",
           "",
@@ -206,7 +206,7 @@ export function SignIn(): React.JSX.Element {
     return (
       <Detail
         isLoading
-        navigationTitle="Pair with tracktime"
+        navigationTitle="Pair with Track Your Time"
         markdown={[
           `# ${userCode}`,
           "",
@@ -248,7 +248,7 @@ export function SignIn(): React.JSX.Element {
 
   return (
     <Detail
-      navigationTitle="tracktime"
+      navigationTitle="Track Your Time"
       markdown={[
         "# Could not pair",
         "",

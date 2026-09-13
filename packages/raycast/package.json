@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "tracktime-raycast",
-  "title": "tracktime",
-  "description": "Start, stop and edit tracktime timers from Raycast, with a live menu bar clock.",
+  "title": "Track Your Time",
+  "description": "Start, stop and edit Track Your Time timers from Raycast, with a live menu bar clock.",
   "icon": "icon.png",
   "author": "trebeljahr",
   "categories": ["Productivity"],
@@ -13,7 +13,7 @@
     {
       "name": "menu-bar",
       "title": "Timer Menu Bar",
-      "subtitle": "tracktime",
+      "subtitle": "Track Your Time",
       "description": "Show the running timer in the macOS menu bar.",
       "mode": "menu-bar",
       "interval": "1m",
@@ -68,7 +68,7 @@
     {
       "name": "toggle-timer",
       "title": "Start / Stop Timer",
-      "subtitle": "tracktime",
+      "subtitle": "Track Your Time",
       "description": "Stop the running timer, or resume the last thing you tracked. Bind it to a hotkey — it never opens a window.",
       "mode": "no-view",
       "keywords": ["toggle", "start", "stop", "resume", "continue", "track"]
@@ -76,7 +76,7 @@
     {
       "name": "timer",
       "title": "Timer",
-      "subtitle": "tracktime",
+      "subtitle": "Track Your Time",
       "description": "Start or stop tracking — the running timer, favorites and recent work.",
       "mode": "view",
       "keywords": ["start", "stop", "track", "resume", "favorites", "recent"]
@@ -84,7 +84,7 @@
     {
       "name": "entries",
       "title": "Show All Time",
-      "subtitle": "tracktime",
+      "subtitle": "Track Your Time",
       "description": "Browse, continue, edit and delete recent time entries.",
       "mode": "view",
       "keywords": ["entries", "history", "log", "today", "week"]
@@ -92,8 +92,8 @@
     {
       "name": "open-dashboard",
       "title": "Open Dashboard",
-      "subtitle": "tracktime",
-      "description": "Open the tracktime web app, where reports, invoices and catalog editing live.",
+      "subtitle": "Track Your Time",
+      "description": "Open the Track Your Time web app, where reports, invoices and catalog editing live.",
       "mode": "no-view",
       "keywords": ["web", "reports", "invoices", "projects", "clients", "tags"]
     }
@@ -102,7 +102,7 @@
     {
       "name": "apiUrl",
       "title": "API URL",
-      "description": "Origin of the tracktime server, e.g. https://api.tracktime.example. Empty means the deployed server, or the local dev server under `ray develop`.",
+      "description": "Origin of the Track Your Time server, e.g. https://api.example.com. Empty means the deployed server, or the local dev server under `ray develop`.",
       "type": "textfield",
       "required": false,
       "placeholder": "https://api.trackyourtime.dev"
@@ -110,7 +110,7 @@
     {
       "name": "webUrl",
       "title": "Web App URL",
-      "description": "Origin of the tracktime web app, used for the device-pairing page and Open in Browser. Empty follows the build: the deployed web app in a `ray build`, http://localhost:3392 under `ray develop`.",
+      "description": "Origin of the Track Your Time web app, used for the device-pairing page and Open in Browser. Empty follows the build: the deployed web app in a `ray build`, http://localhost:3392 under `ray develop`.",
       "type": "textfield",
       "required": false,
       "placeholder": "https://trackyourtime.dev"

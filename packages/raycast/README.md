@@ -1,11 +1,11 @@
-# tracktime for Raycast
+# Track Your Time for Raycast
 
-Start, stop and edit tracktime timers without leaving the keyboard, plus a live
+Start, stop and edit Track Your Time timers without leaving the keyboard, plus a live
 timer in the macOS menu bar.
 
 ## Commands
 
-Five, on purpose. Everything else tracktime can do is better done in the web
+Five, on purpose. Everything else Track Your Time can do is better done in the web
 app, and a launcher that lists twelve of its own commands is a launcher you
 have to search inside of.
 
@@ -127,8 +127,8 @@ say how many rows are waiting and that they belong to somebody else.
    belongs to a build nobody is running any more, which looks exactly like the
    feature not existing. Build once and the item is simply there, at login,
    without opening Raycast: a menu bar command needs no launch, only the
-   command left enabled (Raycast Settings → Extensions → tracktime).
-1. Run **Timer**. Signed out it offers **Sign in to tracktime**: ⏎ shows a
+   command left enabled (Raycast Settings → Extensions → Track Your Time).
+1. Run **Timer**. Signed out it offers **Sign in to Track Your Time**: ⏎ shows a
    short code and opens the approval page in your browser; confirm the code
    there while signed in to the web app. (Pairing has no command of its own —
    it is the wall every command hits, so it lives where you hit it. ⌘⇧A in
@@ -158,7 +158,7 @@ pnpm --filter tracktime-raycast run build
 
 The extension is a thin shell over [`@starter/core`](../core): API calls go
 through `createApiClient`, auth through `session-auth.ts`, durations through the
-same `formatDuration` helpers the web app uses. Nothing about the tracktime
+same `formatDuration` helpers the web app uses. Nothing about the Track Your Time
 domain should be reimplemented here — if a helper is missing, add it to
 `@starter/core` so the browser extension and CLI get it too.
 
@@ -216,7 +216,7 @@ hosts, so a local-only setup has to be pointed at the dev ports.
 
 **Seeing what went wrong** — the terminal running `pnpm dev:raycast` is the
 extension's console: `console.log` and stack traces print there. View commands
-also render errors inline, and Raycast Settings → Extensions → tracktime lists
+also render errors inline, and Raycast Settings → Extensions → Track Your Time lists
 every command with its hotkey and preferences.
 
 **Local dev URLs** — `pnpm dev` prints the API and client ports it picked (pin

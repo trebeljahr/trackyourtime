@@ -261,7 +261,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
   return {
     openapi: "3.1.0",
     info: {
-      title: "tracktime API",
+      title: "Track Your Time API",
       version: "1.0.0",
       description:
         "Read and write tracked time, the catalog behind it, and reports over both.\n\n" +

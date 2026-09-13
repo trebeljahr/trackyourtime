@@ -1,6 +1,8 @@
-# tracktime
+# Track Your Time
 
 A self-hostable time tracker: clients, projects, tasks, tags, billable rates, reports and invoices, with a web app, a browser extension and a Raycast extension sharing one backend.
+
+The product was called tracktime until September 2026. The repository, package names, bundle ids and storage keys keep that name, so existing installs, sessions and queued data carry over.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![build-and-deploy](https://github.com/trebeljahr/tracktime/actions/workflows/build-and-deploy.yml/badge.svg?branch=main)](https://github.com/trebeljahr/tracktime/actions/workflows/build-and-deploy.yml?query=branch%3Amain)
@@ -11,7 +13,7 @@ Hosted instance: <https://trackyourtime.dev>, with the API on its own host at <h
 
 <!-- Screenshot placeholder: add a capture of the /track screen at docs/screenshots/app.png,
      then replace this comment with:
-     ![The tracktime web app tracking time against a project](docs/screenshots/app.png) -->
+     ![The Track Your Time web app tracking time against a project](docs/screenshots/app.png) -->
 
 ## What it is
 
@@ -236,4 +238,4 @@ Commits must be signed off under the [Developer Certificate of Origin](https://d
 
 Licensed under the GNU Affero General Public License, version 3 or later (`AGPL-3.0-or-later`). See [LICENSE](LICENSE).
 
-The code is AGPL; the tracktime name, logo and domain are not — see [TRADEMARK.md](TRADEMARK.md).
+The code is AGPL; the Track Your Time name, logo and domain are not — see [TRADEMARK.md](TRADEMARK.md).

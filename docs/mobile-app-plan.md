@@ -1,4 +1,4 @@
-# tracktime mobile app — implementation plan
+# Track Your Time mobile app — implementation plan
 
 Produced by a 13-agent design workflow: 4 codebase surveys, 3 rival designs, 3 judges (unanimous winner: **Thin Shell**), 1 synthesis, 2 adversarial critics.
 

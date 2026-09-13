@@ -277,7 +277,7 @@ export type SessionSource = "web" | "password";
 
 export type BackgroundState = {
   apiUrl: string;
-  /** Where "Open tracktime" goes. Discovered from the API's /api/health. */
+  /** Where "Open Track Your Time" goes. Discovered from the API's /api/health. */
   webUrl: string | null;
   signedIn: boolean;
   sessionSource: SessionSource | null;

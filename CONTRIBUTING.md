@@ -1,6 +1,6 @@
-# Contributing to tracktime
+# Contributing to Track Your Time
 
-Thanks for taking the time to look at this. tracktime is time tracking with
+Thanks for taking the time to look at this. Track Your Time is time tracking with
 clients, projects, tasks, tags and billable rates — a web app plus a browser
 extension and a Raycast extension that share one backend.
 

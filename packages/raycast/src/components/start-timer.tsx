@@ -146,7 +146,7 @@ export function StartTimer(): React.JSX.Element {
       <Form.Description
         text={
           (catalog.projects.data ?? []).length > 0
-            ? "Starting a timer stops whatever is already running — tracktime keeps one timer at a time."
+            ? "Starting a timer stops whatever is already running — Track Your Time keeps one timer at a time."
             : "No projects yet — this timer will be unassigned. Create projects in the web app to file time against them."
         }
       />

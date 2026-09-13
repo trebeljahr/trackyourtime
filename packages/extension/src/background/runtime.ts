@@ -932,7 +932,7 @@ export const invalidateRecents = (): void => {
  * Where the web app lives, asked of the API rather than configured twice.
  *
  * `/api/health` is public, so this works before sign-in — which matters,
- * because "Open tracktime" is exactly what someone with no session wants. A
+ * because "Open Track Your Time" is exactly what someone with no session wants. A
  * failure is cached as `null` and simply hides the menu item.
  */
 /**

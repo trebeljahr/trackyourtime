@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="tracktime">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Track Your Time">
   <!-- The brand mark, kept byte-for-byte in step with
        packages/client/public/brand/mark-tile.svg. The tile variant rather than
        the bare arc: a favicon sits on browser chrome, where the arc's neutral

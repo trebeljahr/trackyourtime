@@ -1,6 +1,6 @@
 # Getting help
 
-tracktime is maintained by one person in their spare time. Picking the right
+Track Your Time is maintained by one person in their spare time. Picking the right
 place is most of what makes a question answerable.
 
 ## Where to go

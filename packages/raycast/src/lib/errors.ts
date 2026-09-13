@@ -8,7 +8,7 @@
 /** Thrown when no token is stored — the caller should offer to sign in. */
 export class NotSignedInError extends Error {
   constructor() {
-    super("Not signed in to tracktime");
+    super("Not signed in to Track Your Time");
     this.name = "NotSignedInError";
   }
 }

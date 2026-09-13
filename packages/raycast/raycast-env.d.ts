@@ -8,9 +8,9 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 type ExtensionPreferences = {
-  /** API URL - Origin of the tracktime server, e.g. https://api.tracktime.example. Empty means the deployed server, or the local dev server under `ray develop`. */
+  /** API URL - Origin of the Track Your Time server, e.g. https://api.example.com. Empty means the deployed server, or the local dev server under `ray develop`. */
   "apiUrl"?: string,
-  /** Web App URL - Origin of the tracktime web app, used for the device-pairing page and Open in Browser. Empty follows the API URL's default. */
+  /** Web App URL - Origin of the Track Your Time web app, used for the device-pairing page and Open in Browser. Empty follows the build: the deployed web app in a `ray build`, http://localhost:3392 under `ray develop`. */
   "webUrl"?: string
 }
 

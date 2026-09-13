@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "tracktime API",
+    "title": "Track Your Time API",
     "version": "1.0.0",
     "description": "Read and write tracked time, the catalog behind it, and reports over both.\n\nAuthenticate with an API token as `Authorization: Bearer tt_…`. A token is bound to one workspace and carries the visibility its creating member had when it was minted, intersected with that member's visibility right now — it can never show more than its owner may see."
   },

@@ -2,7 +2,7 @@
 
 This is direction, not commitment.
 
-tracktime is built and maintained by one person in their spare time — see
+Track Your Time is built and maintained by one person in their spare time — see
 [GOVERNANCE.md](GOVERNANCE.md). There are no dates here on purpose: a date
 would be a promise about someone's evenings, and it would be wrong. Nothing
 below is scheduled, staffed, or guaranteed. Order within a section carries no

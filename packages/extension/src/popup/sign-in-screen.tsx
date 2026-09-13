@@ -36,7 +36,7 @@ export function SignInScreen({
 
   return (
     <div className="popup__body" data-testid="sign-in-screen">
-      <h1 className="popup__title">Sign in to tracktime</h1>
+      <h1 className="popup__title">Sign in to Track Your Time</h1>
 
       {/* Two sibling forms, never nested: the API URL has its own submit and
           must stay usable while the sign-in form is in flight. */}

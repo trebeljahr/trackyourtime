@@ -1,6 +1,6 @@
 # @starter/extension
 
-A popup-only MV3 browser extension for tracktime. The toolbar button opens a
+A popup-only MV3 browser extension for Track Your Time. The toolbar button opens a
 popup that shows the running entry, starts and stops the timer, and reports
 today's total. There are no content scripts and nothing is injected into any
 page.
@@ -20,7 +20,7 @@ the repo rather than in `.env.development` / `.env.production` — those two
 filenames are commonly gitignored, which would make a fresh clone build an
 extension with no URL in it and no error to say so.
 
-Each target gets its own name (`tracktime` vs `tracktime (dev)`) and its own
+Each target gets its own name (`Track Your Time` vs `Track Your Time (dev)`) and its own
 `host_permissions`, so the two can be installed side by side and neither asks
 for access to hosts it will never talk to. `VITE_API_URL=… pnpm --filter
 @starter/extension run build` still overrides the URL for a one-off build.

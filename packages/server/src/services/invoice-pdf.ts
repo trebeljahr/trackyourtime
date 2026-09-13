@@ -372,7 +372,7 @@ export async function renderInvoicePdf(
 ): Promise<Buffer> {
   const doc = new PDFDocument(pageOptions());
   doc.info.Title = sanitizePdfText(`Invoice ${invoice.number}`);
-  doc.info.Creator = "tracktime";
+  doc.info.Creator = "Track Your Time";
   const chunks: Buffer[] = [];
 
   return new Promise<Buffer>((resolve, reject) => {

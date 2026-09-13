@@ -35,7 +35,7 @@ export function useApi<T>(
       execute: options?.execute,
       keepPreviousData: true,
       onError: (failure) => {
-        void showFailureToast(failure, "Could not reach tracktime");
+        void showFailureToast(failure, "Could not reach Track Your Time");
       },
     },
   );

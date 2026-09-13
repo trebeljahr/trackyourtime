@@ -393,7 +393,7 @@ jobs:
           fi
           echo "✓ CORS allows $WEB_URL"
 
-  # DCO gate — pull requests only. tracktime takes Developer Certificate of
+  # DCO gate — pull requests only. Track Your Time takes Developer Certificate of
   # Origin 1.1 sign-off rather than a CLA, so the check is mechanical: every
   # non-merge commit in the PR carries a `Signed-off-by:` trailer.
   # Hand-rolled bash on purpose — no third-party action in the trust path of a
@@ -474,7 +474,7 @@ jobs:
             echo "--------------------------------------------------------------"
             echo "DCO check failed: $missing of $total commit(s) have no Signed-off-by trailer."
             echo ""
-            echo "Contributions to tracktime are accepted under the Developer"
+            echo "Contributions to Track Your Time are accepted under the Developer"
             echo "Certificate of Origin 1.1 (see CONTRIBUTING.md). Every commit"
             echo "must carry a Signed-off-by trailer certifying that you have the"
             echo "right to submit it under the project's license."

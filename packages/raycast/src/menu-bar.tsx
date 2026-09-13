@@ -121,9 +121,9 @@ export default function MenuBar(): React.JSX.Element | null {
 
   if (signedOut) {
     return (
-      <MenuBarExtra icon={BRAND_MARK} tooltip="tracktime — not signed in">
+      <MenuBarExtra icon={BRAND_MARK} tooltip="Track Your Time — not signed in">
         <MenuBarExtra.Item
-          title="Sign in to tracktime"
+          title="Sign in to Track Your Time"
           icon={Icon.Key}
           onAction={openTimer}
         />
@@ -217,14 +217,14 @@ export default function MenuBar(): React.JSX.Element | null {
         // the right call for a glanceable item — but it must not pass for a
         // fresh reading, so say so where the number is.
         error
-          ? `tracktime — could not refresh · ${describeFailure(error)}`
+          ? `Track Your Time — could not refresh · ${describeFailure(error)}`
           : pending > 0
             ? `${pending} change${pending === 1 ? "" : "s"} waiting to sync${
                 running ? ` · ${label} — ${clock}` : ""
               }`
           : running
             ? `${label} — ${clock}`
-            : `tracktime — no timer running · today ${formatDurationShort(
+            : `Track Your Time — no timer running · today ${formatDurationShort(
                 data?.todaySec ?? 0,
               )}`
       }

@@ -11,7 +11,7 @@ live and why.
 
 ## Orientation
 
-tracktime is time tracking with clients, projects, tasks, tags, billable rates,
+Track Your Time is time tracking with clients, projects, tasks, tags, billable rates,
 reports and invoices, used from a web app, a browser extension, a Raycast
 extension and (as wrappers around the same web client) desktop and mobile
 shells. It is a pnpm workspace: one Express server, one Next.js client, and

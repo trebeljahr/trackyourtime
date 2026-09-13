@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 208 48" width="208" height="48" role="img" aria-label="tracktime">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 244 48" width="244" height="48" role="img" aria-label="Track Your Time">
   <!-- The standalone lockup: for a README, an email, anywhere there is no app
        around it. Inside the app, components/brand-lockup.tsx renders the same
        thing with real HTML text, so the wordmark picks up the app's font and
@@ -9,8 +9,9 @@
        desktop icon all show. `pnpm run icons:brand` does not read this file,
        so if the tile ever changes, change it here too.
 
-       The wordmark inherits `currentColor` for "track", so the lockup follows
-       whatever it is placed on. Only "time" is pinned, to the brand indigo. -->
+       The wordmark inherits `currentColor` for "Track Your", so the lockup follows
+       whatever it is placed on. Only "Time" is pinned, to the brand indigo,
+       as in components/brand-lockup.tsx. -->
   <style>
     .accent { fill: #4F46E5 }
     @media (prefers-color-scheme: dark) { .accent { fill: #818CF8 } }
@@ -23,6 +24,6 @@
   </g>
   <text x="54" y="32" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif"
         font-size="24" font-weight="600" letter-spacing="-0.7">
-    <tspan fill="currentColor">track</tspan><tspan class="accent">time</tspan>
+    <tspan fill="currentColor">Track Your</tspan> <tspan class="accent">Time</tspan>
   </text>
 </svg>

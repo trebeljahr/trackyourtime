@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Tracktime</string>
-    <string name="title_activity_main">Tracktime</string>
+    <string name="app_name">Track Time</string>
+    <string name="title_activity_main">Track Time</string>
     <string name="package_name">com.trebeljahr.tracktime</string>
     <string name="custom_url_scheme">com.trebeljahr.tracktime</string>
 </resources>

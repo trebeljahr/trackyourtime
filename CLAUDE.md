@@ -2,6 +2,19 @@
 
 A stampable starter repo for multiplayer web games and SaaS apps. Express backend, Next.js frontend, MongoDB, tRPC, better-auth, Stripe, WebSocket support.
 
+## Product name
+
+The product people see is **Track Your Time** (`PRODUCT_NAME` in
+`packages/client/src/lib/site-links.ts`); it was "tracktime" until 2026-09-13.
+Home-screen labels use the short form **Track Time** — the web manifest's
+`short_name`, Capacitor `appName`, `CFBundleDisplayName` and the Android
+`app_name` / `title_activity_main`, which `scripts/build-mobile.mjs` asserts
+agree. Everything a user never reads keeps `tracktime`: package names, bundle
+ids, storage/Keychain keys, the `x-tracktime-client` header and client ids,
+the `X-Tracktime-*` webhook headers, Docker images, `TRACKTIME_VERSION`,
+database and bucket names, export filenames. Renaming any of those breaks
+stored sessions, queued data, integrations or deploys.
+
 ## Hatchkit Context
 
 This starter is normally generated and maintained by `hatchkit`.

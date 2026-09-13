@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-tracktime is pre-1.0. The root `package.json` says `0.1.0`, there are no
+Track Your Time is pre-1.0. The root `package.json` says `0.1.0`, there are no
 tagged releases, and there are no maintenance branches. Security fixes land on
 the latest commit of `main` and nowhere else.
 

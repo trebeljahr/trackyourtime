@@ -235,8 +235,8 @@ export async function initAuth(): Promise<void> {
             await sendEmail({
               to: email,
               subject: `${who} invited you to ${org.name}`,
-              text: `${who} invited you to join ${org.name} on tracktime: ${url}`,
-              html: `<p>${who} invited you to join <strong>${org.name}</strong> on tracktime.</p><p><a href="${url}">Accept the invitation</a></p>`,
+              text: `${who} invited you to join ${org.name} on Track Your Time: ${url}`,
+              html: `<p>${who} invited you to join <strong>${org.name}</strong> on Track Your Time.</p><p><a href="${url}">Accept the invitation</a></p>`,
             });
           } catch (error) {
             logAuthUrl("Invitation", email, url);

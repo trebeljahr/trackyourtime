@@ -59,7 +59,7 @@ export function Menu({ webUrl }: MenuProps): JSX.Element {
             onClick={() => openTab(join(webUrl, "/track"))}
             data-testid="menu-open-app"
           >
-            Open tracktime
+            Open Track Your Time
           </button>
           <button
             type="button"

@@ -78,7 +78,7 @@ export function GeneralSettings({
         <div className="space-y-1.5">
           <CardTitle>General</CardTitle>
           <CardDescription>
-            How tracktime looks and how it prints dates and durations.
+            How Track Your Time looks and how it prints dates and durations.
           </CardDescription>
         </div>
         <SaveIndicator state={saveState} testId="general-save-indicator" />

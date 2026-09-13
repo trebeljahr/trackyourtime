@@ -402,7 +402,22 @@ if (platforms.includes("ios")) {
       [...gradle.matchAll(/^\s*versionName\s*=?\s*["']([^"']+)["']/gm)].map((m) => m[1]),
       rootVersion,
     );
-    console.log(`    android/ is ${appId} ${rootVersion}`);
+    // The launcher reads the activity's label, so title_activity_main is as
+    // visible as app_name and has to carry the same home-screen name.
+    const stringsPath = "android/app/src/main/res/values/strings.xml";
+    const strings = readFileSync(resolve(repoRoot, stringsPath), "utf8");
+    for (const key of ["app_name", "title_activity_main"]) {
+      const value = strings
+        .match(new RegExp(`<string name="${key}">([^<]*)</string>`))?.[1]
+        ?.trim();
+      if (appName && value !== appName) {
+        fail(
+          `${key} (${value ?? "missing"}) disagrees with\n` +
+            `  capacitor.config.ts appName (${appName}). Edit ${stringsPath}.`,
+        );
+      }
+    }
+    console.log(`    android/ is ${appId} "${appName}" ${rootVersion}`);
   }
 }
 
