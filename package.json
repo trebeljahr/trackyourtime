@@ -24,6 +24,7 @@
     "build:extension": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/extension run build",
     "build:extension:prod": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/extension run build:prod",
     "extension:id": "node scripts/extension-id.mjs",
+    "llms:emit": "node scripts/llms/build-llms.mjs",
     "docs:sync": "node scripts/docs/sync-self-hosting.mjs",
     "openapi:emit": "pnpm --filter @starter/shared run build && pnpm --filter @starter/server exec tsx src/api/v1/emit-openapi.ts",
     "icons:brand": "node scripts/icons-brand.mjs",

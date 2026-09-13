@@ -3,19 +3,40 @@ import type { Plugin } from "@docusaurus/types";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { AI_CRAWLERS } from "../scripts/llms/site.mjs";
+import { llmsMarkdownPlugin } from "./plugins/llms-markdown";
+
 const docsUrl = process.env.DOCS_SITE_URL ?? "https://docs.example.com";
 const usesPlaceholderUrl = docsUrl === "https://docs.example.com";
 const docsTitle = "Track Your Time docs";
 const docsDescription =
-  "Documentation for Track Your Time — the time tracker, its web app, browser extension, Raycast extension, desktop and mobile builds, and the API they share.";
+  "Documentation for Track Your Time, the open-source time tracker you host on your own server: self-hosting, the MCP server and the REST API.";
 
+/**
+ * robots.txt, by whether this build has a real address.
+ *
+ * With the placeholder URL nothing may be indexed: every canonical link and
+ * sitemap entry would name docs.example.com. With a real one, everything is
+ * allowed, and the crawlers that fetch pages for AI assistants are named in a
+ * group of their own. A crawler that finds a group naming it ignores the `*`
+ * group, so being named is how "allowed" survives a later `*` restriction.
+ */
 function generatedRobotsPlugin(): Plugin<void> {
   return {
     name: "generated-robots",
     postBuild({ outDir }) {
       const body = usesPlaceholderUrl
         ? "User-agent: *\nDisallow: /\n"
-        : `User-agent: *\nAllow: /\n\nSitemap: ${docsUrl.replace(/\/+$/, "")}/sitemap.xml\n`;
+        : [
+            "User-agent: *",
+            "Allow: /",
+            "",
+            ...AI_CRAWLERS.map((agent) => `User-agent: ${agent}`),
+            "Allow: /",
+            "",
+            `Sitemap: ${docsUrl.replace(/\/+$/, "")}/sitemap.xml`,
+            "",
+          ].join("\n");
 
       writeFileSync(join(outDir, "robots.txt"), body);
     },
@@ -53,7 +74,7 @@ const config: Config = {
     ],
   ],
 
-  plugins: [generatedRobotsPlugin],
+  plugins: [generatedRobotsPlugin, llmsMarkdownPlugin],
 
   themeConfig: {
     image: "img/social-card.png",

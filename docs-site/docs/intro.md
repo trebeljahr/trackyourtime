@@ -1,21 +1,22 @@
 ---
 slug: /
-sidebar_position: 1
-description: Overview of the Node realtime starter, including the backend, frontend, auth, payments, data stores, realtime features, and deployment setup.
+title: Track Your Time docs
+sidebar_label: Introduction
+description: Documentation for Track Your Time, the open-source time tracker you host on your own server. Self-hosting, the MCP server and the REST API.
 ---
 
-# Introduction
+# Track Your Time docs
 
-**node-realtime-starter** is a stampable template for building multiplayer web games and SaaS applications.
+Track Your Time is an open-source time tracker you host on your own server. It has a web app, a Chrome extension, a Raycast extension and iPhone and Android apps. They all keep tracking without a connection. The hours you track become reports and PDF invoices.
 
-## What's Included
+These docs are for three kinds of reader.
 
-- **Express + TypeScript** backend with tRPC for type-safe APIs
-- **Next.js** frontend with Tailwind CSS and shadcn/ui
-- **better-auth** for authentication (email/password, OAuth)
-- **Stripe** for payments (subscriptions + one-time purchases)
-- **MongoDB + Redis** for data and real-time features
-- **WebSocket** support for multiplayer/real-time
-- **Playwright** E2E tests covering auth flows
-- **Docker** multi-stage builds for production
-- **GitHub Actions** CI/CD pipeline with Coolify deployment
+**You are deciding whether Track Your Time fits.** [Choosing a self-hosted time tracker](./choosing-a-self-hosted-time-tracker.md) compares it with the other common kinds of tracker and lists what it cannot do yet.
+
+**You want to run it on your own server.** The [self-hosting guide](./self-hosting.md) covers one server, one domain and one Docker Compose file. It includes backups, upgrades, email and troubleshooting.
+
+**You want to connect it to something.** The [MCP server](./mcp.md) lets an AI assistant start timers, log time and read reports. The [REST API](./api/overview.md) and [webhooks](./api/webhooks.md) serve every other integration.
+
+A hosted instance runs at [trackyourtime.dev](https://trackyourtime.dev), and the code is on [GitHub](https://github.com/trebeljahr/tracktime) under AGPL-3.0-or-later.
+
+Every page on this site also exists as plain Markdown. Add `.md` to a page's address, or use `/index.md` for this page. [`/llms.txt`](pathname:///llms.txt) lists all of them.

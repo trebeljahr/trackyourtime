@@ -1,0 +1,65 @@
+# Track Your Time
+
+> Open-source time tracking you host on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline, and tracked hours become reports and PDF invoices.
+
+Track Your Time is for freelancers, consultants and small studios who bill clients by the hour and want that data on a server they control. The code is on GitHub at https://github.com/trebeljahr/tracktime under AGPL-3.0-or-later. A hosted instance runs at https://trackyourtime.dev and is free while in beta.
+
+**What it does today**
+
+- Your data stays on your server. One Docker Compose file runs five containers on one server and one domain: the API, the web app, MongoDB, Redis and Caddy. Caddy gets the HTTPS certificate from Let's Encrypt.
+- You can export a whole workspace as JSON or CSV at any time. A CSV from another tool imports with a preview and a one-step undo.
+- The timer is where you already work. There is a Chrome extension, a Raycast extension with a menu bar clock and a start/stop hotkey, and iPhone and Android apps.
+- The web app, the extensions and the phone apps keep tracking without a connection. They send the queued changes when the connection returns.
+- A timer you stop on one device stops on every other open device at once, over a WebSocket.
+- Each project has an hourly rate. Summary, detailed and weekly reports export to CSV and PDF.
+- An invoice collects a client's unbilled billable hours and downloads as a PDF. An hour on an invoice cannot be billed again.
+- Every install has every feature. There are no paid plugins and no premium tier.
+- The server has a REST API at `/api/v1` with an OpenAPI document, and sends webhooks signed with HMAC-SHA256.
+- An MCP server lets an AI assistant start and stop timers, log past time and list entries. It also lists and creates clients, projects, tasks and tags, and reads summary reports. It runs from a clone of the repository and has no invoice tools.
+
+**Current limits**
+
+- The web app cannot invite team members. The data model has workspaces with members, but in practice each account is one private workspace.
+- There is no tagged release yet. The first self-hosted start builds the images from source and needs a server with about 4 GB of RAM.
+- A self-hosted instance has open sign-up. The application has no setting to close registration. The self-hosting guide lists workarounds at the proxy.
+- The Chrome extension, the Raycast extension and the phone apps are not in any store yet.
+- The Chrome extension has its server address compiled in. To use it with your own server, edit `packages/extension/manifest.config.ts` and build it.
+- The Raycast extension has API URL and Web App URL preferences, so one build reaches any server.
+- The phone apps connect only to the hosted service. On your own server, use the web app in the phone's browser.
+
+**How to self-host**
+
+Point a domain at a Linux server with Docker, clone the repository, copy `.env.selfhost.example` to `.env`, and set `APP_DOMAIN` and `BETTER_AUTH_SECRET`. Then run `docker compose -f docker-compose.selfhost.yml up -d`. The self-hosting guide below has every command, the expected output, backups, upgrades and troubleshooting.
+
+## Start here
+
+- [Choosing a self-hosted time tracker](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/choosing-a-self-hosted-time-tracker.md): Three kinds of self-hosted time tracker, what each one is good at, when to pick it, and what Track Your Time cannot do yet.
+- [Self-hosting guide](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs/self-hosting.md): Run Track Your Time on one server with one domain and Docker Compose: install, first account, email, backups, upgrades and troubleshooting.
+
+## AI assistants
+
+- [MCP server](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/mcp.md): Start and stop timers, log time, list entries, manage clients, projects, tasks and tags, and summarise hours from Claude or any MCP client, on the hosted service or your own server.
+
+## REST API
+
+- [REST API](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/overview.md): The public REST API at /api/v1 — base URL, response envelope, cursor pagination, and what an API token can and cannot reach.
+- [Authentication](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/authentication.md): Minting an API token, the scope table, how a token's visibility is resolved, and what revoking one does.
+- [Errors](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/errors.md): RFC 9457 problem+json error bodies, the full slug table, and what each status means on this API.
+- [OpenAPI document](https://api.trackyourtime.dev/api/v1/openapi.json): The machine-readable description of every /api/v1 route, served by the hosted API.
+
+## Web pages
+
+- [Home](https://trackyourtime.dev/): Keep your hours, clients and invoices on a server you control. How to host it yourself, or use the hosted version.
+- [Chrome extension](https://trackyourtime.dev/extension/): Start and stop the timer from the Chrome toolbar, add time you forgot, and keep tracking when the connection drops.
+- [Raycast extension](https://trackyourtime.dev/raycast/): Start and stop the timer with a hotkey, and see it running in the Mac menu bar.
+- [iPhone and Android](https://trackyourtime.dev/mobile/): Track billable time on an iPhone or Android phone without signal. Changes sync when the connection returns.
+
+## Optional
+
+- [API reference](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/reference.md): Every REST endpoint under /api/v1, the scope it requires, and where its parameters go.
+- [Webhooks](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/webhooks.md): Webhook event catalogue, the signed request format, a Node verification example, retry and auto-disable behaviour, and the SSRF policy.
+- [Rate limits](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/rate-limits.md): The per-token and per-workspace request budgets, the RateLimit headers on every response, and how the limit behaves without Redis.
+- [README](https://raw.githubusercontent.com/trebeljahr/tracktime/main/README.md): The full feature list, the repository layout and the development setup.
+- [llms-full.txt](https://trackyourtime.dev/llms-full.txt): This file plus the full text of the self-hosting guide, the MCP page and the main API pages.
+- [Privacy](https://trackyourtime.dev/privacy/): What the hosted service stores, why, who else sees it, and how to get it back or have it deleted.
+- [Support](https://trackyourtime.dev/support/): How to get help, and answers to common questions.

@@ -54,7 +54,7 @@ browser / extension / Raycast
 | `packages/extension` | Chrome MV3 extension, popup only. `src/background/` (holds the sync client), `src/popup/`, `src/lib/`. API URL baked in at build time by `manifest.config.ts` | Extension UI or background behaviour. Its `chrome-extension://` origin must be in the server's `TRUSTED_ORIGINS` |
 | `packages/raycast` | Raycast (macOS) extension: `menu-bar.tsx`, `timer.tsx`, `entries.tsx`, `components/` (incl. catalog forms), `lib/` | Raycast commands and forms only — domain logic belongs in `core`/`shared` |
 | `packages/mcp` | MCP server on stdio over the public REST API (`/api/v1`) with an API token: `api-client`, `tools` (input schemas from `shared`), `server` (scope probe), `index` (the `trackyourtime-mcp` binary) | A new tool, or a REST change a tool depends on. It never calls tRPC |
-| `docs-site` | Docusaurus site, three pages, **not deployed** and still starter boilerplate | Rarely, and mostly to fix it |
+| `docs-site` | Docusaurus site, **not deployed**: intro, choosing a tracker, self-hosting (generated from `docs/self-hosting.md` by `pnpm docs:sync`), MCP, REST API. `getting-started` and `architecture` are still starter boilerplate. `plugins/llms-markdown.ts` emits a `.md` copy of every page plus `llms.txt` at build | API or MCP changes, and after editing `docs/self-hosting.md` |
 
 `shared` vs `core` is the boundary worth internalising: **`shared` is data and
 pure functions** (a type, a zod schema, a rule with no I/O); **`core` is runtime

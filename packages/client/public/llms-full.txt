@@ -1,0 +1,2077 @@
+# Track Your Time
+
+> Open-source time tracking you host on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline, and tracked hours become reports and PDF invoices.
+
+Track Your Time is for freelancers, consultants and small studios who bill clients by the hour and want that data on a server they control. The code is on GitHub at https://github.com/trebeljahr/tracktime under AGPL-3.0-or-later. A hosted instance runs at https://trackyourtime.dev and is free while in beta.
+
+**What it does today**
+
+- Your data stays on your server. One Docker Compose file runs five containers on one server and one domain: the API, the web app, MongoDB, Redis and Caddy. Caddy gets the HTTPS certificate from Let's Encrypt.
+- You can export a whole workspace as JSON or CSV at any time. A CSV from another tool imports with a preview and a one-step undo.
+- The timer is where you already work. There is a Chrome extension, a Raycast extension with a menu bar clock and a start/stop hotkey, and iPhone and Android apps.
+- The web app, the extensions and the phone apps keep tracking without a connection. They send the queued changes when the connection returns.
+- A timer you stop on one device stops on every other open device at once, over a WebSocket.
+- Each project has an hourly rate. Summary, detailed and weekly reports export to CSV and PDF.
+- An invoice collects a client's unbilled billable hours and downloads as a PDF. An hour on an invoice cannot be billed again.
+- Every install has every feature. There are no paid plugins and no premium tier.
+- The server has a REST API at `/api/v1` with an OpenAPI document, and sends webhooks signed with HMAC-SHA256.
+- An MCP server lets an AI assistant start and stop timers, log past time and list entries. It also lists and creates clients, projects, tasks and tags, and reads summary reports. It runs from a clone of the repository and has no invoice tools.
+
+**Current limits**
+
+- The web app cannot invite team members. The data model has workspaces with members, but in practice each account is one private workspace.
+- There is no tagged release yet. The first self-hosted start builds the images from source and needs a server with about 4 GB of RAM.
+- A self-hosted instance has open sign-up. The application has no setting to close registration. The self-hosting guide lists workarounds at the proxy.
+- The Chrome extension, the Raycast extension and the phone apps are not in any store yet.
+- The Chrome extension has its server address compiled in. To use it with your own server, edit `packages/extension/manifest.config.ts` and build it.
+- The Raycast extension has API URL and Web App URL preferences, so one build reaches any server.
+- The phone apps connect only to the hosted service. On your own server, use the web app in the phone's browser.
+
+**How to self-host**
+
+Point a domain at a Linux server with Docker, clone the repository, copy `.env.selfhost.example` to `.env`, and set `APP_DOMAIN` and `BETTER_AUTH_SECRET`. Then run `docker compose -f docker-compose.selfhost.yml up -d`. The self-hosting guide below has every command, the expected output, backups, upgrades and troubleshooting.
+
+## Start here
+
+- [Choosing a self-hosted time tracker](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/choosing-a-self-hosted-time-tracker.md): Three kinds of self-hosted time tracker, what each one is good at, when to pick it, and what Track Your Time cannot do yet.
+- [Self-hosting guide](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs/self-hosting.md): Run Track Your Time on one server with one domain and Docker Compose: install, first account, email, backups, upgrades and troubleshooting.
+
+## AI assistants
+
+- [MCP server](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/mcp.md): Start and stop timers, log time, list entries, manage clients, projects, tasks and tags, and summarise hours from Claude or any MCP client, on the hosted service or your own server.
+
+## REST API
+
+- [REST API](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/overview.md): The public REST API at /api/v1 — base URL, response envelope, cursor pagination, and what an API token can and cannot reach.
+- [Authentication](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/authentication.md): Minting an API token, the scope table, how a token's visibility is resolved, and what revoking one does.
+- [Errors](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/errors.md): RFC 9457 problem+json error bodies, the full slug table, and what each status means on this API.
+- [OpenAPI document](https://api.trackyourtime.dev/api/v1/openapi.json): The machine-readable description of every /api/v1 route, served by the hosted API.
+
+## Web pages
+
+- [Home](https://trackyourtime.dev/): Keep your hours, clients and invoices on a server you control. How to host it yourself, or use the hosted version.
+- [Chrome extension](https://trackyourtime.dev/extension/): Start and stop the timer from the Chrome toolbar, add time you forgot, and keep tracking when the connection drops.
+- [Raycast extension](https://trackyourtime.dev/raycast/): Start and stop the timer with a hotkey, and see it running in the Mac menu bar.
+- [iPhone and Android](https://trackyourtime.dev/mobile/): Track billable time on an iPhone or Android phone without signal. Changes sync when the connection returns.
+
+## Optional
+
+- [API reference](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/reference.md): Every REST endpoint under /api/v1, the scope it requires, and where its parameters go.
+- [Webhooks](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/webhooks.md): Webhook event catalogue, the signed request format, a Node verification example, retry and auto-disable behaviour, and the SSRF policy.
+- [Rate limits](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/rate-limits.md): The per-token and per-workspace request budgets, the RateLimit headers on every response, and how the limit behaves without Redis.
+- [README](https://raw.githubusercontent.com/trebeljahr/tracktime/main/README.md): The full feature list, the repository layout and the development setup.
+- [llms-full.txt](https://trackyourtime.dev/llms-full.txt): This file plus the full text of the self-hosting guide, the MCP page and the main API pages.
+- [Privacy](https://trackyourtime.dev/privacy/): What the hosted service stores, why, who else sees it, and how to get it back or have it deleted.
+- [Support](https://trackyourtime.dev/support/): How to get help, and answers to common questions.
+
+---
+
+Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/choosing-a-self-hosted-time-tracker.md
+
+# Choosing a self-hosted time tracker
+
+Self-hosted time trackers fall into three patterns, and each one answers a different question. This page describes the patterns and names no products, so it stays accurate as individual projects change. It is part of the Track Your Time documentation, and Track Your Time is the third pattern.
+
+Start with the question you need answered:
+
+- "Who on the team worked on what, and has someone approved it?" leads to a team-first tracker.
+- "Where did my day go?" leads to an automatic activity tracker.
+- "How many hours do I bill this client this month?" leads to a timer-first tracker such as Track Your Time.
+
+## Team-first trackers
+
+Many of the longest-running self-hosted time trackers are web applications written in PHP. They have years of production use behind them, and they are organised around a company with many users.
+
+What they do well:
+
+- Users, teams and roles, with permissions that decide who sees whose time.
+- Timesheet approval by a manager.
+- Plugin systems. Invoice templates, expenses and absence tracking often come from plugins.
+- Translations into many languages. Some also sign users in through a company directory.
+
+What to expect:
+
+- More to run. A typical install needs a PHP application, a relational database and a web server. Upgrades can include database migrations and plugin updates.
+- Time is tracked mainly in the web page. A phone timer that keeps working offline is uncommon, and third parties often supply the mobile apps.
+- Some features sit in paid plugins or a paid cloud plan.
+
+Pick a team-first tracker if:
+
+- Several people track time, and someone reviews or approves it.
+- You need roles, absences or expenses today.
+- A long production history matters more to you than a small install.
+
+## Automatic activity trackers
+
+These run on your own computer. They record which application, window or website is active, and for how long. You never start a timer. The data stays on the machine that recorded it.
+
+What they do well:
+
+- Privacy. Nothing leaves your computer unless you export it.
+- A complete record on the days you forgot about tracking entirely.
+- Detailed answers about your own attention, down to the window title.
+
+What to expect:
+
+- They record the program you used. Matching that time to a client and a project is left to you.
+- They have no clients, projects, hourly rates or invoices.
+- Records usually stay on the device that made them. No shared server combines your laptop and your phone.
+
+Pick an automatic activity tracker if:
+
+- You want to understand your own habits, and nobody gets billed for the result.
+- No tracking data may leave your computer.
+- You forget timers so often that a timer-based tool would stay empty.
+
+## Track Your Time
+
+Track Your Time is a timer-first tracker for a person who bills clients by the hour. You start a timer against a client and a project, and the hours turn into reports and invoices. It runs on your own server from one Docker Compose file on one domain. The [self-hosting guide](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/self-hosting.md) has every command.
+
+What it does:
+
+- The timer runs in the web app, a Chrome extension and iPhone and Android apps. A Raycast extension adds a Mac menu bar clock and a hotkey.
+- Each of these keeps tracking without a connection. The queued changes go to the server when the connection returns.
+- A timer you stop on one device stops on every other open device at once.
+- Each project has an hourly rate. Summary, detailed and weekly reports export to CSV and PDF.
+- An invoice collects a client's unbilled billable hours and downloads as a PDF. An hour on an invoice can't be billed a second time.
+- You can export a whole workspace as JSON or CSV. A CSV from another tool imports with a preview, and you can undo the import.
+- A [REST API](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/overview.md) with an OpenAPI document, signed [webhooks](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/webhooks.md) and an [MCP server](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/mcp.md) connect it to other tools and to AI assistants.
+- The licence is AGPL-3.0-or-later. Every install has every feature, and there is no paid tier.
+
+What it cannot do yet:
+
+- The web app cannot invite team members. The data model has workspaces with members, but in practice one account is one private workspace.
+- There is no tagged release, so there are no published Docker images. The first start builds the images from source and needs about 4 GB of RAM.
+- Anyone who can reach your domain can create an account. The application has no setting to close sign-up, and the self-hosting guide lists workarounds at the proxy.
+- The Chrome extension, the Raycast extension and the phone apps are not in any store yet.
+- The Chrome extension has its server address compiled in. For your own server, you edit one config file and build it. The Raycast extension has server preferences, so one build works with any server.
+- The phone apps reach only the hosted service at trackyourtime.dev. On your own server, use the web app in your phone's browser.
+- It has no timesheet approval and no expense or absence tracking. English is the only language.
+
+Pick Track Your Time if:
+
+- You bill clients by the hour, and your tracked time ends up on an invoice.
+- You want a timer in your browser, your menu bar and your phone, and it has to work without signal.
+- You want the data on your own server, and one person tracking is enough for now.
+- You want to connect your time data to other tools through an API, webhooks or an AI assistant.
+
+## Using two patterns together
+
+An activity tracker and a timer-first tracker can run side by side. The activity record shows what you worked on during a stretch you forgot to time. Track Your Time takes that stretch as a past entry from the web app, the Chrome extension, the Raycast extension or the MCP server. Billable hours logged that way reach the next invoice like any other.
+
+---
+
+Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs/self-hosting.md
+
+# Self-hosting Track Your Time
+
+Run your own instance of Track Your Time on your own server, with your own
+database. You need one Ubuntu server, one domain and one `docker compose`
+command.
+
+This guide is written so that a person or an AI assistant can follow it on a
+fresh Ubuntu VPS. Every install step has three parts. **Run** gives the exact
+command. **Expect** says what success looks like. **If it fails** lists the
+usual causes and their fixes.
+
+This is not the maintainer's own deployment. That one is a two-domain split on
+Coolify, documented in [`deploy.md`](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs/deploy.md). Nothing here interacts with
+it.
+
+**One limit to know before you start.** No release has been published yet:
+`git tag` in the repository prints nothing. There are no version-tagged images
+to pull, so the first start builds both images from source on your server.
+That build needs about 4 GB of memory. A smaller server works if you add swap
+([Step 0.4](#step-04-add-swap-if-the-server-has-less-than-4-gb-of-ram)).
+
+## Contents
+
+- [Install with an AI assistant](#install-with-an-ai-assistant)
+- [What you get, and what it costs to run](#what-you-get-and-what-it-costs-to-run)
+- [Before you start](#before-you-start)
+- [Install](#install)
+  - [Step 0. Prepare a fresh Ubuntu server](#step-0-prepare-a-fresh-ubuntu-server)
+  - [Step 1. Point your domain at the server](#step-1-point-your-domain-at-the-server)
+  - [Step 2. Get the files](#step-2-get-the-files)
+  - [Step 3. Create your `.env`](#step-3-create-your-env)
+  - [Step 4. Generate the session secret](#step-4-generate-the-session-secret)
+  - [Step 5. Set your domain](#step-5-set-your-domain)
+  - [Step 6. Start the stack](#step-6-start-the-stack)
+  - [Step 7. Wait for the services to become healthy](#step-7-wait-for-the-services-to-become-healthy)
+  - [Step 8. Verify the install](#step-8-verify-the-install)
+  - [Step 9. Create your account](#step-9-create-your-account)
+  - [Where the images come from](#where-the-images-come-from)
+- [Accounts, and what "admin" means here](#accounts-and-what-admin-means-here)
+- [Email](#email)
+- [Why one domain, and what it would take to split](#why-one-domain-and-what-it-would-take-to-split)
+- [Backup and restore](#backup-and-restore)
+- [Upgrading](#upgrading)
+- [Optional integrations](#optional-integrations)
+- [The other clients](#the-other-clients)
+- [Troubleshooting](#troubleshooting)
+- [Reference: the files involved](#reference-the-files-involved)
+
+---
+
+## Install with an AI assistant
+
+An assistant with shell access to your server can do the whole install. Copy
+this prompt and replace `<domain>` with your domain:
+
+```text
+Set up Track Your Time on my Ubuntu server at <domain>, following https://github.com/trebeljahr/tracktime/blob/main/docs/self-hosting.md. Run scripts/selfhost-check.sh <domain> at the end and show me its output.
+```
+
+Before you send it, make sure the assistant has these:
+
+| It needs | Why |
+|---|---|
+| SSH access to the server, as root or as a user with `sudo` | It installs Docker, clones the repository and starts the containers. |
+| A DNS `A` record for the domain that already points at the server | Certificate issuance fails until the record resolves. Add an `AAAA` record too if the server has IPv6. |
+| Ports 80 and 443 open in your cloud provider's firewall | The assistant can open the server's own firewall. It usually cannot reach the provider's control panel. |
+| SMTP credentials, optionally | Only for password-reset mail. The app works without them. See [Email](#email). |
+
+The assistant does **not** need an account with any service. There is no
+registry login, no API key, no licence key and no sign-up with a third party.
+Everything it downloads comes from public URLs: the Docker install script, the
+GitHub repository and the public base images.
+
+**Keep your secrets out of the chat.** `BETTER_AUTH_SECRET` and the whole
+`.env` file stay on the server. Step 4 writes the secret straight into `.env`
+without printing it. Do not paste `.env` into a conversation, and do not ask an
+assistant to show it. If you use SMTP, type the password into `.env` yourself
+over SSH and tell the assistant that it is there.
+
+---
+
+## What you get, and what it costs to run
+
+One domain and five containers, all on your server:
+
+| Container | Image | Does |
+|---|---|---|
+| `caddy` | `caddy:2.11-alpine` | TLS. The only container with published ports. Sends `/api/*` and `/ws` to the server, and everything else to the web app. |
+| `server` | `ghcr.io/trebeljahr/tracktime-server` | The API (tRPC and REST), authentication and the live-sync WebSocket. |
+| `client` | `ghcr.io/trebeljahr/tracktime-client-selfhost` | The web app: a static export served by a second, small Caddy. |
+| `mongo` | `mongo:7.0` | All of your data, including accounts and sessions. |
+| `redis` | `redis:7.4-alpine` | Present but unused. See [Optional integrations](#optional-integrations). |
+
+The whole feature set works with nothing else configured. That covers time
+tracking, the client, project and task catalog, tags, reports, invoices, CSV
+and JSON import and export, and the browser and Raycast clients. No account
+with any service is required. The self-host client image is built without the
+analytics variables, so the web app loads no third-party script. A self-hosted
+instance makes no request from the browser that you did not ask for.
+
+**Running cost.** One small VPS and one domain name. Certificates come from
+Let's Encrypt at no cost. The figures below are guidance, not benchmarks:
+
+| | Guidance |
+|---|---|
+| RAM, building the images on the server (needed today) | 4 GB, or less RAM plus a swapfile. `next build` for the web app uses the most memory, and the kernel kills it on a 1 GB server with no swap. |
+| RAM, running the stack | 1 GB works for a single user. 2 GB is comfortable. MongoDB uses the most. |
+| RAM, pulling published images (once a release exists) | Same as running the stack. |
+| Disk | 5 GB for images and volumes, plus your data. Time entries are small. A heavy year of tracking takes megabytes. A local build needs several GB more for the build cache, which `docker builder prune` frees afterwards. |
+| CPU | 1 vCPU is enough to run it. The first build is slow on 1 vCPU. PDF and CSV generation is the only bursty work at runtime. |
+
+**What it does not do.** There is no clustering and no horizontal scaling. The
+server must run as exactly one replica, because live sync fans out inside the
+process. A second replica would not show an error. It would deliver live
+updates only to the devices that connected to the same process. The compose
+file runs one replica. Keep it that way.
+
+---
+
+## Before you start
+
+| Requirement | Notes |
+|---|---|
+| A server with a public IP | Any VPS running Ubuntu 22.04 or 24.04. Other Linux distributions work if you install Docker yourself. |
+| Docker Engine with the Compose v2 plugin | [Step 0.1](#step-01-install-docker-engine-and-the-compose-plugin) installs both. The old Python `docker-compose` 1.x does not work: the compose file uses `depends_on` health conditions and `${VAR:?...}` substitution. |
+| A domain, with an `A` record pointing at the server | Also an `AAAA` record if the server has IPv6. The record must resolve **before** you start the stack, or certificate issuance fails. |
+| Ports 80 and 443 reachable from the internet | Port 80 is not optional: the ACME HTTP challenge uses it. 443/udp is also published, for HTTP/3. |
+| Root, or a user with `sudo` | |
+| About 4 GB of memory for the first build | RAM plus swap. See the limit at the top of this guide. |
+
+**ARM servers.** The release workflow builds `linux/amd64` and `linux/arm64`
+images. Until a release exists, the local build also runs natively on ARM,
+because every base image is multi-arch. MongoDB 7.0 on ARM needs an ARMv8.2-A
+CPU or newer. An Ampere VPS, a Raspberry Pi 5 and an Apple-silicon machine
+qualify. A Raspberry Pi 4 or older does not.
+
+---
+
+## Install
+
+Replace `track.example.com` with your domain in every command. Steps 2 to 9
+run from the directory that holds `docker-compose.selfhost.yml`.
+
+### Step 0. Prepare a fresh Ubuntu server
+
+Skip any part of this step that is already done on your server.
+
+#### Step 0.1. Install Docker Engine and the Compose plugin
+
+This uses Docker's official convenience script from `get.docker.com`. It adds
+Docker's apt repository and installs Docker Engine, the CLI, containerd, and
+the Buildx and Compose plugins. It needs `sudo`. If you prefer to add the apt
+repository by hand, follow Docker's
+[Ubuntu install guide](https://docs.docker.com/engine/install/ubuntu/) instead.
+
+**Run**
+
+```bash
+curl -fsSL https://get.docker.com -o get-docker.sh
+```
+
+```bash
+sudo sh get-docker.sh
+```
+
+**Expect** the script to end without an error. Then check both parts:
+
+```bash
+sudo docker --version
+```
+
+This prints `Docker version` followed by a version number, for example
+`Docker version 28.x.y, build …`.
+
+```bash
+sudo docker compose version
+```
+
+This prints `Docker Compose version v2.x.y` or a newer version.
+
+**Run** this if you work as a user other than root, so that `docker` works
+without `sudo`:
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+Log out and log in again (for an assistant: open a new SSH session). Membership
+in the `docker` group gives root-equivalent access to the server, so add only
+users you trust.
+
+**Expect** `docker ps` to print a table header (`CONTAINER ID   IMAGE …`) with
+no `sudo`.
+
+**If it fails**
+
+| Symptom | Fix |
+|---|---|
+| `sudo: command not found`, or you are not in `sudoers` | Log in as root, or ask your provider for a sudo user. |
+| `docker: 'compose' is not a docker command` | The Compose plugin is missing. Run `sudo apt-get install -y docker-compose-plugin`. |
+| `permission denied while trying to connect to the Docker daemon socket` | Your user is not in the `docker` group yet, or you did not log in again. Log out and in, or prefix Docker commands with `sudo`. |
+| `Cannot connect to the Docker daemon` | The service is not running. Run `sudo systemctl enable --now docker`. |
+
+#### Step 0.2. Open ports 80 and 443
+
+There are two firewalls to think about: the one on the server (`ufw` on
+Ubuntu) and the one at your cloud provider.
+
+**Run**
+
+```bash
+sudo ufw status
+```
+
+**Expect** one of two answers:
+
+- `Status: inactive`. The server's firewall blocks nothing. Go on to the cloud
+  provider's firewall below.
+- `Status: active`. Allow the web ports with the two commands below.
+
+```bash
+sudo ufw allow 80,443/tcp
+```
+
+```bash
+sudo ufw allow 443/udp
+```
+
+Then `sudo ufw status` lists `80,443/tcp` and `443/udp` with `ALLOW`.
+
+Do not enable `ufw` on a server where it is inactive unless you allow SSH
+first (`sudo ufw allow OpenSSH`). Otherwise you lock yourself out.
+
+Docker writes its own iptables rules for published ports, and those rules
+bypass `ufw`. A `ufw` rule therefore rarely blocks this stack. The cloud
+provider's firewall is the usual cause.
+
+**Cloud provider firewall.** Most VPS providers filter traffic before it
+reaches the server, in a panel called a firewall, a security group or a network
+policy. Allow inbound TCP 80, TCP 443 and UDP 443 from anywhere. The server
+cannot check this rule from the inside. [Step 8](#step-8-verify-the-install)
+checks it from the outside once the stack runs.
+
+**If it fails**
+
+| Symptom | Fix |
+|---|---|
+| `ufw: command not found` | Nothing to open on the server. Check the cloud provider's firewall. |
+| Later, `selfhost-check.sh` reports `port 80 … does not answer` or a timeout | The cloud provider's firewall still blocks the port. Open it there. |
+
+#### Step 0.3. Install git
+
+**Run**
+
+```bash
+git --version
+```
+
+**Expect** `git version 2.x.y`.
+
+**If it fails** with `git: command not found`, install it:
+
+```bash
+sudo apt-get update
+```
+
+```bash
+sudo apt-get install -y git
+```
+
+#### Step 0.4. Add swap if the server has less than 4 GB of RAM
+
+The first start builds the images on the server, and the web-app build needs
+about 4 GB of memory. RAM plus swap counts.
+
+**Run**
+
+```bash
+free -h
+```
+
+**Expect** a `Mem:` row and a `Swap:` row. If `Mem:` total is 4 GB or more
+(shown as about `3.8Gi`), or `Swap:` already shows 4 GB, skip the rest of this
+step.
+
+Otherwise, add a 4 GB swapfile. Run these five commands in order:
+
+```bash
+sudo fallocate -l 4G /swapfile
+```
+
+```bash
+sudo chmod 600 /swapfile
+```
+
+```bash
+sudo mkswap /swapfile
+```
+
+```bash
+sudo swapon /swapfile
+```
+
+```bash
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+**Expect** `swapon --show` to print a line that starts with
+`/swapfile file 4G`. The last command keeps the swapfile after a reboot.
+
+**If it fails**
+
+| Symptom | Fix |
+|---|---|
+| `fallocate failed: Operation not supported` | Create the file with `sudo dd if=/dev/zero of=/swapfile bs=1M count=4096` instead, then continue with `chmod`. |
+| `swapon: /swapfile: swapon failed: Device or resource busy` | The swapfile is already active. Nothing to do. |
+| `fallocate: fallocate failed: No space left on device` | The disk has less than 4 GB free. Free space, or resize the disk. |
+
+### Step 1. Point your domain at the server
+
+Do this early. DNS changes can take minutes to reach every resolver, and you
+can continue with Steps 2 to 5 while you wait.
+
+**Run** this on the server to find its public IPv4 address:
+
+```bash
+curl -4 -s https://ifconfig.me
+```
+
+**Expect** one IPv4 address, for example `203.0.113.10`. Your provider's
+control panel shows the same address.
+
+At your DNS provider, create an `A` record for `track.example.com` with that
+address. If the server has a public IPv6 address (`curl -6 -s https://ifconfig.me`
+prints one), also create an `AAAA` record with it. If it has none, create no
+`AAAA` record.
+
+**Run** this to check the record:
+
+```bash
+dig +short track.example.com A
+```
+
+**Expect** exactly the address from `ifconfig.me`. If the domain has an `AAAA`
+record, `dig +short track.example.com AAAA` prints the server's IPv6 address.
+
+**If it fails**
+
+| Symptom | Fix |
+|---|---|
+| `dig: command not found` | Run `sudo apt-get install -y dnsutils`. |
+| No output | The record does not exist yet, or has not propagated. Check the spelling at your DNS provider, wait a few minutes and run `dig` again. |
+| A different address | The record points somewhere else. Correct it. If your DNS provider proxies traffic through its own network, set the record to "DNS only" so that Caddy can obtain a certificate. |
+| An `AAAA` record exists but the server has no IPv6 | Delete the `AAAA` record. A wrong `AAAA` record can make certificate issuance fail and breaks the site for IPv6 visitors. |
+
+### Step 2. Get the files
+
+**Run**
+
+```bash
+git clone https://github.com/trebeljahr/tracktime.git
+```
+
+```bash
+cd tracktime
+```
+
+**Expect** `ls docker-compose.selfhost.yml Caddyfile .env.selfhost.example` to
+print the three file names with no error.
+
+The stack reads only those three files. Clone the whole repository anyway: with
+no published release, Docker builds the images from this checkout, and the
+build needs the whole tree.
+
+**If it fails**
+
+| Symptom | Fix |
+|---|---|
+| `fatal: destination path 'tracktime' already exists` | A clone is already there. Run `cd tracktime` and continue. |
+| `Could not resolve host: github.com` | The server has no outbound DNS or internet access. Fix the network first. |
+
+### Step 3. Create your `.env`
+
+**Run**
+
+```bash
+cp .env.selfhost.example .env
+```
+
+```bash
+chmod 600 .env
+```
+
+**Expect** `ls -l .env` to show `-rw-------`, so only the owner can read the
+file.
+
+Compose reads `.env` from the current directory on its own, which is why the
+copy has that name. To keep a different file name, pass
+`--env-file .env.selfhost` on every compose command.
+
+### Step 4. Generate the session secret
+
+`BETTER_AUTH_SECRET` signs every session. This command generates a random
+value and writes it into `.env` without printing it:
+
+**Run**
+
+```bash
+sed -i "s|^BETTER_AUTH_SECRET=.*|BETTER_AUTH_SECRET=$(openssl rand -base64 32)|" .env
+```
+
+**Expect** the first check to print `1` and the second to print `0`. Neither
+prints the secret.
+
+```bash
+grep -c '^BETTER_AUTH_SECRET=.\{40,\}$' .env
+```
+
+```bash
+grep -c 'replace-me' .env
+```
+
+Keep this value stable. Changing it signs every device out. It cannot be
+recovered, so keep a copy of `.env` somewhere private (see
+[What is not in the backup](#what-is-not-in-the-backup)).
+
+**If it fails**
+
+| Symptom | Fix |
+|---|---|
+| The first check prints `0`, or the second prints `1` | The line was not replaced. Check that `.env` has a line starting with `BETTER_AUTH_SECRET=`, then run the `sed` command again. |
+| `openssl: command not found` | Run `sudo apt-get install -y openssl`. |
+
+### Step 5. Set your domain
+
+**Run**
+
+```bash
+sed -i "s|^APP_DOMAIN=.*|APP_DOMAIN=track.example.com|" .env
+```
+
+**Expect** `grep '^APP_DOMAIN=' .env` to print `APP_DOMAIN=track.example.com`:
+the bare domain, with no scheme and no path.
+
+That is the last required value. Everything else in `.env` is optional and
+commented out:
+
+| Variable | When you need it |
+|---|---|
+| `APP_DOMAIN` | Always. The site address, and therefore the certificate that Caddy requests. |
+| `BETTER_AUTH_SECRET` | Always. |
+| `TRACKTIME_VERSION` | The image tag to pull. Bump it to upgrade once releases exist. See [Upgrading](#upgrading). |
+| `APP_URL` | Only when the origin is not `https://${APP_DOMAIN}`: a plain-HTTP local trial, or a non-standard port. |
+| `SMTP_*`, `EMAIL_FROM` | Only for outgoing mail. See [Email](#email). |
+| `TRUSTED_ORIGINS` | Only for the browser extension or a native shell. See [The other clients](#the-other-clients). |
+| `MONGODB_URI`, `REDIS_URL` | Only to use a managed database instead of the containers. |
+
+The app must run at the **root** of the domain. Hosting it under
+`https://example.com/tracktime/` breaks live sync: the browser derives the
+WebSocket URL from its origin, which still resolves to `example.com/ws`.
+
+**If it fails**
+
+| Symptom | Fix |
+|---|---|
+| `grep` prints nothing | The `APP_DOMAIN=` line is missing or commented out. Add `APP_DOMAIN=track.example.com` to `.env` on its own line. |
+| The value contains `https://` or a `/` | Remove them. `APP_DOMAIN` is the host name only. |
+
+### Step 6. Start the stack
+
+**Run**
+
+```bash
+docker compose -f docker-compose.selfhost.yml up -d
+```
+
+**Expect** a long first run. Compose first tries to pull
+`ghcr.io/trebeljahr/tracktime-server` and
+`ghcr.io/trebeljahr/tracktime-client-selfhost` at the tag in
+`TRACKTIME_VERSION`. No release exists yet, so both pulls fail, and Compose
+builds the two images from the clone. The build takes several minutes. The web
+app is the slowest part. `mongo`, `redis` and `caddy` are pulled from Docker
+Hub.
+
+The command ends with one line per container, such as
+`✔ Container tracktime-server-1  Started` or `Healthy`. Its exit status is
+`0`. Later starts take seconds.
+
+To avoid typing `-f docker-compose.selfhost.yml` on every command, export it
+once per shell:
+
+```bash
+export COMPOSE_FILE=docker-compose.selfhost.yml
+```
+
+The rest of this guide keeps the flag, so every block works when pasted.
+
+**If it fails**
+
+| Symptom | Fix |
+|---|---|
+| `exit code: 137`, or `Killed`, during the build | The kernel stopped the build because memory ran out. Add swap ([Step 0.4](#step-04-add-swap-if-the-server-has-less-than-4-gb-of-ram)) and run the `up -d` command again. The finished build stages are cached. |
+| `required variable APP_DOMAIN is missing a value` | Compose found no `.env` with `APP_DOMAIN` in the current directory. `cd` into the clone, or repeat [Step 5](#step-5-set-your-domain). The compose file stops on purpose rather than request a certificate for an empty name. |
+| `required variable BETTER_AUTH_SECRET is missing a value` | Repeat [Step 4](#step-4-generate-the-session-secret). |
+| `Bind for 0.0.0.0:80 failed: port is already allocated`, or `address already in use` | Another program owns port 80 or 443, often a web server installed with the OS image. `sudo ss -tlnp` lists every listening program. Find the one on `:80` or `:443` and stop it. |
+| `no space left on device` | The build cache filled the disk. Run `docker builder prune`, free space, and run `up -d` again. |
+| `permission denied while trying to connect to the Docker daemon socket` | See [Step 0.1](#step-01-install-docker-engine-and-the-compose-plugin). |
+
+### Step 7. Wait for the services to become healthy
+
+**Run**
+
+```bash
+docker compose -f docker-compose.selfhost.yml ps
+```
+
+**Expect** five rows, for `caddy`, `client`, `mongo`, `redis` and `server`,
+each with a `STATUS` of `Up … (healthy)`.
+
+The services start in order. Mongo and Redis come first, then the server, and
+Caddy last. Caddy waits for both the server and the client to be healthy.
+`depends_on` enforces that order, so a slow first Mongo start delays the rest
+rather than breaking it.
+
+**If it fails**
+
+| Symptom | Fix |
+|---|---|
+| `(health: starting)` | Wait one or two minutes and run `ps` again. The healthchecks run every 10 to 30 seconds. |
+| `caddy` is missing from the list, or `Created` but not `Up` | Caddy is still waiting for `server` or `client`. Look at those two first. |
+| `server` is `unhealthy` or `Restarting` | `docker compose -f docker-compose.selfhost.yml logs --tail 100 server`. A missing variable prints `Missing required environment variable`. If `mongo` is unhealthy too, fix Mongo first. |
+| `mongo` is `unhealthy` or `Restarting` | See [MongoDB does not start](#mongodb-does-not-start). |
+| A service is `Exited` | `docker compose -f docker-compose.selfhost.yml logs --tail 100 <service>` shows why. |
+
+### Step 8. Verify the install
+
+**Run** a quick check of the API through the proxy:
+
+```bash
+curl -sS https://track.example.com/api/health
+```
+
+**Expect** one line of JSON:
+
+```json
+{"status":"ok","db":true,"webUrl":"https://track.example.com","version":"","timestamp":"2026-09-13T12:00:00.000Z"}
+```
+
+- `status` is `ok` when the server answers.
+- `db` is `true` when MongoDB is connected.
+- `webUrl` is the origin the server derived from `APP_URL`. It must match what
+  you type in the browser, character for character. Fix it now if it does not,
+  rather than debugging sign-in later.
+- `version` is the commit the image was built from. Self-host images are built
+  without that value, so it is empty, and that is expected.
+
+**Run** the full check script from the clone directory:
+
+```bash
+scripts/selfhost-check.sh track.example.com
+```
+
+It prints one `PASS`, `FAIL` or `SKIP` line per check. Each `FAIL` has a
+`fix:` line under it. The script exits with status 0 when nothing fails and 1
+when anything does. It checks:
+
+| Check | Passes when |
+|---|---|
+| DNS | The `A` record exists. On the server, once the containers exist, it also matches the server's public IPv4 address, and an `AAAA` record, if present, matches the server's IPv6 address. |
+| Containers | Every service in `docker-compose.selfhost.yml` is running and healthy. Runs where Docker is installed and the compose file is in the current directory. |
+| HTTPS certificate | `curl` connects over HTTPS without `-k`, so the certificate is valid and trusted. |
+| Port 80 | `http://` answers with a redirect to HTTPS. Certificate renewals need port 80. |
+| `/api/health` | It returns `status` `ok`, `db` `true`, and a `webUrl` equal to `https://track.example.com` (or `APP_URL`). |
+| `/` | The web app answers `200` with HTML. |
+| `/api/auth/get-session` | It answers JSON, not HTML. HTML here means sign-in requests reach the web app instead of the server. |
+| `/api/v1/openapi.json` | The REST API answers JSON. |
+| `/ws` | A WebSocket upgrade reaches the server, which answers `401` to a request with no session. A `404`, a `502` or the web app's HTML means the socket is routed wrong. |
+| API token (optional) | With `--token tt_…`, `GET /api/v1/me` accepts the token and the script lists its scopes. |
+
+**Expect** output like this from a healthy install, run on the server:
+
+```text
+Track Your Time self-host check: https://track.example.com
+
+PASS  DNS: track.example.com resolves to 203.0.113.10, this machine's public IPv4
+SKIP  DNS AAAA (no AAAA record, the site is IPv4 only)
+PASS  containers: 5/5 services running and healthy (caddy client mongo redis server)
+PASS  HTTPS certificate for track.example.com is valid and trusted
+PASS  port 80 answers and redirects to HTTPS (HTTP 308)
+PASS  GET /api/health reports status ok
+PASS  GET /api/health reports db:true (MongoDB connected)
+PASS  GET /api/health webUrl is https://track.example.com
+PASS  GET / serves the web app (200, text/html)
+PASS  GET /api/auth/get-session answers JSON (sign-in is routed to the server)
+PASS  GET /api/v1/openapi.json answers JSON (the REST API is routed)
+PASS  WebSocket upgrade on /ws reaches the server (401 without a session, as expected)
+SKIP  API token (pass --token tt_... or set TRACKYOURTIME_API_TOKEN to check one)
+
+11 passed, 0 failed, 2 skipped
+```
+
+A failing check looks like this. These are the `FAIL` lines from a Caddy
+config that sent `/api/auth` and `/api/v1` to the web app and rewrote the `/ws`
+path:
+
+```text
+FAIL  GET /api/auth/get-session answered HTML (HTTP 200), not the API: /api does not reach the server
+      fix: route /api/* to the server: the Caddyfile needs its handle /api/* { reverse_proxy server:5159 } block, and a proxy in front of Caddy must pass /api through, then docker compose -f docker-compose.selfhost.yml restart caddy
+FAIL  GET /api/v1/openapi.json answered HTML (HTTP 200), not the API
+      fix: route /api/* to the server: the Caddyfile needs its handle /api/* { reverse_proxy server:5159 } block, and a proxy in front of Caddy must pass /api through
+FAIL  WebSocket upgrade on /ws was dropped (HTTP 502)
+      fix: proxy /ws to the server without rewriting the path: in Caddy use handle /ws, never handle_path
+```
+
+Run the script from your own computer too. That is the only way to confirm
+that the cloud provider's firewall lets traffic in. Download it into a
+directory that holds no compose file:
+
+```bash
+curl -fsSL -o selfhost-check.sh https://raw.githubusercontent.com/trebeljahr/tracktime/main/scripts/selfhost-check.sh
+```
+
+```bash
+bash selfhost-check.sh track.example.com
+```
+
+With no compose file in the current directory, the script skips the container
+check and the IP comparison, and tests everything else from the outside. It
+needs `curl`, and uses `dig` when installed.
+
+Options:
+
+| Option | Effect |
+|---|---|
+| `--token tt_…` | Also calls `GET /api/v1/me` with an API token. Create one in **Settings → Integrations → New token**. The environment variable `TRACKYOURTIME_API_TOKEN` works too. |
+| `--insecure` | Accepts an untrusted certificate, for a local trial behind Caddy's internal CA. The certificate check then reports `SKIP`. |
+| `APP_URL=http://localhost` | Tests that origin instead of `https://<domain>`. Read from `.env` when set there. |
+| `SELFHOST_PUBLIC_IP` | The server's public IPv4, to skip the lookup at `ifconfig.me`. |
+| `SELFHOST_COMPOSE_FILE` | A compose file other than `docker-compose.selfhost.yml`. |
+
+With no domain argument, the script reads `APP_DOMAIN` from `./.env`. It reads
+no other value from that file, and never prints it.
+
+**If it fails**, follow the `fix:` line. The
+[Troubleshooting](#troubleshooting) section explains each failure in more
+depth.
+
+### Step 9. Create your account
+
+Open `https://track.example.com/signup` and fill in name, email and a password
+of at least eight characters.
+
+**Expect** to land in the app, signed in, with an empty personal workspace.
+
+**If it fails**
+
+| Symptom | Fix |
+|---|---|
+| `403` in the browser's network tab, with `INVALID_ORIGIN` | The address in your browser does not match `APP_URL`. See [`403 INVALID_ORIGIN` on sign-in](#403-invalid_origin-on-sign-in). |
+| The page loads but nothing happens on submit | Run `scripts/selfhost-check.sh track.example.com`. The `/api/auth/get-session` check tells you whether sign-in reaches the server. |
+
+Registration stays open after this. Read the next section before you leave the
+instance on the internet.
+
+### Where the images come from
+
+The `server` and `client` services each carry both an `image:` and a `build:`
+key, so `up -d` works whether or not a release exists. Compose uses the
+published image for `TRACKTIME_VERSION` when it can pull one. When it cannot,
+it builds from your clone. The `build:` blocks already name the right context,
+Dockerfile and build arguments. One of those arguments is the empty
+`NEXT_PUBLIC_API_URL`, which makes the web app use its own origin for the API.
+
+Images for a version exist only after that tag is pushed and
+[`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) has run. No
+tag exists yet, so today every install builds locally. To avoid building on a
+small server, build on another machine and push the images to your own
+registry.
+
+To force one source or the other:
+
+```bash
+docker compose -f docker-compose.selfhost.yml pull
+```
+
+```bash
+docker compose -f docker-compose.selfhost.yml build
+```
+
+`pull` fetches published images only. `build` builds locally only.
+
+Do **not** use `ghcr.io/trebeljahr/tracktime-client:main` as the self-host
+client image. That is the maintainer's build, with the maintainer's API host
+compiled into the browser bundle. You would get a login screen that posts to a
+domain you do not own. The self-host image has the separate name
+`…-client-selfhost` for exactly this reason.
+
+---
+
+## Accounts, and what "admin" means here
+
+**Sign-up is open.** The server always enables email-and-password registration.
+There is no allowlist, no invite code and no setup wizard. The first account is
+not special. Email verification is off, so registration needs no mail provider.
+
+**There is no instance administrator.** No account can see other people's data
+or manage the instance. Every account gets its own personal workspace when it
+is created. All data (clients, projects, tasks, entries, tags and invoices)
+belongs to a workspace. The data model supports several members and roles per
+workspace, but the web app has no screen to invite or manage members. In
+practice, one account is one private workspace. You cannot invite a team
+through the web app yet.
+
+**The application cannot close registration.** There is no setting for it.
+Anyone who can reach your domain can create an account. Three workarounds, from
+the most practical to the most restrictive:
+
+1. **Block the sign-up endpoint at the proxy** once your own account exists.
+   Add this block to your `Caddyfile`, next to the `handle /api/*` block, then
+   run `docker compose -f docker-compose.selfhost.yml restart caddy`:
+
+   ```
+   handle /api/auth/sign-up/* {
+       respond "Registration is closed" 403
+   }
+   ```
+
+   Caddy picks the `handle` block with the most specific path, so this block
+   wins over `handle /api/*` wherever it sits. The `/signup` page still
+   renders, and submitting it fails. This also blocks any account you want to
+   add later, so remove the block first when you need a second one.
+
+2. **Put the whole site behind an authentication layer:** Caddy's
+   `basic_auth`, an identity-aware proxy, or a VPN such as Tailscale or
+   WireGuard. This is the strongest option. It also blocks the browser
+   extension and the Raycast client unless they can send the same credentials.
+
+3. **Do not expose it publicly at all.** Bind the stack to a private network
+   and reach it over a VPN. Let's Encrypt's HTTP challenge needs public
+   access, so you then need a DNS challenge or an internally issued
+   certificate.
+
+**Deleting an account** is in the app: **Settings → Account → Delete
+account**. An account with a password must type it. An account without one
+(Google sign-in) must have signed in within the last 24 hours. Deletion signs
+out every device and removes the account's data at once. There is no grace
+period and no undo. A workspace that other members still use keeps its
+catalog, its invoices and the entries on those invoices. Your MongoDB backups
+still hold the deleted data until they expire, so rotate them if that matters
+to you.
+
+**If you lock yourself out**, see [Email](#email). Without a mail provider the
+server writes the password-reset link to its log, and that is a supported way
+back in.
+
+---
+
+## Email
+
+### What email is used for
+
+Three things, all about accounts: password reset, email verification (off by
+default) and workspace invitations (no screen for them today). No time-tracking
+feature sends mail. Reports, invoices and exports download in the browser.
+
+So Track Your Time runs without email. You need email only to reset a password
+without shell access to the server.
+
+### Configuring SMTP
+
+Any SMTP relay works: a mailbox provider, a transactional mail service, or an
+unauthenticated relay on your own network. Set these in `.env`:
+
+| Variable | Meaning |
+|---|---|
+| `SMTP_HOST` | The relay host. Setting it selects SMTP as the transport. |
+| `SMTP_PORT` | Defaults to `587` (STARTTLS). `465` is implicit TLS. `25` is an unencrypted relay. |
+| `SMTP_USER` | Leave out **both** user and password for an unauthenticated relay. The server then attempts no AUTH, instead of offering empty credentials that the relay rejects. |
+| `SMTP_PASSWORD` | Type it into `.env` on the server. Do not paste it into a chat. |
+| `SMTP_SECURE` | `true` or `false`. When unset, it follows the port (`465` means implicit TLS). That default is right for nearly every provider. |
+| `EMAIL_FROM` | Required whenever `SMTP_HOST` is set. Most relays accept only a domain they are configured to send for, so there is no useful default. |
+
+Apply the change:
+
+```bash
+docker compose -f docker-compose.selfhost.yml up -d server
+```
+
+A missing `EMAIL_FROM` does not count as "email is not configured". A send
+then fails with an error that names the host. The server does not fall back to
+the log in silence. An operator who set up a relay should not have to guess why
+nothing arrives. The server still writes the link to the log, so the
+recovery below keeps working while you fix the relay.
+
+### When it is not configured
+
+Nothing breaks and nothing is queued. Sign-up needs no verification. A
+password-reset request returns the usual "if this email exists…" response, and
+the server prints the reset link to its log. That is how you get back into a
+single-user instance you locked yourself out of:
+
+```bash
+docker compose -f docker-compose.selfhost.yml logs server | grep 'Password reset URL'
+```
+
+The line looks like `[auth] Password reset URL for you@example.com: https://…`.
+Open that URL in a browser. It carries a `?token=` query parameter and lands on
+`https://track.example.com/reset-password`, a real page in the web app.
+
+### Which transport is used
+
+SMTP wins over Listmonk whenever `SMTP_HOST` is set. The three places that send
+account mail (password reset, verification and invitation) check whether *any*
+transport is configured, never one provider's variables. So an instance with
+SMTP set and Listmonk unset sends real mail with no further wiring.
+
+### Verifying a send
+
+Request a password reset for your own account at
+`https://track.example.com/forgot-password`, then watch the log:
+
+```bash
+docker compose -f docker-compose.selfhost.yml logs -f server
+```
+
+A delivery failure throws, and the log shows the relay's own error with the
+host and port the server tried. Nothing is swallowed. The server also prints
+the link, as the same `[auth] Password reset URL for …` line. A relay that does
+not work yet therefore cannot lock you out of your own instance.
+
+---
+
+## Why one domain, and what it would take to split
+
+The web app is a Next.js **static export**: HTML, CSS and JavaScript files with
+no Node process behind them. Next writes `NEXT_PUBLIC_*` variables into that
+bundle when the image is **built**, not when it starts. A client image that
+knows an API URL is bound to that host for good.
+
+The self-host client image is therefore built with an **empty**
+`NEXT_PUBLIC_API_URL`. Every call then falls back to a relative URL:
+
+| Call | Resolves to |
+|---|---|
+| tRPC | `/api/trpc` |
+| better-auth | `window.location.origin` + `/api/auth` |
+| Live-sync WebSocket | `wss://<your host>/ws` |
+
+Caddy makes those the same origin as the page. It sends `/api/*` and `/ws` to
+the server container and everything else to the static files. This gives three
+results. One image works behind anybody's domain. You need one DNS record and
+one certificate instead of two. The cross-origin cookie and CORS problems
+disappear.
+
+The consequences to know about:
+
+- The app must live at the **root** of the domain. A subpath breaks the sync
+  socket, whose URL comes from the browser's origin.
+- `/api/*` and `/ws` must reach the server, never the static files. Caddy
+  sorts `handle` blocks by how specific their path is, so the `handle` block
+  with no path always runs last, whatever its position in the file. Another
+  proxy may evaluate rules in file order, and then the API rules must come
+  first. A static handler that answers `/api/auth/get-session` returns
+  `index.html` with a `200`. The browser shows that as a confusing sign-in
+  failure, not as the routing bug it is.
+- `/ws` must be proxied without rewriting the path. The server compares the
+  upgrade path exactly against `/ws` and `/api/ws`, and closes the connection
+  on anything else. That is why the Caddyfile uses `handle`, never
+  `handle_path`.
+- Your proxy must set `X-Forwarded-For`. Caddy does by default. Without it,
+  better-auth cannot determine a client IP. It then turns off its own rate
+  limiting on sign-in and password reset, and says so in one warning line that
+  is easy to miss.
+
+**Splitting the hosts later** is supported by the server. `FRONTEND_URL` and
+`BETTER_AUTH_URL` exist for this: when set, they override the single `APP_URL`
+and can name two different origins. The client half is a build-time decision,
+though. You would rebuild the client image with
+`NEXT_PUBLIC_API_URL=https://api.example.com`. You would add a second DNS
+record and a second certificate. You would also put the extension's and any
+native client's origins into `TRUSTED_ORIGINS`. Unless you have a specific reason, stay on one domain.
+
+---
+
+## Backup and restore
+
+**Everything that matters is in MongoDB.** One database holds your tracked data
+*and* your accounts and sessions, because better-auth uses the same
+connection. A single dump is a complete backup of the instance.
+
+The compose project is named `tracktime`, so the volumes are:
+
+| Volume | Holds | Back up? |
+|---|---|---|
+| `tracktime_mongo-data` | All application and account data | Yes, but prefer `mongodump` below |
+| `tracktime_mongo-config` | MongoDB's own local config | No |
+| `tracktime_caddy-data` | Issued certificates and the ACME account key | Worth it, see below |
+| `tracktime_caddy-config` | Caddy's autosaved config | No |
+| `tracktime_redis-data` | Nothing the app reads | No |
+
+Confirm the names on your server:
+
+```bash
+docker volume ls | grep tracktime
+```
+
+### Back up the database
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/tracktime" --archive --gzip > tracktime-$(date +%Y%m%d-%H%M%S).archive.gz
+```
+
+**Expect** the command to print `done dumping` lines on stderr and to leave a
+non-empty `tracktime-<date>.archive.gz` in the current directory.
+
+`mongodump` and `mongorestore` ship inside the `mongo:7.0` image, so there is
+nothing to install. The dump is consistent enough for a single-node instance,
+and you can take it while the stack runs. Copy the file off the server. A
+backup that lives only on the VPS is not a backup.
+
+### Restore
+
+Stop the app so nothing writes during the restore, but leave Mongo running:
+
+```bash
+docker compose -f docker-compose.selfhost.yml stop server
+```
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec -T mongo mongorestore --uri "mongodb://127.0.0.1:27017" --archive --gzip --drop < tracktime-20260101-120000.archive.gz
+```
+
+```bash
+docker compose -f docker-compose.selfhost.yml start server
+```
+
+`--drop` replaces each collection that the archive contains. Collections
+created after the dump stay, which is usually what you want. For a clean
+rollback to exactly the dumped state, drop the database first.
+
+### Certificates
+
+`tracktime_caddy-data` holds the issued certificates and the ACME account key.
+Losing it is not fatal, because Caddy issues new certificates on the next
+start. Each new issuance counts against Let's Encrypt's rate limits, which
+matters if you rebuild a server often. To keep the volume, stop the stack first
+so nothing is mid-write:
+
+```bash
+docker compose -f docker-compose.selfhost.yml down
+```
+
+```bash
+docker run --rm -v tracktime_caddy-data:/data:ro -v "$PWD:/backup" alpine tar czf /backup/caddy-data.tar.gz -C /data .
+```
+
+The same `docker run … tar` pattern works for `tracktime_mongo-data` if you
+prefer a file-level copy to a dump. Use it only with the stack stopped. A
+`mongodump` is the more portable backup.
+
+### What is not in the backup
+
+Your `.env` and any edits to `Caddyfile`. Keep those in a private repository or
+a password manager. `BETTER_AUTH_SECRET` in particular cannot be recovered, and
+losing it signs every device out.
+
+---
+
+## Upgrading
+
+Take a dump first. Always:
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/tracktime" --archive --gzip > pre-upgrade-$(date +%Y%m%d-%H%M%S).archive.gz
+```
+
+### Upgrading while no release exists
+
+Today every install runs a local build of the `main` branch. An upgrade is a
+newer local build. Run these from the clone directory:
+
+```bash
+git pull --ff-only
+```
+
+```bash
+docker compose -f docker-compose.selfhost.yml up -d --build
+```
+
+**Expect** the build to run again, and `ps` to show five healthy services
+afterwards. Run `scripts/selfhost-check.sh track.example.com` to confirm.
+
+A local build is tagged with the value of `TRACKTIME_VERSION`. When you later
+switch to a published release, run `pull` explicitly, as below. Otherwise
+Compose keeps using the local image that carries the same tag.
+
+### Upgrading to a published release
+
+Both images carry the same tag, so one variable covers the whole stack. Set
+`TRACKTIME_VERSION` in `.env` to the release you want, then:
+
+```bash
+docker compose -f docker-compose.selfhost.yml pull
+```
+
+```bash
+docker compose -f docker-compose.selfhost.yml up -d
+```
+
+Compose recreates only the containers whose image changed. Expect a few seconds
+of downtime on the server container. Every connected client's sync socket
+reconnects on its own afterwards. Run `scripts/selfhost-check.sh` again to
+confirm.
+
+### Which tag to pin
+
+| Tag | Meaning |
+|---|---|
+| `vX.Y.Z` | An exact release. The default, and the recommendation. |
+| `X.Y` | The newest patch of that minor line. |
+| `latest` | The newest stable release. Prereleases never move it. |
+| `:main` | **Not a release.** The maintainer's own deploy tag, built from every push to `main`. Do not set `TRACKTIME_VERSION` to it. |
+
+### Rolling back
+
+Set `TRACKTIME_VERSION` back to the previous release and repeat `pull` and
+`up -d`. If the newer version wrote data that the older one cannot read,
+restore the dump you took before upgrading (see
+[Backup and restore](#backup-and-restore)).
+
+### Migrations
+
+**There is no migration runner, and nothing migrates at startup.** The server
+boots in four steps: connect to MongoDB, connect to Redis if configured,
+initialise auth, listen. No schema step exists.
+
+Mongoose applies schema changes implicitly:
+
+- A new field is absent on documents that older versions wrote. The code reads
+  an absent field as its default rather than requiring it. This is a
+  deliberate convention in this codebase.
+- Mongoose creates indexes when the models register at startup.
+- Nothing rewrites existing documents.
+
+In practice, an upgrade is usually a new image and nothing more. A downgrade
+usually works too, because old code ignores fields it does not know. "Usually" matters here.
+No tool undoes a change that does rewrite data, which is why the `mongodump`
+above is not optional.
+
+One historical one-off script exists: `migrate:workspaces`, for databases
+older than workspace scoping. Nothing runs it automatically. An instance
+created from the current source or any release image does not need it.
+
+---
+
+## Optional integrations
+
+Each of these is off while its variables are empty, and none runs at boot
+unless configured. The app is complete without all of them.
+
+**Redis.** Connected, but nothing reads it. Sessions live in MongoDB and live
+sync fans out inside the process. The compose file includes Redis because the
+server connects whenever `REDIS_URL` is set. To run the smallest possible
+stack, delete three things from `docker-compose.selfhost.yml`:
+
+- the `REDIS_URL` line in the server's `environment:` block,
+- the `redis` service,
+- the `depends_on` entry that waits for it.
+
+Commenting the variable out in `.env` is not enough, because the compose file
+defaults it to the bundled container. After the edit, the server logs one line
+saying it skipped the connection and carries on.
+`selfhost-check.sh` reads the service list from the compose file, so it then
+expects four services.
+
+**Object storage (S3).** Not used at all. The API renders invoice and report
+PDFs and returns them directly. It builds CSV and JSON exports in memory, and
+imports arrive in the request body. There is no bucket to provision, so do not
+set up MinIO for this. The `S3_*` and `AWS_*` variables belong to the starter
+this app grew from, and the self-host compose file leaves them out on purpose.
+
+**Sentry.** Set `SENTRY_DSN` to send server errors to any Sentry-protocol
+endpoint, including a self-hosted GlitchTip. Unset, nothing is reported and no
+error data leaves the server.
+
+**Google sign-in.** Set both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to
+register the provider. With either empty, the server registers no social
+provider and the web app shows no "Sign in with Google" button. Email and
+password sign-in always works, so you need no OAuth app unless you want one.
+
+**Stripe.** Subscription billing, useful only if you charge other people to use
+your instance. With `STRIPE_MODE` empty the web app does not show the
+subscription card. A self-hosted instance normally leaves this alone.
+
+**Listmonk.** An alternative mail transport to SMTP, not an addition. The
+maintainer's hosted deploy uses it. Its newsletter subscribe and confirm
+endpoints are marketing scaffolding from the starter. The time tracker's UI
+never calls them, and they do nothing while the `LISTMONK_*` variables are
+unset. Prefer plain SMTP, see [Email](#email).
+
+---
+
+## The other clients
+
+Both are optional. The web app is complete on its own.
+
+### Browser extension
+
+The extension compiles its API URL in at build time, so you build your own. In
+`packages/extension/manifest.config.ts`, edit `BUILD_TARGETS.production` to
+point at your origin. Under a single domain that is the bare app origin, not an
+`api.` subdomain. Change both fields:
+
+```ts
+apiUrl: "https://track.example.com",
+hostPermissions: ["https://track.example.com/*"],
+```
+
+Then build it on a machine with Node and pnpm, and load `dist-prod/` as an
+unpacked extension:
+
+```bash
+pnpm run build:extension:prod
+```
+
+An unpacked extension's id, and so its `chrome-extension://<id>` origin, comes
+from the path the browser loaded it from. Print yours:
+
+```bash
+pnpm run extension:id prod
+```
+
+**Add that origin to `TRUSTED_ORIGINS`** in your `.env`, then run
+`docker compose -f docker-compose.selfhost.yml up -d server`. Without it, the
+server refuses sign-in from the extension with `403 INVALID_ORIGIN` before it
+checks the password. Separate several origins with commas.
+
+### Raycast extension
+
+No code change and no `TRUSTED_ORIGINS` entry. Raycast sends no `Origin` header
+at all. The device-approval flow protects it instead: Raycast shows a short
+code, and you approve it at `https://track.example.com/device` in a browser
+where you are signed in.
+
+Set both preference fields in Raycast Settings → Extensions → Track Your Time:
+
+| Preference | Value under a single domain |
+|---|---|
+| **API URL** | `https://track.example.com` |
+| **Web App URL** | `https://track.example.com`, the same value |
+
+Left empty, they fall back to the maintainer's hosts, so fill in both.
+
+---
+
+## Troubleshooting
+
+Start with the check script. It names the failing layer and prints a fix:
+
+```bash
+scripts/selfhost-check.sh track.example.com
+```
+
+### Reading the logs
+
+```bash
+docker compose -f docker-compose.selfhost.yml logs -f server
+```
+
+Replace `server` with `caddy`, `client`, `mongo` or `redis`. Add `--tail 200`
+to skip old lines, and leave out `-f` to read once and exit. Which log to read:
+
+| Symptom | Log |
+|---|---|
+| Sign-in, API errors, mail, password-reset links | `server` |
+| Certificates, routing, `502`s, `404`s from the proxy | `caddy` |
+| The web app does not load at all | `client` |
+| `db: false` from `/api/health` | `mongo`, then `server` |
+
+The state of every container, including which one is unhealthy:
+
+```bash
+docker compose -f docker-compose.selfhost.yml ps
+```
+
+### The build is killed (exit code 137)
+
+`docker compose up -d` or `build` stops with `exit code: 137`, or the log says
+`Killed`. The kernel's out-of-memory killer ended the build, almost always
+during `next build` for the web app. Add a 4 GB swapfile
+([Step 0.4](#step-04-add-swap-if-the-server-has-less-than-4-gb-of-ram)) and run
+the command again. `dmesg | grep -i 'out of memory'` confirms the cause.
+
+### `403 INVALID_ORIGIN` on sign-in
+
+better-auth always checks the `Origin` header when a request carries
+`Sec-Fetch-*` headers, and every real browser request does. If the browser's
+origin is not in the trusted list, the server refuses sign-in before it checks
+the password.
+
+The trusted list is `FRONTEND_URL` (which `APP_URL` supplies) plus everything
+in `TRUSTED_ORIGINS`. So:
+
+- **From the web app:** your `APP_URL` does not match the address in your
+  browser. The server compares the two as literal strings with no aliasing.
+  `https://track.example.com` and `https://www.track.example.com` are two
+  different deployments, and so are `http://localhost:8080` and
+  `http://127.0.0.1:8080`. Check what the server resolved:
+
+  ```bash
+  curl -sS https://track.example.com/api/health
+  ```
+
+  The `webUrl` field is the origin it trusts. Set `APP_URL` (or `APP_DOMAIN`)
+  to match your browser's address bar character for character, then run
+  `docker compose -f docker-compose.selfhost.yml up -d server`.
+  `selfhost-check.sh` reports this mismatch as a `webUrl` failure.
+
+- **From the browser extension:** add its `chrome-extension://<id>` origin to
+  `TRUSTED_ORIGINS`. See [The other clients](#the-other-clients).
+
+**`curl` does not reproduce this.** curl sends no `Origin` and no `Sec-Fetch-*`
+headers, so the origin check does not run. The request that fails in the
+browser succeeds from the shell. Reproduce it in a browser with the network tab
+open, or you will conclude that the server is fine.
+
+Same-origin requests never produce a CORS error, so this failure shows up as a
+plain `403` with no explanation in the console.
+
+### The WebSocket does not connect
+
+The app works, but nothing updates live across devices, and the sync status in
+the app never reaches "open". `selfhost-check.sh` reports the `/ws` check as
+failed when the routing is at fault.
+
+1. **Check that nothing rewrites the path.** The server compares the upgrade
+   path exactly against `/ws` and `/api/ws` and closes the connection on
+   anything else, with no error the browser can explain. Behind Caddy that
+   shows up as a `502`. In Caddy this means `handle /ws`, never
+   `handle_path /ws`, which strips the prefix. If you put another proxy, a CDN
+   or Cloudflare in front of Caddy, check it too.
+2. **Check that the upgrade is forwarded.** The proxy must pass `Upgrade` and
+   `Connection: Upgrade` on an HTTP/1.1 hop. Caddy's `reverse_proxy` does this
+   on its own. A hand-written nginx config needs the standard `Upgrade` map.
+3. **Check that `Cookie` reaches the server.** The web app authenticates the
+   socket with it. A proxy that strips cookies gives you an upgrade that the
+   server refuses with `401`.
+4. **Check that `Sec-WebSocket-Protocol` reaches the server** if you debug the
+   browser extension or Raycast. Their bearer token travels in that header.
+5. **Check idle timeouts.** The server pings every 10 seconds, so any idle
+   timeout above about 30 seconds is fine. An aggressive 10-second idle
+   timeout on a proxy in between cuts the connection again and again.
+6. **Check that the app is at the domain root.** Under a subpath the browser
+   still derives `wss://<host>/ws` from its origin, which does not match where
+   you mounted the app.
+
+In the browser's network tab, filter for `ws`. A healthy request shows status
+`101 Switching Protocols`.
+
+### The certificate is not issued
+
+The browser refuses to connect, or shows Caddy's internal certificate.
+`selfhost-check.sh` reports `HTTPS certificate … is not trusted`. Read the
+proxy log first:
+
+```bash
+docker compose -f docker-compose.selfhost.yml logs caddy | grep -i -E 'acme|certificate|obtain'
+```
+
+The usual causes, in the order worth checking:
+
+| Cause | Check |
+|---|---|
+| DNS does not point here yet | `dig +short track.example.com` on the server, compared with `curl -4 -s https://ifconfig.me`. See [Step 1](#step-1-point-your-domain-at-the-server). |
+| A stale `AAAA` record | `dig +short track.example.com AAAA` prints an address that is not this server's. Delete or correct the record. |
+| Port 80 is blocked | The ACME HTTP challenge uses port 80. A firewall or security group that opens only 443 makes issuance fail. Both must be open **from the internet**. |
+| Something else already owns port 80 or 443 | `docker compose … logs caddy` shows a bind error. `sudo ss -tlnp` finds the other process. |
+| `APP_DOMAIN` is wrong | The site block matches it. A wrong value makes Caddy request a certificate for a name you do not control. |
+| Let's Encrypt rate limits | Let's Encrypt throttles repeated failed attempts for the same name for hours. Fix the cause before you retry, rather than restarting in a loop. |
+
+No ACME contact email is configured by default, so the CA cannot warn you if
+renewals ever stop. Caddy renews well before expiry on its own. For the safety
+net, add a global options block at the top of the `Caddyfile`:
+
+```
+{
+    email you@example.com
+}
+```
+
+### A local trial with no domain
+
+To try the stack on your own computer with no public DNS, use one of these two
+setups in `.env`:
+
+| Setup | `.env` | Open |
+|---|---|---|
+| Plain HTTP | `APP_DOMAIN=http://localhost` and `APP_URL=http://localhost` | `http://localhost` |
+| HTTPS with Caddy's internal certificate | `APP_DOMAIN=localhost`, and no `APP_URL` | `https://localhost`, after accepting the browser's certificate warning |
+
+Caddy skips ACME for `localhost` in both cases. Do not combine
+`APP_DOMAIN=localhost` with `APP_URL=http://localhost`. With that site address
+Caddy redirects `http://localhost` to `https://localhost`, so the browser's
+origin no longer matches `APP_URL` and sign-in fails with `403 INVALID_ORIGIN`.
+
+Use one spelling consistently. `127.0.0.1` is a different origin from
+`localhost` for both the session cookie and the origin check, and the server
+deliberately does not treat them as the same.
+
+Check a local trial with:
+
+```bash
+APP_URL=http://localhost scripts/selfhost-check.sh localhost
+```
+
+For the HTTPS setup, pass `--insecure` so the untrusted certificate is reported
+as `SKIP`.
+
+### MongoDB does not start
+
+```bash
+docker compose -f docker-compose.selfhost.yml logs mongo
+```
+
+| Cause | What you see, and the fix |
+|---|---|
+| No disk space | Mongo refuses to start or aborts on a write. Run `df -h`, then free space. |
+| Unclean shutdown | Recovery messages on start. This usually resolves itself. Give the healthcheck its `start_period` before assuming a failure. |
+| x86 CPU without AVX | `mongo:7.0` requires AVX. On an older or heavily virtualised x86 host it crashes immediately on start. Use a server with a newer CPU, or a managed database via `MONGODB_URI`. |
+| ARM CPU older than ARMv8.2-A | The same immediate crash, for example on a Raspberry Pi 4. Use newer hardware, or a managed database via `MONGODB_URI`. |
+| Volume permissions | After a manual restore of `tracktime_mongo-data` from a tarball, file ownership can be wrong. Restore with the `docker run … tar` pattern from [Backup and restore](#backup-and-restore), which keeps ownership. |
+| A data directory from a different major version | Mongo refuses to start on a newer binary. Restore a `mongodump` into a fresh volume rather than upgrading in place. |
+
+While Mongo is unhealthy the server does not start at all, because
+`depends_on` waits for it. When several services are down at once, look at
+`mongo` first.
+
+### Other things worth knowing
+
+- **`/api/…` returns the web app's HTML with a `200`.** The request reached the
+  static files instead of the server. The shipped `Caddyfile` routes `/api/*`
+  with a `handle /api/*` block, which Caddy always prefers to the `handle`
+  block without a path. Check that the block is still there, and check any
+  proxy in front of Caddy. `selfhost-check.sh` reports this on
+  `/api/auth/get-session` and `/api/v1/openapi.json`.
+- **Everything works but you are signed out constantly.** `BETTER_AUTH_SECRET`
+  changes between restarts (an unset variable, or a regenerated one), or you
+  switch between two spellings of the origin.
+- **`docker compose` refuses to start with `required variable APP_DOMAIN is
+  missing a value`.** The compose file stops on purpose, rather than start a
+  stack that requests a certificate for an empty name. Set it in `.env`, and
+  run the command from the directory that holds `.env`.
+- **Sign-in rate limiting is off without a visible error.** Look for a warning
+  from better-auth that it cannot determine a client IP. It means
+  `X-Forwarded-For` does not reach the server. Check any proxy you put in front
+  of Caddy.
+
+---
+
+## Reference: the files involved
+
+| File | Role |
+|---|---|
+| `docker-compose.selfhost.yml` | The stack. Five services, five volumes, one set of published ports |
+| `.env.selfhost.example` | Copy to `.env`. Two values are required, and the rest are commented out |
+| `Caddyfile` | The single-domain routing rules: `/api/*` and `/ws` to the server, everything else to the web app |
+| `scripts/selfhost-check.sh` | Verifies a running install, one `PASS`, `FAIL` or `SKIP` line per check |
+| `packages/client/Dockerfile.selfhost` | Builds the web app with an empty `NEXT_PUBLIC_API_URL` and serves the static export |
+| `packages/server/Dockerfile` | The server image, shared with the maintainer's deploy |
+| `packages/server/.env.example` | Every server variable, with an explanation for each |
+| [`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) | Publishes the multi-arch, version-tagged images on a `v*` tag |
+| [`docs/deploy.md`](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs/deploy.md) | The maintainer's own two-domain Coolify deployment, not this one |
+
+---
+
+Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/mcp.md
+
+# MCP server
+
+Ask an assistant "what did I work on last week?" or "start a timer for the Acme
+website" and it answers from your own Track Your Time account. The MCP server
+connects any [Model Context Protocol](https://modelcontextprotocol.io) client —
+Claude Desktop, Claude Code, or another MCP client — to the
+[REST API](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/overview.md) with a personal API token.
+
+It works with the hosted service at `https://api.trackyourtime.dev` and with any
+self-hosted instance. The REST API is the same code on both.
+
+What it does not do yet:
+
+- It is not published to npm. You run it from a clone of the repository.
+- It speaks stdio only. There is no hosted MCP endpoint.
+- It has no invoice tools, because the REST API has no invoice routes. Invoices
+  stay in the web app.
+- A token reaches one workspace, the one you created it in.
+
+## 1. Create an API token
+
+In the web app, open **Settings → Integrations → API tokens** and create a token. Tick only the
+scopes you want the assistant to have. The token is shown once, and it starts
+with `tt_`.
+
+| Scope | Tools it enables |
+| --- | --- |
+| `entries:read` | `get_running_timer`, `list_entries` |
+| `entries:write` | `start_timer`, `stop_timer`, `log_time_entry` |
+| `catalog:read` | `list_clients`, `list_projects`, `list_tasks`, `list_tags` |
+| `catalog:write` | `create_client`, `create_project`, `create_task`, `create_tag` |
+| `reports:read` | `summary_report` |
+| none | `get_token_info` |
+
+At start-up the server reads the token's scopes from `GET /api/v1/me` and offers
+only the tools the token can call. A read-only token therefore never shows the
+assistant a `start_timer` tool.
+
+With `catalog:read` as well, the timer tools add project, client and task names to
+their answers. Without it they return ids only.
+
+**Treat the token like a password.** It sits in plain text in your MCP client's
+configuration file. Revoke it in **Settings → Integrations → API tokens** when you stop using it.
+
+## 2. Build the server
+
+You need Node.js 24 or newer, pnpm and git.
+
+```bash
+git clone https://github.com/trebeljahr/tracktime.git
+```
+
+```bash
+cd tracktime && pnpm install && pnpm build:mcp
+```
+
+**Expect:** the last line of output comes from `tsc` with no errors, and
+`packages/mcp/dist/index.js` exists.
+
+Check the server can reach your account before you add it to a client:
+
+```bash
+TRACKYOURTIME_API_TOKEN=tt_your_token node packages/mcp/dist/index.js
+```
+
+**Expect:** one line on stderr, then the process waits for input. Press Ctrl+C to
+quit.
+
+```
+[trackyourtime-mcp] https://api.trackyourtime.dev: token scopes entries:read, entries:write; offering 6 tools.
+```
+
+For a self-hosted instance, add `TRACKYOURTIME_API_URL=https://track.example.com`
+in front of the command.
+
+## 3. Add it to your MCP client
+
+The server reads two environment variables.
+
+| Variable | Value |
+| --- | --- |
+| `TRACKYOURTIME_API_TOKEN` | Required. The `tt_…` token from step 1. |
+| `TRACKYOURTIME_API_URL` | Optional. Defaults to `https://api.trackyourtime.dev`. For a self-hosted instance, use its origin, for example `https://track.example.com`. A pasted `…/api/v1` suffix is accepted too. |
+
+Replace `/path/to/tracktime` below with the absolute path of your clone.
+
+### Claude Code
+
+```bash
+claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token -- node /path/to/tracktime/packages/mcp/dist/index.js
+```
+
+For a self-hosted instance, add a second `--env`:
+
+```bash
+claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token --env TRACKYOURTIME_API_URL=https://track.example.com -- node /path/to/tracktime/packages/mcp/dist/index.js
+```
+
+Add `--scope user` to make it available in every project. Run `claude mcp list` to
+see whether it connected.
+
+### Claude Desktop
+
+Open **Settings → Developer → Edit Config**. That opens
+`claude_desktop_config.json` (on macOS in `~/Library/Application Support/Claude/`,
+on Windows in `%APPDATA%\Claude\`). Add the server under `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "trackyourtime": {
+      "command": "node",
+      "args": ["/path/to/tracktime/packages/mcp/dist/index.js"],
+      "env": {
+        "TRACKYOURTIME_API_TOKEN": "tt_your_token",
+        "TRACKYOURTIME_API_URL": "https://api.trackyourtime.dev"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop. The tools appear under the tools menu in a new chat.
+
+### Other MCP clients
+
+Any client that launches stdio servers works. Give it:
+
+- **command:** `node`
+- **arguments:** `/path/to/tracktime/packages/mcp/dist/index.js`
+- **environment:** `TRACKYOURTIME_API_TOKEN`, and `TRACKYOURTIME_API_URL` for a
+  self-hosted instance
+
+If `node` is not on the client's `PATH`, use the absolute path that `which node`
+prints.
+
+## Tools
+
+| Tool | What it does |
+| --- | --- |
+| `get_token_info` | Confirms the connection and shows the token's workspace, scopes and what it may see. |
+| `get_running_timer` | Returns the running timer and how long it has run, or says none is running. |
+| `start_timer` | Starts a timer now or at a given time, with an optional description, project, task, tags and billable flag. A timer already running in the workspace stops first. |
+| `stop_timer` | Stops the running timer, now or at a given time. |
+| `log_time_entry` | Creates a finished entry with a start and an end, for work nobody timed. |
+| `list_entries` | Lists entries in a date range, newest first, filtered by project, client, task, tag, billable flag or a text search. Up to 500 per page, with a cursor for the next page. |
+| `list_clients`, `list_projects`, `list_tasks`, `list_tags` | Lists the catalog. Projects include tracked time and budget progress. Tags include usage counts. |
+| `create_client`, `create_project`, `create_task`, `create_tag` | Adds to the catalog. A project can have a client, an hourly rate, a billable default, estimated hours and a budget. |
+| `summary_report` | Totals, billable time and amount for a range, grouped by project, client, task, tag, day, week or month. |
+
+The tool arguments use the same validation rules as the REST API, so a name that
+is too long or a colour that is not a hex value is refused before any request is
+sent.
+
+A task in Track Your Time is a kind of work, like "Design review", and not a part
+of a project. An entry can carry a project and a task independently.
+
+### Dates and time zones
+
+`list_entries` and `summary_report` take `from` and `to` as either a date
+(`2026-09-01`) or a full ISO-8601 timestamp. A date covers the whole day: `from:
+2026-09-01, to: 2026-09-30` is all of September.
+
+Dates are read in the time zone of the machine that runs the MCP server. Pass
+`timeZone` (an IANA name such as `Europe/Berlin`) to read them in another zone.
+The summary report also buckets days in that zone.
+
+## When something goes wrong
+
+Every failed tool call returns the server's own error, the problem type from the
+[RFC 9457 error document](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/errors.md), and one sentence on what to change.
+
+| What the assistant reports | Cause and fix |
+| --- | --- |
+| `401 Unauthorized (invalid-token)` | The token is wrong, revoked or expired, or it belongs to a different server than `TRACKYOURTIME_API_URL`. Create a new token on the right server. |
+| A tool you expected is missing | The token lacks that scope. Scopes cannot be added to a token, so create a new one with the scopes you need. |
+| `403 Forbidden (insufficient-scope)` | Same cause. This appears instead when the server could not read the token's scopes at start-up. |
+| `403 Forbidden (money-visibility-required)` | The workspace does not let this member see other members' money, so reports are refused. |
+| `429 Too Many Requests (rate-limited)` | More than the per-token limit in one minute. The error says how many seconds to wait. |
+| `Could not reach …: ECONNREFUSED` or `ENOTFOUND` | `TRACKYOURTIME_API_URL` is wrong, or the server is down. A self-hosted server answers `GET /api/health`. |
+| `… answered HTTP 404 with text/html, not JSON` | The URL points at something other than the API, such as the web app on a split-domain setup. Use the API's origin. |
+
+The server writes one line to its log at start-up with the scopes it found, or the
+reason it could not read them. Claude Code shows server logs with `claude --debug`.
+Claude Desktop writes them to `mcp-server-trackyourtime.log` in its logs folder.
+
+## Check a self-hosted install with an assistant
+
+Once your instance is up, create a token with all five scopes and connect the MCP
+server to it. Then ask the assistant to call `get_token_info`, start and stop a
+timer, and run `summary_report` for today. Each call goes through the proxy, the
+API, the database and the token checks, so four successful answers mean those
+parts work.
+
+---
+
+Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/overview.md
+
+# REST API
+
+`https://api.trackyourtime.dev/api/v1` is a token-authenticated REST API over
+the same data the web app, the browser extension and the Raycast extension use. It
+reads and writes time entries, the catalog behind them (clients, projects, tasks,
+tags) and reports over both.
+
+It is a separate surface from the tRPC endpoint the first-party clients speak. They
+share the service layer underneath, not the transport: a REST write publishes the
+same realtime sync event and enqueues the same webhooks, so a timer started over HTTP
+appears in an open browser tab immediately.
+
+## Getting started
+
+1. Mint a token in **Settings → Integrations**, ticking only the scopes you need.
+2. Send it as `Authorization: Bearer tt_…` on every request.
+3. Confirm what it can reach:
+
+```bash
+curl -s https://api.trackyourtime.dev/api/v1/me \
+  -H "Authorization: Bearer $TRACKTIME_TOKEN"
+```
+
+```json
+{
+  "data": {
+    "tokenId": "665f…",
+    "workspaceId": "664a…",
+    "userId": "6612…",
+    "scopes": ["entries:read", "entries:write"],
+    "visibility": { "canViewOthersTime": false, "canViewOthersMoney": false }
+  }
+}
+```
+
+See [Authentication](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/authentication.md) for the scope table and what those
+visibility flags change.
+
+## One token, one workspace
+
+A token is bound to the workspace it was minted in and cannot address another. There
+is no `workspaceId` parameter anywhere in the API; sending one that names a different
+workspace is refused with `400 workspace-not-addressable` rather than quietly serving
+the bound one.
+
+Anything belonging to another workspace answers `404`, never `403`. A 403 on a foreign
+id would confirm that the id exists somewhere, which turns every endpoint into an
+enumeration oracle. `403` is reserved for a refusal about a resource this workspace
+genuinely owns — the wrong scope, or money the token may not see.
+
+## The envelope
+
+Every successful response is a JSON object with a `data` key:
+
+```json
+{ "data": { "id": "665f…", "durationSec": 3600 } }
+```
+
+A list adds `nextCursor`:
+
+```json
+{ "data": [ /* rows */ ], "nextCursor": "MjAyNi0wOS0wN…" }
+```
+
+`nextCursor` is **always present** and `null` on the last page. It is never omitted:
+an absent key would make "no more pages" indistinguishable from a serialization bug,
+and a paging client would stop early without noticing.
+
+Errors are not enveloped. They are
+[RFC 9457 problem documents](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/errors.md) with their own media type.
+
+## Pagination
+
+`GET /entries` and `GET /reports/detailed` are cursor-paged. Pass `limit` (1–500,
+default set by the server) and then feed each response's `nextCursor` back as the
+`cursor` parameter until it comes back `null`:
+
+```bash
+curl -s -G https://api.trackyourtime.dev/api/v1/entries \
+  -H "Authorization: Bearer $TRACKTIME_TOKEN" \
+  --data-urlencode "from=2026-09-01" \
+  --data-urlencode "to=2026-09-30" \
+  --data-urlencode "limit=100" \
+  --data-urlencode "cursor=$NEXT_CURSOR"
+```
+
+A cursor is **opaque**. It encodes a sort key and an id, not an offset, so rows
+inserted while you page do not shift the window and nothing is skipped or repeated.
+Store it verbatim and send it back unchanged — do not decode it, and do not construct
+one.
+
+The catalog lists (`/clients`, `/projects`, `/tasks`, `/tags`) are not paged: a
+workspace's catalog is small by construction. They still answer with
+`nextCursor: null` so one list parser works everywhere.
+
+## Query parameters
+
+Array filters accept either spelling:
+
+```
+?projectIds=664a…&projectIds=664b…
+?projectIds=664a…,664b…
+```
+
+Dates are ISO-8601. A range filter (`from` / `to`) takes either a calendar day
+(`2026-09-01`) or a full timestamp (`2026-09-01T08:00:00Z`). Every timestamp the API
+*emits* is a full ISO-8601 UTC string.
+
+Report routes take an optional `timeZone` (an IANA name such as `Europe/Berlin`)
+because day bucketing depends on it. Without one the server buckets in its own zone —
+UTC on a deployment — and files after-midnight work under the previous day.
+
+## The machine-readable contract
+
+- [`openapi.json`](https://api.trackyourtime.dev/api/v1/openapi.json) — the committed OpenAPI 3.1 document.
+- `GET /api/v1/openapi.json` — the same document from the running server,
+  unauthenticated, generated on each request from the server's own route table.
+
+Both are generated from the array that mounts the routes and from the very zod schemas
+that validate the requests, so a route cannot exist undocumented and a field cannot be
+documented with a shape it does not have. Point a client generator at either.
+
+## What is not here
+
+- **Invoices.** Money end to end, with no field left to strip for a token whose owner
+  may not see it. Read them in the web app.
+- **CSV and PDF exports.** Same reason: they bake amounts into bytes, so there is
+  nothing to project.
+
+Both are deliberate omissions rather than gaps waiting to be filled.
+
+---
+
+Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/authentication.md
+
+# Authentication
+
+Every route but `/openapi.json` requires an API token:
+
+```
+Authorization: Bearer tt_Ab3xY9Zq_kR2…
+```
+
+There is nothing else to configure. No OAuth dance, no signing of requests, no
+separate API key and secret.
+
+## Minting a token
+
+**Settings → Integrations → New token.** Give it a name, tick the scopes it needs, and
+optionally set an expiry date.
+
+The plaintext is shown **once**, at creation, and is never recoverable afterwards —
+only a SHA-256 hash of it is stored. If you lose it, revoke that token and mint
+another. What the settings screen shows from then on is the token's non-secret
+prefix (`tt_Ab3xY9Zq…`), which is enough to tell two tokens apart in a list and
+useless as a credential.
+
+A token looks like `tt_<prefix>_<secret>`: an 8-character prefix used to look the row
+up, and a 43-character secret carrying 256 bits from the system CSPRNG. Send the whole
+string; the prefix alone authenticates nothing, because the stored hash covers the
+entire token.
+
+## Scopes
+
+Scopes are deny-by-default. A token grants exactly the scopes ticked when it was
+minted, and a route refuses with `403 insufficient-scope` unless its scope is among
+them. A token with no scopes at all is legal and can do nothing — which is the correct
+behaviour for an empty list, not an edge case to guess around.
+
+| Scope | Grants |
+| --- | --- |
+| `entries:read` | List, fetch and page time entries; read the running timer. |
+| `entries:write` | Create, edit and delete entries; start and stop timers. |
+| `catalog:read` | List and fetch clients, projects, tasks and tags. |
+| `catalog:write` | Create, edit, archive and delete catalog rows. |
+| `reports:read` | Summary, detailed and weekly reports. |
+
+Write does **not** imply read. A route that needs `entries:read` needs it even if the
+token holds `entries:write` — so a token that only pushes entries in cannot be turned
+around and used to read the workspace's history.
+
+[The reference](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/reference.md) names the required scope for every route, and so does
+the OpenAPI document, as `x-required-scope` on each operation.
+
+## What a token can see
+
+A workspace member has two visibility flags, both off by default:
+
+- **`canViewOthersTime`** — see other members' entries, not only your own.
+- **`canViewOthersMoney`** — see hourly rates and the amounts derived from them.
+
+A token carries its creating member's flags, resolved on **every request** and
+intersected with the flags that member had when the token was minted. Two rules fall
+out of that, and both matter:
+
+- **Revoking a permission narrows the token immediately.** A member demoted today
+  stops seeing colleagues' money through a token minted last year, on the next
+  request.
+- **Granting a permission does not widen it.** A token minted under a narrower grant
+  keeps that ceiling; to use a newly granted permission, mint a new token. Nobody
+  should discover that a year-old credential silently gained reach.
+
+Removing the member from the workspace kills their tokens outright: `401`, not `403`.
+There is no membership left to derive a scope from.
+
+`GET /me` reports the *effective* flags, so a client can decide whether to render a
+money column at all rather than discovering the answer from a 403 three screens later.
+
+### How money is withheld
+
+Where a response can honestly be narrowed, it is:
+
+- `GET /entries` and `GET /entries/:id` set `hourlyRate: null` on any row whose author
+  is not you when `canViewOthersMoney` is off. When the rate is withheld, `amount` is
+  `0` — **do not read that as "earned nothing"**. `hourlyRate === null` means
+  *withheld*; branch on it before showing any figure.
+- `GET /projects` and `GET /projects/:id` set `progress` to `null`. Budget progress
+  spans every member's entries, so `spentAmount` is aggregate colleague earnings.
+
+Where it cannot, the request is refused: `GET /reports/*` answers
+`403 money-visibility-required` when a token may see colleagues' *time* but not their
+*money*. A report is totals; there is no honest stripped version of a total. Zeroing
+it produces a page of numbers a spreadsheet will sum, and omitting it produces a
+report whose own figures do not reconcile.
+
+Both other combinations are served normally. With `canViewOthersTime` off the rows are
+your own, so every amount in the report is your own earnings; with both flags on there
+is nothing to withhold.
+
+## Revoking
+
+**Settings → Integrations** lists every token with its prefix, scopes, expiry and last
+use. Revoking one takes effect on the next request — there is no cache to wait out.
+An expired token is refused the same way.
+
+Deleting an account deletes every token that account minted, and every webhook it
+created. Requests with those tokens answer `401`, and those webhooks send nothing
+more.
+
+Every failure — unknown, malformed, revoked, expired, belonging to a removed member
+or to a deleted account — answers the same `401 invalid-token` body. Telling those apart would confirm
+which prefixes exist.
+
+`lastUsedAt` is written at most once a minute per token, so a token used ten times a
+second does not turn its own row into the hottest document in the database. Treat it
+as "was this used today", not as an audit log.
+
+## Not the same as a client session
+
+The browser extension, Raycast and the desktop and mobile builds do not use API
+tokens. They sign in as you and keep a better-auth **session** token, which the server
+accepts on the tRPC surface. Those appear under **Settings → Devices** and are revoked
+there.
+
+API tokens are the credential for *your own* integrations: scripts, CI jobs,
+third-party tools. They are scoped, a session is not; a session follows a person's
+full permissions, a token can only ever hold a subset.
+
+---
+
+Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/errors.md
+
+# Errors
+
+Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents, sent
+as `Content-Type: application/problem+json`:
+
+```json
+{
+  "type": "https://trackyourtime.dev/problems/insufficient-scope",
+  "title": "Forbidden",
+  "status": 403,
+  "detail": "This token does not carry the `entries:write` scope.",
+  "instance": "/api/v1/entries"
+}
+```
+
+- **`type`** identifies the failure. Branch on this, not on the prose in `detail`.
+- **`title`** is the HTTP status phrase.
+- **`status`** repeats the HTTP status, so a logged body is self-contained.
+- **`detail`** is human-readable and may change wording between releases.
+- **`instance`** is the path that produced it.
+
+Error bodies are not wrapped in `{ "data": … }`. The media type tells them apart from
+a success before you parse: `application/problem+json` versus `application/json`.
+
+## The slugs
+
+Each `type` is `https://trackyourtime.dev/problems/` plus one of:
+
+| Slug | Status | Means |
+| --- | --- | --- |
+| `invalid-request` | 400 | The request failed validation. `detail` names the fields. |
+| `workspace-not-addressable` | 400 | You sent a `workspaceId` naming a different workspace than the token's. Remove it. |
+| `invalid-token` | 401 | Missing, malformed, unknown, revoked or expired token — or its owner is no longer a member. |
+| `insufficient-scope` | 403 | The token does not hold the scope this route requires. |
+| `money-visibility-required` | 403 | The response would span other members' time and this token may not see what it is worth. Returned by the report routes and by `GET /entries`. |
+| `forbidden` | 403 | A refusal about a resource this workspace owns that is none of the above. |
+| `not-found` | 404 | No such resource in this token's workspace. |
+| `no-such-route` | 404 | No route matches that method and path. |
+| `conflict` | 409 | The write collides with existing data — a duplicate name, an entry already invoiced. |
+| `payload-too-large` | 413 | The request body exceeds what the route accepts. |
+| `rate-limited` | 429 | See [Rate limits](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/rate-limits.md). |
+| `internal-error` | 500 | Something broke on the server. |
+
+## Reading the statuses
+
+**404 covers "not yours".** A resource in another workspace, or one your visibility
+hides, is reported as missing rather than forbidden. A 403 on a foreign id would
+confirm the id exists somewhere. So a 404 means *"not addressable by this token"*, and
+does not by itself prove the id is unused.
+
+**403 is always about permission on something this workspace owns** — the wrong scope,
+or money the token may not see.
+
+**409 is a real conflict, not a validation failure.** Two catalog rows with the same
+name in the same parent, or an edit to an entry that has been invoiced. Retrying
+unchanged will fail again.
+
+**A 500's `detail` is always the same fixed string**, in every environment:
+`"The server could not complete this request."` The real error goes to the server log
+instead. A driver's message routinely carries collection names, query shapes and
+occasionally values, and an API response is the wrong place to find out.
+
+## Retrying
+
+| Status | Retry? |
+| --- | --- |
+| 400, 403, 404, 409, 413 | No. The request will fail identically. Fix it. |
+| 401 | No, until the token is replaced. |
+| 429 | Yes, after `Retry-After` seconds. |
+| 500 | Once or twice, with backoff. If it persists, it is not your request. |
+
+Writes are not idempotent — there is no idempotency key. A retried `POST /entries`
+that actually succeeded the first time creates a second entry, so retry a write only
+on a 429 or a transport failure with no response, and reconcile by listing the range
+afterwards if you cannot tell which happened.
