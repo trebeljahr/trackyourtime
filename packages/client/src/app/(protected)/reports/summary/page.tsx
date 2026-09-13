@@ -241,7 +241,11 @@ function SummaryReport(): React.JSX.Element {
         </div>
       ) : result ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <TimelineChart timeline={result.timeline} duration={fmt.duration} />
+          <TimelineChart
+            timeline={result.timeline}
+            duration={fmt.duration}
+            weekStartsOn={fmt.weekStartsOn}
+          />
           <GroupBreakdownChart
             groups={result.groups}
             totalSec={result.totalSec}

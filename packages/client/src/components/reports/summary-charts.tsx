@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { format, parseISO } from "date-fns";
 import { BarChart3, PieChart as PieChartIcon } from "lucide-react";
 import {
   Bar,
@@ -15,10 +14,19 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { SummaryGroup, SummaryTimelinePoint } from "@starter/shared";
+import type {
+  SummaryGroup,
+  SummaryTimelinePoint,
+  WeekStart,
+} from "@starter/shared";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
+import {
+  bucketTimeline,
+  formatBucketLabel,
+  type TimelineGranularity,
+} from "@/components/reports/timeline-buckets";
 
 /**
  * Series colours come from the theme tokens rather than literals, so the
@@ -61,6 +69,7 @@ type ChartTooltipProps = {
   label?: string | number;
   /** Injected by the caller through `React.cloneElement`. */
   formatDurationValue?: (seconds: number) => string;
+  granularity?: TimelineGranularity;
   formatMoneyValue?: (amount: number) => string;
 };
 
@@ -102,12 +111,13 @@ const TooltipSwatch = ({ color }: { color: string }): React.JSX.Element => (
   />
 );
 
-/** Day tooltip: billable / non-billable split plus the day's total. */
+/** Bucket tooltip: billable / non-billable split plus the bucket's total. */
 function TimelineTooltip({
   active,
   payload,
   label,
   formatDurationValue,
+  granularity = "day",
 }: ChartTooltipProps): React.JSX.Element | null {
   if (active !== true || payload === undefined || payload.length === 0) {
     return null;
@@ -120,7 +130,9 @@ function TimelineTooltip({
 
   return (
     <TooltipShell>
-      <p className="mb-1 font-medium">{formatDayTick(dayLabel, true)}</p>
+      <p className="mb-1 font-medium">
+        {formatBucketLabel(dayLabel, granularity, true)}
+      </p>
       <p className="flex items-center gap-2">
         <TooltipSwatch color={BILLABLE_COLOR} />
         <span className="text-muted-foreground">Billable</span>
@@ -181,13 +193,6 @@ function BreakdownTooltip({
   );
 }
 
-/** "Mon 21" for a "YYYY-MM-DD" key, or the raw key when it is not a date. */
-export const formatDayTick = (day: string, long = false): string => {
-  const parsed = parseISO(day);
-  if (Number.isNaN(parsed.getTime())) return day;
-  return format(parsed, long ? "EEEE, d MMM yyyy" : "EEE d");
-};
-
 const formatHourTick = (seconds: number): string => {
   const hours = seconds / SECONDS_PER_HOUR;
   if (hours === 0) return "0";
@@ -197,21 +202,33 @@ const formatHourTick = (seconds: number): string => {
 export type TimelineChartProps = {
   timeline: SummaryTimelinePoint[];
   duration: (seconds: number) => string;
+  weekStartsOn?: WeekStart;
 };
 
-/** Daily stacked bars, billable at the bottom. */
+const TIMELINE_TITLE: Record<TimelineGranularity, string> = {
+  day: "Daily activity",
+  week: "Weekly activity",
+  month: "Monthly activity",
+};
+
+const TIMELINE_UNIT: Record<TimelineGranularity, string> = {
+  day: "days",
+  week: "weeks",
+  month: "months",
+};
+
+/**
+ * Stacked bars, billable at the bottom — one per day, rolled up to weeks or
+ * months when the range is too long for daily bars to be readable.
+ */
 export function TimelineChart({
   timeline,
   duration,
+  weekStartsOn = 1,
 }: TimelineChartProps): React.JSX.Element {
-  const data = React.useMemo(
-    () =>
-      timeline.map((point) => ({
-        date: point.date,
-        billableSec: point.billableSec,
-        nonBillableSec: Math.max(0, point.seconds - point.billableSec),
-      })),
-    [timeline]
+  const { granularity, buckets: data } = React.useMemo(
+    () => bucketTimeline(timeline, weekStartsOn),
+    [timeline, weekStartsOn]
   );
 
   const hasTime = data.some(
@@ -222,7 +239,7 @@ export function TimelineChart({
     <Card className="min-w-0">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between text-sm font-medium">
-          <span>Daily activity</span>
+          <span>{TIMELINE_TITLE[granularity]}</span>
           <span className="flex items-center gap-3 text-xs font-normal text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <TooltipSwatch color={BILLABLE_COLOR} />
@@ -239,7 +256,7 @@ export function TimelineChart({
         <div
           className="h-[280px] w-full"
           role="img"
-          aria-label={`Daily tracked time across ${data.length} days`}
+          aria-label={`Tracked time across ${data.length} ${TIMELINE_UNIT[granularity]}`}
           data-testid="timeline-chart"
         >
           {hasTime ? (
@@ -256,7 +273,9 @@ export function TimelineChart({
                 />
                 <XAxis
                   dataKey="date"
-                  tickFormatter={(value: string) => formatDayTick(value)}
+                  tickFormatter={(value: string) =>
+                    formatBucketLabel(value, granularity)
+                  }
                   tick={{ fill: AXIS_COLOR, fontSize: 11 }}
                   tickLine={false}
                   axisLine={{ stroke: GRID_COLOR }}
@@ -272,7 +291,12 @@ export function TimelineChart({
                 />
                 <Tooltip
                   cursor={{ fill: GRID_COLOR, fillOpacity: 0.35 }}
-                  content={<TimelineTooltip formatDurationValue={duration} />}
+                  content={
+                    <TimelineTooltip
+                      formatDurationValue={duration}
+                      granularity={granularity}
+                    />
+                  }
                 />
                 <Bar
                   dataKey="billableSec"
@@ -294,7 +318,7 @@ export function TimelineChart({
             <EmptyState
               icon={BarChart3}
               title="No time in this range"
-              description="Track some time or widen the date range to see the daily breakdown."
+              description="Track some time or widen the date range to see the breakdown over time."
               className="h-full"
               testId="timeline-chart-empty"
             />

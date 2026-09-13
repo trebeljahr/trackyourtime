@@ -3,7 +3,12 @@ import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { DateRangePicker, type DateRange } from "./date-range-picker";
+import {
+  DateRangePicker,
+  matchPreset,
+  rangeForPreset,
+  type DateRange,
+} from "./date-range-picker";
 
 afterEach(cleanup);
 
@@ -102,5 +107,48 @@ describe("DateRangePicker custom bounds", () => {
 
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByTestId("picker-to")).toHaveProperty("value", "2026-12-31");
+  });
+});
+
+describe("range presets", () => {
+  // Sunday 13 Sep 2026, local noon so no zone can shift the day.
+  const now = new Date(2026, 8, 13, 12);
+
+  it("resolves last 5 years as a rolling range ending today", () => {
+    expect(rangeForPreset("last5Years", 1, now)).toEqual({
+      from: "2021-09-14",
+      to: "2026-09-13",
+    });
+  });
+
+  it("matches all time only when no fixed preset does", () => {
+    const span = { from: "2019-03-02", to: "2026-09-13" };
+    expect(matchPreset(span, 1, now, span)).toBe("allTime");
+    expect(matchPreset(span, 1, now, null)).toBeNull();
+
+    const thisYear = rangeForPreset("thisYear", 1, now);
+    expect(matchPreset(thisYear, 1, now, thisYear)).toBe("thisYear");
+  });
+
+  it("offers All time only when the tracked span is known", () => {
+    const onChange = vi.fn();
+    const span = { from: "2019-03-02", to: "2026-09-13" };
+    const { rerender } = render(
+      <DateRangePicker value={year} onChange={onChange} testId="picker" />
+    );
+    fireEvent.click(screen.getByTestId("picker"));
+    expect(screen.queryByTestId("picker-preset-allTime")).toBeNull();
+
+    rerender(
+      <DateRangePicker
+        value={year}
+        onChange={onChange}
+        allTime={span}
+        testId="picker"
+      />
+    );
+    fireEvent.click(screen.getByTestId("picker-preset-allTime"));
+
+    expect(onChange).toHaveBeenCalledWith(span);
   });
 });

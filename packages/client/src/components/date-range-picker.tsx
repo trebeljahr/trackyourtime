@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  addDays,
   endOfMonth,
   endOfWeek,
   endOfYear,
@@ -14,6 +15,7 @@ import {
   subDays,
   subMonths,
   subWeeks,
+  subYears,
 } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import type { WeekStart } from "@starter/shared";
@@ -42,7 +44,17 @@ export type DateRangePresetId =
   | "lastWeek"
   | "thisMonth"
   | "lastMonth"
-  | "thisYear";
+  | "thisYear"
+  | "last5Years";
+
+/**
+ * "All time" is not a `DateRangePresetId`: its bounds come from the data (the
+ * workspace's first and last tracked day), so it cannot be resolved from `now`
+ * alone. Callers that know the span pass it to the picker as `allTime`.
+ */
+export type DateRangePickerPresetId = DateRangePresetId | "allTime";
+
+const ALL_TIME_LABEL = "All time";
 
 export const DATE_RANGE_PRESETS: {
   id: DateRangePresetId;
@@ -55,6 +67,7 @@ export const DATE_RANGE_PRESETS: {
   { id: "thisMonth", label: "This month" },
   { id: "lastMonth", label: "Last month" },
   { id: "thisYear", label: "This year" },
+  { id: "last5Years", label: "Last 5 years" },
 ];
 
 /** Local "YYYY-MM-DD" — never `toISOString()`, which shifts across timezones. */
@@ -109,21 +122,42 @@ export const rangeForPreset = (
         from: toDateKey(startOfYear(now)),
         to: toDateKey(endOfYear(now)),
       };
+    case "last5Years":
+      // Rolling, ending today: five years back from tomorrow, so the range
+      // holds exactly five years of days rather than five years and one.
+      return {
+        from: toDateKey(subYears(addDays(now, 1), 5)),
+        to: toDateKey(now),
+      };
   }
 };
 
-/** The preset a range corresponds to, or null when it is a custom range. */
+/**
+ * The preset a range corresponds to, or null when it is a custom range.
+ *
+ * The fixed presets win over `allTime`: a workspace whose whole history is
+ * this week is better labelled "This week" than "All time".
+ */
 export const matchPreset = (
   range: DateRange,
   weekStartsOn: WeekStart = 1,
-  now: Date = new Date()
-): DateRangePresetId | null => {
+  now: Date = new Date(),
+  allTime: DateRange | null = null
+): DateRangePickerPresetId | null => {
   for (const { id } of DATE_RANGE_PRESETS) {
     const candidate = rangeForPreset(id, weekStartsOn, now);
     if (candidate.from === range.from && candidate.to === range.to) return id;
   }
+  if (allTime && allTime.from === range.from && allTime.to === range.to) {
+    return "allTime";
+  }
   return null;
 };
+
+const presetLabel = (id: DateRangePickerPresetId): string =>
+  id === "allTime"
+    ? ALL_TIME_LABEL
+    : (DATE_RANGE_PRESETS.find((preset) => preset.id === id)?.label ?? "");
 
 /** "21 Aug 2026" or "1 – 7 Aug 2026" — a compact, unambiguous label. */
 export const formatRangeLabel = (range: DateRange): string => {
@@ -144,6 +178,11 @@ export type DateRangePickerProps = {
   value: DateRange;
   onChange: (range: DateRange) => void;
   weekStartsOn?: WeekStart;
+  /**
+   * The span of everything tracked. When given, an "All time" preset is
+   * offered; null (unknown yet, or nothing tracked) leaves it out.
+   */
+  allTime?: DateRange | null;
   className?: string;
   align?: "start" | "center" | "end";
   testId?: string;
@@ -157,6 +196,7 @@ export function DateRangePicker({
   value,
   onChange,
   weekStartsOn = 1,
+  allTime = null,
   className,
   align = "start",
   testId = "date-range-picker",
@@ -177,8 +217,8 @@ export function DateRangePicker({
   }, [value.from, value.to]);
 
   const active = React.useMemo(
-    () => matchPreset(value, weekStartsOn),
-    [value, weekStartsOn]
+    () => matchPreset(value, weekStartsOn, new Date(), allTime),
+    [value, weekStartsOn, allTime]
   );
 
   const applyPreset = React.useCallback(
@@ -188,6 +228,12 @@ export function DateRangePicker({
     },
     [onChange, weekStartsOn]
   );
+
+  const applyAllTime = React.useCallback((): void => {
+    if (!allTime) return;
+    onChange({ from: allTime.from, to: allTime.to });
+    setOpen(false);
+  }, [allTime, onChange]);
 
   const setBound = React.useCallback(
     (bound: "from" | "to", next: string): void => {
@@ -227,10 +273,7 @@ export function DateRangePicker({
         >
           <CalendarDays className="size-4 opacity-70" />
           <span className="truncate">
-            {active
-              ? (DATE_RANGE_PRESETS.find((p) => p.id === active)?.label ??
-                formatRangeLabel(value))
-              : formatRangeLabel(value)}
+            {active ? presetLabel(active) : formatRangeLabel(value)}
           </span>
         </Button>
       </PopoverTrigger>
@@ -253,6 +296,18 @@ export function DateRangePicker({
               {preset.label}
             </Button>
           ))}
+          {allTime ? (
+            <Button
+              type="button"
+              variant={active === "allTime" ? "secondary" : "ghost"}
+              size="sm"
+              className="justify-start font-normal"
+              onClick={applyAllTime}
+              data-testid={`${testId}-preset-allTime`}
+            >
+              {ALL_TIME_LABEL}
+            </Button>
+          ) : null}
         </div>
 
         <Separator className="my-2" />

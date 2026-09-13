@@ -62,6 +62,22 @@ export const entriesHref = (
  */
 export const useAllTimeRange = (): DateRange => {
   const { weekStartsOn } = useFormatSettings();
+  const span = useTrackedSpan();
+
+  const fallback = React.useMemo(
+    () => rangeForPreset("thisYear", weekStartsOn),
+    [weekStartsOn],
+  );
+
+  return span ?? fallback;
+};
+
+/**
+ * The first and last day the workspace has tracked time on, or null while
+ * that is unknown or when nothing is tracked. Unlike `useAllTimeRange` there
+ * is no fallback, so a caller can tell "all time" from "this year".
+ */
+export const useTrackedSpan = (): DateRange | null => {
   const spanQuery = trpc.reports.trackedSpan.useQuery(
     { timeZone: DEVICE_TIME_ZONE },
     { staleTime: 5 * 60_000 },
@@ -69,13 +85,8 @@ export const useAllTimeRange = (): DateRange => {
 
   const span = spanQuery.data;
 
-  const fallback = React.useMemo(
-    () => rangeForPreset("thisYear", weekStartsOn),
-    [weekStartsOn],
-  );
-
   return React.useMemo(() => {
-    if (!span || span.from === null || span.to === null) return fallback;
+    if (!span || span.from === null || span.to === null) return null;
     return { from: span.from, to: span.to };
-  }, [fallback, span]);
+  }, [span]);
 };

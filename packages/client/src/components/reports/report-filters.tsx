@@ -12,6 +12,7 @@ import type {
   TaskRow,
 } from "@/components/catalog/types";
 import { DateRangePicker } from "@/components/date-range-picker";
+import { useTrackedSpan } from "@/lib/entry-links";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -163,6 +164,7 @@ export function ReportFiltersBar({
     clearFilters,
   } = filters;
 
+  const trackedSpan = useTrackedSpan();
   const clientsQuery = trpc.clients.list.useQuery({});
   const projectsQuery = trpc.projects.list.useQuery({});
   // Tasks are workspace-wide, so this filter stands on its own: it lists every
@@ -231,6 +233,7 @@ export function ReportFiltersBar({
             value={state.range}
             onChange={setRange}
             weekStartsOn={weekStartsOn}
+            allTime={trackedSpan}
             testId="filter-range"
           />
         )}
