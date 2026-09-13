@@ -112,7 +112,7 @@ export default function SettingsPage() {
           <WebhooksPanel />
         </TabsContent>
         <TabsContent value="account" data-testid="settings-panel-account">
-          <AccountSettings />
+          <AccountSettings onShowExport={() => setTab("data")} />
         </TabsContent>
       </Tabs>
     </div>

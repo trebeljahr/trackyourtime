@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, Mail } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -15,13 +15,19 @@ import {
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
+import { DeleteAccountCard } from "@/components/settings/delete-account";
 import { SettingRow } from "@/components/settings/setting-row";
 import { useAuth } from "@/hooks/use-auth";
 import { signOut } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 
-/** Identity, email notifications, subscription status and sign-out. */
-export function AccountSettings(): React.JSX.Element {
+/** Identity, email notifications, subscription status, sign-out and deletion. */
+export function AccountSettings({
+  onShowExport,
+}: {
+  /** Switch Settings to the export panel, offered before deleting. */
+  onShowExport?: () => void;
+} = {}): React.JSX.Element {
   const router = useRouter();
   const { user } = useAuth();
   const utils = trpc.useUtils();
@@ -206,31 +212,7 @@ export function AccountSettings(): React.JSX.Element {
         </Card>
       ) : null}
 
-      <Card
-        className="border-destructive/30"
-        data-testid="settings-danger-zone"
-      >
-        <CardHeader>
-          <CardTitle className="text-destructive">Danger zone</CardTitle>
-          <CardDescription>
-            Permanently delete your account and every entry, project and client
-            in it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            variant="destructive"
-            data-testid="delete-account"
-          >
-            Delete account
-          </Button>
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Mail className="size-3" />
-            We email you a confirmation link before anything is removed.
-          </span>
-        </CardContent>
-      </Card>
+      <DeleteAccountCard onShowExport={onShowExport} />
     </div>
   );
 }

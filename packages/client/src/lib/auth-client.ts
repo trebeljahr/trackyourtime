@@ -6,7 +6,12 @@ import {
   getNativeToken,
   setNativeToken,
 } from "@/lib/native-session";
-import { sealOfflineQueueOwner } from "@/lib/offline";
+import { ACCOUNT_DELETION_PASSWORD_REQUIRED } from "@starter/shared";
+import {
+  discardDeletedAccountQueue,
+  sealOfflineQueueOwner,
+} from "@/lib/offline";
+import { writeRunningMirror } from "@/lib/running-mirror";
 
 /**
  * better-auth validates its baseURL with `new URL()`, so a relative
@@ -131,6 +136,81 @@ export const signOut: typeof authClient.signOut = async (...args) => {
     await sealOfflineQueueOwner();
     await clearNativeToken();
   }
+};
+
+/** Why a deletion was refused, in the terms the settings dialog acts on. */
+export type AccountDeletionRefusal =
+  /** A password account sent none — ask for it. */
+  | "password-required"
+  /** The password was wrong. */
+  | "invalid-password"
+  /** An account with no password whose session is over a day old — sign in again. */
+  | "session-expired"
+  /** Anything else, the network included. The account still exists. */
+  | "failed";
+
+export const accountDeletionRefusal = (code: unknown): AccountDeletionRefusal => {
+  switch (code) {
+    case ACCOUNT_DELETION_PASSWORD_REQUIRED:
+      return "password-required";
+    case "INVALID_PASSWORD":
+      return "invalid-password";
+    case "SESSION_EXPIRED":
+      return "session-expired";
+    default:
+      return "failed";
+  }
+};
+
+/** Whether this account signs in with a password, and so confirms with one. */
+export const accountHasPassword = async (): Promise<boolean> => {
+  const { data, error } = await authClient.listAccounts();
+  // Unknown reads as "yes": asking for a password the server then turns out
+  // not to need costs a retry, while not asking for one it needs costs a
+  // refusal with nowhere to type the answer.
+  if (error || !Array.isArray(data)) return true;
+  return data.some((account) => account.providerId === "credential");
+};
+
+/**
+ * Delete the signed-in account, then forget it on this device.
+ *
+ * The server does the deleting — `POST /api/auth/delete-user`, which takes the
+ * bearer token like every other auth call, so the native shells need nothing
+ * special. What only this device can do happens after it answers, and only
+ * when it answered yes:
+ *
+ *  - the offline queue drops the deleted account's rows. Sign-out keeps them,
+ *    because that person can sign back in and send them; a deleted account
+ *    cannot, and they must never be replayed under whoever signs in next;
+ *  - the running-timer mirror is cleared, or the next cold launch would seed
+ *    a timer belonging to an account that no longer exists;
+ *  - the Keychain token goes, exactly as on sign-out.
+ *
+ * On a refusal nothing local is touched: the account still exists and so does
+ * everything it queued.
+ */
+export const deleteAccount = async (args: {
+  userId: string;
+  password?: string;
+}): Promise<{ ok: true } | { ok: false; reason: AccountDeletionRefusal }> => {
+  try {
+    const { error } = await authClient.deleteUser(
+      args.password ? { password: args.password } : {},
+    );
+    if (error) return { ok: false, reason: accountDeletionRefusal(error.code) };
+  } catch {
+    return { ok: false, reason: "failed" };
+  }
+
+  // The account is gone whatever happens below; a local cleanup that throws
+  // must not report the deletion as failed.
+  await Promise.allSettled([
+    discardDeletedAccountQueue(args.userId),
+    writeRunningMirror(null),
+  ]);
+  await clearNativeToken().catch(() => undefined);
+  return { ok: true };
 };
 
 /** Where a freshly authenticated user lands. */

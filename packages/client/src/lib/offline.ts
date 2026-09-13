@@ -245,6 +245,37 @@ export const sealOfflineQueueOwner = async (): Promise<number> => {
   return adopted;
 };
 
+/**
+ * The account behind this queue has been deleted: drop its rows and forget it.
+ *
+ * The one place the queue deletes its owner's own work, and the reverse of
+ * `sealOfflineQueueOwner`, which keeps the rows because a signed-out person
+ * can sign back in and send them. A deleted one cannot — there is no
+ * workspace left for them to land in — and replaying them under whoever signs
+ * in next is the one thing the owner stamp exists to prevent. Unowned rows go
+ * too: an unowned row at this moment was made by this session before its
+ * account resolved, so it is the deleted account's by the same argument
+ * `sealOfflineQueueOwner` adopts it with.
+ *
+ * Rows stamped with any OTHER account stay. They are still somebody's time.
+ */
+export const discardDeletedAccountQueue = async (
+  deletedUserId: string
+): Promise<number> => {
+  await hydrateLastOwner();
+  const offlineQueue = getOfflineQueue();
+  const rows = await offlineQueue.list();
+  const theirs = rows.filter((row) => !isForeignTo(row, deletedUserId));
+
+  for (const row of theirs) await offlineQueue.remove(row.id);
+
+  owner = null;
+  lastOwner = null;
+  await getStorage().removeItem(OFFLINE_QUEUE_OWNER_STORAGE_KEY);
+  await refreshPendingCount();
+  return theirs.length;
+};
+
 /** Test seam. */
 export const __resetOfflineQueueOwnerForTests = (): void => {
   owner = null;

@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   __resetOfflineQueueForTests,
   __resetOfflineQueueOwnerForTests,
+  discardDeletedAccountQueue,
   discardForeignQueued,
   enqueueOffline,
   flushOfflineQueue,
@@ -339,5 +340,44 @@ describe("another account's queued rows", () => {
   it("discards nothing when there is nothing to discard", async () => {
     await setOfflineQueueOwner("user-a");
     expect(await discardForeignQueued()).toBe(0);
+  });
+});
+
+describe("discarding the queue of a deleted account", () => {
+  beforeEach(() => {
+    __resetOfflineQueueForTests();
+    __resetOfflineQueueOwnerForTests();
+  });
+
+  it("drops the deleted account's rows and its unowned ones, never another account's", async () => {
+    await setOfflineQueueOwner("user-b");
+    await enqueueOffline("entries.start", startInput("B's work"), "temp-b");
+    await sealOfflineQueueOwner();
+
+    // Unowned: queued before A's session resolved on this launch.
+    await enqueueOffline("entries.start", startInput("pre-resolution"), "temp-0");
+    await setOfflineQueueOwner("user-a");
+    await enqueueOffline("entries.start", startInput("A's work"), "temp-a");
+    // `setOfflineQueueOwner` adopted the unowned row; put one back to prove an
+    // unowned row at deletion time goes too.
+    await getOfflineQueue().enqueue("entries.stop", {
+      input: { end: "2026-08-21T10:00:00.000Z", originId: "tab-1" },
+    });
+
+    expect(await discardDeletedAccountQueue("user-a")).toBe(3);
+
+    const rows = await getOfflineQueue().list();
+    expect(rows.map((row) => row.owner)).toEqual(["user-b"]);
+  });
+
+  it("forgets the owner, so nothing later is stamped with the deleted account", async () => {
+    await setOfflineQueueOwner("user-a");
+    await discardDeletedAccountQueue("user-a");
+    expect(getOfflineQueueOwner()).toBeNull();
+
+    __resetOfflineQueueOwnerForTests();
+    await enqueueOffline("entries.start", startInput("next person"), "temp-1");
+    expect((await getOfflineQueue().list())[0].owner).toBeUndefined();
+    expect(getPendingCount()).toBe(1);
   });
 });

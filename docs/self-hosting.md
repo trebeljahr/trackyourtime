@@ -262,6 +262,14 @@ account. Three workarounds, in order of how well they hold up:
    challenge needs public reachability, so you would need a DNS challenge or
    an internally-issued certificate instead.
 
+**Deleting an account** is in the app: **Settings → Account → Delete account**.
+An account with a password must type it. An account without one (Google sign-in)
+must have signed in within the last 24 hours. Deletion signs out every device and
+removes the account's data at once; there is no grace period and no undo. A
+workspace other members still use keeps its catalog, its invoices and the entries
+on those invoices. Your MongoDB backups still hold the deleted data until they
+expire, so rotate them if that matters to you.
+
 **If you lock yourself out**, see [section 5](#5-email) — without a mail
 provider the password-reset link is written to the server log, and that is a
 supported way back in.

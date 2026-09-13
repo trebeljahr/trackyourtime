@@ -15,3 +15,4 @@ export * from "./import.js";
 export * from "./api-tokens.js";
 export * from "./webhooks.js";
 export * from "./visibility.js";
+export * from "./account-deletion.js";

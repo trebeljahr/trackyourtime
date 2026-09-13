@@ -103,8 +103,12 @@ is nothing to withhold.
 use. Revoking one takes effect on the next request — there is no cache to wait out.
 An expired token is refused the same way.
 
-Every failure — unknown, malformed, revoked, expired, or belonging to a removed
-member — answers the same `401 invalid-token` body. Telling those apart would confirm
+Deleting an account deletes every token that account minted, and every webhook it
+created. Requests with those tokens answer `401`, and those webhooks send nothing
+more.
+
+Every failure — unknown, malformed, revoked, expired, belonging to a removed member
+or to a deleted account — answers the same `401 invalid-token` body. Telling those apart would confirm
 which prefixes exist.
 
 `lastUsedAt` is written at most once a minute per token, so a token used ten times a

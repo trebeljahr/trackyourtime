@@ -683,6 +683,63 @@ count of unsent changes is shown on the login screen rather than left for the
 user to discover, since keeping them silently and dropping them silently look
 identical from the outside.
 
+### Account deletion
+
+Settings → Account → Delete account is better-auth's own `POST
+/api/auth/delete-user`, not a tRPC procedure. better-auth resolves the session
+with the cookie cache off, accepts the bearer token (so the mobile shells use
+the same path), verifies the password and removes the user, accounts and
+every session. tracktime's data goes in `beforeDelete`
+(`auth/account-deletion.ts` → `services/account-deletion/`).
+
+What is deleted:
+
+- **A workspace the person is alone in**, with everything scoped to it:
+  entries, catalog, favorites, invoices, import batches, API tokens, webhooks
+  and their deliveries, workspace settings, invitations, the organization and
+  both membership records.
+- **In a workspace other people use**, only the person's own rows: entries
+  they authored that are NOT on an invoice, favorites, API tokens, webhooks
+  they created (with deliveries), imports they ran, invitations they sent, and
+  both membership records. The catalog, invoices, invoiced entries and
+  workspace settings stay with the workspace.
+- **Everywhere**: user preferences, profile, device-flow codes, and pending
+  invitations addressed to the email.
+
+Five rules, each of which fails quietly if broken:
+
+- **A shared workspace always keeps an owner.** The plan names who owns it
+  afterwards — an existing owner, else the longest-standing admin, else the
+  longest-standing member — and `ensureOwner` writes that into BOTH the app's
+  `WorkspaceMember` and better-auth's `member`. Naming an owner even when no
+  promotion is needed is what lets a retry finish a promotion a crash cut in
+  half.
+- **The cascade is idempotent, and membership rows go last.** Every step is a
+  delete or update by filter; the rows that locate a workspace are removed
+  after everything in it. A failure in `beforeDelete` stops better-auth
+  before it deletes the user, so the person simply tries again.
+  `account-deletion.test.ts` fails the run at every write in turn and checks
+  that a retry converges.
+- **Membership is read from both records.** The app mirror and better-auth's
+  `member` can disagree after a crash; reading only one would call a shared
+  workspace solo and delete colleagues' work.
+- **A password account must send its password.** better-auth alone would
+  delete on a session under 24 hours old, and a browser session lasts seven
+  days. User hooks run before the bearer plugin, so the hook cannot see the
+  account; it records "password sent" per `Request` and `beforeDelete` reads
+  it back. An account with no password keeps better-auth's fresh-session rule.
+  The refusal code is `ACCOUNT_DELETION_PASSWORD_REQUIRED` in `@starter/shared`.
+- **`afterDelete` runs the cascade again**, then sweeps sockets. A request from
+  another device can recreate a personal workspace between the first pass and
+  the user row going; the second pass removes it, and the sweep closes every
+  socket at once instead of on the next minute's re-check.
+
+On the device, `deleteAccount` in `lib/auth-client.ts` acts only on a success:
+`discardDeletedAccountQueue` drops the deleted account's queued rows AND the
+unowned ones (the reverse of sign-out, which keeps them — a deleted account can
+never send them, and they must not replay under the next account), clears the
+running-timer mirror and the Keychain token. Rows another account queued stay.
+
 ### Catalog shape
 
 There is one hierarchy, and it is two levels deep: Client → Project. Tasks and

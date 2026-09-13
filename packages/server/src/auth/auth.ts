@@ -5,7 +5,12 @@ import { deviceAuthorization } from "better-auth/plugins/device-authorization";
 import { organization } from "better-auth/plugins/organization";
 import { MongoClient } from "mongodb";
 import { env, getTrustedOrigins } from "../config/env.js";
+import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { isEmailDeliveryConfigured, sendEmail } from "../services/email.js";
+import {
+  accountDeletionOptions,
+  recordDeletionPassword,
+} from "./account-deletion.js";
 import { DEVICE_FLOW_CLIENT_IDS } from "./client-label.js";
 import { createPersonalWorkspace } from "./personal-workspace.js";
 import {
@@ -99,6 +104,34 @@ export async function initAuth(): Promise<void> {
           throw error;
         }
       },
+    },
+
+    user: {
+      /**
+       * Settings → Delete account, as `POST /api/auth/delete-user`. Everything
+       * tracktime owns is removed in `beforeDelete`, before better-auth removes
+       * the user and every session; shared workspaces lose only this person's
+       * rows. The password rule and the retry story are in
+       * `auth/account-deletion.ts`.
+       */
+      deleteUser: accountDeletionOptions({
+        context: () => getAuth().$context,
+        appRows: mongooseRowStore,
+        /**
+         * Every session is gone by now, so HTTP is already refused on every
+         * device. Sweeping at once closes the sockets too, instead of leaving
+         * them streaming until the next minute's re-check.
+         */
+        onDeleted: () => {
+          void import("../ws/handler.js")
+            .then(({ revokeStaleSockets }) => revokeStaleSockets())
+            .catch(() => undefined);
+        },
+      }),
+    },
+
+    hooks: {
+      before: recordDeletionPassword,
     },
 
     socialProviders: {
