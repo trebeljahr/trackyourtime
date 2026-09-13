@@ -103,6 +103,23 @@ alongside it. Production origins belong in the server app's `TRUSTED_ORIGINS`
 field in Coolify — `.env.production` is untracked here and never reaches the
 image.
 
+**Every Next route answers 404 while `public/` files load** means `next dev`
+could not open file watches (`Watchpack Error (watcher): Error: EMFILE: too many
+open files, watch` in the client log): with no watcher it never scans `app/`.
+The cause was dev watchers from earlier runs that never died — `dev.mjs` used to
+`execSync` concurrently, so a signal to its pid alone (a harness SIGTERM,
+SIGKILL, a closed agent shell) orphaned `tsx watch` and `next dev` for days. Now
+concurrently leads its own process group, which `dev.mjs` stops on
+SIGINT/SIGTERM/SIGHUP, on EPIPE and when reparented, and `scripts/lib/dev-reaper.mjs`
+stops it when `dev.mjs` dies any other way. `dev` warns at start about orphaned
+watchers of this repo and prints a boxed explanation on the first EMFILE/ENOSPC;
+it never kills them. Stop only what you started, or run
+`WATCHPACK_POLLING=true pnpm run dev`. The server's `tsx watch` passes
+`--exclude "../../node_modules/**"`: tsx's own `**/node_modules/**` ignore is
+resolved against `packages/server`, so every dependency under the root
+`node_modules/.pnpm` was watched (~3,200 fds per process; 38 with the exclude,
+reload from `packages/shared/src` intact).
+
 Drop fixtures into `seed/assets/` to have them auto-populate the
 local bucket — see `seed/README.md`. To copy a real-prod bucket into
 local for realistic dev data, `hatchkit assets pull` (treat the copy

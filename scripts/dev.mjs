@@ -36,12 +36,22 @@
 //   pnpm run dev:docs:fixed     Fixed ports with docs
 //   node scripts/dev.mjs --dry-run   Resolve and print ports, start nothing
 
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import { createHash } from "crypto";
 import { existsSync, readFileSync } from "fs";
+import { createRequire } from "module";
 import { createServer } from "net";
-import { basename, resolve } from "path";
+import { constants } from "os";
+import { basename, dirname, resolve } from "path";
+import {
+  describeStrayWatchers,
+  describeWatcherFailure,
+  findRepoWatchers,
+  parsePs,
+  watcherFailureIn,
+} from "./lib/dev-watchers.mjs";
 import { extensionOrigin } from "./lib/extension-id.mjs";
+import { terminateGroup } from "./lib/process-group.mjs";
 
 const fixedMode = process.argv.includes("--fixed");
 const includeDocs = process.argv.includes("--docs");
@@ -371,29 +381,195 @@ const serverEnv = [
 ].join(" ");
 
 const processes = [
-  `"pnpm --filter @starter/shared run dev"`,
-  `"pnpm --filter @starter/core run dev"`,
-  `"node scripts/wait-for-port.mjs ${apiPort} && ${clientEnv} pnpm --filter @starter/client run dev"`,
-  `"${serverEnv} pnpm --filter @starter/server run dev"`,
+  "pnpm --filter @starter/shared run dev",
+  "pnpm --filter @starter/core run dev",
+  `node scripts/wait-for-port.mjs ${apiPort} && ${clientEnv} pnpm --filter @starter/client run dev`,
+  `${serverEnv} pnpm --filter @starter/server run dev`,
 ];
 const names = ["shared", "core", "client", "server"];
 const colors = ["green", "blue", "yellow", "cyan"];
 
 if (includeDocs) {
-  processes.push(`"pnpm --filter docs-site run start -- --port ${docsPort}"`);
+  processes.push(`pnpm --filter docs-site run start -- --port ${docsPort}`);
   names.push("docs");
   colors.push("magenta");
 }
 
+// ── Run, and take every child down with this script ──────────────────
+//
+// This used to be `execSync("npx concurrently ...")`, and a signal aimed at
+// this script's pid alone — SIGTERM from a preview or agent harness, SIGKILL,
+// a crash — killed only this script. npx, concurrently, pnpm, `tsx watch` and
+// `next dev` were reparented to launchd and kept running for days, each
+// `tsx watch` holding thousands of file watches, until a fresh `next dev`
+// could not open any and answered 404 on every route. Only a signal to the
+// whole foreground process group (Ctrl+C in a terminal) ever reached them.
+//
+// Now concurrently runs as the leader of a process group of its own, and every
+// way out goes through `terminateGroup`, which signals that group and so
+// reaches every descendant, including ones whose parent is already gone:
+//
+//   * SIGINT / SIGTERM / SIGHUP to this script  → forwarded to the group
+//   * concurrently exiting on its own          → leftovers in the group stopped
+//   * this script's stdout breaking (EPIPE)    → treated as a hangup
+//   * this script reparented (its parent died) → treated as a hangup
+//   * SIGKILL or a crash of this script        → `lib/dev-reaper.mjs`, which
+//     sees its stdin pipe close and stops the group
+//
+// Output is piped through here rather than inherited, so a watcher that cannot
+// be opened is caught and explained instead of scrolling past.
+const posix = process.platform !== "win32";
+const repoCommonRoot = gitCommonRoot();
+
+// Preflight: watchers of this repo whose run is gone. A warning only — which
+// of them are safe to stop is not this script's call.
+if (posix) {
+  const stray = describeStrayWatchers(scanWatchers(), repoCommonRoot);
+  if (stray) console.warn(stray);
+}
+
+const require = createRequire(import.meta.url);
+const concurrentlyBin = resolve(
+  dirname(require.resolve("concurrently/package.json")),
+  "dist/bin/concurrently.js",
+);
+
 // --kill-others-on-fail, NOT -k: a child exiting 0 must not tear down the rest.
 // `next dev` in Next 16 can return 0 while the dev server keeps running, and
 // with -k that clean exit killed the API server and the tsc watchers with it.
-try {
-  execSync(
-    `npx concurrently --kill-others-on-fail -n ${names.join(",")} -c ${colors.join(",")}` +
-      ` ${processes.join(" ")}`,
-    { stdio: "inherit" },
+const runner = spawn(
+  process.execPath,
+  [
+    concurrentlyBin,
+    "--kill-others-on-fail",
+    "-n",
+    names.join(","),
+    "-c",
+    colors.join(","),
+    ...processes,
+  ],
+  {
+    // A group of its own (setsid). stdin is ignored: nothing in the tree reads
+    // it, and a reader outside the terminal's foreground group would stop.
+    detached: posix,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      // Piping would otherwise strip concurrently's (and its children's) colors.
+      ...(process.stdout.isTTY && !process.env.FORCE_COLOR
+        ? { FORCE_COLOR: String(colorLevel(process.stdout.getColorDepth())) }
+        : {}),
+    },
+  },
+);
+const runnerGroup = runner.pid;
+
+if (posix && runnerGroup) {
+  const reaper = resolve(repoRoot, "scripts/lib/dev-reaper.mjs");
+  spawn(process.execPath, [reaper, String(runnerGroup)], {
+    detached: true,
+    // The pipe on stdin is the whole mechanism: the kernel closes it when this
+    // script exits, however it exits.
+    stdio: ["pipe", "ignore", "ignore"],
+  }).unref();
+}
+
+const reportedFailures = new Set();
+const watchOutput = (source, target) => {
+  let partial = "";
+  source.on("data", (chunk) => {
+    target.write(chunk);
+    const lines = (partial + chunk.toString()).split("\n");
+    partial = lines.pop() ?? "";
+    for (const line of lines) {
+      const code = watcherFailureIn(line);
+      if (!code || reportedFailures.has(code)) continue;
+      reportedFailures.add(code);
+      const prefix = line.match(/\[(\w+)\]/)?.[1] ?? null;
+      console.error(
+        describeWatcherFailure({
+          code,
+          source: prefix,
+          watchers: posix ? scanWatchers() : [],
+          repoRoot: repoCommonRoot,
+        }),
+      );
+    }
+  });
+};
+watchOutput(runner.stdout, process.stdout);
+watchOutput(runner.stderr, process.stderr);
+
+let stopping = null;
+const stop = (signal) => {
+  if (stopping) {
+    // A second Ctrl+C means now.
+    if (signal === "SIGINT" && runnerGroup) {
+      try {
+        process.kill(-runnerGroup, "SIGKILL");
+      } catch {}
+      process.exit(128 + constants.signals.SIGINT);
+    }
+    return;
+  }
+  stopping = signal;
+  if (!posix) {
+    runner.kill(signal === "SIGINT" ? "SIGINT" : "SIGTERM");
+    return;
+  }
+  // SIGINT keeps Next's and tsx's Ctrl+C handling; anything else is a stop.
+  const forwarded = signal === "SIGINT" ? "SIGINT" : "SIGTERM";
+  terminateGroup(runnerGroup, { signal: forwarded }).then(() =>
+    process.exit(128 + constants.signals[signal]),
   );
-} catch {
-  process.exit(1);
+};
+
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => stop(signal));
+// A reader that went away (a closed agent shell) is a hangup, not a crash.
+process.stdout.on("error", () => stop("SIGHUP"));
+process.stderr.on("error", () => stop("SIGHUP"));
+
+const startParent = process.ppid;
+setInterval(() => {
+  if (process.ppid !== startParent) stop("SIGHUP");
+}, 2000).unref();
+
+runner.on("exit", async (code, signal) => {
+  // concurrently is gone, but a child it lost track of may not be — Next 16's
+  // dev server can outlive `next dev` itself.
+  if (posix && runnerGroup) await terminateGroup(runnerGroup);
+  if (stopping) process.exit(128 + constants.signals[stopping]);
+  process.exit(code ?? (signal ? 128 + constants.signals[signal] : 1));
+});
+
+/** `getColorDepth()` bits → the FORCE_COLOR level chalk and supports-color read. */
+function colorLevel(depth) {
+  return depth >= 24 ? 3 : depth >= 8 ? 2 : 1;
+}
+
+function gitCommonRoot() {
+  try {
+    const commonDir = execSync(
+      "git rev-parse --path-format=absolute --git-common-dir",
+      { cwd: repoRoot, stdio: ["ignore", "pipe", "ignore"] },
+    )
+      .toString()
+      .trim();
+    return dirname(commonDir);
+  } catch {
+    return repoRoot;
+  }
+}
+
+// This run's own watchers are attached to it, so they are never reported.
+function scanWatchers() {
+  try {
+    const ps = execSync("ps -Ao pid=,ppid=,etime=,command=", {
+      stdio: ["ignore", "pipe", "ignore"],
+      maxBuffer: 16 * 1024 * 1024,
+    }).toString();
+    return findRepoWatchers(parsePs(ps), repoCommonRoot);
+  } catch {
+    return [];
+  }
 }
