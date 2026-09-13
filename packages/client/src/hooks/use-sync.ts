@@ -150,6 +150,12 @@ const invalidateFor = (utils: Utils, event: SyncEvent): void => {
       if (event.scope === "api-token") void utils.apiTokens.invalidate();
       else void utils.webhooks.invalidate();
       return;
+    case "membership.changed":
+      // A role or visibility change alters what EVERY query may return for
+      // this person, and a removal takes the workspace away entirely, so
+      // nothing is patched — everything is refetched.
+      void utils.invalidate();
+      return;
     default: {
       // A new SyncEvent kind with no case here would otherwise be a silent
       // cross-device staleness bug that no test catches. Fail the BUILD

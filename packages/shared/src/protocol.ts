@@ -80,7 +80,29 @@ export type SyncEvent =
    * any part of one on a broadcast that every device in the workspace
    * receives is a shape worth not having at all.
    */
-  | { kind: "integrations.changed"; scope: "api-token" | "webhook" };
+  | { kind: "integrations.changed"; scope: "api-token" | "webhook" }
+  /**
+   * Who is in a workspace, or what they may do there, changed.
+   *
+   * Published to every member AND, for `removed`/`left`/`joined`, to the
+   * person concerned directly — a removed person is no longer a member, so
+   * the workspace fan-out cannot reach them, and their clients still have to
+   * drop the workspace from the switcher and stop sending requests into it.
+   * Carries no member data: clients refetch, because what a recipient may
+   * see of the member list is decided per request.
+   */
+  | {
+      kind: "membership.changed";
+      workspaceId: string;
+      reason:
+        | "joined"
+        | "role"
+        | "visibility"
+        | "removed"
+        | "left"
+        | "transferred"
+        | "invitation";
+    };
 
 /** Room name every sync event for a given owner is published to. */
 export const userRoomId = (ownerId: string): string => `user:${ownerId}`;

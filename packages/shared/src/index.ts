@@ -20,3 +20,4 @@ export * from "./locale.js";
 export * from "./i18n-catalog.js";
 export * from "./store-clients.js";
 export * from "./business-identity.js";
+export * from "./members.js";

@@ -34,6 +34,9 @@ const affectsTimer = (event: SyncEvent): boolean => {
     case "favorites.changed":
     case "catalog.changed":
     case "data.imported":
+    // A removal or a visibility change can take away the workspace the
+    // running row lives in.
+    case "membership.changed":
       return true;
     case "invoice.changed":
     case "settings.changed":
