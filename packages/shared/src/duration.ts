@@ -29,18 +29,47 @@ export const entryDurationSec = (entry: DurationEntry, nowMs: number): number =>
   return Math.max(0, Math.floor((endMs - startMs) / 1000));
 };
 
+/** Two-decimal hour formatters per locale — `Intl.NumberFormat` is costly to build. */
+const decimalHourFormatters = new Map<string, Intl.NumberFormat>();
+
+const decimalHours = (hours: number, locale: string): string => {
+  let formatter = decimalHourFormatters.get(locale);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      // Never "1.234,50 h": a grouping separator in a German duration is a
+      // dot, which is exactly the character a person types as a decimal point.
+      useGrouping: false,
+    });
+    decimalHourFormatters.set(locale, formatter);
+  }
+  return formatter.format(hours);
+};
+
+/** No-break space: a unit must never wrap onto the line after its number. */
+const NBSP = "\u00a0";
+
 /**
  * "1:23:45" (hms) or "1.40 h" (decimal). Negative values keep their sign.
+ *
+ * `locale` only changes the decimal form ("1,40 h" for "de", with a no-break
+ * space before the unit). Omitting it keeps the exact pre-i18n output — which
+ * is what Raycast, the CSV export and every server caller rely on, so never
+ * pass a locale into anything a machine reads back.
  */
 export const formatDuration = (
   seconds: number,
-  format: DurationFormat = "hms"
+  format: DurationFormat = "hms",
+  locale?: string
 ): string => {
   const total = Math.round(Math.abs(seconds));
   const sign = seconds < 0 ? "-" : "";
 
   if (format === "decimal") {
-    return `${sign}${(total / SECONDS_PER_HOUR).toFixed(2)} h`;
+    return locale === undefined
+      ? `${sign}${(total / SECONDS_PER_HOUR).toFixed(2)} h`
+      : `${sign}${decimalHours(total / SECONDS_PER_HOUR, locale)}${NBSP}h`;
   }
 
   const hours = Math.floor(total / SECONDS_PER_HOUR);
@@ -49,12 +78,24 @@ export const formatDuration = (
   return `${sign}${hours}:${pad2(minutes)}:${pad2(secs)}`;
 };
 
-/** Compact human form: "1h 23m", "23m", "45s". */
-export const formatDurationShort = (seconds: number): string => {
+/**
+ * Compact human form: "1h 23m", "23m", "45s".
+ *
+ * With a German locale it follows the German convention of spaced SI unit
+ * symbols — "1 h 23 min", "23 min", "45 s" — joined by no-break spaces. Without
+ * a locale the English form is unchanged (Raycast depends on it).
+ */
+export const formatDurationShort = (seconds: number, locale?: string): string => {
   const total = Math.round(Math.abs(seconds));
   const sign = seconds < 0 ? "-" : "";
   const hours = Math.floor(total / SECONDS_PER_HOUR);
   const minutes = Math.floor((total % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
+
+  if (locale !== undefined && locale.toLowerCase().startsWith("de")) {
+    if (hours > 0) return `${sign}${hours}${NBSP}h ${minutes}${NBSP}min`;
+    if (minutes > 0) return `${sign}${minutes}${NBSP}min`;
+    return `${sign}${total}${NBSP}s`;
+  }
 
   if (hours > 0) return `${sign}${hours}h ${minutes}m`;
   if (minutes > 0) return `${sign}${minutes}m`;
@@ -67,6 +108,11 @@ export const formatDurationShort = (seconds: number): string => {
  * Accepts "1:30" (h:mm), "1:30:00" (h:mm:ss), "1.5h", "90m", "45s",
  * "1h30m", "1h 30m 15s" and a bare number ("90" → 90 minutes).
  * Returns whole seconds, or null when the input makes no sense.
+ *
+ * Locale-independent on purpose: a comma and a dot are both decimal points
+ * ("1,5h" === "1.5h"), and "min" is accepted as a unit, so everything
+ * `formatDuration`/`formatDurationShort` print for ANY locale parses back —
+ * a German user who edits "1,50 h" in place must not be told it is invalid.
  */
 export const parseDurationInput = (raw: string): number | null => {
   const input = raw.trim().toLowerCase();

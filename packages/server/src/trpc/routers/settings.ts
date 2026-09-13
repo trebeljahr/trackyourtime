@@ -74,6 +74,7 @@ export const settingsRouter = router({
         input.timeFormat !== undefined ||
         input.durationFormat !== undefined ||
         input.theme !== undefined ||
+        input.locale !== undefined ||
         input.idle !== undefined ||
         input.maxDuration !== undefined;
 
@@ -99,6 +100,7 @@ export const settingsRouter = router({
               timeFormat: input.timeFormat ?? current.timeFormat,
               durationFormat: input.durationFormat ?? current.durationFormat,
               theme: input.theme ?? current.theme,
+              locale: input.locale ?? current.locale,
               idle,
               maxDuration,
             },

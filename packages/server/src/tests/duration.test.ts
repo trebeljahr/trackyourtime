@@ -329,3 +329,44 @@ test("spansLocalDayBoundary detects an entry that ends on another day", () => {
   // A running entry has no end and therefore spans nothing yet.
   assert.equal(spansLocalDayBoundary(sameDay.toISOString(), null), false);
 });
+
+// ── locale ───────────────────────────────────────────────────────────
+//
+// The web app prints durations in the reader's language, and a German decimal
+// comma is the one character the rest of the system must never be surprised
+// by. These pin both halves: the locale-free output every machine reader
+// depends on is byte-identical to before, and every localised form parses back.
+
+test("formatDuration without a locale is unchanged (Raycast, CSV, server)", () => {
+  assert.equal(formatDuration(5400, "decimal"), "1.50 h");
+  assert.equal(formatDurationShort(5400), "1h 30m");
+});
+
+test("formatDuration prints a German decimal comma with a no-break space", () => {
+  assert.equal(formatDuration(5400, "decimal", "de"), "1,50 h");
+  assert.equal(formatDuration(5400, "decimal", "en"), "1.50 h");
+  // No grouping: "1.234,50" would put a dot — a decimal point to anybody
+  // typing — into a German duration.
+  assert.equal(formatDuration(1234.5 * HOUR, "decimal", "de"), "1234,50 h");
+  assert.equal(formatDuration(5400, "hms", "de"), "1:30:00");
+});
+
+test("formatDurationShort follows the German unit convention", () => {
+  assert.equal(formatDurationShort(HOUR + 23 * MINUTE, "de"), "1 h 23 min");
+  assert.equal(formatDurationShort(23 * MINUTE, "de-AT"), "23 min");
+  assert.equal(formatDurationShort(45, "de"), "45 s");
+  assert.equal(formatDurationShort(HOUR + 23 * MINUTE, "en"), "1h 23m");
+});
+
+test("every localised duration parses back to the same seconds", () => {
+  for (const seconds of [90 * MINUTE, 5040, 45 * MINUTE, 8 * HOUR]) {
+    for (const locale of [undefined, "en", "de"]) {
+      const decimal = formatDuration(seconds, "decimal", locale);
+      const short = formatDurationShort(seconds, locale);
+      assert.equal(parseDurationInput(decimal), seconds, `${decimal} (${locale})`);
+      assert.equal(parseDurationInput(short), seconds, `${short} (${locale})`);
+    }
+  }
+  assert.equal(parseDurationInput("1,5"), 90);
+  assert.equal(parseDurationInput("1.5"), 90);
+});

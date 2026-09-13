@@ -1,8 +1,10 @@
 import mongoose, { Schema, type Document } from "mongoose";
-import type {
-  Invoice as InvoiceWire,
-  InvoiceLineItem,
-  InvoiceStatus,
+import {
+  SUPPORTED_LOCALES,
+  type Invoice as InvoiceWire,
+  type InvoiceLineItem,
+  type InvoiceStatus,
+  type Locale,
 } from "@starter/shared";
 
 /**
@@ -34,6 +36,8 @@ export interface IInvoice extends Document {
   currency: string;
   entryIds: string[];
   notes: string | null;
+  /** Snapshotted at creation; absent on invoices issued before localisation (English). */
+  locale?: Locale | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +67,7 @@ export type InvoiceDocLike = {
   currency: string;
   entryIds: string[];
   notes: string | null;
+  locale?: Locale | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -117,6 +122,10 @@ const invoiceSchema = new Schema<IInvoice>(
     currency: { type: String, required: true, default: "EUR" },
     entryIds: { type: [String], default: [] },
     notes: { type: String, default: null, maxlength: 2_000 },
+    // A snapshot like every figure above, so NO default: a default would be
+    // applied on read to invoices that predate localisation and could later be
+    // changed, re-languaging documents already sent. Absent reads as English.
+    locale: { type: String, enum: [...SUPPORTED_LOCALES] },
   },
   { timestamps: true },
 );
@@ -169,6 +178,7 @@ export function toClientInvoice(doc: InvoiceDocLike): InvoiceWire {
     currency: doc.currency,
     entryIds: doc.entryIds ?? [],
     notes: doc.notes ?? null,
+    ...(doc.locale ? { locale: doc.locale } : {}),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };

@@ -15,6 +15,13 @@ import {
 import type { IdleBehavior, RunawayBehavior } from "./types.js";
 import { API_TOKEN_SCOPES } from "./api-tokens.js";
 import { WEBHOOK_EVENTS } from "./webhooks.js";
+import { LOCALE_PREFERENCES, SUPPORTED_LOCALES } from "./locale.js";
+
+/** A supported interface/document language, e.g. "de". */
+export const localeSchema = z.enum(SUPPORTED_LOCALES);
+
+/** A stored language preference: a locale, or "system" to follow the device. */
+export const localePreferenceSchema = z.enum(LOCALE_PREFERENCES);
 
 export const updateProfileSchema = z.object({
   bio: z.string().max(500).optional(),
@@ -134,6 +141,8 @@ const entryTimeZone = z.string().max(64).optional();
 export const createClientSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
   color: hexColorSchema.optional(),
+  /** Language of this client's invoices; omitted/null = the issuer's. */
+  invoiceLocale: localeSchema.nullish(),
   originId,
 });
 
@@ -142,6 +151,8 @@ export const updateClientSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   color: hexColorSchema.optional(),
   archived: z.boolean().optional(),
+  /** `null` clears it back to "the issuer's language". */
+  invoiceLocale: localeSchema.nullish(),
   originId,
 });
 
@@ -492,6 +503,11 @@ export const createInvoiceSchema = z.object({
   /** Server-generated when omitted; must stay unique per owner. */
   number: z.string().min(1).max(40).optional(),
   notes: z.string().max(2_000).optional(),
+  /**
+   * Per-invoice language override. Omitted = resolved from the client, then
+   * the issuer (`resolveInvoiceLocale`), and snapshotted either way.
+   */
+  locale: localeSchema.optional(),
   originId,
 });
 
@@ -551,6 +567,7 @@ export const updateSettingsSchema = z.object({
   timeFormat: z.enum(["12h", "24h"]).optional(),
   durationFormat: z.enum(["hms", "decimal"]).optional(),
   theme: z.enum(["light", "dark", "system"]).optional(),
+  locale: localePreferenceSchema.optional(),
   idle: idleSettingsSchema.partial().optional(),
   maxDuration: maxDurationSettingsSchema.partial().optional(),
   originId,

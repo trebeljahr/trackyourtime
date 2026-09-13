@@ -16,6 +16,7 @@ import {
   DEFAULT_IDLE_SETTINGS,
   DEFAULT_MAX_DURATION_SETTINGS,
   IDLE_BEHAVIORS,
+  LOCALE_PREFERENCES,
   MAX_IDLE_THRESHOLD_MINUTES,
   MIN_IDLE_THRESHOLD_MINUTES,
   RUNAWAY_BEHAVIORS,
@@ -23,6 +24,7 @@ import {
 import type {
   DurationFormat,
   IdleSettings,
+  LocalePreference,
   MaxDurationSettings,
   ResolvedSettings,
   ThemePreference,
@@ -56,6 +58,9 @@ export const DEFAULT_USER_PREFERENCES: Omit<UserPreferences, "userId"> = {
   // should follow the machine, which is what every one of them did before this
   // preference was stored at all.
   theme: "system",
+  // "system" for the same reason: every client already followed the device
+  // language before anybody could choose one.
+  locale: "system",
   idle: DEFAULT_IDLE,
   maxDuration: DEFAULT_MAX_DURATION,
 };
@@ -108,6 +113,8 @@ export interface IUserPreferences extends Document {
   durationFormat: DurationFormat;
   /** Absent on documents written before the theme was synced. */
   theme?: ThemePreference | null;
+  /** Absent on documents written before the interface was localised. */
+  locale?: LocalePreference | null;
   /** Absent on documents written before idle detection existed. */
   idle?: IdleSettings | null;
   /** Absent on documents written before the runaway guard existed. */
@@ -188,6 +195,13 @@ const userPreferencesSchema = new Schema<IUserPreferences>(
       enum: ["light", "dark", "system"],
       default: DEFAULT_USER_PREFERENCES.theme,
     },
+    // NOT `required`, exactly like `theme` above: documents written before
+    // localisation have no such field.
+    locale: {
+      type: String,
+      enum: [...LOCALE_PREFERENCES],
+      default: DEFAULT_USER_PREFERENCES.locale,
+    },
     idle: {
       type: idleSchema,
       required: true,
@@ -259,6 +273,7 @@ export async function getOrCreateUserPreferences(
       // A document written before the theme was synced has none; "system" is
       // what such a client was already doing on its own.
       theme: existing.theme ?? DEFAULT_USER_PREFERENCES.theme,
+      locale: existing.locale ?? DEFAULT_USER_PREFERENCES.locale,
       // A preferences document written before idle detection existed has no
       // `idle` sub-document; fall back field by field rather than dropping it.
       idle: {
@@ -292,6 +307,7 @@ export async function getOrCreateUserPreferences(
         timeFormat: created.timeFormat,
         durationFormat: created.durationFormat,
         theme: created.theme ?? DEFAULT_USER_PREFERENCES.theme,
+        locale: created.locale ?? DEFAULT_USER_PREFERENCES.locale,
         idle: { ...DEFAULT_IDLE, ...(created.idle ?? {}) },
         maxDuration: {
           ...DEFAULT_MAX_DURATION,
@@ -325,6 +341,7 @@ export async function getResolvedSettings(
     timeFormat: user.timeFormat,
     durationFormat: user.durationFormat,
     theme: user.theme,
+    locale: user.locale,
     idle: user.idle,
     maxDuration: user.maxDuration,
   };

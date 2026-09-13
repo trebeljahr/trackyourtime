@@ -1,3 +1,5 @@
+import type { Locale, LocalePreference } from "./locale.js";
+
 /** Metadata about a room member. */
 export type RoomMember = {
   userId: string;
@@ -208,6 +210,13 @@ export type Client = {
   /** Hex color, e.g. "#4f46e5". */
   color: string;
   archived: boolean;
+  /**
+   * The language this client's invoices are written in. Absent or null means
+   * "no preference": the issuer's own language decides, see
+   * `resolveInvoiceLocale`. Optional on the wire because every client written
+   * before invoices were localised has no such field.
+   */
+  invoiceLocale?: Locale | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -481,6 +490,15 @@ export type UserPreferences = {
    * so it can paint before the first `settings.get` answers.
    */
   theme: ThemePreference;
+  /**
+   * The interface language, or "system" to follow the device.
+   *
+   * Stored with the theme, and for the same reason: the browser extension and
+   * every other client signed in as this person should speak the same
+   * language. "system" is resolved on each device against its own
+   * `navigator.languages`, never on the server, which has no device to ask.
+   */
+  locale: LocalePreference;
   idle: IdleSettings;
   maxDuration: MaxDurationSettings;
 };
@@ -600,6 +618,12 @@ export type Invoice = {
    */
   entryIds: string[];
   notes: string | null;
+  /**
+   * The language the document is rendered in, snapshotted at creation like
+   * every figure on it. Absent on invoices issued before localisation, which
+   * were English and must stay English on every re-render.
+   */
+  locale?: Locale;
   createdAt: string;
   updatedAt: string;
 };

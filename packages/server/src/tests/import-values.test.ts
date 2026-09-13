@@ -190,3 +190,11 @@ test("ISO dates are never ambiguous", () => {
     ambiguous: false,
   });
 });
+
+test("the importer reads a duration the same whatever language printed it", () => {
+  // The importer must stay locale-independent: a file exported by a German
+  // spreadsheet and one exported by an English one describe the same hours.
+  // Nothing in services/import may ever consult the UI locale.
+  assert.equal(parseDurationSec("1,50"), parseDurationSec("1.50"));
+  assert.equal(parseDurationSec("7,25"), 7.25 * 3600);
+});

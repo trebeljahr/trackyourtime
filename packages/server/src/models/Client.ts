@@ -1,5 +1,5 @@
 import mongoose, { Schema, type Document } from "mongoose";
-import type { Client as ClientWire } from "@starter/shared";
+import { SUPPORTED_LOCALES, type Client as ClientWire, type Locale } from "@starter/shared";
 
 export const DEFAULT_CLIENT_COLOR = "#64748b";
 
@@ -9,6 +9,8 @@ export interface IClient extends Document {
   name: string;
   color: string;
   archived: boolean;
+  /** Absent on clients written before invoices were localised. */
+  invoiceLocale?: Locale | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +26,7 @@ export type ClientDocLike = {
   name: string;
   color: string;
   archived: boolean;
+  invoiceLocale?: Locale | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -40,6 +43,9 @@ const clientSchema = new Schema<IClient>(
     name: { type: String, required: true, maxlength: 120, trim: true },
     color: { type: String, required: true, default: DEFAULT_CLIENT_COLOR },
     archived: { type: Boolean, required: true, default: false },
+    // Optional and never `required`: null/absent means "the issuer's
+    // language", and every client written before this field existed has none.
+    invoiceLocale: { type: String, enum: [...SUPPORTED_LOCALES, null], default: null },
   },
   { timestamps: true },
 );
@@ -57,6 +63,7 @@ export function toClientClient(doc: ClientDocLike): ClientWire {
     name: doc.name,
     color: doc.color,
     archived: doc.archived,
+    invoiceLocale: doc.invoiceLocale ?? null,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };

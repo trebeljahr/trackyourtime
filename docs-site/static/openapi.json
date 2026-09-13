@@ -3219,6 +3219,20 @@
                     "type": "string",
                     "pattern": "^#[0-9a-fA-F]{6}$"
                   },
+                  "invoiceLocale": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "en",
+                          "de"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "originId": {
                     "type": "string",
                     "maxLength": 64
@@ -3615,6 +3629,20 @@
                   },
                   "archived": {
                     "type": "boolean"
+                  },
+                  "invoiceLocale": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "en",
+                          "de"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "originId": {
                     "type": "string",
