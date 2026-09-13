@@ -303,6 +303,17 @@ test.describe("Timer", () => {
    * fraction of a second after logging a block, the + was dead. Logging two
    * blocks in a row is the ordinary case, so this was the ordinary case
    * failing, intermittently, depending on how long the first row took to land.
+   *
+   * What this test covers, and what it does NOT: it walks the ordinary
+   * two-blocks-in-a-row path end to end and asserts the second dialog opens
+   * and works. It does not, on its own, hold the exit animation off — and it
+   * cannot. Playwright waits for the trigger to be receiving pointer events
+   * before it clicks, so a lingering full-viewport overlay is waited out
+   * rather than run into: against a build with the exit animation put back
+   * on purpose, the dialog is detached ~520ms after the add (a ~320ms
+   * mutation plus the 200ms animation) and the reopen below then always
+   * succeeds. The invariant itself is pinned deterministically next to the
+   * component, in components/ui/dialog.test.tsx.
    */
   test("the add-time dialog reopens straight after it was used", async ({
     page,
@@ -319,13 +330,31 @@ test.describe("Timer", () => {
     await page.getByTestId("manual-entry-add").click();
     await expect(entryRow(page, "First block")).toHaveCount(1);
 
-    // Deliberately no settling wait: the exit animation is still running at
-    // this point, which is the state the bug lived in.
+    // Deliberately no settling wait beyond the row landing — the shape the
+    // bug lived in. (Playwright's own actionability wait sits behind this
+    // click, which is why the shape is no longer enough on its own; see the
+    // note above the test.)
     await page.getByTestId("tracker-manual-open").click();
     await expect(dialog).toBeVisible();
 
     // The guard is narrow — a dialog that is genuinely open still dismisses.
-    await page.mouse.click(20, 20);
+    //
+    // Clicked through the overlay's locator rather than as raw coordinates
+    // (`page.mouse.click(20, 20)`), and that is the difference between a test
+    // that measures the app and one that measures Playwright. Radix attaches
+    // its outside-pointerdown listener in a `setTimeout(0)` after the layer
+    // mounts, so for one task after the dialog's DOM lands there is nobody
+    // listening: a raw synthetic click needs no element to be actionable and
+    // fires inside that window, and the press is simply dropped. Measured
+    // here at under 10ms — a click delayed 10ms dismisses, one delayed 5ms
+    // does not — which no hand can hit and no user will ever meet, and which
+    // reproduces identically on the build from before any of this app's
+    // dialog or shell work. A locator click waits for the element to be
+    // stable, i.e. for the dialog's 200ms entry animation to finish, which is
+    // both what a person actually does to the backdrop and long past the gap.
+    await page
+      .getByTestId("dialog-overlay")
+      .click({ position: { x: 20, y: 20 } });
     await expect(dialog).toBeHidden();
   });
 
