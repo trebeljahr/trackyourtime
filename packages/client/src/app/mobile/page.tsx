@@ -1,21 +1,13 @@
 import type { Metadata } from "next";
 
-import {
-  FactList,
-  Feature,
-  Hero,
-  Prose,
-  Section,
-  Shot,
-  StoreLink,
-} from "@/components/marketing/blocks";
+import { Hero, Prose, Section, Shot, StoreLink } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { pageMetadata } from "@/lib/page-metadata";
 
 export const metadata: Metadata = pageMetadata({
   title: "iPhone and Android",
   description:
-    "The tracktime app for iPhone and Android: the timer, timesheet, calendar, reports and invoices. Starts and stops with no signal are kept and sent later.",
+    "Track billable time on your iPhone or Android phone, even without signal. Everything syncs with your laptop.",
   path: "/mobile/",
 });
 
@@ -23,8 +15,8 @@ export default function MobilePage(): React.ReactElement {
   return (
     <MarketingShell>
       <Hero
-        eyebrow="tracktime for iPhone and Android"
-        title="Track time on your phone, with or without a signal"
+        eyebrow="Track Your Time for iPhone and Android"
+        title="Track time wherever the work happens"
         actions={
           <>
             <StoreLink store="appStore" />
@@ -35,20 +27,20 @@ export default function MobilePage(): React.ReactElement {
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:max-w-4xl">
             <Shot
               src="/marketing/phone-track.png"
-              alt="The tracktime timer on an Android phone, running against a client project"
+              alt="The Track Your Time timer running on a phone"
               width={645}
               height={1436}
               priority
             />
             <Shot
               src="/marketing/phone-reports.png"
-              alt="The weekly summary on an Android phone: hours tracked, billable hours and money earned"
+              alt="This week's hours and earnings on a phone"
               width={645}
               height={1436}
             />
             <Shot
               src="/marketing/phone-more.png"
-              alt="The More menu on an Android phone, listing every screen of the app"
+              alt="The Track Your Time menu on a phone, with timesheet, calendar and invoices"
               width={645}
               height={1436}
               className="hidden sm:block"
@@ -57,78 +49,45 @@ export default function MobilePage(): React.ReactElement {
         }
       >
         <p>
-          The tracktime app has the same screens as the web app: the timer, the weekly timesheet,
-          the calendar, reports and invoices. Start a timer in a tunnel. The phone sends it to the
-          server when it has a signal again.
+          Not every billable hour happens at a desk. Start a timer at a client&rsquo;s office, on a
+          site visit or on the train home. It&rsquo;s waiting on your laptop when you sit down to
+          write the invoice.
         </p>
       </Hero>
 
-      <Feature title="Three tabs, and every screen behind the third">
-        <p>
-          <strong>Track</strong> holds the timer and today&rsquo;s entries. <strong>Reports</strong>{" "}
-          opens the summary. <strong>More</strong> opens the full menu: timesheet, calendar,
-          invoices, clients, projects, tasks, tags and settings.
-        </p>
-        <p>
-          On Android, the back button closes the open dialog first. Then it goes to Track. On Track,
-          it leaves the app.
-        </p>
-      </Feature>
-
-      <Section title="What happens with no signal">
-        <FactList
-          items={[
-            {
-              term: "Your changes stay on the phone",
-              detail:
-                "Starts, stops and edits made offline go into a queue in the app's own storage. iOS does not clear that storage when the phone is low on space.",
-            },
-            {
-              term: "The running timer survives a restart",
-              detail:
-                "Start a timer in airplane mode and close the app. When you open it again, still offline, the timer is still running.",
-            },
-            {
-              term: "The queue is sent in order",
-              detail:
-                "When the connection returns, the app sends the queued changes first. Then it asks the server what is running.",
-            },
-            {
-              term: "The app asks the radio, not the browser",
-              detail:
-                "The app reads the network state from the phone itself, so airplane mode counts as offline at once.",
-            },
-          ]}
-        />
-      </Section>
-
-      <Section title="Your hours stay in your account">
+      <Section title="No signal? Keep tracking.">
         <Prose>
           <p>
-            Each queued change records the account that made it. If another person signs in on the
-            same phone, the app does not send your changes to their account. It lists them under
-            Settings → Devices and lets that person discard them by name.
-          </p>
-          <p>
-            If your session ends while changes are waiting, the app stops sending and keeps the
-            changes. Sign in again, and they go out.
+            The app works in airplane mode and in tunnels. Close it and the timer keeps running.
+            When you&rsquo;re back online, everything you did offline syncs by itself.
           </p>
         </Prose>
       </Section>
 
-      <Section title="Signed in for 30 days, signed out in one minute" className="pb-24">
+      <Section title="The whole app, not a cut-down version">
         <Prose>
           <p>
-            The app keeps your session token in the iOS Keychain or the Android Keystore, not in
-            ordinary app storage. A session lasts 30 days and renews each day you use the app.
+            Your timesheet, calendar, reports and invoices are all on your phone. Check this
+            month&rsquo;s hours before a client call, or fix yesterday&rsquo;s entries on the way to
+            work.
           </p>
+        </Prose>
+      </Section>
+
+      <Section title="Lost your phone?">
+        <Prose>
           <p>
-            Lose the phone? Open Settings → Devices in the web app and sign the phone out. Its next
-            request fails, and its live connection closes within a minute.
+            Open Settings in the web app and sign the phone out. It loses access to your account
+            right away.
           </p>
+        </Prose>
+      </Section>
+
+      <Section title="Using your own server?" className="pb-24">
+        <Prose>
           <p>
-            The app has no widgets and sends no notifications. A timer you forget is caught the next
-            time you open tracktime.
+            The phone apps connect to trackyourtime.dev for now. On your own server, open the web
+            app in your phone&rsquo;s browser and add it to your home screen.
           </p>
         </Prose>
       </Section>

@@ -2,25 +2,34 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import {
-  FactList,
   Feature,
   Hero,
   PrimaryLink,
   Prose,
+  Questions,
   SecondaryLink,
   Section,
   Shot,
 } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { pageMetadata } from "@/lib/page-metadata";
-import { OPENAPI_URL, REPO_URL, SELF_HOSTING_URL } from "@/lib/site-links";
+import { DONATE_URL, OPENAPI_URL, REPO_URL, SELF_HOSTING_URL } from "@/lib/site-links";
 
 export const metadata: Metadata = pageMetadata({
-  title: { absolute: "tracktime — time tracking for billable work" },
+  title: { absolute: "Track Your Time — open-source time tracking on your own server" },
   description:
-    "Track billable hours by client, project, task and tag. Invoice them, export them, and host it yourself. Open source under AGPL-3.0.",
+    "Keep your hours, clients and invoices on a server you control. Open source, with a timer for your browser, your Mac and your phone.",
   path: "/",
 });
+
+const CLIENTS = [
+  { href: "/signup/", name: "Web app", text: "Timer, timesheet, calendar, reports and invoices." },
+  { href: "/extension/", name: "Chrome", text: "A timer in your toolbar. One click to start or stop." },
+  { href: "/raycast/", name: "Raycast", text: "A menu bar clock and a start/stop hotkey on your Mac." },
+  { href: "/mobile/", name: "iPhone and Android", text: "Track time away from your desk, even without signal." },
+] as const;
+
+const link = "text-foreground underline underline-offset-4";
 
 /**
  * The landing page, and still the app's front door for a signed-in person:
@@ -31,18 +40,18 @@ export default function LandingPage(): React.ReactElement {
   return (
     <MarketingShell redirectSignedIn>
       <Hero
-        eyebrow="tracktime · time tracking for billable work"
-        title="Name the work once. Report on it across every client."
+        eyebrow="Open-source time tracking"
+        title="Time tracking on your own server"
         actions={
           <>
-            <PrimaryLink href="/signup/">Start tracking</PrimaryLink>
-            <SecondaryLink href={REPO_URL}>Read the source</SecondaryLink>
+            <PrimaryLink href={SELF_HOSTING_URL}>Host it yourself</PrimaryLink>
+            <SecondaryLink href="/signup/">Try it online first</SecondaryLink>
           </>
         }
         shot={
           <Shot
             src="/marketing/web-track.png"
-            alt="The tracktime timer running against a client project, above the day's entries"
+            alt="The Track Your Time timer running, above a list of today's billable entries"
             width={1600}
             height={1000}
             priority
@@ -50,166 +59,103 @@ export default function LandingPage(): React.ReactElement {
         }
       >
         <p>
-          In tracktime, a task does not live inside a project. &ldquo;Design review&rdquo; is one
-          task, and you use it for every client. So a report can tell you how many hours of design
-          review you did this year.
+          Track Your Time keeps your hours, clients and invoices on a server you control. It also
+          puts a timer in your browser, your Mac&rsquo;s menu bar and your phone, so starting one
+          takes a second, even without a connection.
         </p>
-        <p className="text-base">
-          Free while tracktime is in beta. Built for one person&rsquo;s billable work: there are no
-          team features yet.
-        </p>
+        <p className="text-base">Free and open source. The hosted version is free while in beta.</p>
       </Hero>
 
-      <Section title="What tracktime does">
+      <Section title="Your time data belongs to you">
         <Prose>
           <p>
-            Start a timer. File the entry under a client, a project and a task, and add tags. Get
-            the hours back as a report, a CSV file, a PDF or an invoice.
+            A time tracker knows who your clients are, what you charge them and how you spend every
+            working day. That&rsquo;s worth keeping on a server you control, not in someone
+            else&rsquo;s database.
           </p>
           <p>
-            Use it in the browser, from the Chrome toolbar, from Raycast on a Mac, or on your phone.
-            All of them use one account. Stop a timer in one place, and it stops everywhere else.
+            One compose file starts everything on a single server, with HTTPS set up for you. The{" "}
+            <a href={SELF_HOSTING_URL} className={link}>
+              self-hosting guide
+            </a>{" "}
+            walks through the install, backups, upgrades and email, one step at a time. And you can
+            export all of it as JSON or CSV whenever you want.
+          </p>
+          <p className="text-sm">
+            There&rsquo;s no tagged release yet, so the first start builds from source and needs a
+            server with 4 GB of memory. Once images are published, 1–2 GB is enough.
           </p>
         </Prose>
       </Section>
 
       <Feature
-        title="One task name for every project"
+        title="A timer you&rsquo;ll actually use"
         shot={
           <Shot
-            src="/marketing/web-reports.png"
-            alt="A summary report that groups a month of hours by task across several clients"
-            width={1600}
-            height={1000}
+            src="/marketing/popup.png"
+            alt="The Track Your Time Chrome extension with a timer running"
+            width={760}
+            height={1200}
+            className="mx-auto max-w-xs"
           />
         }
       >
         <p>
-          Many time trackers put each task inside a project. Then you create &ldquo;Design
-          review&rdquo; again for every client, and its hours split across all the copies.
+          The hours you forget to track are the hours you don&rsquo;t bill. A tracker that only
+          lives in a browser tab is easy to forget, so Track Your Time goes where you already are: a
+          click in Chrome, a hotkey on your Mac, a tap on your phone.
         </p>
         <p>
-          In tracktime, an entry has a project and a task, and the two are independent. An entry
-          can have both, one or neither. When you delete a project, its entries stay and every task
-          name stays too.
-        </p>
-        <p>
-          Tags add a third dimension. An entry can carry many tags, and a tag such as
-          &ldquo;deep work&rdquo; reports across all your projects.
+          Lost the connection? Keep tracking. Everything syncs when you&rsquo;re back online, and a
+          timer you stop on one device stops on all of them.
         </p>
       </Feature>
 
       <Feature
         reverse
-        title="A new rate does not change old entries"
+        title="From hours to invoice"
         shot={
           <Shot
             src="/marketing/web-invoice.png"
-            alt="An invoice built from a month of billable entries, with line items per project"
+            alt="An invoice for one client, with a month of billable hours grouped into line items"
             width={1600}
             height={1000}
           />
         }
       >
         <p>
-          tracktime copies the hourly rate and the currency onto each entry when you save it. Raise
-          a project&rsquo;s rate in March, and your February hours keep the February rate.
+          Give each project an hourly rate. When it&rsquo;s time to bill, pick a client and a
+          month, and Track Your Time turns the unbilled hours into an invoice you can download as a
+          PDF.
         </p>
         <p>
-          An invoice collects the billable time that is not on an invoice yet. The server gathers
-          the line items again when you create it, and gives it the next number for that year.
-        </p>
-        <p>
-          After that, the project, task, billable flag, start and end of each entry on the invoice
-          are locked. Invoices are draft, sent or paid, and export to PDF.
+          An hour can&rsquo;t be billed twice. And when you raise your rate, the hours you already
+          worked keep the rate you agreed on.
         </p>
       </Feature>
 
-      <Section title="When tracktime cannot know, it tells you">
-        <FactList
-          items={[
-            {
-              term: "Reports grouped by tag",
-              detail:
-                "Each tag gets the full duration of the entry, so the tag rows add up to more than the total. The table says so. Splitting one hour across three tags would invent time.",
-            },
-            {
-              term: "Dates in an imported file",
-              detail:
-                "03/04 can be March or April. tracktime decides the order for each file. If no date in the file settles it, the preview asks you.",
-            },
-            {
-              term: "Files with hours but no clock times",
-              detail:
-                "The import places the day's entries one after another. The preview says that the times of day are invented and the day totals are real.",
-            },
-            {
-              term: "Timesheet cells with two entries",
-              detail:
-                "The weekly grid does not guess which entry a new number is for. It shows the cell read-only, with a breakdown and a link to the entries.",
-            },
-          ]}
-        />
-      </Section>
-
-      <Feature title="Your data leaves in a format that comes back in">
+      <Feature
+        title="See where the time went"
+        shot={
+          <Shot
+            src="/marketing/web-reports.png"
+            alt="A report of four weeks of work, split by task, with hours and money earned"
+            width={1600}
+            height={1000}
+          />
+        }
+      >
         <p>
-          The JSON export contains everything, and it names your clients and projects instead of
-          using internal ids. It restores into an empty instance.
+          Reports show how many hours each client and project took, and what those hours earned.
+          Spot the project that has run past its estimate before the client does.
         </p>
-        <p>
-          The CSV export uses the exact columns the importer reads. The importer takes a CSV from
-          other tools too: it matches each column by its content, not by the name of the app that
-          wrote it. Every import is one batch, and you can undo it.
-        </p>
+        <p>Export any report as a CSV or a PDF when your accountant asks for it.</p>
       </Feature>
 
-      <Feature title="A REST API and webhooks, on the free product">
-        <p>
-          The API has 36 operations for entries, clients, projects, tasks, tags and reports. Tokens
-          have five scopes. Webhooks cover seven events and carry an HMAC-SHA256 signature.
-        </p>
-        <p>
-          The REST layer calls the same code as the web app. A write through the API sends the same
-          live update to your devices and fires the same webhooks as a click in the app.
-        </p>
-        <p>
-          <a href={OPENAPI_URL} className="font-medium text-foreground underline underline-offset-4">
-            Read the OpenAPI document
-          </a>{" "}
-          before you believe anything on this page.
-        </p>
-      </Feature>
-
-      <Section title="Track from where you work" id="clients">
+      <Section title="Works where you work">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            {
-              href: "/signup/",
-              name: "Web app",
-              text: "Every screen: timer, weekly timesheet, calendar, reports, invoices, import and export.",
-            },
-            {
-              href: "/extension/",
-              name: "Chrome extension",
-              text: "The timer in a toolbar popup. Uses your web app session, so you sign in once.",
-            },
-            {
-              href: "/raycast/",
-              name: "Raycast on the Mac",
-              text: "A menu bar clock, and a hotkey that starts or stops the timer without a window.",
-            },
-            {
-              href: "/mobile/",
-              name: "iPhone and Android",
-              text: "The full app on your phone. Starts and stops with no signal are kept and sent later.",
-            },
-          ].map((client) => (
-            <Link
-              key={client.href}
-              href={client.href}
-              className="space-y-2 rounded-xl border p-5 hover:bg-accent"
-            >
+          {CLIENTS.map((client) => (
+            <Link key={client.href} href={client.href} className="space-y-2 rounded-xl border p-5 hover:bg-accent">
               <p className="font-medium">{client.name}</p>
               <p className="text-sm leading-relaxed text-muted-foreground">{client.text}</p>
             </Link>
@@ -217,89 +163,90 @@ export default function LandingPage(): React.ReactElement {
         </div>
       </Section>
 
-      <Section title="What tracktime does not do">
-        <FactList
-          items={[
-            {
-              term: "It is not for teams yet",
-              detail:
-                "tracktime is built for one person's billable work. There is no member list, no roles and no way to invite anyone.",
-            },
-            {
-              term: "It does not watch you",
-              detail:
-                "No screenshots, no activity levels, no keystroke counts. Idle detection uses your own threshold and asks you what to do with the time.",
-            },
-            {
-              term: "It does not send notifications",
-              detail:
-                "A timer you forgot on Friday is caught the next time you open tracktime. Nothing messages you on Saturday.",
-            },
-            {
-              term: "It is not project management",
-              detail: "Clients and projects, then tasks and tags beside them. No issues, no assignments, no approvals.",
-            },
-          ]}
-        />
+      <Section title="Free, and nothing held back">
+        <Prose>
+          <p>
+            Track Your Time is licensed under AGPL-3.0. Every feature is in every install. There are
+            no paid plugins and no premium tier.
+          </p>
+          <p>
+            It&rsquo;s built by one developer, Rico Trebeljahr, in the open on{" "}
+            <a href={REPO_URL} className={link}>
+              GitHub
+            </a>
+            .{" "}
+            {DONATE_URL && (
+              <>
+                If it saves you a subscription,{" "}
+                <a href={DONATE_URL} className={link}>
+                  you can support development
+                </a>
+                .
+              </>
+            )}
+          </p>
+        </Prose>
       </Section>
 
-      <Feature title="Run it on your own server">
-        <p>
-          tracktime is open source under AGPL-3.0. One compose file starts the API, the web app,
-          MongoDB, Redis and Caddy on one server with one domain.
-        </p>
-        <p>
-          No release is tagged yet, so the first start builds from source. The client build needs
-          at least 4 GB of memory.
-        </p>
-        <p>
-          <a href={SELF_HOSTING_URL} className="font-medium text-foreground underline underline-offset-4">
-            Read the self-hosting guide
-          </a>
-        </p>
-      </Feature>
+      <Section title="Who it&rsquo;s for">
+        <Prose>
+          <p>
+            Freelancers, consultants and small studios who bill by the hour and want to own their
+            data. There&rsquo;s no screenshot or keystroke monitoring, and nobody approves your
+            timesheet. The app can&rsquo;t invite team members yet, so larger teams may want to
+            wait.
+          </p>
+        </Prose>
+      </Section>
 
       <Section title="Questions">
-        <FactList
+        <Questions
           items={[
             {
-              term: "Is it free?",
-              detail:
-                "It is free while it is in beta. The price after that is not decided, and this page will not guess one. Self-hosting is free permanently, because the AGPL-3.0 licence grants it.",
+              q: "Do I have to host it myself?",
+              a: "No. You can use the hosted version at trackyourtime.dev, free while in beta. If you move to your own server later, export your data and import it there.",
             },
             {
-              term: "What happens to my data if the project stops?",
-              detail:
-                "The source is public, and the JSON export restores into a new instance. The worst case is that you run your own copy. Your hours do not disappear.",
-            },
-            {
-              term: "Is the AGPL a problem for my employer?",
-              detail:
-                "tracktime is an application you run, not a library you build into a product. Running it for your own work triggers no obligation.",
-            },
-            {
-              term: "Do you track me?",
-              detail: (
+              q: "What do I need to run it?",
+              a: (
                 <>
-                  The hosted instance runs no analytics. The{" "}
-                  <Link href="/privacy/" className="underline underline-offset-4">
-                    privacy policy
-                  </Link>{" "}
-                  lists every piece of data the server keeps.
+                  A Linux server with Docker, a domain name, and 4 GB of memory for the first build.
+                  The{" "}
+                  <a href={SELF_HOSTING_URL} className={link}>
+                    guide
+                  </a>{" "}
+                  lists every command.
                 </>
               ),
             },
+            {
+              q: "Can I bring my history from another time tracker?",
+              a: "Yes. Export a CSV from your old tool and import it. You see a preview before anything is saved, and you can undo the import.",
+            },
+            {
+              q: "Is there an API?",
+              a: (
+                <>
+                  Yes. A REST API and signed webhooks come with every install. Start with the{" "}
+                  <a href={OPENAPI_URL} className={link}>
+                    API reference
+                  </a>
+                  .
+                </>
+              ),
+            },
+            {
+              q: "What happens if the project stops?",
+              a: "Your server keeps running the version you have, and the code stays open source. Nothing depends on a service that could switch off.",
+            },
           ]}
         />
       </Section>
 
-      <Section title="Start tracking, or read the code first" className="pb-24">
-        <Prose>
-          <p>No card. And an export that gives you everything back if you leave.</p>
-        </Prose>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <PrimaryLink href="/signup/">Create an account</PrimaryLink>
-          <SecondaryLink href={REPO_URL}>View the source on GitHub</SecondaryLink>
+      <Section title="Run it on your server, or try it here first" className="pb-24">
+        <div className="flex flex-wrap gap-3">
+          <PrimaryLink href={SELF_HOSTING_URL}>Read the self-hosting guide</PrimaryLink>
+          <SecondaryLink href="/signup/">Create a free account</SecondaryLink>
         </div>
       </Section>
     </MarketingShell>

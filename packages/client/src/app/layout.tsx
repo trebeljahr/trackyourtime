@@ -8,19 +8,19 @@ import { NATIVE_SHELL_SCRIPT, THEME_SCRIPT } from "./pre-paint";
 import "@/styles/globals.css";
 
 const SITE_DESCRIPTION =
-  "Time tracking for billable work. Name the work once and report on it across every client. Open source under AGPL-3.0.";
+  "Open-source time tracking on your own server, with a timer for your browser, your Mac and your phone.";
 
 export const metadata: Metadata = {
   // Resolves the card image below to an absolute URL, which every link
   // preview crawler needs and a static export cannot infer from a request.
   metadataBase: new URL("https://trackyourtime.dev"),
   title: {
-    default: "tracktime",
-    template: "%s | tracktime",
+    default: "Track Your Time",
+    template: "%s | Track Your Time",
   },
   description: SITE_DESCRIPTION,
   manifest: "/manifest.json",
-  openGraph: { type: "website", siteName: "tracktime", images: [OG_IMAGE] },
+  openGraph: { type: "website", siteName: "Track Your Time", images: [OG_IMAGE] },
   twitter: { card: "summary_large_image", images: [OG_IMAGE.url] },
 };
 

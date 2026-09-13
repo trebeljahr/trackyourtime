@@ -43,7 +43,7 @@ const BASE_CSS = `
 `;
 
 const brand = (size) =>
-  `<div class="brand" style="font-size:${size}px">${MARK}<span>track<b>time</b></span></div>`;
+  `<div class="brand" style="font-size:${size}px">${MARK}<span>Track Your <b>Time</b></span></div>`;
 
 /** Caption on the left, capture on the right. */
 const sideBySide = ({ width, height, theme = "light", title, sub, shot, shotWidth }) => `
@@ -78,8 +78,8 @@ const GRAPHICS = [
     out: "og.png", width: 1200, height: 630, needs: [],
     html: async () => centered({
       width: 1200, height: 630, brandSize: 44,
-      title: "Name the work once.<br/>Report on it across every client.",
-      sub: "Time tracking for billable work. Open source under AGPL-3.0.",
+      title: "Time tracking on<br/>your own server.",
+      sub: "Open source, with a timer for your browser, your Mac and your phone.",
     }),
   },
 
@@ -88,24 +88,24 @@ const GRAPHICS = [
     out: "chrome/screenshot-1-timer.png", width: 1280, height: 800, needs: ["ext/popup-running.png"],
     html: async () => sideBySide({
       width: 1280, height: 800, shotWidth: 420, shot: await dataUri(c("ext/popup-running.png")),
-      title: "Start and stop your timer from the toolbar",
-      sub: "Project, task, tags and billable, in a popup. No tab to find.",
+      title: "Start your timer in one click",
+      sub: "Right from the Chrome toolbar, without hunting for a tab.",
     }),
   },
   {
     out: "chrome/screenshot-2-autocomplete.png", width: 1280, height: 800, needs: ["ext/popup-autocomplete.png"],
     html: async () => sideBySide({
       width: 1280, height: 800, shotWidth: 420, shot: await dataUri(c("ext/popup-autocomplete.png")),
-      title: "Descriptions complete from all your past work",
-      sub: "The search runs on the server, so last spring's entries still appear.",
+      title: "Pick up last week's work in a few keystrokes",
+      sub: "Descriptions you used before come back as you type.",
     }),
   },
   {
     out: "chrome/screenshot-3-entries.png", width: 1280, height: 800, needs: ["ext/popup-entries.png"],
     html: async () => sideBySide({
       width: 1280, height: 800, shotWidth: 420, shot: await dataUri(c("ext/popup-entries.png")),
-      title: "Edit, continue or delete any entry",
-      sub: "Step back through earlier days. Changes made offline are sent when you reconnect.",
+      title: "Fix forgotten time before you bill it",
+      sub: "Add, edit or continue any entry. It keeps working offline.",
     }),
   },
   {
@@ -113,28 +113,28 @@ const GRAPHICS = [
     html: async () => stacked({
       width: 1280, height: 800, theme: "light", shotWidth: 1100, radius: 14,
       shot: await dataUri(c("web/web-reports.png")),
-      title: "Reports and invoices are one click away in the web app",
+      title: "Turn the month into an invoice in the web app",
     }).replace("font-size:99.84px", "font-size:46px"),
   },
   {
     out: "chrome/promo-small-440x280.png", width: 440, height: 280, needs: [],
-    html: async () => centered({ width: 440, height: 280, brandSize: 26, title: "Time tracking for billable work" }),
+    html: async () => centered({ width: 440, height: 280, brandSize: 26, title: "Time tracking on your own server" }),
   },
   {
     out: "chrome/promo-marquee-1400x560.png", width: 1400, height: 560, needs: ["ext/popup-running.png"],
     html: async () => sideBySide({
       width: 1400, height: 560, theme: "dark", shotWidth: 330, shot: await dataUri(c("ext/popup-running.png")),
-      title: "Your timer, in the Chrome toolbar",
-      sub: "Signs in with your web app session. Keeps working offline.",
+      title: "Your timer, one click away",
+      sub: "Works offline. Syncs with the web app and your phone.",
     }),
   },
 
   // App Store: iPhone 6.9" 1320x2868, iPad 13" 2064x2752. Google Play: phone 1080x1920.
   ...[
-    ["1-track", "Start a timer. It keeps running with no signal."],
-    ["2-reports", "See what your week earned"],
-    ["3-more", "Every screen of the web app, one tab away"],
-    ["4-invoice", "Invoice the hours at the rate you logged them"],
+    ["1-track", "Track time on the go, even offline"],
+    ["2-reports", "See what this week earned you"],
+    ["3-more", "Timesheet, calendar and invoices too"],
+    ["4-invoice", "Create invoices from your phone"],
   ].flatMap(([name, title]) => [
     {
       out: `app-store/iphone-6.9-${name}.png`, width: 1320, height: 2868, needs: [`phone/iphone-${name}.png`],
@@ -156,7 +156,7 @@ const GRAPHICS = [
     out: "google-play/feature-graphic-1024x500.png", width: 1024, height: 500, needs: [],
     html: async () => centered({
       width: 1024, height: 500, brandSize: 36,
-      title: "Track billable time, with or without a signal",
+      title: "Time tracking on your own server",
     }),
   },
 ];

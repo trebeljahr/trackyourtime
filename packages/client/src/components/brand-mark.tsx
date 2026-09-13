@@ -22,11 +22,11 @@ import { cn } from "@/lib/utils";
  */
 export function BrandMark({
   className,
-  label = "tracktime",
+  label = "Track Your Time",
 }: {
   className?: string;
   /**
-   * Pass `null` where the mark sits next to the word "tracktime" already —
+   * Pass `null` where the mark sits next to the name "Track Your Time" already —
    * the lockup, say. Two accessible names for one logo makes a screen reader
    * announce the app twice.
    */

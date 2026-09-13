@@ -4,7 +4,7 @@ export const OG_IMAGE = {
   url: "/og.png",
   width: 1200,
   height: 630,
-  alt: "tracktime — time tracking for billable work",
+  alt: "Track Your Time — open-source time tracking on your own server",
 } as const;
 
 /**
@@ -21,19 +21,19 @@ export function pageMetadata({
   description,
   path,
 }: {
-  /** Shown in the tab as "<title> | tracktime"; the landing page passes an absolute title. */
+  /** Shown in the tab as "<title> | Track Your Time"; the landing page passes an absolute title. */
   title: string | { absolute: string };
   description: string;
   path: string;
 }): Metadata {
-  const cardTitle = typeof title === "string" ? `${title} | tracktime` : title.absolute;
+  const cardTitle = typeof title === "string" ? `${title} | Track Your Time` : title.absolute;
   return {
     title,
     description,
     alternates: { canonical: path },
     openGraph: {
       type: "website",
-      siteName: "tracktime",
+      siteName: "Track Your Time",
       url: path,
       title: cardTitle,
       description,

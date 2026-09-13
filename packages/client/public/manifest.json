@@ -1,6 +1,6 @@
 {
-  "name": "tracktime",
-  "short_name": "tracktime",
+  "name": "Track Your Time",
+  "short_name": "Track Time",
   "description": "Time tracking with reporting that actually answers questions",
   "start_url": "/track",
   "display": "standalone",

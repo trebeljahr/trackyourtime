@@ -354,7 +354,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
             data-testid="brand"
           >
             <BrandMark />
-            <span>tracktime</span>
+            <span>Track Your Time</span>
           </Link>
           <Separator />
           <SidebarNav pathname={pathname} />
@@ -377,7 +377,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
               <div className="flex h-14 items-center justify-between px-4">
                 <span className="flex items-center gap-2 font-semibold">
                   <BrandMark />
-                  tracktime
+                  Track Your Time
                 </span>
                 <Button
                   variant="ghost"

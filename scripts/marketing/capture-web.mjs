@@ -52,12 +52,15 @@ await page.goto(`${origin}/login/`);
 await page.getByTestId("login-email").fill(email);
 await page.getByTestId("login-password").fill(password);
 await page.getByTestId("login-submit").click();
-await page.waitForURL(/\/track\/?$/, { timeout: 15_000 });
+await page.waitForURL(/\/track\/?$/, { timeout: 120_000 });
 
 for (const screen of SCREENS) {
   await page.goto(`${origin}${screen.path}`);
-  await page.locator(screen.ready).first().waitFor({ timeout: 15_000 });
+  await page.locator(screen.ready).first().waitFor({ timeout: 120_000 });
   await page.waitForLoadState("networkidle");
+  // `next dev` draws its own badge into the page; a capture of a dev server
+  // must not ship it.
+  await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
   // A pointer left over a chart opens a tooltip in the capture.
   await page.mouse.move(0, 899);
   await page.waitForTimeout(1200);
@@ -69,6 +72,7 @@ for (const screen of SCREENS) {
 await page.goto(`${origin}/invoices/`);
 await page.locator('[data-testid^="invoice-open-"]').first().click();
 await page.getByTestId("invoice-detail").waitFor();
+await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
 await page.waitForTimeout(800);
 await page.screenshot({ path: join(outDir, "web-invoice.png") });
 console.log("captured web-invoice");

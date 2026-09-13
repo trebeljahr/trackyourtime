@@ -8,7 +8,7 @@ import { CONTACT_EMAIL, ISSUES_URL, SELF_HOSTING_URL } from "@/lib/site-links";
 
 export const metadata: Metadata = pageMetadata({
   title: "Support",
-  description: "How to get help with tracktime, and answers to the questions people ask most.",
+  description: "How to get help with Track Your Time, and answers to the questions people ask most.",
   path: "/support/",
 });
 
@@ -17,7 +17,7 @@ const link = "text-foreground underline underline-offset-4";
 export default function SupportPage(): React.ReactElement {
   return (
     <MarketingShell>
-      <Hero eyebrow="Support" title="Get help with tracktime">
+      <Hero eyebrow="Support" title="Get help with Track Your Time">
         <p>
           Email{" "}
           <a href={`mailto:${CONTACT_EMAIL}`} className={link}>
@@ -46,7 +46,7 @@ export default function SupportPage(): React.ReactElement {
             {
               term: "How do I connect the Raycast extension?",
               detail:
-                "Open the Timer command. It shows a code and opens a browser page. Approve the code there while you are signed in to tracktime.",
+                "Open the Timer command. It shows a code and opens a browser page. Approve the code there while you are signed in to Track Your Time.",
             },
             {
               term: "The app says changes are waiting to sync",
@@ -61,7 +61,7 @@ export default function SupportPage(): React.ReactElement {
             {
               term: "How do I get all my data out?",
               detail:
-                "Settings → Data exports everything as JSON or CSV. The JSON file restores into a new tracktime instance.",
+                "Settings → Data exports everything as JSON or CSV. The JSON file restores into a new Track Your Time instance.",
             },
             {
               term: "How do I delete my account?",
@@ -77,7 +77,7 @@ export default function SupportPage(): React.ReactElement {
               ),
             },
             {
-              term: "Can I run tracktime on my own server?",
+              term: "Can I run Track Your Time on my own server?",
               detail: (
                 <>
                   Yes. The{" "}

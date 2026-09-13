@@ -8,7 +8,7 @@ import { CONTACT_EMAIL, REPO_URL } from "@/lib/site-links";
 export const metadata: Metadata = pageMetadata({
   title: "Privacy policy",
   description:
-    "What the hosted tracktime service stores, why, who else sees it, and how to get it back or have it deleted.",
+    "What the hosted Track Your Time service stores, why, who else sees it, and how to get it back or have it deleted.",
   path: "/privacy/",
 });
 
@@ -30,13 +30,13 @@ export default function PrivacyPage(): React.ReactElement {
     <MarketingShell>
       <Hero eyebrow={`Last updated ${LAST_UPDATED}`} title="Privacy policy">
         <p>
-          This policy covers the hosted tracktime service at trackyourtime.dev and
-          api.trackyourtime.dev, and the tracktime apps and extensions when they connect to it. If
-          you run your own tracktime server, your data goes to your server, and this policy does
+          This policy covers the hosted Track Your Time service at trackyourtime.dev and
+          api.trackyourtime.dev, and the Track Your Time apps and extensions when they connect to it. If
+          you run your own Track Your Time server, your data goes to your server, and this policy does
           not apply to it.
         </p>
         <p>
-          tracktime is run by Rico Trebeljahr. Write to{" "}
+          Track Your Time is run by Rico Trebeljahr. Write to{" "}
           <a href={`mailto:${CONTACT_EMAIL}`} className="text-foreground underline underline-offset-4">
             {CONTACT_EMAIL}
           </a>{" "}
@@ -46,7 +46,7 @@ export default function PrivacyPage(): React.ReactElement {
 
       <Block title="The short version">
         <ul>
-          <li>tracktime stores your account and the time you track, so that it can show them back to you.</li>
+          <li>Track Your Time stores your account and the time you track, so that it can show them back to you.</li>
           <li>It runs no analytics, shows no ads, and sells no data.</li>
           <li>It does not track what you do in other apps or on other websites.</li>
           <li>You can export all of your data at any time, and ask for all of it to be deleted.</li>
@@ -69,7 +69,7 @@ export default function PrivacyPage(): React.ReactElement {
         </p>
         <p>
           <strong>Your sessions.</strong> For each device you sign in on: the IP address and browser
-          or app identifier it signed in from, and the name of the tracktime client. This is what
+          or app identifier it signed in from, and the name of the Track Your Time client. This is what
           Settings → Devices shows you, so you can recognise a device and sign it out.
         </p>
         <p>
@@ -109,11 +109,11 @@ export default function PrivacyPage(): React.ReactElement {
             subscribe, the newsletter. It receives your email address and the message.
           </li>
           <li>
-            <strong>The server host</strong> rents out the virtual server that runs tracktime and its
+            <strong>The server host</strong> rents out the virtual server that runs Track Your Time and its
             database. Your data is stored on that server.
           </li>
         </ul>
-        <p>No other company receives your data. tracktime does not use advertising or analytics services.</p>
+        <p>No other company receives your data. Track Your Time does not use advertising or analytics services.</p>
       </Block>
 
       <Block title="The browser extension">
@@ -123,7 +123,7 @@ export default function PrivacyPage(): React.ReactElement {
             extension storage on your computer.
           </li>
           <li>
-            The <strong>cookies</strong> permission reads one cookie: the tracktime web app&rsquo;s
+            The <strong>cookies</strong> permission reads one cookie: the Track Your Time web app&rsquo;s
             session cookie, so you do not sign in twice. The extension reads no other cookie.
           </li>
           <li>
@@ -143,7 +143,7 @@ export default function PrivacyPage(): React.ReactElement {
         <p>
           The Raycast extension stores your session token, a copy of recent data, and any unsent
           changes in Raycast&rsquo;s encrypted local storage on your Mac. It talks only to the
-          tracktime server set in its preferences.
+          Track Your Time server set in its preferences.
         </p>
       </Block>
 
@@ -198,7 +198,7 @@ export default function PrivacyPage(): React.ReactElement {
       </Block>
 
       <Block title="Children">
-        <p>tracktime is a tool for work. It is not directed at children under 16.</p>
+        <p>Track Your Time is a tool for work. It is not directed at children under 16.</p>
       </Block>
 
       <Block title="Changes to this policy">

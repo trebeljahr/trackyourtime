@@ -1,4 +1,5 @@
 "use client";
+import { PRODUCT_NAME } from "@/lib/site-links";
 
 import * as React from "react";
 import {
@@ -99,13 +100,13 @@ export function TrackerBar(): React.JSX.Element {
   // Live elapsed time in the tab title, so a backgrounded tab still shows it.
   React.useEffect(() => {
     if (running === null) {
-      document.title = "tracktime";
+      document.title = PRODUCT_NAME;
       return;
     }
     const label = running.description.trim();
     document.title = `${formatDuration(elapsedSec, "hms")}${label === "" ? "" : ` · ${label}`}`;
     return () => {
-      document.title = "tracktime";
+      document.title = PRODUCT_NAME;
     };
   }, [running, elapsedSec]);
 

@@ -35,7 +35,7 @@ export function MarketingShell({
           <Link href="/" className="inline-flex items-center gap-2" data-testid="marketing-home">
             <BrandMark label={null} className="size-7" />
             <span className="text-xl font-semibold tracking-tight">
-              track<span className="text-brand">time</span>
+              Track Your <span className="text-brand">Time</span>
             </span>
           </Link>
           <nav className="order-3 flex w-full gap-5 text-sm text-muted-foreground sm:order-none sm:w-auto">
@@ -64,8 +64,8 @@ export function MarketingShell({
       <footer className="border-t text-sm text-muted-foreground">
         <div className="mx-auto grid max-w-6xl gap-8 px-6 py-10 sm:grid-cols-3">
           <div className="space-y-2">
-            <p className="font-medium text-foreground">tracktime</p>
-            <p>Time tracking for billable work. Open source under AGPL-3.0.</p>
+            <p className="font-medium text-foreground">Track Your Time</p>
+            <p>Open-source time tracking on your own server.</p>
           </div>
           <ul className="space-y-2">
             <li><Link href="/extension/" className="hover:text-foreground">Chrome extension</Link></li>

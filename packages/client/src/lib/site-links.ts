@@ -13,6 +13,16 @@ export const SELF_HOSTING_URL = `${REPO_URL}/blob/main/docs/self-hosting.md`;
 export const ISSUES_URL = `${REPO_URL}/issues`;
 export const CONTACT_EMAIL = "ricotrebeljahr@gmail.com";
 
+/**
+ * Where people can support development. `null` until a donation page exists;
+ * the "Support development" block renders only when this is set, so a page
+ * never asks for money through a link that goes nowhere.
+ */
+export const DONATE_URL: string | null = null;
+
+/** The product name as a stranger reads it. Code, storage keys and headers keep `tracktime`. */
+export const PRODUCT_NAME = "Track Your Time";
+
 export type StoreId = "chrome" | "raycast" | "appStore" | "googlePlay";
 
 export type StoreListing = {

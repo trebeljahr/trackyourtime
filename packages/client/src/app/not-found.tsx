@@ -21,7 +21,7 @@ export default function NotFound(): React.ReactElement {
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="w-full max-w-md space-y-6" data-testid="not-found">
-        <Link href="/" aria-label="tracktime home">
+        <Link href="/" aria-label="Track Your Time home">
           <BrandLockup />
         </Link>
         <div className="space-y-3">
@@ -46,7 +46,7 @@ export default function NotFound(): React.ReactElement {
           </Link>
         </div>
         <p className="text-sm text-muted-foreground">
-          Followed a link from tracktime itself?{" "}
+          Followed a link from Track Your Time itself?{" "}
           <Link href="/support/" className="text-foreground underline underline-offset-4">
             Tell us
           </Link>{" "}

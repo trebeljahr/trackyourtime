@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import {
-  FactList,
+  Bullets,
   Feature,
   Hero,
   Prose,
@@ -12,12 +12,12 @@ import {
 } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { pageMetadata } from "@/lib/page-metadata";
-import { REPO_URL } from "@/lib/site-links";
+import { SELF_HOSTING_URL } from "@/lib/site-links";
 
 export const metadata: Metadata = pageMetadata({
   title: "Chrome extension",
   description:
-    "Start and stop your tracktime timer from the Chrome toolbar. Log forgotten time, edit entries, and keep tracking with no connection.",
+    "Start and stop your Track Your Time timer from the Chrome toolbar. Add time you forgot, and keep tracking when the connection drops.",
   path: "/extension/",
 });
 
@@ -25,112 +25,94 @@ export default function ExtensionPage(): React.ReactElement {
   return (
     <MarketingShell>
       <Hero
-        eyebrow="tracktime for Chrome"
-        title="Start and stop your timer from the Chrome toolbar"
+        eyebrow="Track Your Time for Chrome"
+        title="Your timer, one click away"
         actions={
           <>
             <StoreLink store="chrome" />
-            <SecondaryLink href={`${REPO_URL}/tree/main/packages/extension`}>
-              Build it from source
-            </SecondaryLink>
+            <SecondaryLink href="/signup/">Create an account</SecondaryLink>
           </>
         }
       >
         <p>
-          The tracktime extension opens a small popup with the timer, today&rsquo;s entries and the
-          work you track most often. While a timer runs, the toolbar icon shows how long it has
-          run: &ldquo;7m&rdquo;, then &ldquo;1h&rdquo;.
-        </p>
-        <p>
-          If you are signed in to the tracktime web app, the extension uses that session. You sign
-          in once, and you never paste an API key.
+          You spend the day in the browser, and your time tracker shouldn&rsquo;t be one more tab to
+          hunt for. The Track Your Time extension lives in Chrome&rsquo;s toolbar. Starting a timer takes
+          one click, and the icon shows how long it&rsquo;s been running.
         </p>
       </Hero>
 
       <Feature
-        title="What the popup does"
+        title="Pick up where you left off"
         shot={
           <Shot
-            src="/marketing/extension-popup.png"
-            alt="The tracktime extension popup with a timer running and today's entries below it"
-            width={1280}
-            height={800}
+            src="/marketing/popup.png"
+            alt="The Track Your Time extension popup with a timer running"
+            width={760}
+            height={1200}
+            className="mx-auto max-w-xs"
           />
         }
       >
         <p>
-          Start a timer and stop it. Continue an earlier entry from the quick-start list, or pin a
-          job you do often so it is always at the top.
+          The work you tracked recently is right there in the popup. Click it to start the same task
+          again, or pin the jobs you do every day so they stay at the top.
         </p>
         <p>
-          Log time you forgot to track. Edit or delete an entry. Step back through earlier days to
-          see what you logged.
-        </p>
-        <p>
-          An entry has a description, a project, a task, tags and a billable flag. The project list
-          is grouped by client. If a project, task or tag does not exist yet, create it in the
-          popup, and the popup selects it for you.
+          Start typing a description and the extension suggests ones you&rsquo;ve used before. Pick
+          one, and it can fill in the client and project from last time too.
         </p>
       </Feature>
 
-      <Section title="Descriptions complete from everything you tracked before">
+      <Section title="Fix the day before you bill it">
         <Prose>
           <p>
-            Type the first letters of a description, and the popup suggests names you used before.
-            The search runs on the server, so a description from six months ago still appears.
-          </p>
-          <p>
-            <strong>Tab</strong> takes the suggestion. <strong>Enter</strong> still starts the
-            timer. A suggestion taken with <strong>⌘ Enter</strong> also fills in the project, task,
-            tags and billable flag from the last entry with that name.
+            Forgot to start the timer before a call? Add the time afterwards. Look back through
+            earlier days and correct anything that looks wrong, without opening the web app.
           </p>
         </Prose>
       </Section>
 
-      <Section title="It keeps working with no connection">
+      <Section title="Keeps tracking when the Wi-Fi doesn&rsquo;t">
         <Prose>
           <p>
-            Start and stop timers on a train or a plane. The extension keeps each change on this
-            computer and sends the changes in order when the connection returns.
-          </p>
-          <p>
-            When you sign out, the extension deletes any change it has not sent yet. The next person
-            who signs in on this computer cannot send your hours to their account.
-          </p>
-          <p>
-            While the connection is open, the popup receives live updates. Stop a timer in the web
-            app or on your phone, and the popup shows it at once.
+            If the connection drops, keep working. The extension saves your changes and sends them
+            as soon as you&rsquo;re back online. Stop a timer here, and it&rsquo;s stopped in the
+            web app and on your phone too.
           </p>
         </Prose>
       </Section>
 
-      <Section title="Permissions, and why the extension needs each one">
-        <FactList
+      <Section title="No second login">
+        <Prose>
+          <p>
+            Already logged in to Track Your Time in Chrome? The extension uses that login.
+            There&rsquo;s no extra password and no API key to copy.
+          </p>
+        </Prose>
+      </Section>
+
+      <Section title="Using your own server?">
+        <Prose>
+          <p>
+            The Chrome Web Store version connects to trackyourtime.dev. To use the extension with
+            your own server, build it from source with your server&rsquo;s address. The{" "}
+            <a href={`${SELF_HOSTING_URL}#10-the-other-clients`} className="text-foreground underline underline-offset-4">
+              self-hosting guide
+            </a>{" "}
+            shows how.
+          </p>
+        </Prose>
+      </Section>
+
+      <Section title="What the extension can access" className="pb-24">
+        <Bullets
           items={[
-            { term: "storage", detail: "Keeps your session and the queue of unsent changes on this computer." },
-            { term: "cookies", detail: "Reads the tracktime web app's session, so you do not sign in a second time." },
-            { term: "idle", detail: "Tells the extension that you walked away, so it can ask what to do with that time." },
-            { term: "alarms", detail: "Updates the running time on the toolbar icon every 30 seconds." },
-            {
-              term: "Access to api.trackyourtime.dev",
-              detail: "The one server the extension talks to. The extension cannot read the pages you visit.",
-            },
+            "Your Track Your Time login, so you don't have to sign in twice.",
+            "Whether your computer is idle, so it can ask what to do with the time you were away.",
+            "Storage on your computer, for changes made while you were offline.",
+            "Your Track Your Time server. It can't read the websites you visit.",
           ]}
         />
-      </Section>
-
-      <Section title="What stays in the web app" className="pb-24">
-        <Prose>
-          <p>
-            Reports, invoices, the calendar and the management of clients and projects stay in the
-            web app. The popup is 380 pixels wide, and a report does not fit in it.
-          </p>
-          <p>
-            Theme, clock format, duration format and idle handling are in the popup&rsquo;s settings.
-            They sync with the web app. The settings also list every device signed in to your
-            account, and you can sign any of them out.
-          </p>
-        </Prose>
       </Section>
     </MarketingShell>
   );

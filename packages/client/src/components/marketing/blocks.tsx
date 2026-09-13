@@ -181,3 +181,32 @@ export function FactList({
     </dl>
   );
 }
+
+/** Questions and answers, one per row. Answers are short, so one column reads faster than a grid. */
+export function Questions({
+  items,
+}: {
+  items: ReadonlyArray<{ q: string; a: React.ReactNode }>;
+}): React.ReactElement {
+  return (
+    <dl className="max-w-2xl divide-y">
+      {items.map((item) => (
+        <div key={item.q} className="space-y-2 py-5 first:pt-0">
+          <dt className="font-medium">{item.q}</dt>
+          <dd className="leading-relaxed text-muted-foreground">{item.a}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** A plain bulleted list at reading width. */
+export function Bullets({ items }: { items: ReadonlyArray<React.ReactNode> }): React.ReactElement {
+  return (
+    <ul className="max-w-2xl list-disc space-y-2 pl-5 leading-relaxed text-muted-foreground">
+      {items.map((item, index) => (
+        <li key={index}>{item}</li>
+      ))}
+    </ul>
+  );
+}

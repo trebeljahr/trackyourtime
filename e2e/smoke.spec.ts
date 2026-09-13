@@ -7,7 +7,7 @@ test.describe("Smoke tests", () => {
   }) => {
     await page.goto("/");
     await expect(page.getByTestId("marketing-title")).toContainText(
-      "Name the work once",
+      "Time tracking on your own server",
     );
     // The redirect runs once the session resolves. A signed-out visitor
     // must still be on the landing page after it has.
@@ -28,9 +28,9 @@ test.describe("Smoke tests", () => {
   });
 
   for (const [path, title] of [
-    ["/extension", "Chrome toolbar"],
-    ["/raycast", "menu bar"],
-    ["/mobile", "your phone"],
+    ["/extension", "one click away"],
+    ["/raycast", "keyboard"],
+    ["/mobile", "wherever the work happens"],
     ["/privacy", "Privacy policy"],
     ["/support", "Get help"],
   ] as const) {

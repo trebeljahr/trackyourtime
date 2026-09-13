@@ -29,7 +29,7 @@ export function BrandLockup({
       {/* Decorative: the wordmark right next to it is the accessible name. */}
       <BrandMark label={null} className="size-9" />
       <span className="text-3xl font-semibold tracking-tight">
-        track<span className="text-brand">time</span>
+        Track Your <span className="text-brand">Time</span>
       </span>
     </span>
   );
