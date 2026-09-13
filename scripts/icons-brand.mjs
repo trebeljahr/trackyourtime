@@ -169,3 +169,43 @@ const socialPng = await sharp(socialSvg, { density: BASE_DPI * 2 })
   .png({ compressionLevel: 9 })
   .toBuffer();
 await emit("docs-site/static/img/social-card.png", socialPng);
+
+/*
+ * The web app's two bitmap icons, as Next.js file conventions in `app/`.
+ *
+ * `favicon.ico` because link-preview crawlers and feed readers still ask for
+ * `/favicon.ico` by name and show a blank square when it 404s, whatever
+ * `icon.svg` says. `apple-icon.png` because iOS ignores SVG for a home-screen
+ * icon — and it is rendered full-bleed, since iOS applies its own corner mask
+ * and a pre-rounded tile would come out with dark corners.
+ */
+const fullBleedTile = Buffer.from(tile.toString("utf8").replace('rx="14"', 'rx="0"'));
+await emit("packages/client/src/app/apple-icon.png", await render(fullBleedTile, 180));
+
+/** An ICO whose entries are PNGs — valid since Windows Vista, and what every browser reads. */
+function icoFromPngs(entries) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(entries.length, 4);
+  const directory = Buffer.alloc(16 * entries.length);
+  let offset = header.length + directory.length;
+  entries.forEach(({ size, png }, index) => {
+    const at = index * 16;
+    directory.writeUInt8(size >= 256 ? 0 : size, at);
+    directory.writeUInt8(size >= 256 ? 0 : size, at + 1);
+    directory.writeUInt16LE(1, at + 4);
+    directory.writeUInt16LE(32, at + 6);
+    directory.writeUInt32LE(png.length, at + 8);
+    directory.writeUInt32LE(offset, at + 12);
+    offset += png.length;
+  });
+  return Buffer.concat([header, directory, ...entries.map((entry) => entry.png)]);
+}
+
+await emit(
+  "packages/client/src/app/favicon.ico",
+  icoFromPngs(
+    await Promise.all([16, 32, 48].map(async (size) => ({ size, png: await render(tile, size) }))),
+  ),
+);

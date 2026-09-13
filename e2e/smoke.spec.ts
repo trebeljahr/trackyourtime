@@ -1,13 +1,44 @@
 import { test, expect } from "@playwright/test";
+import { signUpViaUI, TRACK_URL } from "./helpers";
 
 test.describe("Smoke tests", () => {
-  test("landing page sends a signed-out visitor to the login screen", async ({
+  test("landing page explains the product to a signed-out visitor", async ({
     page,
   }) => {
-    // "/" redirects to the tracker, which is behind the auth guard.
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
+    await expect(page.getByTestId("marketing-title")).toContainText(
+      "Name the work once",
+    );
+    // The redirect runs once the session resolves. A signed-out visitor
+    // must still be on the landing page after it has.
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/$/);
   });
+
+  test("landing page sends a signed-in visitor to the tracker", async ({
+    page,
+  }) => {
+    await signUpViaUI(page, {
+      name: "Landing Redirect",
+      email: `landing-${Date.now()}@example.com`,
+      password: "SecurePassword123!",
+    });
+    await page.goto("/");
+    await page.waitForURL(TRACK_URL, { timeout: 10_000 });
+  });
+
+  for (const [path, title] of [
+    ["/extension", "Chrome toolbar"],
+    ["/raycast", "menu bar"],
+    ["/mobile", "your phone"],
+    ["/privacy", "Privacy policy"],
+    ["/support", "Get help"],
+  ] as const) {
+    test(`public page ${path} loads`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.getByTestId("marketing-title")).toContainText(title);
+    });
+  }
 
   test("login page loads", async ({ page }) => {
     await page.goto("/login");

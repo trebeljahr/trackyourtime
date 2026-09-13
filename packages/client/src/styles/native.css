@@ -249,3 +249,16 @@ html.cap [data-testid="mobile-tab-bar"] {
 html.cap [data-testid="mobile-tab-bar"] > * {
   min-height: 3.5rem;
 }
+
+/*
+ * The public pages (`components/marketing/`) inside the shell.
+ *
+ * The app opens on `/`, which on the web is the landing page. Inside the app
+ * that page is an advertisement for the thing the person is already holding,
+ * so it never paints: `SignedInRedirect` sends the shell on to /track, and
+ * this keeps the frames before that blank. The splash normally covers them,
+ * but a WebView reload has no splash.
+ */
+html.cap [data-marketing] {
+  display: none;
+}
