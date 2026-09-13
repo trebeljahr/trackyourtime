@@ -1308,6 +1308,127 @@ the two can never disagree). The production id has to be pinned with
 hand — deliberately: a production trust list that a script can extend is a
 trust list nobody reviews.
 
+### Internationalisation (i18n)
+
+The web app, the native shells, the browser extension, invoices and email ship
+in English and German. Raycast does not (below). Everything lives in
+`packages/client/src/i18n/` unless noted.
+
+```ts
+const t = useT("tracker");            // client components
+t("timer.start");                     // key typed against the English catalog
+t("entries.count", { count });        // ICU arguments typed too
+translate("common")("errors.generic") // non-component code, at call time
+const f = useFormat();                // f.money / f.date / f.duration / …
+```
+
+**Library: `use-intl/core`, and nothing from its React half.** `useT` is
+`createTranslator` bound to the locale store, so there is no provider to mount
+and every existing component test renders unchanged, in English. No
+`next-intl`: its routing needs middleware, which a static export cannot have.
+
+**Catalogs.** One file per namespace per locale — `messages/en/<ns>.ts` is the
+source (`as const`, whose literal types are what type-check keys AND ICU
+arguments), `messages/de/<ns>.ts` is annotated `Translation<typeof source>`
+(`@starter/shared`), so a missing, misspelled or extra German key fails `tsc`.
+`messages/index.ts` is the only file that lists namespaces: `common`,
+`tracker`, `calendar`, `reports`, `catalog`, `settings`, `shell`, `marketing`.
+`common` is shared vocabulary and is edited deliberately, never in passing.
+`catalog-parity.test.ts` checks what the types cannot see: identical ICU
+placeholder and tag names per message (`{project}` renamed to `{projekt}`
+type-checks and renders raw), valid ICU in both locales, and whole English
+sentences left untranslated. Terms and voice: `i18n/GLOSSARY.de.md` (du,
+„Kunde“, „Tätigkeit“, „Schlagwort“ — never „Tag“, which means *day* on every
+screen of a time tracker).
+
+**The preference is synced, the language is resolved per device.**
+`UserPreferences.locale` is `"system" | "en" | "de"`, stored beside `theme`
+and written through `settings.update`; `<LocaleSync>` (app shell) carries it
+both ways like `<ThemeSync>`. The server never resolves "system" — it has no
+device to ask — so one account reads German on a German phone and English on
+an English laptop. `matchLocaleList` in `@starter/shared/locale` is the one
+resolver (primary subtag, first supported entry of `navigator.languages`).
+
+**The first paint is the hard part, and it fails silently in two directions.**
+Every HTML file outside `/de/` is prerendered in English, and hydration must
+match it. So:
+
+- `useLocale()` answers "en" during hydration by construction
+  (`useSyncExternalStore`'s server snapshot), and the store's `current` only
+  becomes the reader's language in `<LocaleRoot>`'s layout effect, after
+  hydration. Rendering German during hydration is a text mismatch React
+  reports once in the console and then "fixes" by throwing the served DOM away.
+- `LOCALE_SCRIPT` (`app/pre-paint.ts`) resolves the same answer before paint,
+  writes `<html lang>`/`data-locale`, and sets `data-locale-pending` when it is
+  not English. `globals.css` hides `[data-locale-gate]` — the app subtree, NOT
+  `<body>` — until `<LocaleRoot>` removes the attribute in the same pre-paint
+  flush as the German render. The script and `locale-store.ts` must resolve
+  identically (`pre-paint.test.ts` runs both over the same inputs): if they
+  disagree the gate lifts on the wrong language or waits for a switch that
+  never comes. A 4 s failsafe lifts it anyway, because an English page beats an
+  invisible one when a chunk fails to load. `locale-root.test.tsx` hydrates real
+  prerendered HTML and fails on any console error.
+- Native shells need nothing extra: they load the same export and the same
+  script; `navigator.languages` is the device language. The preference mirror
+  is `localStorage` (like the theme) — iOS evicting it costs one gated frame,
+  not data.
+
+**Formatting goes through `i18n/format.ts`, never `toLocale*(undefined)` and
+never into anything a machine reads.** Intl with the rendered language and the
+device's region (en-GB keeps "21 Aug", de-AT keeps „Jänner“).
+`useFormatSettings()` now formats in the active locale. `formatDuration` /
+`formatDurationShort` in shared take an optional locale: without one the
+output is byte-identical to before — Raycast, CSV export and the server rely on
+that — and `formatDurationFor` keeps English identical too. German prints
+„1,50 h“ / „1 h 30 min“ with no-break spaces and no grouping, and
+`parseDurationInput` and the importer accept comma and dot alike
+(`duration.test.ts`, `import-values.test.ts`). CSV headers and values, the
+importer, REST/tRPC error codes and `problem+json` types, webhook payloads and
+OpenAPI docs are never localised. `weekStartsOn` stays a workspace setting
+seeded to Monday: every member's "this week" must be the same seven days, so
+`defaultWeekStart(locale)` applies only where no stored value exists.
+
+**Public pages are built once per language.** English at `/`, German under
+`/de/`: `app/de/**/page.tsx` are one-line re-exports of
+`components/marketing/pages/*-page.tsx` with `locale="de"`, rendered at build
+time with `marketingT(locale)` so the HTML crawlers fetch is already German.
+`marketingMetadata` adds canonical, `hreflang` alternates (`x-default` =
+English) and `og:locale`; `localizedPath` keeps internal links in the
+language; `<MarketingShell locale path>` wraps the page in `<FixedLocale>`,
+which pins it (it never follows the preference) and exempts it from the gate.
+Not a `[locale]` segment: at the root it would compete with `/track` and turn
+unknown paths into marketing pages instead of the 404. The one thing `/de/`
+cannot get is `lang="de"` on the served `<html>` (a second root layout means
+moving every route into groups); the content wrapper carries `lang="de"` and
+the script sets `<html lang>` before paint. Never put a date into an ICU
+argument on a prerendered page: the build machine's zone would be baked in.
+
+**Pseudo-locale:** `?locale=pseudo` (persisted; `?locale=off` clears) or the
+Settings picker, in non-production builds only — `LOCALE_SCRIPT` for a
+production build contains no trace of it. Accented, ~35 % longer, bracketed,
+derived from English at runtime: unaccented text was never extracted, clipped
+text will clip in German.
+
+**Invoices are localised per document.** `Client.invoiceLocale` (optional)
+and `createInvoiceSchema.locale` (override) feed `resolveInvoiceLocale`
+(override → client → issuer's explicit preference → English), and the result
+is snapshotted onto `Invoice.locale` like every figure on it: a re-render must
+never change the language of a document a customer holds. The model field has
+no default on purpose — an invoice without one predates localisation and is
+English forever. Server strings: `packages/server/src/i18n/` (`serverT(locale,
+"invoice" | "email")`), parity-tested in `tests/i18n-catalog.test.ts`.
+
+**Browser extension:** its own catalog in `packages/extension/src/i18n/`,
+resolved from the synced `settings.locale` with a synchronous `localStorage`
+mirror, like its theme. Not `chrome.i18n`, which follows the browser's UI
+language and cannot honour the account preference; `public/_locales` holds
+only the manifest name and description (`__MSG_*__`, `default_locale: "en"`).
+
+**Raycast stays English.** The Raycast Store accepts extensions in US English
+only, and Raycast itself has no locale API to follow — a German Raycast would
+be unpublishable. Never pass a locale to the shared duration helpers from
+`packages/raycast`.
+
 ### Static export caveats
 
 - `NEXT_PUBLIC_API_URL` is baked at build time — desktop/mobile binaries

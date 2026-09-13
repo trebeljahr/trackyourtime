@@ -312,6 +312,59 @@ file you are editing.
 
 ---
 
+## Translations
+
+The interface ships in English and German. The full design, and what breaks
+quietly if it is changed, is in [CLAUDE.md](CLAUDE.md) → "Internationalisation
+(i18n)". What a contributor needs:
+
+- **Text goes in a catalog, never in JSX.** `const t = useT("<namespace>")`
+  from `@/i18n/use-t`, then `t("group.key")`. Add the key to
+  `packages/client/src/i18n/messages/en/<namespace>.ts` first, then the same key
+  to `messages/de/<namespace>.ts` — `pnpm run typecheck` fails until both match.
+- **Numbers, money, dates and durations** come from `useFormat()` /
+  `useFormatSettings()`, never from `toLocaleString()` or string concatenation.
+- **Plurals use ICU**, even where English and German agree:
+  `{count, plural, one {# entry} other {# entries}}`.
+- **German follows the glossary** in
+  [`packages/client/src/i18n/GLOSSARY.de.md`](packages/client/src/i18n/GLOSSARY.de.md):
+  informal „du“, one German word per concept.
+- **Check your layout in the pseudo-locale:** open any page with
+  `?locale=pseudo` in a development build (`?locale=off` to leave). Text that is
+  not accented was not extracted; text that clips will clip in German too.
+
+### Adding a language
+
+1. Add the code to `SUPPORTED_LOCALES` in `packages/shared/src/locale.ts`. The
+   zod schemas, the Mongoose enums and the Settings preference all derive from
+   it.
+2. Copy every file in `packages/client/src/i18n/messages/de/` to
+   `messages/<code>/`, translate, and add the namespace objects to
+   `messages/index.ts` (typed `Translation<Messages>`, like `de`).
+3. Return the new catalog from `getMessages` in `i18n/translator.ts`, and add
+   the language to the Settings picker (`components/settings/language-picker.tsx`,
+   with its name written in its own language) and to `settings.language` in
+   every catalog.
+4. Teach `LOCALE_SCRIPT` in `packages/client/src/app/pre-paint.ts` the new code
+   — its supported list is inlined — and extend `pre-paint.test.ts`.
+5. Public pages: add `app/<code>/**/page.tsx` re-exports mirroring `app/de/`,
+   an `OG_LOCALE` entry in `i18n/marketing.ts`, and the `<code>/` prefix to the
+   path check in `LOCALE_SCRIPT` and `locale-store.ts`.
+6. Server and extension: add `messages/<code>/` beside the German ones in
+   `packages/server/src/i18n/` and `packages/extension/src/i18n/`, plus
+   `packages/extension/public/_locales/<code>/messages.json`.
+7. Write a glossary, `GLOSSARY.<code>.md`, before translating — term choices
+   made string by string drift.
+8. Run `pnpm run typecheck`, `pnpm run test:client` (the parity test compares
+   ICU placeholders across every locale) and `pnpm run test:unit`.
+
+**Never localise:** CSV export headers and values, the importer, REST and tRPC
+error codes and `problem+json` types, webhook payloads, the OpenAPI document,
+log lines, and the Raycast extension (the Raycast Store accepts US English
+only). These are read by machines or by people who match exact strings.
+
+---
+
 ## Commit messages and branches
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/):
