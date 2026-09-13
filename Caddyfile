@@ -30,15 +30,19 @@
 	# before expiry; add `email you@example.com` in a global options block
 	# at the top of this file if you want the safety net.
 	#
-	# A local trial over plain HTTP: set APP_DOMAIN to `localhost` (or
-	# `http://localhost`) and APP_URL to the matching http:// origin — Caddy
-	# skips ACME for localhost and issues its own internal certificate.
+	# A local trial: APP_DOMAIN=http://localhost with APP_URL=http://localhost
+	# serves plain HTTP. APP_DOMAIN=localhost with no APP_URL serves HTTPS on
+	# Caddy's internal certificate. Do not mix the two — a bare `localhost`
+	# site redirects http:// to https://, so APP_URL=http://localhost would
+	# name an origin the browser never ends up on. See docs/self-hosting.md.
 
 	encode zstd gzip
 
 	# ── The API ──────────────────────────────────────────────────────────
-	# Matched BEFORE the catch-all below. Order matters more than it looks:
-	# a static handler that swallows /api/auth/get-session answers it with
+	# Caddy sorts `handle` blocks by path specificity, not file order, so this
+	# wins over the bare `handle` catch-all below wherever it is written. Keep
+	# that in mind when porting to another proxy, where order often does
+	# matter: a static handler that swallows /api/auth/get-session answers it with
 	# index.html and a 200, which reaches the browser as a bizarre auth
 	# failure rather than as the routing bug it is.
 	#

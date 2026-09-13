@@ -1,3 +1,11 @@
+---
+title: Self-hosting Track Your Time
+sidebar_label: Self-hosting
+description: Install Track Your Time on your own Ubuntu server with Docker Compose, check the install with one script, and back it up, upgrade it and fix it.
+---
+
+<!-- Generated from docs/self-hosting.md by scripts/docs/sync-self-hosting.mjs. Do not edit by hand: edit the source, then run `pnpm docs:sync`. -->
+
 # Self-hosting Track Your Time
 
 Run your own instance of Track Your Time on your own server, with your own
@@ -10,7 +18,7 @@ command. **Expect** says what success looks like. **If it fails** lists the
 usual causes and their fixes.
 
 This is not the maintainer's own deployment. That one is a two-domain split on
-Coolify, documented in [`deploy.md`](./deploy.md). Nothing here interacts with
+Coolify, documented in [`deploy.md`](https://github.com/trebeljahr/tracktime/blob/main/docs/deploy.md). Nothing here interacts with
 it.
 
 **One limit to know before you start.** No release has been published yet:
@@ -672,7 +680,7 @@ Dockerfile and build arguments. One of those arguments is the empty
 `NEXT_PUBLIC_API_URL`, which makes the web app use its own origin for the API.
 
 Images for a version exist only after that tag is pushed and
-[`.github/workflows/release.yml`](../.github/workflows/release.yml) has run. No
+[`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) has run. No
 tag exists yet, so today every install builds locally. To avoid building on a
 small server, build on another machine and push the images to your own
 registry.
@@ -1368,5 +1376,5 @@ While Mongo is unhealthy the server does not start at all, because
 | `packages/client/Dockerfile.selfhost` | Builds the web app with an empty `NEXT_PUBLIC_API_URL` and serves the static export |
 | `packages/server/Dockerfile` | The server image, shared with the maintainer's deploy |
 | `packages/server/.env.example` | Every server variable, with an explanation for each |
-| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | Publishes the multi-arch, version-tagged images on a `v*` tag |
-| [`docs/deploy.md`](./deploy.md) | The maintainer's own two-domain Coolify deployment, not this one |
+| [`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) | Publishes the multi-arch, version-tagged images on a `v*` tag |
+| [`docs/deploy.md`](https://github.com/trebeljahr/tracktime/blob/main/docs/deploy.md) | The maintainer's own two-domain Coolify deployment, not this one |
