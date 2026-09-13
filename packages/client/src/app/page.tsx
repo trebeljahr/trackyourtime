@@ -45,7 +45,7 @@ export default function LandingPage(): React.ReactElement {
         actions={
           <>
             <PrimaryLink href={SELF_HOSTING_URL}>Host it yourself</PrimaryLink>
-            <SecondaryLink href="/signup/">Try it online first</SecondaryLink>
+            <SecondaryLink href="/signup/">Use the hosted version</SecondaryLink>
           </>
         }
         shot={
@@ -204,7 +204,7 @@ export default function LandingPage(): React.ReactElement {
           items={[
             {
               q: "Do I have to host it myself?",
-              a: "No. You can use the hosted version at trackyourtime.dev, free while in beta. If you move to your own server later, export your data and import it there.",
+              a: "No. The hosted version at trackyourtime.dev is open to everyone, and free while in beta. You can move to your own server later: export your data and import it there.",
             },
             {
               q: "What do I need to run it?",
@@ -243,7 +243,7 @@ export default function LandingPage(): React.ReactElement {
         />
       </Section>
 
-      <Section title="Run it on your server, or try it here first" className="pb-24">
+      <Section title="Run it on your server, or use ours" className="pb-24">
         <div className="flex flex-wrap gap-3">
           <PrimaryLink href={SELF_HOSTING_URL}>Read the self-hosting guide</PrimaryLink>
           <SecondaryLink href="/signup/">Create a free account</SecondaryLink>
