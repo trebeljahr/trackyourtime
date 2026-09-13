@@ -40,6 +40,14 @@ test.describe("Smoke tests", () => {
     });
   }
 
+  test("an unknown address answers 404 with the custom page", async ({
+    page,
+  }) => {
+    const response = await page.goto("/no-such-page-anywhere");
+    expect(response?.status()).toBe(404);
+    await expect(page.getByTestId("not-found")).toBeVisible();
+  });
+
   test("login page loads", async ({ page }) => {
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
