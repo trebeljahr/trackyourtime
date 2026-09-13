@@ -28,6 +28,8 @@
 	     default, so an http://localhost:<port> dev API is unreachable from the
 	     Simulator without this. Scoped to localhost on purpose: production is
 	     https://tracktime.trebeljahr.com and must stay subject to ATS. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
