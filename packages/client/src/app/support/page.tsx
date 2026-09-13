@@ -67,11 +67,12 @@ export default function SupportPage(): React.ReactElement {
               term: "How do I delete my account?",
               detail: (
                 <>
-                  Email {CONTACT_EMAIL} from the address on your account. The{" "}
+                  Open Settings → Account → Delete account and confirm with your password. Export
+                  your data first if you want to keep it. The{" "}
                   <Link href="/privacy/" className={link}>
                     privacy policy
                   </Link>{" "}
-                  explains what is deleted and when.
+                  lists what is deleted.
                 </>
               ),
             },

@@ -165,7 +165,8 @@ export default function PrivacyPage(): React.ReactElement {
       <Block title="How long it is kept">
         <p>
           Your account and tracked time are kept until you delete them or ask for them to be deleted.
-          A session record ends 30 days after its last use, or when you sign the device out.
+          A browser session ends 7 days after its last use. A session in an app or extension ends
+          30 days after its last use. Either ends at once when you sign the device out.
         </p>
       </Block>
 
@@ -178,12 +179,17 @@ export default function PrivacyPage(): React.ReactElement {
           <strong>Correct it.</strong> You can edit every entry and every setting yourself.
         </p>
         <p>
-          <strong>Delete it.</strong> Write to{" "}
+          <strong>Delete it.</strong> Open Settings → Account → Delete account, in the web app or
+          in the phone apps, and confirm with your password. The account, every session and
+          everything in your workspace are deleted at once. Every signed-in device is signed out.
+        </p>
+        <p>
+          If you cannot sign in, write to{" "}
           <a href={`mailto:${CONTACT_EMAIL}`} className="text-foreground underline underline-offset-4">
             {CONTACT_EMAIL}
           </a>{" "}
-          from the email address on your account. Your account and everything in it are deleted
-          within 30 days, and you receive a confirmation.
+          from the email address on your account. The account is then deleted within 30 days, and
+          you receive a confirmation.
         </p>
         <p>
           If you live in the EU or the UK, you also have the right to object, to restrict processing,
