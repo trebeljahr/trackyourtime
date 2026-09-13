@@ -5,16 +5,19 @@
 // what order, and what a retry after a crash does) runs in the unit suite
 // against in-memory rows. The two real stores are thin: mongoose for app
 // collections, better-auth's adapter for its own tables.
-import type { WorkspaceRole } from "@starter/shared";
 import {
   memberDepartureSteps,
-  planWorkspaceExit,
   userScopedSteps,
   workspaceDeletionSteps,
   type DeletionCollection,
   type DeletionFilter,
-  type MemberRow,
 } from "./plan.js";
+import {
+  ensureOwner,
+  membersOf,
+  planWorkspaceExit,
+} from "../membership/records.js";
+import { asId } from "../membership/store.js";
 
 export type StoredRow = Readonly<Record<string, unknown>>;
 
@@ -35,101 +38,9 @@ export type AccountDeletionReport = {
   promoted: Record<string, string>;
 };
 
-const ROLES: readonly WorkspaceRole[] = ["owner", "admin", "member"];
-const ROLE_RANK: Record<WorkspaceRole, number> = { owner: 0, admin: 1, member: 2 };
-
-const asString = (value: unknown): string | null => {
-  if (typeof value === "string" && value.length > 0) return value;
-  // better-auth's Mongo adapter hands ids back as strings, but a raw ObjectId
-  // must still compare equal to the string ids the app collections store.
-  if (value !== null && typeof value === "object" && "toHexString" in value) {
-    return String(value);
-  }
-  return null;
-};
-
-const asRole = (value: unknown): WorkspaceRole =>
-  ROLES.includes(value as WorkspaceRole) ? (value as WorkspaceRole) : "member";
-
-const asDate = (value: unknown): Date => {
-  const date = value instanceof Date ? value : new Date(String(value));
-  return Number.isNaN(date.getTime()) ? new Date(0) : date;
-};
-
-/**
- * Both membership records for one workspace, merged per person.
- *
- * The app mirror (`WorkspaceMember`) and better-auth's `member` are written
- * separately and can disagree after a crash between the two writes. Reading
- * both is what stops a person who exists in only one of them from being
- * missed — which would turn "shared workspace" into "delete it".
- */
-async function membersOf(
-  store: DeletionRowStore,
-  workspaceId: string,
-): Promise<MemberRow[]> {
-  const [app, auth] = await Promise.all([
-    store.find("workspaceMembers", { workspaceId }),
-    store.find("authMembers", { organizationId: workspaceId }),
-  ]);
-  const byUser = new Map<string, MemberRow>();
-  for (const row of [...app, ...auth]) {
-    const userId = asString(row.userId);
-    if (!userId) continue;
-    const role = asRole(row.role);
-    const createdAt = asDate(row.createdAt);
-    const seen = byUser.get(userId);
-    byUser.set(userId, {
-      userId,
-      role: seen && ROLE_RANK[seen.role] <= ROLE_RANK[role] ? seen.role : role,
-      createdAt: seen && seen.createdAt <= createdAt ? seen.createdAt : createdAt,
-    });
-  }
-  return [...byUser.values()];
-}
-
-/**
- * Make `userId` an owner in whichever membership records do not already say
- * so. Returns whether anything changed — a promotion, or the second half of
- * one an earlier run did not finish.
- */
-async function ensureOwner(
-  store: DeletionRowStore,
-  workspaceId: string,
-  userId: string,
-): Promise<boolean> {
-  const [app, auth] = await Promise.all([
-    store.find("workspaceMembers", { workspaceId, userId }),
-    store.find("authMembers", { organizationId: workspaceId, userId }),
-  ]);
-  let changed = false;
-  // An owner sees everyone's time and money: `upsertWorkspaceMember` grants
-  // both to every owner, and a promoted one is no different.
-  if (
-    app.some(
-      (row) =>
-        row.role !== "owner" ||
-        row.canViewOthersTime !== true ||
-        row.canViewOthersMoney !== true,
-    )
-  ) {
-    await store.updateMany(
-      "workspaceMembers",
-      { workspaceId, userId },
-      { role: "owner", canViewOthersTime: true, canViewOthersMoney: true },
-    );
-    changed = true;
-  }
-  if (auth.some((row) => row.role !== "owner")) {
-    await store.updateMany(
-      "authMembers",
-      { organizationId: workspaceId, userId },
-      { role: "owner" },
-    );
-    changed = true;
-  }
-  return changed;
-}
+// `membersOf`, `ensureOwner` and `planWorkspaceExit` live in
+// services/membership/records.ts, shared with every other membership action
+// (leave, remove, transfer), so "who owns this workspace" has one definition.
 
 async function workspaceIdsOf(
   store: DeletionRowStore,
@@ -141,11 +52,11 @@ async function workspaceIdsOf(
   ]);
   const ids = new Set<string>();
   for (const row of app) {
-    const id = asString(row.workspaceId);
+    const id = asId(row.workspaceId);
     if (id) ids.add(id);
   }
   for (const row of auth) {
-    const id = asString(row.organizationId);
+    const id = asId(row.organizationId);
     if (id) ids.add(id);
   }
   return [...ids].sort();
@@ -193,7 +104,7 @@ export async function deleteAccountData(
     const webhookIds = (
       await store.find("webhookSubscriptions", { workspaceId, createdBy: user.id })
     )
-      .map((row) => asString(row.id))
+      .map((row) => asId(row.id))
       .filter((id): id is string => id !== null);
 
     for (const step of memberDepartureSteps(workspaceId, user.id, webhookIds)) {

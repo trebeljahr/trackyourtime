@@ -7,7 +7,11 @@
 // `deleteMany`s is idempotent by construction: a step that already ran matches
 // nothing the second time, which is what makes a half-finished deletion safe
 // to simply run again.
-import type { WorkspaceRole } from "@starter/shared";
+export {
+  planWorkspaceExit,
+  type MemberRow,
+  type WorkspaceExit,
+} from "../membership/records.js";
 
 /**
  * Every collection the cascade touches.
@@ -60,63 +64,6 @@ export type DeletionStep = {
   collection: DeletionCollection;
   filter: DeletionFilter;
 };
-
-/**
- * One membership, merged from the app mirror and better-auth's `member`. The
- * role is the higher of the two when they disagree.
- */
-export type MemberRow = {
-  userId: string;
-  role: WorkspaceRole;
-  createdAt: Date;
-};
-
-export type WorkspaceExit =
-  | { kind: "delete-workspace"; workspaceId: string }
-  | {
-      kind: "leave-workspace";
-      workspaceId: string;
-      /** Who owns the workspace once this person is gone. */
-      owner: string;
-    };
-
-const ROLE_RANK: Record<WorkspaceRole, number> = { owner: 0, admin: 1, member: 2 };
-
-/**
- * Decide what happens to one workspace when `userId` deletes their account.
- *
- * Alone in it: the workspace goes, with everything in it. Anybody else still
- * in it: only the departing person's own rows go, and the workspace stays.
- *
- * A shared workspace must never be left without an owner — nobody could then
- * manage members, rates or visibility. So the plan always names one: an owner
- * who is already there, else the longest-standing admin, else the
- * longest-standing member. Promotion rather than refusal, deliberately: a
- * deletion that other people's workspaces can block is not the in-app
- * deletion the store policies require, and the successor is the person who
- * would have been asked anyway.
- *
- * Naming the owner even when nobody needs promoting is what makes a retry
- * safe: a run that promoted Bob in one membership record and crashed before
- * the other must, next time, finish promoting Bob rather than read him as
- * "already an owner" and stop.
- */
-export function planWorkspaceExit(
-  workspaceId: string,
-  userId: string,
-  members: readonly MemberRow[],
-): WorkspaceExit {
-  const others = members.filter((member) => member.userId !== userId);
-  if (others.length === 0) return { kind: "delete-workspace", workspaceId };
-
-  const [owner] = [...others].sort(
-    (a, b) =>
-      ROLE_RANK[a.role] - ROLE_RANK[b.role] ||
-      a.createdAt.getTime() - b.createdAt.getTime() ||
-      a.userId.localeCompare(b.userId),
-  );
-  return { kind: "leave-workspace", workspaceId, owner: owner.userId };
-}
 
 /**
  * Remove a workspace nobody else uses, and everything scoped to it.
@@ -173,6 +120,11 @@ export function workspaceDeletionSteps(workspaceId: string): DeletionStep[] {
  *
  * `webhookIds` are this person's subscriptions in this workspace, read before
  * the subscriptions themselves are deleted — deliveries carry no `createdBy`.
+ *
+ * ACCOUNT DELETION ONLY. It deletes the person's entries, which is right when
+ * the person is gone for good and wrong when they only leave a workspace or
+ * are removed from one: that time was tracked for the workspace and stays
+ * with it. Leave and remove go through `services/membership/lifecycle.ts`.
  */
 export function memberDepartureSteps(
   workspaceId: string,
