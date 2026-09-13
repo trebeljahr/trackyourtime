@@ -43,6 +43,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ThemeSync } from "@/components/theme-sync";
+import { LocaleSync } from "@/i18n/locale-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useNativeLifecycle } from "@/hooks/use-native-lifecycle";
 import { useRunningEntry, useSync } from "@/hooks/use-sync";
@@ -415,6 +416,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
               <RunningTimerIndicator />
               <SyncDot status={status} />
               <ThemeSync />
+              <LocaleSync />
               <ThemeToggle />
               <UserMenu />
             </div>

@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "Track Your Time"
+  },
+  "extNameDev": {
+    "message": "Track Your Time (dev)"
+  },
+  "extDescription": {
+    "message": "Starte, stoppe und sieh deinen Track-Your-Time-Timer direkt in der Symbolleiste."
+  }
+}

@@ -19,6 +19,21 @@
  */
 @import "./standalone.css";
 
+/*
+ * The pre-paint language gate — see LOCALE_SCRIPT in app/pre-paint.ts.
+ * While <html data-locale-pending> is set, the app subtree is still the
+ * prerendered English and must not be seen. `visibility` rather than
+ * `display` or `opacity`: layout is computed as usual (no jump when it lifts)
+ * and a descendant may set it back, which is how the fixed-locale public
+ * pages opt out. Unlayered, like native.css, so no utility can override it.
+ */
+html[data-locale-pending] [data-locale-gate] {
+  visibility: hidden;
+}
+html[data-locale-pending] [data-locale-fixed] {
+  visibility: visible;
+}
+
 /* Dark mode via .dark class on a parent (matches shadcn convention). */
 @custom-variant dark (&:is(.dark *));
 

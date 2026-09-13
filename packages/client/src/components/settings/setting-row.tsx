@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
 
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import type { SaveState } from "@/components/settings/use-workspace-settings";
 
@@ -21,6 +22,7 @@ export function SaveIndicator({
   className,
   testId = "save-indicator",
 }: SaveIndicatorProps): React.JSX.Element {
+  const t = useT("common");
   return (
     <span
       className={cn(
@@ -37,19 +39,19 @@ export function SaveIndicator({
       {state === "saving" ? (
         <>
           <Loader2 className="size-3 animate-spin" />
-          Saving
+          {t("status.saving")}
         </>
       ) : null}
       {state === "saved" ? (
         <>
           <Check className="size-3" />
-          Saved
+          {t("status.saved")}
         </>
       ) : null}
       {state === "error" ? (
         <>
           <AlertCircle className="size-3" />
-          Not saved
+          {t("status.notSaved")}
         </>
       ) : null}
     </span>

@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { LanguagePicker } from "@/components/settings/language-picker";
 import { OptionGroup } from "@/components/settings/option-group";
 import { SaveIndicator, SettingRow } from "@/components/settings/setting-row";
 import type { WorkspaceSettingsController } from "@/components/settings/use-workspace-settings";
@@ -96,6 +97,8 @@ export function GeneralSettings({
             onChange={setTheme}
           />
         </SettingRow>
+
+        <LanguagePicker />
 
         <SettingRow
           title="Week starts on"

@@ -47,3 +47,60 @@ export const THEME_SCRIPT = `(function(){try{var c=localStorage.getItem("trackti
  * there — the same assumption `isNative()` in bridge.ts has always made.
  */
 export const NATIVE_SHELL_SCRIPT = `(function(){try{var c=window.Capacitor;if(!c||!c.isNativePlatform||!c.isNativePlatform())return;var r=document.documentElement;r.classList.add("cap");r.setAttribute("data-platform",c.getPlatform?c.getPlatform():"unknown");}catch(e){}})();`;
+
+/**
+ * Decides the interface language before first paint, and hides the app until
+ * React has rendered in it.
+ *
+ * Every HTML file outside /de/ is prerendered in English, and it has to be:
+ * hydration must match the served DOM, so React's first render is English too
+ * (`useLocale` answers "en" during hydration by construction). A German reader
+ * would therefore see an English page for as long as the JS takes to load —
+ * a flash of the wrong language on every hard navigation, and on every cold
+ * launch of the Capacitor apps, which load this same export.
+ *
+ * So this script resolves the language exactly the way `i18n/locale-store.ts`
+ * does — stored preference ("en" | "de" | "system"), else the first supported
+ * `navigator.languages` entry, else English; in development `?locale=pseudo`
+ * and its stored override — writes `lang` and `data-locale` onto <html>, and,
+ * when the answer is not English, sets `data-locale-pending`. globals.css
+ * hides `[data-locale-gate]` (the app subtree in app/layout.tsx) while that
+ * attribute is present, and <LocaleRoot> removes it in a layout effect once
+ * the switch has committed — before the browser paints the next frame.
+ *
+ * Three failure modes this is shaped around:
+ *
+ *  - It hides the GATE, not <body>. The public pages are prerendered per
+ *    language and never switch, so they opt back in with `[data-locale-fixed]`
+ *    (visibility is inherited and a descendant may set it back to visible) and
+ *    a German visitor to the English landing page is not held on a blank
+ *    screen waiting for JavaScript it does not need.
+ *  - A 4-second failsafe removes the attribute on its own. If the bundle never
+ *    loads — an extension blocking a chunk, a broken deploy — an English page
+ *    is a far better failure than an invisible one.
+ *  - It writes only to <html>, which already carries
+ *    `suppressHydrationWarning`, for the reason given on NATIVE_SHELL_SCRIPT.
+ *
+ * Built by a function because the pseudo-locale must not exist in production:
+ * app/layout.tsx passes `process.env.NODE_ENV !== "production"`, and the
+ * production script contains no trace of it. Keep every key and rule here in
+ * lockstep with i18n/config.ts and i18n/locale-store.ts; pre-paint.test.ts runs
+ * both against the same inputs.
+ */
+export const localeScript = (allowPseudo: boolean): string =>
+  `(function(){try{var r=document.documentElement,l="en",s=null;` +
+  `if(/^\\/de(\\/|$)/.test(location.pathname)){r.lang="de";r.setAttribute("data-locale","de");return;}` +
+  `try{s=localStorage.getItem("tracktime.locale");}catch(e){}` +
+  (allowPseudo
+    ? `var q=null,o=null;try{q=new URLSearchParams(location.search).get("locale");o=localStorage.getItem("tracktime.locale.override");}catch(e){}` +
+      `if(q==="pseudo"||(q!=="off"&&o==="pseudo")){l="pseudo";}else `
+    : ``) +
+  `if(s==="en"||s==="de"){l=s;}else{var n=navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language||""];` +
+  `for(var i=0;i<n.length;i++){var p=String(n[i]).trim().toLowerCase().split(/[-_;]/)[0];if(p==="en"||p==="de"){l=p;break;}}}` +
+  (allowPseudo ? `r.lang=l==="pseudo"?"en-XA":l;` : `r.lang=l;`) +
+  `r.setAttribute("data-locale",l);` +
+  `if(l!=="en"){r.setAttribute("data-locale-pending","");setTimeout(function(){r.removeAttribute("data-locale-pending");},4000);}` +
+  `}catch(e){}})();`;
+
+/** The script app/layout.tsx inlines, for the build it is part of. */
+export const LOCALE_SCRIPT = localeScript(process.env.NODE_ENV !== "production");

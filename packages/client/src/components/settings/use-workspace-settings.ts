@@ -61,6 +61,7 @@ export const applySettingsPatch = (
       ? patch.durationFormat
       : current.durationFormat,
     theme: isDefined(patch.theme) ? patch.theme : current.theme,
+    locale: isDefined(patch.locale) ? patch.locale : current.locale,
     idle,
     maxDuration,
   };

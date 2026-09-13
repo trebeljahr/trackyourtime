@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "Track Your Time",
+    "description": "Extension name in the Chrome Web Store and the toolbar. The product name is never translated."
+  },
+  "extNameDev": {
+    "message": "Track Your Time (dev)",
+    "description": "Name of the development build, so it can sit beside the real one."
+  },
+  "extDescription": {
+    "message": "Start, stop and see your Track Your Time timer from the toolbar.",
+    "description": "Chrome Web Store short description. Maximum 132 characters."
+  }
+}

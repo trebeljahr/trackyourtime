@@ -4,7 +4,8 @@ import { AuthProvider } from "@/providers/auth-provider";
 import { MobileBridgeLoader } from "@/mobile/MobileBridgeLoader";
 import { Toaster } from "@/components/ui/sonner";
 import { OG_IMAGE } from "@/lib/page-metadata";
-import { NATIVE_SHELL_SCRIPT, THEME_SCRIPT } from "./pre-paint";
+import { LocaleRoot } from "@/i18n/locale-root";
+import { LOCALE_SCRIPT, NATIVE_SHELL_SCRIPT, THEME_SCRIPT } from "./pre-paint";
 import "@/styles/globals.css";
 
 const SITE_DESCRIPTION =
@@ -60,6 +61,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: NATIVE_SHELL_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: LOCALE_SCRIPT }} />
         {/* OpenPanel analytics — replace with your client ID */}
         {process.env.NEXT_PUBLIC_OPENPANEL_CLIENT_ID && (
           <script
@@ -83,9 +85,11 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
         <MobileBridgeLoader />
-        <TRPCProvider>
-          <AuthProvider>{children}</AuthProvider>
-        </TRPCProvider>
+        <LocaleRoot>
+          <TRPCProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </TRPCProvider>
+        </LocaleRoot>
         <Toaster />
       </body>
     </html>

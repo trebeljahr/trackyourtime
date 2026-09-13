@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 /** Explicit user choice; "system" defers to `prefers-color-scheme`. */
@@ -180,11 +181,16 @@ export const useTheme = (): UseThemeResult => {
   };
 };
 
-const OPTIONS: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Laptop },
-];
+/**
+ * Labels are message KEYS, not text: a module-level constant is evaluated once
+ * at import, before the locale is known, so translated text can never live
+ * here. The component resolves them with `t` on every render.
+ */
+const OPTIONS = [
+  { value: "light", labelKey: "theme.light", icon: Sun },
+  { value: "dark", labelKey: "theme.dark", icon: Moon },
+  { value: "system", labelKey: "theme.system", icon: Laptop },
+] as const satisfies readonly { value: ThemeChoice; labelKey: string; icon: typeof Sun }[];
 
 export type ThemeToggleProps = {
   className?: string;
@@ -193,6 +199,7 @@ export type ThemeToggleProps = {
 /** Light / Dark / System menu for the top bar. */
 export function ThemeToggle({ className }: ThemeToggleProps): React.JSX.Element {
   const { theme, resolved, setTheme } = useTheme();
+  const t = useT("shell");
 
   return (
     <DropdownMenu>
@@ -201,7 +208,7 @@ export function ThemeToggle({ className }: ThemeToggleProps): React.JSX.Element 
           variant="ghost"
           size="icon"
           className={cn(className)}
-          aria-label="Change theme"
+          aria-label={t("theme.change")}
           data-testid="theme-toggle"
         >
           {resolved === "dark" ? (
@@ -212,14 +219,14 @@ export function ThemeToggle({ className }: ThemeToggleProps): React.JSX.Element 
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" data-testid="theme-menu">
-        {OPTIONS.map(({ value, label, icon: Icon }) => (
+        {OPTIONS.map(({ value, labelKey, icon: Icon }) => (
           <DropdownMenuItem
             key={value}
             onSelect={() => setTheme(value)}
             data-testid={`theme-option-${value}`}
           >
             <Icon className="size-4" />
-            <span>{label}</span>
+            <span>{t(labelKey)}</span>
             <Check
               className={cn(
                 "ml-auto size-4",

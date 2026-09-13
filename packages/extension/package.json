@@ -14,7 +14,8 @@
     "@starter/core": "workspace:*",
     "@starter/shared": "workspace:*",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "use-intl": "^4.14.4"
   },
   "devDependencies": {
     "@types/chrome": "^0.2.7",

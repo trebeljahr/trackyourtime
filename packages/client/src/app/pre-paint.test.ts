@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { NATIVE_SHELL_SCRIPT, THEME_SCRIPT } from "./pre-paint";
+import { matchLocaleList } from "@starter/shared";
+
+import { LOCALE_PENDING_ATTRIBUTE } from "@/i18n/config";
+import { NATIVE_SHELL_SCRIPT, THEME_SCRIPT, localeScript } from "./pre-paint";
 
 /*
  * The pre-paint marker, run for real.
@@ -88,6 +91,96 @@ describe("NATIVE_SHELL_SCRIPT", () => {
   });
 });
 
+describe("LOCALE_SCRIPT", () => {
+  const root = document.documentElement;
+
+  const setLanguages = (languages: string[]): void => {
+    Object.defineProperty(window.navigator, "languages", { value: languages, configurable: true });
+  };
+
+  const at = (url: string): void => {
+    window.history.replaceState(null, "", url);
+  };
+
+  afterEach(() => {
+    root.removeAttribute("lang");
+    root.removeAttribute("data-locale");
+    root.removeAttribute(LOCALE_PENDING_ATTRIBUTE);
+    window.localStorage.clear();
+    setLanguages(["en-US"]);
+    at("/");
+    vi.useRealTimers();
+  });
+
+  it("follows the device and holds the page for a German reader", () => {
+    setLanguages(["de-DE", "en"]);
+    run(localeScript(false));
+    expect(root.lang).toBe("de");
+    expect(root.getAttribute("data-locale")).toBe("de");
+    expect(root.hasAttribute(LOCALE_PENDING_ATTRIBUTE)).toBe(true);
+  });
+
+  it("never gates an English reader", () => {
+    run(localeScript(false));
+    expect(root.lang).toBe("en");
+    expect(root.hasAttribute(LOCALE_PENDING_ATTRIBUTE)).toBe(false);
+  });
+
+  it("a stored choice beats the device", () => {
+    setLanguages(["de-DE"]);
+    window.localStorage.setItem("tracktime.locale", "en");
+    run(localeScript(false));
+    expect(root.lang).toBe("en");
+    expect(root.hasAttribute(LOCALE_PENDING_ATTRIBUTE)).toBe(false);
+  });
+
+  it("agrees with the runtime resolver on every device language list", () => {
+    // If the script and i18n/locale-store.ts ever disagree, the gate is lifted
+    // on a page in the wrong language (or held for a switch that never comes).
+    const lists = [["de"], ["de-CH"], ["fr-FR", "de-AT"], ["fr", "es"], ["EN_gb", "de"], [""], []];
+    for (const languages of lists) {
+      setLanguages(languages);
+      root.removeAttribute("data-locale");
+      run(localeScript(false));
+      expect(root.getAttribute("data-locale"), languages.join(",")).toBe(matchLocaleList(languages));
+    }
+  });
+
+  it("leaves the prerendered German pages alone", () => {
+    at("/de/privacy/");
+    run(localeScript(true));
+    expect(root.lang).toBe("de");
+    expect(root.hasAttribute(LOCALE_PENDING_ATTRIBUTE)).toBe(false);
+  });
+
+  it("lifts the gate on its own if the app never loads", () => {
+    vi.useFakeTimers();
+    setLanguages(["de"]);
+    run(localeScript(false));
+    expect(root.hasAttribute(LOCALE_PENDING_ATTRIBUTE)).toBe(true);
+    vi.advanceTimersByTime(4000);
+    expect(root.hasAttribute(LOCALE_PENDING_ATTRIBUTE)).toBe(false);
+  });
+
+  it("offers the pseudo-locale only in a build that allows it", () => {
+    at("/track/?locale=pseudo");
+    run(localeScript(false));
+    expect(root.getAttribute("data-locale")).toBe("en");
+    expect(localeScript(false)).not.toContain("pseudo");
+
+    run(localeScript(true));
+    expect(root.getAttribute("data-locale")).toBe("pseudo");
+    expect(root.lang).toBe("en-XA");
+  });
+
+  it("writes only to <html>", () => {
+    setLanguages(["de"]);
+    const before = document.body.outerHTML;
+    run(localeScript(true));
+    expect(document.body.outerHTML).toBe(before);
+  });
+});
+
 describe("app/layout.tsx", () => {
   const layout = readFileSync(join(__dirname, "layout.tsx"), "utf8");
 
@@ -107,5 +200,12 @@ describe("app/layout.tsx", () => {
     expect(head.indexOf("NATIVE_SHELL_SCRIPT")).toBeLessThan(
       head.indexOf("THEME_SCRIPT"),
     );
+  });
+
+  it("inlines the locale script in <head> and gates the app inside <body>", () => {
+    const head = layout.slice(layout.indexOf("<head>"), layout.indexOf("</head>"));
+    expect(head).toContain("LOCALE_SCRIPT");
+    const body = layout.slice(layout.indexOf("<body"), layout.indexOf("</body>"));
+    expect(body).toContain("<LocaleRoot>");
   });
 });

@@ -3,6 +3,8 @@ import Link from "next/link";
 
 import { BrandMark } from "@/components/brand-mark";
 import { SignedInRedirect } from "@/components/marketing/signed-in-redirect";
+import { FixedLocale } from "@/i18n/locale-root";
+import { localizedPath, marketingT, MARKETING_LOCALES, type Locale } from "@/i18n/marketing";
 import { OPENAPI_URL, REPO_URL } from "@/lib/site-links";
 
 const NAV = [
@@ -21,18 +23,26 @@ const NAV = [
  */
 export function MarketingShell({
   children,
+  locale = "en",
+  path,
   redirectSignedIn = false,
 }: {
   children: React.ReactNode;
+  /** The language this copy of the page is built in. */
+  locale?: Locale;
+  /** The page's ENGLISH path ("/privacy/"), for the language switch. */
+  path: string;
   /** Send a signed-in visitor to /track. Only the landing page does this. */
   redirectSignedIn?: boolean;
 }): React.ReactElement {
+  const href = (target: string): string => localizedPath(locale, target);
   return (
+    <FixedLocale locale={locale}>
     <div data-marketing className="flex min-h-screen flex-col">
       {redirectSignedIn && <SignedInRedirect />}
       <header className="border-b">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
-          <Link href="/" className="inline-flex items-center gap-2" data-testid="marketing-home">
+          <Link href={href("/")} className="inline-flex items-center gap-2" data-testid="marketing-home">
             <BrandMark label={null} className="size-7" />
             <span className="text-xl font-semibold tracking-tight">
               Track Your <span className="text-brand">Time</span>
@@ -40,7 +50,7 @@ export function MarketingShell({
           </Link>
           <nav className="order-3 flex w-full gap-5 text-sm text-muted-foreground sm:order-none sm:w-auto">
             {NAV.map((item) => (
-              <Link key={item.href} href={item.href} className="hover:text-foreground">
+              <Link key={item.href} href={href(item.href)} className="hover:text-foreground">
                 {item.label}
               </Link>
             ))}
@@ -68,18 +78,52 @@ export function MarketingShell({
             <p>Open-source time tracking on your own server.</p>
           </div>
           <ul className="space-y-2">
-            <li><Link href="/extension/" className="hover:text-foreground">Chrome extension</Link></li>
-            <li><Link href="/raycast/" className="hover:text-foreground">Raycast extension</Link></li>
-            <li><Link href="/mobile/" className="hover:text-foreground">iPhone and Android</Link></li>
+            <li><Link href={href("/extension/")} className="hover:text-foreground">Chrome extension</Link></li>
+            <li><Link href={href("/raycast/")} className="hover:text-foreground">Raycast extension</Link></li>
+            <li><Link href={href("/mobile/")} className="hover:text-foreground">iPhone and Android</Link></li>
           </ul>
           <ul className="space-y-2">
             <li><a href={REPO_URL} className="hover:text-foreground">Source code</a></li>
             <li><a href={OPENAPI_URL} className="hover:text-foreground">API specification</a></li>
-            <li><Link href="/privacy/" className="hover:text-foreground">Privacy policy</Link></li>
-            <li><Link href="/support/" className="hover:text-foreground">Support</Link></li>
+            <li><Link href={href("/privacy/")} className="hover:text-foreground">Privacy policy</Link></li>
+            <li><Link href={href("/support/")} className="hover:text-foreground">Support</Link></li>
           </ul>
+          <LanguageSwitch locale={locale} path={path} />
         </div>
       </footer>
     </div>
+    </FixedLocale>
+  );
+}
+
+/**
+ * Links to this page in every other language, each labelled in its own
+ * language ("Deutsch" on the English page, "English" on the German one) and
+ * marked with `hreflang` and `lang`.
+ */
+function LanguageSwitch({ locale, path }: { locale: Locale; path: string }): React.ReactElement {
+  const t = marketingT(locale);
+  const label: Record<Locale, string> = {
+    en: t("languageSwitch.toEn"),
+    de: t("languageSwitch.toDe"),
+  };
+  return (
+    <nav aria-label={t("languageSwitch.label")} className="sm:col-span-3" data-testid="language-switch">
+      <ul className="flex gap-4">
+        {MARKETING_LOCALES.filter((each) => each !== locale).map((each) => (
+          <li key={each}>
+            <Link
+              href={localizedPath(each, path)}
+              hrefLang={each}
+              lang={each}
+              className="hover:text-foreground"
+              data-testid={`language-switch-${each}`}
+            >
+              {label[each]}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }

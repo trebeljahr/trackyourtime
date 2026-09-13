@@ -21,6 +21,13 @@ export type BuildTarget = {
   /** Distinct so a dev build and a real one can sit in the toolbar together. */
   name: string;
   /**
+   * The `_locales/<lang>/messages.json` key the manifest names the extension by.
+   * Chrome resolves `__MSG_<key>__` in the BROWSER's UI language — which is
+   * right for the store listing and the toolbar tooltip, and exactly why the
+   * popup itself does not use `chrome.i18n` (see src/i18n/index.ts).
+   */
+  nameMessage: "extName" | "extNameDev";
+  /**
    * Hosts the extension may talk to. Narrow on purpose: this is the line
    * Chrome shows the user at install time, and `https://*\/*` reads as "every
    * site you visit" for something that talks to exactly one server.
@@ -35,6 +42,7 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
     // instead, which is what the popup's runtime override is for.
     apiUrl: "http://localhost:5159",
     name: "Track Your Time (dev)",
+    nameMessage: "extNameDev",
     hostPermissions: ["http://localhost/*", "http://127.0.0.1/*"],
     // Deliberately still `dist`: an unpacked extension's id is derived from
     // its path, so moving this would change the id, and with it the
@@ -54,6 +62,7 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
     // `https://api.trackyourtime.dev/api/trpc`.
     apiUrl: "https://api.trackyourtime.dev",
     name: "Track Your Time",
+    nameMessage: "extName",
     hostPermissions: ["https://api.trackyourtime.dev/*"],
     outDir: "dist-prod",
   },
@@ -86,16 +95,19 @@ export function buildManifest(mode: BuildMode): Record<string, unknown> {
 
   return {
     manifest_version: 3,
-    name: target.name,
+    // Localised through public/_locales; `default_locale` is mandatory once
+    // that directory exists, and Chrome refuses to load the extension without it.
+    name: `__MSG_${target.nameMessage}__`,
+    default_locale: "en",
     version: VERSION,
-    description: "Start, stop and see your Track Your Time timer from the toolbar.",
+    description: "__MSG_extDescription__",
     // WebSocket traffic only keeps an MV3 service worker alive from 116 on,
     // and the sync socket depends on that.
     minimum_chrome_version: "116",
     ...(key ? { key } : {}),
     action: {
       default_popup: "src/popup/index.html",
-      default_title: target.name,
+      default_title: `__MSG_${target.nameMessage}__`,
     },
     background: {
       service_worker: "background.js",
