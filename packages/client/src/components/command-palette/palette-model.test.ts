@@ -147,7 +147,7 @@ describe("buildPaletteGroups", () => {
     expect(projects?.items[1]?.label).toBe("Open report filtered by Website");
     expect(projects?.items[1]?.action).toEqual({
       kind: "navigate",
-      href: "/reports/detailed?from=2026-01-01&to=2026-12-31&projects=p1",
+      href: "/reports?from=2026-01-01&to=2026-12-31&projects=p1&view=entries",
     });
   });
 
