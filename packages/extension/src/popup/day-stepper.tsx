@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { addDaysToKey, dayKeyInZone, type DayKey } from "@starter/core";
+import { usePopupLocale, useT } from "../i18n/use-t";
 import { entryDayLabel } from "./entry-format";
 
 /**
@@ -32,6 +33,8 @@ export function DayStepper({
   disabled = false,
   testId,
 }: DayStepperProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
   const ms = Date.parse(value);
   const dayKey = dayKeyInZone(Number.isNaN(ms) ? Date.now() : ms, zone);
   const todayKey = dayKeyInZone(Date.now(), zone);
@@ -42,12 +45,12 @@ export function DayStepper({
 
   return (
     <div className="field">
-      <span className="field__label">Day</span>
+      <span className="field__label">{t("fields.day")}</span>
       <div className="daystep" data-testid={testId}>
         <button
           type="button"
           className="daystep__button"
-          aria-label="Previous day"
+          aria-label={t("dayStepper.previous")}
           disabled={disabled}
           onClick={() => onChange(addDaysToKey(dayKey, -1))}
           data-testid={`${testId}-prev`}
@@ -56,13 +59,13 @@ export function DayStepper({
         </button>
 
         <span className="daystep__label" data-testid={`${testId}-label`}>
-          {entryDayLabel(dayKey, todayKey)}
+          {entryDayLabel(dayKey, todayKey, t, locale)}
         </span>
 
         <button
           type="button"
           className="daystep__button"
-          aria-label="Next day"
+          aria-label={t("dayStepper.next")}
           disabled={disabled || atToday}
           onClick={() => onChange(addDaysToKey(dayKey, 1))}
           data-testid={`${testId}-next`}
@@ -77,7 +80,7 @@ export function DayStepper({
           onClick={() => onChange(todayKey)}
           data-testid={`${testId}-today`}
         >
-          Today
+          {t("dayStepper.today")}
         </button>
       </div>
     </div>

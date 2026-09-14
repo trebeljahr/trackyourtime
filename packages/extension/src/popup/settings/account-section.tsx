@@ -6,6 +6,7 @@ import { ConfirmPanel } from "../confirm-panel";
 import { ServerPicker } from "../server-picker";
 import type { SetServerOutcome } from "../switch-server";
 import { join, openTab } from "../open-tab";
+import { useT, type PopupT } from "../../i18n/use-t";
 
 /**
  * Who is signed in, where the server is, and the way out.
@@ -36,8 +37,8 @@ export type AccountSectionProps = {
   onSignOut: () => Promise<boolean>;
 };
 
-export function accountHint(email: string | null): string {
-  return email ?? "Signed in";
+export function accountHint(email: string | null, t: PopupT): string {
+  return email ?? t("app.signedIn");
 }
 
 export function AccountSection({
@@ -50,6 +51,7 @@ export function AccountSection({
   onSetServer,
   onSignOut,
 }: AccountSectionProps): JSX.Element {
+  const t = useT("popup");
   const [showServer, setShowServer] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -61,16 +63,15 @@ export function AccountSection({
       {/* Not a SettingRow: there is no control here for a <label> to point
           at, and a label with nothing to name is a screen-reader dead end. */}
       <div className="setting" data-testid="setting-account-email">
-        <span className="setting__label">Signed in as</span>
+        <span className="setting__label">{t("account.signedInAs")}</span>
         <span className="footer__email" title={email ?? ""}>
-          {email ?? "Signed in"}
+          {email ?? t("app.signedIn")}
         </span>
       </div>
 
       {shared ? (
         <p className="setting__note" data-testid="account-shared-session">
-          Signed in with the web app’s session — signing out here signs out
-          Track Your Time in this browser too.
+          {t("account.sharedSession")}
         </p>
       ) : null}
 
@@ -81,7 +82,7 @@ export function AccountSection({
           onClick={() => openTab(join(webUrl, "/track"))}
           data-testid="account-open-app"
         >
-          Open Track Your Time ↗
+          {t("actions.openAppExternal")}
         </button>
       ) : null}
 
@@ -104,7 +105,7 @@ export function AccountSection({
         onClick={() => setShowServer((open) => !open)}
         data-testid="account-api-url-toggle"
       >
-        {showServer ? "Keep this server" : "Change server…"}
+        {showServer ? t("account.keepServer") : t("account.changeServer")}
       </button>
 
       {showServer ? (
@@ -118,13 +119,9 @@ export function AccountSection({
 
       {confirming ? (
         <ConfirmPanel
-          title="Sign out?"
-          hint={
-            shared
-              ? "This session is shared with the web app, so Track Your Time signs out in this browser too."
-              : "Anything already tracked is kept. You sign in again to keep tracking."
-          }
-          confirmLabel="Sign out"
+          title={t("account.signOutTitle")}
+          hint={shared ? t("account.signOutSharedHint") : t("account.signOutHint")}
+          confirmLabel={t("actions.signOut")}
           danger
           busy={busy}
           onCancel={() => setConfirming(false)}
@@ -146,7 +143,7 @@ export function AccountSection({
           onClick={() => setConfirming(true)}
           data-testid="account-sign-out"
         >
-          Sign out
+          {t("actions.signOut")}
         </button>
       )}
     </>

@@ -31,8 +31,9 @@ export type NumberFieldProps = {
 };
 
 const parseNumber = (raw: string): number | null => {
-  // A comma is what a German keyboard produces for a decimal point, and this
-  // popup has no locale of its own to consult.
+  // A comma is what a German keyboard produces for a decimal point. Accepted
+  // in every language rather than only in German: the keyboard, not the
+  // interface language, decides which key a person reaches for.
   const normalized = raw.trim().replace(",", ".");
   if (normalized === "") return null;
   const parsed = Number(normalized);

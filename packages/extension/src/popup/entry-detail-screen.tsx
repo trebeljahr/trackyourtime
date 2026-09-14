@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from "react
 import {
   dayKeyInZone,
   deviceTimeZone,
-  formatDuration,
   isTempId,
   type DetailedEntry,
   type DurationFormat,
 } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
+import { formatDurationFor, formatIdleSpanFor } from "../i18n/format";
+import { usePopupLocale, useT } from "../i18n/use-t";
 import { ConfirmPanel } from "./confirm-panel";
 import { entryDayLabel, entrySubtitle, entryZone } from "./entry-format";
 import { EntryForm, type EntryFieldPatch } from "./entry-form";
@@ -81,6 +82,8 @@ export function EntryDetailScreen({
   onCreateTask,
   onMissing,
 }: EntryDetailScreenProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const alertRef = useRef<HTMLParagraphElement>(null);
@@ -132,6 +135,7 @@ export function EntryDetailScreen({
   };
 
   const sync = describeSync(
+    t,
     state.syncStatus,
     state.serverReachable,
     state.pendingSync,
@@ -141,10 +145,12 @@ export function EntryDetailScreen({
   const zone = entry === null ? deviceTimeZone() : entryZone(entry);
   const title =
     entry === null
-      ? "Entry"
+      ? t("entryDetail.title")
       : entryDayLabel(
           dayKeyInZone(Date.parse(entry.start), zone),
           dayKeyInZone(Date.now(), deviceTimeZone()),
+          t,
+          locale,
         );
 
   // A row that only exists as a queued `entries.create` cannot be edited: an
@@ -197,26 +203,27 @@ export function EntryDetailScreen({
             onClick={onGoTracker}
             data-testid="idle-alert"
           >
-            Away for {Math.round(state.pendingIdle.idleSec / 60)} min — resolve
+            {t("idle.alert", {
+              span: formatIdleSpanFor(state.pendingIdle.idleSec, locale),
+            })}
           </button>
         ) : null}
 
         {entry === null || values === null ? (
           <p className="loading" data-testid="entry-loading">
-            Loading…
+            {t("app.loading")}
           </p>
         ) : (
           <div className="detail">
             {queued ? (
               <p className="detail__locked" data-testid="entry-queued">
-                Not sent yet — try again in a moment.
+                {t("entryDetail.queued")}
               </p>
             ) : null}
 
             {invoiced ? (
               <p className="detail__locked" data-testid="entry-invoiced">
-                On an invoice — times, project and billable are locked. The
-                description and tags can still be changed.
+                {t("entryDetail.invoiced")}
               </p>
             ) : null}
 
@@ -237,9 +244,13 @@ export function EntryDetailScreen({
 
             {confirming ? (
               <ConfirmPanel
-                title="Delete this entry?"
-                hint={`${formatDuration(entry.durationSec, durationFormat)} · ${title} · ${entrySubtitle(entry)}`}
-                confirmLabel="Delete"
+                title={t("entryDetail.deleteTitle")}
+                hint={t("entryDetail.deleteHint", {
+                  duration: formatDurationFor(entry.durationSec, locale, durationFormat),
+                  day: title,
+                  subtitle: entrySubtitle(entry, t),
+                })}
+                confirmLabel={t("actions.delete")}
                 danger
                 busy={busy}
                 onConfirm={() => {
@@ -251,7 +262,7 @@ export function EntryDetailScreen({
             ) : invoiced ? (
               /* The server refuses it, so offering the button would only be a
                  way to be told no. */
-              <p className="detail__note">An invoiced entry cannot be deleted.</p>
+              <p className="detail__note">{t("entryDetail.cannotDelete")}</p>
             ) : (
               <div className="detail__actions">
                 {/* Enabled even while queued, unlike every field above it: a
@@ -265,7 +276,7 @@ export function EntryDetailScreen({
                   onClick={() => setConfirming(true)}
                   data-testid="entry-delete"
                 >
-                  Delete entry
+                  {t("entryDetail.deleteEntry")}
                 </button>
               </div>
             )}

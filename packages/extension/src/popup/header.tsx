@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { useT } from "../i18n/use-t";
 import type { SyncLabel } from "./sync-label";
 
 /**
@@ -40,13 +41,14 @@ export function Header({
   onOpenSuggestions,
   sync,
 }: HeaderProps): JSX.Element {
+  const t = useT("popup");
   return (
     <div className="header">
       {onBack !== undefined ? (
         <button
           type="button"
           className="icon-button header__back"
-          aria-label="Back"
+          aria-label={t("header.back")}
           onClick={onBack}
           data-testid="header-back"
         >
@@ -73,8 +75,8 @@ export function Header({
           <button
             type="button"
             className="icon-button"
-            aria-label="New entry"
-            title="New entry"
+            aria-label={t("header.newEntry")}
+            title={t("header.newEntry")}
             onClick={onNewEntry}
             data-testid="header-new-entry"
           >
@@ -99,8 +101,8 @@ export function Header({
           <button
             type="button"
             className="icon-button"
-            aria-label="Entries"
-            title="Entries"
+            aria-label={t("header.entries")}
+            title={t("header.entries")}
             onClick={onOpenEntries}
             data-testid="header-entries"
           >
@@ -112,8 +114,8 @@ export function Header({
           <button
             type="button"
             className="icon-button"
-            aria-label="Settings"
-            title="Settings"
+            aria-label={t("header.settings")}
+            title={t("header.settings")}
             onClick={onOpenSettings}
             data-testid="header-settings"
           >

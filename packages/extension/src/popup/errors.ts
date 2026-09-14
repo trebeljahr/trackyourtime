@@ -1,5 +1,6 @@
 /**
- * Turn a {@link BackgroundResponse} failure into something a user can act on.
+ * Turn a {@link BackgroundResponse} failure into something a user can act on,
+ * in the popup's language.
  *
  * The worker forwards core's `AuthError.code` untouched, and those codes are
  * written for programs: "NO_SESSION_TOKEN" tells a developer the server is
@@ -11,9 +12,13 @@
  *   - no session token     → the server is wrong, not the password; retrying
  *                            forever is the failure mode to avoid here
  *
- * Anything unrecognised falls through to the worker's own message rather than
- * a generic apology, so a new server-side code still says something true.
+ * Translated HERE, from the code, rather than in the worker: the popup always
+ * knows the reader's language synchronously, while a worker MV3 evicts every
+ * thirty seconds wakes up without its settings. The worker's own `message`
+ * is English developer text, used only for a code this file does not know —
+ * so a new server-side code still says something true.
  */
+import type { PopupT } from "../i18n/use-t";
 
 import { serverHost } from "@starter/core";
 
@@ -48,34 +53,67 @@ const looksLikeNetworkFailure = (message: string): boolean =>
     message,
   );
 
+/**
+ * Codes with one fixed meaning, whichever of the worker, better-auth or tRPC
+ * raised them. Codes that carry a specific server sentence (BAD_REQUEST,
+ * CONFLICT) are deliberately absent: a generic line would say less than the
+ * server did.
+ */
+const fixedMessage = (code: string, t: PopupT): string | null => {
+  switch (code) {
+    case "INVALID_EMAIL":
+      return t("errors.invalidEmail");
+    case "EMAIL_NOT_VERIFIED":
+      return t("errors.emailNotVerified");
+    case "NO_FETCH":
+      return t("errors.noFetch");
+    case "NOT_SIGNED_IN":
+      return t("errors.notSignedIn");
+    case "STILL_SYNCING":
+      return t("errors.stillSyncing");
+    case "BAD_TIME_RANGE":
+      return t("errors.badTimeRange");
+    case "REVOKE_SELF":
+      return t("errors.revokeSelf");
+    case "NOT_RUNNING":
+      return t("errors.notRunning");
+    case "INVALID_API_URL":
+      return t("errors.invalidApiUrl");
+    case "BAD_MESSAGE":
+      return t("errors.badMessage");
+    case "FORBIDDEN":
+      return t("errors.forbidden");
+    case "NOT_FOUND":
+      return t("errors.notFound");
+    case "TOO_MANY_REQUESTS":
+      return t("errors.tooManyRequests");
+    case "UNKNOWN":
+    case "INTERNAL_SERVER_ERROR":
+      return t("errors.generic");
+    default:
+      return null;
+  }
+};
+
 export function describeError(
   code: string,
   message: string,
   apiUrl: string,
+  t: PopupT,
 ): string {
-  if (CREDENTIAL_CODES.has(code)) {
-    return "That email and password did not match an account.";
-  }
+  if (CREDENTIAL_CODES.has(code)) return t("errors.credentials");
 
-  if (code === "NO_SESSION_TOKEN") {
-    return (
-      "The server accepted the password but returned no session token, so " +
-      "there is nothing for the extension to keep. Its better-auth bearer " +
-      "plugin needs to be enabled — signing in again will not help."
-    );
-  }
+  if (code === "NO_SESSION_TOKEN") return t("errors.noSessionToken");
 
-  if (WORKER_CODES.has(code)) {
-    return "The extension's background worker did not answer. Close and reopen the popup.";
-  }
+  if (WORKER_CODES.has(code)) return t("errors.worker");
 
   if (NETWORK_CODES.has(code) || looksLikeNetworkFailure(message)) {
-    return `Could not reach ${serverHost(apiUrl)}. Check the server address and that the server is running.`;
+    return t("errors.unreachable", { server: serverHost(apiUrl) });
   }
 
   if (/^HTTP_5\d\d$/.test(code)) {
-    return `The server failed with ${code.slice(5)}. Try again in a moment.`;
+    return t("errors.serverFailed", { status: code.slice(5) });
   }
 
-  return message;
+  return fixedMessage(code, t) ?? (message.trim() === "" ? t("errors.generic") : message);
 }

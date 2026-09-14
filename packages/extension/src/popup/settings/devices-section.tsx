@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type JSX } from "react";
-import type { DeviceSession } from "@starter/core";
+import type { ClientKind, DeviceSession } from "@starter/core";
+import type { Locale } from "@starter/shared";
+import { formatRelativePast } from "../../i18n/format";
+import { usePopupLocale, useT, type PopupT } from "../../i18n/use-t";
 import { ConfirmPanel } from "../confirm-panel";
 
 /**
@@ -34,48 +37,40 @@ type Confirm =
   | { kind: "others" }
   | { kind: "self" };
 
-export function devicesHint(devices: DeviceSession[] | null): string {
+export function devicesHint(devices: DeviceSession[] | null, t: PopupT): string {
   if (devices === null) return "…";
-  return devices.length === 1 ? "1 signed in" : `${devices.length} signed in`;
+  return t("devices.hint", { count: devices.length });
 }
 
 /** "3 minutes ago" — sessions are short-lived enough that relative reads best. */
-const formatRelative = (iso: string): string => {
+const formatRelative = (iso: string, t: PopupT, locale: Locale): string => {
   const then = Date.parse(iso);
-  if (Number.isNaN(then)) return "unknown";
+  if (Number.isNaN(then)) return t("devices.unknown");
 
   const seconds = Math.round((Date.now() - then) / 1000);
-  if (seconds < 60) return "just now";
-
-  const units: ReadonlyArray<[Intl.RelativeTimeFormatUnit, number]> = [
-    ["minute", 60],
-    ["hour", 3600],
-    ["day", 86_400],
-    ["month", 2_592_000],
-    ["year", 31_536_000],
-  ];
-
-  // Largest unit that fits, walked from the top. Comparing against a multiple
-  // of the candidate's own size instead would let "hour" run to 60 hours, and
-  // a device last seen two days ago would read "50 hours ago".
-  let unit: Intl.RelativeTimeFormatUnit = "minute";
-  let divisor = 60;
-  for (const [candidate, size] of [...units].reverse()) {
-    if (seconds < size) continue;
-    unit = candidate;
-    divisor = size;
-    break;
-  }
-
-  return new Intl.RelativeTimeFormat(undefined, { numeric: "auto" }).format(
-    -Math.round(seconds / divisor),
-    unit,
-  );
+  if (seconds < 60) return t("devices.justNow");
+  return formatRelativePast(seconds, locale);
 };
 
-const SHARED_SESSION_HINT =
-  "This session is shared with the web app, so signing out here signs out " +
-  "Track Your Time in this browser too.";
+/** The kind of client, said as a word rather than as its stored id. */
+const clientLabel = (client: ClientKind, t: PopupT): string => {
+  switch (client) {
+    case "web":
+      return t("devices.clients.web");
+    case "desktop":
+      return t("devices.clients.desktop");
+    case "mobile":
+      return t("devices.clients.mobile");
+    case "raycast":
+      return t("devices.clients.raycast");
+    case "extension":
+      return t("devices.clients.extension");
+    case "cli":
+      return t("devices.clients.cli");
+    case "unknown":
+      return t("devices.clients.unknown");
+  }
+};
 
 export function DevicesSection({
   devices,
@@ -85,6 +80,8 @@ export function DevicesSection({
   onRevokeOthers,
   onSignOut,
 }: DevicesSectionProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -111,7 +108,7 @@ export function DevicesSection({
   };
 
   if (devices === null) {
-    return <p className="loading">Loading devices…</p>;
+    return <p className="loading">{t("devices.loading")}</p>;
   }
 
   return (
@@ -130,11 +127,14 @@ export function DevicesSection({
                     as-is rather than re-derived from the user agent here. */}
                 {device.name}
                 {device.current ? (
-                  <span className="device__badge">This browser</span>
+                  <span className="device__badge">{t("devices.thisBrowser")}</span>
                 ) : null}
               </span>
               <span className="device__hint">
-                {device.client} · Last active {formatRelative(device.updatedAt)}
+                {t("devices.lastActive", {
+                  client: clientLabel(device.client, t),
+                  when: formatRelative(device.updatedAt, t, locale),
+                })}
                 {device.ipAddress !== null ? ` · ${device.ipAddress}` : ""}
               </span>
             </div>
@@ -152,24 +152,24 @@ export function DevicesSection({
               }
               data-testid={`device-revoke-${device.id}`}
             >
-              Sign out
+              {t("actions.signOut")}
             </button>
 
             {open ? (
               <ConfirmPanel
                 title={
                   device.current
-                    ? "Sign this browser out?"
-                    : "Sign this device out?"
+                    ? t("devices.signOutBrowserTitle")
+                    : t("devices.signOutDeviceTitle")
                 }
                 hint={
                   device.current
                     ? sharedSession
-                      ? SHARED_SESSION_HINT
-                      : "The extension forgets its session and you sign in again."
-                    : `${device.name} stops syncing immediately and has to sign in again. Nothing it already tracked is lost.`
+                      ? t("devices.sharedSessionHint")
+                      : t("devices.signOutBrowserHint")
+                    : t("devices.signOutDeviceHint", { name: device.name })
                 }
-                confirmLabel="Sign out"
+                confirmLabel={t("actions.signOut")}
                 danger
                 busy={busy}
                 onCancel={() => setConfirm(null)}
@@ -194,14 +194,14 @@ export function DevicesSection({
         onClick={() => setConfirm({ kind: "others" })}
         data-testid="devices-revoke-others"
       >
-        Sign out other devices
+        {t("devices.signOutOthers")}
       </button>
 
       {confirm !== null && confirm.kind === "others" ? (
         <ConfirmPanel
-          title="Sign every other device out?"
-          hint="This browser stays signed in. Everything else has to sign in again."
-          confirmLabel="Sign them out"
+          title={t("devices.signOutOthersTitle")}
+          hint={t("devices.signOutOthersHint")}
+          confirmLabel={t("devices.signOutOthersConfirm")}
           danger
           busy={busy}
           onCancel={() => setConfirm(null)}

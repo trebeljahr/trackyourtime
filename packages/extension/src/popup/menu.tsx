@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from "react";
+import { useT } from "../i18n/use-t";
 import { join, openTab } from "./open-tab";
 
 /**
@@ -17,6 +18,7 @@ export type MenuProps = {
 };
 
 export function Menu({ webUrl }: MenuProps): JSX.Element {
+  const t = useT("popup");
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +45,7 @@ export function Menu({ webUrl }: MenuProps): JSX.Element {
         className="menu__trigger"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="More"
+        aria-label={t("menu.more")}
         onClick={() => setOpen((current) => !current)}
         data-testid="menu-trigger"
       >
@@ -59,7 +61,7 @@ export function Menu({ webUrl }: MenuProps): JSX.Element {
             onClick={() => openTab(join(webUrl, "/track"))}
             data-testid="menu-open-app"
           >
-            Open Track Your Time
+            {t("actions.openApp")}
           </button>
           <button
             type="button"
@@ -68,7 +70,7 @@ export function Menu({ webUrl }: MenuProps): JSX.Element {
             onClick={() => openTab(join(webUrl, "/reports"))}
             data-testid="menu-reports"
           >
-            Reports
+            {t("menu.reports")}
           </button>
         </div>
       )}

@@ -1,18 +1,23 @@
 import type { JSX } from "react";
-import {
-  formatDuration,
-  type DurationFormat,
-  type ResolvedSettings,
-  type ThemePreference,
-  type TimeFormat,
-  type WeekStart,
+import type {
+  DurationFormat,
+  ResolvedSettings,
+  ThemePreference,
+  TimeFormat,
+  WeekStart,
 } from "@starter/core";
+import type { Locale, LocalePreference } from "@starter/shared";
+import { currencyName, formatDurationFor, formatWeekday } from "../../i18n/format";
+import { usePopupLocale, useT, type PopupT } from "../../i18n/use-t";
 import type { SettingsPatch } from "../../lib/messaging";
 import { NumberField } from "../number-field";
 import { SettingRow } from "../accordion";
 
 /**
- * Clock, duration, week, money.
+ * Language, theme, clock, duration, week, money.
+ *
+ * Language and theme are personal and synced; the popup follows both from the
+ * snapshot rather than applying a pick locally.
  *
  * The last three are WORKSPACE fields, and `settings.update` refuses them with
  * FORBIDDEN when the caller's membership role is "member". They are rendered
@@ -32,80 +37,137 @@ export type GeneralSectionProps = {
   onSave: (patch: SettingsPatch) => Promise<boolean>;
 };
 
-const THEMES: ReadonlyArray<{ value: ThemePreference; label: string }> = [
-  { value: "system", label: "Match the system" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
+const THEMES: readonly ThemePreference[] = ["system", "light", "dark"];
+
+const LANGUAGES: readonly LocalePreference[] = ["system", "en", "de"];
+
+const TIME_FORMATS: readonly TimeFormat[] = ["24h", "12h"];
+
+const DURATION_FORMATS: readonly DurationFormat[] = ["hms", "decimal"];
+
+/** Monday first: the workspace default, and the order most of the world reads. */
+const WEEK_STARTS: readonly WeekStart[] = [1, 0];
+
+/**
+ * ISO 4217 codes offered in the picker. Any 3-letter code is valid
+ * server-side; the names come from `Intl.DisplayNames` in the reader's
+ * language, so no list of currency names is kept here.
+ */
+const CURRENCIES: readonly string[] = [
+  "EUR",
+  "USD",
+  "GBP",
+  "CHF",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
+  "CZK",
+  "CAD",
+  "AUD",
+  "NZD",
+  "JPY",
+  "SGD",
+  "HKD",
+  "INR",
+  "BRL",
+  "MXN",
+  "ZAR",
 ];
 
-const TIME_FORMATS: ReadonlyArray<{ value: TimeFormat; label: string }> = [
-  { value: "24h", label: "24-hour" },
-  { value: "12h", label: "12-hour" },
-];
+/** 1.5 hours: the sample every duration-format label is spelled with. */
+const SAMPLE_DURATION_SEC = 5400;
 
-const DURATION_FORMATS: ReadonlyArray<{ value: DurationFormat; label: string }> = [
-  { value: "hms", label: "1:30:00" },
-  { value: "decimal", label: "1.50 h" },
-];
+const themeLabel = (theme: ThemePreference, t: PopupT): string => {
+  switch (theme) {
+    case "system":
+      return t("general.themes.system");
+    case "light":
+      return t("general.themes.light");
+    case "dark":
+      return t("general.themes.dark");
+  }
+};
 
-const WEEK_STARTS: ReadonlyArray<{ value: "0" | "1"; label: string }> = [
-  { value: "1", label: "Monday" },
-  { value: "0", label: "Sunday" },
-];
+const languageLabel = (language: LocalePreference, t: PopupT): string => {
+  switch (language) {
+    case "system":
+      return t("general.languages.system");
+    case "en":
+      return t("general.languages.en");
+    case "de":
+      return t("general.languages.de");
+  }
+};
 
-/** ISO 4217 codes offered in the picker. Any 3-letter code is valid server-side. */
-const CURRENCIES: ReadonlyArray<{ code: string; label: string }> = [
-  { code: "EUR", label: "Euro" },
-  { code: "USD", label: "US Dollar" },
-  { code: "GBP", label: "British Pound" },
-  { code: "CHF", label: "Swiss Franc" },
-  { code: "SEK", label: "Swedish Krona" },
-  { code: "NOK", label: "Norwegian Krone" },
-  { code: "DKK", label: "Danish Krone" },
-  { code: "PLN", label: "Polish Zloty" },
-  { code: "CZK", label: "Czech Koruna" },
-  { code: "CAD", label: "Canadian Dollar" },
-  { code: "AUD", label: "Australian Dollar" },
-  { code: "NZD", label: "New Zealand Dollar" },
-  { code: "JPY", label: "Japanese Yen" },
-  { code: "SGD", label: "Singapore Dollar" },
-  { code: "HKD", label: "Hong Kong Dollar" },
-  { code: "INR", label: "Indian Rupee" },
-  { code: "BRL", label: "Brazilian Real" },
-  { code: "MXN", label: "Mexican Peso" },
-  { code: "ZAR", label: "South African Rand" },
-];
-
-const WORKSPACE_NOTE = "Applies to the whole workspace";
+const clockLabel = (format: TimeFormat, t: PopupT): string =>
+  format === "12h" ? t("general.timeFormats.12h") : t("general.timeFormats.24h");
 
 /** The closed header's summary: "24-hour · 1:30:00 · EUR". */
-export function generalHint(settings: ResolvedSettings | null): string {
+export function generalHint(
+  settings: ResolvedSettings | null,
+  t: PopupT,
+  locale: Locale,
+): string {
   if (settings === null) return "…";
-  const clock = settings.timeFormat === "12h" ? "12-hour" : "24-hour";
-  return `${clock} · ${formatDuration(5400, settings.durationFormat)} · ${settings.currency}`;
+  return t("general.hint", {
+    clock: clockLabel(settings.timeFormat, t),
+    duration: formatDurationFor(SAMPLE_DURATION_SEC, locale, settings.durationFormat),
+    currency: settings.currency,
+  });
 }
 
 export function GeneralSection({
   settings,
   onSave,
 }: GeneralSectionProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
   if (settings === null) {
-    return <p className="loading">Loading settings…</p>;
+    return <p className="loading">{t("settings.loading")}</p>;
   }
 
   // A currency the workspace already uses but that is not in the curated list
   // must still be selectable, or the <select> would silently drop it — and
   // picking any other option would then be the only way to leave the field.
-  const currencies = CURRENCIES.some((item) => item.code === settings.currency)
+  const currencies = CURRENCIES.includes(settings.currency)
     ? CURRENCIES
-    : [{ code: settings.currency, label: settings.currency }, ...CURRENCIES];
+    : [settings.currency, ...CURRENCIES];
+
+  const workspaceNote = t("general.workspaceNote");
 
   return (
     <>
       <SettingRow
-        label="Theme"
+        label={t("general.language")}
+        htmlFor="setting-language"
+        note={t("general.languageNote")}
+        testId="setting-language"
+      >
+        <select
+          id="setting-language"
+          className="select"
+          value={settings.locale}
+          onChange={(event) => {
+            // Not applied here, like the theme below: the popup follows
+            // `state.settings.locale`, so a refused write leaves the language
+            // where it really is.
+            void onSave({ locale: event.target.value as LocalePreference });
+          }}
+          data-testid="language-select"
+        >
+          {LANGUAGES.map((language) => (
+            <option key={language} value={language}>
+              {languageLabel(language, t)}
+            </option>
+          ))}
+        </select>
+      </SettingRow>
+
+      <SettingRow
+        label={t("general.theme")}
         htmlFor="setting-theme"
-        note="Shared with the web app and your other machines."
+        note={t("general.themeNote")}
         testId="setting-theme"
       >
         <select
@@ -121,16 +183,16 @@ export function GeneralSection({
           }}
           data-testid="theme-select"
         >
-          {THEMES.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
+          {THEMES.map((theme) => (
+            <option key={theme} value={theme}>
+              {themeLabel(theme, t)}
             </option>
           ))}
         </select>
       </SettingRow>
 
       <SettingRow
-        label="Time format"
+        label={t("general.timeFormat")}
         htmlFor="setting-time-format"
         testId="setting-time-format"
       >
@@ -143,18 +205,18 @@ export function GeneralSection({
           }}
           data-testid="time-format-select"
         >
-          {TIME_FORMATS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
+          {TIME_FORMATS.map((format) => (
+            <option key={format} value={format}>
+              {clockLabel(format, t)}
             </option>
           ))}
         </select>
       </SettingRow>
 
       <SettingRow
-        label="Duration format"
+        label={t("general.durationFormat")}
         htmlFor="setting-duration-format"
-        note="Decimal hours are what most invoices expect."
+        note={t("general.durationFormatNote")}
         testId="setting-duration-format"
       >
         <select
@@ -168,18 +230,18 @@ export function GeneralSection({
           }}
           data-testid="duration-format-select"
         >
-          {DURATION_FORMATS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
+          {DURATION_FORMATS.map((format) => (
+            <option key={format} value={format}>
+              {formatDurationFor(SAMPLE_DURATION_SEC, locale, format)}
             </option>
           ))}
         </select>
       </SettingRow>
 
       <SettingRow
-        label="Week starts on"
+        label={t("general.weekStart")}
         htmlFor="setting-week-start"
-        note={WORKSPACE_NOTE}
+        note={workspaceNote}
         testId="setting-week-start"
       >
         <select
@@ -194,18 +256,18 @@ export function GeneralSection({
           }}
           data-testid="week-start-select"
         >
-          {WEEK_STARTS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
+          {WEEK_STARTS.map((day) => (
+            <option key={day} value={String(day)}>
+              {formatWeekday(day, locale)}
             </option>
           ))}
         </select>
       </SettingRow>
 
       <SettingRow
-        label="Currency"
+        label={t("general.currency")}
         htmlFor="setting-currency"
-        note={WORKSPACE_NOTE}
+        note={workspaceNote}
         testId="setting-currency"
       >
         <select
@@ -219,18 +281,18 @@ export function GeneralSection({
           }}
           data-testid="currency-select"
         >
-          {currencies.map((option) => (
-            <option key={option.code} value={option.code}>
-              {option.code} — {option.label}
+          {currencies.map((code) => (
+            <option key={code} value={code}>
+              {t("general.currencyOption", { code, name: currencyName(code, locale) })}
             </option>
           ))}
         </select>
       </SettingRow>
 
       <SettingRow
-        label="Default hourly rate"
+        label={t("general.defaultRate")}
         htmlFor="setting-default-rate"
-        note={`Used when a billable entry's project has no rate of its own. ${WORKSPACE_NOTE.toLowerCase()}.`}
+        note={t("general.defaultRateNote")}
         testId="setting-default-rate"
       >
         <NumberField
@@ -243,7 +305,7 @@ export function GeneralSection({
           max={1_000_000}
           step={0.01}
           suffix={settings.currency}
-          ariaLabel="Default hourly rate"
+          ariaLabel={t("general.defaultRate")}
           testId="default-hourly-rate"
         />
       </SettingRow>

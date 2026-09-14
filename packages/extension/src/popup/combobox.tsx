@@ -7,6 +7,7 @@ import {
   type JSX,
   type KeyboardEvent,
 } from "react";
+import { useT } from "../i18n/use-t";
 
 /**
  * A searchable picker that can also create what you were searching for.
@@ -59,9 +60,10 @@ export function Combobox({
   disabled = false,
   disabledHint,
   onCreate,
-  createLabel = (name) => `Create “${name}”`,
+  createLabel,
   testId,
 }: ComboboxProps): JSX.Element {
+  const t = useT("popup");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -201,7 +203,7 @@ export function Combobox({
       <div className="field">
         <span className="field__label">{label}</span>
         <p className="combobox__disabled" data-testid={testId && `${testId}-disabled`}>
-          {disabledHint ?? "Not available"}
+          {disabledHint ?? t("combobox.notAvailable")}
         </p>
       </div>
     );
@@ -223,7 +225,7 @@ export function Combobox({
           aria-controls={listId}
           aria-autocomplete="list"
           autoComplete="off"
-          placeholder={selected?.label ?? placeholder ?? emptyLabel ?? "Search…"}
+          placeholder={selected?.label ?? placeholder ?? emptyLabel ?? t("combobox.search")}
           value={open ? query : (selected?.label ?? "")}
           onFocus={() => setOpen(true)}
           onChange={(event) => {
@@ -245,7 +247,7 @@ export function Combobox({
             role="listbox"
           >
             {rows.length === 0 && (
-              <li className="combobox__none">No matches</li>
+              <li className="combobox__none">{t("combobox.noMatches")}</li>
             )}
             {rows.map((row, index) => {
               const isActive = index === active;
@@ -289,7 +291,11 @@ export function Combobox({
                     )}
                     {row.kind === "create" && (
                       <span className="combobox__create">
-                        {creating ? "Creating…" : createLabel(trimmed)}
+                        {creating
+                          ? t("actions.creating")
+                          : createLabel !== undefined
+                            ? createLabel(trimmed)
+                            : t("combobox.create", { name: trimmed })}
                       </span>
                     )}
                   </button>

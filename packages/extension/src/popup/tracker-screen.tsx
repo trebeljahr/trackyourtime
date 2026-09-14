@@ -2,7 +2,6 @@ import { useState, type FormEvent, type JSX } from "react";
 import {
   createId,
   deviceTimeZone,
-  formatDuration,
   withProject,
   withTask,
   type DescriptionSuggestion,
@@ -14,11 +13,8 @@ import {
   type TimeEntry,
 } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
-import {
-  cachedLocalePreference,
-  extensionT,
-  resolveExtensionLocale,
-} from "../i18n";
+import { formatDurationFor } from "../i18n/format";
+import { usePopupLocale, useT } from "../i18n/use-t";
 import { HeldQueue, WorkspacePicker } from "./workspace-bar";
 import { Combobox } from "./combobox";
 import { DescriptionField } from "./description-field";
@@ -169,10 +165,8 @@ export function TrackerScreen({
   onSwitchWorkspace,
   onDiscardHeld,
 }: TrackerScreenProps): JSX.Element {
-  const t = extensionT(
-    resolveExtensionLocale(state.settings?.locale ?? cachedLocalePreference()),
-    "popup",
-  );
+  const t = useT("popup");
+  const locale = usePopupLocale();
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -428,6 +422,7 @@ export function TrackerScreen({
   const tasks = state.tasks;
 
   const sync = describeSync(
+    t,
     state.syncStatus,
     state.serverReachable,
     state.pendingSync,
@@ -506,19 +501,19 @@ export function TrackerScreen({
         >
           {running !== null ? (
             <span className="elapsed" data-testid="tracker-elapsed">
-              {formatElapsed(elapsedSec, durationFormat)}
+              {formatElapsed(elapsedSec, durationFormat, locale)}
             </span>
           ) : null}
 
           <DescriptionField
             id="description"
-            label="Description"
+            label={t("fields.description")}
             value={description}
             // A draft has nothing settled behind it, so it compares against
             // itself: leaving an untouched field then writes nothing, and
             // Escape has nothing to restore it to.
             committed={running?.description ?? description}
-            placeholder="What are you working on?"
+            placeholder={t("tracker.descriptionPlaceholder")}
             autoFocus
             suggestions={state.descriptions ?? []}
             suggestionsFor={state.descriptionsFor}
@@ -542,16 +537,16 @@ export function TrackerScreen({
           />
 
           <Combobox
-            label="Task"
+            label={t("fields.task")}
             options={tasks.map((task) => ({ id: task.id, label: task.name }))}
             value={taskId}
             onChange={selectTask}
-            emptyLabel="No task"
-            placeholder="Search tasks…"
+            emptyLabel={t("fields.noTask")}
+            placeholder={t("fields.searchTasks")}
             onCreate={async (name) => {
               await createTask(name, () => onCreateTask(name));
             }}
-            createLabel={(name) => `Create task “${name}”`}
+            createLabel={(name) => t("fields.createTask", { name })}
             testId="tracker-task"
           />
 
@@ -566,7 +561,7 @@ export function TrackerScreen({
           <Switch
             checked={billable}
             onChange={toggleBillable}
-            label={billable ? "Billable" : "Not billable"}
+            label={billable ? t("fields.billable") : t("fields.notBillable")}
             variant="struck"
             testId="tracker-billable"
           />
@@ -581,14 +576,14 @@ export function TrackerScreen({
             disabled={busy || namingProject}
             data-testid={running === null ? "tracker-start" : "tracker-stop"}
           >
-            {running === null ? "Start" : "Stop"}
+            {running === null ? t("tracker.start") : t("tracker.stop")}
           </button>
         </form>
 
         <p className="today">
-          <span>Today</span>
+          <span>{t("tracker.today")}</span>
           <span className="today__value" data-testid="tracker-today">
-            {formatDuration(todaySec, durationFormat)}
+            {formatDurationFor(todaySec, locale, durationFormat)}
           </span>
         </p>
 
@@ -602,7 +597,7 @@ export function TrackerScreen({
       <div className="footer">
         <div className="footer__row">
           <span className="footer__email" title={state.email ?? ""}>
-            {state.email ?? "Signed in"}
+            {state.email ?? t("app.signedIn")}
           </span>
           <span className="status" data-testid="tracker-sync-status" title={sync.title}>
             <span className={`status__dot status__dot--${sync.tone}`} />

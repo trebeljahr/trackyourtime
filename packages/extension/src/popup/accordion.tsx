@@ -1,4 +1,5 @@
 import { useId, type JSX, type ReactNode } from "react";
+import { useT } from "../i18n/use-t";
 
 /**
  * One collapsible settings section, and the row primitive its controls sit in.
@@ -34,6 +35,7 @@ export function Section({
   testId,
   children,
 }: SectionProps): JSX.Element {
+  const t = useT("popup");
   const bodyId = useId();
 
   return (
@@ -52,7 +54,7 @@ export function Section({
         <span className="section__title">{title}</span>
         {saved ? (
           <span className="section__saved" role="status">
-            Saved
+            {t("section.saved")}
           </span>
         ) : open ? null : (
           <span className="section__hint">{hint}</span>

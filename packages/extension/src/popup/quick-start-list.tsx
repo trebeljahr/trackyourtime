@@ -1,12 +1,12 @@
 import type { JSX } from "react";
 import {
   isBrokenQuickStart,
-  quickStartHint,
-  quickStartLabel,
   repairQuickStart,
   type QuickStart,
   type QuickStartItem,
 } from "@starter/core";
+import { useT } from "../i18n/use-t";
+import { quickHint, quickLabel } from "./entry-format";
 
 export type QuickStartListProps = {
   items: QuickStartItem[];
@@ -33,16 +33,17 @@ export function QuickStartList({
   onPin,
   onUnpin,
 }: QuickStartListProps): JSX.Element | null {
+  const t = useT("popup");
   // Nothing tracked and nothing pinned. An empty rail explaining itself would
   // cost more of a 380px surface than it is worth.
   if (items.length === 0) return null;
 
   return (
     <div className="quick" data-testid="quick-start-list">
-      <p className="field__label">Quick start</p>
+      <p className="field__label">{t("quickStart.title")}</p>
       {items.map((item) => {
-        const label = quickStartLabel(item);
-        const hint = quickStartHint(item);
+        const label = quickLabel(item, t);
+        const hint = quickHint(item, t);
         const broken = isBrokenQuickStart(item);
         const pinned = item.kind === "favorite";
 
@@ -62,7 +63,7 @@ export function QuickStartList({
               // is not sent an id it would reject — and so an offline replay
               // is not stuck retrying a mutation that can never succeed.
               onClick={() => onStart(repairQuickStart(item))}
-              title={hint === null ? label : `${label} — ${hint}`}
+              title={hint === null ? label : t("quickStart.rowTitle", { label, hint })}
             >
               <span
                 className="quick__dot"
@@ -91,8 +92,16 @@ export function QuickStartList({
               type="button"
               disabled={disabled}
               aria-pressed={pinned}
-              title={pinned ? `Unpin ${label}` : `Pin ${label}`}
-              aria-label={pinned ? `Unpin ${label}` : `Pin ${label}`}
+              title={
+                pinned
+                  ? t("quickStart.unpin", { label })
+                  : t("quickStart.pin", { label })
+              }
+              aria-label={
+                pinned
+                  ? t("quickStart.unpin", { label })
+                  : t("quickStart.pin", { label })
+              }
               onClick={() => {
                 if (pinned) onUnpin(item.id);
                 else onPin(repairQuickStart(item));

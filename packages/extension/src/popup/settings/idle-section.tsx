@@ -1,8 +1,6 @@
 import type { JSX } from "react";
 import {
   IDLE_BEHAVIORS,
-  idleBehaviorDescription,
-  idleBehaviorLabel,
   MAX_IDLE_THRESHOLD_MINUTES,
   MIN_IDLE_THRESHOLD_MINUTES,
   type IdleBehavior,
@@ -12,15 +10,17 @@ import type { SettingsPatch } from "../../lib/messaging";
 import { NumberField } from "../number-field";
 import { Switch } from "../switch";
 import { SettingRow } from "../accordion";
+import { useT, type PopupT } from "../../i18n/use-t";
 
 /**
  * Idle detection, changed from the device that does the detecting.
  *
- * The labels and the sentence under the behaviour come from
- * `@starter/shared`'s own `idleBehaviorLabel` / `idleBehaviorDescription` and
- * are never retyped here: the web app renders the same four choices, and two
- * hand-written copies of "what pause-and-resume does to your entry" is how the
- * two surfaces end up promising different things.
+ * The labels and the sentence under the behaviour are the popup catalog's
+ * `idleSettings.behaviors`, whose English is `@starter/shared`'s own
+ * `idleBehaviorLabel` / `idleBehaviorDescription` word for word: the web app
+ * renders the same four choices, and two copies of "what pause-and-resume does
+ * to your entry" that disagree is how the surfaces end up promising different
+ * things. Change them together.
  *
  * Changing anything in this block obliges the worker to re-run
  * `syncDetectionInterval()` — `chrome.idle`'s detection interval is set once
@@ -33,25 +33,39 @@ export type IdleSectionProps = {
   onSave: (patch: SettingsPatch) => Promise<boolean>;
 };
 
-/** The behaviour, said in one word, for the closed header. */
-const SHORT_BEHAVIOR: Record<IdleBehavior, string> = {
-  ask: "Ask",
-  "pause-and-resume": "Pause",
-  "keep-running": "Keep",
-  stop: "Stop",
-};
+/**
+ * The catalog's key for a behaviour. ICU `select` branches and catalog keys
+ * are identifiers, so the hyphenated stored values are mapped rather than
+ * used directly.
+ */
+const BEHAVIOR_KEY = {
+  ask: "ask",
+  "pause-and-resume": "pause",
+  "keep-running": "keep",
+  stop: "stop",
+} as const satisfies Record<IdleBehavior, string>;
 
-export function idleHint(settings: ResolvedSettings | null): string {
+const behaviorLabel = (behavior: IdleBehavior, t: PopupT): string =>
+  t(`idleSettings.behaviors.${BEHAVIOR_KEY[behavior]}.label`);
+
+const behaviorDescription = (behavior: IdleBehavior, t: PopupT): string =>
+  t(`idleSettings.behaviors.${BEHAVIOR_KEY[behavior]}.description`);
+
+export function idleHint(settings: ResolvedSettings | null, t: PopupT): string {
   if (settings === null) return "…";
   const { idle } = settings;
   return idle.enabled
-    ? `${SHORT_BEHAVIOR[idle.behavior]} after ${idle.thresholdMinutes} min`
-    : "Off";
+    ? t("idleSettings.hint", {
+        behavior: BEHAVIOR_KEY[idle.behavior],
+        minutes: idle.thresholdMinutes,
+      })
+    : t("settings.off");
 }
 
 export function IdleSection({ settings, onSave }: IdleSectionProps): JSX.Element {
+  const t = useT("popup");
   if (settings === null) {
-    return <p className="loading">Loading settings…</p>;
+    return <p className="loading">{t("settings.loading")}</p>;
   }
 
   const { idle } = settings;
@@ -60,7 +74,7 @@ export function IdleSection({ settings, onSave }: IdleSectionProps): JSX.Element
   return (
     <>
       <SettingRow
-        note="Each device watches its own input. A device that did not start the timer never touches it."
+        note={t("idleSettings.enabledNote")}
         testId="setting-idle-enabled"
       >
         <Switch
@@ -68,15 +82,15 @@ export function IdleSection({ settings, onSave }: IdleSectionProps): JSX.Element
           onChange={(enabled) => {
             void onSave({ idle: { enabled } });
           }}
-          label={idle.enabled ? "Detecting idle time" : "Idle detection off"}
+          label={idle.enabled ? t("idleSettings.on") : t("idleSettings.off")}
           testId="idle-enabled"
         />
       </SettingRow>
 
       <SettingRow
-        label="Away after"
+        label={t("idleSettings.threshold")}
         htmlFor="setting-idle-threshold"
-        note="How long with no input before you count as away."
+        note={t("idleSettings.thresholdNote")}
         testId="setting-idle-threshold"
       >
         <NumberField
@@ -87,17 +101,17 @@ export function IdleSection({ settings, onSave }: IdleSectionProps): JSX.Element
           }}
           min={MIN_IDLE_THRESHOLD_MINUTES}
           max={MAX_IDLE_THRESHOLD_MINUTES}
-          suffix="min"
+          suffix={t("idleSettings.minutesSuffix")}
           disabled={off}
-          ariaLabel="Idle threshold in minutes"
+          ariaLabel={t("idleSettings.thresholdLabel")}
           testId="idle-threshold"
         />
       </SettingRow>
 
       <SettingRow
-        label="When away"
+        label={t("idleSettings.behavior")}
         htmlFor="setting-idle-behavior"
-        note={idleBehaviorDescription(idle.behavior)}
+        note={behaviorDescription(idle.behavior, t)}
         testId="setting-idle-behavior"
       >
         <select
@@ -112,14 +126,14 @@ export function IdleSection({ settings, onSave }: IdleSectionProps): JSX.Element
         >
           {IDLE_BEHAVIORS.map((behavior) => (
             <option key={behavior} value={behavior}>
-              {idleBehaviorLabel(behavior)}
+              {behaviorLabel(behavior, t)}
             </option>
           ))}
         </select>
       </SettingRow>
 
       <SettingRow
-        note="Locking is deliberate, so it does not have to wait out the threshold first."
+        note={t("idleSettings.lockNote")}
         testId="setting-idle-lock"
       >
         <Switch
@@ -129,8 +143,8 @@ export function IdleSection({ settings, onSave }: IdleSectionProps): JSX.Element
           }}
           label={
             idle.lockIsImmediate
-              ? "Locking counts immediately"
-              : "Locking waits for the threshold"
+              ? t("idleSettings.lockImmediate")
+              : t("idleSettings.lockWaits")
           }
           disabled={off}
           testId="idle-lock-immediate"

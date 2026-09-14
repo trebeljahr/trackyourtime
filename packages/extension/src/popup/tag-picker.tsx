@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import type { Tag } from "@starter/core";
+import { useT } from "../i18n/use-t";
 import { Combobox } from "./combobox";
 import { useSelectWhenCreated } from "./use-created-row";
 
@@ -33,6 +34,7 @@ export function TagPicker({
   onCreate,
   testId = "tracker-tags",
 }: TagPickerProps): JSX.Element {
+  const t = useT("popup");
   const createTag = useSelectWhenCreated(tags, (tag) => {
     // Guarded, because nothing stops the same name being created twice from
     // two surfaces before either snapshot lands.
@@ -55,7 +57,7 @@ export function TagPicker({
               type="button"
               className="tag"
               style={{ borderColor: tag.color }}
-              title={`Remove ${tag.name}`}
+              title={t("tagPicker.remove", { name: tag.name })}
               onClick={() =>
                 onChange(value.filter((id) => id !== tag.id))
               }
@@ -71,7 +73,7 @@ export function TagPicker({
       )}
 
       <Combobox
-        label="Tags"
+        label={t("fields.tags")}
         // Already-chosen tags are filtered out: offering one that is on the
         // entry would look selectable and then do nothing.
         options={tags
@@ -83,12 +85,12 @@ export function TagPicker({
           if (id !== null) onChange([...value, id]);
         }}
         placeholder={
-          selected.length === 0 ? "Search or add tags…" : "Add another tag…"
+          selected.length === 0 ? t("tagPicker.search") : t("tagPicker.addAnother")
         }
         onCreate={async (name) => {
           await createTag(name, () => onCreate(name));
         }}
-        createLabel={(name) => `Create tag “${name}”`}
+        createLabel={(name) => t("tagPicker.create", { name })}
         testId={testId}
       />
     </div>

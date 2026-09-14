@@ -80,6 +80,7 @@ import {
 } from "../lib/workspace-choice";
 import { deleteAllActivity } from "./activity/capture";
 import { renderBadge } from "./badge";
+import { noteLocalePreference } from "./locale";
 import {
   noteRemoteActivity,
   noteReplayedStart,
@@ -1124,6 +1125,7 @@ export const getCachedSettings = (): ResolvedSettings | null => cachedSettings;
  */
 export const setCachedSettings = (settings: ResolvedSettings): void => {
   cachedSettings = settings;
+  noteLocalePreference(settings.locale);
 };
 
 export const getActiveView = (): PopupView => activeView;
@@ -1237,6 +1239,7 @@ export async function resolveSettings(): Promise<ResolvedSettings | null> {
     .then((settings) => {
       cachedSettings = settings;
       knownUserId = settings.userId;
+      noteLocalePreference(settings.locale);
       return settings;
     })
     .catch(() => null);

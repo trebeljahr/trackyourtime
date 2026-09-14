@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from "react";
-import {
-  deviceTimeZone,
-  formatDuration,
-  type DurationFormat,
-} from "@starter/core";
+import { deviceTimeZone, type DurationFormat } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
+import { formatDurationFor, formatIdleSpanFor } from "../i18n/format";
+import { usePopupLocale, useT } from "../i18n/use-t";
 import { EntryForm } from "./entry-form";
 import { Header } from "./header";
 import { describeSync } from "./sync-label";
@@ -48,13 +46,6 @@ export type EntryCreateScreenProps = {
   labels?: { title: string; submit: string; busy: string; testId: string };
 };
 
-const CREATE_LABELS = {
-  title: "New entry",
-  submit: "Add entry",
-  busy: "Adding…",
-  testId: "entry-new",
-};
-
 export function EntryCreateScreen({
   state,
   error,
@@ -69,8 +60,16 @@ export function EntryCreateScreen({
   onCreateProject,
   onCreateTag,
   onCreateTask,
-  labels = CREATE_LABELS,
+  labels: givenLabels,
 }: EntryCreateScreenProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
+  const labels = givenLabels ?? {
+    title: t("entryNew.title"),
+    submit: t("entryNew.add"),
+    busy: t("entryNew.adding"),
+    testId: "entry-new",
+  };
   const [busy, setBusy] = useState(false);
   /** True while the project picker is naming a new project. */
   const [namingProject, setNamingProject] = useState(false);
@@ -92,6 +91,7 @@ export function EntryCreateScreen({
   };
 
   const sync = describeSync(
+    t,
     state.syncStatus,
     state.serverReachable,
     state.pendingSync,
@@ -141,7 +141,9 @@ export function EntryCreateScreen({
             onClick={onGoTracker}
             data-testid="idle-alert"
           >
-            Away for {Math.round(state.pendingIdle.idleSec / 60)} min — resolve
+            {t("idle.alert", {
+              span: formatIdleSpanFor(state.pendingIdle.idleSec, locale),
+            })}
           </button>
         ) : null}
 
@@ -164,8 +166,10 @@ export function EntryCreateScreen({
 
           <p className="detail__note" data-testid={`${labels.testId}-duration`}>
             {valid
-              ? `That is ${formatDuration(seconds, durationFormat)}.`
-              : "The end has to be after the start."}
+              ? t("entryNew.duration", {
+                  duration: formatDurationFor(seconds, locale, durationFormat),
+                })
+              : t("errors.badTimeRange")}
           </p>
 
           <button

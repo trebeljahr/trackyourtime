@@ -1,5 +1,6 @@
 import { useState, type JSX } from "react";
 import type { Client, Project } from "@starter/core";
+import { useT } from "../i18n/use-t";
 import { Combobox, type ComboboxOption } from "./combobox";
 import { useSelectWhenCreated } from "./use-created-row";
 
@@ -69,6 +70,7 @@ export function ProjectPicker({
   onPendingChange,
   testId,
 }: ProjectPickerProps): JSX.Element {
+  const t = useT("popup");
   /** Set while a new project is being named, holding the client to file it under. */
   const [pending, setPending] = useState<string | null>(null);
   const [pendingClientId, setPendingClientId] = useState<string | null>(null);
@@ -114,18 +116,18 @@ export function ProjectPicker({
   if (pending === null) {
     return (
       <Combobox
-        label="Project"
+        label={t("fields.project")}
         options={projectOptions(projects, clients)}
         value={value}
         onChange={onChange}
-        emptyLabel="No project"
-        placeholder="Search projects…"
+        emptyLabel={t("fields.noProject")}
+        placeholder={t("fields.searchProjects")}
         disabled={disabled}
         disabledHint={disabledHint}
         onCreate={async (name) => {
           openPanel(name);
         }}
-        createLabel={(name) => `Create project “${name}”`}
+        createLabel={(name) => t("fields.createProject", { name })}
         testId={testId}
       />
     );
@@ -133,10 +135,10 @@ export function ProjectPicker({
 
   return (
     <div className="panel" data-testid={`${testId}-new`}>
-      <p className="panel__title">New project “{pending}”</p>
+      <p className="panel__title">{t("projectPicker.newTitle", { name: pending })}</p>
 
       <Combobox
-        label="Client"
+        label={t("fields.client")}
         options={clients.map((client) => ({
           id: client.id,
           label: client.name,
@@ -144,12 +146,12 @@ export function ProjectPicker({
         }))}
         value={pendingClientId}
         onChange={setPendingClientId}
-        emptyLabel="No client"
-        placeholder="Search clients…"
+        emptyLabel={t("fields.noClient")}
+        placeholder={t("fields.searchClients")}
         onCreate={async (name) => {
           await createClient(name, () => onCreateClient(name));
         }}
-        createLabel={(name) => `Create client “${name}”`}
+        createLabel={(name) => t("fields.createClient", { name })}
         testId={`${testId}-new-client`}
       />
 
@@ -161,7 +163,7 @@ export function ProjectPicker({
           disabled={busy || creating}
           data-testid={`${testId}-new-cancel`}
         >
-          Cancel
+          {t("actions.cancel")}
         </button>
         <button
           className="button button--primary"
@@ -172,7 +174,7 @@ export function ProjectPicker({
           disabled={busy || creating}
           data-testid={`${testId}-new-create`}
         >
-          {creating ? "Creating…" : "Create"}
+          {creating ? t("actions.creating") : t("actions.create")}
         </button>
       </div>
     </div>

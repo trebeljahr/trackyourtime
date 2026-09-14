@@ -1,5 +1,7 @@
 import type { JSX } from "react";
-import { formatIdleSpan, type IdleAnswer, type PendingIdle } from "@starter/core";
+import type { IdleAnswer, PendingIdle } from "@starter/core";
+import { formatIdleSpanFor } from "../i18n/format";
+import { usePopupLocale, useT } from "../i18n/use-t";
 
 export type IdlePanelProps = {
   pending: PendingIdle;
@@ -21,18 +23,18 @@ export function IdlePanel({
   busy,
   onAnswer,
 }: IdlePanelProps): JSX.Element {
-  const span = formatIdleSpan(pending.idleSec);
+  const t = useT("popup");
+  const span = formatIdleSpanFor(pending.idleSec, usePopupLocale());
 
   return (
     <div className="panel" data-testid="idle-panel">
       <p className="panel__title">
         {pending.signal === "locked"
-          ? `Screen was locked for ${span}`
-          : `No input for ${span}`}
+          ? t("idle.lockedTitle", { span })
+          : t("idle.inputTitle", { span })}
       </p>
       <p className="panel__hint">
-        The timer is still running. Keep that time if you were reading, in a
-        meeting or on a call.
+        {t("idle.hint")}
       </p>
 
       <div className="panel__actions">
@@ -43,7 +45,7 @@ export function IdlePanel({
           onClick={() => onAnswer("keep")}
           data-testid="idle-keep"
         >
-          I was working
+          {t("idle.keep")}
         </button>
         <button
           className="button"
@@ -52,7 +54,7 @@ export function IdlePanel({
           onClick={() => onAnswer("discard")}
           data-testid="idle-discard"
         >
-          Discard {span}
+          {t("idle.discard", { span })}
         </button>
         <button
           className="button button--primary"
@@ -61,7 +63,7 @@ export function IdlePanel({
           onClick={() => onAnswer("discard-and-resume")}
           data-testid="idle-discard-resume"
         >
-          Discard and resume
+          {t("idle.discardAndResume")}
         </button>
       </div>
     </div>

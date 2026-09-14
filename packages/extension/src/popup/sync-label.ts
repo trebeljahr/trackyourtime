@@ -7,6 +7,7 @@
  * be a second place for the two to disagree about the same snapshot.
  */
 import type { SyncStatus } from "@starter/core";
+import type { PopupT } from "../i18n/use-t";
 
 export type SyncLabel = {
   label: string;
@@ -27,45 +28,37 @@ export type SyncLabel = {
  * user did has not reached the server yet.
  */
 export const describeSync = (
+  t: PopupT,
   status: SyncStatus,
   serverReachable: boolean,
   pending: number,
 ): SyncLabel => {
   if (!serverReachable) {
     return {
-      label: pending > 0 ? `Offline · ${pending} queued` : "Offline",
+      label: pending > 0 ? t("sync.offlineQueued", { count: pending }) : t("sync.offline"),
       tone: "closed",
       title:
         pending > 0
-          ? `The server is not answering. ${pending} change${pending === 1 ? "" : "s"} will be sent when it does.`
-          : "The server is not answering. Timers still start and stop, and are sent when it comes back.",
+          ? t("sync.offlineQueuedTitle", { count: pending })
+          : t("sync.offlineTitle"),
     };
   }
   if (pending > 0) {
     return {
-      label: `${pending} queued`,
+      label: t("sync.queued", { count: pending }),
       tone: "pending",
-      title: `${pending} change${pending === 1 ? "" : "s"} still to send.`,
+      title: t("sync.queuedTitle", { count: pending }),
     };
   }
   if (status === "open") {
-    return {
-      label: "Synced",
-      tone: "open",
-      title: "Live updates from your other devices are connected.",
-    };
+    return { label: t("sync.synced"), tone: "open", title: t("sync.syncedTitle") };
   }
   if (status === "connecting") {
     return {
-      label: "Connecting…",
+      label: t("sync.connecting"),
       tone: "connecting",
-      title: "Connecting to live updates.",
+      title: t("sync.connectingTitle"),
     };
   }
-  return {
-    label: "Polling",
-    tone: "polling",
-    title:
-      "Live updates are unavailable, so changes made elsewhere show up on a short delay. Everything you do here is saved normally.",
-  };
+  return { label: t("sync.polling"), tone: "polling", title: t("sync.pollingTitle") };
 };

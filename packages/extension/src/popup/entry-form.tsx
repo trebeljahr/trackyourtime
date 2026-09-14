@@ -1,7 +1,6 @@
 import { useState, type JSX } from "react";
 import {
   deviceTimeZone,
-  formatDuration,
   isSameZone,
   parseDurationInput,
   rollEndAfterStart,
@@ -13,7 +12,10 @@ import {
   type Project,
   type TimeFormat,
 } from "@starter/core";
+import type { Locale } from "@starter/shared";
 import type { BackgroundState } from "../lib/messaging";
+import { formatDurationFor } from "../i18n/format";
+import { usePopupLocale, useT } from "../i18n/use-t";
 import { Combobox } from "./combobox";
 import { DayStepper } from "./day-stepper";
 import { DescriptionField } from "./description-field";
@@ -112,6 +114,7 @@ const MIN_SECONDS = 60;
 type DurationFieldProps = {
   seconds: number;
   format: DurationFormat;
+  locale: Locale;
   onCommit: (seconds: number) => void;
   disabled: boolean;
   testId: string;
@@ -127,11 +130,13 @@ type DurationFieldProps = {
 function DurationField({
   seconds,
   format,
+  locale,
   onCommit,
   disabled,
   testId,
 }: DurationFieldProps): JSX.Element {
-  const shown = formatDuration(seconds, format);
+  const t = useT("popup");
+  const shown = formatDurationFor(seconds, locale, format);
   const [draft, setDraft] = useState(shown);
 
   const [lastShown, setLastShown] = useState(shown);
@@ -147,14 +152,14 @@ function DurationField({
       return;
     }
     const next = Math.max(MIN_SECONDS, parsed);
-    setDraft(formatDuration(next, format));
+    setDraft(formatDurationFor(next, locale, format));
     if (next !== seconds) onCommit(next);
   };
 
   return (
     <div className="range__field">
       <label className="field__label" htmlFor={`${testId}-input`}>
-        Duration
+        {t("fields.duration")}
       </label>
       <input
         id={`${testId}-input`}
@@ -198,6 +203,8 @@ export function EntryForm({
   onCreateTag,
   onCreateTask,
 }: EntryFormProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
   const timeFormat: TimeFormat = state.settings?.timeFormat ?? "24h";
   const durationFormat: DurationFormat = state.settings?.durationFormat ?? "hms";
 
@@ -358,10 +365,10 @@ export function EntryForm({
     <div className="form" data-testid="entry-form">
       <DescriptionField
         id="entry-description"
-        label="Description"
+        label={t("fields.description")}
         value={text}
         committed={values.description}
-        placeholder="What was this?"
+        placeholder={t("entryForm.descriptionPlaceholder")}
         disabled={labelsLocked}
         suggestions={state.descriptions ?? []}
         suggestionsFor={state.descriptionsFor}
@@ -382,7 +389,7 @@ export function EntryForm({
         value={values.projectId}
         onChange={selectProject}
         disabled={factsLocked}
-        disabledHint={locked ? "On an invoice" : "Not sent yet"}
+        disabledHint={locked ? t("entryForm.onInvoice") : t("entryForm.notSent")}
         onCreateClient={onCreateClient}
         onCreateProject={onCreateProject}
         onPendingChange={onNamingProject}
@@ -390,18 +397,18 @@ export function EntryForm({
       />
 
       <Combobox
-        label="Task"
+        label={t("fields.task")}
         options={tasks.map((task) => ({ id: task.id, label: task.name }))}
         value={values.taskId}
         onChange={selectTask}
-        emptyLabel="No task"
-        placeholder="Search tasks…"
+        emptyLabel={t("fields.noTask")}
+        placeholder={t("fields.searchTasks")}
         disabled={factsLocked}
-        disabledHint={locked ? "On an invoice" : "Not sent yet"}
+        disabledHint={locked ? t("entryForm.onInvoice") : t("entryForm.notSent")}
         onCreate={async (name) => {
           await createTask(name, () => onCreateTask(name));
         }}
-        createLabel={(name) => `Create task “${name}”`}
+        createLabel={(name) => t("fields.createTask", { name })}
         testId="entry-task"
       />
 
@@ -416,7 +423,7 @@ export function EntryForm({
       <Switch
         checked={values.billable}
         onChange={(next) => change({ billable: next }, { billable: next })}
-        label={values.billable ? "Billable" : "Not billable"}
+        label={values.billable ? t("fields.billable") : t("fields.notBillable")}
         variant="struck"
         disabled={factsLocked}
         testId="entry-billable"
@@ -432,7 +439,7 @@ export function EntryForm({
 
       <div className="range">
         <TimeField
-          label="Start"
+          label={t("fields.start")}
           value={values.start}
           zone={zone}
           timeFormat={timeFormat}
@@ -441,7 +448,7 @@ export function EntryForm({
           testId="entry-start-time"
         />
         <TimeField
-          label="End"
+          label={t("fields.end")}
           value={values.end}
           zone={zone}
           timeFormat={timeFormat}
@@ -452,6 +459,7 @@ export function EntryForm({
         <DurationField
           seconds={seconds}
           format={durationFormat}
+          locale={locale}
           onCommit={setDurationSec}
           disabled={factsLocked}
           testId="entry-duration"
@@ -463,7 +471,7 @@ export function EntryForm({
           reading you wrote down is the reading you get back. */}
       {isSameZone(zone, deviceTimeZone()) ? null : (
         <p className="detail__note" data-testid="entry-zone-note">
-          Recorded in {zoneLabel(zone)}, and edited in that clock.
+          {t("entryForm.zoneNote", { zone: zoneLabel(zone) })}
         </p>
       )}
     </div>

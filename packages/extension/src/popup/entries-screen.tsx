@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from "react
 import {
   dayKeyInZone,
   deviceTimeZone,
-  formatDuration,
   isTempId,
   type DayKey,
   type DetailedEntry,
@@ -10,6 +9,8 @@ import {
   type TimeFormat,
 } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
+import { formatDurationFor, formatIdleSpanFor } from "../i18n/format";
+import { usePopupLocale, useT } from "../i18n/use-t";
 import { entryDayLabel, entryZone } from "./entry-format";
 import { EntryRow, RunningRow } from "./entry-row";
 import { Header } from "./header";
@@ -100,6 +101,8 @@ export function EntriesScreen({
   onNewEntry,
   onLoadMore,
 }: EntriesScreenProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
   const [busy, setBusy] = useState(false);
   const alertRef = useRef<HTMLParagraphElement>(null);
   const elapsedSec = useElapsedSec(state.running);
@@ -127,6 +130,7 @@ export function EntriesScreen({
   };
 
   const sync = describeSync(
+    t,
     state.syncStatus,
     state.serverReachable,
     state.pendingSync,
@@ -146,7 +150,7 @@ export function EntriesScreen({
   return (
     <div className="screen" onKeyDown={onKeyDown} data-testid="entries-screen">
       <Header
-        title="Entries"
+        title={t("entries.title")}
         onBack={onBack}
         onNewEntry={onNewEntry}
         sync={sync}
@@ -180,7 +184,9 @@ export function EntriesScreen({
             onClick={onGoTracker}
             data-testid="idle-alert"
           >
-            Away for {Math.round(state.pendingIdle.idleSec / 60)} min — resolve
+            {t("idle.alert", {
+              span: formatIdleSpanFor(state.pendingIdle.idleSec, locale),
+            })}
           </button>
         ) : null}
 
@@ -200,7 +206,7 @@ export function EntriesScreen({
 
           {page === null ? (
             <p className="loading" data-testid="entries-loading">
-              Loading…
+              {t("app.loading")}
             </p>
           ) : page.entries.length === 0 ? (
             <>
@@ -208,8 +214,7 @@ export function EntriesScreen({
                   explain itself, unlike the quick-start row, which renders
                   nothing when it has nothing to offer. */}
               <p className="entries__empty" data-testid="entries-empty">
-                Nothing tracked in the last {windowDays(page.from, page.to)}{" "}
-                days.
+                {t("entries.empty", { days: windowDays(page.from, page.to) })}
               </p>
               <button
                 type="button"
@@ -217,7 +222,7 @@ export function EntriesScreen({
                 onClick={onNewEntry}
                 data-testid="entries-empty-new"
               >
-                New entry
+                {t("entries.newEntry")}
               </button>
             </>
           ) : (
@@ -226,10 +231,10 @@ export function EntriesScreen({
                 <div key={group.key}>
                   <div className="entry-day">
                     <span className="entry-day__label">
-                      {entryDayLabel(group.key, todayKey)}
+                      {entryDayLabel(group.key, todayKey, t, locale)}
                     </span>
                     <span className="entry-day__total">
-                      {formatDuration(group.totalSec, durationFormat)}
+                      {formatDurationFor(group.totalSec, locale, durationFormat)}
                     </span>
                   </div>
 
@@ -261,14 +266,13 @@ export function EntriesScreen({
                   }}
                   data-testid="entries-more"
                 >
-                  {busy ? "Loading…" : "Load older"}
+                  {busy ? t("app.loading") : t("entries.loadOlder")}
                 </button>
               ) : (
                 /* Said out loud so the end of the list reads as a decision
                    rather than a bug. */
                 <p className="entries__more" data-testid="entries-end">
-                  That is the last {windowDays(page.from, page.to)} days. Older
-                  entries are in the web app.{" "}
+                  {t("entries.end", { days: windowDays(page.from, page.to) })}{" "}
                   {webUrl === null ? null : (
                     <button
                       type="button"
@@ -276,7 +280,7 @@ export function EntriesScreen({
                       onClick={() => openTab(join(webUrl, "/track"))}
                       data-testid="entries-open-app"
                     >
-                      Open Track Your Time ↗
+                      {t("actions.openAppExternal")}
                     </button>
                   )}
                 </p>

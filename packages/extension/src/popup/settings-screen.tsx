@@ -11,6 +11,8 @@ import type {
   BackgroundState,
   SettingsPatch,
 } from "../lib/messaging";
+import { formatIdleSpanFor } from "../i18n/format";
+import { usePopupLocale, useT } from "../i18n/use-t";
 import { Header } from "./header";
 import { Section } from "./accordion";
 import { describeSync } from "./sync-label";
@@ -87,6 +89,8 @@ export function SettingsScreen({
   onRequestActivityPermission,
   onWipeActivity,
 }: SettingsScreenProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
   const [saved, setSaved] = useState<SettingsSection | null>(null);
   const flashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alertRef = useRef<HTMLParagraphElement>(null);
@@ -149,6 +153,7 @@ export function SettingsScreen({
   };
 
   const sync = describeSync(
+    t,
     state.syncStatus,
     state.serverReachable,
     state.pendingSync,
@@ -156,7 +161,7 @@ export function SettingsScreen({
 
   return (
     <div className="screen" onKeyDown={onKeyDown} data-testid="settings-screen">
-      <Header title="Settings" onBack={onBack} sync={sync} />
+      <Header title={t("settings.title")} onBack={onBack} sync={sync} />
 
       <div className="popup__body">
         <p
@@ -187,13 +192,15 @@ export function SettingsScreen({
             onClick={onGoTracker}
             data-testid="idle-alert"
           >
-            Away for {Math.round(state.pendingIdle.idleSec / 60)} min — resolve
+            {t("idle.alert", {
+              span: formatIdleSpanFor(state.pendingIdle.idleSec, locale),
+            })}
           </button>
         ) : null}
 
         <Section
-          title="General"
-          hint={generalHint(state.settings)}
+          title={t("settings.sections.general")}
+          hint={generalHint(state.settings, t, locale)}
           open={section === "general"}
           onToggle={() => toggle("general")}
           saved={saved === "general"}
@@ -208,8 +215,8 @@ export function SettingsScreen({
         <hr className="rule" />
 
         <Section
-          title="Idle"
-          hint={idleHint(state.settings)}
+          title={t("settings.sections.idle")}
+          hint={idleHint(state.settings, t)}
           open={section === "idle"}
           onToggle={() => toggle("idle")}
           saved={saved === "idle"}
@@ -221,8 +228,8 @@ export function SettingsScreen({
         <hr className="rule" />
 
         <Section
-          title="Limits"
-          hint={limitsHint(state.settings)}
+          title={t("settings.sections.limits")}
+          hint={limitsHint(state.settings, t)}
           open={section === "limits"}
           onToggle={() => toggle("limits")}
           saved={saved === "limits"}
@@ -234,8 +241,8 @@ export function SettingsScreen({
         <hr className="rule" />
 
         <Section
-          title="Devices"
-          hint={devicesHint(state.devices)}
+          title={t("settings.sections.devices")}
+          hint={devicesHint(state.devices, t)}
           open={section === "devices"}
           onToggle={() => toggle("devices")}
           saved={saved === "devices"}
@@ -254,7 +261,7 @@ export function SettingsScreen({
         <hr className="rule" />
 
         <Section
-          title="Activity"
+          title={t("settings.sections.activity")}
           hint={activityHint(state.activity)}
           open={section === "activity"}
           onToggle={() => toggle("activity")}
@@ -280,8 +287,8 @@ export function SettingsScreen({
         <hr className="rule" />
 
         <Section
-          title="Account"
-          hint={accountHint(state.email)}
+          title={t("settings.sections.account")}
+          hint={accountHint(state.email, t)}
           open={section === "account"}
           onToggle={() => toggle("account")}
           saved={saved === "account"}

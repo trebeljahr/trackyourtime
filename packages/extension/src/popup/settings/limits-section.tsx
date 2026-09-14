@@ -5,8 +5,6 @@ import {
   MAX_MAX_DURATION_HOURS,
   MIN_MAX_DURATION_HOURS,
   RUNAWAY_BEHAVIORS,
-  runawayBehaviorDescription,
-  runawayBehaviorLabel,
   type ResolvedSettings,
   type RunawayBehavior,
 } from "@starter/core";
@@ -14,6 +12,7 @@ import type { SettingsPatch } from "../../lib/messaging";
 import { NumberField } from "../number-field";
 import { Switch } from "../switch";
 import { SettingRow } from "../accordion";
+import { useT, type PopupT } from "../../i18n/use-t";
 
 /**
  * The runaway-timer guard.
@@ -40,26 +39,49 @@ export type LimitsSectionProps = {
 /** What the number field shows while the guard is off, so it is not blank. */
 const PLACEHOLDER_HOURS = DEFAULT_MAX_DURATION_SETTINGS.maxHours;
 
-const SHORT_BEHAVIOR: Record<RunawayBehavior, string> = {
-  ask: "ask",
-  cap: "cap it",
-  stop: "stop it",
+/**
+ * The label and sentence for a behaviour, in the popup's language. The
+ * English wording is `@starter/shared`'s `runawayBehaviorLabel` /
+ * `runawayBehaviorDescription`, which the web app renders too — change both
+ * together.
+ */
+const behaviorLabel = (behavior: RunawayBehavior, t: PopupT): string => {
+  switch (behavior) {
+    case "ask":
+      return t("limits.behaviors.ask.label");
+    case "cap":
+      return t("limits.behaviors.cap.label");
+    case "stop":
+      return t("limits.behaviors.stop.label");
+  }
 };
 
-export function limitsHint(settings: ResolvedSettings | null): string {
+const behaviorDescription = (behavior: RunawayBehavior, t: PopupT): string => {
+  switch (behavior) {
+    case "ask":
+      return t("limits.behaviors.ask.description");
+    case "cap":
+      return t("limits.behaviors.cap.description");
+    case "stop":
+      return t("limits.behaviors.stop.description");
+  }
+};
+
+export function limitsHint(settings: ResolvedSettings | null, t: PopupT): string {
   if (settings === null) return "…";
   const { maxDuration } = settings;
   return isRunawayGuardOn(maxDuration)
-    ? `${maxDuration.maxHours} h, then ${SHORT_BEHAVIOR[maxDuration.behavior]}`
-    : "Off";
+    ? t("limits.hint", { hours: maxDuration.maxHours, behavior: maxDuration.behavior })
+    : t("settings.off");
 }
 
 export function LimitsSection({
   settings,
   onSave,
 }: LimitsSectionProps): JSX.Element {
+  const t = useT("popup");
   if (settings === null) {
-    return <p className="loading">Loading settings…</p>;
+    return <p className="loading">{t("settings.loading")}</p>;
   }
 
   const { maxDuration } = settings;
@@ -68,7 +90,7 @@ export function LimitsSection({
   return (
     <>
       <SettingRow
-        note="Worked out on the server, not on your devices — the whole point is the case where none of them were running."
+        note={t("limits.enabledNote")}
         testId="setting-limits-enabled"
       >
         <Switch
@@ -80,15 +102,15 @@ export function LimitsSection({
               },
             });
           }}
-          label={on ? "Stopping runaway timers" : "Runaway guard off"}
+          label={on ? t("limits.on") : t("limits.off")}
           testId="limits-enabled"
         />
       </SettingRow>
 
       <SettingRow
-        label="After"
+        label={t("limits.after")}
         htmlFor="setting-limits-hours"
-        note="Pick something above any believable single sitting and below an overnight."
+        note={t("limits.afterNote")}
         testId="setting-limits-hours"
       >
         <NumberField
@@ -99,17 +121,17 @@ export function LimitsSection({
           }}
           min={MIN_MAX_DURATION_HOURS}
           max={MAX_MAX_DURATION_HOURS}
-          suffix="h"
+          suffix={t("limits.hoursSuffix")}
           disabled={!on}
-          ariaLabel="Maximum entry length in hours"
+          ariaLabel={t("limits.hoursLabel")}
           testId="limits-max-hours"
         />
       </SettingRow>
 
       <SettingRow
-        label="Then"
+        label={t("limits.then")}
         htmlFor="setting-limits-behavior"
-        note={runawayBehaviorDescription(maxDuration.behavior)}
+        note={behaviorDescription(maxDuration.behavior, t)}
         testId="setting-limits-behavior"
       >
         <select
@@ -126,7 +148,7 @@ export function LimitsSection({
         >
           {RUNAWAY_BEHAVIORS.map((behavior) => (
             <option key={behavior} value={behavior}>
-              {runawayBehaviorLabel(behavior)}
+              {behaviorLabel(behavior, t)}
             </option>
           ))}
         </select>

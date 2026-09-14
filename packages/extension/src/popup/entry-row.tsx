@@ -1,6 +1,5 @@
 import type { CSSProperties, JSX } from "react";
 import {
-  formatDuration,
   type DetailedEntry,
   type DurationFormat,
   type TimeEntry,
@@ -12,6 +11,8 @@ import {
   entryTitle,
   formatElapsed,
 } from "./entry-format";
+import { formatDurationFor } from "../i18n/format";
+import { usePopupLocale, useT } from "../i18n/use-t";
 
 /**
  * One row of the entry list, and the running entry's variant of it.
@@ -51,6 +52,8 @@ export function EntryRow({
   pending,
   onOpen,
 }: EntryRowProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
   const described = entry.description.trim() !== "";
 
   return (
@@ -58,7 +61,7 @@ export function EntryRow({
       type="button"
       className="entry"
       onClick={onOpen}
-      title={pending ? "Not sent yet — editable once it syncs" : undefined}
+      title={pending ? t("entry.pendingTitle") : undefined}
       data-testid="entry-row"
       data-entry-id={entry.id}
       data-invoiced={entry.invoiceId !== null ? "true" : "false"}
@@ -74,9 +77,9 @@ export function EntryRow({
         <span
           className={described ? "entry__label" : "entry__label combobox__muted"}
         >
-          {entryTitle(entry)}
+          {entryTitle(entry, t)}
         </span>
-        <span className="entry__hint">{entrySubtitle(entry)}</span>
+        <span className="entry__hint">{entrySubtitle(entry, t)}</span>
       </span>
 
       <span className="entry__times">
@@ -84,7 +87,7 @@ export function EntryRow({
           {entryRangeLabel(entry, timeFormat)}
         </span>
         <span className="entry__duration">
-          {formatDuration(entry.durationSec, durationFormat)}
+          {formatDurationFor(entry.durationSec, locale, durationFormat)}
         </span>
       </span>
     </button>
@@ -117,6 +120,8 @@ export function RunningRow({
   durationFormat,
   onOpen,
 }: RunningRowProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
   const described = entry.description.trim() !== "";
 
   return (
@@ -133,9 +138,9 @@ export function RunningRow({
         <span
           className={described ? "entry__label" : "entry__label combobox__muted"}
         >
-          {entryTitle(entry)}
+          {entryTitle(entry, t)}
         </span>
-        <span className="entry__hint">Running</span>
+        <span className="entry__hint">{t("entry.running")}</span>
       </span>
 
       <span className="entry__times">
@@ -143,7 +148,7 @@ export function RunningRow({
           {entryRangeLabel(entry, timeFormat)}
         </span>
         <span className="entry__duration">
-          {formatElapsed(elapsedSec, durationFormat)}
+          {formatElapsed(elapsedSec, durationFormat, locale)}
         </span>
       </span>
     </button>

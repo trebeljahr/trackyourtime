@@ -30,6 +30,7 @@ import { forgetRoute, loadRoute, rememberRoute } from "./route-memory";
 import { Screens } from "./screens";
 import { rememberTheme } from "./theme";
 import { ServerAccessNotice } from "./server-access-notice";
+import { applyLocalePreference, useT } from "../i18n/use-t";
 import { SignInScreen } from "./sign-in-screen";
 import type { SetServerOutcome } from "./switch-server";
 import type { RunningPatch } from "./tracker-screen";
@@ -65,8 +66,15 @@ const REFRESH_MS = 3000;
 const DRAFT_MEMORY_DEBOUNCE_MS = 500;
 
 export function App(): JSX.Element {
+  const t = useT("popup");
   const [state, setState] = useState<BackgroundState | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // `send` must keep a stable identity (it is a mount-effect dependency), yet
+  // the failure it translates has to be said in the language on screen NOW —
+  // a ref gives it both, the same trick `apiUrlRef` plays below.
+  const tRef = useRef(t);
+  tRef.current = t;
 
   /**
    * A one-line outcome of the transition that just happened, rendered by the
@@ -118,7 +126,9 @@ export function App(): JSX.Element {
         setError(null);
         return true;
       }
-      setError(describeError(response.code, response.message, apiUrlRef.current));
+      setError(
+        describeError(response.code, response.message, apiUrlRef.current, tRef.current),
+      );
       // A failure retires whatever the last transition said: "Entry added."
       // sitting above "The end has to be after the start." reads as though
       // both were true of the same action.
@@ -221,6 +231,17 @@ export function App(): JSX.Element {
     if (theme === undefined) return;
     rememberTheme(theme);
   }, [state?.settings?.theme]);
+
+  /**
+   * Follow the account's language, for the same reasons as the theme: it is
+   * a synced preference, and remembering it as it is applied is what lets the
+   * next open render its first frame in the right language.
+   */
+  useEffect(() => {
+    const locale = state?.settings?.locale;
+    if (locale === undefined) return;
+    applyLocalePreference(locale);
+  }, [state?.settings?.locale]);
 
   /**
    * Tell the worker which surface is being looked at.
@@ -347,7 +368,7 @@ export function App(): JSX.Element {
         ok: false,
         code: response.code,
         message: worker
-          ? describeError(response.code, response.message, origin)
+          ? describeError(response.code, response.message, origin, tRef.current)
           : response.message,
       };
     },
@@ -458,7 +479,7 @@ export function App(): JSX.Element {
   const deleteEntry = useCallback(
     async (id: string): Promise<boolean> => {
       const ok = await send({ type: "entry:remove", id });
-      if (ok) goBackWith("Entry deleted.");
+      if (ok) goBackWith(tRef.current("app.notes.entryDeleted"));
       return ok;
     },
     [send, goBackWith],
@@ -476,7 +497,7 @@ export function App(): JSX.Element {
         start: draft.start,
         end: draft.end,
       });
-      if (ok) goBackWith("Entry added.");
+      if (ok) goBackWith(tRef.current("app.notes.entryAdded"));
       return ok;
     },
     [send, goBackWith],
@@ -627,7 +648,7 @@ export function App(): JSX.Element {
    */
   const entryMissing = useCallback((): void => {
     if (topOf(stackRef.current).name !== "entry") return;
-    goBackWith("That entry is gone.");
+    goBackWith(tRef.current("app.notes.entryGone"));
   }, [goBackWith]);
 
   if (state === null) {
@@ -636,7 +657,7 @@ export function App(): JSX.Element {
         <div className="popup__body">
           {error === null ? (
             <p className="loading" data-testid="popup-loading">
-              Loading…
+              {t("app.loading")}
             </p>
           ) : (
             <>
@@ -651,7 +672,7 @@ export function App(): JSX.Element {
                 }}
                 data-testid="popup-retry"
               >
-                Try again
+                {t("app.retry")}
               </button>
             </>
           )}

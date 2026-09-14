@@ -9,6 +9,8 @@
  * the wall clock is right in all three cases and costs nothing.
  */
 import { entryDurationSec, type TimeEntry } from "@starter/core";
+import type { ExtensionTranslator } from "../i18n";
+import { backgroundT } from "./locale";
 
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
@@ -25,9 +27,12 @@ const BADGE_TEXT_COLOR = "#ffffff";
  * A badge is roughly four characters wide, so the unit steps down as the
  * number grows: "7m", "59m", "1h". Precision below the minute would only
  * flicker — the alarm cannot fire more often than every 30 seconds anyway.
+ * The unit letters come from the `background` catalog, so a translation can
+ * pick its own shortest recognisable unit.
  */
 export const badgeTextFor = (
   entry: TimeEntry | null,
+  t: ExtensionTranslator<"background">,
   nowMs: number = Date.now(),
 ): string => {
   if (entry === null) return "";
@@ -35,8 +40,8 @@ export const badgeTextFor = (
   const minutes = Math.floor(
     entryDurationSec(entry, nowMs) / SECONDS_PER_MINUTE,
   );
-  if (minutes < MINUTES_PER_HOUR) return `${minutes}m`;
-  return `${Math.floor(minutes / MINUTES_PER_HOUR)}h`;
+  if (minutes < MINUTES_PER_HOUR) return t("badge.minutes", { minutes });
+  return t("badge.hours", { hours: Math.floor(minutes / MINUTES_PER_HOUR) });
 };
 
 /**
@@ -51,7 +56,7 @@ export async function renderBadge(entry: TimeEntry | null): Promise<void> {
   if (!action) return;
 
   try {
-    await action.setBadgeText({ text: badgeTextFor(entry) });
+    await action.setBadgeText({ text: badgeTextFor(entry, await backgroundT()) });
     await action.setBadgeBackgroundColor({ color: BADGE_BACKGROUND });
     await action.setBadgeTextColor({ color: BADGE_TEXT_COLOR });
   } catch {

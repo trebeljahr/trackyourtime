@@ -10,13 +10,17 @@ import {
   addDaysToKey,
   deviceTimeZone,
   formatClockInZone,
-  formatDuration,
   type DayKey,
   type DetailedEntry,
   type DurationFormat,
+  type QuickStart,
+  type QuickStartLabels,
   type TimeEntry,
   type TimeFormat,
 } from "@starter/core";
+import type { Locale } from "@starter/shared";
+import { formatDayKey, formatDurationFor } from "../i18n/format";
+import type { PopupT } from "../i18n/use-t";
 
 /**
  * A ticking clock in the user's own duration format.
@@ -30,8 +34,9 @@ import {
 export function formatElapsed(
   seconds: number,
   format: DurationFormat,
+  locale: Locale,
 ): string {
-  const shown = formatDuration(seconds, format);
+  const shown = formatDurationFor(seconds, locale, format);
   return shown.startsWith("0:") ? shown.slice(2) : shown;
 }
 
@@ -60,34 +65,61 @@ export function entryRangeLabel(
   return `${start}–${end}`;
 }
 
-/** "Today", "Yesterday", else "Fri 5 Sep". */
-export function entryDayLabel(dayKey: DayKey, todayKey: DayKey): string {
-  if (dayKey === todayKey) return "Today";
-  if (dayKey === addDaysToKey(todayKey, -1)) return "Yesterday";
-
-  // Parsed and rendered in UTC on purpose: the key already names a calendar
-  // day in the entry's own zone, so letting the device's offset reinterpret it
-  // is exactly how a date slips by one.
-  const ms = Date.parse(`${dayKey}T00:00:00Z`);
-  if (Number.isNaN(ms)) return dayKey;
-  return new Date(ms).toLocaleDateString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
+/** "Today", "Yesterday", else "Fri 5 Sep" in the reader's language. */
+export function entryDayLabel(
+  dayKey: DayKey,
+  todayKey: DayKey,
+  t: PopupT,
+  locale: Locale,
+): string {
+  if (dayKey === todayKey) return t("entry.today");
+  if (dayKey === addDaysToKey(todayKey, -1)) return t("entry.yesterday");
+  return formatDayKey(dayKey, locale);
 }
 
 /** An entry with no description is a real state, not a blank row. */
-export function entryTitle(entry: Pick<TimeEntry, "description">): string {
+export function entryTitle(entry: Pick<TimeEntry, "description">, t: PopupT): string {
   const trimmed = entry.description.trim();
-  return trimmed === "" ? "No description" : trimmed;
+  return trimmed === "" ? t("entry.noDescription") : trimmed;
 }
 
 /** "Acme · Landing page" — the denormalized labels the server already sent. */
-export function entrySubtitle(entry: DetailedEntry): string {
+export function entrySubtitle(entry: DetailedEntry, t: PopupT): string {
   const parts = [entry.clientName, entry.projectName, entry.taskName].filter(
     (part): part is string => part !== null && part !== "",
   );
-  return parts.length === 0 ? "No project" : parts.join(" · ");
+  return parts.length === 0 ? t("fields.noProject") : parts.join(" · ");
+}
+
+type Labelled = QuickStart & Partial<QuickStartLabels>;
+
+/**
+ * `quickStartLabel` from `@starter/shared`, with its one fallback word said in
+ * the popup's language. The order — description, project, task — is the
+ * shared rule and must stay in step with it.
+ */
+export function quickLabel(quick: Labelled, t: PopupT): string {
+  const description = quick.description.trim();
+  if (description !== "") return description;
+  if (quick.projectName) return quick.projectName;
+  if (quick.taskName) return quick.taskName;
+  return t("entry.noDescription");
+}
+
+/**
+ * `quickStartHint` from `@starter/shared`, translated: project and client, or
+ * null when it would only repeat the label. Kept rule for rule with the shared
+ * helper, which Raycast still uses in English.
+ */
+export function quickHint(quick: Labelled, t: PopupT): string | null {
+  if (quick.projectMissing === true) return t("entry.projectDeleted");
+  if (!quick.projectName) return quick.taskName ?? null;
+  if (quick.description.trim() === "") return quick.clientName ?? null;
+
+  const project = quick.projectArchived
+    ? t("entry.projectArchived", { project: quick.projectName })
+    : quick.projectName;
+  return quick.clientName
+    ? t("entry.clientAndProject", { client: quick.clientName, project })
+    : project;
 }

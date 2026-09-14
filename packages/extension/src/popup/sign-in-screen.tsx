@@ -3,6 +3,7 @@ import { DEFAULT_API_URL } from "../lib/config";
 import { describeServer } from "../lib/server-label";
 import { ServerPicker } from "./server-picker";
 import type { SetServerOutcome } from "./switch-server";
+import { useT } from "../i18n/use-t";
 
 export type SignInScreenProps = {
   apiUrl: string;
@@ -34,6 +35,7 @@ export function SignInScreen({
   onSignIn,
   onSetServer,
 }: SignInScreenProps): JSX.Element {
+  const t = useT("popup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -49,14 +51,14 @@ export function SignInScreen({
 
   return (
     <div className="popup__body" data-testid="sign-in-screen">
-      <h1 className="popup__title">Sign in to Track Your Time</h1>
+      <h1 className="popup__title">{t("signIn.title")}</h1>
 
       {/* Which server the password is about to be sent to, said before the
           form rather than after it: with a self-hosted choice in play, that is
           the thing to check before typing anything. */}
       <div className="server" data-testid="sign-in-server">
         <p className="server__text">
-          Signing in to{" "}
+          {t("signIn.signingInTo")}{" "}
           <strong title={apiUrl}>{describeServer(apiUrl, DEFAULT_API_URL)}</strong>
           {serverVersion !== null ? (
             <span className="server__version"> · {serverVersion}</span>
@@ -69,7 +71,7 @@ export function SignInScreen({
           onClick={() => setChangingServer((open) => !open)}
           data-testid="sign-in-change-server"
         >
-          {changingServer ? "Cancel" : "Change server"}
+          {changingServer ? t("signIn.keepServer") : t("signIn.changeServer")}
         </button>
       </div>
 
@@ -87,7 +89,7 @@ export function SignInScreen({
       <form className="form" onSubmit={submit} data-testid="sign-in-form">
         <div className="field">
           <label className="field__label" htmlFor="email">
-            Email
+            {t("signIn.email")}
           </label>
           <input
             id="email"
@@ -104,7 +106,7 @@ export function SignInScreen({
 
         <div className="field">
           <label className="field__label" htmlFor="password">
-            Password
+            {t("signIn.password")}
           </label>
           <input
             id="password"
@@ -124,7 +126,7 @@ export function SignInScreen({
           disabled={busy}
           data-testid="sign-in-submit"
         >
-          {busy ? "Signing in…" : "Sign in"}
+          {busy ? t("signIn.submitting") : t("signIn.submit")}
         </button>
       </form>
 

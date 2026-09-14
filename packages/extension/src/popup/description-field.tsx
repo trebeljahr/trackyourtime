@@ -5,7 +5,9 @@ import {
   type JSX,
   type KeyboardEvent,
 } from "react";
-import { quickStartHint, type DescriptionSuggestion } from "@starter/core";
+import type { DescriptionSuggestion } from "@starter/core";
+import { useT } from "../i18n/use-t";
+import { quickHint } from "./entry-format";
 
 /**
  * The description input, with what you have called work before hanging under
@@ -96,6 +98,7 @@ export function DescriptionField({
   onFill,
   testId,
 }: DescriptionFieldProps): JSX.Element {
+  const t = useT("popup");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(NONE);
 
@@ -281,7 +284,7 @@ export function DescriptionField({
         {showList && (
           <ul className="suggest__list" id={listId} role="listbox">
             {rows.map((suggestion, index) => {
-              const hint = quickStartHint(suggestion);
+              const hint = quickHint(suggestion, t);
               const isActive = index === active;
               return (
                 <li key={suggestion.lastEntryId} className="suggest__item">
@@ -327,8 +330,12 @@ export function DescriptionField({
                     <button
                       type="button"
                       className="suggest__fill"
-                      title={`Use “${suggestion.description}” with its project, task, tags and billable setting`}
-                      aria-label={`Use ${suggestion.description} with its fields`}
+                      title={t("description.fillTitle", {
+                        description: suggestion.description,
+                      })}
+                      aria-label={t("description.fillLabel", {
+                        description: suggestion.description,
+                      })}
                       onMouseDown={(event) => {
                         event.preventDefault();
                         take(suggestion, true);
@@ -344,8 +351,8 @@ export function DescriptionField({
 
             <li className="suggest__legend" aria-hidden="true">
               {onFill === undefined
-                ? "⇥ completes"
-                : "⇥ completes · ＋ or ⌘⏎ brings its project and tags"}
+                ? t("description.legend")
+                : t("description.legendWithFill")}
             </li>
           </ul>
         )}

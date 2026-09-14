@@ -4,6 +4,7 @@ import {
   parseTimeOfDayInZone,
   type TimeFormat,
 } from "@starter/core";
+import { useT } from "../i18n/use-t";
 
 /**
  * A clock time, typed as text.
@@ -43,6 +44,7 @@ export function TimeField({
   disabled = false,
   testId,
 }: TimeFieldProps): JSX.Element {
+  const t = useT("popup");
   const shown = formatClockInZone(value, zone, timeFormat);
   const [draft, setDraft] = useState(shown);
   const [rejected, setRejected] = useState(false);
@@ -114,7 +116,7 @@ export function TimeField({
       />
       {rejected ? (
         <p className="detail__note" data-testid={`${testId}-hint`}>
-          Not a time — try 9:30, 930 or 9:30 pm.
+          {t("timeField.rejected")}
         </p>
       ) : null}
     </div>

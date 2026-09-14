@@ -19,6 +19,7 @@ import { Header } from "./header";
 import { ProjectPicker } from "./project-picker";
 import type { EntryDraft } from "./route";
 import { describeSync } from "./sync-label";
+import { useT } from "../i18n/use-t";
 
 /**
  * Time this browser saw you working that no entry covers yet, one day at a time.
@@ -277,6 +278,7 @@ function RuleList({
 export function SuggestionsScreen(props: SuggestionsScreenProps): JSX.Element {
   const { state, error, note = null, day, onBack, onGoTracker, onOpenActivitySettings, onChangeDay } =
     props;
+  const t = useT("popup");
   const [busy, setBusy] = useState(false);
   const alertRef = useRef<HTMLParagraphElement>(null);
 
@@ -316,7 +318,7 @@ export function SuggestionsScreen(props: SuggestionsScreenProps): JSX.Element {
   // The snapshot can describe the day the popup was on a moment ago.
   const current = activity.day === shownDay ? activity.suggestions : null;
 
-  const sync = describeSync(state.syncStatus, state.serverReachable, state.pendingSync);
+  const sync = describeSync(t, state.syncStatus, state.serverReachable, state.pendingSync);
 
   return (
     <div className="screen" onKeyDown={onKeyDown} data-testid="suggestions-screen">

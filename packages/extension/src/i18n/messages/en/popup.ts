@@ -4,6 +4,10 @@
  * Add keys here, then in ../de/popup.ts (`tsc` enforces parity). ICU syntax as
  * in the web client. Reuse the web client's German terms
  * (packages/client/src/i18n/GLOSSARY.de.md) so the two surfaces agree.
+ *
+ * Grouped by component. `fields` and `actions` hold the words several screens
+ * share, so "Project" is one message and cannot drift between the tracker and
+ * the entry editor.
  */
 export const popup = {
   workspace: {
@@ -22,5 +26,349 @@ export const popup = {
       remove: "Delete an entry in {workspace}",
       other: "A change in {workspace}",
     },
+  },
+  actions: {
+    cancel: "Cancel",
+    create: "Create",
+    creating: "Creating…",
+    delete: "Delete",
+    signOut: "Sign out",
+    openApp: "Open Track Your Time",
+    openAppExternal: "Open Track Your Time ↗",
+  },
+  fields: {
+    description: "Description",
+    project: "Project",
+    noProject: "No project",
+    searchProjects: "Search projects…",
+    createProject: "Create project “{name}”",
+    task: "Task",
+    noTask: "No task",
+    searchTasks: "Search tasks…",
+    createTask: "Create task “{name}”",
+    client: "Client",
+    noClient: "No client",
+    searchClients: "Search clients…",
+    createClient: "Create client “{name}”",
+    tags: "Tags",
+    billable: "Billable",
+    notBillable: "Not billable",
+    start: "Start",
+    end: "End",
+    duration: "Duration",
+    day: "Day",
+  },
+  app: {
+    loading: "Loading…",
+    retry: "Try again",
+    signedIn: "Signed in",
+    notes: {
+      entryDeleted: "Entry deleted.",
+      entryAdded: "Entry added.",
+      entryGone: "That entry is gone.",
+    },
+  },
+  errors: {
+    credentials: "That email and password did not match an account.",
+    noSessionToken:
+      "The server accepted the password but returned no session token, so there is nothing for the extension to keep. Its better-auth bearer plugin needs to be enabled — signing in again will not help.",
+    worker: "The extension’s background worker did not answer. Close and reopen the popup.",
+    unreachable:
+      "Could not reach {server}. Check the server address and that the server is running.",
+    serverFailed: "The server failed with {status}. Try again in a moment.",
+    invalidEmail: "That does not look like an email address.",
+    emailNotVerified: "Verify your email address before signing in.",
+    noFetch: "This browser could not make the request.",
+    notSignedIn: "Sign in first.",
+    stillSyncing: "That entry has not reached the server yet. Try again in a moment.",
+    badTimeRange: "The end has to be after the start.",
+    revokeSelf:
+      "That is this browser. Use Sign out instead, so the extension forgets its own session too.",
+    notRunning: "No timer is running, so there is nothing to edit.",
+    invalidApiUrl: "That is not a valid URL.",
+    badMessage: "The extension received a message it does not understand.",
+    forbidden: "You do not have permission to do this.",
+    notFound: "This could not be found. It may have been deleted.",
+    tooManyRequests: "Too many requests. Wait a moment and try again.",
+    generic: "Something went wrong. Try again.",
+  },
+  sync: {
+    offline: "Offline",
+    offlineQueued: "Offline · {count, number} queued",
+    offlineTitle:
+      "The server is not answering. Timers still start and stop, and are sent when it comes back.",
+    offlineQueuedTitle:
+      "The server is not answering. {count, plural, one {# change} other {# changes}} will be sent when it does.",
+    queued: "{count, number} queued",
+    queuedTitle: "{count, plural, one {# change} other {# changes}} still to send.",
+    synced: "Synced",
+    syncedTitle: "Live updates from your other devices are connected.",
+    connecting: "Connecting…",
+    connectingTitle: "Connecting to live updates.",
+    polling: "Polling",
+    pollingTitle:
+      "Live updates are unavailable, so changes made elsewhere show up on a short delay. Everything you do here is saved normally.",
+  },
+  header: {
+    back: "Back",
+    newEntry: "New entry",
+    entries: "Entries",
+    settings: "Settings",
+  },
+  menu: {
+    more: "More",
+    reports: "Reports",
+  },
+  idle: {
+    alert: "Away for {span} — resolve",
+    lockedTitle: "Screen was locked for {span}",
+    inputTitle: "No input for {span}",
+    hint: "The timer is still running. Keep that time if you were reading, in a meeting or on a call.",
+    keep: "I was working",
+    discard: "Discard {span}",
+    discardAndResume: "Discard and resume",
+  },
+  dayStepper: {
+    previous: "Previous day",
+    next: "Next day",
+    today: "Today",
+  },
+  entry: {
+    today: "Today",
+    yesterday: "Yesterday",
+    noDescription: "No description",
+    running: "Running",
+    pendingTitle: "Not sent yet — editable once it syncs",
+    projectDeleted: "Project deleted",
+    projectArchived: "{project} (archived)",
+    clientAndProject: "{client} · {project}",
+  },
+  tagPicker: {
+    remove: "Remove {name}",
+    search: "Search or add tags…",
+    addAnother: "Add another tag…",
+    create: "Create tag “{name}”",
+  },
+  signIn: {
+    title: "Sign in to Track Your Time",
+    email: "Email",
+    password: "Password",
+    submitting: "Signing in…",
+    submit: "Sign in",
+    signingInTo: "Signing in to",
+    changeServer: "Change server",
+    keepServer: "Cancel",
+  },
+  section: {
+    saved: "Saved",
+  },
+  quickStart: {
+    title: "Quick start",
+    rowTitle: "{label} — {hint}",
+    pin: "Pin {label}",
+    unpin: "Unpin {label}",
+  },
+  timeField: {
+    rejected: "Not a time — try 9:30, 930 or 9:30 pm.",
+  },
+  combobox: {
+    create: "Create “{name}”",
+    notAvailable: "Not available",
+    search: "Search…",
+    noMatches: "No matches",
+  },
+  description: {
+    fillTitle: "Use “{description}” with its project, task, tags and billable setting",
+    fillLabel: "Use {description} with its fields",
+    legend: "⇥ completes",
+    legendWithFill: "⇥ completes · ＋ or ⌘⏎ brings its project and tags",
+  },
+  projectPicker: {
+    newTitle: "New project “{name}”",
+  },
+  entryForm: {
+    descriptionPlaceholder: "What was this?",
+    onInvoice: "On an invoice",
+    notSent: "Not sent yet",
+    zoneNote: "Recorded in {zone}, and edited in that clock.",
+  },
+  tracker: {
+    descriptionPlaceholder: "What are you working on?",
+    /** The button. The start TIME of an entry is `fields.start`. */
+    start: "Start",
+    stop: "Stop",
+    today: "Today",
+  },
+  entries: {
+    title: "Entries",
+    empty:
+      "{days, plural, one {Nothing tracked today.} other {Nothing tracked in the last # days.}}",
+    newEntry: "New entry",
+    loadOlder: "Load older",
+    end: "{days, plural, one {That is all of today.} other {That is the last # days.}} Older entries are in the web app.",
+  },
+  entryNew: {
+    title: "New entry",
+    duration: "That is {duration}.",
+    adding: "Adding…",
+    add: "Add entry",
+  },
+  entryDetail: {
+    title: "Entry",
+    queued: "Not sent yet — try again in a moment.",
+    invoiced:
+      "On an invoice — times, project and billable are locked. The description and tags can still be changed.",
+    deleteTitle: "Delete this entry?",
+    deleteHint: "{duration} · {day} · {subtitle}",
+    cannotDelete: "An invoiced entry cannot be deleted.",
+    deleteEntry: "Delete entry",
+  },
+  settings: {
+    title: "Settings",
+    loading: "Loading settings…",
+    off: "Off",
+    sections: {
+      general: "General",
+      idle: "Idle",
+      limits: "Limits",
+      devices: "Devices",
+      activity: "Activity",
+      account: "Account",
+    },
+  },
+  general: {
+    hint: "{clock} · {duration} · {currency}",
+    workspaceNote: "Applies to the whole workspace",
+    language: "Language",
+    languageNote: "Shared with the web app and your other devices.",
+    languages: {
+      system: "Match the system",
+      en: "English",
+      de: "Deutsch",
+    },
+    theme: "Theme",
+    themeNote: "Shared with the web app and your other machines.",
+    themes: {
+      system: "Match the system",
+      light: "Light",
+      dark: "Dark",
+    },
+    timeFormat: "Time format",
+    timeFormats: {
+      "24h": "24-hour",
+      "12h": "12-hour",
+    },
+    durationFormat: "Duration format",
+    durationFormatNote: "Decimal hours are what most invoices expect.",
+    weekStart: "Week starts on",
+    currency: "Currency",
+    currencyOption: "{code} — {name}",
+    defaultRate: "Default hourly rate",
+    defaultRateNote:
+      "Used when a billable entry’s project has no rate of its own. Applies to the whole workspace.",
+  },
+  idleSettings: {
+    hint: "{behavior, select, ask {Ask} pause {Pause} keep {Keep} other {Stop}} after {minutes, number} min",
+    enabledNote:
+      "Each device watches its own input. A device that did not start the timer never touches it.",
+    on: "Detecting idle time",
+    off: "Idle detection off",
+    threshold: "Away after",
+    thresholdNote: "How long with no input before you count as away.",
+    thresholdLabel: "Idle threshold in minutes",
+    minutesSuffix: "min",
+    behavior: "When away",
+    lockNote: "Locking is deliberate, so it does not have to wait out the threshold first.",
+    lockImmediate: "Locking counts immediately",
+    lockWaits: "Locking waits for the threshold",
+    behaviors: {
+      ask: {
+        label: "Ask me",
+        description:
+          "Keep running and offer the choice when you get back. Nothing is discarded unless you say so.",
+      },
+      pause: {
+        label: "Pause and resume",
+        description:
+          "End the entry where the idle time started, then reopen an identical one as soon as you come back.",
+      },
+      keep: {
+        label: "Keep running",
+        description:
+          "Never act on idle time. For reading, meetings and calls, where no input is normal.",
+      },
+      stop: {
+        label: "Stop the timer",
+        description: "End the entry where the idle time started and leave the timer stopped.",
+      },
+    },
+  },
+  limits: {
+    hint: "{hours, number} h, then {behavior, select, ask {ask} cap {cap it} other {stop it}}",
+    enabledNote:
+      "Worked out on the server, not on your devices — the whole point is the case where none of them were running.",
+    on: "Stopping runaway timers",
+    off: "Runaway guard off",
+    after: "After",
+    afterNote: "Pick something above any believable single sitting and below an overnight.",
+    hoursLabel: "Maximum entry length in hours",
+    hoursSuffix: "h",
+    then: "Then",
+    behaviors: {
+      ask: {
+        label: "Ask me",
+        description:
+          "Leave the timer running and ask the next time you look. Nothing is shortened unless you say so.",
+      },
+      cap: {
+        label: "Cap it",
+        description:
+          "End the entry at the maximum and discard the overrun. The original span is kept on the entry so you can put it back.",
+      },
+      stop: {
+        label: "Stop it",
+        description:
+          "End the entry where it had got to. Every second is kept — the timer just stops growing.",
+      },
+    },
+  },
+  devices: {
+    hint: "{count, plural, one {# signed in} other {# signed in}}",
+    loading: "Loading devices…",
+    thisBrowser: "This browser",
+    lastActive: "{client} · Last active {when}",
+    justNow: "just now",
+    unknown: "unknown",
+    clients: {
+      web: "Web",
+      desktop: "Desktop",
+      mobile: "Mobile",
+      raycast: "Raycast",
+      extension: "Browser extension",
+      cli: "CLI",
+      unknown: "Unknown",
+    },
+    signOutBrowserTitle: "Sign this browser out?",
+    signOutDeviceTitle: "Sign this device out?",
+    sharedSessionHint:
+      "This session is shared with the web app, so signing out here signs out Track Your Time in this browser too.",
+    signOutBrowserHint: "The extension forgets its session and you sign in again.",
+    signOutDeviceHint:
+      "{name} stops syncing immediately and has to sign in again. Nothing it already tracked is lost.",
+    signOutOthers: "Sign out other devices",
+    signOutOthersTitle: "Sign every other device out?",
+    signOutOthersHint: "This browser stays signed in. Everything else has to sign in again.",
+    signOutOthersConfirm: "Sign them out",
+  },
+  account: {
+    signedInAs: "Signed in as",
+    sharedSession:
+      "Signed in with the web app’s session — signing out here signs out Track Your Time in this browser too.",
+    changeServer: "Change server…",
+    keepServer: "Keep this server",
+    signOutTitle: "Sign out?",
+    signOutSharedHint:
+      "This session is shared with the web app, so Track Your Time signs out in this browser too.",
+    signOutHint: "Anything already tracked is kept. You sign in again to keep tracking.",
   },
 } as const;

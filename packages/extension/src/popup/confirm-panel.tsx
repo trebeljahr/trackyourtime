@@ -1,4 +1,5 @@
 import type { JSX, KeyboardEvent } from "react";
+import { useT } from "../i18n/use-t";
 
 /**
  * A two-step confirm, inline.
@@ -33,6 +34,7 @@ export function ConfirmPanel({
   onCancel,
   testId,
 }: ConfirmPanelProps): JSX.Element {
+  const t = useT("popup");
   // Escape cancels the question rather than leaving the screen. Marking the
   // event handled is what the screen's own Escape handler reads to stay put.
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -54,7 +56,7 @@ export function ConfirmPanel({
           disabled={busy}
           data-testid={`${testId}-cancel`}
         >
-          Cancel
+          {t("actions.cancel")}
         </button>
         <button
           className={danger ? "button button--danger" : "button button--primary"}
