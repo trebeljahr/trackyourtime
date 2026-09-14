@@ -229,7 +229,7 @@ Before you send it, make sure the assistant has these:
 | SSH access to the server, as root or as a user with `sudo` | It installs Docker, clones the repository and starts the containers. |
 | A DNS `A` record for the domain that already points at the server | Certificate issuance fails until the record resolves. Add an `AAAA` record too if the server has IPv6. |
 | Ports 80 and 443 open in your cloud provider's firewall | The assistant can open the server's own firewall. It usually cannot reach the provider's control panel. |
-| SMTP credentials, optionally | Only for password-reset mail. The app works without them. See [Email](#email). |
+| SMTP credentials, optionally | Only for password-reset mail and timer reminders. The app works without them. See [Email](#email). |
 
 The assistant does **not** need an account with any service. There is no
 registry login, no API key, no licence key and no sign-up with a third party.
@@ -1077,12 +1077,22 @@ PASS  clock            this process is 2 ms behind the database server
 
 ### What email is used for
 
-Three things, all about accounts: password reset, email verification (off by
-default) and workspace invitations (no screen for them today). No time-tracking
-feature sends mail. Reports, invoices and exports download in the browser.
+Three things about accounts: password reset, email verification (off by
+default) and workspace invitations (no screen for them today). One thing about
+time tracking: a single reminder for a timer left running too long. Reports,
+invoices and exports download in the browser.
+
+The reminder goes out once per timer. It is sent when the runaway guard flags
+a timer (behaviour "Ask me"), or when a timer passes 8 hours with the guard
+off. A background job checks every 5 minutes. With no SMTP configured, the
+server logs the reminder instead of sending it. Each person can turn the
+reminder off with **Email notifications** in Settings, Account. The job also
+applies "Cap it" and "Stop it" with no app open. `SCHEDULER_ENABLED=false`
+turns the job off; the guard then applies only when an app next asks for the
+running timer.
 
 So Track Your Time runs without email. You need email only to reset a password
-without shell access to the server.
+without shell access to the server, and to receive timer reminders.
 
 ### Configuring SMTP
 

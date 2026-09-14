@@ -970,6 +970,45 @@ the lossless one (colors, archived catalog rows, project rates) and references
 the catalog **by name**, so it can be imported into a different workspace or
 into an empty one after the database it came from is gone.
 
+### Background jobs (scheduler)
+
+`services/scheduler/` runs recurring jobs inside the server process. One
+`ScheduledJob` row per job name is shared by every process on the database; a
+job runs only after an atomic `findOneAndUpdate` claims it, so several
+replicas run each job once per interval. It polls every 30s, starts from
+`index.ts` after the DB connects, and is gated by `SCHEDULER_ENABLED` (on by
+default). Later jobs register with `registerRecurringJob(name, intervalMs,
+handler)`. The webhook sweeper keeps its own loop.
+
+```bash
+TEST_MONGODB_URI=mongodb://127.0.0.1:<port> pnpm --filter @starter/server test
+```
+
+The database-backed unit tests (`scheduler-lease`, `runaway-reminder`) skip
+without `TEST_MONGODB_URI`, and each connects to a throwaway database of its
+own (`tests/support/test-database.ts`). CI sets it.
+
+Four rules, each of which fails quietly if broken:
+
+- **The claim moves `nextRunAt` forward, not the release.** That is what makes
+  it once per interval rather than once per free moment. `lockedUntil` only
+  keeps a run slower than its interval from starting beside itself; a process
+  that dies mid-run loses that run and frees the job when the lease lapses.
+- **Release filters on `lockedBy`.** A process whose lease lapsed and was taken
+  over must not clear the new holder's lease on its way out.
+- **`runaway-reminder` (every 5 min) calls `enforceMaxEntryDuration` and nothing
+  else to enforce**, per person with a timer running. The lazy call sites in
+  `entries/timer.ts` and `ws/handler.ts` stay as the fallback, and both are
+  idempotent against the job: a cap needs `end: null`, a flag needs
+  `runaway: null`. Never add a second enforcement path.
+- **One reminder email per entry, keyed on `TimeEntry.reminderSentAt`,**
+  claimed atomically BEFORE sending and given back if the send throws. Sent for
+  an unanswered `ask` flag, or past 8h with the guard off. The notifications
+  toggle (`Profile.preferences.notifications`) suppresses the email only,
+  never the cap or stop. With no transport the reminder is logged and still
+  claimed, so the log gets one line per timer, not one per poll.
+  `reminderSentAt` has no default and is never required, so old rows validate.
+
 ### Public REST API and webhooks
 
 `/api/v1` is the token-authenticated REST surface third parties integrate
