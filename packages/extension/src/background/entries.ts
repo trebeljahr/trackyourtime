@@ -55,6 +55,8 @@ import {
   enqueueOffline,
   entriesCacheIsFresh,
   flushQueue,
+  getActiveWorkspaceId,
+  getKnownUserId,
   getCachedClients,
   getCachedEntries,
   getCachedProjects,
@@ -182,7 +184,17 @@ const applyOverlay = async (
 
   const fromMs = Date.parse(from);
   const toMs = Date.parse(to);
+  const activeWorkspaceId = getActiveWorkspaceId();
   const added = [...upserts.values()]
+    // An offline create made in another workspace is that workspace's row.
+    // An optimistic entry built before any workspace was known says "", and
+    // is shown: it can only have been made where the person was then.
+    .filter(
+      (entry) =>
+        entry.workspaceId === "" ||
+        activeWorkspaceId === null ||
+        entry.workspaceId === activeWorkspaceId,
+    )
     .filter((entry) => {
       const startMs = Date.parse(entry.start);
       return startMs >= fromMs && startMs <= toMs;
@@ -237,7 +249,7 @@ const fetchWindow = async (
 
   while (pages < depth) {
     const page = await fetchPage(from, to, cursor);
-    entries.push(...finishedOnly(page.entries));
+    entries.push(...ownOnly(finishedOnly(page.entries)));
     pages += 1;
     cursor = page.nextCursor ?? null;
     if (cursor === null || entries.length >= ENTRY_MAX_ROWS) break;
@@ -259,6 +271,20 @@ const fetchWindow = async (
  */
 const finishedOnly = (entries: DetailedEntry[]): DetailedEntry[] =>
   entries.filter((entry) => entry.end !== null);
+
+/**
+ * The popup browses the signed-in person's own entries. A member allowed to
+ * see colleagues' time gets their rows from the same `entries.list`, and a
+ * 380px list of everybody's work — each row offering an editor the server
+ * would refuse — is not what "Entries" beside a personal timer means. Until
+ * the worker knows who it is signed in as, nothing is hidden.
+ */
+const ownOnly = (entries: DetailedEntry[]): DetailedEntry[] => {
+  const userId = getKnownUserId();
+  return userId === null
+    ? entries
+    : entries.filter((entry) => entry.authorId === userId);
+};
 
 /**
  * The window as the cache alone can describe it, with no round trip.
@@ -344,7 +370,7 @@ export async function loadMoreEntries(): Promise<void> {
 
   const { from, to } = windowBounds();
   const page = await fetchPage(from, to, cached.cursor);
-  const entries = finishedOnly(page.entries);
+  const entries = ownOnly(finishedOnly(page.entries));
   const total = cached.entries.length + entries.length;
   appendCachedEntries(
     entries,

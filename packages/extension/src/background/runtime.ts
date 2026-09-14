@@ -17,9 +17,23 @@ import {
   createOfflineQueue,
   createSyncClient,
   decodeOfflineMutation,
+  describeQueuedMutation,
+  emptyWorkspaceChoice,
+  isHeldByWorkspace,
   isPermanentRejection,
   isQueuedOn,
+  isReplayableIn,
   OFFLINE_QUEUE_STORAGE_KEY,
+  resolveActiveWorkspaceId,
+  syncEventReach,
+  withWorkspaceList,
+  workspaceChoiceFor,
+  workspaceNameIn,
+  isOwnActivity,
+  type OfflineMutation,
+  type QueuedMutation,
+  type QueuedMutationSummary,
+  type WorkspaceSummary,
   type ApiClient,
   type Client,
   type DescriptionSuggestion,
@@ -57,6 +71,12 @@ import {
   type StoredSession,
 } from "../lib/session";
 import { clearWebSessionCookie, readWebSessionToken } from "../lib/web-session";
+import {
+  clearWorkspaceChoice,
+  loadWorkspaceChoice,
+  saveWorkspaceChoice,
+  type WorkspaceChoice,
+} from "../lib/workspace-choice";
 import { deleteAllActivity } from "./activity/capture";
 import { renderBadge } from "./badge";
 import {
@@ -226,6 +246,169 @@ let cachedEmail: string | null = null;
 
 let queue: OfflineQueue | null = null;
 
+/**
+ * Who this worker is signed in as, once anything has said.
+ *
+ * A password sign-in knows at once; a session borrowed from the web app's
+ * cookie carries only a token, so this is filled from `settings.get`. Kept
+ * apart from `cachedSettings`, which a workspace switch or a reconnect drops:
+ * the person does not change when the workspace does, and a socket event
+ * arriving in that gap still has to be told apart from a colleague's.
+ */
+let knownUserId: string | null = null;
+
+export const getKnownUserId = (): string | null =>
+  runtime?.session?.userId ?? knownUserId;
+
+// ── the active workspace ─────────────────────────────────────────────
+
+/**
+ * The extension's own workspace choice and the last membership list — see
+ * `lib/workspace-choice.ts` for why it never follows the web app's session.
+ * Loaded from storage on every rebuild, like everything else in this worker.
+ */
+let workspaceChoice: WorkspaceChoice = emptyWorkspaceChoice();
+
+/**
+ * Whether `workspaces.list` has answered since this worker was built, and
+ * since the last `membership.changed`. A stale list is still used — it is the
+ * best answer offline — but the next read that can afford a request asks again.
+ */
+let workspacesFresh = false;
+let workspacesLookup: Promise<WorkspaceSummary[] | null> | null = null;
+
+/** The workspace every request is addressed to, or null before any is known. */
+export const getActiveWorkspaceId = (): string | null =>
+  resolveActiveWorkspaceId(
+    workspaceChoice.workspaceId,
+    workspaceChoice.workspaces,
+  );
+
+export const getKnownWorkspaces = (): WorkspaceSummary[] | null =>
+  workspaceChoice.workspaces;
+
+/** A workspace's name, including one this person has since left. */
+export const workspaceNameFor = (workspaceId: string): string | null =>
+  workspaceNameIn(workspaceChoice, workspaceId);
+
+/**
+ * Every cache that describes ONE workspace. The running entry is not among
+ * them: the timer is the person's, and a start in one workspace stops the
+ * timer in any other, so the badge is right across a switch.
+ */
+const forgetWorkspaceCaches = (): void => {
+  cachedProjects = null;
+  cachedClients = null;
+  cachedTags = null;
+  cachedTasks = null;
+  cachedTodaySec = null;
+  cachedFavorites = null;
+  cachedRecents = null;
+  cachedSettings = null;
+  settingsLookup = null;
+  cachedEntries = null;
+  entriesStale = false;
+  cachedDescriptions = null;
+};
+
+/**
+ * Install a fresh membership list.
+ *
+ * The resolved id is written back as the choice, so a cold offline start
+ * addresses the workspace the last answer settled on rather than re-deriving
+ * it from a list that may be gone. When the resolution moved — the stored
+ * workspace is no longer a membership — every workspace cache is dropped, or
+ * the popup would show the lost workspace's projects under the new one.
+ *
+ * Unstamped queue rows (from a build before the stamp) are claimed by the
+ * workspace resolved here, once, eagerly: that is where they would have
+ * replayed anyway, and a later switch must not carry them along.
+ */
+const installWorkspaceList = async (
+  list: WorkspaceSummary[],
+  apiUrl: string,
+  /**
+   * False from inside a flush: the queue serialises every operation, so an
+   * adoption awaited while a flush holds it would wait for itself forever.
+   * The next list read adopts instead.
+   */
+  adopt = true,
+): Promise<void> => {
+  const installed = withWorkspaceList(workspaceChoice, list, {
+    server: apiUrl,
+    userId: getKnownUserId(),
+  });
+  workspaceChoice = installed.choice;
+  const after = installed.activeId;
+  await saveWorkspaceChoice(workspaceChoice);
+  if (installed.moved) forgetWorkspaceCaches();
+  if (adopt && after !== null) {
+    await getOfflineQueue().adoptUnstampedWorkspace(after, (row) =>
+      isQueuedOn(row, apiUrl, DEFAULT_API_URL),
+    );
+  }
+};
+
+/**
+ * The membership list, fetched when this worker has not asked since it was
+ * built or since a membership event.
+ *
+ * Null when the server could not be asked. Never throws: every caller has a
+ * safer thing to do without a list than with an exception — the snapshot keeps
+ * the last list, and the flush sends nothing it cannot check.
+ */
+export async function resolveWorkspaces(): Promise<WorkspaceSummary[] | null> {
+  const current = await ensureReady();
+  if (!current.session) return null;
+  if (workspacesFresh && workspaceChoice.workspaces !== null) {
+    return workspaceChoice.workspaces;
+  }
+  if (workspacesLookup) return workspacesLookup;
+
+  const mine = generation;
+  const lookup = current.api
+    .query<WorkspaceSummary[]>("workspaces.list")
+    .then(async (list) => {
+      // A reload landed mid-request: the list belongs to a session that has
+      // been replaced, and installing it would validate the next account's
+      // choice against the previous account's memberships.
+      if (mine !== generation) return null;
+      await installWorkspaceList(list, current.apiUrl);
+      workspacesFresh = true;
+      return list;
+    })
+    .catch(() => null);
+
+  workspacesLookup = lookup;
+  try {
+    return await lookup;
+  } finally {
+    if (workspacesLookup === lookup) workspacesLookup = null;
+  }
+}
+
+/**
+ * Point the extension at another workspace.
+ *
+ * Checked against a fresh list, so a workspace the person has just been
+ * removed from cannot be chosen from a popup that was a poll behind. Never
+ * calls `workspaces.setActive`: that moves the SESSION's active workspace,
+ * which the web app may be sharing, and a switch here must leave the web app
+ * exactly where it was.
+ */
+export async function switchWorkspace(workspaceId: string): Promise<boolean> {
+  const current = await ensureReady();
+  if (!current.session) return false;
+  workspacesFresh = false;
+  const list = (await resolveWorkspaces()) ?? workspaceChoice.workspaces;
+  if (list === null || !list.some((it) => it.id === workspaceId)) return false;
+  if (getActiveWorkspaceId() === workspaceId) return true;
+  workspaceChoice = { ...workspaceChoice, workspaceId };
+  await saveWorkspaceChoice(workspaceChoice);
+  forgetWorkspaceCaches();
+  return true;
+}
+
 // ── the offline queue ────────────────────────────────────────────────
 
 /**
@@ -251,8 +434,17 @@ export async function enqueueOffline<K extends OfflineOp>(
   // queue today, so this is defence in depth rather than the mechanism: a row
   // that somehow outlived a switch is held back by `flushQueue` instead of
   // being replayed into an account on a server that never saw its start.
+  //
+  // And with the workspace it was made in, so a switch before the network
+  // returns cannot file it somewhere else — `flushQueue` replays it there.
   const { apiUrl } = await ensureReady();
-  await getOfflineQueue().enqueue(op, payload, undefined, apiUrl);
+  await getOfflineQueue().enqueue(
+    op,
+    payload,
+    undefined,
+    apiUrl,
+    getActiveWorkspaceId() ?? undefined,
+  );
 }
 
 // ── the optimistic running entry ─────────────────────────────────────
@@ -318,7 +510,7 @@ const loadOptimisticRunning = async (): Promise<{
  * timer whose mutation has already been replayed.
  */
 const rehydrateOptimisticRunning = async (): Promise<void> => {
-  if ((await getOfflineQueue().size()) === 0) {
+  if ((await pendingSyncCount()) === 0) {
     await forgetOptimisticRunning();
     return;
   }
@@ -461,7 +653,11 @@ export async function cancelQueuedForTemp(tempId: string): Promise<boolean> {
 
 const buildRuntime = async (): Promise<Runtime> => {
   const mine = generation;
-  const [apiUrl, stored] = await Promise.all([loadApiUrl(), loadSession()]);
+  const [apiUrl, stored, choice] = await Promise.all([
+    loadApiUrl(),
+    loadSession(),
+    loadWorkspaceChoice(),
+  ]);
 
   // The web app's cookie wins when the extension has nothing of its own: that
   // is what makes signing in on the web sign the toolbar in too, with no form
@@ -487,6 +683,9 @@ const buildRuntime = async (): Promise<Runtime> => {
       baseUrl: apiUrl,
       token: session?.token,
       clientId: EXTENSION_CLIENT_ID,
+      // Read per request: a switch changes it under a live client. An input
+      // that already names a workspace — a replayed queue row — keeps it.
+      workspaceId: getActiveWorkspaceId,
     }),
   };
 
@@ -498,6 +697,13 @@ const buildRuntime = async (): Promise<Runtime> => {
   if (mine !== generation) return ensureReady();
 
   runtime = next;
+  // Only this server's and this account's choice applies; another one's id
+  // would answer NOT_FOUND to every request until a list replaced it.
+  workspaceChoice = workspaceChoiceFor(choice, {
+    server: apiUrl,
+    userId: session?.userId ?? null,
+  });
+  workspacesFresh = false;
   // A queued mutation outlives the worker that made it, so the optimistic view
   // of the timer has to come back with it — otherwise a revived worker
   // contradicts a start that is still waiting to be sent.
@@ -543,6 +749,9 @@ export async function reload(): Promise<Runtime> {
   lastSyncNudgeAt = 0;
   runtime = null;
   forgetRunning();
+  knownUserId = null;
+  workspacesFresh = false;
+  workspacesLookup = null;
   cachedProjects = null;
   cachedClients = null;
   cachedTags = null;
@@ -580,19 +789,11 @@ const setSyncStatus = (next: SyncStatus): void => {
   // evicted — and pressing Stop then fails against a server with nothing
   // running. One `entries.current` per reconnect buys a self-healing gap.
   forgetRunning();
-  cachedProjects = null;
-  cachedClients = null;
-  cachedTags = null;
-  cachedTasks = null;
-  cachedTodaySec = null;
-  cachedFavorites = null;
-  cachedRecents = null;
-  cachedSettings = null;
-  settingsLookup = null;
-  cachedEntries = null;
-  entriesStale = false;
+  forgetWorkspaceCaches();
   cachedDevices = null;
-  cachedDescriptions = null;
+  // A membership change missed while the socket was down is a missed event
+  // like any other.
+  workspacesFresh = false;
 
   // A socket that just came up is the first reliable sign the network is back.
   // Nothing awaits this, so it must swallow its own failure — the next
@@ -607,49 +808,114 @@ const closeSync = (): void => {
 };
 
 /**
+ * Whose entry an event carries, as far as this worker can tell.
+ *
+ * In a shared workspace the socket also carries colleagues' entry events. The
+ * badge is this person's timer, so a colleague's start must not become it and
+ * a colleague's stop must not clear it. When this worker does not yet know who
+ * it is signed in as, it believes neither: the cache is dropped and the next
+ * read asks `entries.current`, which only ever answers with the caller's own.
+ */
+const authorship = (entry: TimeEntry): "own" | "other" | "unknown" => {
+  const userId = getKnownUserId();
+  if (userId === null) return "unknown";
+  return entry.authorId === userId ? "own" : "other";
+};
+
+/** The running-entry half of an entry-bearing event — per person, any workspace. */
+const applyRunning = (event: SyncEvent): void => {
+  switch (event.kind) {
+    case "timer.started": {
+      const who = authorship(event.entry);
+      if (who === "own") rememberRunning(event.entry);
+      else if (who === "unknown") forgetRunning();
+      return;
+    }
+    case "timer.stopped": {
+      // The id match is safe whoever sent it: the cached entry is ours.
+      if (cachedRunning?.entry?.id === event.entry.id) {
+        rememberRunning(null);
+        return;
+      }
+      const who = authorship(event.entry);
+      if (who === "own") rememberRunning(null);
+      else if (who === "unknown") forgetRunning();
+      return;
+    }
+    case "entry.upserted": {
+      if (event.entry.end !== null) {
+        // An edit that closed the entry we thought was running stops the timer.
+        if (cachedRunning?.entry?.id === event.entry.id) rememberRunning(null);
+        return;
+      }
+      const who = authorship(event.entry);
+      if (who === "own") rememberRunning(event.entry);
+      else if (who === "unknown") forgetRunning();
+      return;
+    }
+    case "entry.deleted":
+      if (cachedRunning?.entry?.id === event.id) rememberRunning(null);
+      return;
+    default:
+      return;
+  }
+};
+
+/**
  * Apply another device's event to the cache.
  *
  * The events carry the entry itself, so nothing here needs a round trip — the
  * badge can be repainted from the message alone, which matters because these
  * arrive while the worker would otherwise be asleep.
+ *
+ * The socket carries every workspace the person belongs to. An event from a
+ * workspace other than the one this extension is pointed at may move the
+ * running timer (it is per person) or the membership list, and nothing else —
+ * its rows must not mark this workspace's caches, and its catalog must not
+ * replace this workspace's.
  */
-const applyEvent = (event: SyncEvent): void => {
+export const applyEvent = (event: SyncEvent, eventWorkspaceId?: string): void => {
+  const reach = syncEventReach(event, eventWorkspaceId, getActiveWorkspaceId());
+  if (reach === "ignore") return;
+  if (reach === "membership") {
+    workspacesFresh = false;
+    return;
+  }
+  applyRunning(event);
+  if (reach === "timer") return;
+
   switch (event.kind) {
     case "timer.started":
-      rememberRunning(event.entry);
       // What "recent" means changes with every entry another device closes.
       cachedRecents = null;
       // A start closes whatever was running, which adds a finished row to the
       // window the entries screen is showing.
       entriesStale = true;
+      cachedTodaySec = null;
       return;
     case "timer.stopped":
-      rememberRunning(null);
       cachedRecents = null;
       entriesStale = true;
+      cachedTodaySec = null;
       // A finished entry is the only thing `entries.descriptions` reads, so
       // this is the moment a name typed on another device becomes suggestible.
       cachedDescriptions = null;
       return;
     case "entry.upserted":
-      // Marked before the running-entry branches below, not inside them: any
-      // upsert can land inside the browsed window, whether or not it happens to
-      // be the entry this device thinks is running.
+      // Any upsert can land inside the browsed window, whether or not it
+      // happens to be the entry this device thinks is running.
       entriesStale = true;
-      if (event.entry.end === null) {
-        rememberRunning(event.entry);
-        return;
-      }
-      cachedDescriptions = null;
-      // An edit that closed the entry we thought was running stops the timer.
-      if (cachedRunning?.entry?.id === event.entry.id) {
-        rememberRunning(null);
-      }
+      if (event.entry.end !== null) cachedDescriptions = null;
       return;
     case "entry.deleted":
       entriesStale = true;
       cachedDescriptions = null;
-      if (cachedRunning?.entry?.id === event.id) rememberRunning(null);
+      return;
+    case "membership.changed":
+      // A role or visibility change in THIS workspace changes what the
+      // server will show; a removal changes where requests may go at all.
+      workspacesFresh = false;
+      forgetWorkspaceCaches();
       return;
     case "catalog.changed":
       if (event.scope === "project") cachedProjects = null;
@@ -685,15 +951,19 @@ const connectSync = (current: Runtime): void => {
     url,
     token: current.session.token,
     onStatus: setSyncStatus,
-    onEvent: (event, originId) => {
+    onEvent: (event, originId, eventWorkspaceId) => {
       // Our own write, already applied locally — re-applying a stale copy of
       // it would flicker the badge back to what it was a moment ago.
       if (originId === ORIGIN_ID) return;
       // Somebody just did something on another device, so the person was at a
       // keyboard at this instant. Idle spans are measured from here, which is
-      // what stops a browser left open from pausing work done elsewhere.
-      void noteRemoteActivity(Date.now()).catch(() => undefined);
-      applyEvent(event);
+      // what stops a browser left open from pausing work done elsewhere. Only
+      // THIS person's doing counts — a colleague's timer is not evidence that
+      // the laptop in front of this browser is in use.
+      if (isOwnActivity(event, eventWorkspaceId, getKnownUserId())) {
+        void noteRemoteActivity(Date.now()).catch(() => undefined);
+      }
+      applyEvent(event, eventWorkspaceId);
       void renderBadge(cachedRunning?.entry ?? null);
     },
   });
@@ -746,8 +1016,57 @@ export const noteServerReachable = (reachable: boolean): void => {
 
 export const isServerReachable = (): boolean => serverReachable;
 
-/** How many mutations are waiting to be replayed. */
-export const pendingSyncCount = (): Promise<number> => getOfflineQueue().size();
+/**
+ * True when a row belongs to a workspace this person is no longer in, by the
+ * last list this worker saw. Such a row is HELD: never replayed — not into
+ * its own workspace, which would refuse it, and not into any other — and
+ * never dropped on its own. The popup lists it by name until the person
+ * discards it.
+ */
+const isHeldRow = (row: QueuedMutation): boolean =>
+  isHeldByWorkspace(row, workspaceChoice.workspaces);
+
+/**
+ * How many mutations are waiting to be replayed — held rows excluded.
+ *
+ * Excluded because every caller reads this as "is something still ahead of a
+ * new mutation": the live-or-queue decision, the optimistic running entry, the
+ * overlay. A held row is never sent, so counting it would queue every future
+ * start behind a row that can never drain, and pin the optimistic timer on
+ * screen forever.
+ */
+export const pendingSyncCount = async (): Promise<number> => {
+  const rows = await getOfflineQueue().list();
+  return rows.filter((row) => !isHeldRow(row)).length;
+};
+
+/** Every queued row, held or not — what a server switch would discard. */
+export const queuedRowCount = (): Promise<number> => getOfflineQueue().size();
+
+/** Rows held for a workspace this person has left, described by name. */
+export type HeldQueuedRow = QueuedMutationSummary;
+
+export async function listHeldRows(): Promise<HeldQueuedRow[]> {
+  const rows = await getOfflineQueue().list();
+  return rows
+    .filter(isHeldRow)
+    .map((row) => describeQueuedMutation(row, workspaceNameFor));
+}
+
+/**
+ * Discard one held row, deliberately.
+ *
+ * Refuses anything that is not held right now, so a popup a poll behind
+ * cannot delete a row that has become sendable again (the person was added
+ * back) and is about to replay.
+ */
+export async function discardHeldRow(id: string): Promise<boolean> {
+  const rows = await getOfflineQueue().list();
+  const row = rows.find((it) => it.id === id);
+  if (row === undefined || !isHeldRow(row)) return false;
+  await getOfflineQueue().remove(id);
+  return true;
+}
 
 // ── caches ───────────────────────────────────────────────────────────
 
@@ -891,6 +1210,7 @@ export async function resolveSettings(): Promise<ResolvedSettings | null> {
     .query<ResolvedSettings>("settings.get")
     .then((settings) => {
       cachedSettings = settings;
+      knownUserId = settings.userId;
       return settings;
     })
     .catch(() => null);
@@ -1046,7 +1366,7 @@ const runningCacheIsUsable = async (): Promise<boolean> => {
   if (cachedRunning === null) return false;
   if (syncStatus === "open") return true;
   if (Date.now() - cachedRunningAt < RUNNING_CACHE_TTL_MS) return true;
-  return (await getOfflineQueue().size()) > 0;
+  return (await pendingSyncCount()) > 0;
 };
 
 /**
@@ -1152,6 +1472,11 @@ export async function forgetSession(
   // them so nothing more is recorded until somebody signs in again. A storage
   // failure must not keep the token alive, so it is swallowed.
   await deleteAllActivity({ forgetScope: true }).catch(() => undefined);
+  // The workspace choice and the names beside it are this account's. The next
+  // account resolves its own default rather than inheriting an id it may not
+  // even belong to.
+  await clearWorkspaceChoice();
+  workspaceChoice = emptyWorkspaceChoice();
 
   // Deliberate on an explicit sign-out: signing out is synced, so the web app's
   // cookie goes too. NOT done when the server merely rejected the token — that
@@ -1197,12 +1522,36 @@ export const isTransportFailure = (error: unknown): boolean =>
  * `entries.stop` in particular resolves against whatever is running at the
  * moment it arrives.
  */
+/**
+ * The input a queued row is replayed with: addressed to the workspace it was
+ * queued in, over the client's current choice. The api client's getter only
+ * fills a gap, and a stamped row never leaves one.
+ */
+export const replayInput = (decoded: OfflineMutation): unknown =>
+  decoded.workspaceId === undefined
+    ? decoded.input
+    : { ...decoded.input, workspaceId: decoded.workspaceId };
+
 export async function flushQueue(): Promise<number> {
   const current = await ensureReady();
+  // Every mutation drains first, so this is also where a worker that has
+  // never resolved a workspace does so before its first write. A write with no
+  // workspace resolves the SESSION's active one server-side — which the web
+  // app moves when it switches, and which must not decide where this start goes.
+  if (current.session && getActiveWorkspaceId() === null) {
+    await resolveWorkspaces();
+  }
   const offline = getOfflineQueue();
-  const pending = await offline.size();
-  if (pending === 0) return 0;
-  if (!current.session) return pending;
+  if ((await offline.size()) === 0) return 0;
+  if (!current.session) return pendingSyncCount();
+
+  // Which workspaces a stamped row may still go to. Without an answer nothing
+  // is sent: a row cannot be checked against nothing, and the server's refusal
+  // of a left workspace's row (NOT_FOUND) is a permanent rejection the flush
+  // would drop — a day of tracked time gone with no trace.
+  const members = await resolveWorkspaces();
+  if (members === null) return pendingSyncCount();
+  const memberIds = new Set(members.map((it) => it.id));
 
   const result = await offline.flush(
     async (row) => {
@@ -1214,7 +1563,7 @@ export async function flushQueue(): Promise<number> {
       try {
         // The op string *is* the tRPC path, by design — so there is no dispatch
         // table here to drift out of step with the queue contract.
-        replayed = await current.api.mutate(decoded.op, decoded.input);
+        replayed = await current.api.mutate(decoded.op, replayInput(decoded));
       } catch (error) {
         // Anything the server can still accept later — a lapsed session, a 500,
         // a dead network — keeps its place and wedges the rest deliberately, so
@@ -1223,6 +1572,25 @@ export async function flushQueue(): Promise<number> {
         // close is exactly that), and stopping here would wedge the queue
         // forever. Drop it and let the reconcile below pull the truth back.
         if (!isPermanentRejection(error)) throw error;
+        // Except a NOT_FOUND that may mean "you left this workspace" rather
+        // than "that entry is gone": the list above can be a minute old. Ask
+        // again, and keep the row unless its workspace is demonstrably still
+        // a membership — the next flush then holds it by the filter.
+        if (
+          decoded.workspaceId !== undefined &&
+          error instanceof ApiError &&
+          (error.httpStatus === 404 || error.code === "NOT_FOUND")
+        ) {
+          // Asked directly rather than through `resolveWorkspaces`, whose
+          // adoption step needs the queue this flush is holding.
+          const fresh = await current.api
+            .query<WorkspaceSummary[]>("workspaces.list")
+            .catch(() => null);
+          if (fresh !== null) await installWorkspaceList(fresh, current.apiUrl, false);
+          if (fresh === null || !fresh.some((it) => it.id === decoded.workspaceId)) {
+            throw error;
+          }
+        }
         return;
       }
 
@@ -1238,12 +1606,20 @@ export async function flushQueue(): Promise<number> {
       // what `isQueuedOn`'s third argument says; a row for any other server
       // keeps its place untouched rather than being sent somewhere it was
       // never meant for.
-      filter: (row) => isQueuedOn(row, current.apiUrl, DEFAULT_API_URL),
+      filter: (row) =>
+        isQueuedOn(row, current.apiUrl, DEFAULT_API_URL) &&
+        // A row for a workspace this person has left is held in place: not
+        // replayed there, not replayed anywhere else, not dropped.
+        isReplayableIn(row, memberIds),
     },
   );
 
+  // Rows the filter held back never drain here, so they are not "ahead of" a
+  // new mutation and must not keep it queued — see `pendingSyncCount`.
+  const blocking = result.remaining - result.skipped;
+
   // Drained: the server now holds everything the optimistic entry stood in for.
-  if (result.remaining === 0) {
+  if (blocking === 0) {
     await forgetOptimisticRunning();
     // Wholesale, and only on a fully drained queue: the past-entry overlay
     // exists purely to stand in for queued work, so an empty queue is the one
@@ -1260,5 +1636,5 @@ export async function flushQueue(): Promise<number> {
     // guesses about what each queued mutation would do.
     forgetRunning();
   }
-  return result.remaining;
+  return blocking;
 }

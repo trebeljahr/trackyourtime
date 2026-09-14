@@ -693,6 +693,9 @@ export function App(): JSX.Element {
             onCreateTag: createTag,
             onCreateProject: createProject,
             onCreateTask: createTask,
+            onSwitchWorkspace: (workspaceId) =>
+              send({ type: "workspace:switch", workspaceId }),
+            onDiscardHeld: (id) => send({ type: "queue:discard-held", id }),
           }}
           settings={{
             state,

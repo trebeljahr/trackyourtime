@@ -14,6 +14,7 @@
 import {
   describeServerVersion,
   mergeQuickStarts,
+  ownEntries,
   sameServerOrigin,
   type ApiClient,
   type ServerInfo,
@@ -49,16 +50,22 @@ import {
   getCachedServerInfo,
   getCachedTasks,
   getCachedTodaySec,
+  getActiveWorkspaceId,
+  getKnownUserId,
+  getKnownWorkspaces,
   getSyncStatus,
   isTransportFailure,
   isUnauthorized,
   noteServerReachable,
+  listHeldRows,
   pendingSyncCount,
   peekRunning,
+  queuedRowCount,
   resolveEmail,
   resolveRunning,
   resolveSettings,
   resolveWebUrl,
+  resolveWorkspaces,
   setCachedTodaySec,
 } from "./runtime";
 
@@ -120,6 +127,18 @@ const resolveServerFacts = async (
   pendingSync: await pendingSyncCount(),
 });
 
+/**
+ * Signed out, the count answers "what would switching servers throw away",
+ * so rows held for a left workspace are in it too — they go with the queue.
+ */
+const signedOutFacts = async (
+  apiUrl: string,
+  webUrl: string | null,
+): Promise<ServerFacts> => ({
+  ...(await resolveServerFacts(apiUrl, webUrl)),
+  pendingSync: await queuedRowCount(),
+});
+
 const signedOutState = (
   facts: ServerFacts,
   activity: ActivitySnapshot,
@@ -148,6 +167,9 @@ const signedOutState = (
   descriptions: null,
   descriptionsFor: null,
   activity,
+  workspaces: [],
+  activeWorkspaceId: null,
+  heldSync: [],
 });
 
 /**
@@ -164,9 +186,14 @@ const signedOutState = (
  * it (`{ $or: [{ end: null }, ...] }`), and the popup adds its live elapsed
  * seconds on top of this figure — counting it here too made "Today" tick at
  * double speed for as long as a timer ran.
+ *
+ * Only `userId`'s own entries count. A member allowed to see colleagues' time
+ * gets their entries from the same `entries.list`, and "Today" beside the
+ * badge is this person's day, not the team's.
  */
-const fetchTodaySec = async (
+export const fetchTodaySec = async (
   api: ApiClient,
+  userId: string | null,
   nowMs: number = Date.now(),
 ): Promise<number> => {
   const now = new Date(nowMs);
@@ -181,7 +208,7 @@ const fetchTodaySec = async (
     limit: TODAY_ENTRY_LIMIT,
   });
 
-  const seconds = page.entries.reduce((total, entry) => {
+  const seconds = ownEntries(page.entries, userId).reduce((total, entry) => {
     if (entry.end === null) return total;
     const startMs = Date.parse(entry.start);
     const endMs = Date.parse(entry.end);
@@ -203,7 +230,7 @@ export async function buildState(): Promise<BackgroundState> {
   const webUrl = await resolveWebUrl();
   if (!current.session) {
     return signedOutState(
-      await resolveServerFacts(current.apiUrl, webUrl),
+      await signedOutFacts(current.apiUrl, webUrl),
       await resolveActivitySnapshot("tracker"),
     );
   }
@@ -266,9 +293,23 @@ export async function buildState(): Promise<BackgroundState> {
   // the list the user has seen.
   const entriesFallback = view === "entries" ? await cachedEntryPage() : null;
 
+  // Before any workspace-scoped read, and awaited: every request below is
+  // addressed to the resolved workspace, and a stored choice the person is no
+  // longer a member of would answer NOT_FOUND to all of them. Swallows its own
+  // failure — offline, the last known list still resolves the choice.
+  await resolveWorkspaces();
+
   // `resolveRunning` reports its own reachability from inside the runtime,
   // where it can tell a real request apart from a cache hit.
   const running = await localRead(resolveRunning, peekRunning());
+
+  // `localRead`, not `softRead`: `resolveSettings` swallows its own failure and
+  // answers null, so wrapping it in the reachability probe would report the
+  // server as answering on every failure. Read before the parallel batch
+  // because it is what names the user for a session borrowed from the web
+  // app, and the day total counts only that user's time.
+  const settings = await localRead(resolveSettings, getCachedSettings());
+  const userId = getKnownUserId();
   const [
     email,
     projects,
@@ -285,16 +326,11 @@ export async function buildState(): Promise<BackgroundState> {
     softRead(() => fetchClients(current.api), getCachedClients() ?? []),
     softRead(() => fetchTags(current.api), getCachedTags() ?? []),
     softRead(() => fetchTasks(current.api), getCachedTasks() ?? []),
-    softRead(() => fetchTodaySec(current.api), getCachedTodaySec() ?? 0),
+    softRead(() => fetchTodaySec(current.api, userId), getCachedTodaySec() ?? 0),
     softRead(() => fetchFavorites(current.api), getCachedFavorites() ?? []),
     softRead(() => fetchRecents(current.api), getCachedRecents() ?? []),
     localRead(pendingIdle, null),
   ]);
-
-  // `localRead`, not `softRead`: `resolveSettings` swallows its own failure and
-  // answers null, so wrapping it in the reachability probe would report the
-  // server as answering on every failure.
-  const settings = await localRead(resolveSettings, getCachedSettings());
 
   // Whose activity capture files under. Settings are the one read that names
   // both the user and the workspace, and a change here wipes the previous
@@ -331,7 +367,7 @@ export async function buildState(): Promise<BackgroundState> {
     // left alone: an expired token is not a request to sign the browser out.
     await forgetSession();
     return signedOutState(
-      await resolveServerFacts(current.apiUrl, webUrl),
+      await signedOutFacts(current.apiUrl, webUrl),
       await resolveActivitySnapshot("tracker"),
     );
   }
@@ -375,5 +411,8 @@ export async function buildState(): Promise<BackgroundState> {
     descriptions: getCachedDescriptions()?.rows ?? null,
     descriptionsFor: getCachedDescriptions()?.query ?? null,
     activity,
+    workspaces: getKnownWorkspaces() ?? [],
+    activeWorkspaceId: getActiveWorkspaceId(),
+    heldSync: await listHeldRows(),
   };
 }

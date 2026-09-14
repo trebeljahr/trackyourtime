@@ -14,6 +14,12 @@ import {
   type TimeEntry,
 } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
+import {
+  cachedLocalePreference,
+  extensionT,
+  resolveExtensionLocale,
+} from "../i18n";
+import { HeldQueue, WorkspacePicker } from "./workspace-bar";
 import { Combobox } from "./combobox";
 import { DescriptionField } from "./description-field";
 import { formatElapsed } from "./entry-format";
@@ -75,6 +81,10 @@ export type TrackerScreenProps = {
   onCreateTag: (name: string) => Promise<boolean>;
   onCreateProject: (name: string, clientId: string | null) => Promise<boolean>;
   onCreateTask: (name: string) => Promise<boolean>;
+  /** Points the extension (never the web app) at another workspace. */
+  onSwitchWorkspace: (workspaceId: string) => Promise<boolean>;
+  /** Discards one change held for a workspace the person has left. */
+  onDiscardHeld: (id: string) => Promise<boolean>;
 };
 
 /** Local-clock seconds elapsed today, the ceiling on a running entry's share. */
@@ -156,7 +166,13 @@ export function TrackerScreen({
   onCreateTag,
   onCreateProject,
   onCreateTask,
+  onSwitchWorkspace,
+  onDiscardHeld,
 }: TrackerScreenProps): JSX.Element {
+  const t = extensionT(
+    resolveExtensionLocale(state.settings?.locale ?? cachedLocalePreference()),
+    "popup",
+  );
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -434,6 +450,22 @@ export function TrackerScreen({
       />
 
       <div className="popup__body">
+        {/* First, because it decides where everything below is filed. A draft
+            in the form is kept across a switch; its project may not exist in
+            the next workspace, which the picker then shows as unset. */}
+        <WorkspacePicker
+          workspaces={state.workspaces}
+          activeWorkspaceId={state.activeWorkspaceId}
+          disabled={busy}
+          onSwitch={(workspaceId) => {
+            setProjectId(null);
+            setTaskId(null);
+            setTagIds([]);
+            void onSwitchWorkspace(workspaceId);
+          }}
+          t={t}
+        />
+
         {/* Above everything else: it is a question about the time already on
             the clock below, and answering it changes what that clock says. */}
         {state.pendingIdle !== null ? (
@@ -559,6 +591,8 @@ export function TrackerScreen({
             {formatDuration(todaySec, durationFormat)}
           </span>
         </p>
+
+        <HeldQueue rows={state.heldSync} onDiscard={onDiscardHeld} t={t} />
 
         <p className="notice" role="alert" aria-live="assertive" data-testid="tracker-error">
           {error ?? ""}

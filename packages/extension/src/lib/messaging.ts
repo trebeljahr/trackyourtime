@@ -17,6 +17,7 @@ import type {
   IdleAnswer,
   PendingIdle,
   Project,
+  QueuedMutationSummary,
   QuickStart,
   QuickStartItem,
   RecentEntry,
@@ -26,6 +27,7 @@ import type {
   Task,
   TimeEntry,
   UpdateSettingsInput,
+  WorkspaceSummary,
 } from "@starter/core";
 import type {
   ActivityRule,
@@ -360,7 +362,24 @@ export type PopupToBackground =
    */
   | { type: "activity:settings"; patch: Partial<ActivitySettings> }
   /** Settings → Activity → "Delete all activity now". */
-  | { type: "activity:wipe" };
+  | { type: "activity:wipe" }
+  /**
+   * Point the extension at another workspace.
+   *
+   * The extension's own choice: it never moves the web app's session, so a
+   * switch in one place cannot retarget a timer started from the other. The
+   * worker re-checks membership against a fresh list, because anything can
+   * send this message.
+   */
+  | { type: "workspace:switch"; workspaceId: string }
+  /**
+   * Discard one queued change held for a workspace this person has left.
+   *
+   * The only way such a row ever leaves the queue short of a sign-out: it is
+   * never replayed and never dropped on its own, because it is time no server
+   * has seen. The worker refuses a row that is not held right now.
+   */
+  | { type: "queue:discard-held"; id: string };
 
 /**
  * Where the current session came from.
@@ -508,6 +527,19 @@ export type BackgroundState = {
   descriptionsFor: string | null;
   /** Activity capture: always present, heavier halves scoped by view. */
   activity: ActivitySnapshot;
+  /**
+   * The workspaces this person belongs to, as last known. The popup offers a
+   * picker only with more than one.
+   */
+  workspaces: WorkspaceSummary[];
+  /** The workspace every request is addressed to, or null before any is known. */
+  activeWorkspaceId: string | null;
+  /**
+   * Queued changes held for a workspace this person no longer belongs to —
+   * never sent, never dropped on their own, and NOT in `pendingSync`. Each
+   * names its workspace when the name is still known.
+   */
+  heldSync: QueuedMutationSummary[];
 };
 
 export type BackgroundResponse =

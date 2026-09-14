@@ -73,14 +73,16 @@ import {
 } from "./idle";
 import {
   adoptSession,
+  discardHeldRow,
   ensureReady,
   ensureSyncConnected,
   flushQueue,
   forgetSession,
   isUnauthorized,
   onWebSessionChanged,
-  pendingSyncCount,
   peekRunning,
+  queuedRowCount,
+  switchWorkspace,
   reload,
   resolveRunning,
   resolveSettings,
@@ -283,7 +285,8 @@ const setServer = async (
   const current = await ensureReady();
 
   if (!sameServerOrigin(current.apiUrl, origin)) {
-    const pending = await pendingSyncCount();
+    // Every row, held ones included: the switch discards the whole queue.
+    const pending = await queuedRowCount();
     if (pending > 0 && !discardUnsent) {
       throw new BackgroundError(
         "UNSENT_CHANGES",
@@ -484,6 +487,24 @@ const apply = async (message: PopupToBackground): Promise<void> => {
     }
     case "activity:wipe":
       return deleteAllActivity();
+    case "workspace:switch":
+      if (!(await switchWorkspace(message.workspaceId))) {
+        // The same answer for "never a member" and "no longer one": the
+        // popup's list was a poll behind, and the fresh snapshot fixes it.
+        throw new BackgroundError(
+          "WORKSPACE_NOT_FOUND",
+          "That workspace is not available to this account any more.",
+        );
+      }
+      return;
+    case "queue:discard-held":
+      if (!(await discardHeldRow(message.id))) {
+        throw new BackgroundError(
+          "QUEUE_ROW_NOT_HELD",
+          "That change is no longer held here, so it was not discarded.",
+        );
+      }
+      return;
     default: {
       // `apply` returns void, so falling off the end of this switch would be
       // valid TypeScript: a new message type added to the contract would

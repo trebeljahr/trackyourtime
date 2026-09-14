@@ -827,6 +827,25 @@ button.tag:hover .tag__x {
   margin-top: 10px;
 }
 
+/* ── rows held for a workspace the person left ─────────────────────── */
+
+.held-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.held-queue__row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
 /* ── overflow menu ─────────────────────────────────────────────────── */
 
 .menu {
