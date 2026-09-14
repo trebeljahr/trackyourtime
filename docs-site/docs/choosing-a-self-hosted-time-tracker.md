@@ -66,7 +66,7 @@ What it does:
 - The timer runs in the web app, a Chrome extension and iPhone and Android apps. A Raycast extension adds a Mac menu bar clock and a hotkey.
 - Each of these keeps tracking without a connection. The queued changes go to the server when the connection returns.
 - A timer you stop on one device stops on every other open device at once.
-- Each project has an hourly rate. Summary, detailed and weekly reports export to CSV and PDF.
+- Each project has an hourly rate. Reports show totals by project, client, task, tag, day, week or month, or list every entry. Both views export to CSV and PDF.
 - An invoice collects a client's unbilled billable hours and downloads as a PDF. An hour on an invoice can't be billed a second time.
 - You can export a whole workspace as JSON or CSV. A CSV from another tool imports with a preview, and you can undo the import.
 - A [REST API](./api/overview.md) with an OpenAPI document, signed [webhooks](./api/webhooks.md) and an [MCP server](./mcp.md) connect it to other tools and to AI assistants.

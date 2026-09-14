@@ -132,7 +132,7 @@ test.describe("Tags", () => {
     await expect(page.getByTestId(`tag-tracked-${tagId}`)).toHaveText(ONE_HOUR);
 
     // ── filter a report down to it ──────────────────────────────────
-    await page.goto(`/reports/summary${RANGE_QUERY}`);
+    await page.goto(`/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("report-filters")).toBeVisible();
     // Both entries are in range before the filter is applied.
     await expect(page.getByTestId("summary-total-duration")).toHaveText(
@@ -173,7 +173,7 @@ test.describe("Tags", () => {
 
     await logManualEntry(page, "Pairing at the client", ONE_HOUR);
 
-    await page.goto(`/reports/summary${RANGE_QUERY}&group=tag`);
+    await page.goto(`/reports${RANGE_QUERY}&group=tag`);
     await expect(page.getByTestId("summary-table")).toBeVisible();
 
     // The total is the true, un-double-counted hour...
@@ -194,7 +194,7 @@ test.describe("Tags", () => {
     );
 
     // Any other grouping partitions the entries, so the caveat must be gone.
-    await page.goto(`/reports/summary${RANGE_QUERY}&group=project`);
+    await page.goto(`/reports${RANGE_QUERY}&group=project`);
     await expect(page.getByTestId("summary-table")).toBeVisible();
     await expect(page.getByTestId("summary-overlap-note")).toHaveCount(0);
   });

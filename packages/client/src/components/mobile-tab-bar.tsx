@@ -39,10 +39,10 @@ const TABS: Tab[] = [
     key: "reports",
     label: "Reports",
     icon: BarChart3,
-    href: "/reports/summary",
-    // Detailed and Weekly are reached from inside Reports, so the tab stays
-    // lit while the user is anywhere under /reports.
-    match: ["/reports"],
+    // `isActiveRoute` lights child paths too, so the retired /reports/summary,
+    // /detailed and /weekly redirects keep this tab lit for the frame before
+    // they land — no `match` needed.
+    href: "/reports",
   },
   { key: "more", label: "More", icon: Menu, href: null },
 ];

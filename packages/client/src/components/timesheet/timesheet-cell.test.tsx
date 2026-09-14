@@ -41,7 +41,7 @@ const renderCell = (
       durationFormat="hms"
       duration={(seconds) => formatDuration(seconds, "hms")}
       clock={(iso) => iso.slice(11, 16)}
-      detailHref="/reports/detailed"
+      detailHref="/reports?view=entries"
       onCommit={onCommit}
       onNavigate={onNavigate}
       testId="cell"

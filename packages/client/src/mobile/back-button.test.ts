@@ -25,7 +25,7 @@ describe("handleBackPress", () => {
     const navigate = vi.fn();
     expect(
       handleBackPress({
-        pathname: "/reports/detailed",
+        pathname: "/reports",
         navigate,
         dismissOverlay: () => false,
       }),

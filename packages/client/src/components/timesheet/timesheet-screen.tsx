@@ -27,6 +27,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNow } from "@/components/calendar/use-now";
 import { useFormatSettings } from "@/lib/format";
+import { reportsHref } from "@/lib/report-links";
 import { trpc } from "@/lib/trpc";
 import { TimesheetGrid } from "./timesheet-grid";
 import { useTimesheetMutations } from "./use-timesheet-mutations";
@@ -154,8 +155,8 @@ export function TimesheetScreen(): React.JSX.Element {
    * other people's time, and mixing that into a row would be wrong twice over:
    * the cell total would not be the hours this person is filing, and a cell
    * holding a colleague's entry would look editable while `entries.update`
-   * rightly refuses to touch it. The team's week is what the weekly report is
-   * for.
+   * rightly refuses to touch it. The team's week is what Reports → Totals
+   * grouped by day is for.
    */
   const myEntries = React.useMemo(
     () =>
@@ -204,7 +205,7 @@ export function TimesheetScreen(): React.JSX.Element {
       const params = new URLSearchParams({ from: day, to: day });
       if (row.projectId !== null) params.set("projects", row.projectId);
       if (row.taskId !== null) params.set("tasks", row.taskId);
-      return `/reports/detailed?${params.toString()}`;
+      return reportsHref("entries", params);
     },
     []
   );
@@ -277,7 +278,7 @@ export function TimesheetScreen(): React.JSX.Element {
               data-testid="timesheet-truncated"
             >
               This week has more entries than the grid can total accurately, so
-              editing is off. Narrow it down in the detailed report instead.
+              editing is off. Narrow it down in Reports → Entries instead.
             </p>
           ) : null}
 

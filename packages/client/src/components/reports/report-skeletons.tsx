@@ -91,10 +91,17 @@ export function TableSkeleton({
   );
 }
 
-/** Whole-page fallback used by the routes' Suspense boundary. */
+/**
+ * Whole-page fallback for the /reports Suspense boundary and the legacy
+ * redirect pages.
+ */
 export function ReportPageSkeleton(): React.JSX.Element {
   return (
     <div className="space-y-4" data-testid="report-page-skeleton">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Skeleton className="h-7 w-32" />
+        <Skeleton className="h-9 w-40 rounded-md" />
+      </div>
       <FilterBarSkeleton />
       <KpiRowSkeleton />
       <ChartSkeleton />

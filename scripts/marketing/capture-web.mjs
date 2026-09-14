@@ -26,7 +26,7 @@ const SCREENS = [
   // Grouped by task across four weeks: the one view the landing page argues for.
   {
     name: "web-reports",
-    path: `/reports/summary/?group=task&from=${ymd(fourWeeksAgo)}&to=${ymd(new Date())}`,
+    path: `/reports/?group=task&from=${ymd(fourWeeksAgo)}&to=${ymd(new Date())}`,
     ready: '[data-testid="groupby-switch"]',
   },
   { name: "web-timesheet", path: "/timesheet/", ready: "main" },

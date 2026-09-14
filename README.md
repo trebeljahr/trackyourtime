@@ -57,8 +57,8 @@ Everything is scoped to a workspace, but today that is effectively one workspace
 
 ### Reports and money
 
-- **Three reports**: summary (totals, grouped breakdown by project/client/task/tag, zero-filled daily series), detailed (paginated entry log whose totals span the whole range), and weekly (7-day grid).
-- **CSV and PDF export** for all three, paginating the full range so an export is never a page of what you were looking at.
+- **One Reports screen with two views** over the same URL-backed filters: Totals (grouped breakdown by project/client/task/tag/day/week/month, zero-filled timeline, budgets; each group drills down into its entries) and Entries (paginated, sortable, bulk-editable entry log whose totals span the whole range). Switching views keeps every filter. The old `/reports/summary`, `/reports/detailed` and `/reports/weekly` addresses redirect to it; the REST API still serves summary, detailed and weekly reports.
+- **CSV and PDF export** for both views, paginating the full range so an export is never a page of what you were looking at.
 - **Invoices** built from un-invoiced billable time. Preview rolls up line items without writing; creating an invoice re-gathers server-side rather than trusting the client's line items, assigns a per-year sequential number, and stamps the invoice onto every entry it billed. Draft/sent/paid status, PDF export, and a guard that refuses edits to entries already on an invoice.
 - **Project budgets and estimates** — a lifetime roll-up of hours and earnings against estimated hours and budget, computed from each entry's own snapshotted rate.
 
@@ -83,7 +83,7 @@ Everything is scoped to a workspace, but today that is effectively one workspace
 
 | Client | State |
 | --- | --- |
-| **Web app** (Next.js static export) | Shipped, and the reference implementation. 14 signed-in routes: track, timesheet, calendar, three reports, clients, projects, tasks, tags, invoices, settings, profile, device. |
+| **Web app** (Next.js static export) | Shipped, and the reference implementation. 12 signed-in routes: track, timesheet, calendar, reports, clients, projects, tasks, tags, invoices, settings, profile, device. |
 | **Browser extension** (Chrome MV3) | Working and genuinely useful — popup only, no content scripts. Timer, badge, catalog, favorites, idle and the offline queue. Version 0.1.0, not published to any store; you load it unpacked. |
 | **Raycast extension** (macOS) | Working and broad — 4 commands (menu bar timer, a live one-second timer view, an entries browser and an open-dashboard action), with full catalog CRUD reached through pushed forms rather than commands of its own. Not published to the Raycast store, and it has **no offline queue**: a mutation made without connectivity is lost, unlike the same action from the web app or extension. |
 | **Desktop** (Electron) | Real but thin. Window lifecycle, persisted fullscreen preference, external-link handling and `powerMonitor`-backed idle reporting over IPC. No tray icon, no global shortcuts, no auto-update, no signing setup. Never built or distributed. |

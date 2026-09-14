@@ -65,7 +65,7 @@ export function Menu({ webUrl }: MenuProps): JSX.Element {
             type="button"
             role="menuitem"
             className="menu__item"
-            onClick={() => openTab(join(webUrl, "/reports/summary"))}
+            onClick={() => openTab(join(webUrl, "/reports"))}
             data-testid="menu-reports"
           >
             Reports

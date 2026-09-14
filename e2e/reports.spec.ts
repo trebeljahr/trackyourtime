@@ -92,8 +92,8 @@ test.describe("Reports", () => {
     ).toHaveCount(0);
   });
 
-  test("summary totals the tracked time and groups it", async ({ page }) => {
-    await page.goto(`/reports/summary${RANGE_QUERY}`);
+  test("totals add up the tracked time and groups it", async ({ page }) => {
+    await page.goto(`/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("summary-report")).toBeVisible();
 
     // Headline figures match the two entries exactly.
@@ -138,7 +138,7 @@ test.describe("Reports", () => {
   });
 
   test("creates and renames a client from the filter bar", async ({ page }) => {
-    await page.goto(`/reports/summary${RANGE_QUERY}`);
+    await page.goto(`/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("report-filters")).toBeVisible();
 
     // ── create one, without leaving the report ──────────────────────
@@ -181,8 +181,8 @@ test.describe("Reports", () => {
     ).toContainText("Filter Bar Ltd");
   });
 
-  test("detailed lists every entry in the range", async ({ page }) => {
-    await page.goto(`/reports/detailed${RANGE_QUERY}`);
+  test("entries list every entry in the range", async ({ page }) => {
+    await page.goto(`/reports${RANGE_QUERY}&view=entries`);
     await expect(page.getByTestId("detailed-report")).toBeVisible();
     await expect(page.getByTestId("detailed-table")).toBeVisible();
 
@@ -206,9 +206,236 @@ test.describe("Reports", () => {
 
     // Narrowing to a range with no tracked time empties the log rather than
     // showing stale rows.
-    await page.goto(`/reports/detailed?from=${dayKey(-30)}&to=${dayKey(-20)}`);
+    await page.goto(
+      `/reports?from=${dayKey(-30)}&to=${dayKey(-20)}&view=entries`
+    );
     await expect(page.getByTestId("detailed-empty")).toBeVisible();
     await expect(rows).toHaveCount(0);
     await expect(page.getByTestId("kpi-total")).toHaveText("0:00:00");
+  });
+
+  test("switching views keeps the filters", async ({ page }) => {
+    await page.goto(`/reports${RANGE_QUERY}&group=client`);
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+    await expect(page.getByTestId("report-view-totals")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+
+    // Narrow to the project, from the one filter bar both views share.
+    await page.getByTestId("filter-projects").click();
+    const option = page
+      .locator('[data-testid^="filter-projects-option-"]')
+      .filter({ hasText: PROJECT_NAME });
+    await expect(option).toHaveCount(1);
+    const projectId = await idFromTestId(option, "filter-projects-option-");
+    await option.click();
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(new RegExp(`projects=${projectId}`));
+    await expect(page.getByTestId("summary-total-duration")).toHaveText(
+      TOTAL_DURATION
+    );
+
+    // ── Totals → Entries ────────────────────────────────────────────
+    await page.getByTestId("report-view-entries").click();
+    await expect(page.getByTestId("report-view-entries")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await expect(page.getByTestId("report-view-totals")).toHaveAttribute(
+      "aria-selected",
+      "false"
+    );
+    await expect(page).toHaveURL(/view=entries/);
+    await expect(page).toHaveURL(new RegExp(`from=${dayKey(-7)}`));
+    await expect(page).toHaveURL(new RegExp(`to=${dayKey(1)}`));
+    await expect(page).toHaveURL(new RegExp(`projects=${projectId}`));
+    // Entries has no grouping, but the choice is kept for the way back.
+    await expect(page).toHaveURL(/group=client/);
+
+    await expect(page.getByTestId("detailed-report")).toBeVisible();
+    await expect(page.getByTestId("summary-report")).toHaveCount(0);
+    await expect(page.locator('[data-testid^="detailed-row-"]')).toHaveCount(2);
+    await expect(page.getByTestId("filter-projects")).toContainText(
+      PROJECT_NAME
+    );
+
+    // ── Entries → Totals ────────────────────────────────────────────
+    await page.getByTestId("report-view-totals").click();
+    await expect(page.getByTestId("report-view-totals")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await expect(page).not.toHaveURL(/view=/);
+    await expect(page).toHaveURL(new RegExp(`from=${dayKey(-7)}`));
+    await expect(page).toHaveURL(new RegExp(`projects=${projectId}`));
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+    await expect(page.getByTestId("detailed-report")).toHaveCount(0);
+    await expect(page.getByTestId("groupby-client")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await expect(page.getByTestId("filter-projects")).toContainText(
+      PROJECT_NAME
+    );
+    await expect(page.getByTestId("summary-total-duration")).toHaveText(
+      TOTAL_DURATION
+    );
+  });
+
+  test("a grouped total drills down into its entries", async ({ page }) => {
+    await page.goto(`/reports${RANGE_QUERY}`);
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+
+    const row = page.locator('[data-testid^="summary-row-"]');
+    await expect(row).toHaveCount(1);
+    const projectId = await idFromTestId(row, "summary-row-");
+
+    await page.getByTestId(`summary-link-${projectId}`).click();
+
+    await expect(page).toHaveURL(/view=entries/);
+    await expect(page).toHaveURL(new RegExp(`projects=${projectId}`));
+    await expect(page).toHaveURL(new RegExp(`from=${dayKey(-7)}`));
+    await expect(page.getByTestId("report-view-entries")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await expect(page.getByTestId("detailed-report")).toBeVisible();
+    await expect(page.locator('[data-testid^="detailed-row-"]')).toHaveCount(2);
+    await expect(page.getByTestId("filter-projects")).toContainText(
+      PROJECT_NAME
+    );
+  });
+
+  test("the sidebar has one Reports link", async ({ page }) => {
+    await page.goto("/track");
+    const nav = page.getByTestId("sidebar-nav");
+    await expect(nav).toBeVisible();
+
+    await expect(page.getByTestId("nav-reports")).toHaveCount(1);
+    await expect(page.getByTestId("nav-reports")).toHaveAttribute(
+      "href",
+      /^\/reports\/?$/
+    );
+    await expect(page.getByTestId("nav-summary")).toHaveCount(0);
+    await expect(page.getByTestId("nav-detailed")).toHaveCount(0);
+    await expect(page.getByTestId("nav-weekly")).toHaveCount(0);
+
+    await page.getByTestId("nav-reports").click();
+    await expect(page).toHaveURL(/\/reports\/?(\?|$)/);
+    await expect(page.getByTestId("report-view-switch")).toBeVisible();
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+    await expect(page.getByTestId("weekly-report")).toHaveCount(0);
+  });
+});
+
+/**
+ * The old report addresses are bookmarked and linked from outside the app, so
+ * each one must land on the merged page with the equivalent view and filters.
+ */
+test.describe("Legacy report addresses", () => {
+  test.beforeEach(async ({ page }) => {
+    await signUpViaUI(page, {
+      name: "Legacy Reports User",
+      email: uniqueEmail("legacy-reports"),
+      password: PASSWORD,
+    });
+  });
+
+  /** Matches `/reports?…` and `/reports/?…`, never `/reports/summary`. */
+  const MERGED_PAGE = /\/reports\/?\?/;
+
+  test("/reports/summary opens Totals with the same query", async ({
+    page,
+  }) => {
+    await page.goto(`/reports/summary${RANGE_QUERY}&group=client`);
+
+    await expect(page).toHaveURL(MERGED_PAGE);
+    await expect(page).not.toHaveURL(/\/reports\/summary/);
+    await expect(page).not.toHaveURL(/view=/);
+    await expect(page).toHaveURL(new RegExp(`from=${dayKey(-7)}`));
+    await expect(page).toHaveURL(new RegExp(`to=${dayKey(1)}`));
+    await expect(page).toHaveURL(/group=client/);
+
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+    await expect(page.getByTestId("report-view-totals")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await expect(page.getByTestId("groupby-client")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+  });
+
+  test("/reports/detailed opens Entries and drops the grouping", async ({
+    page,
+  }) => {
+    await page.goto(
+      `/reports/detailed${RANGE_QUERY}&group=tag&sort=duration&dir=desc`
+    );
+
+    await expect(page).toHaveURL(MERGED_PAGE);
+    await expect(page).not.toHaveURL(/\/reports\/detailed/);
+    await expect(page).toHaveURL(/view=entries/);
+    await expect(page).not.toHaveURL(/group=/);
+    await expect(page).toHaveURL(new RegExp(`from=${dayKey(-7)}`));
+    await expect(page).toHaveURL(new RegExp(`to=${dayKey(1)}`));
+    await expect(page).toHaveURL(/sort=duration/);
+
+    await expect(page.getByTestId("detailed-report")).toBeVisible();
+    await expect(page.getByTestId("report-view-entries")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  });
+
+  test("/reports/weekly opens Totals for that week, by day", async ({
+    page,
+  }) => {
+    const week = dayKey(-7);
+    await page.goto(`/reports/weekly?week=${week}`);
+
+    await expect(page).toHaveURL(MERGED_PAGE);
+    await expect(page).not.toHaveURL(/\/reports\/weekly/);
+    await expect(page).not.toHaveURL(/view=/);
+    await expect(page).not.toHaveURL(/week=/);
+    await expect(page).toHaveURL(/group=day/);
+
+    // The week start depends on the workspace setting, so assert the shape:
+    // seven days, and the requested day inside them.
+    const url = new URL(page.url());
+    const from = url.searchParams.get("from");
+    const to = url.searchParams.get("to");
+    expect(from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const days =
+      (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+      86_400_000;
+    expect(days).toBe(6);
+    expect((from ?? "") <= week && week <= (to ?? "")).toBe(true);
+
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+    await expect(page.getByTestId("groupby-day")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await expect(page.getByTestId("weekly-report")).toHaveCount(0);
+  });
+
+  test("/reports/weekly with no week opens the current week", async ({
+    page,
+  }) => {
+    await page.goto("/reports/weekly");
+
+    await expect(page).toHaveURL(MERGED_PAGE);
+    await expect(page).toHaveURL(/group=day/);
+
+    const url = new URL(page.url());
+    const from = url.searchParams.get("from") ?? "";
+    const to = url.searchParams.get("to") ?? "";
+    const today = dayKey(0);
+    expect(from <= today && today <= to).toBe(true);
+    await expect(page.getByTestId("summary-report")).toBeVisible();
   });
 });

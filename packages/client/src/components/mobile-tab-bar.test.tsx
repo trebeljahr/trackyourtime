@@ -60,10 +60,10 @@ describe("MobileTabBar", () => {
     expect(activeTab()).toBe("track");
   });
 
-  it("keeps Reports lit on the report screens the drawer reaches", () => {
-    // Detailed and Weekly have no tab of their own, so the tab that took the
-    // user into Reports has to stay lit while they are in there.
-    renderBar("/reports/detailed");
+  it("keeps Reports lit under /reports", () => {
+    // The retired report routes are redirects under /reports, so a bookmark
+    // to one must not light More for the frame before it lands.
+    renderBar("/reports/summary");
     expect(activeTab()).toBe("reports");
   });
 
@@ -79,12 +79,10 @@ describe("MobileTabBar", () => {
     expect(activeTab()).toBe("more");
   });
 
-  it("points Reports at Summary, not at the bare /reports segment", () => {
-    // /reports itself is not a page — linking there is a 404 in the static
-    // export.
+  it("points Reports at the one Reports page", () => {
     renderBar("/track");
     expect(screen.getByTestId("tab-reports").getAttribute("href")).toBe(
-      "/reports/summary",
+      "/reports",
     );
   });
 

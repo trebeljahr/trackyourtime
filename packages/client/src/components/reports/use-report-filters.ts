@@ -9,11 +9,16 @@ import {
   type DateRange,
 } from "@/components/date-range-picker";
 import { useFormatSettings } from "@/lib/format";
+import {
+  parseReportView,
+  REPORT_VIEW_PARAM,
+  type ReportView,
+} from "@/lib/report-links";
 
 /**
- * Query-string parameter names. All three report routes read and write the
- * same keys, so switching tabs carries the filters along and any report URL
- * is shareable and survives a reload.
+ * Query-string parameter names. Both views of `/reports` read and write the
+ * same keys, so switching between Totals and Entries carries the filters along
+ * and any report URL is shareable and survives a reload.
  */
 export const REPORT_PARAM = {
   from: "from",
@@ -25,9 +30,9 @@ export const REPORT_PARAM = {
   billable: "billable",
   search: "q",
   groupBy: "group",
-  week: "week",
   sort: "sort",
   dir: "dir",
+  view: REPORT_VIEW_PARAM,
 } as const;
 
 /** Billable is a tri-state: absent = all, "yes" = billable, "no" = not. */
@@ -113,6 +118,14 @@ export type UseReportFiltersResult = {
   /** Ready to spread into `reports.*` / `entries.list` inputs. */
   filters: ReportFilters;
   weekStartsOn: WeekStart;
+  /** Totals or Entries, from the `view` param. */
+  view: ReportView;
+  /**
+   * Switches the view and nothing else. Sort, direction and grouping stay in
+   * the URL even while the other view ignores them, so switching back finds
+   * the report exactly as it was left.
+   */
+  setView: (view: ReportView) => void;
   /** True when anything beyond the date range narrows the report. */
   isFiltered: boolean;
   setRange: (range: DateRange) => void;
@@ -121,15 +134,32 @@ export type UseReportFiltersResult = {
   setSearch: (value: string) => void;
   getParam: (key: string) => string | null;
   setParam: (key: string, value: string | null) => void;
-  setParams: (patch: Record<string, string | null>) => void;
+  setParams: (
+    patch: Record<string, string | null>,
+    options?: SetParamsOptions
+  ) => void;
   clearFilters: () => void;
+};
+
+/**
+ * How a URL change lands in history. Filter edits `replace` (the default), so
+ * typing a search does not leave one Back step per keystroke.
+ */
+export type SetParamsOptions = { history?: "push" | "replace" };
+
+/** What the screen hands each report view. */
+export type ReportViewProps = {
+  /** Owned by the screen, which renders the filter bar above the view. */
+  filters: UseReportFiltersResult;
+  /** Whether the export has anything to describe yet. */
+  onExportReady: (ready: boolean) => void;
 };
 
 /**
  * Report filter state, stored in the URL rather than component state.
  *
  * Nothing is written until the user actually changes something, so a bare
- * `/reports/summary` keeps a clean URL while still defaulting to this week.
+ * `/reports` keeps a clean URL while still defaulting to this week.
  */
 export const useReportFilters = (): UseReportFiltersResult => {
   const router = useRouter();
@@ -187,16 +217,19 @@ export const useReportFilters = (): UseReportFiltersResult => {
   const searchString = searchParams.toString();
 
   const setParams = React.useCallback(
-    (patch: Record<string, string | null>): void => {
+    (
+      patch: Record<string, string | null>,
+      options?: SetParamsOptions
+    ): void => {
       const next = new URLSearchParams(searchString);
       for (const [key, value] of Object.entries(patch)) {
         if (value === null || value === "") next.delete(key);
         else next.set(key, value);
       }
       const query = next.toString();
-      router.replace(query === "" ? pathname : `${pathname}?${query}`, {
-        scroll: false,
-      });
+      const href = query === "" ? pathname : `${pathname}?${query}`;
+      if (options?.history === "push") router.push(href, { scroll: false });
+      else router.replace(href, { scroll: false });
     },
     [pathname, router, searchString]
   );
@@ -239,6 +272,25 @@ export const useReportFilters = (): UseReportFiltersResult => {
     [setParams]
   );
 
+  const view = parseReportView(searchParams.get(REPORT_PARAM.view));
+
+  const setView = React.useCallback(
+    (next: ReportView): void => {
+      // Totals is the default, so it is the absence of the param: the clean
+      // `/reports` URL and the Totals view are the same page.
+      //
+      // A view switch pushes, where a filter edit replaces: Totals and Entries
+      // are two places, and Back from Entries returns to Totals — the way it
+      // did when they were separate routes, and the way it does after the
+      // drill-down link, which is a push too.
+      setParams(
+        { [REPORT_PARAM.view]: next === "entries" ? next : null },
+        { history: "push" }
+      );
+    },
+    [setParams]
+  );
+
   const clearFilters = React.useCallback((): void => {
     setParams({
       [REPORT_PARAM.projects]: null,
@@ -267,6 +319,8 @@ export const useReportFilters = (): UseReportFiltersResult => {
     state,
     filters,
     weekStartsOn,
+    view,
+    setView,
     isFiltered,
     setRange,
     setIds,

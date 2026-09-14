@@ -11,6 +11,7 @@ import {
   REPORT_PARAM,
 } from "@/components/reports/use-report-filters";
 import { useFormatSettings } from "@/lib/format";
+import { reportsHref } from "@/lib/report-links";
 import { trpc } from "@/lib/trpc";
 
 /** The catalog dimensions an entry log can be narrowed to. */
@@ -23,17 +24,15 @@ const PARAM_FOR_DIMENSION: Record<EntryFilterDimension, string> = {
   tag: REPORT_PARAM.tags,
 };
 
-const DETAILED_REPORT_PATH = "/reports/detailed";
-
 export type EntriesLinkTarget = {
   dimension: EntryFilterDimension;
   id: string;
 };
 
 /**
- * The detailed report, filtered to one catalog row over `range`.
+ * Reports → Entries, filtered to one catalog row over `range`.
  *
- * The report reads its whole state from the query string, so linking into it
+ * Reports reads its whole state from the query string, so linking into it
  * needs no new plumbing: the same URL a user could have built with the filter
  * bar is the one a click on a catalog row produces, and it stays shareable.
  */
@@ -47,7 +46,7 @@ export const entriesHref = (
     [PARAM_FOR_DIMENSION[target.dimension]]: target.id,
   });
 
-  return `${DETAILED_REPORT_PATH}?${params.toString()}`;
+  return reportsHref("entries", params);
 };
 
 /**

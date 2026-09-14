@@ -133,23 +133,18 @@ type CatalogDialog =
 
 export type ReportFiltersBarProps = {
   filters: UseReportFiltersResult;
-  /** Weekly swaps the range picker for its own week navigation. */
-  hideDateRange?: boolean;
-  /** Rendered at the very start of the bar (weekly week nav). */
-  leading?: React.ReactNode;
   /** Rendered at the end, right-aligned - normally `<ExportMenu />`. */
   trailing?: React.ReactNode;
   className?: string;
 };
 
 /**
- * The filter bar every report shares. All state lives in the URL, so the three
- * routes stay in step with one another and a report link is shareable.
+ * The filter bar both report views share. All state lives in the URL, so
+ * Totals and Entries stay in step with one another and a report link is
+ * shareable.
  */
 export function ReportFiltersBar({
   filters,
-  hideDateRange = false,
-  leading,
   trailing,
   className,
 }: ReportFiltersBarProps): React.JSX.Element {
@@ -226,17 +221,13 @@ export function ReportFiltersBar({
         )}
         data-testid="report-filters"
       >
-        {leading}
-
-        {hideDateRange ? null : (
-          <DateRangePicker
-            value={state.range}
-            onChange={setRange}
-            weekStartsOn={weekStartsOn}
-            allTime={trackedSpan}
-            testId="filter-range"
-          />
-        )}
+        <DateRangePicker
+          value={state.range}
+          onChange={setRange}
+          weekStartsOn={weekStartsOn}
+          allTime={trackedSpan}
+          testId="filter-range"
+        />
 
         <MultiSelect
           label="Clients"

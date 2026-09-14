@@ -60,8 +60,8 @@ test.describe("PDF export", () => {
     await logManualEntry(page, ENTRY_DESCRIPTION, ENTRY_DURATION);
   });
 
-  test("downloads a real PDF of the summary report", async ({ page }) => {
-    await page.goto(`/reports/summary${RANGE_QUERY}`);
+  test("downloads a real PDF of the totals report", async ({ page }) => {
+    await page.goto(`/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("summary-report")).toBeVisible();
     // The button stays disabled until the report has answered; clicking before
     // that would open nothing.
@@ -98,10 +98,36 @@ test.describe("PDF export", () => {
     expect(bytes.subarray(-1024).toString("latin1")).toContain("%%EOF");
   });
 
+  test("export follows the active view", async ({ page }) => {
+    // The Entries view shares the export button with Totals, so the button
+    // must ask for the report on screen, not the one the page opened on.
+    await page.goto(`/reports${RANGE_QUERY}`);
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+    await page.getByTestId("report-view-entries").click();
+    await expect(page.getByTestId("detailed-report")).toBeVisible();
+    await expect(page.getByTestId("report-export")).toBeEnabled();
+
+    await page.getByTestId("report-export").click();
+    await expect(page.getByTestId("report-export-menu")).toBeVisible();
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 30_000 }),
+      page.getByTestId("report-export-pdf").click(),
+    ]);
+
+    expect(download.suggestedFilename()).toMatch(
+      /^tracktime-detailed-\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.pdf$/,
+    );
+    const path = await download.path();
+    expect(path).not.toBeNull();
+    const bytes = await readFile(path as string);
+    expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+  });
+
   test("the print item is gone — the PDF is server-rendered now", async ({
     page,
   }) => {
-    await page.goto(`/reports/summary${RANGE_QUERY}`);
+    await page.goto(`/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("summary-report")).toBeVisible();
 
     await page.getByTestId("report-export").click();

@@ -35,9 +35,8 @@ vi.mock("@/lib/trpc", () => ({
   trpc: { useUtils: () => ({ reports: {} }) },
 }));
 
-const { canDownloadFiles, exportCsvReport, exportPdfReport } = await import(
-  "./export-menu"
-);
+const { buildExportInput, canDownloadFiles, exportCsvReport, exportPdfReport } =
+  await import("./export-menu");
 
 const INPUT: ExportPdfInput = {
   from: "2026-08-01",
@@ -64,6 +63,28 @@ beforeEach(() => {
 
 afterEach(() => {
   delete (window as { Capacitor?: unknown }).Capacitor;
+});
+
+describe("buildExportInput", () => {
+  const filters = { from: "2026-08-01", to: "2026-08-31", timeZone: "UTC" };
+
+  it("sends the grouping with the summary", () => {
+    expect(
+      buildExportInput({ report: "summary", filters, groupBy: "client" }),
+    ).toEqual({ ...filters, report: "summary", groupBy: "client" });
+  });
+
+  it("never sends a grouping with the detailed report", () => {
+    // The screen keeps `group` in the URL while Entries shows, so a caller
+    // handing it over must not turn into a grouped detailed export.
+    const input = buildExportInput({
+      report: "detailed",
+      filters,
+      groupBy: "tag",
+    });
+    expect(input).toEqual({ ...filters, report: "detailed" });
+    expect("groupBy" in input).toBe(false);
+  });
 });
 
 describe("exportPdfReport", () => {

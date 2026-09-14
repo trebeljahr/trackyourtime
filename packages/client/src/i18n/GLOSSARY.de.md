@@ -40,13 +40,13 @@ terms; it is the reference when in doubt.
 | date | Datum | |
 | delete | löschen | |
 | description | Beschreibung | |
-| detailed (report) | Detailliert | |
 | device | Gerät | |
 | draft (invoice) | Entwurf | |
 | due date | Fälligkeitsdatum | |
 | duration | Dauer | |
 | end (time) | Ende | |
 | entry, time entry | Eintrag, Zeiteintrag | "Zeiteintrag" where the context is unclear |
+| Entries (report view) | Einträge | the Reports switch; plural of "Eintrag" |
 | export | exportieren / Export | |
 | favorite | Favorit | |
 | hourly rate | Stundensatz | |
@@ -71,7 +71,6 @@ terms; it is the reference when in doubt.
 | sign up | registrieren | |
 | start (time) | Beginn | the button is "Starten" |
 | stop (button) | Stoppen | |
-| summary (report) | Übersicht | |
 | sync, synced | Synchronisierung, synchronisiert | |
 | tag | Schlagwort | plural Schlagwörter — see below |
 | task | Tätigkeit | plural Tätigkeiten — see below |
@@ -81,6 +80,7 @@ terms; it is the reference when in doubt.
 | timer | Timer | the established German word in software; "Stoppuhr" reads as a toy |
 | timesheet | Stundenzettel | |
 | total | Gesamt | "Summe" in invoice totals |
+| Totals (report view) | Summen | the Reports switch; never „Übersicht“, which is dashboard |
 | track (time) | erfassen | "Zeit erfassen"; the nav item /track is "Erfassen" |
 | webhook | Webhook | |
 | week starts on | Woche beginnt am | |

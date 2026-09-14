@@ -24,15 +24,14 @@ import { toast } from "@/components/ui/sonner";
 import { downloadBase64, downloadBlob } from "@/lib/download";
 import { trpc } from "@/lib/trpc";
 
-export type ExportReportKind = "summary" | "detailed" | "weekly";
+/** The server also renders a weekly export; no screen in this app offers it. */
+export type ExportReportKind = "summary" | "detailed";
 
 export type ExportMenuProps = {
   report: ExportReportKind;
   filters: ReportFilters;
   /** Required by the server for `report === "summary"`. */
   groupBy?: ReportGroupBy;
-  /** Required by the server for `report === "weekly"`. */
-  weekStart?: string;
   disabled?: boolean;
 };
 
@@ -64,6 +63,27 @@ export function canDownloadFiles(): boolean {
     // A shell that throws out of its own bridge is not one we can save through.
     return false;
   }
+}
+
+/**
+ * The export request for what is on screen. Only the summary is grouped: the
+ * screen keeps `group` in the URL while Entries is showing, so a grouping handed
+ * over for the detailed report is ignored here rather than sent along.
+ */
+export function buildExportInput({
+  report,
+  filters,
+  groupBy,
+}: {
+  report: ExportReportKind;
+  filters: ReportFilters;
+  groupBy?: ReportGroupBy;
+}): ExportCsvInput {
+  return {
+    ...filters,
+    report,
+    ...(report === "summary" && groupBy ? { groupBy } : {}),
+  };
 }
 
 const unsupportedMessage = (what: string): string =>
@@ -126,25 +146,20 @@ export async function exportPdfReport(
 }
 
 /**
- * CSV + PDF export, shared by all three report screens. Both files are
+ * CSV + PDF export, shared by both report views. Both files are
  * rendered server-side (`reports.exportCsv` / `reports.exportPdf`) so they
  * always cover the whole filtered range, not just the page currently on
  * screen — and so the PDF is a real document rather than whatever the
  * browser's print dialog made of the live DOM.
  */
 export function ExportMenu(props: ExportMenuProps): React.JSX.Element {
-  const { report, filters, groupBy, weekStart, disabled = false } = props;
+  const { report, filters, groupBy, disabled = false } = props;
   const utils = trpc.useUtils();
   const [pending, setPending] = React.useState(false);
 
   const input = React.useMemo(
-    (): ExportCsvInput => ({
-      ...filters,
-      report,
-      ...(groupBy ? { groupBy } : {}),
-      ...(weekStart ? { weekStart } : {}),
-    }),
-    [filters, groupBy, report, weekStart],
+    (): ExportCsvInput => buildExportInput({ report, filters, groupBy }),
+    [filters, groupBy, report],
   );
 
   const run = React.useCallback((task: () => Promise<void>): void => {

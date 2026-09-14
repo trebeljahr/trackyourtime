@@ -373,8 +373,8 @@ query), `Invoice.ts`, `ImportBatch.ts`, `Favorite.ts`, `Settings.ts`,
    `packages/client/src/components/<area>/`, the way `TrackPage` is just
    `<TrackerBar />` + `<EntryList />`.
 3. Add it to `NAV_SECTIONS` in `packages/client/src/components/app-shell.tsx`
-   (href, label, lucide icon; `match` for routes with sub-paths, as `/reports`
-   does).
+   (href, label, lucide icon). Child paths of `href` light the item on their
+   own; `match` is only for extra prefixes that are not under `href`.
 4. Auth needs nothing — `app/(protected)/layout.tsx` already gates the group and
    re-confirms the session with the server before redirecting anyone.
 5. Respect the static export (`next.config.ts`: `output: "export"`,

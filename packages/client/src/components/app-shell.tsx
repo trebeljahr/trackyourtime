@@ -14,7 +14,6 @@ import {
   Menu,
   Receipt,
   Settings as SettingsIcon,
-  Table2,
   Tags as TagsIcon,
   Timer,
   User as UserIcon,
@@ -74,14 +73,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/track", label: "Track", icon: Timer },
       { href: "/timesheet", label: "Timesheet", icon: Grid3x3 },
       { href: "/calendar", label: "Calendar", icon: CalendarDays },
-    ],
-  },
-  {
-    heading: "Reports",
-    items: [
-      { href: "/reports/summary", label: "Summary", icon: BarChart3 },
-      { href: "/reports/detailed", label: "Detailed", icon: Table2 },
-      { href: "/reports/weekly", label: "Weekly", icon: CalendarDays },
+      { href: "/reports", label: "Reports", icon: BarChart3 },
     ],
   },
   {

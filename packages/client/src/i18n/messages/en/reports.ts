@@ -1,5 +1,5 @@
 /**
- * English `reports` messages — the SOURCE catalog for reports (summary, detailed, weekly), charts, budgets and invoices.
+ * English `reports` messages — the SOURCE catalog for reports (Totals and Entries), charts, budgets and invoices.
  *
  * Add keys here first (grouped by component or screen, camelCase), then the
  * same keys in ../de/reports.ts: `tsc` fails until both agree. ICU syntax:

@@ -8,10 +8,11 @@ const params = (href: string): URLSearchParams =>
   new URLSearchParams(href.slice(href.indexOf("?") + 1));
 
 describe("entriesHref", () => {
-  it("points at the detailed report, filtered to the row", () => {
+  it("points at Reports → Entries, filtered to the row", () => {
     const href = entriesHref({ dimension: "client", id: "c1" }, RANGE);
 
-    expect(href.startsWith("/reports/detailed?")).toBe(true);
+    expect(href.startsWith("/reports?")).toBe(true);
+    expect(params(href).get("view")).toBe("entries");
     expect(params(href).get("clients")).toBe("c1");
   });
 

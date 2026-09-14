@@ -82,7 +82,7 @@ ${PRODUCT_NAME} is for freelancers, consultants and small studios who bill clien
 - The timer is where you already work. There is a Chrome extension, a Raycast extension with a menu bar clock and a start/stop hotkey, and iPhone and Android apps.
 - The web app, the extensions and the phone apps keep tracking without a connection. They send the queued changes when the connection returns.
 - A timer you stop on one device stops on every other open device at once, over a WebSocket.
-- Each project has an hourly rate. Summary, detailed and weekly reports export to CSV and PDF.
+- Each project has an hourly rate. Reports show totals by project, client, task, tag, day, week or month, or list every entry. Both views export to CSV and PDF.
 - An invoice collects a client's unbilled billable hours and downloads as a PDF. An hour on an invoice cannot be billed again.
 - Every install has every feature. There are no paid plugins and no premium tier.
 - The server has a REST API at \`/api/v1\` with an OpenAPI document, and sends webhooks signed with HMAC-SHA256.
