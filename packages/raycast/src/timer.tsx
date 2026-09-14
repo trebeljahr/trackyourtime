@@ -12,6 +12,7 @@ import {
 import {
   entryDurationSec,
   formatDuration,
+  sameServerOrigin,
   quickStartHint,
   quickStartLabel,
   repairQuickStart,
@@ -34,7 +35,7 @@ import {
   projectIcon,
 } from "./lib/format.js";
 import { useApi, useNow, useReconciledRunning } from "./lib/hooks.js";
-import { webLink } from "./lib/preferences.js";
+import { apiUrl, hostLabel, webLink } from "./lib/preferences.js";
 import {
   RECENT_DAYS,
   entryHint,
@@ -195,7 +196,11 @@ export default function Timer(): React.JSX.Element {
         .slice(0, MAX_NAMED_FOREIGN)
         .map(
           (row) =>
-            `${row.description?.trim() || "No description"} — ${formatDayHeading(row.at)}`,
+            `${row.description?.trim() || "No description"} — ${formatDayHeading(row.at)}${
+              row.server && !sameServerOrigin(row.server, apiUrl())
+                ? ` — ${hostLabel(row.server)}`
+                : ""
+            }`,
         );
       const rest = rows.length - named.length;
 
@@ -356,8 +361,8 @@ export default function Timer(): React.JSX.Element {
           {foreign > 0 ? (
             <List.Item
               icon={{ source: Icon.Person, tintColor: Color.SecondaryText }}
-              title={`${foreign} queued by another account`}
-              subtitle="Sign in as that account to send them, or discard them"
+              title={`${foreign} queued for another account or server`}
+              subtitle="Sign in as that account, on that server, to send them — or discard them"
               actions={
                 <ActionPanel>
                   <Action.Push

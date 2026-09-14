@@ -1,5 +1,10 @@
 import { LocalStorage } from "@raycast/api";
-import { createId, signOutSession, type IssuedSession } from "@starter/core";
+import {
+  createId,
+  sameServerOrigin,
+  signOutSession,
+  type IssuedSession,
+} from "@starter/core";
 import { clearCache } from "./local-cache.js";
 import { clearOverlay } from "./overlay.js";
 import { apiUrl } from "./preferences.js";
@@ -16,6 +21,13 @@ import { apiUrl } from "./preferences.js";
 const TOKEN_KEY = "tracktime.session.token";
 const EMAIL_KEY = "tracktime.session.email";
 const USER_KEY = "tracktime.session.userId";
+/**
+ * The server that issued the token. A token is a credential for ONE server:
+ * after the API URL preference is pointed somewhere else, sending it along
+ * would hand this account's session to a server that has no business holding
+ * it. So a token is only ever used against the origin stored beside it.
+ */
+const SERVER_KEY = "tracktime.session.server";
 const ORIGIN_KEY = "tracktime.originId";
 
 /** Names this client in Settings → Devices, and in the device flow. */
@@ -35,7 +47,30 @@ export type StoredSession = {
   userId: string | null;
 };
 
+/**
+ * The origin the stored token belongs to, claiming the current one for a token
+ * stored before this was recorded — the preference has not changed since that
+ * build last ran, so that is the server that issued it.
+ */
+async function storedServer(): Promise<string | null> {
+  const token = await LocalStorage.getItem<string>(TOKEN_KEY);
+  if (!token) return null;
+  const server = await LocalStorage.getItem<string>(SERVER_KEY);
+  if (server) return server;
+  await LocalStorage.setItem(SERVER_KEY, apiUrl());
+  return apiUrl();
+}
+
+/** True when a token is stored and it was issued by the server in use now. */
+async function sessionIsForThisServer(): Promise<boolean> {
+  const server = await storedServer();
+  return server !== null && sameServerOrigin(server, apiUrl());
+}
+
 export async function getStoredSession(): Promise<StoredSession | null> {
+  // A token from another server reads as signed out here: the person signs in
+  // to the server they pointed Raycast at, and the old token is never sent.
+  if (!(await sessionIsForThisServer())) return null;
   const token = await LocalStorage.getItem<string>(TOKEN_KEY);
   if (!token) return null;
   const email = await LocalStorage.getItem<string>(EMAIL_KEY);
@@ -50,6 +85,7 @@ export async function getStoredSession(): Promise<StoredSession | null> {
  * only moment it matters.
  */
 export async function getStoredUserId(): Promise<string | null> {
+  if (!(await sessionIsForThisServer())) return null;
   return (await LocalStorage.getItem<string>(USER_KEY)) ?? null;
 }
 
@@ -59,6 +95,7 @@ export async function storeSession(session: IssuedSession): Promise<void> {
   else await LocalStorage.removeItem(EMAIL_KEY);
   if (session.userId) await LocalStorage.setItem(USER_KEY, session.userId);
   else await LocalStorage.removeItem(USER_KEY);
+  await LocalStorage.setItem(SERVER_KEY, apiUrl());
 }
 
 /**
@@ -69,16 +106,17 @@ export async function storeSession(session: IssuedSession): Promise<void> {
  * that from happening.
  */
 export async function signOut(): Promise<void> {
-  const session = await getStoredSession();
-  if (session) {
-    await signOutSession(
-      { baseUrl: apiUrl(), clientId: CLIENT_ID },
-      session.token,
-    );
+  const token = await LocalStorage.getItem<string>(TOKEN_KEY);
+  const server = await storedServer();
+  if (token && server) {
+    // Revoked where it was issued — which, after the API URL preference has
+    // moved, is not the server every other call now goes to.
+    await signOutSession({ baseUrl: server, clientId: CLIENT_ID }, token);
   }
   await LocalStorage.removeItem(TOKEN_KEY);
   await LocalStorage.removeItem(EMAIL_KEY);
   await LocalStorage.removeItem(USER_KEY);
+  await LocalStorage.removeItem(SERVER_KEY);
 
   // The cached reads and the optimistic overlay both describe one account's
   // workspace, so they go — the next person to pair must not see the last

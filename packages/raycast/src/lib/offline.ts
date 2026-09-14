@@ -20,6 +20,7 @@ import {
   describeQueuedMutation,
   isForeignTo,
   isPermanentRejection,
+  isQueuedOn,
   isReplayableBy,
   isTransportFailure as isTransportFailureCore,
   OFFLINE_QUEUE_STORAGE_KEY,
@@ -30,6 +31,7 @@ import {
   type OfflinePayloadMap,
   type OfflineQueue,
   type OfflineReplayMutators,
+  type QueuedMutation,
   type QueuedMutationSummary,
   type ReplayIdMap,
   type StoredOfflinePayload,
@@ -37,6 +39,7 @@ import {
 import { NotSignedInError } from "./errors.js";
 import { getStoredUserId } from "./auth.js";
 import { raycastStorage } from "./storage.js";
+import { apiUrl } from "./preferences.js";
 
 let queue: OfflineQueue | null = null;
 
@@ -54,6 +57,43 @@ export const getOfflineQueue = (): OfflineQueue => {
   });
   return queue;
 };
+
+// ── which server a row belongs to ─────────────────────────────────────
+
+/*
+ * The API URL is a preference, and a person can point it at another server —
+ * the hosted one, their own — at any time. The queue outlives that for the
+ * reason it outlives a sign-out: its rows are time no server has seen. So
+ * every row carries the server it was queued against, and only rows for the
+ * server in use now are replayed, counted as ours or cancelled; the rest wait
+ * for the preference to point back, or for a deliberate discard.
+ *
+ * Rows from before the stamp are claimed for the server in use the first time
+ * this build touches the queue. That is where they were made — a preference
+ * cannot change between the old build's last run and the new one's first.
+ */
+let claimed: Promise<unknown> | null = null;
+
+const ready = (): Promise<unknown> => {
+  claimed ??= getOfflineQueue().adoptUnserved(apiUrl());
+  return claimed;
+};
+
+const isOnThisServer = (row: QueuedMutation): boolean =>
+  isQueuedOn(row, apiUrl(), apiUrl());
+
+/** Not this session's to send: another server's row, or another account's. */
+const isElsewhere = (row: QueuedMutation, owner: string | null): boolean =>
+  !isOnThisServer(row) || isForeignTo(row, owner);
+
+/**
+ * Claim the unowned rows queued against the server in use for `userId` — and
+ * only those: an account here could not have made a row for another server.
+ */
+export async function adoptUnownedHere(userId: string): Promise<number> {
+  await ready();
+  return getOfflineQueue().adoptUnowned(userId, isOnThisServer);
+}
 
 // ── classification ───────────────────────────────────────────────────
 
@@ -101,13 +141,19 @@ export async function enqueueOffline<K extends OfflineOp>(
   tempId?: string,
 ): Promise<void> {
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
-  await getOfflineQueue().enqueue(op, payload, (await getStoredUserId()) ?? undefined);
+  await ready();
+  await getOfflineQueue().enqueue(
+    op,
+    payload,
+    (await getStoredUserId()) ?? undefined,
+    apiUrl(),
+  );
 }
 
 export type PendingCounts = {
   /** Rows this account can replay. */
   mine: number;
-  /** Rows queued by a different account — kept, never replayed. */
+  /** Rows queued by a different account or for another server — kept, never replayed. */
   foreign: number;
 };
 
@@ -120,9 +166,10 @@ export type PendingCounts = {
  * counted as ours: nobody has claimed them and the next sign-in adopts them.
  */
 export async function pendingCounts(): Promise<PendingCounts> {
+  await ready();
   const rows = await getOfflineQueue().list();
   const owner = await getStoredUserId();
-  const foreign = rows.filter((row) => isForeignTo(row, owner)).length;
+  const foreign = rows.filter((row) => isElsewhere(row, owner)).length;
   return { mine: rows.length - foreign, foreign };
 }
 
@@ -136,10 +183,11 @@ export async function pendingCounts(): Promise<PendingCounts> {
  * "Invoicing" from 21 August.
  */
 export async function listForeign(): Promise<QueuedMutationSummary[]> {
+  await ready();
   const owner = await getStoredUserId();
   const rows = await getOfflineQueue().list();
   return rows
-    .filter((row) => isForeignTo(row, owner))
+    .filter((row) => isElsewhere(row, owner))
     .map(describeQueuedMutation);
 }
 
@@ -153,10 +201,11 @@ export async function listForeign(): Promise<QueuedMutationSummary[]> {
  * it less silent.
  */
 export async function discardForeign(): Promise<number> {
+  await ready();
   const owner = await getStoredUserId();
   const offline = getOfflineQueue();
   const theirs = (await offline.list()).filter((row) =>
-    isForeignTo(row, owner),
+    isElsewhere(row, owner),
   );
   for (const row of theirs) await offline.remove(row.id);
   return theirs.length;
@@ -177,7 +226,7 @@ export async function cancelQueuedForTemp(tempId: string): Promise<boolean> {
   for (const row of rows) {
     // Never reach into another account's rows, even to cancel. An unowned row
     // is fair game: it is one this install queued before it knew the account.
-    if (isForeignTo(row, owner)) continue;
+    if (isElsewhere(row, owner)) continue;
     if (decodeOfflineMutation(row)?.tempId !== tempId) continue;
     await offline.remove(row.id);
     removed = true;
@@ -222,6 +271,7 @@ export type FlushReport = FlushResult & {
 export async function flushOffline(
   mutators: OfflineReplayMutators,
 ): Promise<FlushReport> {
+  await ready();
   const offline = getOfflineQueue();
   const owner = await getStoredUserId();
   const resolved: ReplayIdMap = new Map();
@@ -251,7 +301,7 @@ export async function flushOffline(
         throw error;
       }
     },
-    { filter: (row) => isReplayableBy(row, owner) },
+    { filter: (row) => isReplayableBy(row, owner) && isOnThisServer(row) },
   );
 
   return { ...result, refused, stale, resolved };

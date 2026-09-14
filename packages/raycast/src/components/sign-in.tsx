@@ -29,7 +29,7 @@ import {
   webUrl,
 } from "../lib/preferences.js";
 import { getTracktime } from "../lib/api.js";
-import { getOfflineQueue } from "../lib/offline.js";
+import { adoptUnownedHere } from "../lib/offline.js";
 import { describeFailure, refreshMenuBar } from "../lib/ui.js";
 
 /**
@@ -99,7 +99,7 @@ export function SignIn(): React.JSX.Element {
          * there being counted as somebody else's.
          */
         const adopted = session.userId
-          ? await getOfflineQueue().adoptUnowned(session.userId)
+          ? await adoptUnownedHere(session.userId)
           : 0;
         const stuck = await (await getTracktime()).sync().catch(() => 0);
 
