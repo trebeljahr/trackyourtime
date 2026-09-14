@@ -12,6 +12,7 @@
 // had) must fail here rather than pass by coincidence.
 import mongoose, { Types } from "mongoose";
 import type { WorkspaceRole } from "@starter/shared/types";
+import { BusinessProfileModel } from "../../models/BusinessProfile.js";
 import { Client } from "../../models/Client.js";
 import { Favorite } from "../../models/Favorite.js";
 import { Invoice } from "../../models/Invoice.js";
@@ -123,6 +124,7 @@ export type Store = {
   favorites: MemoryCollection;
   invoices: MemoryCollection;
   settings: MemoryCollection;
+  businessProfiles: MemoryCollection;
 };
 
 /** A fresh copy of the whole workspace. */
@@ -177,6 +179,8 @@ export const freshStore = (): Store => ({
       weekStartsOn: 1,
     },
   ]),
+  // Read by invoice creation and the workspace export (the issuer header).
+  businessProfiles: memoryCollection(),
 });
 
 /**
@@ -194,6 +198,7 @@ export const installStore = (store: Store): (() => void) => {
     stubModel(Favorite, store.favorites),
     stubModel(Invoice, store.invoices),
     stubModel(WorkspaceSettingsModel, store.settings),
+    stubModel(BusinessProfileModel, store.businessProfiles),
   ];
   return () => {
     for (const restore of restores) restore();
