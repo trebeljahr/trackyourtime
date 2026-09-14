@@ -3,7 +3,8 @@ import test from "node:test";
 import type { WebSocket } from "ws";
 import type { ServerToClientMessage } from "@starter/shared";
 // Subpath import: a bare named import from "@starter/shared" throws under tsx
-// (see the note in duration.test.ts).
+// (see the note in duration.test.ts). `publishSync` and its per-recipient
+// projection are exercised in visibility-sync-projection.test.ts.
 import { userRoomId } from "@starter/shared/protocol";
 import { RoomManager } from "../ws/rooms.js";
 

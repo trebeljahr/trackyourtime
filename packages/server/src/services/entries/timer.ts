@@ -621,6 +621,9 @@ export async function discardTimer(
     running.workspaceId,
     { kind: "entry.deleted", id },
     input.originId,
+    // Without an author the fan-out fails closed, and a restricted member's
+    // own other devices would keep showing the discarded timer.
+    { authorId },
   );
   emitWebhookEvent(running.workspaceId, "entry.deleted", {
     kind: "entry-deleted",

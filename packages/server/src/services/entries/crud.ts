@@ -249,10 +249,14 @@ export async function deleteEntry(
   });
   if (result.deletedCount === 0) throw notFound();
 
+  // The audience is what lets the fan-out send an id-only event to the
+  // author's other devices without also telling a colleague who may not see
+  // the author's time that an entry just disappeared.
   void publishSync(
     scope.workspaceId,
     { kind: "entry.deleted", id: input.id },
     input.originId,
+    { authorId: scope.userId },
   );
   emitWebhookEvent(scope.workspaceId, "entry.deleted", {
     kind: "entry-deleted",
