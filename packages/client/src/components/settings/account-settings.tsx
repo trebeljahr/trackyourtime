@@ -111,7 +111,7 @@ export function AccountSettings({
 
           <SettingRow
             title="Email notifications"
-            description="Product and account emails. Timer reminders are separate."
+            description="Account emails, including one reminder for a timer left running too long."
             testId="setting-notifications"
           >
             <Switch

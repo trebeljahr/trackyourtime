@@ -309,10 +309,11 @@ export async function currentEntry(
     if (!here) return null;
   }
 
-  // Where the runaway guard is evaluated. There is no scheduler in this
-  // server and deliberately so — the read that would have shown a stale
-  // 63-hour timer is the read that deals with it. Confined by the same reach
-  // as the query below it, and for the same reason. See services/runaway.ts.
+  // Where the runaway guard is evaluated on read. The runaway-reminder job
+  // evaluates it on a schedule too; this is the fallback between polls and
+  // with the scheduler off, and both are idempotent against each other.
+  // Confined by the same reach as the query below it, and for the same
+  // reason. See services/runaway.ts.
   const outcome = await enforceMaxEntryDuration(
     scope.userId,
     reachWorkspaceId(reach),

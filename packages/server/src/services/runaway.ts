@@ -1,30 +1,25 @@
 /**
  * The runaway-timer guard, evaluated on the server.
  *
- * ── Why there is no cron here ────────────────────────────────────────
+ * ── Evaluated twice: on read, and on a schedule ───────────────────────
  *
- * The next person will look for a scheduler and not find one. There isn't one
- * anywhere in this server — no cron, no job runner, nothing but the WebSocket
- * heartbeat's `setInterval` — and adding the first one for this would be the
- * wrong trade:
+ * The guard is evaluated LAZILY, whenever something resolves "what is
+ * running": `entries.current`, opening a timer by starting another one, and
+ * joining the sync room on a fresh socket. The read that would have shown a
+ * stale 63-hour timer is the read that fixes it.
  *
- *  - The guard is evaluated LAZILY, whenever something resolves "what is
- *    running": `entries.current`, opening a timer by starting another one, and
- *    joining the sync room on a fresh socket. Nobody learns about a runaway
- *    until they look, and when they look is exactly when it is evaluated. The
- *    read that would have shown a stale 63-hour timer is the read that fixes
- *    it, so from the user's side the two are indistinguishable.
- *  - It costs no new infrastructure and cannot fall behind, get stuck, or need
- *    a lock. A scheduler would need one the moment this process is scaled past
- *    a single instance (it isn't today, and the guard should not be the reason
- *    it has to care).
+ * Lazy evaluation cannot act while nobody looks, so the `runaway-reminder`
+ * job (services/scheduler/runaway-reminder.ts) calls the same function every
+ * five minutes for everyone with a timer running. A cap then lands within
+ * minutes of the limit with no client open, connected devices receive the
+ * stop over sync, and the job can email a reminder the lazy path never could.
  *
- * What lazy evaluation genuinely cannot do is notify proactively — no push
- * arrives on Saturday morning saying the Friday timer is still going. That is
- * the price, and it is the right one to pay until there is a push channel for
- * such a notification to travel down. If one is ever added, the decision
- * itself is pure and unchanged (`@starter/shared/runaway`); only the call site
- * moves.
+ * Both callers go through `enforceMaxEntryDuration` and nothing else, so they
+ * cannot disagree, and neither can double-act: a cap goes through
+ * `finalizeStop`, whose filter requires `end: null`, and a flag's write
+ * requires `runaway: null`. Whichever caller comes second finds nothing to do.
+ * The lazy path stays as the fallback for an instance with
+ * SCHEDULER_ENABLED=false, and between two polls.
  *
  * ── Why it cannot live in a client ───────────────────────────────────
  *
@@ -198,6 +193,82 @@ const run = async (
   publish(running.workspaceId, { kind: "timer.stopped", entry: stopped });
   return { kind: "ended", entry: stopped };
 };
+
+// ── the reminder email ───────────────────────────────────────────────
+
+/**
+ * With the guard off, a timer this old still earns one reminder. Eight hours
+ * is a working day: past it, a timer is far more often forgotten than meant.
+ */
+export const UNGUARDED_REMINDER_AFTER_SEC = 8 * 3600;
+
+export type RunawayReminderDue =
+  | { kind: "none" }
+  /** The guard flagged it (behaviour `ask`); `limitSec` is what it saw. */
+  | { kind: "limit"; limitSec: number }
+  /** The guard is off and the entry is past {@link UNGUARDED_REMINDER_AFTER_SEC}. */
+  | { kind: "unguarded" };
+
+/** The fields of an entry the reminder decision reads. */
+export type RunawayReminderEntry = {
+  start: Date;
+  end: Date | null;
+  runaway?: RunawayDoc | null;
+  reminderSentAt?: Date | null;
+};
+
+/**
+ * Whether this entry is owed its one reminder email. Pure: the job reads the
+ * entry and the person's settings, and this decides.
+ *
+ * With the guard on, only an entry the guard FLAGGED and nobody has answered
+ * yet is owed one. `cap` and `stop` end the entry, and an ended entry needs no
+ * reminder to stop it. A flag answered with "keep running" (`resolvedAt` set)
+ * was a decision, not an oversight. With the guard off, the fixed threshold
+ * stands in for the missing limit.
+ */
+export function runawayReminderDue(
+  entry: RunawayReminderEntry,
+  settings: MaxDurationSettings,
+  nowMs: number,
+): RunawayReminderDue {
+  if (entry.end !== null || entry.reminderSentAt) return { kind: "none" };
+
+  if (settings.maxHours > 0) {
+    const mark = entry.runaway;
+    return mark && mark.action === "flagged" && !mark.resolvedAt
+      ? { kind: "limit", limitSec: mark.limitSec }
+      : { kind: "none" };
+  }
+
+  return nowMs - entry.start.getTime() >= UNGUARDED_REMINDER_AFTER_SEC * 1000
+    ? { kind: "unguarded" }
+    : { kind: "none" };
+}
+
+/**
+ * The Mongo filter that claims an entry's reminder, as one atomic write.
+ *
+ * It repeats the decision's conditions, so the claim fails when the entry was
+ * stopped, answered or already reminded about between the read and the write,
+ * in this process or another. `reminderSentAt: null` also matches the absent
+ * field every older entry has.
+ */
+export function runawayReminderClaimFilter(
+  entryId: string,
+  due: Exclude<RunawayReminderDue, { kind: "none" }>,
+  now: Date,
+): Record<string, unknown> {
+  const base = { _id: entryId, end: null, reminderSentAt: null };
+  return due.kind === "limit"
+    ? { ...base, "runaway.action": "flagged", "runaway.resolvedAt": null }
+    : {
+        ...base,
+        start: {
+          $lte: new Date(now.getTime() - UNGUARDED_REMINDER_AFTER_SEC * 1000),
+        },
+      };
+}
 
 /** Into the entry's OWN workspace, which may not be the one that asked. */
 const publish = (workspaceId: string, event: SyncEvent): void => {

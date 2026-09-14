@@ -206,3 +206,76 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+
+// ── runaway timer reminder ──────────────────────────────────────────────
+
+export type RunawayReminderEmailInput = {
+  to: string;
+  /** The entry's description; empty is normal and reads as "Untitled". */
+  description: string;
+  start: Date;
+  now: Date;
+  /**
+   * The person's runaway limit in seconds when the guard flagged the entry,
+   * or null when the guard is off and the reminder comes from the fixed
+   * threshold instead. Only the wording differs.
+   */
+  limitSec: number | null;
+  /** Absolute link to the tracker, or null when no frontend URL is set. */
+  trackUrl: string | null;
+};
+
+/** "9 h 12 min", "45 min". Hours and minutes only: this is an email. */
+function formatReminderDuration(totalSec: number): string {
+  const minutes = Math.max(0, Math.floor(totalSec / 60));
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours === 0) return `${rest} min`;
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+}
+
+/**
+ * The reminder sent once per entry by the runaway-reminder job
+ * (services/scheduler/runaway-reminder.ts). Pure, so the copy is testable
+ * without a transport.
+ *
+ * The start is written in UTC with the zone named. The server does not know
+ * which of the person's devices they will read this on.
+ */
+export function buildRunawayReminderEmail(
+  input: RunawayReminderEmailInput,
+): EmailParams & { html: string } {
+  const elapsed = formatReminderDuration(
+    (input.now.getTime() - input.start.getTime()) / 1000,
+  );
+  const name = input.description.trim() || "Untitled";
+  const started = `${input.start.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+
+  const why =
+    input.limitSec === null
+      ? "If you forgot to stop it, stop it now or correct its end time."
+      : `That is past your ${formatReminderDuration(input.limitSec)} limit. Stop it, keep it running, or correct its end time.`;
+  const footer =
+    "You get this email once per timer. To stop these emails, turn off " +
+    "Email notifications in Settings, Account.";
+
+  const subject = `Your timer has been running for ${elapsed}`;
+  const text = [
+    `Your timer "${name}" started at ${started} and has run for ${elapsed}.`,
+    why,
+    ...(input.trackUrl ? [`Open the tracker: ${input.trackUrl}`] : []),
+    "",
+    footer,
+  ].join("\n");
+
+  const link = input.trackUrl
+    ? `<p><a href="${escapeHtml(input.trackUrl)}">Open the tracker</a></p>`
+    : "";
+  const html =
+    `<p>Your timer <strong>${escapeHtml(name)}</strong> started at ` +
+    `${escapeHtml(started)} and has run for ${escapeHtml(elapsed)}.</p>` +
+    `<p>${escapeHtml(why)}</p>${link}` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
+
+  return { to: input.to, subject, text, html };
+}

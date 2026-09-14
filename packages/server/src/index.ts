@@ -8,6 +8,11 @@ import { connectRedis, disconnectRedis } from "./db/redis.js";
 import { initAuth, disconnectAuth } from "./auth/auth.js";
 import { setupWebSocket } from "./ws/handler.js";
 import { startWebhookSweeper } from "./services/webhooks/sweeper.js";
+import {
+  registerBuiltInJobs,
+  startScheduler,
+  stopScheduler,
+} from "./services/scheduler/index.js";
 import { env, getTrustedOrigins } from "./config/env.js";
 
 const app = createApp();
@@ -28,7 +33,17 @@ async function start(): Promise<void> {
     //    decides what that owner may see. No-op under NODE_ENV=test.
     startWebhookSweeper();
 
-    // 4. Start listening
+    // 4. Start the job scheduler (runaway-timer enforcement and reminders).
+    //    After the DB connects because every poll is a claim on a job row.
+    //    Gated by SCHEDULER_ENABLED; no-op under NODE_ENV=test.
+    registerBuiltInJobs();
+    if (startScheduler({ enabled: env.SCHEDULER_ENABLED, isTest: env.isTest })) {
+      console.log("[scheduler] Started");
+    } else if (!env.isTest) {
+      console.log("[scheduler] Disabled by SCHEDULER_ENABLED");
+    }
+
+    // 5. Start listening
     server.listen(env.PORT, () => {
       console.log(`[server] Listening on http://127.0.0.1:${env.PORT}`);
       console.log(`[server] Environment: ${env.NODE_ENV}`);
@@ -60,6 +75,9 @@ async function shutdown(signal: string): Promise<void> {
 
   // Stop accepting new connections
   server.close();
+
+  // Let a job run in flight finish before its database goes away
+  await stopScheduler();
 
   // Disconnect from databases and auth
   await disconnectAuth();

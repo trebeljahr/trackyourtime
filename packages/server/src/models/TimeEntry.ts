@@ -25,6 +25,12 @@ export interface ITimeEntry extends Document {
   timeZone: string | null;
   /** What the runaway guard did about this entry. See @starter/shared/runaway. */
   runaway: RunawayDoc | null;
+  /**
+   * When the scheduler emailed this person about this still-running entry.
+   * Absent on every entry it never emailed about, which includes every entry
+   * written before the scheduler existed. Server-only: never on the wire.
+   */
+  reminderSentAt?: Date | null;
   /** Ids of the Tags on this entry. Empty array = untagged. */
   tagIds: string[];
   /** The Invoice this entry was billed on, or null while still billable. */
@@ -68,6 +74,8 @@ export type TimeEntryDocLike = {
   timeZone: string | null;
   /** Absent on every entry written before the guard existed. */
   runaway?: RunawayDoc | null;
+  /** Absent unless the runaway reminder job emailed about this entry. */
+  reminderSentAt?: Date | null;
   tagIds: string[];
   invoiceId: string | null;
   /** Absent on every entry written before imports existed. */
@@ -127,6 +135,16 @@ const timeEntrySchema = new Schema<ITimeEntry>(
     // See the note on TimeEntry.timeZone in @starter/shared.
     timeZone: { type: String, default: null },
     runaway: { type: runawaySchema, default: null },
+    /**
+     * The once-only key for the runaway reminder email
+     * (services/scheduler/runaway-reminder.ts). Next to `runaway` because
+     * it answers the same entry's "has anyone been told" question.
+     *
+     * No `default` and never `required`: an old row has no such field, and
+     * the job claims a reminder with `{ reminderSentAt: null }`, which Mongo
+     * matches for an absent field and an explicit null alike.
+     */
+    reminderSentAt: { type: Date },
     tagIds: { type: [String], default: [] },
     /**
      * The DENORMALIZED half of the double-billing guard.

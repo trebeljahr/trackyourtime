@@ -173,6 +173,11 @@ function getNonNegativeInt(key: string, defaultValue: number): number {
   return parsed;
 }
 
+/** On unless the value explicitly says off. */
+export function parseBooleanDefaultOn(raw: string): boolean {
+  return !["false", "0", "no", "off"].includes(raw.trim().toLowerCase());
+}
+
 export const env = {
   NODE_ENV: getOptional("NODE_ENV", "development"),
   PORT: getPositiveInt("PORT", 5000),
@@ -318,6 +323,14 @@ export const env = {
   // listener at a dev server.
   WEBHOOK_ALLOW_PRIVATE_TARGETS:
     getOptional("WEBHOOK_ALLOW_PRIVATE_TARGETS") === "true",
+
+  // Background jobs
+  // The in-process scheduler (services/scheduler/). On unless set to
+  // false/0/no/off. Safe with several server processes on one database: a job
+  // row is leased, so each interval runs once across all of them. Turning it
+  // off leaves the runaway guard to its lazy on-read evaluation and sends no
+  // reminder emails.
+  SCHEDULER_ENABLED: parseBooleanDefaultOn(getOptional("SCHEDULER_ENABLED")),
 
   // Monitoring
   SENTRY_DSN: getOptional("SENTRY_DSN"),
