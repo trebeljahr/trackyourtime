@@ -1373,6 +1373,34 @@ The client image serves the static export: `output: "export"` leaves no
 The E2E suite runs that same file, so the deployed and tested servers cannot
 drift apart.
 
+### Web command palette and description autocomplete
+
+Cmd/Ctrl+K opens `components/command-palette/` on every protected screen; the
+phone reaches it from the Search entry at the top of the More drawer. The
+tracker bar's description field is `components/tracker/description-combobox.tsx`
+over `entries.descriptions`. Four rules, each of which fails quietly if broken:
+
+- **The palette writes only through `useEntryMutations`.** A stop from the
+  palette offline must be the same optimistic, queued row a stop from the bar
+  is; a tRPC call of its own would skip `OFFLINE_QUEUED_MUTATION` and the
+  queue. What it offers is plain data (`palette-model.ts`) and what a row does
+  is `palette-actions.ts`, so both are tested without cmdk.
+- **`NAV_SECTIONS` stays in `app-shell.tsx` and is passed in as a prop.** The
+  shell renders the palette, so importing it would be a cycle, and a second
+  list of destinations would drift. Catalog rows appear only once something is
+  typed, so an empty palette is Timer and Go to, not two rows per project.
+- **Cmd/Ctrl+K is the only binding the shell adds.** The calendar's single-key
+  shortcuts return early on any modifier and on typing targets, which is what
+  keeps d/w/m/y/t working with the palette mounted.
+- **The combobox keeps Enter.** Nothing is highlighted until an arrow press, so
+  Enter still starts or stops; Tab completes the name only; Cmd/Ctrl+Enter on a
+  highlighted row fills project, task, tags and billable and is kept from the
+  bar's page-wide Cmd/Ctrl+Enter toggle (`stopPropagation`, and the toggle
+  skips a `defaultPrevented` event). Escape reverts without the blur it causes
+  saving the abandoned text, and a Tab-take followed by its blur writes once.
+  The list opens on typing, a click or ArrowDown — never on focus, because the
+  field is focused on every visit to /track. Suggestion failures are silent.
+
 ### Browser extension
 
 Five things the 380px popup does that are easy to break:
