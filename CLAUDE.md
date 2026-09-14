@@ -882,6 +882,50 @@ does the rewrite. Three limits, each an existing rule:
 `updateProjectSchema`: REST validates with the latter and publishes it as
 OpenAPI, and a bulk rewrite of history is not part of the public API.
 
+### Colleagues' time and money
+
+A `WorkspaceMember` carries `canViewOthersTime` and `canViewOthersMoney`, and
+every surface that serves another person's work answers both, server-side.
+The helpers are in `@starter/shared/visibility.ts`; the rule is REST's:
+projected where that is honest, refused where it is not, never recomputed.
+
+- **The sync socket is per recipient.** `publishSync` (`ws/sync.ts`) reads the
+  memberships fresh on every publish and runs `projectSyncEventFor` per member:
+  an entry event reaches the author unchanged, a member without time NOT AT
+  ALL, a member without money with `hourlyRate` stripped. `entry.deleted` and
+  `data.imported` carry no author, so their call sites pass
+  `audience: { authorId }`; a call without one reaches only members who see
+  everybody's time. `invoice.changed` reaches only `canUseInvoices`. A new kind
+  that carries an entry must be added to the switch — unknown kinds pass
+  through. Every `tt:sync` envelope from it carries `workspaceId`.
+- **Money in a withheld slot is `null`, never `0`.** `DetailedEntry.amount`,
+  report group amounts and totals are `number | null`; zero is what unbillable
+  time earns. `entries.list`/`get` project colleagues' rows with
+  `projectDetailedEntry` in the service, so every client inherits it.
+- **Reports withhold every amount, not a partial sum**, when
+  `reportMoneyVisible` is false (time on, money off) and say so with
+  `moneyVisible: false` — the caller's own groups and detailed rows included
+  (the entry list keeps own rates; a report is one document). CSV drops the money
+  COLUMNS and PDF drops the money columns and stats; a blank column sums to
+  zero in a spreadsheet. REST keeps refusing that visibility with 403.
+- **`memberIds` is intersected with the author scope** as two separate `$and`
+  conditions (`pushAuthorConditions`). Folding them into one `$in` is how a
+  filter widens a scope; a closed member naming a colleague gets an empty
+  report, not an error. `groupBy: "member"` labels only authors of matched rows
+  (live `user` name, then the membership mirror, then "Former member").
+- **Budget progress needs both flags** (`canSeeBudgetProgress`), decided in
+  `aggregateProjects` before the whole-workspace entry read. A future budget
+  alert must ask it per RECIPIENT.
+- **Invoices need owner/admin plus both flags** (`canUseInvoices`), asked before
+  any query: `list` answers `[]`, anything by id answers NOT_FOUND (FORBIDDEN
+  would confirm the id), `preview`/`create` answer FORBIDDEN
+  `invoice-permission-required`. Workspace exports omit invoices by the same
+  rule.
+
+The tests drive the real routers against an in-memory copy of a shared
+workspace (`tests/support/shared-workspace.ts`), which evaluates each
+resolver's actual filter rather than returning canned rows.
+
 ### Tags
 
 Tags are the other catalog dimension outside the client/project hierarchy:
