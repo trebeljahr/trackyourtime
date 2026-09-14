@@ -7,4 +7,11 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const tracker = {
+  description: {
+    label: "Description",
+    placeholder: "What are you working on?",
+    suggestions: "Past descriptions",
+    fill: "Use “{description}” with its project, task, tags and billable setting",
+    legend: "Tab completes · {shortcut} brings its project, task and tags",
+  },
 } as const;

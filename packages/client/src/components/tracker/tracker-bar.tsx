@@ -12,16 +12,16 @@ import {
   WifiOff,
 } from "lucide-react";
 import Link from "next/link";
-import type { EntryFields } from "@starter/core";
+import type { DescriptionSuggestion, EntryFields } from "@starter/core";
 import { formatDuration } from "@starter/shared";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { ProjectTaskPicker } from "@/components/entry-fields/project-task-picker";
 import { TagPicker } from "@/components/tags/tag-picker";
 import { BillableGlyph } from "@/components/tracker/billable-glyph";
+import { DescriptionCombobox } from "@/components/tracker/description-combobox";
 import { ManualEntryDialog } from "@/components/tracker/manual-entry-dialog";
 import { QuickStartMenu } from "@/components/tracker/quick-start-menu";
 import { useEntryMutations } from "@/components/tracker/use-entry-mutations";
@@ -169,11 +169,41 @@ export function TrackerBar(): React.JSX.Element {
     }
   }, [billable, isRunning, mutations, running]);
 
-  const commitDescription = React.useCallback((): void => {
-    if (!isRunning || running === null) return;
-    if (description === running.description) return;
-    mutations.updateEntry({ id: running.id, description });
-  }, [description, isRunning, mutations, running]);
+  // Takes the text explicitly: it is called from inside the field's key and
+  // blur handlers, where this render's `description` may not have caught up.
+  const commitDescription = React.useCallback(
+    (next: string): void => {
+      if (!isRunning || running === null) return;
+      if (next === running.description) return;
+      mutations.updateEntry({ id: running.id, description: next });
+    },
+    [isRunning, mutations, running]
+  );
+
+  // A suggestion taken with everything it carries. On a running timer that is
+  // one edit of five fields; on the composer it only prepares the next start,
+  // and the suggestion's billable flag wins over the project default because
+  // it is what that work was actually billed as last time.
+  const fillFromSuggestion = React.useCallback(
+    (suggestion: DescriptionSuggestion): void => {
+      setDescription(suggestion.description);
+      setProjectId(suggestion.projectId);
+      setTaskId(suggestion.taskId);
+      setBillable(suggestion.billable);
+      setTagIds(suggestion.tagIds);
+      if (isRunning && running) {
+        mutations.updateEntry({
+          id: running.id,
+          description: suggestion.description,
+          projectId: suggestion.projectId,
+          taskId: suggestion.taskId,
+          billable: suggestion.billable,
+          tagIds: suggestion.tagIds,
+        });
+      }
+    },
+    [isRunning, mutations, running]
+  );
 
   const start = React.useCallback((): void => {
     mutations.startTimer({ description, projectId, taskId, billable, tagIds });
@@ -199,6 +229,9 @@ export function TrackerBar(): React.JSX.Element {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== "Enter") return;
       if (!event.metaKey && !event.ctrlKey) return;
+      // The description field's secondary action (Cmd/Ctrl+Enter on a
+      // highlighted suggestion) already used this keystroke.
+      if (event.defaultPrevented) return;
       event.preventDefault();
       toggleRef.current();
     };
@@ -231,8 +264,13 @@ export function TrackerBar(): React.JSX.Element {
         className="flex flex-wrap items-center gap-2"
         data-testid="tracker-composer"
       >
-        <Input
+        <DescriptionCombobox
           value={description}
+          committed={running?.description ?? ""}
+          onValueChange={setDescription}
+          onCommit={commitDescription}
+          onSubmit={toggle}
+          onFill={fillFromSuggestion}
           /* On a phone this opened the software keyboard on every mount of
              /track — half the screen gone, over the entries the user came to
              read, before they had done anything. Focus-on-mount is a
@@ -243,26 +281,9 @@ export function TrackerBar(): React.JSX.Element {
              — it focuses imperatively on mount — so the native value is the
              one that decides. */
           autoFocus={!isNative()}
-          placeholder="What are you working on?"
-          aria-label="Description"
-          className="h-10 min-w-0 flex-1 basis-64 border-0 bg-transparent px-2 text-base shadow-none focus-visible:ring-0"
-          onChange={(event) => setDescription(event.target.value)}
-          onBlur={commitDescription}
-          onKeyDown={(event) => {
-            // Cmd/Ctrl+Enter is handled by the page-wide shortcut; letting it
-            // through here too would toggle the timer twice.
-            if (event.key === "Enter" && !event.metaKey && !event.ctrlKey) {
-              event.preventDefault();
-              commitDescription();
-              toggle();
-            }
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setDescription(running?.description ?? "");
-              event.currentTarget.blur();
-            }
-          }}
-          data-testid="tracker-description"
+          className="min-w-0 flex-1 basis-64"
+          inputClassName="h-10 border-0 bg-transparent px-2 text-base shadow-none focus-visible:ring-0"
+          testId="tracker-description"
         />
 
         {/* The client is a property of the project, not a field of its own —

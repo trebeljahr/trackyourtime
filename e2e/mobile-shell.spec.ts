@@ -158,7 +158,8 @@ test.describe("web app at phone width", () => {
     // Asserted on the computed flex-basis rather than on rendered widths: at
     // 393pt the description happens to fill the row under BOTH rules, so a
     // width comparison would pass with the native rule leaking.
-    const description = page.getByTestId("tracker-description");
+    // The flex item is the field wrapper around the combobox input.
+    const description = page.getByTestId("tracker-description-field");
     await expect(description).toBeVisible();
 
     const basis = await description.evaluate(

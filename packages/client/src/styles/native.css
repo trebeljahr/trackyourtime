@@ -212,8 +212,12 @@ html.cap .cap-touch {
  * border box, so the day headings in entry-list.tsx follow this taller layout
  * with no second number to keep in step.
  */
-html.cap [data-testid="tracker-composer"] [data-testid="tracker-description"] {
+html.cap [data-testid="tracker-composer"] [data-testid="tracker-description-field"] {
   flex-basis: 100%;
+}
+
+/* The field is the flex item; the input inside it is the touch target. */
+html.cap [data-testid="tracker-composer"] [data-testid="tracker-description"] {
   min-height: 2.75rem;
 }
 
