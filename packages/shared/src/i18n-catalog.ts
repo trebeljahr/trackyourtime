@@ -250,6 +250,9 @@ const ACCENTED: Record<string, string> = {
  * or wraps badly will do the same in German, which runs about a third longer
  * than English.
  */
+/** Longest run of padding before a break — about one long German word. */
+const PSEUDO_WORD = 8;
+
 export const pseudoLocalize = (message: string): string => {
   let letters = 0;
   const body = walk(message, {
@@ -260,6 +263,12 @@ export const pseudoLocalize = (message: string): string => {
       }),
   });
   if (body.trim() === "") return message;
-  const pad = "~".repeat(Math.max(1, Math.ceil(letters * 0.35)));
+  // The padding stands in for longer WORDS, so it comes in word-sized runs:
+  // one unbroken run of forty tildes can never wrap, and would report a long
+  // sentence as overflowing where German, which wraps between words, fits.
+  const length = Math.max(1, Math.ceil(letters * 0.35));
+  const pad = Array.from({ length: Math.ceil(length / PSEUDO_WORD) }, (_, index) =>
+    "~".repeat(Math.min(PSEUDO_WORD, length - index * PSEUDO_WORD)),
+  ).join(" ");
   return `[${body} ${pad}]`;
 };

@@ -532,6 +532,12 @@ export const exportPdfSchema = reportFiltersSchema.extend({
   groupBy: reportGroupBySchema.optional(),
   /** Required when `report === "weekly"`. */
   weekStart: isoDateOrDateTimeSchema.optional(),
+  /**
+   * The language the exporting device renders in. The server cannot resolve a
+   * "system" preference itself; absent means the exporter's explicit
+   * preference, else English.
+   */
+  locale: localeSchema.optional(),
 });
 
 // ── invoicing ────────────────────────────────────────────────────────
