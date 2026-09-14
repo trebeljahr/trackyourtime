@@ -18,6 +18,7 @@
 // standing up Mongo.
 import { TRPCError } from "@trpc/server";
 import {
+  canUseInvoices,
   createInvoiceSchema,
   entryAmount,
   idInputSchema,
@@ -33,6 +34,8 @@ import {
   type InvoiceRecipient,
   type InvoiceStatus,
   type PdfExportResult,
+  type Visibility,
+  type WorkspaceRole,
 } from "@starter/shared";
 import mongoose, { Types } from "mongoose";
 import { BusinessProfileModel } from "../../models/BusinessProfile.js";
@@ -619,6 +622,54 @@ const decodeCursor = (cursor: string): DecodedCursor | null => {
   return { createdAt: new Date(createdAtMs), id: new Types.ObjectId(rawId) };
 };
 
+/**
+ * The refusal for a caller who may not use invoices at all, on the two
+ * procedures that do not address an existing invoice. Stable, so the client
+ * can explain it rather than printing a server string.
+ */
+export const INVOICE_PERMISSION_REQUIRED = "invoice-permission-required";
+
+/** What the invoice gate reads off the request, and nothing more. */
+type InvoiceCaller = {
+  membership: { role: WorkspaceRole };
+  visibility: Visibility;
+};
+
+/**
+ * THE INVOICE GATE. Every procedure below asks it FIRST, before any query.
+ *
+ * An invoice merges whoever's billable hours fell in its range into one line,
+ * so it discloses colleagues' time and money at once — `canUseInvoices` is
+ * the rule (owner or admin, with both visibility flags). How a refusal reads
+ * depends on what was asked:
+ *
+ *  - `list` answers an empty page: "no invoices you may see" is true, and a
+ *    screen that lists nothing needs no error state.
+ *  - Anything addressing an invoice BY ID answers NOT_FOUND, exactly as for an
+ *    id that does not exist. FORBIDDEN there would confirm that the id is a
+ *    real invoice in this workspace. The gate runs before the lookup, so the
+ *    two answers are indistinguishable in timing as well as shape.
+ *  - `preview` and `create` address no existing document, so there is nothing
+ *    to hide by pretending: FORBIDDEN with {@link INVOICE_PERMISSION_REQUIRED}.
+ *    It is the only honest answer, and gathering first would have read every
+ *    colleague's billable entries for somebody who may see none of them.
+ */
+const mayUseInvoices = (caller: InvoiceCaller): boolean =>
+  canUseInvoices(caller.membership.role, caller.visibility);
+
+const requireInvoiceById = (caller: InvoiceCaller): void => {
+  if (!mayUseInvoices(caller)) throw notFound();
+};
+
+const requireInvoiceAuthoring = (caller: InvoiceCaller): void => {
+  if (!mayUseInvoices(caller)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: INVOICE_PERMISSION_REQUIRED,
+    });
+  }
+};
+
 export type InvoiceRemoveResult = {
   deleted: boolean;
   /** How many entries became billable again. */
@@ -630,6 +681,7 @@ export const invoicesRouter = router({
   preview: workspaceProcedure
     .input(invoicePreviewSchema)
     .query(async ({ ctx, input }): Promise<InvoicePreview> => {
+      requireInvoiceAuthoring(ctx);
       const workspaceId = ctx.workspaceId;
       const gathered = await gather(workspaceId, input);
       const taxRate = input.taxRate ?? null;
@@ -665,6 +717,7 @@ export const invoicesRouter = router({
   create: workspaceProcedure
     .input(createInvoiceSchema)
     .mutation(async ({ ctx, input }): Promise<InvoiceWire> => {
+      requireInvoiceAuthoring(ctx);
       const workspaceId = ctx.workspaceId;
       const gathered = await gather(workspaceId, input);
       const entryIds = gathered.selection.billable.map((entry) => entry.id);
@@ -804,6 +857,7 @@ export const invoicesRouter = router({
   list: workspaceProcedure
     .input(invoiceListSchema)
     .query(async ({ ctx, input }): Promise<InvoiceListResult> => {
+      if (!mayUseInvoices(ctx)) return { invoices: [] };
       const workspaceId = ctx.workspaceId;
       const limit = input.limit ?? DEFAULT_LIST_LIMIT;
 
@@ -839,6 +893,7 @@ export const invoicesRouter = router({
   get: workspaceProcedure
     .input(idInputSchema)
     .query(async ({ ctx, input }): Promise<InvoiceWire> => {
+      requireInvoiceById(ctx);
       const doc = await Invoice.findOne({
         _id: requireObjectId(input.id, "Invoice not found"),
         workspaceId: ctx.workspaceId,
@@ -854,6 +909,7 @@ export const invoicesRouter = router({
   updateStatus: workspaceProcedure
     .input(updateInvoiceStatusSchema)
     .mutation(async ({ ctx, input }): Promise<InvoiceWire> => {
+      requireInvoiceById(ctx);
       const workspaceId = ctx.workspaceId;
       const current = await Invoice.findOne({
         _id: requireObjectId(input.id, "Invoice not found"),
@@ -912,6 +968,7 @@ export const invoicesRouter = router({
   remove: workspaceProcedure
     .input(idInputSchema)
     .mutation(async ({ ctx, input }): Promise<InvoiceRemoveResult> => {
+      requireInvoiceById(ctx);
       const workspaceId = ctx.workspaceId;
       const invoice = await Invoice.findOne({
         _id: requireObjectId(input.id, "Invoice not found"),
@@ -958,6 +1015,7 @@ export const invoicesRouter = router({
   exportPdf: workspaceProcedure
     .input(invoicePdfSchema)
     .query(async ({ ctx, input }): Promise<PdfExportResult> => {
+      requireInvoiceById(ctx);
       const doc = await Invoice.findOne({
         _id: requireObjectId(input.id, "Invoice not found"),
         workspaceId: ctx.workspaceId,

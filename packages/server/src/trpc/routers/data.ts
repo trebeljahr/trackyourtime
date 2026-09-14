@@ -22,6 +22,7 @@ import {
   IMPORT_PREVIEW_ROWS,
   MAX_IMPORT_ROWS,
   WORKSPACE_EXPORT_VERSION,
+  canUseInvoices,
   importInputSchema,
   importUndoSchema,
   issuerSnapshot,
@@ -775,15 +776,22 @@ function exportEntryFilter(args: {
  * (`authorScopeFilter`, as in reports.ts) and WHETHER the rates on them do
  * (`redactExportMoney`). Handing this function only the author scope is what
  * left the money half unanswerable, and unanswered.
+ *
+ * `role` answers the third question — whether invoices leave at all — with
+ * the same `canUseInvoices` rule the invoices router gates on. An export is a
+ * bulk door onto what `invoices.list` serves a page at a time, and a member
+ * that list answers with nothing must not find the documents in a download.
  */
 async function buildWorkspaceExport(args: {
   workspaceId: string;
   from?: string;
   to?: string;
   visibility: Visibility;
+  role: WorkspaceRole;
 }): Promise<WorkspaceExport> {
-  const { workspaceId, from, to, visibility } = args;
+  const { workspaceId, from, to, visibility, role } = args;
   const authorScope = authorScopeFilter(visibility);
+  const includeInvoices = canUseInvoices(role, visibility);
 
   // One range, applied to an entry's `start` and to an invoice's `issueDate`:
   // a ranged export is "what happened in these months", and an invoice issued
@@ -821,21 +829,27 @@ async function buildWorkspaceExport(args: {
     // is no author scope at all — a line merges whoever's hours were billed
     // into one figure. That is exactly why every amount on an invoice follows
     // the workspace-money rule and not the per-entry "own money" one.
-    Invoice.find({
-      workspaceId,
-      ...(authorScope ? { createdBy: authorScope.authorId } : {}),
-      ...(dateRange ? { issueDate: dateRange } : {}),
-    })
-      .sort({ issueDate: 1 })
-      // One past the cap, like the entries below: a plain limit would drop
-      // the newest invoices out of a file that still reads as a full backup.
-      .limit(MAX_EXPORT_INVOICES + 1)
-      .lean(),
+    includeInvoices
+      ? Invoice.find({
+          workspaceId,
+          ...(authorScope ? { createdBy: authorScope.authorId } : {}),
+          ...(dateRange ? { issueDate: dateRange } : {}),
+        })
+          .sort({ issueDate: 1 })
+          // One past the cap, like the entries below: a plain limit would drop
+          // the newest invoices out of a file that still reads as a full backup.
+          .limit(MAX_EXPORT_INVOICES + 1)
+          .lean()
+      : Promise.resolve([]),
     // Omitted from the file while empty, so "never filled in" and "not
     // stated" read the same on the way back in: neither overwrites anything.
-    BusinessProfileModel.findOne({ workspaceId })
-      .lean()
-      .then((doc) => issuerSnapshot(doc) ?? undefined),
+    // The issuer profile is the invoice header, payment details included, so
+    // it leaves under the same `canUseInvoices` rule as the invoices do.
+    includeInvoices
+      ? BusinessProfileModel.findOne({ workspaceId })
+          .lean()
+          .then((doc) => issuerSnapshot(doc) ?? undefined)
+      : Promise.resolve(undefined),
   ]);
 
   const clientNameById = new Map(
@@ -1210,11 +1224,30 @@ export const dataRouter = router({
         { $set: { entriesCreated, favoriteIds } },
       );
 
+      // Author-audienced: the event means "this person's history just grew",
+      // which a colleague restricted to their own time must not be told.
       void publishSync(
         workspaceId,
         { kind: "data.imported", batchId, undone: false },
         input.originId,
+        { authorId: ctx.user.id },
       );
+      // The catalog an import created is shared configuration every member
+      // lists, and a member who does not receive `data.imported` would
+      // otherwise keep a project list without it until the next reload.
+      if (
+        created.clientIds.length +
+          created.projectIds.length +
+          created.taskIds.length +
+          created.tagIds.length >
+        0
+      ) {
+        void publishSync(
+          workspaceId,
+          { kind: "catalog.changed", scope: "project" },
+          input.originId,
+        );
+      }
 
       return {
         batchId,
@@ -1362,11 +1395,27 @@ export const dataRouter = router({
         { $set: { undoneAt: new Date() } },
       );
 
+      // A batch written before `createdBy` existed has no author to name, and
+      // the fan-out then fails closed: members who may see everybody's time.
       void publishSync(
         workspaceId,
         { kind: "data.imported", batchId: input.batchId, undone: true },
         input.originId,
+        batch.createdBy ? { authorId: batch.createdBy } : undefined,
       );
+      if (
+        result.clientsDeleted +
+          result.projectsDeleted +
+          result.tasksDeleted +
+          result.tagsDeleted >
+        0
+      ) {
+        void publishSync(
+          workspaceId,
+          { kind: "catalog.changed", scope: "project" },
+          input.originId,
+        );
+      }
 
       return result;
     }),
@@ -1417,6 +1466,7 @@ export const dataRouter = router({
         from: input.from,
         to: input.to,
         visibility: ctx.visibility,
+        role: ctx.membership.role,
       }),
     ),
 
@@ -1440,6 +1490,7 @@ export const dataRouter = router({
           from: input.from,
           to: input.to,
           visibility: ctx.visibility,
+          role: ctx.membership.role,
         });
 
         const rows = data.entries.map((entry) => ({
