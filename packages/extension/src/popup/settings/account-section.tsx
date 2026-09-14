@@ -1,7 +1,10 @@
 import { useState, type JSX } from "react";
+import { DEFAULT_API_URL } from "../../lib/config";
 import type { SessionSource } from "../../lib/messaging";
-import { ApiUrlEditor } from "../api-url-editor";
+import { describeServer } from "../../lib/server-label";
 import { ConfirmPanel } from "../confirm-panel";
+import { ServerPicker } from "../server-picker";
+import type { SetServerOutcome } from "../switch-server";
 import { join, openTab } from "../open-tab";
 
 /**
@@ -11,10 +14,10 @@ import { join, openTab } from "../open-tab";
  * and building a button that cannot do what it says is worse than not offering
  * it. Nothing about subscriptions either — billing is a web-app surface.
  *
- * "Change API URL…" lives here rather than in the overflow menu because this
- * is where someone looks when the popup cannot reach the server, and it is the
- * one control that can fix that. It is dropped in unchanged as a SIBLING form,
- * never nested inside another one.
+ * "Change server…" lives here rather than in the overflow menu because this is
+ * where someone looks when the popup cannot reach the server, and it is the
+ * one control that can fix that. The picker is dropped in unchanged as a
+ * SIBLING form, never nested inside another one.
  */
 
 export type AccountSectionProps = {
@@ -22,7 +25,14 @@ export type AccountSectionProps = {
   sessionSource: SessionSource | null;
   webUrl: string | null;
   apiUrl: string;
-  onSaveApiUrl: (apiUrl: string) => Promise<boolean>;
+  /** "Track Your Time 0.1.0 (1a2b3c4)", when the server has said. */
+  serverVersion: string | null;
+  /** Queued changes a server switch would discard. */
+  pendingSync: number;
+  onSetServer: (
+    origin: string,
+    discardUnsent: boolean,
+  ) => Promise<SetServerOutcome>;
   onSignOut: () => Promise<boolean>;
 };
 
@@ -35,10 +45,12 @@ export function AccountSection({
   sessionSource,
   webUrl,
   apiUrl,
-  onSaveApiUrl,
+  serverVersion,
+  pendingSync,
+  onSetServer,
   onSignOut,
 }: AccountSectionProps): JSX.Element {
-  const [showApiUrl, setShowApiUrl] = useState(false);
+  const [showServer, setShowServer] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -73,18 +85,35 @@ export function AccountSection({
         </button>
       ) : null}
 
+      <div className="setting" data-testid="setting-account-server">
+        <span className="setting__label">Server</span>
+        <span className="footer__email" title={apiUrl}>
+          {describeServer(apiUrl, DEFAULT_API_URL)}
+        </span>
+        {serverVersion !== null ? (
+          <span className="setting__note" data-testid="account-server-version">
+            {serverVersion}
+          </span>
+        ) : null}
+      </div>
+
       <button
         type="button"
         className="button--link"
-        aria-expanded={showApiUrl}
-        onClick={() => setShowApiUrl((open) => !open)}
+        aria-expanded={showServer}
+        onClick={() => setShowServer((open) => !open)}
         data-testid="account-api-url-toggle"
       >
-        Change API URL…
+        {showServer ? "Keep this server" : "Change server…"}
       </button>
 
-      {showApiUrl ? (
-        <ApiUrlEditor apiUrl={apiUrl} onSave={onSaveApiUrl} />
+      {showServer ? (
+        <ServerPicker
+          apiUrl={apiUrl}
+          pendingSync={pendingSync}
+          onSetServer={onSetServer}
+          onSwitched={() => setShowServer(false)}
+        />
       ) : null}
 
       {confirming ? (

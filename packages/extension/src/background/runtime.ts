@@ -18,6 +18,7 @@ import {
   createSyncClient,
   decodeOfflineMutation,
   isPermanentRejection,
+  isQueuedOn,
   OFFLINE_QUEUE_STORAGE_KEY,
   type ApiClient,
   type Client,
@@ -31,6 +32,7 @@ import {
   type OfflineQueue,
   type Project,
   type RecentEntry,
+  type ServerInfo,
   type StoredOfflinePayload,
   type SyncClient,
   type SyncEvent,
@@ -42,7 +44,12 @@ import {
 } from "@starter/core";
 import { chromeStorage, localStorageArea } from "../lib/chrome-storage";
 import type { PopupView, SessionSource } from "../lib/messaging";
-import { EXTENSION_CLIENT_ID, loadApiUrl, syncUrlFrom } from "../lib/config";
+import {
+  DEFAULT_API_URL,
+  EXTENSION_CLIENT_ID,
+  loadApiUrl,
+  syncUrlFrom,
+} from "../lib/config";
 import {
   clearSession,
   loadSession,
@@ -203,6 +210,13 @@ let cachedDescriptions: CachedDescriptions | null = null;
 let cachedWebUrl: string | null = null;
 
 /**
+ * What that same /api/health said about the server's release, for the version
+ * line in Settings → Account. Filled by the read that fills
+ * {@link cachedWebUrl}, so it costs no request of its own.
+ */
+let cachedServerInfo: ServerInfo | null = null;
+
+/**
  * The signed-in address. A password sign-in returns it, but a session adopted
  * from the web app's cookie carries only the token — so for that path it has
  * to be asked for, once, rather than left blank in the popup's footer.
@@ -232,7 +246,12 @@ export async function enqueueOffline<K extends OfflineOp>(
   tempId?: string,
 ): Promise<void> {
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
-  await getOfflineQueue().enqueue(op, payload);
+  // Stamped with the server it was made against. Switching servers clears the
+  // queue today, so this is defence in depth rather than the mechanism: a row
+  // that somehow outlived a switch is held back by `flushQueue` instead of
+  // being replayed into an account on a server that never saw its start.
+  const { apiUrl } = await ensureReady();
+  await getOfflineQueue().enqueue(op, payload, undefined, apiUrl);
 }
 
 // ── the optimistic running entry ─────────────────────────────────────
@@ -533,6 +552,7 @@ export async function reload(): Promise<Runtime> {
   cachedSettings = null;
   settingsLookup = null;
   cachedWebUrl = null;
+  cachedServerInfo = null;
   cachedEmail = null;
   cachedEntries = null;
   entriesStale = false;
@@ -968,6 +988,9 @@ export async function resolveEmail(): Promise<string | null> {
   }
 }
 
+/** The server's self-description from the last /api/health read, or null. */
+export const getCachedServerInfo = (): ServerInfo | null => cachedServerInfo;
+
 export async function resolveWebUrl(): Promise<string | null> {
   if (cachedWebUrl !== null) return cachedWebUrl;
   const current = await ensureReady();
@@ -983,6 +1006,19 @@ export async function resolveWebUrl(): Promise<string | null> {
         : undefined;
     if (typeof webUrl !== "string" || webUrl.trim() === "") return null;
     cachedWebUrl = webUrl.trim();
+    const record = body as Record<string, unknown>;
+    const text = (value: unknown): string | null =>
+      typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+    // The same fields core's `checkServer` reads — `version` is the commit —
+    // taken from a response this worker was fetching anyway.
+    cachedServerInfo = {
+      origin: current.apiUrl,
+      release: text(record.release),
+      commit: text(record.version),
+      webUrl: cachedWebUrl,
+      originTrusted:
+        typeof record.originTrusted === "boolean" ? record.originTrusted : null,
+    };
     return cachedWebUrl;
   } catch {
     return null;
@@ -1162,33 +1198,43 @@ export async function flushQueue(): Promise<number> {
   if (pending === 0) return 0;
   if (!current.session) return pending;
 
-  const result = await offline.flush(async (row) => {
-    const decoded = decodeOfflineMutation(row);
-    // A row written by an older build cannot be replayed against today's
-    // schema; resolving drops it rather than wedging everything behind it.
-    if (decoded === null) return;
-    let replayed: unknown;
-    try {
-      // The op string *is* the tRPC path, by design — so there is no dispatch
-      // table here to drift out of step with the queue contract.
-      replayed = await current.api.mutate(decoded.op, decoded.input);
-    } catch (error) {
-      // Anything the server can still accept later — a lapsed session, a 500,
-      // a dead network — keeps its place and wedges the rest deliberately, so
-      // ordering survives. A permanent refusal cannot: the server has already
-      // moved on (the runaway guard capping an entry this stop was going to
-      // close is exactly that), and stopping here would wedge the queue
-      // forever. Drop it and let the reconcile below pull the truth back.
-      if (!isPermanentRejection(error)) throw error;
-      return;
-    }
+  const result = await offline.flush(
+    async (row) => {
+      const decoded = decodeOfflineMutation(row);
+      // A row written by an older build cannot be replayed against today's
+      // schema; resolving drops it rather than wedging everything behind it.
+      if (decoded === null) return;
+      let replayed: unknown;
+      try {
+        // The op string *is* the tRPC path, by design — so there is no dispatch
+        // table here to drift out of step with the queue contract.
+        replayed = await current.api.mutate(decoded.op, decoded.input);
+      } catch (error) {
+        // Anything the server can still accept later — a lapsed session, a 500,
+        // a dead network — keeps its place and wedges the rest deliberately, so
+        // ordering survives. A permanent refusal cannot: the server has already
+        // moved on (the runaway guard capping an entry this stop was going to
+        // close is exactly that), and stopping here would wedge the queue
+        // forever. Drop it and let the reconcile below pull the truth back.
+        if (!isPermanentRejection(error)) throw error;
+        return;
+      }
 
-    // Outside the catch above on purpose: this writes to `chrome.storage`, and
-    // a failure there is not a failed replay. Letting it reach that handler
-    // would re-queue a mutation the server has already applied and replay it
-    // twice.
-    await noteReplayedStart(decoded, replayed);
-  });
+      // Outside the catch above on purpose: this writes to `chrome.storage`, and
+      // a failure there is not a failed replay. Letting it reach that handler
+      // would re-queue a mutation the server has already applied and replay it
+      // twice.
+      await noteReplayedStart(decoded, replayed);
+    },
+    {
+      // Only rows made against the server in use. Rows written before the
+      // stamp existed were all made against this build's default, which is
+      // what `isQueuedOn`'s third argument says; a row for any other server
+      // keeps its place untouched rather than being sent somewhere it was
+      // never meant for.
+      filter: (row) => isQueuedOn(row, current.apiUrl, DEFAULT_API_URL),
+    },
+  );
 
   // Drained: the server now holds everything the optimistic entry stood in for.
   if (result.remaining === 0) {

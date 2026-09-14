@@ -138,7 +138,22 @@ export type PopupToBackground =
   | { type: "tag:create"; name: string }
   | { type: "project:create"; name: string; clientId: string | null }
   | { type: "task:create"; name: string }
-  | { type: "config:set-api-url"; apiUrl: string }
+  /**
+   * Use a different Track Your Time server.
+   *
+   * The popup has already asked Chrome for access to the host, from the click
+   * — the worker cannot, because a service worker never holds a user gesture.
+   * The worker re-validates everything anyway (the address, the grant, and
+   * that a Track Your Time server answers at it), because anything can send
+   * this message.
+   *
+   * Moving to another server signs out of the old one, and the extension's
+   * sign-out discards its offline queue. `discardUnsent` is the person having
+   * been told that and said yes; without it the worker refuses with
+   * `UNSENT_CHANGES` while anything is queued, so a popup whose count was a
+   * poll behind cannot throw work away that nobody was asked about.
+   */
+  | { type: "config:set-server"; origin: string; discardUnsent?: boolean }
   /**
    * Tell the worker which surface is showing.
    *
@@ -277,6 +292,22 @@ export type SessionSource = "web" | "password";
 
 export type BackgroundState = {
   apiUrl: string;
+  /**
+   * Whether Chrome currently lets the extension reach `apiUrl`.
+   *
+   * A granted optional host can be taken away at `chrome://extensions` at any
+   * moment, and nothing about a failed request says that was why — it looks
+   * exactly like a dead network. Reported on its own so the popup can say the
+   * true thing and offer the one button that fixes it, on the signed-in and the
+   * signed-out screens alike.
+   */
+  serverAccess: boolean;
+  /**
+   * "Track Your Time 0.1.0 (1a2b3c4)" for the server in use, or null when it
+   * has not said. Read from its `/api/health`, or remembered from the check
+   * that chose it.
+   */
+  serverVersion: string | null;
   /** Where "Open Track Your Time" goes. Discovered from the API's /api/health. */
   webUrl: string | null;
   signedIn: boolean;
@@ -316,7 +347,14 @@ export type BackgroundState = {
    * lost — a very different thing to tell them.
    */
   serverReachable: boolean;
-  /** Mutations waiting to be replayed. Zero on a healthy connection. */
+  /**
+   * Mutations waiting to be replayed. Zero on a healthy connection.
+   *
+   * Counted on the signed-out snapshot too: a web-app sign-out drops the
+   * borrowed session without clearing the queue, and switching servers from
+   * the sign-in screen would discard those rows — the picker has to know
+   * there are some before it can ask.
+   */
   pendingSync: number;
   /**
    * An idle span waiting to be explained, or null.

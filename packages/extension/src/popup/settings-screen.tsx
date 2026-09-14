@@ -16,6 +16,7 @@ import { DevicesSection, devicesHint } from "./settings/devices-section";
 import { GeneralSection, generalHint } from "./settings/general-section";
 import { IdleSection, idleHint } from "./settings/idle-section";
 import { LimitsSection, limitsHint } from "./settings/limits-section";
+import type { SetServerOutcome } from "./switch-server";
 
 /**
  * Everything the popup can change about the account, in one pushed screen.
@@ -51,7 +52,10 @@ export type SettingsScreenProps = {
   onRevokeDevice: (id: string) => Promise<boolean>;
   onRevokeOtherDevices: () => Promise<boolean>;
   onSignOut: () => Promise<boolean>;
-  onSaveApiUrl: (apiUrl: string) => Promise<boolean>;
+  onSetServer: (
+    origin: string,
+    discardUnsent: boolean,
+  ) => Promise<SetServerOutcome>;
 };
 
 /** How long a section header says "Saved" after a successful write. */
@@ -70,7 +74,7 @@ export function SettingsScreen({
   onRevokeDevice,
   onRevokeOtherDevices,
   onSignOut,
-  onSaveApiUrl,
+  onSetServer,
 }: SettingsScreenProps): JSX.Element {
   const [saved, setSaved] = useState<SettingsSection | null>(null);
   const flashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,7 +99,7 @@ export function SettingsScreen({
   /**
    * One write, attributed to the section that made it.
    *
-   * The flash is set only on success, the same rule `ApiUrlEditor` follows:
+   * The flash is set only on success, the same rule the server picker follows:
    * failure is the screen banner's job, and exactly one `role="alert"` region
    * per screen is what keeps a screen reader from announcing twice.
    */
@@ -251,7 +255,9 @@ export function SettingsScreen({
             sessionSource={state.sessionSource}
             webUrl={state.webUrl}
             apiUrl={state.apiUrl}
-            onSaveApiUrl={onSaveApiUrl}
+            serverVersion={state.serverVersion}
+            pendingSync={state.pendingSync}
+            onSetServer={onSetServer}
             onSignOut={onSignOut}
           />
         </Section>

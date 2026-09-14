@@ -7,13 +7,15 @@
  * particular have to land, because each has a different fix:
  *
  *   - bad credentials      → retype the password
- *   - unreachable server   → fix the API URL, or start the server
+ *   - unreachable server   → fix the server address, or start the server
  *   - no session token     → the server is wrong, not the password; retrying
  *                            forever is the failure mode to avoid here
  *
  * Anything unrecognised falls through to the worker's own message rather than
  * a generic apology, so a new server-side code still says something true.
  */
+
+import { serverHost } from "@starter/core";
 
 const CREDENTIAL_CODES: ReadonlySet<string> = new Set([
   "INVALID_EMAIL_OR_PASSWORD",
@@ -68,7 +70,7 @@ export function describeError(
   }
 
   if (NETWORK_CODES.has(code) || looksLikeNetworkFailure(message)) {
-    return `Could not reach ${apiUrl}. Check the API URL below and that the server is running.`;
+    return `Could not reach ${serverHost(apiUrl)}. Check the server address and that the server is running.`;
   }
 
   if (/^HTTP_5\d\d$/.test(code)) {

@@ -12,12 +12,26 @@
  * worker's console is readable from `chrome://extensions` by anything the user
  * lets near their browser.
  */
-import { signInWithPassword, signOutSession } from "@starter/core";
-import { DEFAULT_API_URL, EXTENSION_CLIENT_ID, saveApiUrl } from "../lib/config";
+import {
+  checkServer,
+  normalizeServerInput,
+  sameServerOrigin,
+  serverHost,
+  signInWithPassword,
+  signOutSession,
+  type ServerCheckProblem,
+} from "@starter/core";
+import {
+  DEFAULT_API_URL,
+  EXTENSION_CLIENT_ID,
+  saveApiUrl,
+  saveServerInfo,
+} from "../lib/config";
 import type {
   BackgroundResponse,
   PopupToBackground,
 } from "../lib/messaging";
+import { hasServerAccess } from "../lib/server-access";
 import { watchWebSession } from "../lib/web-session";
 import { renderBadge } from "./badge";
 import {
@@ -50,6 +64,7 @@ import {
   forgetSession,
   isUnauthorized,
   onWebSessionChanged,
+  pendingSyncCount,
   peekRunning,
   reload,
   resolveRunning,
@@ -186,17 +201,110 @@ const signOut = async (): Promise<void> => {
   await forgetSession({ clearWebCookie: true });
 };
 
-const setApiUrl = async (apiUrl: string): Promise<void> => {
-  try {
-    await saveApiUrl(apiUrl);
-  } catch (error) {
+/** The worker's code for each way `checkServer` can refuse a server. */
+const SERVER_CHECK_CODES: Readonly<Record<ServerCheckProblem, string>> = {
+  unreachable: "SERVER_UNREACHABLE",
+  "not-tracktime": "NOT_TRACKTIME",
+  unhealthy: "SERVER_UNHEALTHY",
+};
+
+/**
+ * Point the extension at another Track Your Time server.
+ *
+ * Everything the popup already checked is checked again, because anything can
+ * send this message: the address, the Chrome grant, and — over the network,
+ * which only the worker waits for — that what answers is a working Track Your
+ * Time server. Nothing is changed until all three pass, so a typo or a server
+ * that is down leaves the extension exactly where it was.
+ *
+ * Moving to a DIFFERENT server ends the session on the old one, because a
+ * token is only meaningful to the server that issued it:
+ *
+ *  - A password session this extension created is signed out on the old
+ *    server, so it does not sit in that account's Settings → Devices forever.
+ *  - A session borrowed from the web app's cookie is NOT revoked. It is the
+ *    web app's session; the person is still using that server in a tab, and
+ *    moving the toolbar elsewhere is no request to sign the tab out.
+ *
+ * Either way `forgetSession` then drops the local copy and, with it, the
+ * offline queue — the extension's standing sign-out rule. That is why unsent
+ * changes need `discardUnsent`: the popup asks first, and a snapshot one poll
+ * behind cannot answer for a queue that has grown since.
+ *
+ * Choosing the server already in use changes nothing about the session; it
+ * re-saves and rebuilds, which re-reads the server's version and web URL.
+ */
+const setServer = async (
+  input: string,
+  discardUnsent: boolean,
+): Promise<void> => {
+  const parsed = normalizeServerInput(input);
+  if (!parsed.ok) throw new BackgroundError("INVALID_SERVER", parsed.message);
+  const { origin } = parsed;
+  const host = serverHost(origin);
+
+  // Before the network check, not after: without the grant, the check below
+  // is not a question about the server at all.
+  if (!(await hasServerAccess(origin, chrome.permissions))) {
     throw new BackgroundError(
-      "INVALID_API_URL",
-      error instanceof Error ? error.message : `Not a valid URL: ${apiUrl}`,
+      "SERVER_ACCESS_MISSING",
+      `Chrome has not given the extension access to ${host}, so it cannot reach that server.`,
     );
   }
+
+  const check = await checkServer(origin);
+  if (!check.ok) {
+    throw new BackgroundError(SERVER_CHECK_CODES[check.problem], check.message);
+  }
+
+  const current = await ensureReady();
+
+  if (!sameServerOrigin(current.apiUrl, origin)) {
+    const pending = await pendingSyncCount();
+    if (pending > 0 && !discardUnsent) {
+      throw new BackgroundError(
+        "UNSENT_CHANGES",
+        `${pending} change${pending === 1 ? " has" : "s have"} not reached ${serverHost(current.apiUrl)} yet. Switching servers signs you out and discards ${pending === 1 ? "it" : "them"}.`,
+      );
+    }
+
+    const token = current.session?.token ?? null;
+    if (token !== null && current.sessionSource === "password") {
+      try {
+        await signOutSession(
+          { baseUrl: current.apiUrl, clientId: EXTENSION_CLIENT_ID },
+          token,
+        );
+      } catch {
+        // Best effort, as on an ordinary sign-out: the old server being
+        // unreachable is a common reason to be switching away from it.
+      }
+    }
+
+    // No `clearWebCookie`: the cookie belongs to the old server's web app, and
+    // leaving that server is not signing out of it.
+    await forgetSession();
+  }
+
+  await saveApiUrl(origin);
+  await saveServerInfo(check.server);
   // The URL is baked into both the api client and the socket at construction,
   // so the only way to retarget them is to build new ones.
+  await reload();
+  await refreshBadge();
+};
+
+/**
+ * Chrome's grant for the server in use changed — taken away at
+ * `chrome://extensions`, or given back from the popup's notice.
+ *
+ * Rebuilding is the whole response. It closes a socket to a host the extension
+ * may no longer reach, drops caches read while it could, and re-reads the web
+ * app's cookie, which `chrome.cookies` only hands over for a host the
+ * extension holds. The snapshot reports the access itself, live, so the popup
+ * needs nothing else from here.
+ */
+const onServerAccessChanged = async (): Promise<void> => {
   await reload();
   await refreshBadge();
 };
@@ -255,8 +363,8 @@ const apply = async (message: PopupToBackground): Promise<void> => {
     case "task:create":
       await createTask(message.name);
       return;
-    case "config:set-api-url":
-      return setApiUrl(message.apiUrl);
+    case "config:set-server":
+      return setServer(message.origin, message.discardUnsent === true);
     case "view:set":
       return setActiveView(message.view);
     case "entries:more":
@@ -399,6 +507,22 @@ chrome.idle.onStateChanged.addListener((state) => {
     await observeIdle(state, seconds ?? 0);
   })().catch(() => undefined);
 });
+
+/**
+ * Host access being removed or granted.
+ *
+ * Module scope like the rest: removing a site's access at
+ * `chrome://extensions` is an event that commonly reaches a sleeping worker.
+ * Filtered to changes that carry origins, so an unrelated API permission
+ * changing does not rebuild anything.
+ */
+const onPermissionsChanged = (permissions: chrome.permissions.Permissions): void => {
+  if ((permissions.origins?.length ?? 0) === 0) return;
+  void onServerAccessChanged().catch(() => undefined);
+};
+
+chrome.permissions.onRemoved.addListener(onPermissionsChanged);
+chrome.permissions.onAdded.addListener(onPermissionsChanged);
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== BADGE_ALARM) return;

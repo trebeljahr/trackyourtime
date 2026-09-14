@@ -11,8 +11,17 @@
  * last knew, because a popup showing a stale running timer is far more useful
  * than one showing an error.
  */
-import { mergeQuickStarts, type ApiClient, type TimeEntry } from "@starter/core";
+import {
+  describeServerVersion,
+  mergeQuickStarts,
+  sameServerOrigin,
+  type ApiClient,
+  type ServerInfo,
+  type TimeEntry,
+} from "@starter/core";
+import { loadServerInfo } from "../lib/config";
 import type { BackgroundState } from "../lib/messaging";
+import { hasServerAccess } from "../lib/server-access";
 import { fetchClients, fetchProjects, fetchTags, fetchTasks } from "./catalog";
 import { cachedEntryPage, resolveEntryPage } from "./entries";
 import { fetchFavorites, fetchRecents } from "./favorites";
@@ -32,6 +41,7 @@ import {
   getCachedProjects,
   getCachedTags,
   getCachedRecents,
+  getCachedServerInfo,
   getCachedTasks,
   getCachedTodaySec,
   getSyncStatus,
@@ -57,12 +67,56 @@ const TODAY_ENTRY_LIMIT = 500;
  */
 const QUICK_START_LIMIT = 5;
 
-const signedOutState = (
+/**
+ * What every snapshot says about the server itself, signed in or not.
+ *
+ * Kept apart from the account half because the sign-in screen needs all of
+ * it: which server it is about to sign in to, whether Chrome still lets the
+ * extension reach it, and how much queued work a switch would throw away.
+ */
+type ServerFacts = Pick<
+  BackgroundState,
+  "apiUrl" | "webUrl" | "serverAccess" | "serverVersion" | "pendingSync"
+>;
+
+/**
+ * The version line: the live /api/health answer when there is one, else what
+ * the check that chose this server recorded — but only if that record is
+ * about THIS server, not one the extension has since moved away from.
+ */
+const resolveServerVersion = async (apiUrl: string): Promise<string | null> => {
+  // A server that reported neither a release nor a commit (a local dev server,
+  // or one older than the fields) would read as a bare "Track Your Time" —
+  // true, and no use to anybody — so it has no version line at all.
+  const describe = (info: ServerInfo): string | null =>
+    info.release !== null || info.commit !== null
+      ? describeServerVersion(info)
+      : null;
+
+  const live = getCachedServerInfo();
+  if (live !== null && sameServerOrigin(live.origin, apiUrl)) {
+    return describe(live);
+  }
+  const stored = await loadServerInfo().catch(() => null);
+  if (stored !== null && sameServerOrigin(stored.origin, apiUrl)) {
+    return describe(stored);
+  }
+  return null;
+};
+
+const resolveServerFacts = async (
   apiUrl: string,
   webUrl: string | null,
-): BackgroundState => ({
+): Promise<ServerFacts> => ({
   apiUrl,
   webUrl,
+  serverAccess: await hasServerAccess(apiUrl, chrome.permissions),
+  serverVersion: await resolveServerVersion(apiUrl),
+  pendingSync: await pendingSyncCount(),
+});
+
+const signedOutState = (facts: ServerFacts): BackgroundState => ({
+  ...facts,
   signedIn: false,
   sessionSource: null,
   email: null,
@@ -77,7 +131,6 @@ const signedOutState = (
   todaySec: 0,
   syncStatus: getSyncStatus(),
   serverReachable: isServerReachable(),
-  pendingSync: 0,
   pendingIdle: null,
   view: "tracker",
   settings: null,
@@ -139,7 +192,9 @@ export async function buildState(): Promise<BackgroundState> {
   // Resolved even when signed out: "Open Track Your Time" is exactly what someone
   // with no session reaches for, so the menu must work before sign-in.
   const webUrl = await resolveWebUrl();
-  if (!current.session) return signedOutState(current.apiUrl, webUrl);
+  if (!current.session) {
+    return signedOutState(await resolveServerFacts(current.apiUrl, webUrl));
+  }
 
   // Opening the popup is the moment someone is looking at the status, so it is
   // the moment a dead socket should be retried — waiting up to 30 seconds for
@@ -247,12 +302,11 @@ export async function buildState(): Promise<BackgroundState> {
     // of looping on an error the user cannot act on. The web app's cookie is
     // left alone: an expired token is not a request to sign the browser out.
     await forgetSession();
-    return signedOutState(current.apiUrl, webUrl);
+    return signedOutState(await resolveServerFacts(current.apiUrl, webUrl));
   }
 
   return {
-    apiUrl: current.apiUrl,
-    webUrl,
+    ...(await resolveServerFacts(current.apiUrl, webUrl)),
     signedIn: true,
     sessionSource: current.sessionSource,
     email,
@@ -274,7 +328,6 @@ export async function buildState(): Promise<BackgroundState> {
     todaySec,
     syncStatus: getSyncStatus(),
     serverReachable: isServerReachable(),
-    pendingSync: await pendingSyncCount(),
     // Dropped once the entry it refers to is no longer the running one: the
     // question "what were those 40 minutes?" is meaningless against an entry
     // somebody has since stopped, and answering it would edit the wrong row.

@@ -1,12 +1,20 @@
 /**
  * Where this extension talks to the server.
  *
- * A baked-in URL alone is not enough: `pnpm run dev` picks a random API port
- * per run, so a build from yesterday would point at a port nothing is
- * listening on. The build-time value is therefore only a default, and the
- * popup can override it at runtime into `chrome.storage.local`.
+ * A baked-in URL alone is not enough, for two reasons. Track Your Time can be
+ * self-hosted, and the Web Store build is one bundle for everybody, so the
+ * server is somebody's choice rather than the build's. And `pnpm run dev`
+ * picks a random API port per run in a worktree, so a build from yesterday
+ * would point at a port nothing is listening on. The build-time value is
+ * therefore only a default, and the popup's server picker overrides it into
+ * `chrome.storage.local`.
  */
-import { resolveSyncUrl, type ClientId } from "@starter/core";
+import {
+  normalizeServerInput,
+  resolveSyncUrl,
+  type ClientId,
+  type ServerInfo,
+} from "@starter/core";
 import { chromeStorage, localStorageArea } from "./chrome-storage";
 
 /**
@@ -45,18 +53,58 @@ export async function loadApiUrl(): Promise<string> {
 }
 
 /**
- * Persist an override. Validated first because a value that does not parse
- * bricks every later request with no obvious way back — the popup would keep
- * failing against a URL the user can no longer see was wrong.
+ * Persist an override, as the normalized origin.
+ *
+ * Validated here even though every caller has already validated it: a value
+ * that does not parse bricks every later request with no obvious way back —
+ * the popup would keep failing against a URL the user can no longer see was
+ * wrong. Stored as the ORIGIN, so a pasted page URL or a trailing slash can
+ * never become part of `<apiUrl>/api/trpc`.
  */
 export async function saveApiUrl(url: string): Promise<void> {
-  const trimmed = url.trim();
+  const parsed = normalizeServerInput(url);
+  if (!parsed.ok) throw new Error(parsed.message);
+  await storage().setItem(API_URL_STORAGE_KEY, parsed.origin);
+}
+
+/**
+ * What the chosen server said about itself when it was checked — its release
+ * and commit — so Settings → Account can say which Track Your Time it is
+ * talking to. Kept beside the URL, and keyed by the origin inside it, so a
+ * record left from an earlier server is recognisably not about this one.
+ */
+export const SERVER_INFO_STORAGE_KEY = "tracktime.server-info";
+
+export async function saveServerInfo(info: ServerInfo): Promise<void> {
+  await storage().setItem(SERVER_INFO_STORAGE_KEY, JSON.stringify(info));
+}
+
+const textOrNull = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() !== "" ? value : null;
+
+/** The stored record, or null when there is none or it is not readable. */
+export async function loadServerInfo(): Promise<ServerInfo | null> {
+  const raw = await storage().getItem(SERVER_INFO_STORAGE_KEY);
+  if (raw === null) return null;
   try {
-    new URL(trimmed);
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const record = parsed as Record<string, unknown>;
+    const origin = textOrNull(record.origin);
+    if (origin === null) return null;
+    return {
+      origin,
+      release: textOrNull(record.release),
+      commit: textOrNull(record.commit),
+      webUrl: textOrNull(record.webUrl),
+      originTrusted:
+        typeof record.originTrusted === "boolean" ? record.originTrusted : null,
+    };
   } catch {
-    throw new Error(`Not a valid URL: ${url}`);
+    // Written by another build, or hand-edited: a missing version line is the
+    // whole cost, which is not worth failing a snapshot over.
+    return null;
   }
-  await storage().setItem(API_URL_STORAGE_KEY, trimmed);
 }
 
 /**

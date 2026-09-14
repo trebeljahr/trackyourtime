@@ -1,12 +1,22 @@
 import { useState, type FormEvent, type JSX } from "react";
-import { ApiUrlEditor } from "./api-url-editor";
+import { DEFAULT_API_URL } from "../lib/config";
+import { describeServer } from "../lib/server-label";
+import { ServerPicker } from "./server-picker";
+import type { SetServerOutcome } from "./switch-server";
 
 export type SignInScreenProps = {
   apiUrl: string;
+  /** "Track Your Time 0.1.0 (1a2b3c4)", when the server has said. */
+  serverVersion: string | null;
+  /** Queued changes a server switch would discard. */
+  pendingSync: number;
   /** The last failure, already translated into human terms. */
   error: string | null;
   onSignIn: (email: string, password: string) => Promise<boolean>;
-  onSaveApiUrl: (apiUrl: string) => Promise<boolean>;
+  onSetServer: (
+    origin: string,
+    discardUnsent: boolean,
+  ) => Promise<SetServerOutcome>;
 };
 
 /**
@@ -18,13 +28,16 @@ export type SignInScreenProps = {
  */
 export function SignInScreen({
   apiUrl,
+  serverVersion,
+  pendingSync,
   error,
   onSignIn,
-  onSaveApiUrl,
+  onSetServer,
 }: SignInScreenProps): JSX.Element {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [changingServer, setChangingServer] = useState(false);
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -38,8 +51,39 @@ export function SignInScreen({
     <div className="popup__body" data-testid="sign-in-screen">
       <h1 className="popup__title">Sign in to Track Your Time</h1>
 
-      {/* Two sibling forms, never nested: the API URL has its own submit and
-          must stay usable while the sign-in form is in flight. */}
+      {/* Which server the password is about to be sent to, said before the
+          form rather than after it: with a self-hosted choice in play, that is
+          the thing to check before typing anything. */}
+      <div className="server" data-testid="sign-in-server">
+        <p className="server__text">
+          Signing in to{" "}
+          <strong title={apiUrl}>{describeServer(apiUrl, DEFAULT_API_URL)}</strong>
+          {serverVersion !== null ? (
+            <span className="server__version"> · {serverVersion}</span>
+          ) : null}
+        </p>
+        <button
+          type="button"
+          className="button--link"
+          aria-expanded={changingServer}
+          onClick={() => setChangingServer((open) => !open)}
+          data-testid="sign-in-change-server"
+        >
+          {changingServer ? "Cancel" : "Change server"}
+        </button>
+      </div>
+
+      {/* Two sibling forms, never nested: the server picker has its own submit
+          and must stay usable while the sign-in form is in flight. */}
+      {changingServer ? (
+        <ServerPicker
+          apiUrl={apiUrl}
+          pendingSync={pendingSync}
+          onSetServer={onSetServer}
+          onSwitched={() => setChangingServer(false)}
+        />
+      ) : null}
+
       <form className="form" onSubmit={submit} data-testid="sign-in-form">
         <div className="field">
           <label className="field__label" htmlFor="email">
@@ -87,13 +131,6 @@ export function SignInScreen({
       <p className="notice" role="alert" aria-live="assertive" data-testid="sign-in-error">
         {error ?? ""}
       </p>
-
-      <p className="popup__hint">
-        The extension signs in against the server below. Fix the URL first if
-        it cannot be reached.
-      </p>
-
-      <ApiUrlEditor apiUrl={apiUrl} onSave={onSaveApiUrl} />
     </div>
   );
 }

@@ -26,7 +26,9 @@ import {
 import { forgetRoute, loadRoute, rememberRoute } from "./route-memory";
 import { Screens } from "./screens";
 import { rememberTheme } from "./theme";
+import { ServerAccessNotice } from "./server-access-notice";
 import { SignInScreen } from "./sign-in-screen";
+import type { SetServerOutcome } from "./switch-server";
 import type { RunningPatch } from "./tracker-screen";
 
 /**
@@ -289,11 +291,44 @@ export function App(): JSX.Element {
     [send],
   );
 
-  const saveApiUrl = useCallback(
-    (apiUrl: string): Promise<boolean> =>
-      send({ type: "config:set-api-url", apiUrl }),
-    [send],
+  /**
+   * Switch servers, answering the picker rather than the screen banner.
+   *
+   * Not through `send`: a refused server is the picker's own sentence, shown
+   * under the address that was refused, and `send` would also raise it in the
+   * screen's banner — one failure announced twice. The worker's message is
+   * already written for a person (core's `checkServer`), so it is passed on
+   * as it is; only transport failures go through `describeError`.
+   */
+  const setServer = useCallback(
+    async (origin: string, discardUnsent: boolean): Promise<SetServerOutcome> => {
+      const response = await sendToBackground({
+        type: "config:set-server",
+        origin,
+        discardUnsent,
+      });
+      if (response.ok) {
+        apiUrlRef.current = response.state.apiUrl;
+        setState(response.state);
+        setError(null);
+        return { ok: true };
+      }
+      const worker =
+        response.code === "NO_RESPONSE" || response.code === "PORT_CLOSED";
+      return {
+        ok: false,
+        code: response.code,
+        message: worker
+          ? describeError(response.code, response.message, origin)
+          : response.message,
+      };
+    },
+    [],
   );
+
+  const refreshState = useCallback((): void => {
+    void send({ type: "state:get" });
+  }, [send]);
 
   const createTag = useCallback(
     (name: string): Promise<boolean> => send({ type: "tag:create", name }),
@@ -501,6 +536,9 @@ export function App(): JSX.Element {
 
   return (
     <div className="popup">
+      {!state.serverAccess ? (
+        <ServerAccessNotice apiUrl={state.apiUrl} onAnswered={refreshState} />
+      ) : null}
       {state.signedIn ? (
         <Screens
           route={topOf(stack)}
@@ -541,7 +579,7 @@ export function App(): JSX.Element {
             onRevokeDevice: revokeDevice,
             onRevokeOtherDevices: revokeOtherDevices,
             onSignOut: signOut,
-            onSaveApiUrl: saveApiUrl,
+            onSetServer: setServer,
           }}
           entries={{
             state,
@@ -586,9 +624,11 @@ export function App(): JSX.Element {
       ) : (
         <SignInScreen
           apiUrl={state.apiUrl}
+          serverVersion={state.serverVersion}
+          pendingSync={state.pendingSync}
           error={error}
           onSignIn={signIn}
-          onSaveApiUrl={saveApiUrl}
+          onSetServer={setServer}
         />
       )}
     </div>

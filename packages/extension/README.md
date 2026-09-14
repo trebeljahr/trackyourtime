@@ -7,8 +7,10 @@ page.
 
 ## Build modes
 
-The API URL is baked in at build time, so a build **is** a target — there is no
-one bundle that works against both a laptop and the deployed server.
+The **default** API URL is baked in at build time, so a build is a target: a
+development bundle starts out pointed at a laptop, a production bundle at the
+hosted API. Either can then be pointed at any Track Your Time server from the
+popup — see [Choosing a server](#choosing-a-server).
 
 ```bash
 pnpm run build:extension        # development -> dist/,      http://localhost:5159
@@ -21,36 +23,104 @@ filenames are commonly gitignored, which would make a fresh clone build an
 extension with no URL in it and no error to say so.
 
 Each target gets its own name (`Track Your Time` vs `Track Your Time (dev)`) and its own
-`host_permissions`, so the two can be installed side by side and neither asks
-for access to hosts it will never talk to. `VITE_API_URL=… pnpm --filter
-@starter/extension run build` still overrides the URL for a one-off build.
+permissions, so the two can be installed side by side:
 
-The popup can repoint the API URL at runtime, but only within the host
-permissions its build declared: a production build cannot be aimed at
-localhost. That is deliberate — use the development build for that.
+| | development (`dist/`) | production (`dist-prod/`) |
+|---|---|---|
+| `host_permissions` (granted at install) | `http://localhost/*`, `http://127.0.0.1/*` | `https://api.trackyourtime.dev/*` |
+| `optional_host_permissions` (asked for per server) | `https://*/*` | `https://*/*`, `http://localhost/*`, `http://127.0.0.1/*` |
+| `key` | none — id follows the load path | the Web Store key (`STORE_EXTENSION_KEY`) |
+
+`VITE_API_URL=… pnpm --filter @starter/extension run build` still overrides the
+default URL for a one-off build.
+
+## Choosing a server
+
+Track Your Time can be self-hosted, and the Web Store build is one bundle for
+everybody, so the server is the person's choice. The sign-in screen says which
+server it is about to sign in to, with a **Change server** control; Settings →
+Account shows the server, its version and the same control. The picker offers
+"Track Your Time cloud" (in a development build: "Default (localhost:5159)")
+or "My own server" with an address field.
+
+Choosing a server runs in this order, and the order is load-bearing:
+
+1. **The address is checked in the popup** (`normalizeServerInput` from
+   `@starter/core`): no scheme means https, a pasted page URL keeps only its
+   origin, and plain http is refused for anything but localhost.
+2. **Chrome is asked for that one host** (`src/lib/server-access.ts`),
+   `https://<host>/*` with no port, straight from the click. Chrome only shows
+   the prompt inside a user gesture, and the gesture ends at the first
+   `await` — so nothing is awaited before this step (`src/popup/switch-server.ts`,
+   pinned by its test).
+3. **The worker checks it again** (`config:set-server`): the address, the
+   grant, and `GET <origin>/api/health` through `checkServer`, which has to
+   answer as a working Track Your Time server. Nothing changes unless all
+   three pass. If the worker refuses, the popup gives the new grant back, so a
+   typo or a server that is down does not leave a standing permission behind.
+
+Moving to a **different** server signs out of the old one. A password session
+the extension created is revoked on the old server; a session borrowed from the
+web app's cookie is not, because that tab is still using it. The extension's
+sign-out then drops its offline queue, as it always has, so a switch with
+unsent changes first shows a confirm naming how many will be discarded — and
+the worker refuses the switch with `UNSENT_CHANGES` unless that confirm was
+answered, so a popup whose count is a poll behind cannot discard work silently.
+
+Queued rows are stamped with the server they were made against, and the flush
+only replays rows for the server in use (`isQueuedOn`).
+
+### When Chrome takes access away
+
+Anyone can remove a site's access at `chrome://extensions`. The worker listens
+for `chrome.permissions.onRemoved` (and `onAdded`) and rebuilds, and every
+snapshot carries `serverAccess`. While it is false the popup shows "Chrome no
+longer lets the extension reach <host>." above every screen, signed in or out,
+with an **Allow access** button that asks again from the click. Without it a
+revoked grant would look exactly like being offline.
+
+The web app's cookie is still borrowed for a self-hosted server: the `cookies`
+permission covers granted optional hosts the same as required ones.
+
+### Chrome Web Store permission justification
+
+`host_permissions` lists only `https://api.trackyourtime.dev/*`, the hosted
+API the extension uses by default. `optional_host_permissions` lists
+`https://*/*`, `http://localhost/*` and `http://127.0.0.1/*` because Track Your
+Time is open source and people run their own server on a domain the extension
+cannot know in advance. None of these are granted at install. The extension
+requests exactly one host, `https://<server>/*`, only when the person types
+that server's address into the extension's server picker and clicks to use it,
+and only for that server. It never requests access to sites the person browses,
+has no content scripts, and does not read or change any web page. Plain http is
+accepted for localhost only, for someone running the server on the same
+machine.
 
 ### Production ids and TRUSTED_ORIGINS
 
-The two builds live in different directories, so as unpacked extensions they
-have **different ids** — and each id's origin has to be in the server's
-`TRUSTED_ORIGINS` or sign-in returns `403 INVALID_ORIGIN`:
+The production build pins the Web Store key, so its id is
+`opibnndhibnigcfgfbgbipakadhnbjfi` (`STORE_EXTENSION_ID` in `@starter/shared`)
+wherever it is loaded from — unpacked from `dist-prod/`, or installed from the
+store. A self-hosted server trusts that origin by default, which is what lets
+the store build sign in to it with no configuration:
 
 ```bash
 pnpm run extension:id prod
 ```
 
-An unpacked id follows the path it was loaded from, which is no use for a
-server that must trust the extension before anyone has installed it. Pin a key
-to fix the id instead:
+A fork that publishes under its own listing passes its own public key as
+`EXTENSION_KEY`, which overrides the store key for either build:
 
 ```bash
 openssl genrsa 2048 | openssl pkcs8 -topk8 -nocrypt -out tracktime-extension.pem
 openssl rsa -in tracktime-extension.pem -pubout -outform DER | base64 | tr -d '\n'
 ```
 
-Pass that public half as `EXTENSION_KEY` when building; keep the `.pem` out of
-the repo. `pnpm run extension:id prod` then reports the pinned id, which stays
-the same wherever the build is loaded — including once it is uploaded.
+Keep the `.pem` out of the repo. That fork's servers then need its
+`chrome-extension://<id>` in `TRUSTED_ORIGINS`.
+
+The development build pins no key: its id follows the load path, and
+`pnpm run dev` derives the same id to trust.
 
 ## The server has to trust this extension's origin
 
@@ -76,8 +146,8 @@ read at boot, and `tsx watch` only watches `src/`.
 moving, but it trusts every extension installed in the browser, so it is a
 local-dev shortcut rather than something to ship.
 
-For a shipped build, pin a `key` in `manifest.json` (or publish to the Web
-Store) so the id stops depending on a path, and list that one origin.
+The production build does not have this problem: it pins the Web Store key,
+so its id is fixed (see above).
 
 
 ## Architecture
@@ -133,11 +203,12 @@ reload.
 
 ## Pointing it at your dev server
 
-`pnpm run dev` picks a **random API port** on every run, so the URL baked in
-at build time (`VITE_API_URL`, defaulting to `http://localhost:5159`) is
-almost never the one you want in development. Open the popup, expand the API
-URL setting and paste the API URL the dev script printed. It is stored in
-`chrome.storage.local` and survives rebuilds.
+`pnpm run dev` pins the API to `http://localhost:5159`, the development build's
+default. In a git worktree it picks a **random port** instead, so open the
+popup, choose **Change server → My own server** and paste the API origin the
+dev script printed (for example `localhost:51590`). It is stored in
+`chrome.storage.local` and survives rebuilds. The development build already
+holds `http://localhost/*`, so there is no Chrome prompt for it.
 
 ## Sign-in
 
@@ -175,13 +246,6 @@ tile brings its own indigo ground and reads on light and dark chrome alike. At
 limit of the shape at that size, not a rendering fault.
 
 ## Before shipping
-
-`host_permissions` currently includes `https://*/*`, which is far broader than
-this extension needs and will draw a review objection on the Chrome Web Store.
-It is wide only so a build works against any dev or staging host. Narrow it to
-the real API origin (e.g. `https://api.tracktime.example/*`) in
-`public/manifest.json` before publishing, and drop the localhost entries from
-a production build.
 
 `minimum_chrome_version` is `116` because WebSocket activity only keeps an MV3
 service worker alive from that version on, and the sync socket depends on it.

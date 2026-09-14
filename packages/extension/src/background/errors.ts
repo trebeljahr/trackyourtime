@@ -36,7 +36,7 @@ const AUTH_MESSAGES: Readonly<Record<string, string>> = {
 };
 
 const UNREACHABLE =
-  "Could not reach the Track Your Time server. Check the API URL below.";
+  "Could not reach the server. Check its address and that it is running.";
 
 /**
  * A rejection that never carried an HTTP response — `fetch` throws a

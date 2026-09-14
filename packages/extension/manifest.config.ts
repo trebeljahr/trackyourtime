@@ -1,17 +1,22 @@
 /**
  * Build targets, and the manifest each one produces.
  *
- * The API URL is baked in at build time, so a build IS a target — there is no
- * one bundle that works against both a laptop and the deployed server. Keeping
- * both targets described here, in TypeScript that ships in the repo, rather
- * than in `.env.development` / `.env.production`: those two filenames are
- * commonly gitignored (they are on this machine), which would make a fresh
- * clone build an extension with no URL in it and no error to say so.
+ * The DEFAULT API URL is baked in at build time, so a build is still a target
+ * — a development bundle starts out pointed at a laptop, a production one at
+ * the hosted API. Keeping both targets described here, in TypeScript that
+ * ships in the repo, rather than in `.env.development` / `.env.production`:
+ * those two filenames are commonly gitignored (they are on this machine),
+ * which would make a fresh clone build an extension with no URL in it and no
+ * error to say so.
  *
- * The popup can still repoint the URL at runtime, but only within the host
- * permissions the build declared — a production build cannot be aimed at
- * localhost, by design.
+ * The default is only where a build starts. Track Your Time can be self-hosted,
+ * and the Chrome Web Store build is one bundle for everybody, so the popup lets
+ * a person pick any server and asks Chrome for access to that one host at the
+ * moment they pick it (`optional_host_permissions`, `src/lib/server-access.ts`).
+ * The required `host_permissions` stay narrow — only the build's own default —
+ * because that is the line Chrome shows at install time.
  */
+import { STORE_EXTENSION_KEY } from "@starter/shared/store-clients";
 
 export type BuildMode = "development" | "production";
 
@@ -28,22 +33,49 @@ export type BuildTarget = {
    */
   nameMessage: "extName" | "extNameDev";
   /**
-   * Hosts the extension may talk to. Narrow on purpose: this is the line
-   * Chrome shows the user at install time, and `https://*\/*` reads as "every
-   * site you visit" for something that talks to exactly one server.
+   * Hosts the extension may talk to from the moment it is installed. Narrow on
+   * purpose: this is the line Chrome shows the user at install time, and
+   * `https://*\/*` there reads as "every site you visit" for something that
+   * talks to exactly one server.
    */
   hostPermissions: string[];
+  /**
+   * Hosts the extension may ASK for later, one at a time, from a click.
+   *
+   * Broad because a self-hosted server can live on any name, and a manifest
+   * cannot list names nobody has chosen yet. Declaring a pattern here grants
+   * nothing: Chrome shows no warning for it at install, and the extension only
+   * ever requests the single `https://<host>/*` a person typed into the server
+   * picker. Chrome only accepts `permissions.request` for patterns covered by
+   * this list, so it is also the ceiling on what the popup can ask for.
+   */
+  optionalHostPermissions: string[];
+  /**
+   * The public key pinned when `EXTENSION_KEY` is not set, or undefined to let
+   * the id follow the load path.
+   */
+  defaultKey: string | undefined;
   outDir: string;
 };
 
 export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
   development: {
     // The API port `pnpm run dev` pins. A git worktree runs on random ports
-    // instead, which is what the popup's runtime override is for.
+    // instead, which is what the popup's server picker is for.
     apiUrl: "http://localhost:5159",
     name: "Track Your Time (dev)",
     nameMessage: "extNameDev",
     hostPermissions: ["http://localhost/*", "http://127.0.0.1/*"],
+    // Only https: a development build already holds both loopback hosts, and
+    // this is what lets it exercise the self-hosted path — the request, the
+    // prompt, the revocation — against a real https server.
+    optionalHostPermissions: ["https://*/*"],
+    // No key. The dev id is derived from the load path, and `scripts/dev.mjs`
+    // derives the same id to put in the dev server's TRUSTED_ORIGINS. Pinning
+    // the store key here would give the dev build the store build's id — the
+    // two could no longer be installed side by side, and the dev server would
+    // be trusting an id no dev build has.
+    defaultKey: undefined,
     // Deliberately still `dist`: an unpacked extension's id is derived from
     // its path, so moving this would change the id, and with it the
     // `chrome-extension://…` origin already listed in the dev server's
@@ -64,34 +96,60 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
     name: "Track Your Time",
     nameMessage: "extName",
     hostPermissions: ["https://api.trackyourtime.dev/*"],
+    // Any https host, for a self-hosted server, plus the two loopback names
+    // over plain http for someone running one on the same machine. Plain http
+    // anywhere else is refused before Chrome is ever asked
+    // (`normalizeServerInput`), because it would send the password in the
+    // clear — so no `http://*/*` here either.
+    optionalHostPermissions: [
+      "https://*/*",
+      "http://localhost/*",
+      "http://127.0.0.1/*",
+    ],
+    // The Web Store key, so the id every self-hosted server trusts by default
+    // (`STORE_EXTENSION_ID`) is the id this build actually gets — unpacked,
+    // uploaded, or installed from the store.
+    defaultKey: STORE_EXTENSION_KEY,
     outDir: "dist-prod",
   },
 };
 
 export const VERSION = "0.1.0";
 
+/** The environment a build reads, narrowed so no Node typings are needed. */
+export type BuildEnv = Readonly<Record<string, string | undefined>>;
+
+const processEnv = (): BuildEnv =>
+  (globalThis as { process?: { env?: BuildEnv } }).process?.env ?? {};
+
 /**
  * A pinned public key, which fixes the extension's id.
  *
  * Without one, an unpacked extension's id follows its path and a Web Store
  * extension's id is assigned by Google — neither of which can be known before
- * the server needs it in TRUSTED_ORIGINS. Supplying `EXTENSION_KEY` at build
- * time makes the production id deterministic, so the origin can be configured
- * ahead of the first upload. Generate one with:
+ * the server needs it in TRUSTED_ORIGINS. The production target pins the Web
+ * Store key by default; `EXTENSION_KEY` overrides it for either target, for a
+ * fork that publishes under its own listing. Generate one with:
  *
  *   openssl genrsa 2048 | openssl pkcs8 -topk8 -nocrypt -out tracktime.pem
  *   openssl rsa -in tracktime.pem -pubout -outform DER | base64 | tr -d '\n'
  *
  * Keep the .pem out of the repo; only the public half belongs in a manifest.
  */
-const pinnedKey = (): string | undefined => {
-  const key = process.env.EXTENSION_KEY?.trim();
-  return key !== undefined && key !== "" ? key : undefined;
+export const pinnedKey = (
+  target: BuildTarget,
+  env: BuildEnv = processEnv(),
+): string | undefined => {
+  const key = env.EXTENSION_KEY?.trim();
+  return key !== undefined && key !== "" ? key : target.defaultKey;
 };
 
-export function buildManifest(mode: BuildMode): Record<string, unknown> {
+export function buildManifest(
+  mode: BuildMode,
+  env: BuildEnv = processEnv(),
+): Record<string, unknown> {
   const target = BUILD_TARGETS[mode];
-  const key = pinnedKey();
+  const key = pinnedKey(target, env);
 
   return {
     manifest_version: 3,
@@ -114,11 +172,13 @@ export function buildManifest(mode: BuildMode): Record<string, unknown> {
       type: "module",
     },
     // `cookies` is what lets the extension read the web app's better-auth
-    // session and sign in without a second form. `idle` is the only way to
-    // learn that the person has walked away — a service worker sees no input
-    // events of its own.
+    // session and sign in without a second form — for an optional host too,
+    // once it has been granted. `idle` is the only way to learn that the
+    // person has walked away — a service worker sees no input events of its
+    // own.
     permissions: ["storage", "alarms", "cookies", "idle"],
     host_permissions: target.hostPermissions,
+    optional_host_permissions: target.optionalHostPermissions,
     icons: {
       "16": "icons/16.png",
       "32": "icons/32.png",
