@@ -32,15 +32,6 @@ export default defineConfig({
         BETTER_AUTH_SECRET: "e2e-test-secret",
         BETTER_AUTH_URL: `http://127.0.0.1:${E2E_SERVER_PORT}`,
         FRONTEND_URL: `http://127.0.0.1:${E2E_CLIENT_PORT}`,
-        S3_ENDPOINT: process.env.S3_ENDPOINT ?? "http://127.0.0.1:9002",
-        S3_FORCE_PATH_STYLE: "true",
-        S3_BUCKET_NAME: "trackyourtime-e2e",
-        S3_PUBLIC_URL:
-          process.env.S3_PUBLIC_URL ??
-          "http://127.0.0.1:9002/trackyourtime-e2e",
-        AWS_ACCESS_KEY_ID: "hatchkit-dev",
-        AWS_SECRET_ACCESS_KEY: "hatchkit-dev",
-        AWS_REGION: "us-east-1",
       },
     },
     {

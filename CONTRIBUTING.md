@@ -239,7 +239,7 @@ given you the shape.
 |---|---|
 | `pnpm run test:unit` | Server unit tests — `node:test` over `packages/server/src/tests/*.test.ts`. Pure logic: budgets, CSV, PDF, import parsing, invoicing guards, timesheet rules, runaway timers, workspace scoping, schemas. No MongoDB, Redis or Docker needed. |
 | `pnpm run test:client` | Client unit tests — Vitest + `@testing-library/react` over colocated `*.test.ts(x)` files under `packages/client/src`. jsdom; no services needed. |
-| `pnpm run test:e2e` | Playwright, chromium, serial. Specs in `e2e/`. **Needs Docker** — `e2e/start-server.sh` starts its own Mongo, Redis and S3 containers on separate ports, and the suite runs against the client's static export, so the first run includes a full build. |
+| `pnpm run test:e2e` | Playwright, chromium, serial. Specs in `e2e/`. **Needs Docker** — `e2e/start-server.sh` starts its own Mongo and Redis containers on separate ports, and the suite runs against the client's static export, so the first run includes a full build. |
 | `pnpm run build` | Full production build in dependency order: shared → core → server → client. |
 | `pnpm run typecheck` | Builds shared + core (they resolve through `package.json` exports to `dist/`), then `tsc --noEmit` across every other package, plus the Electron main process. |
 | `pnpm --filter @starter/client run lint` | ESLint over the client package. There is no root `lint` script. |
@@ -477,7 +477,7 @@ checks and none of the publishing.
 | Job | What it does |
 |---|---|
 | `verify` | `pnpm install --frozen-lockfile`, then `pnpm run typecheck`, `pnpm run build`, `pnpm run test:unit`, `pnpm run test:client`. |
-| `e2e` | Playwright, after `verify` passes. Mongo and Redis as service containers, MinIO started in a step, then the full suite against the client's static export. This is the slow one. |
+| `e2e` | Playwright, after `verify` passes. Mongo and Redis as service containers, then the full suite against the client's static export. This is the slow one. |
 | `dco` | Checks that every non-merge commit in the pull request carries a `Signed-off-by` trailer. |
 
 Every credential those jobs need is a throwaway literal in the workflow file

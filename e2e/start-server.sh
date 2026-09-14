@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# In CI, GitHub Actions services provide MongoDB/Redis/local S3.
+# In CI, GitHub Actions services provide MongoDB/Redis. The app stores no
+# objects, so no S3 container is started here or in CI.
 # Locally, spin up Docker containers for E2E testing.
 
 # Start a container, reusing an existing one of that name.
@@ -36,18 +37,6 @@ if [ -z "${CI:-}" ]; then
 
   # Redis on port 6380
   ensure_container starter-e2e-redis -p 6380:6379 --tmpfs /data redis:7-alpine
-
-  # SeaweedFS S3 on port 9002
-  ensure_container starter-e2e-seaweedfs -p 9002:8333 \
-    -e S3_BUCKET=trackyourtime-e2e \
-    --tmpfs /data chrislusf/seaweedfs:latest
-
-  # Wait for SeaweedFS. The image creates S3_BUCKET on startup.
-  for i in $(seq 1 30); do
-    curl -s http://127.0.0.1:9002/ >/dev/null && break
-    sleep 1
-  done
-  echo "[e2e] SeaweedFS bucket ready"
 
   # Wait for MongoDB
   for i in $(seq 1 30); do

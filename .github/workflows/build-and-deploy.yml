@@ -134,27 +134,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
 
-      - name: Start MinIO
-        run: |
-          docker run -d --name e2e-minio -p 9002:9000 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            --tmpfs /data minio/minio:latest server /data
-          for i in $(seq 1 30); do
-            curl -sf http://127.0.0.1:9002/minio/health/live && break
-            sleep 1
-          done
-          # Both bucket names: the job env below sets S3_BUCKET_NAME to
-          # starter-e2e, but playwright.config.ts's server webServer `env:`
-          # block hardcodes trackyourtime-e2e and overrides it — so the bucket the
-          # server actually writes to is trackyourtime-e2e.
-          docker run --rm --network host \
-            --entrypoint sh minio/mc:latest -c \
-            "mc alias set local http://127.0.0.1:9002 minioadmin minioadmin && \
-             mc mb --ignore-existing local/starter-e2e && \
-             mc anonymous set download local/starter-e2e && \
-             mc mb --ignore-existing local/trackyourtime-e2e && \
-             mc anonymous set download local/trackyourtime-e2e"
-
       - run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests
@@ -166,13 +145,6 @@ jobs:
           BETTER_AUTH_SECRET: e2e-test-secret
           BETTER_AUTH_URL: http://127.0.0.1:5006
           FRONTEND_URL: http://127.0.0.1:3001
-          S3_ENDPOINT: http://127.0.0.1:9002
-          S3_FORCE_PATH_STYLE: "true"
-          S3_BUCKET_NAME: starter-e2e
-          S3_PUBLIC_URL: http://127.0.0.1:9002/starter-e2e
-          AWS_ACCESS_KEY_ID: minioadmin
-          AWS_SECRET_ACCESS_KEY: minioadmin
-          AWS_REGION: us-east-1
 
   # PUSH ONLY. `docker/login-action` below authenticates to ghcr.io with
   # secrets.GITHUB_TOKEN, which is read-only on a fork PR — `push: true` would
