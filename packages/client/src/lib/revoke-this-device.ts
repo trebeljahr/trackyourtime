@@ -20,7 +20,7 @@
  */
 
 import { toast } from "@/components/ui/sonner";
-import { signOut } from "@/lib/auth-client";
+import { authClient, signOut } from "@/lib/auth-client";
 import { clearNativeToken } from "@/lib/native-session";
 import { refreshPendingCount } from "@/lib/offline";
 import { handleSessionRevoked } from "@/lib/session-revoked";
@@ -33,8 +33,19 @@ const description = (pending: number): string =>
     : "This device's access was revoked from another device. Sign in again to continue.";
 
 /** Sign this device out because the server says its session is gone. */
-export const revokeThisDevice = (redirect: () => void): Promise<void> =>
+export const revokeThisDevice = (
+  redirect: () => void,
+  resume?: () => void,
+): Promise<void> =>
   handleSessionRevoked({
+    // Asked without the cookie cache, which would answer from the old session.
+    stillSignedIn: async () => {
+      const { data } = await authClient.getSession({
+        query: { disableCookieCache: true },
+      });
+      return Boolean(data?.session);
+    },
+    resume,
     pendingCount: refreshPendingCount,
     signOut: () => signOut(),
     clearToken: clearNativeToken,

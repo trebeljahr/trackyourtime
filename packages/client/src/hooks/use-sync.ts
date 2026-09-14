@@ -187,6 +187,10 @@ export const useSync = (): SyncStatus => {
   // and a socket opened before (or across) a change of server would be talking
   // to one the person has left. Always null on web.
   const serverOrigin = useApiOrigin().choice?.origin ?? null;
+  // Bumped when a 4401 turns out to be a replaced session rather than a
+  // revoked one (`lib/session-revoked.ts`): the closed client has latched, so
+  // a fresh one is built with the current credential.
+  const [epoch, setEpoch] = React.useState(0);
 
   React.useEffect(() => {
     utilsRef.current = utils;
@@ -216,7 +220,10 @@ export const useSync = (): SyncStatus => {
        * dead token would still be in the Keychain at the next launch.
        */
       onSessionRevoked: () => {
-        void revokeThisDevice(() => routerRef.current.replace("/login"));
+        void revokeThisDevice(
+          () => routerRef.current.replace("/login"),
+          () => setEpoch((value) => value + 1),
+        );
       },
       onEvent: (event, originId) => {
         // Our own echo — the mutation's optimistic update already landed.
@@ -236,7 +243,7 @@ export const useSync = (): SyncStatus => {
       if (activeClient === client) activeClient = null;
       client.close();
     };
-  }, [sessionReady, nativeToken, serverOrigin]);
+  }, [sessionReady, nativeToken, serverOrigin, epoch]);
 
   return useSyncStatus();
 };

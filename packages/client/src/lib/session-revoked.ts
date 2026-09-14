@@ -52,6 +52,20 @@ export type SessionRevokedDeps = {
   notify: (notice: SessionRevokedNotice) => void;
   /** Send them to the login screen. */
   redirect: () => void;
+  /**
+   * Whether the credential this device holds NOW still has a live session.
+   *
+   * better-auth replaces the session outright when two-factor is switched on
+   * or off: a new row and cookie, the old row deleted. The socket was opened
+   * with the old one, so the server's re-check correctly closes it with 4401
+   * — but the device is still signed in, and every other tab of the same
+   * browser shares the new cookie. Signing out there would end the NEW
+   * session too. So ask first; only a clean "no session" signs out. A check
+   * that throws signs out as before: the server has already said revoked.
+   */
+  stillSignedIn?: () => Promise<boolean>;
+  /** Open a fresh socket with the current credential instead of signing out. */
+  resume?: () => void;
 };
 
 // ── the notice the login screen picks up ─────────────────────────────
@@ -78,6 +92,14 @@ export const consumeSessionRevokedNotice = (): SessionRevokedNotice | null => {
 let running: Promise<void> | null = null;
 
 const run = async (deps: SessionRevokedDeps): Promise<void> => {
+  if (deps.stillSignedIn && deps.resume) {
+    const live = await deps.stillSignedIn().catch(() => false);
+    if (live) {
+      deps.resume();
+      return;
+    }
+  }
+
   let pending = 0;
   try {
     pending = await deps.pendingCount();

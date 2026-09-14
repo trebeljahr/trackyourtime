@@ -49,8 +49,13 @@ const PASSWORD_REFUSALS: Record<string, string> = {
  * "Sign out other devices" is on by default: the usual reason to change a
  * password is that someone else might know it. The server deletes every
  * other session, and `ws/session-watch.ts` closes their sockets with 4401.
- * This device gets a fresh session in the same response — on a native shell
- * `auth-client.ts` stores the new token, because the old one is gone.
+ *
+ * That is two requests, not `changePassword`'s own `revokeOtherSessions`.
+ * better-auth's flag deletes THIS session as well and issues a new one, while
+ * the server's after-hook sweeps sockets before the response (and its new
+ * cookie) reaches the browser — so this device's own socket was closed as
+ * revoked and the app signed itself out. `/revoke-other-sessions` keeps the
+ * current session, so nothing here changes credential at all.
  */
 export function ChangePasswordRow({ hasPassword }: { hasPassword: boolean | null }): React.JSX.Element {
   const [open, setOpen] = React.useState(false);
@@ -87,17 +92,30 @@ export function ChangePasswordRow({ hasPassword }: { hasPassword: boolean | null
       .changePassword({
         currentPassword: current,
         newPassword: next,
-        revokeOtherSessions: revokeOthers,
+        revokeOtherSessions: false,
       })
       .catch(() => ({ error: { code: "FAILED" } }));
-    setBusy(false);
     if (refusal) {
+      setBusy(false);
       setError(PASSWORD_REFUSALS[refusal.code ?? ""] ?? "Your password could not be changed. Try again.");
       return;
     }
-    toast.success(
-      revokeOthers ? "Password changed. Other devices are signed out." : "Password changed",
-    );
+    if (revokeOthers) {
+      const { error: revokeRefusal } = await authClient
+        .revokeOtherSessions()
+        .catch(() => ({ error: { code: "FAILED" } }));
+      setBusy(false);
+      if (revokeRefusal) {
+        toast.error("Password changed, but other devices are still signed in", {
+          description: "Sign them out in Settings → Devices.",
+        });
+      } else {
+        toast.success("Password changed. Other devices are signed out.");
+      }
+    } else {
+      setBusy(false);
+      toast.success("Password changed");
+    }
     change(false);
   };
 

@@ -817,11 +817,19 @@ Five rules, each of which fails quietly if broken:
   enabled only on the web app when `health.check` reports
   `authConfig.googleEnabled`, and disabled with a note in Capacitor, Electron
   and Tauri, where the OAuth redirect cannot return to the shell's origin.
-- **Change password with "sign out other devices" deletes every session and
-  makes a new one for the caller**, so a native shell must keep storing only a
-  truthy `set-auth-token` (it gets a fresh one here). The `hooks.after`
-  `sweepSocketsAfterRevocation` sweeps sockets at once; `ws/session-watch.ts`
-  closing them with 4401 within a minute is the guarantee.
+- **Some of these calls replace the caller's own session, and its socket
+  still holds the old one.** better-auth's `changePassword` with
+  `revokeOtherSessions`, and switching two-factor on (the first verify) or
+  off, each create a new session and delete the current one. The server's
+  re-check then closes this device's socket with 4401, and the app used to
+  sign itself out — every tab of the browser, since they share the new cookie.
+  Two answers, both needed: the password row calls `changePassword` without
+  the flag and then `/revoke-other-sessions`, which keeps the current session
+  (the `hooks.after` sweep runs before the response, so a rotated cookie would
+  lose that race); and `lib/session-revoked.ts` asks `getSession` (no cookie
+  cache) before signing out, and on a live session rebuilds the sync client
+  instead. A native shell must keep storing only a truthy `set-auth-token` —
+  the two-factor toggles hand it a fresh one.
 
 Callback URLs in mail and OAuth are built with `webCallbackUrl()` from
 `lib/auth-client.ts`: the API is a different origin, and a relative

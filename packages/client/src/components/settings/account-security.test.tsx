@@ -26,6 +26,7 @@ const verifyTotp = vi.fn<(args: { code: string }) => Promise<Result>>();
 const disable = vi.fn<(args: { password: string }) => Promise<Result>>();
 const changePassword = vi.fn<(args: unknown) => Promise<Result>>();
 const changeEmail = vi.fn<(args: unknown) => Promise<Result>>();
+const revokeOtherSessions = vi.fn<() => Promise<Result>>();
 
 vi.mock("@/components/ui/sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/auth-client", () => ({
@@ -38,6 +39,7 @@ vi.mock("@/lib/auth-client", () => ({
     },
     changePassword: (args: unknown) => changePassword(args),
     changeEmail: (args: unknown) => changeEmail(args),
+    revokeOtherSessions: () => revokeOtherSessions(),
   },
   webCallbackUrl: (path: string) => `http://localhost:3392${path}`,
 }));
@@ -57,6 +59,7 @@ beforeEach(() => {
   disable.mockReset().mockResolvedValue({ data: { status: true }, error: null });
   changePassword.mockReset().mockResolvedValue({ data: { token: null }, error: null });
   changeEmail.mockReset().mockResolvedValue({ data: { status: true }, error: null });
+  revokeOtherSessions.mockReset().mockResolvedValue({ data: { status: true }, error: null });
 });
 
 afterEach(() => cleanup());
@@ -139,17 +142,18 @@ describe("changing the password", () => {
     type("change-password-confirm", "new-password-5678");
   };
 
-  it("signs other devices out by default", async () => {
+  it("signs other devices out by default, keeping this device's session", async () => {
     render(<ChangePasswordRow hasPassword />);
     fill();
     fireEvent.click(screen.getByTestId("change-password-submit"));
-    await waitFor(() =>
-      expect(changePassword).toHaveBeenCalledWith({
-        currentPassword: "password1234",
-        newPassword: "new-password-5678",
-        revokeOtherSessions: true,
-      }),
-    );
+    await waitFor(() => expect(revokeOtherSessions).toHaveBeenCalledTimes(1));
+    // better-auth's own flag would replace this device's session too, and the
+    // socket sweep would then sign this device out.
+    expect(changePassword).toHaveBeenCalledWith({
+      currentPassword: "password1234",
+      newPassword: "new-password-5678",
+      revokeOtherSessions: false,
+    });
   });
 
   it("keeps other devices signed in when unticked", async () => {
@@ -157,11 +161,20 @@ describe("changing the password", () => {
     fill();
     fireEvent.click(screen.getByTestId("change-password-revoke"));
     fireEvent.click(screen.getByTestId("change-password-submit"));
+    await waitFor(() => expect(changePassword).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(changePassword).toHaveBeenCalledWith(
-        expect.objectContaining({ revokeOtherSessions: false }),
-      ),
+      expect(screen.queryByTestId("change-password-dialog")).not.toBeInTheDocument(),
     );
+    expect(revokeOtherSessions).not.toHaveBeenCalled();
+  });
+
+  it("does not sign other devices out when the password was refused", async () => {
+    changePassword.mockResolvedValue({ error: { code: "INVALID_PASSWORD" } });
+    render(<ChangePasswordRow hasPassword />);
+    fill();
+    fireEvent.click(screen.getByTestId("change-password-submit"));
+    await screen.findByRole("alert");
+    expect(revokeOtherSessions).not.toHaveBeenCalled();
   });
 
   it("stays open with a reason when the current password is wrong", async () => {

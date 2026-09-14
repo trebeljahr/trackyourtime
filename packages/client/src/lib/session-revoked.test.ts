@@ -56,6 +56,32 @@ describe("handleSessionRevoked", () => {
     expect(spies.notify).toHaveBeenCalledWith({ pending: 2 });
   });
 
+  it("reconnects instead of signing out when the session was only replaced", async () => {
+    const { calls, spies } = deps();
+    const resume = vi.fn();
+
+    await handleSessionRevoked({ ...spies, stillSignedIn: async () => true, resume });
+
+    // Switching two-factor on or off rotates the session: the socket's old
+    // one is gone, the device's credential is not.
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([]);
+    expect(consumeSessionRevokedNotice()).toBeNull();
+  });
+
+  it("signs out when the current credential is gone too, or cannot be checked", async () => {
+    for (const stillSignedIn of [async () => false, async () => Promise.reject(new Error("offline"))]) {
+      __resetSessionRevokedForTests();
+      const { calls, spies } = deps();
+      const resume = vi.fn();
+
+      await handleSessionRevoked({ ...spies, stillSignedIn, resume });
+
+      expect(resume).not.toHaveBeenCalled();
+      expect(calls).toEqual(["pendingCount", "signOut", "clearToken", "notify", "redirect"]);
+    }
+  });
+
   it("clears the token even when the sign-out request fails", async () => {
     const { spies } = deps();
     // Expected, not exceptional: the session this would end is the one the
