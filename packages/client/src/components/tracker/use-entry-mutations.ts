@@ -91,6 +91,26 @@ type MutationContext = {
  */
 const TRACKER_WRITE_META = { trackerWrite: true } as const;
 
+/*
+ * Starts and stops reach the server one at a time, in the order they were
+ * asked for — across every mounted copy of this hook, since a scope lives in
+ * the mutation cache.
+ *
+ * Both writes act on "whatever is running": a stop carries no id, and a start
+ * ends the running entry before inserting. Both are optimistic, so Stop can be
+ * pressed while the start is still in flight, and under latency the two
+ * requests arrive in either order. A stop that lands first finds nothing
+ * running, and the start then opens the timer the user just stopped; a start
+ * that lands after a later stop does the same in reverse.
+ *
+ * A scope queues the *request* only. `onMutate` still runs the moment the user
+ * acts, so the screen answers at once; a queued mutation is `pending` (and
+ * paused) until the one ahead of it settles, which `refetchWhenQuiet` already
+ * counts as in flight. Offline nothing changes: the write ahead fails fast,
+ * parks itself in the queue, and the next one follows it there in order.
+ */
+const TIMER_SCOPE = { id: "tracker-timer" } as const;
+
 /**
  * A tracker write still in flight that will refetch when it settles itself.
  * A write parked in the offline queue does not (its replay does), so it is
@@ -432,9 +452,39 @@ export const useEntryMutations = (): EntryMutations => {
 
   // ── mutations ──────────────────────────────────────────────────────
 
+  /**
+   * True while a start or stop the user asked for after this one is waiting
+   * for it. `self` is counted: a mutation stays `pending` until its own
+   * callbacks have returned.
+   */
+  const timerWriteQueuedBehind = React.useCallback(
+    (): boolean =>
+      queryClient.getMutationCache().findAll({
+        status: "pending",
+        predicate: (mutation) => mutation.options.scope?.id === TIMER_SCOPE.id,
+      }).length > 1,
+    [queryClient]
+  );
+
+  const retargetQueuedStops = React.useCallback(
+    (tempId: string, entry: TimeEntry): void => {
+      for (const mutation of queryClient.getMutationCache().findAll({
+        status: "pending",
+        predicate: (m) => m.options.scope?.id === TIMER_SCOPE.id,
+      })) {
+        const context = mutation.state.context as MutationContext | undefined;
+        if (context?.runningAtStop?.id !== tempId) continue;
+        context.runningAtStop = entry;
+        context.tempId = undefined;
+      }
+    },
+    [queryClient]
+  );
+
   const startMutation = trpc.entries.start.useMutation({
     ...OFFLINE_QUEUED_MUTATION,
     meta: TRACKER_WRITE_META,
+    scope: TIMER_SCOPE,
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as StartInput;
       const context = await snapshot();
@@ -464,8 +514,38 @@ export const useEntryMutations = (): EntryMutations => {
     onSuccess: (entry, _raw, context) => {
       announceReplacedTimer(entry);
       if (!stillInWorkspace(context)) return;
-      if (context?.tempId) replaceEntry(context.tempId, toDetailed(entry));
-      utils.entries.current.setData(undefined, entry);
+      const tempId = context?.tempId;
+      if (timerWriteQueuedBehind()) {
+        /*
+         * A stop or another start was pressed while this one was in flight.
+         * Its `onMutate` has already ended the temp row on screen and moved
+         * `current` on, and its request goes out as soon as this callback
+         * returns. Adopting the server's running entry here would put the
+         * stopped timer back on screen until that request answers — so the row
+         * only learns its real id, and keeps the end it was given.
+         */
+        const row =
+          tempId === undefined
+            ? undefined
+            : utils.entries.list
+                .getInfiniteData(TRACKER_LIST_INPUT)
+                ?.pages.flatMap((page) => page.entries)
+                .find((candidate) => candidate.id === tempId);
+        if (tempId !== undefined && row !== undefined) {
+          replaceEntry(
+            tempId,
+            row.end === null ? toDetailed(entry) : stopShape(entry, row.end)
+          );
+        }
+        // The stop waiting behind resolved its target to the temp id. Name the
+        // real entry instead, so that if it fails offline it is queued with an
+        // `id` rather than as "stop whatever is running" with a temp id no
+        // queued start will ever resolve.
+        if (tempId !== undefined) retargetQueuedStops(tempId, entry);
+      } else {
+        if (tempId) replaceEntry(tempId, toDetailed(entry));
+        utils.entries.current.setData(undefined, entry);
+      }
       // A rename of the claim, never a fresh one: the detector can fire while
       // the start is still in flight, and re-claiming here would discard what
       // it decided — which is how a pause-and-resume lost the resume it was
@@ -494,6 +574,7 @@ export const useEntryMutations = (): EntryMutations => {
   const stopMutation = trpc.entries.stop.useMutation({
     ...OFFLINE_QUEUED_MUTATION,
     meta: TRACKER_WRITE_META,
+    scope: TIMER_SCOPE,
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as OfflineStopInput;
       const context = await snapshot();
@@ -830,7 +911,9 @@ export const useEntryMutations = (): EntryMutations => {
     (end?: string): void => {
       // No `id`, even when idle detection knows one: the server stops whatever
       // is running, which is what a replayed offline stop has to do too, and
-      // an entry started offline has no server id to name yet.
+      // an entry started offline has no server id to name yet. That is only
+      // safe because `TIMER_SCOPE` holds this request until any start ahead of
+      // it has answered.
       const input: OfflineStopInput = { end: end ?? nowIso(), originId: ORIGIN_ID };
       // Deliberately not inside `stopMutation.onMutate`: `splitAtIdle` stops
       // through the same mutation while the watcher is holding a resume, and

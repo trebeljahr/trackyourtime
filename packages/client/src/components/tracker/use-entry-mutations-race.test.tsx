@@ -31,6 +31,12 @@ vi.mock("@/components/ui/sonner", () => ({
   toast: { error: vi.fn(), message: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
 
+const enqueueOffline = vi.fn(async (): Promise<void> => undefined);
+vi.mock("@/lib/offline", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/offline")>()),
+  enqueueOffline,
+}));
+
 vi.mock("@/lib/running-mirror", () => ({
   writeRunningMirror: async (): Promise<void> => undefined,
 }));
@@ -51,13 +57,19 @@ type Mutations = ReturnType<typeof useEntryMutations>;
 
 // ── the fake server ──────────────────────────────────────────────────
 
-type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void };
+type Deferred<T> = {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+};
 const deferred = <T,>(): Deferred<T> => {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 };
 
 const entry = (over: Partial<DetailedEntry>): DetailedEntry =>
@@ -86,6 +98,8 @@ let listCalls = 0;
 /** Mutations the spec wants to hold open, keyed by procedure path. */
 const held = new Map<string, Deferred<unknown>>();
 const heldCalls = new Map<string, number>();
+/** Held procedures in the order their requests left the client. */
+let callOrder: string[] = [];
 
 const answer = (path: string): Promise<unknown> => {
   switch (path) {
@@ -96,6 +110,7 @@ const answer = (path: string): Promise<unknown> => {
       return Promise.resolve(serverEntries.find((e) => e.end === null) ?? null);
     default: {
       heldCalls.set(path, (heldCalls.get(path) ?? 0) + 1);
+      callOrder.push(path);
       const hold = held.get(path);
       if (hold === undefined) throw new Error(`unexpected call to ${path}`);
       return hold.promise;
@@ -141,7 +156,7 @@ function Probe(): React.ReactElement {
   React.useEffect(() => {
     mutations = hook;
   }, [hook]);
-  trpc.entries.current.useQuery(undefined);
+  const current = trpc.entries.current.useQuery(undefined);
   const list = trpc.entries.list.useInfiniteQuery(TRACKER_LIST_INPUT, {
     getNextPageParam: (page: { nextCursor?: string }) => page.nextCursor,
   });
@@ -149,13 +164,16 @@ function Probe(): React.ReactElement {
     (page: { entries: DetailedEntry[] }) => page.entries
   );
   return (
-    <ul data-testid="rows">
-      {rows.map((row: DetailedEntry) => (
-        <li key={row.id} data-testid={row.end === null ? "running" : "stopped"}>
-          {row.description}
-        </li>
-      ))}
-    </ul>
+    <>
+      <output data-testid="current">{current.data?.id ?? ""}</output>
+      <ul data-testid="rows">
+        {rows.map((row: DetailedEntry) => (
+          <li key={row.id} data-testid={row.end === null ? "running" : "stopped"}>
+            {row.description}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -187,6 +205,8 @@ beforeEach(() => {
   listCalls = 0;
   held.clear();
   heldCalls.clear();
+  callOrder = [];
+  enqueueOffline.mockClear();
   mutations = null;
 });
 
@@ -213,8 +233,11 @@ describe("entry mutations racing each other", () => {
     act(() =>
       mutations?.startTimer({ description: "After", projectId: null, billable: false })
     );
-    await waitFor(() => expect(heldCalls.get("entries.start")).toBe(1));
-    expect(screen.getByTestId("running").textContent).toBe("After");
+    // On screen at once, but the request waits for the stop ahead of it.
+    await waitFor(() =>
+      expect(screen.getByTestId("running").textContent).toBe("After")
+    );
+    expect(heldCalls.get("entries.start")).toBeUndefined();
 
     // The stop commits and answers. The start has not reached the database,
     // so any list read from here on is from before it.
@@ -223,6 +246,7 @@ describe("entry mutations racing each other", () => {
     await act(async () => {
       stop.resolve(stoppedAt(running, stopEnd));
     });
+    await waitFor(() => expect(heldCalls.get("entries.start")).toBe(1));
     await waitFor(() => expect(queryClient.isMutating()).toBe(1));
     // Past the macrotask on which a settled write decides whether to refetch.
     await act(async () => {
@@ -261,10 +285,10 @@ describe("entry mutations racing each other", () => {
     act(() =>
       mutations?.startTimer({ description: "After", projectId: null, billable: false })
     );
-    await waitFor(() => expect(heldCalls.get("entries.start")).toBe(1));
+    await waitFor(() => expect(queryClient.isMutating()).toBe(2));
 
-    // Each write sees the other still pending when it settles; neither may
-    // conclude that the other will refetch.
+    // Both answers are ready before either is read; neither write may conclude
+    // that the other will refetch.
     const stopEnd = new Date().toISOString();
     const started = entry({ id: "e2", description: "After", start: stopEnd });
     serverEntries = [started, entry(stoppedAt(running, stopEnd))];
@@ -298,6 +322,102 @@ describe("entry mutations racing each other", () => {
     await settleAll();
 
     expect(listCalls).toBeGreaterThan(callsBeforeStop);
+    expect(screen.queryByTestId("running")).toBeNull();
+  });
+});
+
+describe("a stop pressed while the start is still in flight", () => {
+  const idle = entry({
+    id: "e1",
+    description: "Before",
+    start: new Date(Date.now() - 600_000).toISOString(),
+    end: new Date(Date.now() - 300_000).toISOString(),
+    durationSec: 300,
+  });
+
+  /** Start, then Stop before the start has answered. */
+  const startThenStop = async (): Promise<{
+    start: Deferred<unknown>;
+    stop: Deferred<unknown>;
+  }> => {
+    serverEntries = [idle];
+    mount();
+    await screen.findByText("Before");
+
+    const start = deferred<unknown>();
+    const stop = deferred<unknown>();
+    held.set("entries.start", start);
+    held.set("entries.stop", stop);
+
+    act(() =>
+      mutations?.startTimer({ description: "After", projectId: null, billable: false })
+    );
+    await waitFor(() => expect(heldCalls.get("entries.start")).toBe(1));
+    act(() => mutations?.stopTimer());
+
+    // The screen answers the click at once; the request waits its turn.
+    await waitFor(() => expect(screen.queryByTestId("running")).toBeNull());
+    expect(screen.getByTestId("current").textContent).toBe("");
+    expect(heldCalls.get("entries.stop")).toBeUndefined();
+    return { start, stop };
+  };
+
+  it("sends the stop only after the start has answered, and never shows the timer again", async () => {
+    const { start, stop } = await startThenStop();
+
+    // The start commits late. Only now may the id-less stop go out, or it
+    // would find nothing running and the start would open a timer after it.
+    const started = entry({ id: "e2", description: "After", start: new Date().toISOString() });
+    serverEntries = [started, idle];
+    await act(async () => {
+      start.resolve(started);
+    });
+    await waitFor(() => expect(heldCalls.get("entries.stop")).toBe(1));
+    expect(callOrder).toEqual(["entries.start", "entries.stop"]);
+
+    // Between the two answers the stopped timer must not come back.
+    expect(screen.queryByTestId("running")).toBeNull();
+    expect(screen.getByTestId("current").textContent).toBe("");
+
+    const end = new Date().toISOString();
+    const stopped = { ...started, end, durationSec: 0 } as TimeEntry;
+    serverEntries = [entry(stopped), idle];
+    await act(async () => {
+      stop.resolve(stopped);
+    });
+    await settleAll();
+
+    expect(screen.queryByTestId("running")).toBeNull();
+    expect(screen.getByTestId("current").textContent).toBe("");
+    expect(screen.getAllByTestId("stopped").map((row) => row.textContent)).toEqual([
+      "After",
+      "Before",
+    ]);
+  });
+
+  it("queues a stop that loses the network with the id the start was given", async () => {
+    const { start, stop } = await startThenStop();
+
+    const started = entry({ id: "e2", description: "After", start: new Date().toISOString() });
+    serverEntries = [started, idle];
+    await act(async () => {
+      start.resolve(started);
+    });
+    await waitFor(() => expect(heldCalls.get("entries.stop")).toBe(1));
+
+    await act(async () => {
+      stop.reject(new TypeError("Failed to fetch"));
+    });
+    await waitFor(() => expect(enqueueOffline).toHaveBeenCalledTimes(1));
+
+    const [op, input, tempId] = enqueueOffline.mock.calls[0] as unknown as [
+      string,
+      { id?: string },
+      string | undefined,
+    ];
+    expect(op).toBe("entries.stop");
+    expect(input.id).toBe("e2");
+    expect(tempId).toBeUndefined();
     expect(screen.queryByTestId("running")).toBeNull();
   });
 });
