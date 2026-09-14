@@ -7,6 +7,7 @@
 // The workspace IS a better-auth organization — the same id from the very
 // first migration, so inviting people into it later never reissues workspace
 // ids.
+import { randomBytes } from "node:crypto";
 import type { WorkspaceRole } from "@starter/shared";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 
@@ -46,6 +47,30 @@ export function personalWorkspaceSlug(user: WorkspaceOwner): string {
 export function personalWorkspaceName(user: WorkspaceOwner): string {
   const who = (user.name ?? "").trim() || (user.email ?? "").split("@")[0] || "My";
   return `${who}'s workspace`;
+}
+
+/** How many fresh slugs a creation tries after the deterministic one is taken. */
+const SLUG_RETRIES = 3;
+
+/** True for better-auth's "that slug is taken" refusal from createOrganization. */
+function isSlugTaken(error: unknown): boolean {
+  const body = (error as { body?: { code?: unknown } } | null)?.body;
+  return body?.code === "ORGANIZATION_ALREADY_EXISTS";
+}
+
+/**
+ * The deterministic slug with a random tail, for when that slug is taken.
+ *
+ * It is taken whenever this person already HAD a personal workspace that is
+ * no longer theirs: they handed it over and left it (so they are in no
+ * workspace at all), or an earlier creation wrote the organization and died
+ * before the mirror. Slugs are global and never freed, so retrying the same
+ * one would fail forever — and with it every request that needs a workspace.
+ */
+export function retrySlug(user: WorkspaceOwner): string {
+  const tail = randomBytes(4).toString("hex");
+  const base = personalWorkspaceSlug(user).slice(0, MAX_SLUG_LENGTH - tail.length - 1);
+  return `${base}-${tail}`;
 }
 
 /**
@@ -107,13 +132,21 @@ export async function createPersonalWorkspace(
   user: WorkspaceOwner,
 ): Promise<string | null> {
   try {
-    const organization = await api.createOrganization({
-      body: {
-        name: personalWorkspaceName(user),
-        slug: personalWorkspaceSlug(user),
-        userId: user.id,
-      },
-    });
+    let organization: { id?: unknown } | null = null;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        organization = await api.createOrganization({
+          body: {
+            name: personalWorkspaceName(user),
+            slug: attempt === 0 ? personalWorkspaceSlug(user) : retrySlug(user),
+            userId: user.id,
+          },
+        });
+        break;
+      } catch (error) {
+        if (!isSlugTaken(error) || attempt >= SLUG_RETRIES) throw error;
+      }
+    }
 
     const workspaceId = organization?.id ? String(organization.id) : null;
     if (!workspaceId) return null;
