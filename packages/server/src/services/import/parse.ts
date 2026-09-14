@@ -10,7 +10,11 @@ import {
   IMPORT_DAY_START_HOUR,
   MAX_IMPORT_ENTRY_SEC,
   dayKeyInZone,
+  issuerSnapshot,
+  normalizeClientBilling,
   zonedWallClockToMs,
+  type ClientBilling,
+  type InvoiceIssuer,
   type ImportColumn,
   type ImportColumnRole,
   type ImportDateOrder,
@@ -478,6 +482,7 @@ export function workspaceJsonCatalog(text: string): WorkspaceExport | null {
   if (!Array.isArray(doc.entries)) return null;
 
   const settings = readExportSettings(doc.settings);
+  const businessProfile = readExportBusinessProfile(doc.businessProfile);
 
   return {
     // Whether the money in this file was blanked on the way out. Carried
@@ -497,6 +502,7 @@ export function workspaceJsonCatalog(text: string): WorkspaceExport | null {
     workspaceId: String(doc.workspaceId ?? ""),
     currency: String(doc.currency ?? "EUR"),
     ...(settings ? { settings } : {}),
+    ...(businessProfile ? { businessProfile } : {}),
     clients: readExportClients(doc.clients),
     projects: readExportProjects(doc.projects),
     tasks: readExportTasks(doc.tasks),
@@ -575,10 +581,68 @@ function readExportClients(value: unknown): WorkspaceExportClient[] {
   return objects(value).flatMap((row) => {
     const name = text(row.name, 120);
     if (name === "") return [];
+    const billing = readExportBilling(row.billing);
     return [
-      { name, color: text(row.color, 32), archived: flag(row.archived, false) },
+      {
+        name,
+        color: text(row.color, 32),
+        archived: flag(row.archived, false),
+        ...(billing ? { billing } : {}),
+      },
     ];
   });
+}
+
+/** Postal identity fields, each read as text and cut to the model's limit. */
+const readPostalFields = (row: Record<string, unknown>) => ({
+  legalName: text(row.legalName, 200),
+  addressLines: Array.isArray(row.addressLines)
+    ? row.addressLines.slice(0, 4).map((line) => text(line, 200))
+    : [],
+  postalCode: text(row.postalCode, 20),
+  city: text(row.city, 120),
+  // Anything but two letters is not a country code this app can print.
+  country: /^[A-Za-z]{2}$/.test(text(row.country, 8)) ? text(row.country, 8) : "",
+  taxId: text(row.taxId, 60),
+  email: text(row.email, 254),
+});
+
+/**
+ * A client's billing subdocument, or nothing. Every field is optional, so a
+ * malformed one degrades to blank rather than dropping the client.
+ */
+export function readExportBilling(value: unknown): ClientBilling | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  return normalizeClientBilling({
+    ...readPostalFields(row),
+    reference: text(row.reference, 120),
+  });
+}
+
+/** The business profile section, or nothing when absent or all blank. */
+export function readExportBusinessProfile(
+  value: unknown,
+): InvoiceIssuer | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const row = value as Record<string, unknown>;
+  const terms = row.paymentTermsDays;
+  const issuer = issuerSnapshot({
+    ...readPostalFields(row),
+    phone: text(row.phone, 40),
+    website: text(row.website, 200),
+    paymentDetails: text(row.paymentDetails, 1_000),
+    paymentTermsDays:
+      typeof terms === "number" && Number.isInteger(terms) && terms >= 0 && terms <= 365
+        ? terms
+        : null,
+    invoiceFooter: text(row.invoiceFooter, 500),
+  });
+  return issuer ?? undefined;
 }
 
 function readExportProjects(value: unknown): WorkspaceExportProject[] {

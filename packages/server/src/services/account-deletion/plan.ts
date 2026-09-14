@@ -31,6 +31,7 @@ export type DeletionCollection =
   | "webhookSubscriptions"
   | "webhookDeliveries"
   | "workspaceSettings"
+  | "businessProfiles"
   | "workspaceMembers"
   | "userPreferences"
   | "profiles"
@@ -143,6 +144,10 @@ export function workspaceDeletionSteps(workspaceId: string): DeletionStep[] {
     scoped("projects"),
     scoped("clients"),
     scoped("workspaceSettings"),
+    // The issuer identity printed on the workspace's invoices. Workspace
+    // scoped like its settings: it goes with a solo workspace and stays with
+    // a shared one, whose invoices keep their own frozen copy regardless.
+    scoped("businessProfiles"),
     { collection: "authInvitations", filter: { organizationId: workspaceId } },
     { collection: "authOrganizations", filter: { id: workspaceId } },
     { collection: "authMembers", filter: { organizationId: workspaceId } },

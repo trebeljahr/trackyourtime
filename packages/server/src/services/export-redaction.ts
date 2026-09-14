@@ -116,17 +116,30 @@ export function redactExportMoney(
       }))
     : document.invoices;
 
+  // The business profile carries payment details, and reading it takes what
+  // reading money takes (`settings.businessProfile`). The snapshots on each
+  // invoice go for the same reason — the issuer's copy carries them too.
+  const { businessProfile: _profile, ...rest } = document;
+  void _profile;
+  const strippedInvoices = invoices?.map(
+    ({ issuer: _issuer, recipient: _recipient, ...invoice }) => {
+      void _issuer;
+      void _recipient;
+      return invoice;
+    },
+  );
+
   // Stamped so a restore cannot read "every rate is null" as "this workspace
   // never billed anything". A redacted export is a real backup of times and
   // catalog and an incomplete one of money, and the file says which it is
   // rather than leaving that to be discovered. The importer reads it back and
   // the preview states it before anything is written — see `ImportSections`.
   return {
-    ...document,
+    ...rest,
     moneyRedacted: true,
     settings,
     projects,
     entries,
-    invoices,
+    invoices: strippedInvoices,
   };
 }

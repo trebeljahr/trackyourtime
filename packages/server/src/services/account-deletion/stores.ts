@@ -1,6 +1,7 @@
 // The two real row stores behind `deleteAccountData`.
 import type { Model } from "mongoose";
 import { ApiToken } from "../../models/ApiToken.js";
+import { BusinessProfileModel } from "../../models/BusinessProfile.js";
 import { Client } from "../../models/Client.js";
 import { Favorite } from "../../models/Favorite.js";
 import { ImportBatch } from "../../models/ImportBatch.js";
@@ -43,6 +44,7 @@ const APP_MODELS: Record<AppCollection, Model<any>> = {
   webhookSubscriptions: WebhookSubscription,
   webhookDeliveries: WebhookDelivery,
   workspaceSettings: WorkspaceSettingsModel,
+  businessProfiles: BusinessProfileModel,
   workspaceMembers: WorkspaceMember,
   userPreferences: UserPreferencesModel,
   profiles: Profile,

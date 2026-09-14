@@ -137,6 +137,10 @@ const seed = (): NonNullable<Parameters<typeof memoryRowStore>[0]> => ({
     { workspaceId: TEAM },
     { workspaceId: BOBS },
   ],
+  businessProfiles: [
+    { workspaceId: SOLO, legalName: "Alice Solo" },
+    { workspaceId: TEAM, legalName: "Team Ltd" },
+  ],
   userPreferences: [{ userId: ALICE }, { userId: BOB }],
   profiles: [{ userId: ALICE }, { userId: BOB }],
 });
@@ -238,6 +242,11 @@ describe("deleteAccountData", () => {
     assert.deepEqual(
       (store.rows.workspaceSettings ?? []).map((row) => row.workspaceId).sort(),
       [BOBS, TEAM],
+    );
+    // The shared workspace keeps its issuer profile; the solo one's is gone.
+    assert.deepEqual(
+      (store.rows.businessProfiles ?? []).map((row) => row.workspaceId),
+      [TEAM],
     );
     // Her pins, tokens, webhooks (with their deliveries) and imports go.
     assert.deepEqual(ids(store, "favorites"), ["f3"]);

@@ -24,9 +24,14 @@ import {
   WORKSPACE_EXPORT_VERSION,
   importInputSchema,
   importUndoSchema,
+  issuerSnapshot,
+  normalizeBusinessProfile,
+  normalizeClientBilling,
+  normalizeRecipient,
   resolveHourlyRate,
   resolveTimeZone,
   workspaceExportSchema,
+  type ClientBilling,
   type ImportBatchSummary,
   type ImportColumnRole,
   type ImportInput,
@@ -45,6 +50,10 @@ import {
   type WorkspaceExportInvoice,
   type WorkspaceRole,
 } from "@starter/shared";
+import {
+  BusinessProfileModel,
+  saveBusinessProfile,
+} from "../../models/BusinessProfile.js";
 import { Client, DEFAULT_CLIENT_COLOR } from "../../models/Client.js";
 import { Favorite } from "../../models/Favorite.js";
 import { ImportBatch, toClientImportBatch } from "../../models/ImportBatch.js";
@@ -335,6 +344,8 @@ function missingNames(
 /** Catalog settings a JSON export carries that a delimited file cannot. */
 type CatalogHints = {
   clientColor: Map<string, string>;
+  /** Billing details for a client the import creates; never onto an existing one. */
+  clientBilling: Map<string, ClientBilling>;
   projectColor: Map<string, string>;
   projectRate: Map<string, number | null>;
   projectBillable: Map<string, boolean>;
@@ -356,6 +367,7 @@ type ProjectExtras = {
 
 const emptyHints = (): CatalogHints => ({
   clientColor: new Map(),
+  clientBilling: new Map(),
   projectColor: new Map(),
   projectRate: new Map(),
   projectBillable: new Map(),
@@ -373,6 +385,10 @@ function hintsFromDoc(doc: WorkspaceExport | null): CatalogHints {
   for (const client of doc.clients) {
     if (client?.name && client.color) {
       hints.clientColor.set(lower(client.name), client.color);
+    }
+    const billing = client?.name ? normalizeClientBilling(client.billing) : null;
+    if (client?.name && billing) {
+      hints.clientBilling.set(lower(client.name), billing);
     }
   }
   for (const project of doc.projects) {
@@ -440,13 +456,19 @@ async function restoreWorkspaceSettings(args: {
   }
 
   const fields = settingsRestoreFields(doc);
-  if (Object.keys(fields).length === 0) return false;
+  const profile = doc.businessProfile;
+  if (Object.keys(fields).length === 0 && !profile) return false;
 
-  await WorkspaceSettingsModel.updateOne(
-    { workspaceId },
-    { $set: fields },
-    { upsert: true },
-  );
+  if (Object.keys(fields).length > 0) {
+    await WorkspaceSettingsModel.updateOne(
+      { workspaceId },
+      { $set: fields },
+      { upsert: true },
+    );
+  }
+  // Replaced whole, like `settings.updateBusinessProfile` does. A file that
+  // states no profile leaves the destination's alone — absence is "not said".
+  if (profile) await saveBusinessProfile(workspaceId, profile);
   void publishSync(workspaceId, { kind: "settings.changed" }, originId);
   return true;
 }
@@ -529,7 +551,10 @@ const sectionsOf = (doc: WorkspaceExport | null): ImportSections => ({
   // a `settings` key: a v1 file has no such section and still names a
   // currency, which is restorable. A preview must promise what would actually
   // be written, or approving it means nothing.
-  settings: doc ? Object.keys(settingsRestoreFields(doc)).length > 0 : false,
+  settings: doc
+    ? Object.keys(settingsRestoreFields(doc)).length > 0 ||
+      doc.businessProfile !== undefined
+    : false,
   favorites: doc?.favorites?.length ?? 0,
   invoices: doc?.invoices?.length ?? 0,
 });
@@ -584,10 +609,12 @@ async function createMissingCatalog(args: {
   let colorSeed = catalog.clients.size;
   for (const [key, name] of clientNames) {
     if (catalog.clients.has(key)) continue;
+    const billing = hints.clientBilling.get(key);
     const doc = await Client.create({
       workspaceId,
       createdBy,
       name,
+      ...(billing ? { billing } : {}),
       color:
         hints.clientColor.get(key) ??
         pickCatalogColor(colorSeed) ??
@@ -771,6 +798,7 @@ async function buildWorkspaceExport(args: {
     settings,
     catalogFavorites,
     catalogInvoices,
+    businessProfile,
   ] = await Promise.all([
     Client.find({ workspaceId }).lean(),
     Project.find({ workspaceId }).lean(),
@@ -803,6 +831,11 @@ async function buildWorkspaceExport(args: {
       // the newest invoices out of a file that still reads as a full backup.
       .limit(MAX_EXPORT_INVOICES + 1)
       .lean(),
+    // Omitted from the file while empty, so "never filled in" and "not
+    // stated" read the same on the way back in: neither overwrites anything.
+    BusinessProfileModel.findOne({ workspaceId })
+      .lean()
+      .then((doc) => issuerSnapshot(doc) ?? undefined),
   ]);
 
   const clientNameById = new Map(
@@ -904,6 +937,10 @@ async function buildWorkspaceExport(args: {
       total: invoice.total,
       currency: invoice.currency,
       notes: invoice.notes ?? null,
+      ...(invoice.issuer ? { issuer: normalizeBusinessProfile(invoice.issuer) } : {}),
+      ...(invoice.recipient
+        ? { recipient: normalizeRecipient(invoice.recipient) }
+        : {}),
       createdAt: invoice.createdAt.toISOString(),
       // `entryIds` is deliberately absent: an entry has no identity in this
       // format, so exporting them would write ids that address nothing —
@@ -923,11 +960,16 @@ async function buildWorkspaceExport(args: {
       defaultHourlyRate: settings.defaultHourlyRate,
       weekStartsOn: settings.weekStartsOn,
     },
-    clients: catalogClients.map((client) => ({
-      name: client.name,
-      color: client.color,
-      archived: client.archived,
-    })),
+    ...(businessProfile ? { businessProfile } : {}),
+    clients: catalogClients.map((client) => {
+      const billing = normalizeClientBilling(client.billing);
+      return {
+        name: client.name,
+        color: client.color,
+        archived: client.archived,
+        ...(billing ? { billing } : {}),
+      };
+    }),
     projects: catalogProjects.map((project) => ({
       name: project.name,
       color: project.color,

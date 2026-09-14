@@ -15,6 +15,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
+  InvoiceIssuer,
   Visibility,
   WorkspaceExport,
   WorkspaceExportClient,
@@ -85,6 +86,7 @@ const visibility = (
  * it, so a fixture forced to set it could not represent one.
  */
 type ExhaustiveExport = Required<Omit<WorkspaceExport, "moneyRedacted">> & {
+  businessProfile: InvoiceIssuer;
   /** Typed `undefined` rather than dropped: readable, and impossible to set. */
   moneyRedacted?: undefined;
   settings: Required<WorkspaceExportSettings>;
@@ -105,7 +107,37 @@ const fixture = (): ExhaustiveExport => ({
   workspaceId: "workspace-1",
   currency: "EUR",
   settings: { defaultHourlyRate: 95, weekStartsOn: 1 },
-  clients: [{ name: "Internal", color: "#111111", archived: false }],
+  businessProfile: {
+    legalName: "Alice Consulting",
+    addressLines: ["Hauptstr. 1"],
+    postalCode: "10115",
+    city: "Berlin",
+    country: "DE",
+    taxId: "DE123456789",
+    email: "billing@example.com",
+    phone: null,
+    website: null,
+    paymentDetails: "IBAN DE00 0000 0000 0000",
+    paymentTermsDays: 14,
+    invoiceFooter: null,
+  },
+  clients: [
+    {
+      name: "Internal",
+      color: "#111111",
+      archived: false,
+      billing: {
+        legalName: "Internal GmbH",
+        addressLines: ["Weg 2"],
+        postalCode: "20095",
+        city: "Hamburg",
+        country: "DE",
+        taxId: null,
+        email: null,
+        reference: "PO-7",
+      },
+    },
+  ],
   projects: [
     {
       name: "tracktime",
@@ -222,10 +254,43 @@ const fixture = (): ExhaustiveExport => ({
       total: 214.2,
       currency: "EUR",
       notes: null,
+      issuer: {
+        legalName: "Alice Consulting",
+        addressLines: [],
+        postalCode: null,
+        city: "Berlin",
+        country: null,
+        taxId: null,
+        email: null,
+        phone: null,
+        website: null,
+        paymentDetails: "IBAN DE00 0000 0000 0000",
+        paymentTermsDays: 14,
+        invoiceFooter: null,
+      },
+      recipient: {
+        name: "Internal",
+        legalName: null,
+        addressLines: [],
+        postalCode: null,
+        city: "Hamburg",
+        country: null,
+        taxId: null,
+        email: null,
+        reference: null,
+      },
       createdAt: "2026-09-01T09:00:00.000Z",
     },
   ],
 });
+
+/**
+ * Sections a redaction removes whole rather than blanking. The business
+ * profile and the parties frozen on each invoice carry payment details, and
+ * reading them takes the money flag, so a redacted file does not state them
+ * at all — and an import reads their absence as "not said".
+ */
+const IDENTITY_PATH = /^(businessProfile|invoices\[\d+\]\.(issuer|recipient))(\.|\[|$)/;
 
 /** Both configurations that are refused money, run through every rule below. */
 const REDACTED_VIEWERS: readonly Visibility[] = [
@@ -307,7 +372,9 @@ test("redaction blanks fields and never drops them", () => {
   // A missing key and a null one read differently on the way back in, and a
   // redaction that silently changed the SHAPE of the document would break the
   // round trip rather than just the amounts.
-  const before = leavesOf(fixture()).map((leaf) => leaf.path);
+  const before = leavesOf(fixture())
+    .map((leaf) => leaf.path)
+    .filter((path) => !IDENTITY_PATH.test(path));
   const after = leavesOf(
     redactExportMoney(fixture(), visibility(true, false)),
   ).map((leaf) => leaf.path);
@@ -343,6 +410,20 @@ test("redaction takes the money and nothing else", () => {
   assert.equal(redacted.invoices?.[0]?.lineItems[0]?.hours, 1.5);
   assert.equal(redacted.invoices?.[0]?.lineItems[0]?.seconds, 5400);
   assert.equal(redacted.invoices?.[0]?.currency, "EUR");
+});
+
+test("a redacted export states no business profile and no invoice parties", () => {
+  for (const viewer of REDACTED_VIEWERS) {
+    const redacted = redactExportMoney(fixture(), viewer);
+    assert.equal("businessProfile" in redacted, false);
+    assert.equal("issuer" in (redacted.invoices?.[0] ?? {}), false);
+    assert.equal("recipient" in (redacted.invoices?.[0] ?? {}), false);
+    // A client's billing address is catalog, not money: it survives.
+    assert.equal(redacted.clients[0]?.billing?.reference, "PO-7");
+  }
+  const kept = redactExportMoney(fixture(), visibility(true, true));
+  assert.equal(kept.businessProfile?.taxId, "DE123456789");
+  assert.equal(kept.invoices?.[0]?.issuer?.city, "Berlin");
 });
 
 test("a redacted budget loses its currency with its amount", () => {
