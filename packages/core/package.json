@@ -24,14 +24,14 @@
   },
   "dependencies": {
     "@starter/shared": "workspace:*",
-    "zod": "^4.4.3",
+    "zod": "^4.6.2",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@types/node": "^25.8.0",
     "@types/ws": "^8.18.1",
-    "tsx": "^4.22.0",
+    "tsx": "^4.23.13",
     "typescript": "^6.0.3",
-    "ws": "^8.18.3"
+    "ws": "^8.21.3"
   }
 }
