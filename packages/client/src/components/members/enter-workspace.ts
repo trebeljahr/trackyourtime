@@ -1,4 +1,4 @@
-import { ACTIVE_WORKSPACE_STORAGE_KEY } from "@starter/shared";
+import { chooseWorkspaceForNextLoad } from "@/lib/active-workspace";
 
 /** Where somebody lands after joining or leaving a workspace. */
 export const WORKSPACE_LANDING = "/track/";
@@ -20,17 +20,19 @@ export const assignLocation: Navigate = (href) => {
  * other's permissions until each happened to refetch. A reload starts every
  * one of them from the stored choice.
  *
- * The id is written before the navigation so the next page load reads it.
- * Storage can throw (private mode, a WebView with storage disabled); the
- * server has already moved the session to the same workspace, so a failed
+ * The id is stored before the navigation so the next page load reads it,
+ * through `lib/active-workspace.ts` — the same store the tRPC link, the
+ * switcher and the offline queue read, which is Preferences on the native
+ * shells. Storage can throw (private mode, a WebView with storage disabled);
+ * the server has already moved the session to the same workspace, so a failed
  * write still lands in the right place and is not worth blocking on.
  */
-export const enterWorkspace = (
+export const enterWorkspace = async (
   workspaceId: string,
   navigate: Navigate = assignLocation,
-): void => {
+): Promise<void> => {
   try {
-    window.localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, workspaceId);
+    await chooseWorkspaceForNextLoad(workspaceId);
   } catch {
     // See above: the session already points at this workspace.
   }

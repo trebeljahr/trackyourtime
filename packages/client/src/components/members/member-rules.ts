@@ -82,15 +82,23 @@ export const leaveBlockFor = (
 };
 
 /**
- * The workspace this client is working in, until the switcher exists.
+ * The workspace the screens are showing: the one this device's requests are
+ * addressed to (`activeId`, from `lib/active-workspace.ts`), so the
+ * permissions the Members screen, Settings → Workspace, the nav and Reports
+ * draw from are the permissions every request is actually checked against.
  *
- * Every request that names no workspace resolves to the session default on the
- * server, so that is the one whose permissions describe what the screens are
- * showing. The first row is only a fallback for a list that marks none.
+ * Before the device has resolved a workspace, requests name none and the
+ * server answers with the session default — so that is the fallback, and the
+ * first row only for a list that marks none.
  */
 export const pickActiveWorkspace = (
   list: readonly WorkspaceSummary[] | undefined,
-): WorkspaceSummary | null => list?.find((row) => row.isDefault) ?? list?.[0] ?? null;
+  activeId: string | null = null,
+): WorkspaceSummary | null =>
+  (activeId === null ? undefined : list?.find((row) => row.id === activeId)) ??
+  list?.find((row) => row.isDefault) ??
+  list?.[0] ??
+  null;
 
 /**
  * Whether Reports offers the member filter and "group by member".

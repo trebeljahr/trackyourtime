@@ -52,7 +52,7 @@ export function LeaveWorkspace({
     setPending(true);
     try {
       const { nextWorkspaceId } = await onLeave();
-      enterWorkspace(nextWorkspaceId, navigate);
+      await enterWorkspace(nextWorkspaceId, navigate);
     } catch (failure) {
       toast.error(membershipErrorMessage(failure));
       setPending(false);

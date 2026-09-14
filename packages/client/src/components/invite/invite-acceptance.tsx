@@ -327,7 +327,7 @@ function InvitationBody({
     setJoining(true);
     try {
       const { workspaceId } = await accept.mutateAsync({ id: invitation.id });
-      enterWorkspace(workspaceId, navigate);
+      await enterWorkspace(workspaceId, navigate);
     } catch (failure) {
       setJoining(false);
       setError(membershipErrorMessage(failure));

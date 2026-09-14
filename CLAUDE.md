@@ -1061,9 +1061,13 @@ that fail quietly if broken:
   what keeps `/device/?user_code=` through sign-in. Never put the email in a
   verification `callbackURL`: the link already knows the address.
 - **Joining or leaving a workspace is a full page load** (`enterWorkspace`):
-  write `ACTIVE_WORKSPACE_STORAGE_KEY`, then `window.location.assign`. A
-  client-side route change keeps every cached query, the socket and the timer
-  mirror built for the previous workspace's permissions.
+  store the choice with `chooseWorkspaceForNextLoad` (Preferences on the
+  native shells, so never `localStorage` directly), then
+  `window.location.assign`. A client-side route change keeps every cached
+  query, the socket and the timer mirror built for the previous workspace's
+  permissions. The screens' own workspace (`useActiveWorkspace` in
+  `components/members/`) is the switcher's active id, not the session default —
+  otherwise Members would manage one workspace while requests address another.
 - **The tracker, runaway guard and calendar show only the viewer's own
   entries** (`components/tracker/own-entries.ts`). `entries.list` returns the
   whole workspace to somebody with time visibility, and those screens would

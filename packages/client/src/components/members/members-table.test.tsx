@@ -194,4 +194,13 @@ describe("member rules", () => {
     expect(pickActiveWorkspace([])).toBeNull();
     expect(pickActiveWorkspace(undefined)).toBeNull();
   });
+
+  it("picks the workspace this device's requests are addressed to first", () => {
+    const a = workspaceFor("owner", { id: "a", isDefault: false });
+    const b = workspaceFor("member", { id: "b", isDefault: true });
+    expect(pickActiveWorkspace([a, b], "a")?.id).toBe("a");
+    // A choice the list no longer contains falls back like no choice at all.
+    expect(pickActiveWorkspace([a, b], "gone")?.id).toBe("b");
+    expect(pickActiveWorkspace([a, b], null)?.id).toBe("b");
+  });
 });

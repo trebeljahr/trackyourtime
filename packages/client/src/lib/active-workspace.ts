@@ -448,6 +448,26 @@ export const switchWorkspace = async (
   }
 };
 
+/**
+ * Store `workspaceId` as this device's choice for the NEXT page load, without
+ * checking it against the known list.
+ *
+ * For joining and leaving (`components/members/enter-workspace.ts`), which
+ * reload straight afterwards. A workspace just joined is not in the known list
+ * yet, so `switchWorkspace` would refuse it; the first list after the reload
+ * validates the stored id the same way it validates any other. Written through
+ * this module's storage, never `localStorage` directly: on the native shells
+ * the choice lives in Preferences, and a `localStorage` write there is ignored.
+ */
+export const chooseWorkspaceForNextLoad = async (
+  workspaceId: string
+): Promise<void> => {
+  await whenActiveWorkspaceReady();
+  storedId = workspaceId;
+  publish();
+  await getStorage().setItem(ACTIVE_WORKSPACE_STORAGE_KEY, workspaceId);
+};
+
 // ── NOT_FOUND on the active workspace ────────────────────────────────
 
 let refetchList: (() => void) | null = null;
