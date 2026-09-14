@@ -6,17 +6,22 @@ import { REPORT_PARAM } from "@/components/reports/use-report-filters";
  * The dimensions Totals can be grouped by, in switch order. Lives beside the
  * report filters rather than inside the Totals view because the screen needs
  * the grouping too: the export sends it along with the summary report.
+ *
+ * Each carries the `common` key that names it. The label is looked up at
+ * render, never stored here, so it follows the language.
  */
-export const GROUP_BY_OPTIONS: { id: ReportGroupBy; label: string }[] = [
-  { id: "project", label: "Project" },
-  { id: "client", label: "Client" },
-  { id: "task", label: "Task" },
-  { id: "tag", label: "Tag" },
-  { id: "member", label: "Member" },
-  { id: "day", label: "Day" },
-  { id: "week", label: "Week" },
-  { id: "month", label: "Month" },
-];
+export const GROUP_BY_OPTIONS = [
+  { id: "project", labelKey: "fields.project" },
+  { id: "client", labelKey: "fields.client" },
+  { id: "task", labelKey: "fields.task" },
+  { id: "tag", labelKey: "fields.tag" },
+  { id: "member", labelKey: "fields.member" },
+  { id: "day", labelKey: "time.day" },
+  { id: "week", labelKey: "time.week" },
+  { id: "month", labelKey: "time.month" },
+] as const satisfies readonly { id: ReportGroupBy; labelKey: string }[];
+
+export type GroupByOption = (typeof GROUP_BY_OPTIONS)[number];
 
 export const DEFAULT_GROUP_BY: ReportGroupBy = "project";
 
@@ -46,7 +51,7 @@ export const PARAM_FOR_GROUP_BY: Partial<Record<ReportGroupBy, string>> = {
  */
 export const groupByOptionsFor = (
   memberReporting: boolean
-): { id: ReportGroupBy; label: string }[] =>
+): readonly GroupByOption[] =>
   memberReporting
     ? GROUP_BY_OPTIONS
     : GROUP_BY_OPTIONS.filter((option) => option.id !== "member");

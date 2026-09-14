@@ -6,9 +6,10 @@ import type { CreateInvoiceInput, InvoiceStatus } from "@starter/shared";
 import { errorMessage } from "@/components/catalog/types";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import { translate } from "@/i18n/translate";
 import { downloadBase64 } from "@/lib/download";
 import { trpc } from "@/lib/trpc";
-import type { InvoiceRow } from "./types";
+import { statusLabel, type InvoiceRow } from "./types";
 
 /**
  * Mutations for the invoicing screens.
@@ -53,34 +54,47 @@ export function useInvoiceMutations(): InvoiceMutations {
 
   const create = trpc.invoices.create.useMutation({
     onSuccess: (invoice) => {
-      toast.success(`Invoice ${invoice.number} created.`);
+      toast.success(
+        translate("reports")("invoices.toast.created", { number: invoice.number }),
+      );
     },
     onError: (error) => {
-      toast.error(errorMessage(error, "Could not create the invoice."));
+      toast.error(
+        errorMessage(error, translate("reports")("invoices.toast.createFailed")),
+      );
     },
     onSettled: settle,
   });
 
   const updateStatus = trpc.invoices.updateStatus.useMutation({
     onSuccess: (invoice) => {
-      toast.success(`Invoice ${invoice.number} is now ${invoice.status}.`);
+      toast.success(
+        translate("reports")("invoices.toast.statusChanged", {
+          number: invoice.number,
+          status: statusLabel(invoice.status),
+        }),
+      );
     },
     onError: (error) => {
-      toast.error(errorMessage(error, "Could not change the status."));
+      toast.error(
+        errorMessage(error, translate("reports")("invoices.toast.statusFailed")),
+      );
     },
     onSettled: settle,
   });
 
   const remove = trpc.invoices.remove.useMutation({
     onSuccess: (result) => {
-      const released = result.releasedEntries;
-      const plural = released === 1 ? "entry is" : "entries are";
       toast.success(
-        `Draft deleted — ${released} time ${plural} billable again.`,
+        translate("reports")("invoices.toast.deleted", {
+          count: result.releasedEntries,
+        }),
       );
     },
     onError: (error) => {
-      toast.error(errorMessage(error, "Could not delete the invoice."));
+      toast.error(
+        errorMessage(error, translate("reports")("invoices.toast.deleteFailed")),
+      );
     },
     onSettled: settle,
   });
@@ -96,7 +110,10 @@ export function useInvoiceMutations(): InvoiceMutations {
         downloadBase64(result.filename, result.base64, result.mimeType);
       } catch (error) {
         toast.error(
-          errorMessage(error, `Could not build the PDF for ${invoice.number}.`),
+          errorMessage(
+            error,
+            translate("reports")("invoices.toast.pdfFailed", { number: invoice.number }),
+          ),
         );
       } finally {
         setDownloading(false);

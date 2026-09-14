@@ -17,7 +17,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CatalogName } from "@/components/catalog/catalog-name";
-import { formatDayLabel } from "@/lib/format";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 export type DetailedSortField = "date" | "duration";
@@ -68,6 +69,7 @@ function SortButton({
   onSort: (field: DetailedSortField) => void;
   className?: string;
 }): React.JSX.Element {
+  const t = useT("reports");
   const active = sort.field === field;
   const Icon = !active
     ? ChevronsUpDown
@@ -81,7 +83,7 @@ function SortButton({
       variant="ghost"
       size="sm"
       className={cn("-mx-2 h-7 gap-1 font-medium", className)}
-      aria-label={`Sort by ${label}`}
+      aria-label={t("detailed.sortBy", { label })}
       aria-sort={
         active
           ? sort.direction === "asc"
@@ -128,6 +130,9 @@ export function DetailedTable({
   clock,
   onEditProject,
 }: DetailedTableProps): React.JSX.Element {
+  const t = useT("reports");
+  const tc = useT("common");
+  const f = useFormat();
   const allSelected = entries.length > 0 && selected.size >= entries.length;
   const someSelected = selected.size > 0 && !allSelected;
 
@@ -141,34 +146,34 @@ export function DetailedTable({
                 allSelected ? true : someSelected ? "indeterminate" : false
               }
               onCheckedChange={(value) => onToggleAll(value === true)}
-              aria-label="Select all loaded entries"
+              aria-label={t("detailed.selectAll")}
               data-testid="detailed-select-all"
             />
           </TableHead>
           <TableHead className="w-28">
             <SortButton
-              label="Date"
+              label={tc("fields.date")}
               field="date"
               sort={sort}
               onSort={onSort}
             />
           </TableHead>
-          <TableHead>Description</TableHead>
-          <TableHead className="w-40">Project</TableHead>
-          <TableHead className="w-32">Client</TableHead>
-          <TableHead className="w-32">Task</TableHead>
-          <TableHead className="w-24">Billable</TableHead>
-          <TableHead className="w-32 text-right">Start / End</TableHead>
+          <TableHead>{tc("fields.description")}</TableHead>
+          <TableHead className="w-40">{tc("fields.project")}</TableHead>
+          <TableHead className="w-32">{tc("fields.client")}</TableHead>
+          <TableHead className="w-32">{tc("fields.task")}</TableHead>
+          <TableHead className="w-24">{tc("fields.billable")}</TableHead>
+          <TableHead className="w-32 text-right">{t("detailed.startEnd")}</TableHead>
           <TableHead className="w-24 text-right">
             <SortButton
-              label="Duration"
+              label={tc("fields.duration")}
               field="duration"
               sort={sort}
               onSort={onSort}
               className="ml-auto"
             />
           </TableHead>
-          <TableHead className="w-24 text-right">Amount</TableHead>
+          <TableHead className="w-24 text-right">{tc("fields.amount")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -188,18 +193,22 @@ export function DetailedTable({
                 <Checkbox
                   checked={isSelected}
                   onCheckedChange={(value) => onToggle(entry.id, value === true)}
-                  aria-label={`Select entry ${entry.description || "without description"}`}
+                  aria-label={
+                    entry.description
+                      ? t("detailed.selectEntry", { description: entry.description })
+                      : t("detailed.selectEntryUntitled")
+                  }
                   data-testid={`detailed-select-${entry.id}`}
                 />
               </TableCell>
               <TableCell className="whitespace-nowrap text-muted-foreground">
-                {formatDayLabel(entry.start)}
+                {f.date(entry.start, "dayLabel") || entry.start}
               </TableCell>
               <TableCell className="max-w-0">
                 <span className="block truncate">
                   {entry.description === "" ? (
                     <span className="text-muted-foreground">
-                      No description
+                      {t("detailed.noDescription")}
                     </span>
                   ) : (
                     entry.description
@@ -211,13 +220,15 @@ export function DetailedTable({
                   is changed with the bulk bar, which is the report's job. */}
               <TableCell>
                 {entry.projectName === null ? (
-                  <span className="text-muted-foreground">No project</span>
+                  <span className="text-muted-foreground">
+                    {tc("empty.noProject")}
+                  </span>
                 ) : onEditProject && projectId !== null ? (
                   <CatalogName
                     name={entry.projectName}
                     color={entry.projectColor}
                     nameClassName="font-normal"
-                    editLabel={`Edit project "${entry.projectName}"`}
+                    editLabel={t("detailed.editProject", { name: entry.projectName })}
                     onEdit={() => onEditProject(projectId)}
                     testId={`detailed-project-${entry.id}`}
                   />
@@ -243,13 +254,13 @@ export function DetailedTable({
               </TableCell>
               <TableCell>
                 <Badge variant={entry.billable ? "default" : "outline"}>
-                  {entry.billable ? "Billable" : "Non-billable"}
+                  {entry.billable ? tc("fields.billable") : tc("fields.nonBillable")}
                 </Badge>
               </TableCell>
               <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">
                 {clock(entry.start)}
                 {" – "}
-                {running ? "running" : clock(entry.end ?? entry.start)}
+                {running ? t("detailed.running") : clock(entry.end ?? entry.start)}
               </TableCell>
               <TableCell className="text-right font-medium tabular-nums">
                 {duration(entry.durationSec)}

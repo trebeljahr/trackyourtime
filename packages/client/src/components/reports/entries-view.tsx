@@ -14,6 +14,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
 import { CURRENCY_FALLBACK_ICON, currencyIcon } from "@/lib/currency";
+import { translate } from "@/i18n/translate";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
+import { userErrorMessage } from "@/lib/error-message";
 import { useFormatSettings } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { ProjectFormDialog } from "@/components/catalog/project-form-dialog";
@@ -60,6 +64,9 @@ export function EntriesView({
 }: ReportViewProps): React.JSX.Element {
   const { filters: reportFilters, getParam, setParams } = filters;
   const fmt = useFormatSettings();
+  const f = useFormat();
+  const t = useT("reports");
+  const tc = useT("common");
   const utils = trpc.useUtils();
 
   const input = React.useMemo(
@@ -244,7 +251,7 @@ export function EntriesView({
         } catch (error) {
           utils.reports.detailed.setInfiniteData(input, () => snapshot);
           toast.error(
-            error instanceof Error ? error.message : "Bulk update failed"
+            userErrorMessage(error, translate("reports")("detailed.toast.failed"))
           );
         } finally {
           setBulkPending(false);
@@ -284,11 +291,14 @@ export function EntriesView({
         (id) =>
           updateEntry.mutateAsync({ id, projectId, originId: ORIGIN_ID }),
         projectId === null
-          ? `Removed the project from ${selectedIds.length} entries`
-          : `Moved ${selectedIds.length} entries to ${project?.name ?? "the project"}`
+          ? t("detailed.toast.removedProject", { count: selectedIds.length })
+          : t("detailed.toast.moved", {
+              count: selectedIds.length,
+              project: project?.name ?? t("detailed.toast.theProject"),
+            })
       );
     },
-    [fmt.settings.defaultHourlyRate, projectsById, runBulk, selectedIds, updateEntry]
+    [fmt.settings.defaultHourlyRate, projectsById, runBulk, selectedIds, t, updateEntry]
   );
 
   const handleSetBillable = React.useCallback(
@@ -313,10 +323,12 @@ export function EntriesView({
           };
         },
         (id) => updateEntry.mutateAsync({ id, billable, originId: ORIGIN_ID }),
-        `Marked ${selectedIds.length} entries ${billable ? "billable" : "non-billable"}`
+        billable
+          ? t("detailed.toast.markedBillable", { count: selectedIds.length })
+          : t("detailed.toast.markedNonBillable", { count: selectedIds.length })
       );
     },
-    [fmt.settings.defaultHourlyRate, projectsById, runBulk, selectedIds, updateEntry]
+    [fmt.settings.defaultHourlyRate, projectsById, runBulk, selectedIds, t, updateEntry]
   );
 
   const handleDelete = React.useCallback((): void => {
@@ -324,21 +336,21 @@ export function EntriesView({
       selectedIds,
       () => null,
       (id) => removeEntry.mutateAsync({ id, originId: ORIGIN_ID }),
-      `Deleted ${selectedIds.length} entries`
+      t("detailed.toast.deleted", { count: selectedIds.length })
     );
-  }, [removeEntry, runBulk, selectedIds]);
+  }, [removeEntry, runBulk, selectedIds, t]);
 
   const kpis = React.useMemo<KpiItem[]>(
     () => [
       {
-        label: "Total tracked",
+        label: t("kpi.totalTracked"),
         value: fmt.duration(totals?.totalSec ?? 0),
-        hint: "Whole filtered range",
+        hint: t("kpi.wholeRange"),
         icon: Clock,
         testId: "kpi-total",
       },
       {
-        label: "Amount earned",
+        label: t("kpi.amountEarned"),
         value:
           totals && totals.totalAmount === null
             ? MONEY_WITHHELD
@@ -350,14 +362,14 @@ export function EntriesView({
         testId: "kpi-amount",
       },
       {
-        label: "Entries loaded",
-        value: String(entries.length),
-        hint: query.hasNextPage ? "More available" : "All entries in range",
+        label: t("kpi.entriesLoaded"),
+        value: f.number(entries.length),
+        hint: query.hasNextPage ? t("kpi.moreAvailable") : t("kpi.allInRange"),
         icon: ListChecks,
         testId: "kpi-entries",
       },
     ],
-    [entries.length, fmt, query.hasNextPage, totals]
+    [entries.length, f, fmt, query.hasNextPage, t, totals]
   );
 
   const isLoading = query.isPending;
@@ -378,8 +390,8 @@ export function EntriesView({
           ) : entries.length === 0 ? (
             <EmptyState
               icon={Table2}
-              title="No entries match these filters"
-              description="Widen the date range, clear a filter, or track some time to populate this log."
+              title={t("detailed.emptyTitle")}
+              description={t("detailed.emptyDescription")}
               testId="detailed-empty"
             />
           ) : (
@@ -409,7 +421,7 @@ export function EntriesView({
                 {query.isFetchingNextPage ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : null}
-                Load more
+                {t("detailed.loadMore")}
               </Button>
             </div>
           ) : null}
@@ -438,7 +450,7 @@ export function EntriesView({
 
       {query.isError ? (
         <p className="text-sm text-destructive" data-testid="detailed-error">
-          {query.error.message}
+          {userErrorMessage(query.error, undefined, tc)}
         </p>
       ) : null}
     </div>

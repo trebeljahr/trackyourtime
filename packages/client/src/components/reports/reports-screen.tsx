@@ -4,6 +4,8 @@ import * as React from "react";
 
 import { formatRangeLabel } from "@/components/date-range-picker";
 import { Button } from "@/components/ui/button";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import type { ReportView } from "@/lib/report-links";
 import { cn } from "@/lib/utils";
 import { EntriesView } from "@/components/reports/entries-view";
@@ -18,10 +20,8 @@ import {
   useReportFilters,
 } from "@/components/reports/use-report-filters";
 
-const VIEW_OPTIONS: { id: ReportView; label: string }[] = [
-  { id: "totals", label: "Totals" },
-  { id: "entries", label: "Entries" },
-];
+/** In switch order; each label is `reports.screen.views.<id>`. */
+const VIEW_OPTIONS: readonly ReportView[] = ["totals", "entries"];
 
 /**
  * The one Reports screen: a shared header and filter bar over either Totals
@@ -36,6 +36,8 @@ export function ReportsScreen(): React.JSX.Element {
   const memberReporting = useMemberReporting();
   const filters = useReportFilters({ memberFilter: memberReporting });
   const { state, filters: reportFilters, getParam, view, setView } = filters;
+  const t = useT("reports");
+  const f = useFormat();
 
   // Readiness is recorded against the view that reported it, so a switch reads
   // as "not ready" until the newly mounted view says otherwise — including a
@@ -57,31 +59,31 @@ export function ReportsScreen(): React.JSX.Element {
     <div className="space-y-4" data-testid="reports-screen">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold">Reports</h1>
+          <h1 className="text-xl font-semibold">{t("screen.title")}</h1>
           <p className="text-sm text-muted-foreground">
-            {formatRangeLabel(state.range)}
+            {formatRangeLabel(state.range, f.locale)}
           </p>
         </div>
 
         <div
           className="flex items-center gap-1 rounded-lg border border-border bg-card p-1"
           role="tablist"
-          aria-label="Report view"
+          aria-label={t("screen.viewLabel")}
           data-testid="report-view-switch"
         >
           {VIEW_OPTIONS.map((option) => (
             <Button
-              key={option.id}
+              key={option}
               type="button"
               size="sm"
               role="tab"
-              variant={option.id === view ? "secondary" : "ghost"}
-              aria-selected={option.id === view}
-              className={cn("font-normal", option.id === view && "font-medium")}
-              onClick={() => setView(option.id)}
-              data-testid={`report-view-${option.id}`}
+              variant={option === view ? "secondary" : "ghost"}
+              aria-selected={option === view}
+              className={cn("font-normal", option === view && "font-medium")}
+              onClick={() => setView(option)}
+              data-testid={`report-view-${option}`}
             >
-              {option.label}
+              {t(`screen.views.${option}`)}
             </Button>
           ))}
         </div>

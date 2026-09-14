@@ -19,6 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 export type MultiSelectOption = {
@@ -93,15 +94,17 @@ export function MultiSelect({
   value,
   onChange,
   label,
-  emptyText = "No matches.",
-  searchPlaceholder = "Search...",
+  emptyText,
+  searchPlaceholder,
   disabled = false,
   footerActions,
   onEditOption,
-  editLabel = "Edit",
+  editLabel,
   className,
   testId,
 }: MultiSelectProps): React.JSX.Element {
+  const t = useT("reports");
+  const tc = useT("common");
   const [open, setOpen] = React.useState(false);
 
   const selected = React.useMemo(() => new Set(value), [value]);
@@ -111,10 +114,10 @@ export function MultiSelect({
     if (value.length === 0) return label;
     if (value.length === 1) {
       const match = options.find((option) => option.value === value[0]);
-      return match?.label ?? "1 selected";
+      return match?.label ?? tc("counts.selected", { count: "1" });
     }
     return label;
-  }, [label, options, value]);
+  }, [label, options, value, tc]);
 
   // Ids are opaque Mongo ids; scoring them would produce phantom matches on
   // hex-looking queries, so only the human-readable keywords are scored.
@@ -156,6 +159,7 @@ export function MultiSelect({
                 "truncate",
                 value.length === 0 && "text-muted-foreground"
               )}
+              title={selectedLabel}
             >
               {selectedLabel}
             </span>
@@ -175,11 +179,11 @@ export function MultiSelect({
       >
         <Command filter={filter} loop>
           <CommandInput
-            placeholder={searchPlaceholder}
+            placeholder={searchPlaceholder ?? t("multiSelect.search")}
             data-testid={`${testId}-search`}
           />
           <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandEmpty>{emptyText ?? t("multiSelect.noMatches")}</CommandEmpty>
             {groups.map((group) => (
               <CommandGroup
                 key={group.heading ?? "__ungrouped"}
@@ -221,7 +225,10 @@ export function MultiSelect({
                       {onEditOption ? (
                         <button
                           type="button"
-                          aria-label={`${editLabel} ${option.label}`}
+                          aria-label={t("multiSelect.editOption", {
+                            action: editLabel ?? tc("actions.edit"),
+                            name: option.label,
+                          })}
                           className="ml-auto shrink-0 rounded-sm p-1 text-muted-foreground opacity-60 hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                           // cmdk selects on pointer down as well as on click,
                           // so both have to be stopped or the pencil would
@@ -280,7 +287,7 @@ export function MultiSelect({
                   onClick={() => onChange([])}
                   data-testid={`${testId}-clear`}
                 >
-                  Clear {value.length} selected
+                  {t("multiSelect.clearSelected", { count: value.length })}
                 </Button>
               </div>
             </>

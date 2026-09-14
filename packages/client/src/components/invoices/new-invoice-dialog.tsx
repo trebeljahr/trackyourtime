@@ -2,7 +2,13 @@
 
 import * as React from "react";
 import { AlertTriangle, Info, Loader2, ShieldCheck } from "lucide-react";
-import { dueDateFromTerms } from "@starter/shared";
+import {
+  SUPPORTED_LOCALES,
+  dueDateFromTerms,
+  isLocale,
+  resolveInvoiceLocale,
+  type Locale,
+} from "@starter/shared";
 
 import { CLIENT_LIST_INPUT } from "@/components/catalog/types";
 import {
@@ -21,12 +27,20 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { formatMoney, useFormatSettings } from "@/lib/format";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
+import { useFormatSettings } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-import { useT } from "@/i18n/use-t";
 import { InvoiceIdentityWarnings } from "./identity-warnings";
 import { InvoiceLines } from "./invoice-lines";
 import {
@@ -40,6 +54,7 @@ import {
   type InvoiceRow,
 } from "./types";
 import { useInvoiceMutations, type CreateInvoiceVars } from "./use-invoices";
+import { userErrorMessage } from "@/lib/error-message";
 
 export type NewInvoiceDialogProps = {
   open: boolean;
@@ -48,10 +63,15 @@ export type NewInvoiceDialogProps = {
   onCreated: (invoice: InvoiceRow) => void;
 };
 
-const GROUP_OPTIONS: { id: InvoiceGroupBy; label: string }[] = [
-  { id: "project", label: "One line per project" },
-  { id: "task", label: "One line per task" },
-];
+const GROUP_OPTIONS = [
+  { id: "project", labelKey: "invoices.form.perProject" },
+  { id: "task", labelKey: "invoices.form.perTask" },
+] as const satisfies readonly { id: InvoiceGroupBy; labelKey: string }[];
+
+/** The language select's value: no override, or one supported locale. */
+type LanguageChoice = "auto" | Locale;
+
+const AUTO_LANGUAGE = "auto" as const satisfies LanguageChoice;
 
 /**
  * The create flow.
@@ -108,6 +128,9 @@ function NewInvoiceForm({
   onCancel,
 }: NewInvoiceFormProps): React.JSX.Element {
   const format = useFormatSettings();
+  const f = useFormat();
+  const t = useT("reports");
+  const tc = useT("common");
   const { createInvoice, isCreating } = useInvoiceMutations();
 
   const [clientId, setClientId] = React.useState<string | null>(null);
@@ -120,8 +143,8 @@ function NewInvoiceForm({
   // Once the person picks a due date it is theirs; until then it follows the
   // business profile's payment terms, when there are any.
   const [dueTouched, setDueTouched] = React.useState(false);
-  const t = useT("reports");
   const [notes, setNotes] = React.useState("");
+  const [language, setLanguage] = React.useState<LanguageChoice>(AUTO_LANGUAGE);
   const [confirming, setConfirming] = React.useState(false);
 
   const clients = trpc.clients.list.useQuery(CLIENT_LIST_INPUT);
@@ -151,7 +174,20 @@ function NewInvoiceForm({
 
   const tax = parseTaxRate(taxInput);
   const taxRate = tax.ok ? tax.value : null;
-  const taxError = tax.ok ? null : tax.error;
+  const taxError = tax.ok
+    ? null
+    : tax.error === "outOfRange"
+      ? t("invoices.form.taxOutOfRange")
+      : t("invoices.form.taxNotNumber");
+
+  // What "Automatic" resolves to right now, named on the option so nobody has
+  // to guess. The server resolves it again with the same function and
+  // snapshots the answer onto the invoice.
+  const automaticLanguage = resolveInvoiceLocale({
+    clientLocale: selectedClient?.invoiceLocale ?? null,
+    issuerPreference: format.settings.locale,
+  });
+  const languageName = (locale: Locale): string => t(`invoices.languages.${locale}`);
 
   // A dry run, re-fetched on every edit. `enabled` keeps it from firing with a
   // placeholder client id, and `staleTime: 0` keeps it honest — another tab
@@ -169,7 +205,7 @@ function NewInvoiceForm({
 
   const data = preview.data;
   const billable = previewIsBillable(data);
-  const notices = data ? exclusionNotices(data) : [];
+  const notices = data ? exclusionNotices(data, f.locale) : [];
 
   const setIssueDate = (next: string): void => {
     if (next === "") return;
@@ -203,6 +239,8 @@ function NewInvoiceForm({
       issueDate: dates.issueDate,
       dueDate,
       ...(notes.trim() === "" ? {} : { notes: notes.trim() }),
+      // Omitted unless chosen, so the client's own language keeps deciding.
+      ...(language === AUTO_LANGUAGE ? {} : { locale: language }),
     };
     const created = await createInvoice(vars);
     if (!created) {
@@ -217,16 +255,13 @@ function NewInvoiceForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>New invoice</DialogTitle>
-        <DialogDescription>
-          Preview costs nothing and changes nothing. Creating the invoice bills
-          the time on it — that time can never be invoiced again.
-        </DialogDescription>
+        <DialogTitle>{t("invoices.form.title")}</DialogTitle>
+        <DialogDescription>{t("invoices.form.description")}</DialogDescription>
       </DialogHeader>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="invoice-client">Client</Label>
+          <Label htmlFor="invoice-client">{tc("fields.client")}</Label>
           <Combobox
             id="invoice-client"
             className="w-full"
@@ -236,15 +271,15 @@ function NewInvoiceForm({
               setConfirming(false);
               setClientId(next);
             }}
-            placeholder="Select a client"
-            searchPlaceholder="Search clients..."
-            emptyText="No clients yet."
+            placeholder={t("invoices.form.selectClient")}
+            searchPlaceholder={t("filters.clients.search")}
+            emptyText={t("filters.clients.empty")}
             data-testid="invoice-client-combobox"
           />
         </div>
 
         <div className="space-y-2">
-          <Label>Billed range</Label>
+          <Label>{t("invoices.columns.billedRange")}</Label>
           <DateRangePicker
             value={range}
             onChange={(next) => {
@@ -258,8 +293,8 @@ function NewInvoiceForm({
         </div>
 
         <div className="space-y-2">
-          <Label>Lines</Label>
-          <div className="flex gap-2" data-testid="invoice-groupby">
+          <Label>{t("invoices.form.lines")}</Label>
+          <div className="flex flex-wrap gap-2" data-testid="invoice-groupby">
             {GROUP_OPTIONS.map((option) => (
               <Button
                 key={option.id}
@@ -273,18 +308,18 @@ function NewInvoiceForm({
                 aria-pressed={groupBy === option.id}
                 data-testid={`invoice-groupby-${option.id}`}
               >
-                {option.label}
+                {t(option.labelKey)}
               </Button>
             ))}
           </div>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="invoice-tax">Tax rate (%)</Label>
+          <Label htmlFor="invoice-tax">{t("invoices.form.taxRate")}</Label>
           <Input
             id="invoice-tax"
             inputMode="decimal"
-            placeholder="No tax"
+            placeholder={t("invoices.noTax")}
             value={taxInput}
             onChange={(event) => {
               setConfirming(false);
@@ -298,13 +333,13 @@ function NewInvoiceForm({
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Leave empty for no tax line. 0 prints a real 0% line.
+              {t("invoices.form.taxHint")}
             </p>
           )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="invoice-issue-date">Issue date</Label>
+          <Label htmlFor="invoice-issue-date">{t("invoices.form.issueDate")}</Label>
           <Input
             id="invoice-issue-date"
             type="date"
@@ -315,7 +350,7 @@ function NewInvoiceForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="invoice-due-date">Due date</Label>
+          <Label htmlFor="invoice-due-date">{t("invoices.form.dueDate")}</Label>
           <Input
             id="invoice-due-date"
             type="date"
@@ -332,16 +367,51 @@ function NewInvoiceForm({
             </p>
           ) : null}
         </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="invoice-locale">{t("invoices.form.language")}</Label>
+          <Select
+            value={language}
+            onValueChange={(next) => {
+              // Changes the document, not the preview: nothing to re-run, but
+              // the confirmation strip must restate what is being created.
+              setConfirming(false);
+              setLanguage(isLocale(next) ? next : AUTO_LANGUAGE);
+            }}
+          >
+            <SelectTrigger id="invoice-locale" data-testid="invoice-locale">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent data-testid="invoice-locale-content">
+              <SelectItem value={AUTO_LANGUAGE} data-testid="invoice-locale-auto">
+                {t("invoices.form.languageAuto", {
+                  language: languageName(automaticLanguage),
+                })}
+              </SelectItem>
+              {SUPPORTED_LOCALES.map((locale) => (
+                <SelectItem
+                  key={locale}
+                  value={locale}
+                  lang={locale}
+                  data-testid={`invoice-locale-${locale}`}
+                >
+                  {languageName(locale)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{t("invoices.form.languageHint")}</p>
+        </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="invoice-notes">Notes (optional)</Label>
+        <Label htmlFor="invoice-notes">{t("invoices.form.notes")}</Label>
         <Textarea
           id="invoice-notes"
           rows={2}
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
-          placeholder="Payment terms, a reference, anything the customer needs to see."
+          placeholder={t("invoices.form.notesPlaceholder")}
           data-testid="invoice-notes"
         />
       </div>
@@ -355,13 +425,13 @@ function NewInvoiceForm({
 
       <section className="space-y-3" data-testid="invoice-preview">
         <header className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">Preview</h3>
+          <h3 className="text-sm font-semibold">{t("invoices.form.preview")}</h3>
           {data ? (
             <span
               className="text-xs text-muted-foreground"
               data-testid="invoice-preview-number"
             >
-              Next number: {data.suggestedNumber}
+              {t("invoices.form.nextNumber", { number: data.suggestedNumber })}
             </span>
           ) : null}
         </header>
@@ -371,20 +441,20 @@ function NewInvoiceForm({
             className="text-sm text-muted-foreground"
             data-testid="invoice-preview-idle"
           >
-            Pick a client to see what would be billed.
+            {t("invoices.form.pickClient")}
           </p>
         ) : !tax.ok ? (
           <p className="text-sm text-muted-foreground">
-            Fix the tax rate to see the preview.
+            {t("invoices.form.fixTax")}
           </p>
         ) : preview.isPending ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            Gathering billable time…
+            {t("invoices.form.gathering")}
           </p>
         ) : preview.error ? (
           <p className="text-sm text-destructive" data-testid="invoice-preview-error">
-            {preview.error.message}
+            {userErrorMessage(preview.error, undefined, tc)}
           </p>
         ) : data ? (
           <>
@@ -427,7 +497,9 @@ function NewInvoiceForm({
                 className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground"
                 data-testid="invoice-preview-empty"
               >
-                Nothing to bill. {emptyPreviewReason(data)}
+                {t("invoices.form.nothingToBill", {
+                  reason: emptyPreviewReason(data, f.locale),
+                })}
               </p>
             )}
           </>
@@ -444,12 +516,13 @@ function NewInvoiceForm({
           <p className="flex items-start gap-2 text-sm">
             <Info className="mt-0.5 size-4 shrink-0" />
             <span>
-              This creates invoice <strong>{data.suggestedNumber}</strong> for{" "}
-              <strong>{data.clientName}</strong> at{" "}
-              <strong>{formatMoney(data.total, data.currency)}</strong> and bills{" "}
-              {data.entryIds.length}{" "}
-              {data.entryIds.length === 1 ? "entry" : "entries"}. That time
-              cannot be invoiced again.
+              {t.rich("invoices.form.confirm", {
+                number: data.suggestedNumber,
+                client: data.clientName,
+                total: f.money(data.total, data.currency),
+                count: data.entryIds.length,
+                b: (chunks) => <strong>{chunks}</strong>,
+              })}
             </span>
           </p>
           <div className="flex justify-end gap-2">
@@ -459,7 +532,7 @@ function NewInvoiceForm({
               onClick={() => setConfirming(false)}
               data-testid="invoice-create-back"
             >
-              Back to preview
+              {t("invoices.form.backToPreview")}
             </Button>
             <Button
               type="button"
@@ -468,7 +541,7 @@ function NewInvoiceForm({
               data-testid="invoice-create-confirm"
             >
               {isCreating ? <Loader2 className="size-4 animate-spin" /> : null}
-              Create invoice {data.suggestedNumber}
+              {t("invoices.form.createNumbered", { number: data.suggestedNumber })}
             </Button>
           </div>
         </div>
@@ -480,7 +553,7 @@ function NewInvoiceForm({
             onClick={onCancel}
             data-testid="invoice-cancel"
           >
-            Cancel
+            {tc("actions.cancel")}
           </Button>
           <Button
             type="button"
@@ -488,7 +561,7 @@ function NewInvoiceForm({
             disabled={!billable || !tax.ok || isCreating}
             data-testid="invoice-create"
           >
-            Create invoice…
+            {t("invoices.form.create")}
           </Button>
         </div>
       )}

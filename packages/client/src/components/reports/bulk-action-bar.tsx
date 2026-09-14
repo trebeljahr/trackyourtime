@@ -15,6 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 
 export type BulkActionBarProps = {
   count: number;
@@ -38,16 +40,19 @@ export function BulkActionBar({
   onDelete,
 }: BulkActionBarProps): React.JSX.Element {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const t = useT("reports");
+  const tc = useT("common");
+  const f = useFormat();
 
   return (
     <div
       className="sticky bottom-4 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-lg"
       role="region"
-      aria-label="Bulk actions"
+      aria-label={t("bulk.region")}
       data-testid="bulk-action-bar"
     >
       <span className="px-1 text-sm font-medium" data-testid="bulk-count">
-        {count} selected
+        {tc("counts.selected", { count: f.number(count) })}
       </span>
 
       <Separator orientation="vertical" className="h-6" />
@@ -56,7 +61,7 @@ export function BulkActionBar({
         value={null}
         onChange={onSetProject}
         allowCreate={false}
-        placeholder="Set project"
+        placeholder={t("bulk.setProject")}
         disabled={pending}
         size="sm"
         className="min-w-44"
@@ -71,7 +76,7 @@ export function BulkActionBar({
         onClick={() => onSetBillable(true)}
         data-testid="bulk-billable-on"
       >
-        Mark billable
+        {t("bulk.markBillable")}
       </Button>
       <Button
         type="button"
@@ -81,7 +86,7 @@ export function BulkActionBar({
         onClick={() => onSetBillable(false)}
         data-testid="bulk-billable-off"
       >
-        Mark non-billable
+        {t("bulk.markNonBillable")}
       </Button>
 
       <Button
@@ -97,7 +102,7 @@ export function BulkActionBar({
         ) : (
           <Trash2 className="size-4" />
         )}
-        Delete
+        {tc("actions.delete")}
       </Button>
 
       <Button
@@ -109,17 +114,14 @@ export function BulkActionBar({
         data-testid="bulk-clear"
       >
         <X className="size-4" />
-        Clear selection
+        {t("bulk.clearSelection")}
       </Button>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent data-testid="bulk-delete-dialog">
           <DialogHeader>
-            <DialogTitle>Delete {count} time entries?</DialogTitle>
-            <DialogDescription>
-              This permanently removes the selected entries and the time they
-              recorded. It cannot be undone.
-            </DialogDescription>
+            <DialogTitle>{t("bulk.confirmTitle", { count })}</DialogTitle>
+            <DialogDescription>{t("bulk.confirmDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
@@ -128,7 +130,7 @@ export function BulkActionBar({
                 variant="outline"
                 data-testid="bulk-delete-cancel"
               >
-                Cancel
+                {tc("actions.cancel")}
               </Button>
             </DialogClose>
             <Button
@@ -140,7 +142,7 @@ export function BulkActionBar({
               }}
               data-testid="bulk-delete-confirm"
             >
-              Delete entries
+              {t("bulk.confirm", { count })}
             </Button>
           </DialogFooter>
         </DialogContent>

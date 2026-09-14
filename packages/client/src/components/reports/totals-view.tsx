@@ -11,7 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PROJECT_LIST_INPUT } from "@/components/catalog/types";
 import { budgetView, type BudgetView } from "@/lib/budget-view";
 import { CURRENCY_FALLBACK_ICON, currencyIcon } from "@/lib/currency";
-import { formatMoney, useFormatSettings } from "@/lib/format";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
+import { userErrorMessage } from "@/lib/error-message";
+import { useFormatSettings } from "@/lib/format";
 import { reportsHref } from "@/lib/report-links";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -22,7 +25,6 @@ import {
   groupByOptionsFor,
 } from "@/components/reports/group-by";
 import { MoneyHiddenNote } from "@/components/reports/member-reporting";
-import { useT } from "@/i18n/use-t";
 import { KpiRow, type KpiItem } from "@/components/reports/kpi-row";
 import { MONEY_WITHHELD } from "@/components/reports/report-money";
 import {
@@ -40,9 +42,6 @@ import {
   type ReportViewProps,
 } from "@/components/reports/use-report-filters";
 
-const percent = (part: number, whole: number): string =>
-  whole > 0 ? `${((part / whole) * 100).toFixed(0)}% of tracked time` : "";
-
 /** Reports → Totals: KPIs, the timeline, the breakdown and the grouped table. */
 export function TotalsView({
   filters,
@@ -51,23 +50,17 @@ export function TotalsView({
 }: ReportViewProps): React.JSX.Element {
   const { filters: reportFilters, setParam, getParam } = filters;
   const fmt = useFormatSettings();
+  const f = useFormat();
+  const t = useT("reports");
+  const tc = useT("common");
   const searchParams = useSearchParams();
-  const tm = useT("members");
-
   const groupBy = effectiveGroupBy(getParam(REPORT_PARAM.groupBy), memberReporting);
 
-  // "Member" is the one grouping that arrived with the catalog; the others
-  // still carry their English labels from before it.
-  const groupByOptions = React.useMemo(
-    () =>
-      groupByOptionsFor(memberReporting).map((option) =>
-        option.id === "member" ? { ...option, label: tm("reports.groupBy") } : option
-      ),
-    [memberReporting, tm]
-  );
+  const groupByOptions = groupByOptionsFor(memberReporting);
 
-  const dimension =
-    groupByOptions.find((option) => option.id === groupBy)?.label ?? "Project";
+  const dimensionOption =
+    groupByOptions.find((option) => option.id === groupBy) ?? groupByOptions[0];
+  const dimension = tc(dimensionOption.labelKey);
 
   const query = trpc.reports.summary.useQuery(
     { ...reportFilters, groupBy },
@@ -103,13 +96,14 @@ export function TotalsView({
         project.id,
         budgetView(project.progress, {
           durationShort: fmt.durationShort,
-          money: formatMoney,
+          money: f.money,
           fallbackCurrency: fmt.currency,
+          locale: f.locale,
         }),
       ]),
     );
     return (groupKey) => views.get(groupKey) ?? null;
-  }, [groupBy, projectsQuery.data, fmt.durationShort, fmt.currency]);
+  }, [groupBy, projectsQuery.data, fmt.durationShort, fmt.currency, f]);
 
   /**
    * Drilling into a group keeps every filter already on screen and adds the
@@ -136,30 +130,32 @@ export function TotalsView({
     const totalSec = result?.totalSec ?? 0;
     const billableSec = result?.billableSec ?? 0;
     const nonBillableSec = Math.max(0, totalSec - billableSec);
+    const percent = (part: number, whole: number): string =>
+      whole > 0 ? t("kpi.shareOfTracked", { percent: f.percent(part / whole) }) : "";
     return [
       {
-        label: "Total tracked",
+        label: t("kpi.totalTracked"),
         value: fmt.duration(totalSec),
         hint: fmt.durationShort(totalSec),
         icon: Clock,
         testId: "kpi-total",
       },
       {
-        label: "Billable",
+        label: tc("fields.billable"),
         value: fmt.duration(billableSec),
         hint: percent(billableSec, totalSec),
         icon: Receipt,
         testId: "kpi-billable",
       },
       {
-        label: "Non-billable",
+        label: tc("fields.nonBillable"),
         value: fmt.duration(nonBillableSec),
         hint: percent(nonBillableSec, totalSec),
         icon: Clock,
         testId: "kpi-non-billable",
       },
       {
-        label: "Amount earned",
+        label: t("kpi.amountEarned"),
         value:
           result && result.totalAmount === null
             ? MONEY_WITHHELD
@@ -171,7 +167,7 @@ export function TotalsView({
         testId: "kpi-amount",
       },
     ];
-  }, [fmt, result]);
+  }, [fmt, result, t, tc, f]);
 
   const isLoading = query.isPending;
   const isEmpty = result !== undefined && result.totalSec === 0;
@@ -191,11 +187,11 @@ export function TotalsView({
       <div
         className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1"
         role="group"
-        aria-label="Group by"
+        aria-label={t("groupBy.label")}
         data-testid="groupby-switch"
       >
         <span className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Group by
+          {t("groupBy.label")}
         </span>
         {groupByOptions.map((option) => (
           <Button
@@ -213,7 +209,7 @@ export function TotalsView({
             }
             data-testid={`groupby-${option.id}`}
           >
-            {option.label}
+            {tc(option.labelKey)}
           </Button>
         ))}
       </div>
@@ -235,7 +231,7 @@ export function TotalsView({
             totalSec={result.totalSec}
             duration={fmt.duration}
             money={fmt.money}
-            dimension={dimension.toLowerCase()}
+            groupBy={groupBy}
           />
         </div>
       ) : null}
@@ -243,7 +239,7 @@ export function TotalsView({
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">
-            Totals by {dimension.toLowerCase()}
+            {t("groupBy.totalsTitle", { groupBy })}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -252,8 +248,8 @@ export function TotalsView({
           ) : isEmpty || result === undefined ? (
             <EmptyState
               icon={BarChart3}
-              title="No time tracked in this range"
-              description="Adjust the filters or track some time, and the numbers will show up here."
+              title={t("summary.emptyTitle")}
+              description={t("summary.emptyDescription")}
               testId="summary-empty"
             />
           ) : (
@@ -268,8 +264,7 @@ export function TotalsView({
               budgetFor={budgetFor}
               hrefForGroup={hrefForGroup}
               // Stated from the grouping itself, not inferred from the label,
-              // so renaming "Tag" cannot silently drop the double-counting
-              // caveat.
+              // which is translated and so cannot identify the grouping.
               groupsOverlap={groupBy === "tag"}
             />
           )}
@@ -278,7 +273,7 @@ export function TotalsView({
 
       {query.isError ? (
         <p className="text-sm text-destructive" data-testid="summary-error">
-          {query.error.message}
+          {userErrorMessage(query.error, undefined, tc)}
         </p>
       ) : null}
     </div>

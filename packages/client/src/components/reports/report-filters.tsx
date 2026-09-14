@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import {
@@ -37,12 +38,6 @@ import {
 
 const SEARCH_DEBOUNCE_MS = 350;
 
-const BILLABLE_LABEL: Record<BillableFilter, string> = {
-  all: "All entries",
-  yes: "Billable",
-  no: "Non-billable",
-};
-
 /** Debounced description search - one URL write per pause, not per keystroke. */
 function SearchField({
   value,
@@ -51,6 +46,7 @@ function SearchField({
   value: string;
   onChange: (next: string) => void;
 }): React.JSX.Element {
+  const t = useT("reports");
   const [draft, setDraft] = React.useState(value);
   const [lastValue, setLastValue] = React.useState(value);
   const timer = React.useRef<number | null>(null);
@@ -92,13 +88,15 @@ function SearchField({
   );
 
   return (
-    <div className="relative">
+    // A row of its own on a phone: sharing one with Export left the German
+    // and pseudo placeholders clipped mid-word.
+    <div className="relative w-full sm:w-auto">
       <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         value={draft}
-        placeholder="Search descriptions"
-        aria-label="Search descriptions"
-        className="w-full pl-8 sm:w-56"
+        placeholder={t("filters.searchDescriptions")}
+        aria-label={t("filters.searchDescriptions")}
+        className="w-full pl-8 sm:w-64"
         onChange={(event) => {
           setDraft(event.target.value);
           schedule(event.target.value);
@@ -163,6 +161,14 @@ export function ReportFiltersBar({
     clearFilters,
   } = filters;
 
+  const t = useT("reports");
+  const tc = useT("common");
+  const billableLabel: Record<BillableFilter, string> = {
+    all: t("filters.allEntries"),
+    yes: tc("fields.billable"),
+    no: tc("fields.nonBillable"),
+  };
+
   const trackedSpan = useTrackedSpan();
   const clientsQuery = trpc.clients.list.useQuery({});
   const projectsQuery = trpc.projects.list.useQuery({});
@@ -187,9 +193,9 @@ export function ReportFiltersBar({
         value: project.id,
         label: project.name,
         color: project.color,
-        group: project.clientName ?? "No client",
+        group: project.clientName ?? tc("empty.noClient"),
       })),
-    [projectsQuery.data]
+    [projectsQuery.data, tc]
   );
 
   const taskOptions = React.useMemo<MultiSelectOption[]>(
@@ -234,21 +240,21 @@ export function ReportFiltersBar({
         />
 
         <MultiSelect
-          label="Clients"
+          label={tc("fields.clients")}
           options={clientOptions}
           value={state.clientIds}
           onChange={(ids) => setIds("clientIds", ids)}
-          emptyText="No clients yet."
-          searchPlaceholder="Search clients..."
-          className="w-[9.5rem]"
+          emptyText={t("filters.clients.empty")}
+          searchPlaceholder={t("filters.clients.search")}
+          className="w-auto min-w-[9.5rem] max-w-[14rem]"
           testId="filter-clients"
-          editLabel="Edit client"
+          editLabel={t("filters.clients.edit")}
           onEditOption={(option) =>
             setCatalogDialog({ kind: "client", row: findClient(option.value) })
           }
           footerActions={[
             {
-              label: "New client…",
+              label: t("filters.clients.create"),
               onSelect: () => setCatalogDialog({ kind: "client", row: null }),
               testId: "filter-clients-new",
             },
@@ -256,15 +262,15 @@ export function ReportFiltersBar({
         />
 
         <MultiSelect
-          label="Projects"
+          label={tc("fields.projects")}
           options={projectOptions}
           value={state.projectIds}
           onChange={(ids) => setIds("projectIds", ids)}
-          emptyText="No projects yet."
-          searchPlaceholder="Search projects..."
-          className="w-[9.5rem]"
+          emptyText={t("filters.projects.empty")}
+          searchPlaceholder={t("filters.projects.search")}
+          className="w-auto min-w-[9.5rem] max-w-[14rem]"
           testId="filter-projects"
-          editLabel="Edit project"
+          editLabel={t("filters.projects.edit")}
           onEditOption={(option) =>
             setCatalogDialog({
               kind: "project",
@@ -273,7 +279,7 @@ export function ReportFiltersBar({
           }
           footerActions={[
             {
-              label: "New project…",
+              label: t("filters.projects.create"),
               onSelect: () => setCatalogDialog({ kind: "project", row: null }),
               testId: "filter-projects-new",
             },
@@ -281,21 +287,21 @@ export function ReportFiltersBar({
         />
 
         <MultiSelect
-          label="Tasks"
+          label={tc("fields.tasks")}
           options={taskOptions}
           value={state.taskIds}
           onChange={(ids) => setIds("taskIds", ids)}
-          emptyText="No tasks yet."
-          searchPlaceholder="Search tasks..."
-          className="w-[9.5rem]"
+          emptyText={t("filters.tasks.empty")}
+          searchPlaceholder={t("filters.tasks.search")}
+          className="w-auto min-w-[9.5rem] max-w-[14rem]"
           testId="filter-tasks"
-          editLabel="Edit task"
+          editLabel={t("filters.tasks.edit")}
           onEditOption={(option) =>
             setCatalogDialog({ kind: "task", row: findTask(option.value) })
           }
           footerActions={[
             {
-              label: "New task…",
+              label: t("filters.tasks.create"),
               onSelect: () => setCatalogDialog({ kind: "task", row: null }),
               testId: "filter-tasks-new",
             },
@@ -318,18 +324,18 @@ export function ReportFiltersBar({
           value={state.billable}
           onValueChange={(next) => setBillable(next as BillableFilter)}
         >
-          <SelectTrigger className="w-[9.5rem]" data-testid="filter-billable">
-            <SelectValue>{BILLABLE_LABEL[state.billable]}</SelectValue>
+          <SelectTrigger className="w-auto min-w-[9.5rem] gap-2" data-testid="filter-billable">
+            <SelectValue>{billableLabel[state.billable]}</SelectValue>
           </SelectTrigger>
           <SelectContent data-testid="filter-billable-content">
             <SelectItem value="all" data-testid="filter-billable-all">
-              All entries
+              {billableLabel.all}
             </SelectItem>
             <SelectItem value="yes" data-testid="filter-billable-yes">
-              Billable
+              {billableLabel.yes}
             </SelectItem>
             <SelectItem value="no" data-testid="filter-billable-no">
-              Non-billable
+              {billableLabel.no}
             </SelectItem>
           </SelectContent>
         </Select>
@@ -345,12 +351,12 @@ export function ReportFiltersBar({
             data-testid="filter-clear"
           >
             <X className="size-4" />
-            Clear
+            {tc("actions.clear")}
           </Button>
         ) : null}
 
         {trailing ? (
-          <div className="ml-auto flex items-center gap-2">{trailing}</div>
+          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">{trailing}</div>
         ) : null}
       </div>
 

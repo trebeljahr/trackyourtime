@@ -6,6 +6,11 @@ import {
 } from "date-fns";
 import type { SummaryTimelinePoint, WeekStart } from "@starter/shared";
 
+import type { ClientLocale } from "@/i18n/config";
+import { formatDate } from "@/i18n/format";
+import { getActiveLocale } from "@/i18n/locale-store";
+import { getTranslator } from "@/i18n/translator";
+
 export type TimelineGranularity = "day" | "week" | "month";
 
 export type TimelineBucket = {
@@ -71,22 +76,39 @@ export const bucketTimeline = (
   return { granularity, buckets: [...buckets.values()] };
 };
 
-/** Axis tick ("Mon 21", "7 Sep", "Sep 2026") or tooltip heading (`long`). */
+const LONG_DAY = {
+  weekday: "long",
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+} as const satisfies Intl.DateTimeFormatOptions;
+
+const SHORT_DAY = { weekday: "short", day: "numeric" } as const satisfies Intl.DateTimeFormatOptions;
+
+const MONTH = { month: "short", year: "numeric" } as const satisfies Intl.DateTimeFormatOptions;
+
+/**
+ * Axis tick ("Mon 21", "7 Sep", "Sep 2026") or tooltip heading (`long`), in
+ * the order and words `locale` uses.
+ */
 export const formatBucketLabel = (
   date: string,
   granularity: TimelineGranularity,
   long = false,
+  locale: ClientLocale = getActiveLocale(),
 ): string => {
   const parsed = parseISO(date);
   if (Number.isNaN(parsed.getTime())) return date;
   switch (granularity) {
     case "day":
-      return format(parsed, long ? "EEEE, d MMM yyyy" : "EEE d");
+      return formatDate(parsed, locale, long ? LONG_DAY : SHORT_DAY);
     case "week":
       return long
-        ? `Week of ${format(parsed, "d MMM yyyy")}`
-        : format(parsed, "d MMM");
+        ? getTranslator(locale, "reports")("charts.weekOf", {
+            date: formatDate(parsed, locale, "medium"),
+          })
+        : formatDate(parsed, locale, "dayMonth");
     case "month":
-      return format(parsed, long ? "MMMM yyyy" : "MMM yyyy");
+      return formatDate(parsed, locale, long ? "monthYear" : MONTH);
   }
 };

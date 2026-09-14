@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import type {
+  ReportGroupBy,
   SummaryGroup,
   SummaryTimelinePoint,
   WeekStart,
@@ -22,6 +23,8 @@ import type {
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import {
   MONEY_WITHHELD,
   sumReportMoney,
@@ -123,10 +126,12 @@ function TimelineTooltip({
   formatDurationValue,
   granularity = "day",
 }: ChartTooltipProps): React.JSX.Element | null {
+  const tc = useT("common");
+  const f = useFormat();
   if (active !== true || payload === undefined || payload.length === 0) {
     return null;
   }
-  const asDuration = formatDurationValue ?? ((seconds: number) => `${seconds}s`);
+  const asDuration = formatDurationValue ?? f.durationShort;
   const point = payload[0]?.payload;
   const billable = readNumber(point, "billableSec");
   const nonBillable = readNumber(point, "nonBillableSec");
@@ -135,20 +140,20 @@ function TimelineTooltip({
   return (
     <TooltipShell>
       <p className="mb-1 font-medium">
-        {formatBucketLabel(dayLabel, granularity, true)}
+        {formatBucketLabel(dayLabel, granularity, true, f.locale)}
       </p>
       <p className="flex items-center gap-2">
         <TooltipSwatch color={BILLABLE_COLOR} />
-        <span className="text-muted-foreground">Billable</span>
+        <span className="text-muted-foreground">{tc("fields.billable")}</span>
         <span className="ml-auto tabular-nums">{asDuration(billable)}</span>
       </p>
       <p className="flex items-center gap-2">
         <TooltipSwatch color={NON_BILLABLE_COLOR} />
-        <span className="text-muted-foreground">Non-billable</span>
+        <span className="text-muted-foreground">{tc("fields.nonBillable")}</span>
         <span className="ml-auto tabular-nums">{asDuration(nonBillable)}</span>
       </p>
       <p className="mt-1 flex items-center gap-2 border-t border-border pt-1 font-medium">
-        <span>Total</span>
+        <span>{tc("fields.total")}</span>
         <span className="ml-auto tabular-nums">
           {asDuration(billable + nonBillable)}
         </span>
@@ -164,11 +169,14 @@ function BreakdownTooltip({
   formatDurationValue,
   formatMoneyValue,
 }: ChartTooltipProps): React.JSX.Element | null {
+  const t = useT("reports");
+  const tc = useT("common");
+  const f = useFormat();
   if (active !== true || payload === undefined || payload.length === 0) {
     return null;
   }
-  const asDuration = formatDurationValue ?? ((seconds: number) => `${seconds}s`);
-  const asMoney = formatMoneyValue ?? ((amount: number) => String(amount));
+  const asDuration = formatDurationValue ?? f.durationShort;
+  const asMoney = formatMoneyValue ?? ((amount: number) => f.number(amount));
   const slice = payload[0]?.payload;
   const seconds = readNumber(slice, "seconds");
   // Read raw rather than through `readNumber`, which would turn a withheld
@@ -187,44 +195,41 @@ function BreakdownTooltip({
         {readString(slice, "label")}
       </p>
       <p className="flex items-center gap-4">
-        <span className="text-muted-foreground">Tracked</span>
+        <span className="text-muted-foreground">{t("charts.tracked")}</span>
         <span className="ml-auto tabular-nums">
-          {asDuration(seconds)} ({share.toFixed(1)}%)
+          {t("charts.durationWithShare", {
+            duration: asDuration(seconds),
+            share: formatShare(f, share),
+          })}
         </span>
       </p>
       <p className="flex items-center gap-4">
-        <span className="text-muted-foreground">Amount</span>
+        <span className="text-muted-foreground">{tc("fields.amount")}</span>
         <span className="ml-auto tabular-nums">{amountLabel}</span>
       </p>
       <p className="sr-only">
-        {readString(slice, "label")}: {asDuration(seconds)}, {amountLabel}
+        {t("charts.sliceSummary", {
+          label: readString(slice, "label"),
+          duration: asDuration(seconds),
+          amount: amountLabel,
+        })}
       </p>
     </TooltipShell>
   );
 }
 
-const formatHourTick = (seconds: number): string => {
-  const hours = seconds / SECONDS_PER_HOUR;
-  if (hours === 0) return "0";
-  return hours >= 10 ? `${Math.round(hours)}h` : `${hours.toFixed(1)}h`;
-};
+/** A share of 0–100 as a percentage with one decimal: "12.5%" / "12,5 %". */
+const formatShare = (f: ReturnType<typeof useFormat>, share: number): string =>
+  f.number(share / 100, {
+    style: "percent",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
 
 export type TimelineChartProps = {
   timeline: SummaryTimelinePoint[];
   duration: (seconds: number) => string;
   weekStartsOn?: WeekStart;
-};
-
-const TIMELINE_TITLE: Record<TimelineGranularity, string> = {
-  day: "Daily activity",
-  week: "Weekly activity",
-  month: "Monthly activity",
-};
-
-const TIMELINE_UNIT: Record<TimelineGranularity, string> = {
-  day: "days",
-  week: "weeks",
-  month: "months",
 };
 
 /**
@@ -236,6 +241,9 @@ export function TimelineChart({
   duration,
   weekStartsOn = 1,
 }: TimelineChartProps): React.JSX.Element {
+  const t = useT("reports");
+  const tc = useT("common");
+  const f = useFormat();
   const { granularity, buckets: data } = React.useMemo(
     () => bucketTimeline(timeline, weekStartsOn),
     [timeline, weekStartsOn]
@@ -245,19 +253,30 @@ export function TimelineChart({
     (point) => point.billableSec + point.nonBillableSec > 0
   );
 
+  const formatHourTick = (seconds: number): string => {
+    const hours = seconds / SECONDS_PER_HOUR;
+    if (hours === 0) return f.number(0);
+    return t("charts.hourTick", {
+      hours: f.number(hours, {
+        minimumFractionDigits: hours >= 10 ? 0 : 1,
+        maximumFractionDigits: hours >= 10 ? 0 : 1,
+      }),
+    });
+  };
+
   return (
     <Card className="min-w-0">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between text-sm font-medium">
-          <span>{TIMELINE_TITLE[granularity]}</span>
+          <span>{t(`charts.timelineTitle.${granularity}`)}</span>
           <span className="flex items-center gap-3 text-xs font-normal text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <TooltipSwatch color={BILLABLE_COLOR} />
-              Billable
+              {tc("fields.billable")}
             </span>
             <span className="flex items-center gap-1.5">
               <TooltipSwatch color={NON_BILLABLE_COLOR} />
-              Non-billable
+              {tc("fields.nonBillable")}
             </span>
           </span>
         </CardTitle>
@@ -266,7 +285,7 @@ export function TimelineChart({
         <div
           className="h-[280px] w-full"
           role="img"
-          aria-label={`Tracked time across ${data.length} ${TIMELINE_UNIT[granularity]}`}
+          aria-label={t(`charts.timelineAria.${granularity}`, { count: data.length })}
           data-testid="timeline-chart"
         >
           {hasTime ? (
@@ -284,7 +303,7 @@ export function TimelineChart({
                 <XAxis
                   dataKey="date"
                   tickFormatter={(value: string) =>
-                    formatBucketLabel(value, granularity)
+                    formatBucketLabel(value, granularity, false, f.locale)
                   }
                   tick={{ fill: AXIS_COLOR, fontSize: 11 }}
                   tickLine={false}
@@ -310,14 +329,14 @@ export function TimelineChart({
                 />
                 <Bar
                   dataKey="billableSec"
-                  name="Billable"
+                  name={tc("fields.billable")}
                   stackId="time"
                   fill={BILLABLE_COLOR}
                   radius={[0, 0, 0, 0]}
                 />
                 <Bar
                   dataKey="nonBillableSec"
-                  name="Non-billable"
+                  name={tc("fields.nonBillable")}
                   stackId="time"
                   fill={NON_BILLABLE_COLOR}
                   radius={[3, 3, 0, 0]}
@@ -327,8 +346,8 @@ export function TimelineChart({
           ) : (
             <EmptyState
               icon={BarChart3}
-              title="No time in this range"
-              description="Track some time or widen the date range to see the breakdown over time."
+              title={t("charts.timelineEmptyTitle")}
+              description={t("charts.timelineEmptyDescription")}
               className="h-full"
               testId="timeline-chart-empty"
             />
@@ -354,8 +373,8 @@ export type GroupBreakdownChartProps = {
   totalSec: number;
   duration: (seconds: number) => string;
   money: (amount: number) => string;
-  /** Heading noun, e.g. "project" - already lower-case. */
-  dimension: string;
+  /** What the groups are, which names the heading. */
+  groupBy: ReportGroupBy;
 };
 
 /** Donut of the grouped breakdown, with a readable legend beside it. */
@@ -364,8 +383,10 @@ export function GroupBreakdownChart({
   totalSec,
   duration,
   money,
-  dimension,
+  groupBy,
 }: GroupBreakdownChartProps): React.JSX.Element {
+  const t = useT("reports");
+  const f = useFormat();
   const slices = React.useMemo<Slice[]>(() => {
     const positive = groups.filter((group) => group.seconds > 0);
     const head = positive.slice(0, MAX_SLICES);
@@ -385,7 +406,7 @@ export function GroupBreakdownChart({
       const seconds = tail.reduce((sum, group) => sum + group.seconds, 0);
       mapped.push({
         key: "__other",
-        label: `${tail.length} more`,
+        label: t("charts.more", { count: tail.length }),
         seconds,
         amount: sumReportMoney(tail.map((group) => group.amount)),
         share: (seconds / total) * 100,
@@ -394,20 +415,20 @@ export function GroupBreakdownChart({
     }
 
     return mapped;
-  }, [groups, totalSec]);
+  }, [groups, totalSec, t]);
 
   return (
     <Card className="min-w-0">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium">
-          Breakdown by {dimension}
+          {t("groupBy.breakdownTitle", { groupBy })}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div
           className="h-[280px] w-full"
           role="img"
-          aria-label={`Share of tracked time by ${dimension}`}
+          aria-label={t("groupBy.breakdownAria", { groupBy })}
           data-testid="breakdown-chart"
         >
           {slices.length > 0 ? (
@@ -453,7 +474,7 @@ export function GroupBreakdownChart({
                       {slice.label}
                     </span>
                     <span className="tabular-nums text-muted-foreground">
-                      {slice.share.toFixed(0)}%
+                      {f.percent(slice.share / 100)}
                     </span>
                     <span className="w-16 text-right tabular-nums">
                       {duration(slice.seconds)}
@@ -465,8 +486,8 @@ export function GroupBreakdownChart({
           ) : (
             <EmptyState
               icon={PieChartIcon}
-              title="Nothing to break down"
-              description="No tracked time matches the current filters."
+              title={t("charts.breakdownEmptyTitle")}
+              description={t("charts.breakdownEmptyDescription")}
               className="h-full"
               testId="breakdown-chart-empty"
             />

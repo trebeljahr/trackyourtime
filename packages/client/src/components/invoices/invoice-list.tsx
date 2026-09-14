@@ -15,9 +15,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatMoney } from "@/lib/format";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
-import { formatDate, statusBadgeTone, type InvoiceRow } from "./types";
+import {
+  formatDate,
+  statusBadgeTone,
+  statusLabel,
+  type InvoiceRow,
+} from "./types";
 
 export type InvoiceListProps = {
   invoices: InvoiceRow[];
@@ -41,6 +47,10 @@ export function InvoiceList({
   onSelect,
   onCreate,
 }: InvoiceListProps): React.JSX.Element {
+  const t = useT("reports");
+  const tc = useT("common");
+  const f = useFormat();
+
   if (isLoading) {
     return (
       <div className="space-y-2" data-testid="invoices-loading">
@@ -55,12 +65,12 @@ export function InvoiceList({
     return (
       <EmptyState
         icon={FileText}
-        title="No invoices yet"
-        description="An invoice turns one client's billable time over one date range into a document. Time that lands on an invoice is never offered for billing again."
+        title={t("invoices.emptyTitle")}
+        description={t("invoices.emptyDescription")}
         action={
           <Button onClick={onCreate} data-testid="invoices-empty-create">
             <Plus className="size-4" />
-            New invoice
+            {t("invoices.newInvoice")}
           </Button>
         }
         testId="invoices-empty"
@@ -73,12 +83,12 @@ export function InvoiceList({
       <Table data-testid="invoices-table">
         <TableHeader>
           <TableRow>
-            <TableHead>Number</TableHead>
-            <TableHead>Client</TableHead>
-            <TableHead>Issued</TableHead>
-            <TableHead>Due</TableHead>
-            <TableHead className="text-right">Total</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>{t("invoices.columns.number")}</TableHead>
+            <TableHead>{tc("fields.client")}</TableHead>
+            <TableHead>{t("invoices.columns.issued")}</TableHead>
+            <TableHead>{t("invoices.columns.due")}</TableHead>
+            <TableHead className="text-right">{tc("fields.total")}</TableHead>
+            <TableHead>{t("invoices.columns.status")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -110,23 +120,23 @@ export function InvoiceList({
                 {invoice.clientName}
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {formatDate(invoice.issueDate)}
+                {formatDate(invoice.issueDate, f.locale)}
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {formatDate(invoice.dueDate)}
+                {formatDate(invoice.dueDate, f.locale)}
               </TableCell>
               <TableCell
                 className="text-right tabular-nums"
                 data-testid={`invoice-total-${invoice.id}`}
               >
-                {formatMoney(invoice.total, invoice.currency)}
+                {f.money(invoice.total, invoice.currency)}
               </TableCell>
               <TableCell>
                 <Badge
                   variant={statusBadgeTone(invoice.status)}
                   data-testid={`invoice-status-${invoice.id}`}
                 >
-                  {invoice.status}
+                  {statusLabel(invoice.status, f.locale)}
                 </Badge>
               </TableCell>
             </TableRow>

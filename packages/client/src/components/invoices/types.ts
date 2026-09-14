@@ -1,6 +1,24 @@
 import { addDays, format, parseISO } from "date-fns";
 import type { Invoice, InvoiceLineItem, InvoiceStatus } from "@starter/shared";
 
+import type { ClientLocale } from "@/i18n/config";
+import {
+  DATE_STYLES,
+  formatDate as formatLocaleDate,
+  formatDecimal,
+  formatNumber,
+  intlLocale,
+} from "@/i18n/format";
+import { getActiveLocale } from "@/i18n/locale-store";
+import { getTranslator } from "@/i18n/translator";
+
+/**
+ * Every display helper below takes the locale last and defaults it to the one
+ * rendering now. Components pass `useLocale()`, so a language switch
+ * re-renders their text; tests and plain callers read English.
+ */
+const reportsT = (locale: ClientLocale) => getTranslator(locale, "reports");
+
 /**
  * The shapes and the rules the invoicing screens draw from.
  *
@@ -84,9 +102,21 @@ export function statusTransitions(from: InvoiceStatus): InvoiceStatus[] {
 export function statusActionLabel(
   from: InvoiceStatus,
   to: InvoiceStatus,
+  locale: ClientLocale = getActiveLocale(),
 ): string {
   const forward = INVOICE_STATUSES.indexOf(to) > INVOICE_STATUSES.indexOf(from);
-  return forward ? `Mark as ${to}` : `Back to ${to}`;
+  const t = reportsT(locale);
+  return forward
+    ? t("invoices.markAs", { status: to })
+    : t("invoices.backTo", { status: to });
+}
+
+/** The status as the badge names it: "draft" / „Entwurf“. */
+export function statusLabel(
+  status: InvoiceStatus,
+  locale: ClientLocale = getActiveLocale(),
+): string {
+  return reportsT(locale)(`invoices.status.${status}`);
 }
 
 export type BadgeTone = "default" | "secondary" | "outline" | "destructive";
@@ -122,9 +152,6 @@ export type ExclusionNotice = {
   message: string;
 };
 
-const plural = (count: number, one: string, many: string): string =>
-  `${count} ${count === 1 ? one : many}`;
-
 /**
  * Turn the counts the preview reports into sentences.
  *
@@ -140,14 +167,18 @@ const plural = (count: number, one: string, many: string): string =>
  */
 export function exclusionNotices(
   preview: Pick<InvoicePreviewData, "skippedMissingRate" | "skippedInvoiced">,
+  locale: ClientLocale = getActiveLocale(),
 ): ExclusionNotice[] {
   const notices: ExclusionNotice[] = [];
+  const t = reportsT(locale);
 
   if (preview.skippedMissingRate > 0) {
     notices.push({
       id: "missing-rate",
       tone: "warning",
-      message: `${plural(preview.skippedMissingRate, "entry has", "entries have")} no hourly rate and cannot be billed. Set a rate on the project, then re-run this preview.`,
+      message: t("invoices.notices.missingRate", {
+        count: preview.skippedMissingRate,
+      }),
     });
   }
 
@@ -155,7 +186,9 @@ export function exclusionNotices(
     notices.push({
       id: "already-invoiced",
       tone: "info",
-      message: `${plural(preview.skippedInvoiced, "entry is", "entries are")} already on an earlier invoice and will not be billed again.`,
+      message: t("invoices.notices.alreadyInvoiced", {
+        count: preview.skippedInvoiced,
+      }),
     });
   }
 
@@ -178,28 +211,35 @@ export function previewIsBillable(
  */
 export function emptyPreviewReason(
   preview: Pick<InvoicePreviewData, "skippedMissingRate" | "skippedInvoiced">,
+  locale: ClientLocale = getActiveLocale(),
 ): string {
+  const t = reportsT(locale);
   if (preview.skippedInvoiced > 0 && preview.skippedMissingRate > 0) {
-    return "Every billable hour in this range is either already invoiced or missing a rate.";
+    return t("invoices.emptyReason.both");
   }
   if (preview.skippedInvoiced > 0) {
-    return "Every billable hour in this range has already been invoiced. The same time is never billed twice.";
+    return t("invoices.emptyReason.invoiced");
   }
   if (preview.skippedMissingRate > 0) {
-    return "The tracked time in this range carries no hourly rate, so there is nothing to bill.";
+    return t("invoices.emptyReason.missingRate");
   }
-  return "No billable, un-invoiced time was tracked for this client in this range.";
+  return t("invoices.emptyReason.none");
 }
 
 // ── display ──────────────────────────────────────────────────────────
 
 /**
- * Hours on an invoice are decimal, always two places — "3.00 h", not
- * "3:00:00". A customer reconciles `hours × rate = amount` by eye, and that
- * only works if the quantity is the one the multiplication used.
+ * Hours on an invoice are decimal, always two places — "3.00 h" / „3,00 h“,
+ * not "3:00:00". A customer reconciles `hours × rate = amount` by eye, and
+ * that only works if the quantity is the one the multiplication used.
  */
-export function formatHours(hours: number): string {
-  return `${(Number.isFinite(hours) ? hours : 0).toFixed(2)} h`;
+export function formatHours(
+  hours: number,
+  locale: ClientLocale = getActiveLocale(),
+): string {
+  return reportsT(locale)("invoices.hoursValue", {
+    hours: formatDecimal(Number.isFinite(hours) ? hours : 0, locale, 2),
+  });
 }
 
 /** Total decimal hours across the lines, for the summary row. */
@@ -208,10 +248,19 @@ export function totalHours(lineItems: readonly InvoiceLineItem[]): number {
   return Math.round((seconds / 3600) * 100) / 100;
 }
 
-/** "19% VAT" / "No tax" — the tax line's own label. */
-export function taxLabel(taxRate: number | null): string {
-  if (taxRate === null || !Number.isFinite(taxRate)) return "No tax";
-  return `Tax (${Number.isInteger(taxRate) ? taxRate : taxRate.toFixed(2)}%)`;
+/** "Tax (19%)" / "No tax" — the tax line's own label. */
+export function taxLabel(
+  taxRate: number | null,
+  locale: ClientLocale = getActiveLocale(),
+): string {
+  const t = reportsT(locale);
+  if (taxRate === null || !Number.isFinite(taxRate)) return t("invoices.noTax");
+  return t("invoices.tax", {
+    rate: formatNumber(taxRate / 100, locale, {
+      style: "percent",
+      maximumFractionDigits: 4,
+    }),
+  });
 }
 
 // ── dates ────────────────────────────────────────────────────────────
@@ -250,31 +299,41 @@ export function reconcileDueDate(issueDate: string, dueDate: string): string {
     : dueDate;
 }
 
+/** Why a tax field was refused; the form names it in the reader's language. */
+export type TaxRateError = "notNumber" | "outOfRange";
+
 /**
  * Parse the tax field.
  *
  * Empty means NO TAX LINE (null), which is not the same as 0% — a 0% line is
  * a deliberate statement and still prints. Anything unparseable or out of the
- * server's 0–100 range is rejected here so the mutation is never sent.
+ * server's 0–100 range is rejected here so the mutation is never sent. A
+ * decimal comma is accepted alongside the dot ("7,5"), since that is how half
+ * the readers of a German UI type a fraction.
  */
 export function parseTaxRate(
   raw: string,
-): { ok: true; value: number | null } | { ok: false; error: string } {
+): { ok: true; value: number | null } | { ok: false; error: TaxRateError } {
   const trimmed = raw.trim();
   if (trimmed === "") return { ok: true, value: null };
 
-  const value = Number(trimmed);
+  const normalised = /^[+-]?\d*,\d+$/.test(trimmed) ? trimmed.replace(",", ".") : trimmed;
+  const value = Number(normalised);
   if (!Number.isFinite(value)) {
-    return { ok: false, error: "Enter a tax rate as a number, e.g. 19." };
+    return { ok: false, error: "notNumber" };
   }
   if (value < 0 || value > 100) {
-    return { ok: false, error: "A tax rate has to be between 0 and 100." };
+    return { ok: false, error: "outOfRange" };
   }
   return { ok: true, value };
 }
 
-/** "1 – 31 Aug 2026" for the billed range, from ISO instants or date keys. */
-export function formatRange(from: string, to: string): string {
+/** "1–31 Aug 2026" for the billed range, from ISO instants or date keys. */
+export function formatRange(
+  from: string,
+  to: string,
+  locale: ClientLocale = getActiveLocale(),
+): string {
   const parse = (value: string): Date | null => {
     const date = new Date(value.length === 10 ? `${value}T00:00:00` : value);
     return Number.isNaN(date.getTime()) ? null : date;
@@ -286,13 +345,21 @@ export function formatRange(from: string, to: string): string {
   // so the last billed day is the day before it.
   const lastDay = addDays(end, -1);
   const inclusiveEnd = lastDay.getTime() < start.getTime() ? end : lastDay;
-  return `${format(start, "d MMM yyyy")} – ${format(inclusiveEnd, "d MMM yyyy")}`;
+  const formatter = new Intl.DateTimeFormat(intlLocale(locale), DATE_STYLES.medium);
+  try {
+    return formatter.formatRange(start, inclusiveEnd);
+  } catch {
+    return `${formatter.format(start)} – ${formatter.format(inclusiveEnd)}`;
+  }
 }
 
-/** "21 Aug 2026" for a single ISO date. */
-export function formatDate(iso: string): string {
+/** "21 Aug 2026" / „21. Aug. 2026“ for a single ISO date. */
+export function formatDate(
+  iso: string,
+  locale: ClientLocale = getActiveLocale(),
+): string {
   const date = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
-  return Number.isNaN(date.getTime()) ? iso : format(date, "d MMM yyyy");
+  return Number.isNaN(date.getTime()) ? iso : formatLocaleDate(date, locale, "medium");
 }
 
 /** The date input's "YYYY-MM-DD" form of a stored ISO instant. */

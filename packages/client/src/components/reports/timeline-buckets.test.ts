@@ -73,12 +73,19 @@ describe("bucketTimeline", () => {
 
 describe("formatBucketLabel", () => {
   it("names each granularity", () => {
-    expect(formatBucketLabel("2026-09-07", "day", true)).toBe(
-      "Monday, 7 Sep 2026",
+    expect(formatBucketLabel("2026-09-07", "day", true, "en")).toBe(
+      "Monday, Sep 7, 2026",
     );
-    expect(formatBucketLabel("2026-09-07", "week", true)).toBe(
-      "Week of 7 Sep 2026",
+    expect(formatBucketLabel("2026-09-07", "week", true, "en")).toBe(
+      "Week of Sep 7, 2026",
     );
-    expect(formatBucketLabel("2026-09-01", "month")).toBe("Sep 2026");
+    expect(formatBucketLabel("2026-09-01", "month", false, "en")).toBe("Sep 2026");
+  });
+
+  it("follows the locale's own order and words", () => {
+    expect(formatBucketLabel("2026-09-07", "day", true, "de")).toBe(
+      "Montag, 7. Sept. 2026",
+    );
+    expect(formatBucketLabel("2026-09-07", "day", false, "de")).toBe("Mo., 7.");
   });
 });

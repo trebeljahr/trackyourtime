@@ -11,7 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatMoney } from "@/lib/format";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { formatHours, taxLabel, totalHours } from "./types";
 
 export type InvoiceLinesProps = {
@@ -43,7 +44,10 @@ export function InvoiceLines({
   currency,
   testIdPrefix,
 }: InvoiceLinesProps): React.JSX.Element {
-  const money = (amount: number): string => formatMoney(amount, currency);
+  const t = useT("reports");
+  const tc = useT("common");
+  const f = useFormat();
+  const money = (amount: number): string => f.money(amount, currency);
 
   return (
     <div className="space-y-3">
@@ -51,10 +55,10 @@ export function InvoiceLines({
         <Table data-testid={`${testIdPrefix}-lines`}>
           <TableHeader>
             <TableRow>
-              <TableHead>Line</TableHead>
-              <TableHead className="text-right">Hours</TableHead>
-              <TableHead className="text-right">Rate</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
+              <TableHead>{t("invoices.columns.line")}</TableHead>
+              <TableHead className="text-right">{t("invoices.columns.hours")}</TableHead>
+              <TableHead className="text-right">{tc("fields.rate")}</TableHead>
+              <TableHead className="text-right">{tc("fields.amount")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -62,7 +66,7 @@ export function InvoiceLines({
               <TableRow key={line.key} data-testid={`${testIdPrefix}-line`}>
                 <TableCell className="font-medium">{line.label}</TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {formatHours(line.hours)}
+                  {formatHours(line.hours, f.locale)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums text-muted-foreground">
                   {money(line.hourlyRate)}
@@ -78,16 +82,16 @@ export function InvoiceLines({
 
       <dl className="ml-auto grid w-full max-w-xs gap-1 text-sm">
         <div className="flex justify-between text-muted-foreground">
-          <dt>Billed hours</dt>
+          <dt>{t("invoices.billedHours")}</dt>
           <dd
             className="tabular-nums"
             data-testid={`${testIdPrefix}-hours`}
           >
-            {formatHours(totalHours(lineItems))}
+            {formatHours(totalHours(lineItems), f.locale)}
           </dd>
         </div>
         <div className="flex justify-between">
-          <dt>Subtotal</dt>
+          <dt>{t("invoices.subtotal")}</dt>
           <dd
             className="tabular-nums"
             data-testid={`${testIdPrefix}-subtotal`}
@@ -97,14 +101,14 @@ export function InvoiceLines({
         </div>
         {taxRate === null ? null : (
           <div className="flex justify-between">
-            <dt>{taxLabel(taxRate)}</dt>
+            <dt>{taxLabel(taxRate, f.locale)}</dt>
             <dd className="tabular-nums" data-testid={`${testIdPrefix}-tax`}>
               {money(taxAmount)}
             </dd>
           </div>
         )}
         <div className="flex justify-between border-t border-border pt-1 text-base font-semibold">
-          <dt>Total</dt>
+          <dt>{tc("fields.total")}</dt>
           <dd className="tabular-nums" data-testid={`${testIdPrefix}-total`}>
             {money(total)}
           </dd>

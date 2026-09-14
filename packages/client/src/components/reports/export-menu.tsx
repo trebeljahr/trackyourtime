@@ -21,8 +21,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/sonner";
+import { shippedLocale } from "@/i18n/config";
+import { useLocale } from "@/i18n/locale-store";
+import { translate } from "@/i18n/translate";
+import { useT } from "@/i18n/use-t";
 import { downloadBase64, downloadBlob } from "@/lib/download";
 import { trpc } from "@/lib/trpc";
+import { userErrorMessage } from "@/lib/error-message";
 
 /** The server also renders a weekly export; no screen in this app offers it. */
 export type ExportReportKind = "summary" | "detailed";
@@ -86,8 +91,14 @@ export function buildExportInput({
   };
 }
 
-const unsupportedMessage = (what: string): string =>
-  `This app can't save files yet — open the report in a browser to download the ${what}.`;
+const unsupportedMessage = (format: "CSV" | "PDF"): string =>
+  translate("reports")("exportMenu.unsupported", { format });
+
+const exportedMessage = (filename: string): string =>
+  translate("reports")("exportMenu.exported", { filename });
+
+const failedMessage = (error: unknown): string =>
+  userErrorMessage(error, translate("reports")("exportMenu.failed"));
 
 /**
  * Fetch the server-rendered CSV and hand it to the browser.
@@ -111,11 +122,9 @@ export async function exportCsvReport(
       result.filename,
       new Blob([`\uFEFF${result.csv}`], { type: "text/csv;charset=utf-8;" }),
     );
-    toast.success(`Exported ${result.filename}`);
+    toast.success(exportedMessage(result.filename));
   } catch (error) {
-    toast.error(
-      error instanceof Error ? error.message : "Could not export the report",
-    );
+    toast.error(failedMessage(error));
   }
 }
 
@@ -137,11 +146,9 @@ export async function exportPdfReport(
   try {
     const result = await fetchPdf(input);
     downloadBase64(result.filename, result.base64, result.mimeType);
-    toast.success(`Exported ${result.filename}`);
+    toast.success(exportedMessage(result.filename));
   } catch (error) {
-    toast.error(
-      error instanceof Error ? error.message : "Could not export the report",
-    );
+    toast.error(failedMessage(error));
   }
 }
 
@@ -155,6 +162,9 @@ export async function exportPdfReport(
 export function ExportMenu(props: ExportMenuProps): React.JSX.Element {
   const { report, filters, groupBy, disabled = false } = props;
   const utils = trpc.useUtils();
+  const t = useT("reports");
+  const tc = useT("common");
+  const locale = useLocale();
   const [pending, setPending] = React.useState(false);
 
   const input = React.useMemo(
@@ -186,10 +196,10 @@ export function ExportMenu(props: ExportMenuProps): React.JSX.Element {
     run(() =>
       exportPdfReport(
         (payload) => utils.reports.exportPdf.fetch(payload),
-        input,
+        { ...input, locale: shippedLocale(locale) },
       ),
     );
-  }, [input, run, utils]);
+  }, [input, locale, run, utils]);
 
   return (
     <DropdownMenu>
@@ -205,19 +215,19 @@ export function ExportMenu(props: ExportMenuProps): React.JSX.Element {
           ) : (
             <Download className="size-4" />
           )}
-          Export
+          {tc("actions.export")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" data-testid="report-export-menu">
-        <DropdownMenuLabel>Export report</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("exportMenu.title")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={handleCsv} data-testid="report-export-csv">
           <FileSpreadsheet className="size-4" />
-          Download CSV
+          {t("exportMenu.csv")}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={handlePdf} data-testid="report-export-pdf">
           <FileText className="size-4" />
-          Download PDF
+          {t("exportMenu.pdf")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { InvoiceDetail } from "./invoice-detail";
 import { InvoiceList } from "./invoice-list";
@@ -19,6 +20,7 @@ import { INVOICE_LIST_INPUT, type InvoiceRow } from "./types";
  * no build-time list of an owner's invoice ids to generate from.
  */
 export function InvoicesScreen(): React.JSX.Element {
+  const t = useT("reports");
   const list = trpc.invoices.list.useQuery(INVOICE_LIST_INPUT);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [creating, setCreating] = React.useState(false);
@@ -33,11 +35,11 @@ export function InvoicesScreen(): React.JSX.Element {
     <div className="space-y-6" data-testid="invoices-screen">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground" data-testid="invoices-count">
-          {invoices.length} {invoices.length === 1 ? "invoice" : "invoices"}
+          {t("invoices.count", { count: invoices.length })}
         </p>
         <Button onClick={() => setCreating(true)} data-testid="new-invoice">
           <Plus className="size-4" />
-          New invoice
+          {t("invoices.newInvoice")}
         </Button>
       </div>
 

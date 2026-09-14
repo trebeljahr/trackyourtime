@@ -12,6 +12,11 @@ import {
   type BudgetStatus,
 } from "@starter/shared";
 
+import type { ClientLocale } from "@/i18n/config";
+import { formatList, formatNumber, formatPercent } from "@/i18n/format";
+import { getActiveLocale } from "@/i18n/locale-store";
+import { getTranslator } from "@/i18n/translator";
+
 const SECONDS_PER_HOUR = 3600;
 
 /** One target's worth of display state. */
@@ -46,28 +51,32 @@ export type BudgetFormatters = {
   money: (amount: number, currency: string) => string;
   /** Used when the progress has no currency of its own. */
   fallbackCurrency: string;
+  /**
+   * The language the labels are written in. Defaults to the one rendering
+   * now; a component should pass its own (`useLocale()`), so a language switch
+   * re-renders the strings along with it.
+   */
+  locale?: ClientLocale;
 };
 
-/** "80h", "7.5h" — an estimate reads as hours, not as a clock. */
-export const formatHoursTarget = (hours: number): string => {
-  const rounded = Math.round(hours * 100) / 100;
-  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(2).replace(/0+$/, "")}h`;
-};
-
-const percentLabel = (ratio: number): string => `${Math.round(ratio * 100)}%`;
+/** "80h", "7.5h" / "80 h", "7,5 h" — an estimate reads as hours, not as a clock. */
+export const formatHoursTarget = (
+  hours: number,
+  locale: ClientLocale = getActiveLocale(),
+): string =>
+  getTranslator(locale, "reports")("budget.hoursTarget", {
+    hours: formatNumber(hours, locale, { maximumFractionDigits: 2 }),
+  });
 
 const clampFill = (ratio: number): number =>
   Math.max(0, Math.min(100, ratio * 100));
 
-const BADGE: Partial<Record<BudgetStatus, string>> = {
-  near: "Nearly used up",
-  over: "Over budget",
+const badgeFor = (status: BudgetStatus, locale: ClientLocale): string | null => {
+  const t = getTranslator(locale, "reports");
+  if (status === "near") return t("budget.nearlyUsedUp");
+  if (status === "over") return t("budget.overBudget");
+  return null;
 };
-
-const listCurrencies = (codes: string[]): string =>
-  codes.length <= 1
-    ? (codes[0] ?? "")
-    : `${codes.slice(0, -1).join(", ")} and ${codes[codes.length - 1]}`;
 
 /**
  * The note under the money figure when a project's entries span more than one
@@ -75,12 +84,16 @@ const listCurrencies = (codes: string[]): string =>
  * a project that outlived a currency change has earnings that genuinely
  * cannot be added together — saying so is the only honest option.
  */
-const currencyNoteFor = (progress: BudgetProgress): string | null => {
+const currencyNoteFor = (
+  progress: BudgetProgress,
+  locale: ClientLocale,
+): string | null => {
   if (!progress.mixedCurrency) return null;
-  const others = listCurrencies(progress.foreignCurrencies);
+  const t = getTranslator(locale, "reports");
+  const currencies = formatList(progress.foreignCurrencies, locale);
   return progress.currency === null
-    ? `Tracked in ${others}. Amounts are never summed across currencies.`
-    : `Excludes ${others} tracked before the workspace currency changed.`;
+    ? t("budget.trackedIn", { currencies })
+    : t("budget.excludes", { currencies });
 };
 
 /**
@@ -98,19 +111,24 @@ export const budgetView = (
   const status = overallBudgetStatus(progress);
   if (status === "none") return null;
 
+  const locale = fmt.locale ?? getActiveLocale();
+  const t = getTranslator(locale, "reports");
+  const percentLabel = (ratio: number): string => formatPercent(ratio, locale);
+
   const hours: BudgetMeter | null =
     progress.estimatedHours === null || progress.hoursRatio === null
       ? null
       : {
-          label: `${fmt.durationShort(progress.trackedSec)} of ${formatHoursTarget(
-            progress.estimatedHours,
-          )}`,
+          label: t("budget.progress", {
+            spent: fmt.durationShort(progress.trackedSec),
+            target: formatHoursTarget(progress.estimatedHours, locale),
+          }),
           percentLabel: percentLabel(progress.hoursRatio),
           fill: clampFill(progress.hoursRatio),
           remainderLabel:
             progress.remainingSec !== null && progress.remainingSec < 0
-              ? `${fmt.durationShort(-progress.remainingSec)} over`
-              : `${fmt.durationShort(progress.remainingSec ?? 0)} left`,
+              ? t("budget.over", { amount: fmt.durationShort(-progress.remainingSec) })
+              : t("budget.left", { amount: fmt.durationShort(progress.remainingSec ?? 0) }),
           status: progress.hoursStatus,
         };
 
@@ -119,16 +137,18 @@ export const budgetView = (
     progress.budgetAmount === null || progress.amountRatio === null
       ? null
       : {
-          label: `${fmt.money(progress.spentAmount, currency)} of ${fmt.money(
-            progress.budgetAmount,
-            currency,
-          )}`,
+          label: t("budget.progress", {
+            spent: fmt.money(progress.spentAmount, currency),
+            target: fmt.money(progress.budgetAmount, currency),
+          }),
           percentLabel: percentLabel(progress.amountRatio),
           fill: clampFill(progress.amountRatio),
           remainderLabel:
             progress.remainingAmount !== null && progress.remainingAmount < 0
-              ? `${fmt.money(-progress.remainingAmount, currency)} over`
-              : `${fmt.money(progress.remainingAmount ?? 0, currency)} left`,
+              ? t("budget.over", { amount: fmt.money(-progress.remainingAmount, currency) })
+              : t("budget.left", {
+                  amount: fmt.money(progress.remainingAmount ?? 0, currency),
+                }),
           status: progress.amountStatus,
         };
 
@@ -136,8 +156,8 @@ export const budgetView = (
     hours,
     amount,
     status,
-    badge: BADGE[status] ?? null,
-    currencyNote: currencyNoteFor(progress),
+    badge: badgeFor(status, locale),
+    currencyNote: currencyNoteFor(progress, locale),
   };
 };
 

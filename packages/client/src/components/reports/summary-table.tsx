@@ -15,6 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { colorForGroup } from "@/components/reports/summary-charts";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import type { BudgetView } from "@/lib/budget-view";
 import { formatReportMoney } from "@/components/reports/report-money";
 
@@ -42,14 +44,11 @@ export type SummaryTableProps = {
   hrefForGroup?: (group: SummaryGroup) => string | null;
   /**
    * Whether the groups can overlap — true only for tags, where one entry
-   * carries several. Defaults to the tag dimension so the caller does not have
-   * to remember; pass it explicitly if a future dimension overlaps too.
+   * carries several. Stated by the caller from the grouping itself: the
+   * heading is translated, so it can no longer stand in for the grouping.
    */
   groupsOverlap?: boolean;
 };
-
-/** The one dimension whose groups an entry can belong to more than once. */
-const OVERLAPPING_DIMENSION = "Tag";
 
 /** Grouped totals, biggest first, with an inline share-of-total bar. */
 export function SummaryTable({
@@ -62,8 +61,11 @@ export function SummaryTable({
   dimensionLabel,
   budgetFor,
   hrefForGroup,
-  groupsOverlap = dimensionLabel === OVERLAPPING_DIMENSION,
+  groupsOverlap = false,
 }: SummaryTableProps): React.JSX.Element {
+  const t = useT("reports");
+  const tc = useT("common");
+  const f = useFormat();
   const rows = React.useMemo(
     () => [...groups].sort((a, b) => b.seconds - a.seconds),
     [groups]
@@ -81,8 +83,7 @@ export function SummaryTable({
           className="mb-2 text-xs text-muted-foreground"
           data-testid="summary-overlap-note"
         >
-          An entry carrying several tags counts in each of them, so these rows
-          add up to more than the total below.
+          {t("summary.overlapNote")}
         </p>
       ) : null}
 
@@ -90,15 +91,15 @@ export function SummaryTable({
       <TableHeader>
         <TableRow>
           <TableHead>{dimensionLabel}</TableHead>
-          <TableHead className="w-[28%]">Share</TableHead>
-          <TableHead className="text-right">Billable</TableHead>
-          <TableHead className="text-right">Duration</TableHead>
-          <TableHead className="text-right">Amount</TableHead>
+          <TableHead className="w-[28%]">{t("summary.share")}</TableHead>
+          <TableHead className="text-right">{tc("fields.billable")}</TableHead>
+          <TableHead className="text-right">{tc("fields.duration")}</TableHead>
+          <TableHead className="text-right">{tc("fields.amount")}</TableHead>
           {budgetFor ? (
             <TableHead className="w-52">
-              Budget
+              {t("summary.budget")}
               <span className="ml-1 font-normal text-muted-foreground">
-                (lifetime)
+                {t("summary.lifetime")}
               </span>
             </TableHead>
           ) : null}
@@ -130,7 +131,7 @@ export function SummaryTable({
                   <Link
                     href={href}
                     className="rounded underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    title={`Show time entries for ${group.label}`}
+                    title={t("summary.showEntriesFor", { name: group.label })}
                     data-testid={`summary-link-${group.key}`}
                   >
                     {label}
@@ -152,7 +153,11 @@ export function SummaryTable({
                     />
                   </span>
                   <span className="w-11 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                    {share.toFixed(1)}%
+                    {f.number(share / 100, {
+                      style: "percent",
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    })}
                   </span>
                 </span>
               </TableCell>
@@ -186,7 +191,7 @@ export function SummaryTable({
       </TableBody>
       <TableFooter>
         <TableRow data-testid="summary-total-row">
-          <TableCell>Total</TableCell>
+          <TableCell>{tc("fields.total")}</TableCell>
           <TableCell />
           <TableCell className="text-right tabular-nums">
             {duration(billableSec)}

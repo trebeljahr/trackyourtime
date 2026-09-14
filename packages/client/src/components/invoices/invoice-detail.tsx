@@ -7,6 +7,8 @@ import { ConfirmDialog } from "@/components/catalog/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { useLocale } from "@/i18n/locale-store";
+import { useT } from "@/i18n/use-t";
 import { InvoiceLines } from "./invoice-lines";
 import {
   canDeleteInvoice,
@@ -14,6 +16,7 @@ import {
   formatRange,
   statusActionLabel,
   statusBadgeTone,
+  statusLabel,
   statusTransitions,
   type InvoiceRow,
 } from "./types";
@@ -40,6 +43,8 @@ export function InvoiceDetail({
 }: InvoiceDetailProps): React.JSX.Element {
   const { setStatus, removeInvoice, downloadPdf, isBusy } =
     useInvoiceMutations();
+  const t = useT("reports");
+  const locale = useLocale();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
 
@@ -72,7 +77,7 @@ export function InvoiceDetail({
               variant={statusBadgeTone(invoice.status)}
               data-testid="invoice-detail-status"
             >
-              {invoice.status}
+              {statusLabel(invoice.status, locale)}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground" data-testid="invoice-detail-client">
@@ -84,7 +89,7 @@ export function InvoiceDetail({
           variant="ghost"
           size="icon"
           onClick={onClose}
-          aria-label="Close invoice"
+          aria-label={t("invoices.detail.close")}
           data-testid="invoice-detail-close"
         >
           <X className="size-4" />
@@ -93,17 +98,27 @@ export function InvoiceDetail({
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
         <div>
-          <dt className="text-muted-foreground">Issued</dt>
-          <dd data-testid="invoice-detail-issued">{formatDate(invoice.issueDate)}</dd>
+          <dt className="text-muted-foreground">{t("invoices.columns.issued")}</dt>
+          <dd data-testid="invoice-detail-issued">
+            {formatDate(invoice.issueDate, locale)}
+          </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Due</dt>
-          <dd data-testid="invoice-detail-due">{formatDate(invoice.dueDate)}</dd>
+          <dt className="text-muted-foreground">{t("invoices.columns.due")}</dt>
+          <dd data-testid="invoice-detail-due">{formatDate(invoice.dueDate, locale)}</dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Billed range</dt>
+          <dt className="text-muted-foreground">{t("invoices.columns.billedRange")}</dt>
           <dd data-testid="invoice-detail-range">
-            {formatRange(invoice.from, invoice.to)}
+            {formatRange(invoice.from, invoice.to, locale)}
+          </dd>
+        </div>
+        {/* The document's own language, snapshotted at creation. An invoice
+            without one predates localisation and is English for good. */}
+        <div>
+          <dt className="text-muted-foreground">{t("invoices.columns.language")}</dt>
+          <dd data-testid="invoice-detail-language">
+            {t(`invoices.languages.${invoice.locale ?? "en"}`)}
           </dd>
         </div>
       </dl>
@@ -128,10 +143,9 @@ export function InvoiceDetail({
       ) : null}
 
       <p className="text-xs text-muted-foreground" data-testid="invoice-detail-entries">
-        {invoice.entryIds.length}{" "}
-        {invoice.entryIds.length === 1 ? "time entry is" : "time entries are"}{" "}
-        billed on this invoice and cannot be billed again
-        {deletable ? " unless this draft is deleted." : "."}
+        {deletable
+          ? t("invoices.detail.entriesDraft", { count: invoice.entryIds.length })
+          : t("invoices.detail.entriesFinal", { count: invoice.entryIds.length })}
       </p>
 
       <Separator />
@@ -147,7 +161,7 @@ export function InvoiceDetail({
             onClick={() => setStatus(invoice.id, status)}
             data-testid={`invoice-status-set-${status}`}
           >
-            {statusActionLabel(invoice.status, status)}
+            {statusActionLabel(invoice.status, status, locale)}
           </Button>
         ))}
 
@@ -164,7 +178,7 @@ export function InvoiceDetail({
           ) : (
             <Download className="size-4" />
           )}
-          Download PDF
+          {t("invoices.detail.downloadPdf")}
         </Button>
 
         {deletable ? (
@@ -178,7 +192,7 @@ export function InvoiceDetail({
             data-testid="invoice-delete"
           >
             <Trash2 className="size-4" />
-            Delete draft
+            {t("invoices.detail.deleteDraft")}
           </Button>
         ) : null}
       </div>
@@ -186,16 +200,11 @@ export function InvoiceDetail({
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title={`Delete draft ${invoice.number}?`}
-        description={
-          <>
-            The {invoice.entryIds.length}{" "}
-            {invoice.entryIds.length === 1 ? "entry" : "entries"} on it become
-            billable again, and the number is given up. Only drafts can be
-            deleted — once an invoice is sent it is a record.
-          </>
-        }
-        confirmLabel="Delete draft"
+        title={t("invoices.detail.deleteTitle", { number: invoice.number })}
+        description={t("invoices.detail.deleteDescription", {
+          count: invoice.entryIds.length,
+        })}
+        confirmLabel={t("invoices.detail.deleteDraft")}
         onConfirm={() => {
           removeInvoice(invoice.id);
           onDeleted();

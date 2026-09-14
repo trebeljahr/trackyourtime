@@ -150,7 +150,6 @@ export const members: Translation<typeof source> = {
     members: "Mitglieder",
     empty: "Keine Mitglieder.",
     search: "Mitglieder suchen …",
-    groupBy: "Mitglied",
     moneyHidden: "Beträge sind für deine Rolle ausgeblendet.",
   },
 };

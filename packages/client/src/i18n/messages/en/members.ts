@@ -144,7 +144,6 @@ export const members = {
     members: "Members",
     empty: "No members.",
     search: "Search members...",
-    groupBy: "Member",
     moneyHidden: "Amounts are hidden for your role.",
   },
 } as const;

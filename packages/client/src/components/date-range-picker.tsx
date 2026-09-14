@@ -7,7 +7,6 @@ import {
   endOfWeek,
   endOfYear,
   format,
-  isSameDay,
   parseISO,
   startOfMonth,
   startOfWeek,
@@ -20,6 +19,11 @@ import {
 import { CalendarDays } from "lucide-react";
 import type { WeekStart } from "@starter/shared";
 
+import type { ClientLocale } from "@/i18n/config";
+import { DATE_STYLES, intlLocale } from "@/i18n/format";
+import { getActiveLocale, useLocale } from "@/i18n/locale-store";
+import { getTranslator } from "@/i18n/translator";
+import { useT } from "@/i18n/use-t";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,21 +58,30 @@ export type DateRangePresetId =
  */
 export type DateRangePickerPresetId = DateRangePresetId | "allTime";
 
-const ALL_TIME_LABEL = "All time";
-
-export const DATE_RANGE_PRESETS: {
-  id: DateRangePresetId;
-  label: string;
-}[] = [
-  { id: "today", label: "Today" },
-  { id: "yesterday", label: "Yesterday" },
-  { id: "thisWeek", label: "This week" },
-  { id: "lastWeek", label: "Last week" },
-  { id: "thisMonth", label: "This month" },
-  { id: "lastMonth", label: "Last month" },
-  { id: "thisYear", label: "This year" },
-  { id: "last5Years", label: "Last 5 years" },
+/** The presets, in the order the picker lists them. */
+export const DATE_RANGE_PRESETS: { id: DateRangePresetId }[] = [
+  { id: "today" },
+  { id: "yesterday" },
+  { id: "thisWeek" },
+  { id: "lastWeek" },
+  { id: "thisMonth" },
+  { id: "lastMonth" },
+  { id: "thisYear" },
+  { id: "last5Years" },
 ];
+
+/**
+ * A preset's name in `locale`. Read at call time, never stored in a constant:
+ * a label computed at import would stay English after the switch.
+ */
+export const presetLabel = (
+  id: DateRangePickerPresetId,
+  locale: ClientLocale = getActiveLocale()
+): string => {
+  if (id === "allTime") return getTranslator(locale, "reports")("rangePicker.allTime");
+  if (id === "last5Years") return getTranslator(locale, "reports")("rangePicker.last5Years");
+  return getTranslator(locale, "common")(`time.${id}`);
+};
 
 /** Local "YYYY-MM-DD" — never `toISOString()`, which shifts across timezones. */
 export const toDateKey = (date: Date): string => format(date, "yyyy-MM-dd");
@@ -154,24 +167,25 @@ export const matchPreset = (
   return null;
 };
 
-const presetLabel = (id: DateRangePickerPresetId): string =>
-  id === "allTime"
-    ? ALL_TIME_LABEL
-    : (DATE_RANGE_PRESETS.find((preset) => preset.id === id)?.label ?? "");
-
-/** "21 Aug 2026" or "1 – 7 Aug 2026" — a compact, unambiguous label. */
-export const formatRangeLabel = (range: DateRange): string => {
+/**
+ * "21 Aug 2026" or "1–7 Aug 2026" / "1.–7. Aug. 2026" — a compact, unambiguous
+ * label. `Intl.DateTimeFormat#formatRange` drops the parts both ends share, in
+ * the order and punctuation the locale expects.
+ */
+export const formatRangeLabel = (
+  range: DateRange,
+  locale: ClientLocale = getActiveLocale()
+): string => {
   const from = parseDateKey(range.from);
   const to = parseDateKey(range.to);
-  if (!from || !to) return "Select dates";
-  if (isSameDay(from, to)) return format(from, "d MMM yyyy");
-  if (from.getFullYear() === to.getFullYear()) {
-    if (from.getMonth() === to.getMonth()) {
-      return `${format(from, "d")} – ${format(to, "d MMM yyyy")}`;
-    }
-    return `${format(from, "d MMM")} – ${format(to, "d MMM yyyy")}`;
+  if (!from || !to) return getTranslator(locale, "reports")("rangePicker.selectDates");
+  const formatter = new Intl.DateTimeFormat(intlLocale(locale), DATE_STYLES.medium);
+  const [start, end] = from.getTime() <= to.getTime() ? [from, to] : [to, from];
+  try {
+    return formatter.formatRange(start, end);
+  } catch {
+    return `${formatter.format(start)} – ${formatter.format(end)}`;
   }
-  return `${format(from, "d MMM yyyy")} – ${format(to, "d MMM yyyy")}`;
 };
 
 export type DateRangePickerProps = {
@@ -202,6 +216,8 @@ export function DateRangePicker({
   testId = "date-range-picker",
 }: DateRangePickerProps): React.JSX.Element {
   const [open, setOpen] = React.useState(false);
+  const locale = useLocale();
+  const t = useT("reports");
 
   // The two fields are edited as a draft and only committed once they describe
   // an ordered range. A native date input fires `change` on every keystroke, so
@@ -273,7 +289,7 @@ export function DateRangePicker({
         >
           <CalendarDays className="size-4 opacity-70" />
           <span className="truncate">
-            {active ? presetLabel(active) : formatRangeLabel(value)}
+            {active ? presetLabel(active, locale) : formatRangeLabel(value, locale)}
           </span>
         </Button>
       </PopoverTrigger>
@@ -293,7 +309,7 @@ export function DateRangePicker({
               onClick={() => applyPreset(preset.id)}
               data-testid={`${testId}-preset-${preset.id}`}
             >
-              {preset.label}
+              {presetLabel(preset.id, locale)}
             </Button>
           ))}
           {allTime ? (
@@ -305,7 +321,7 @@ export function DateRangePicker({
               onClick={applyAllTime}
               data-testid={`${testId}-preset-allTime`}
             >
-              {ALL_TIME_LABEL}
+              {t("rangePicker.allTime")}
             </Button>
           ) : null}
         </div>
@@ -315,7 +331,7 @@ export function DateRangePicker({
         <div className="grid grid-cols-2 gap-2">
           <div className="grid min-w-0 gap-1">
             <Label htmlFor={`${testId}-from`} className="text-xs">
-              From
+              {t("rangePicker.from")}
             </Label>
             <Input
               id={`${testId}-from`}
@@ -329,7 +345,7 @@ export function DateRangePicker({
           </div>
           <div className="grid min-w-0 gap-1">
             <Label htmlFor={`${testId}-to`} className="text-xs">
-              To
+              {t("rangePicker.to")}
             </Label>
             <Input
               id={`${testId}-to`}
@@ -348,7 +364,7 @@ export function DateRangePicker({
             className="mt-2 text-xs text-destructive"
             data-testid={`${testId}-invalid`}
           >
-            From is after To — the range is not applied yet.
+            {t("rangePicker.invalid")}
           </p>
         ) : null}
       </PopoverContent>

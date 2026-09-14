@@ -5,6 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import type { BudgetStatus } from "@starter/shared";
 
 import { Badge } from "@/components/ui/badge";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import type { BudgetMeter as BudgetMeterData, BudgetView } from "@/lib/budget-view";
 
@@ -65,6 +66,7 @@ type MeterProps = {
 };
 
 function Meter({ meter, name, testId }: MeterProps): React.JSX.Element {
+  const t = useT("reports");
   return (
     <div className="space-y-1" title={meter.remainderLabel} data-testid={testId}>
       <div className="flex items-baseline justify-between gap-2 text-xs">
@@ -82,7 +84,10 @@ function Meter({ meter, name, testId }: MeterProps): React.JSX.Element {
         aria-valuenow={Math.round(meter.fill)}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuetext={`${meter.percentLabel} — ${meter.remainderLabel}`}
+        aria-valuetext={t("budget.meterValue", {
+          percent: meter.percentLabel,
+          remainder: meter.remainderLabel,
+        })}
         className="block h-1.5 overflow-hidden rounded-full bg-muted"
       >
         <span
@@ -113,6 +118,7 @@ export function BudgetMeterCell({
   emptyLabel = "—",
   testId,
 }: BudgetMeterProps): React.JSX.Element {
+  const t = useT("reports");
   if (view === null) {
     return (
       <span className="text-muted-foreground/70" data-testid={testId}>
@@ -126,14 +132,14 @@ export function BudgetMeterCell({
       {view.hours ? (
         <Meter
           meter={view.hours}
-          name="Tracked hours against the estimate"
+          name={t("budget.hoursMeter")}
           testId={testId ? `${testId}-hours` : undefined}
         />
       ) : null}
       {view.amount ? (
         <Meter
           meter={view.amount}
-          name="Billable amount against the budget"
+          name={t("budget.amountMeter")}
           testId={testId ? `${testId}-amount` : undefined}
         />
       ) : null}
