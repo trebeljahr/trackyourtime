@@ -217,7 +217,7 @@ jobs:
       # and `version` are set by hand because metadata-action reads them from
       # the event, which on a dispatch is the dispatching branch.
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ env.IMAGE_OWNER_REPO }}-server
           flavor: latest=false
@@ -311,7 +311,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ env.IMAGE_OWNER_REPO }}-client-selfhost
           flavor: latest=false
@@ -417,7 +417,7 @@ jobs:
       # output from its own input and would otherwise fall back to the repo's
       # name and description.
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
