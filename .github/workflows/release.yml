@@ -36,9 +36,33 @@
 # client emits no third-party script tags at all, so a self-hosted instance
 # makes no outbound request the operator did not ask for.
 #
-# Note that `v*` tags ALSO trigger desktop-release.yml, mobile-release.yml and
-# tauri-release.yml. One `git tag v1.2.3 && git push --tags` therefore fans out
-# to four workflows; that is expected.
+# A `v*` tag runs THIS workflow and nothing else. desktop-release.yml,
+# mobile-release.yml and tauri-release.yml run on manual dispatch only (their
+# `on:` blocks list what has to be true before a tag trigger comes back), and
+# build-and-deploy.yml runs on pushes to main and on pull requests.
+#
+# ── Jobs, in order ───────────────────────────────────────────────────────
+#
+#   prepare    resolves the version, the commit, and which tags may move.
+#   release-*  one leg per image per arch, each on a NATIVE runner
+#              (ubuntu-24.04 / ubuntu-24.04-arm), pushed by digest only — no
+#              tag exists yet. A dispatch with `push` unchecked stops here: it
+#              builds both images on both arches and discards the result,
+#              which is the only way to test this file without publishing.
+#   merge      joins the two digests of each image into one manifest list and
+#              pushes the EXACT tag (vX.Y.Z) and nothing else.
+#   smoke      pulls that exact tag ANONYMOUSLY on amd64 and on arm64, starts
+#              docker-compose.selfhost.yml from the tagged commit, and checks
+#              /api/health, the web app and the proxy's /api routing
+#              (scripts/verify-release-images.sh — the same script the
+#              maintainer runs locally, see docs/releasing.md).
+#   promote    moves `X.Y` and `latest` onto the exact tag, only once smoke
+#              has passed on both arches. A broken image, or one nobody can
+#              pull because its package is still private, never becomes what
+#              `latest` points at.
+#
+# See docs/releasing.md for the maintainer's runbook, including the one
+# manual step of the FIRST release (making tracktime-client-selfhost public).
 
 name: release
 
@@ -49,107 +73,231 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing git tag to (re-)publish images for, e.g. v1.2.3"
-        required: true
+        description: "vX.Y.Z to (re-)publish. Required when push is checked; empty builds the dispatched branch"
+        required: false
         type: string
+        default: ""
+      push:
+        description: "Push to GHCR. Unchecked builds both images on both arches and discards the result"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
+# Read-only by default. `packages: write` is granted per job, to the build,
+# merge and promote jobs only — never to smoke, whose whole point is to prove
+# the images can be pulled by someone holding no token at all.
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  # Resolves one version string for both build jobs, so a manual re-cut
-  # publishes the same tags a pushed tag would. On workflow_dispatch,
-  # github.ref_name is a BRANCH, which would make metadata-action's semver
-  # parsing produce nothing at all — hence the explicit input and the
-  # `ref:` checkout in the build jobs.
+  # Resolves one version string and one commit for every later job, so a
+  # manual re-cut publishes the same tags a pushed tag would, and all four
+  # build legs compile the same commit even if the tag were moved mid-run.
+  # On workflow_dispatch github.ref_name is a BRANCH and github.sha is that
+  # branch's head — hence the explicit input and the resolved `sha` output
+  # that every checkout and every revision label below uses instead.
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
+      push: ${{ steps.resolve.outputs.push }}
       version: ${{ steps.resolve.outputs.version }}
+      sha: ${{ steps.resolve.outputs.sha }}
       latest: ${{ steps.resolve.outputs.latest }}
-    steps:
-      - id: resolve
-        env:
-          RAW_VERSION: ${{ github.event.inputs.tag || github.ref_name }}
-        run: |
-          set -euo pipefail
-          version="$RAW_VERSION"
-          if ! printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
-            echo "::error::'$version' is not a vX.Y.Z tag. Release images are version-tagged; refusing to publish an unversioned one."
-            exit 1
-          fi
-          # A prerelease (v1.2.3-rc.1) gets its exact tag and nothing else.
-          # Moving `:latest` onto it would hand every self-hoster tracking
-          # latest an unfinished build without them doing anything.
-          case "$version" in
-            *-*) latest=false ;;
-            *)   latest=true ;;
-          esac
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "latest=$latest" >> "$GITHUB_OUTPUT"
-          echo "Releasing $version (latest=$latest)"
-
-  release-server:
-    runs-on: ubuntu-latest
-    needs: [prepare]
+      minor: ${{ steps.resolve.outputs.minor }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.version }}
+          ref: ${{ inputs.tag || github.ref }}
+          # Full history AND tags: the latest/minor decision below compares
+          # this version against every other release tag.
+          fetch-depth: 0
 
-      - uses: docker/setup-qemu-action@v3
+      - id: resolve
+        env:
+          # The push event carries no inputs, so a pushed tag always publishes
+          # — nothing a dispatch form says can weaken the tag path.
+          PUSH: ${{ github.event_name == 'push' || inputs.push == true }}
+          RAW_VERSION: ${{ inputs.tag || (github.event_name == 'push' && github.ref_name) || '' }}
+        run: |
+          set -euo pipefail
+          version="$RAW_VERSION"
+          sha="$(git rev-parse HEAD)"
+          latest=false
+          minor=""
+
+          if [ "$PUSH" = "true" ]; then
+            if [ -z "$version" ]; then
+              echo "::error::push is checked but no tag was given. Publishing needs an existing vX.Y.Z tag."
+              exit 1
+            fi
+            if ! printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+              echo "::error::'$version' is not a vX.Y.Z tag. Release images are version-tagged; refusing to publish an unversioned one."
+              exit 1
+            fi
+            # A prerelease (v1.2.3-rc.1) gets its exact tag and nothing else.
+            # Moving `:latest` onto it would hand every self-hoster tracking
+            # latest an unfinished build without them doing anything.
+            case "$version" in
+              *-*) ;;
+              *)
+                # A stable release moves a floating tag only when it is the
+                # newest stable release that tag covers. Without this, a
+                # dispatch re-publishing v0.1.0 after v0.2.0 exists would move
+                # `latest` BACKWARDS, and a hotfix v0.1.5 would drag `latest`
+                # off 0.2 while rightly moving `0.1`.
+                series="$(printf '%s' "$version" | sed -E 's/^v([0-9]+)\.([0-9]+)\..*/\1.\2/')"
+                stable="$(git tag -l 'v*' | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V)"
+                newest="$(printf '%s\n' "$stable" | tail -n 1)"
+                newest_in_series="$(printf '%s\n' "$stable" | { grep -F "v${series}." || true; } | tail -n 1)"
+                if [ "$version" = "$newest" ]; then latest=true; fi
+                if [ "$version" = "$newest_in_series" ]; then minor="$series"; fi
+                ;;
+            esac
+          else
+            # Dry run: the version only names the build in labels and logs.
+            version="${version:-dryrun-$(git rev-parse --short HEAD)}"
+          fi
+
+          {
+            echo "push=$PUSH"
+            echo "version=$version"
+            echo "sha=$sha"
+            echo "latest=$latest"
+            echo "minor=$minor"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing $version at $sha (push=$PUSH, latest=$latest, minor=${minor:-none})"
+
+  release-server:
+    needs: [prepare]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      # Both legs always finish, so one run tells you whether the failure is
+      # arch-specific rather than hiding the other half behind a cancel.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
+        if: needs.prepare.outputs.push == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Labels only: this leg pushes by digest and applies no tag. The tag is
+      # written once, by `merge`, onto the joined manifest list. `revision`
+      # and `version` are set by hand because metadata-action reads them from
+      # the event, which on a dispatch is the dispatching branch.
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}-server
-          # latest=false because `latest` is added explicitly below, gated on
-          # the prerelease check — the default `latest=auto` reads the event
-          # ref, which is a branch on workflow_dispatch.
           flavor: latest=false
-          tags: |
-            type=semver,pattern=v{{version}},value=${{ needs.prepare.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare.outputs.version }}
-            type=raw,value=latest,enable=${{ needs.prepare.outputs.latest == 'true' }}
+          tags: type=raw,value=${{ needs.prepare.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=tracktime-server
+            org.opencontainers.image.description=Track Your Time API server
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: packages/server/Dockerfile
-          push: true
-          # arm64 is built under QEMU emulation, which makes the install and
-          # tsc steps several times slower than native. The gha cache is what
-          # keeps a re-cut release from paying that twice.
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
+          # Native runners, one arch each — no QEMU. Emulated arm64 made the
+          # install and tsc steps several times slower, and Node native
+          # binaries under emulation have a history of hanging or dying with
+          # SIGILL; the first run to find out would have been a release tag.
+          platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=release-server
-          cache-to: type=gha,mode=max,scope=release-server
+          # /api/health reports this as `version`, so an operator can tell
+          # which commit a running release is — the deploy workflow passes it
+          # too, and a release image without it answered an empty string.
+          build-args: |
+            COMMIT_SHA=${{ needs.prepare.outputs.sha }}
+          # Publishing: push the image by DIGEST, untagged, for `merge` to
+          # join. Dry run: `cacheonly` builds everything and keeps nothing but
+          # the layer cache.
+          outputs: ${{ needs.prepare.outputs.push == 'true' && format('type=image,name=ghcr.io/{0}-server,push-by-digest=true,name-canonical=true,push=true', github.repository) || 'type=cacheonly' }}
+          # Explicit rather than build-push-action's implicit default, and
+          # mode=max is safe here: no secret and no API URL is a build arg, so
+          # the recorded build parameters disclose nothing. Off on a dry run,
+          # where there is no image to attach an attestation to.
+          provenance: ${{ needs.prepare.outputs.push == 'true' && 'mode=max' || 'false' }}
+          sbom: ${{ needs.prepare.outputs.push == 'true' }}
+          # One cache scope per arch, or the two legs overwrite each other's
+          # cache on every run. A tag run can restore caches written on the
+          # default branch, so a dry-run dispatch on main warms the cache the
+          # real release then reads.
+          cache-from: type=gha,scope=release-server-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=release-server-${{ matrix.arch }}
+
+      - name: Export digest
+        if: needs.prepare.outputs.push == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        if: needs.prepare.outputs.push == 'true'
+        with:
+          name: digests-server-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
 
   release-client-selfhost:
-    runs-on: ubuntu-latest
     needs: [prepare]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.version }}
+          ref: ${{ needs.prepare.outputs.sha }}
 
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
+        if: needs.prepare.outputs.push == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -160,12 +308,16 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}-client-selfhost
           flavor: latest=false
-          tags: |
-            type=semver,pattern=v{{version}},value=${{ needs.prepare.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare.outputs.version }}
-            type=raw,value=latest,enable=${{ needs.prepare.outputs.latest == 'true' }}
+          tags: type=raw,value=${{ needs.prepare.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=tracktime-client-selfhost
+            org.opencontainers.image.description=Track Your Time web app, same-origin build for self-hosting
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           # Deliberately NOT packages/client/Dockerfile — that one packages the
@@ -173,8 +325,10 @@ jobs:
           # from a plain static server, which is what the single-domain
           # reverse-proxy layout needs.
           file: packages/client/Dockerfile.selfhost
-          push: true
-          platforms: linux/amd64,linux/arm64
+          # Native runner per arch, as for the server. The runtime stage is
+          # static files, but `next build` (SWC, lightningcss, the tailwind
+          # oxide binary) runs per leg and is exactly what QEMU was worst at.
+          platforms: ${{ matrix.platform }}
           # An EMPTY value, passed explicitly so the intent is visible in the
           # build log rather than looking like an omission. Empty makes every
           # client call site fall back to a relative URL: tRPC to /api/trpc,
@@ -186,7 +340,207 @@ jobs:
           # WebSocket problem down a dead end.
           build-args: |
             NEXT_PUBLIC_API_URL=
-          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=release-client-selfhost
-          cache-to: type=gha,mode=max,scope=release-client-selfhost
+          outputs: ${{ needs.prepare.outputs.push == 'true' && format('type=image,name=ghcr.io/{0}-client-selfhost,push-by-digest=true,name-canonical=true,push=true', github.repository) || 'type=cacheonly' }}
+          provenance: ${{ needs.prepare.outputs.push == 'true' && 'mode=max' || 'false' }}
+          sbom: ${{ needs.prepare.outputs.push == 'true' }}
+          cache-from: type=gha,scope=release-client-selfhost-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=release-client-selfhost-${{ matrix.arch }}
+
+      - name: Export digest
+        if: needs.prepare.outputs.push == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        if: needs.prepare.outputs.push == 'true'
+        with:
+          name: digests-client-selfhost-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Joins each image's two per-arch digests into one manifest list and tags it
+  # with the EXACT version only. `v` is kept, and a prerelease keeps its
+  # suffix: v1.2.3-rc.1 is published as v1.2.3-rc.1, which a semver pattern
+  # would have rewritten to 1.2.3-rc.1.
+  #
+  # Each per-arch digest is itself an index holding the image and its
+  # provenance/SBOM attestation manifest; `imagetools create` carries those
+  # entries into the joined list. They show on the package page as
+  # `unknown/unknown` platforms, which docker, containerd and compose skip.
+  merge:
+    needs: [prepare, release-server, release-client-selfhost]
+    if: needs.prepare.outputs.push == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [server, client-selfhost]
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}-${{ matrix.image }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+          path: /tmp/digests
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Same key/value set as the build legs' labels, emitted here as INDEX
+      # annotations: labels live inside each per-arch image config, and GHCR's
+      # package page reads a multi-arch image's description from the index.
+      # `annotations:`, not `labels:` — metadata-action builds its annotations
+      # output from its own input and would otherwise fall back to the repo's
+      # name and description.
+      - id: meta
+        uses: docker/metadata-action@v5
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=false
+          tags: type=raw,value=${{ needs.prepare.outputs.version }}
+          annotations: |
+            org.opencontainers.image.title=tracktime-${{ matrix.image }}
+            org.opencontainers.image.description=${{ matrix.image == 'server' && 'Track Your Time API server' || 'Track Your Time web app, same-origin build for self-hosting' }}
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
+
+      - name: Create the manifest list
+        working-directory: /tmp/digests
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r tag; do
+            args+=(-t "$tag")
+          done < <(jq -r '.tags[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+          # One array element per annotation: a description contains spaces,
+          # and unquoted jq output would split it into several arguments.
+          while IFS= read -r annotation; do
+            args+=(--annotation "$annotation")
+          done < <(jq -r '.annotations[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+
+          sources=()
+          for digest in *; do
+            sources+=("${IMAGE}@sha256:${digest}")
+          done
+          if [ "${#sources[@]}" -ne 2 ]; then
+            echo "::error::expected 2 per-arch digests for ${IMAGE}, found ${#sources[@]}: ${sources[*]:-none}"
+            exit 1
+          fi
+
+          docker buildx imagetools create "${args[@]}" "${sources[@]}"
+
+      - name: Check both arches and the attestations landed
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          manifest="$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}')"
+          if ! jq -e '[.manifests[] | .platform // {} | select(.os == "linux") | .architecture] | contains(["amd64", "arm64"])' <<<"$manifest" >/dev/null; then
+            echo "::error::${IMAGE}:${VERSION} does not list both linux/amd64 and linux/arm64"
+            jq '.manifests[] | {digest, platform}' <<<"$manifest"
+            exit 1
+          fi
+          attestations="$(jq '[.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest")] | length' <<<"$manifest")"
+          if [ "$attestations" -lt 2 ]; then
+            echo "::error::${IMAGE}:${VERSION} carries ${attestations} attestation manifest(s), expected one per arch — provenance/SBOM did not survive the merge"
+            exit 1
+          fi
+          echo "${IMAGE}:${VERSION}: linux/amd64 + linux/arm64, ${attestations} attestation manifests"
+
+  # Anonymous pull and start, on both arches, of the exact tag `merge` just
+  # pushed. No login step anywhere in this job and no `packages` permission:
+  # a pull that only works with a token proves nothing about what a
+  # self-hoster will see. On the FIRST publish this fails by design —
+  # GHCR creates tracktime-client-selfhost PRIVATE — and the script's error
+  # says how to flip it; then "Re-run failed jobs" re-runs smoke and promote
+  # without rebuilding anything.
+  smoke:
+    needs: [prepare, release-server, release-client-selfhost, merge]
+    if: needs.prepare.outputs.push == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      # The compose file, Caddyfile and script from the tagged commit — the
+      # ones a self-hoster following that release's docs would use.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      # Fails in seconds, rather than minutes into the script, if a runner
+      # image ever ships without the compose plugin.
+      - run: docker version && docker compose version
+
+      # Belt and braces: the script also runs docker with a throwaway,
+      # credential-free DOCKER_CONFIG.
+      - run: docker logout ghcr.io || true
+
+      - name: Pull and start the release anonymously
+        env:
+          EXPECTED_SHA: ${{ needs.prepare.outputs.sha }}
+          # The packages this run pushed. The script defaults to the upstream
+          # repo's, so a fork's release would otherwise smoke-test upstream.
+          IMAGE_REPO: ${{ github.repository }}
+          VERIFY_PORT: "80"
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: scripts/verify-release-images.sh "$VERSION"
+
+  # Floating tags move last. `imagetools create` re-points X.Y and latest at
+  # the exact tag's index digest, so annotations and attestations come along
+  # and nothing is rebuilt or re-pushed.
+  promote:
+    needs: [prepare, smoke]
+    if: needs.prepare.outputs.push == 'true' && (needs.prepare.outputs.latest == 'true' || needs.prepare.outputs.minor != '')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [server, client-selfhost]
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Move the floating tags
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}-${{ matrix.image }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          LATEST: ${{ needs.prepare.outputs.latest }}
+          MINOR: ${{ needs.prepare.outputs.minor }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "$MINOR" ]; then args+=(-t "${IMAGE}:${MINOR}"); fi
+          if [ "$LATEST" = "true" ]; then args+=(-t "${IMAGE}:latest"); fi
+          docker buildx imagetools create "${args[@]}" "${IMAGE}:${VERSION}"
+          echo "Moved ${args[*]} onto ${IMAGE}:${VERSION}"

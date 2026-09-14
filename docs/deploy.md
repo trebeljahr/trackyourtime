@@ -306,7 +306,9 @@ it), so the deployed server and the tested one cannot drift apart.
 ## Android release signing
 
 Play will not accept an unsigned bundle, and `.github/workflows/
-mobile-release.yml` builds one on every `v*` tag. The wiring is done —
+mobile-release.yml` builds one when it is dispatched by hand (a `v*` tag no
+longer runs it; its `on:` block lists what must be true first). The wiring is
+done —
 `android/app/build.gradle` has a `signingConfigs.release` block that reads the
 key material out of the environment, and the workflow passes it — but the key
 itself does not exist yet. **Generating it is yours to do**: it is a private

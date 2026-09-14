@@ -1,13 +1,30 @@
 name: Desktop Release
 
-# Triggered by pushing a tag like v0.1.0 or manual dispatch.
-# Each platform job builds an Electron app and uploads it to itch.io
-# via butler. Set ITCH_API_KEY / ITCH_USER / ITCH_GAME as repo secrets.
+# Manual dispatch only (Actions -> Desktop Release -> Run workflow); a `v*` tag
+# does not start it — see the note under `on:`. Each platform job builds an
+# Electron app, uploads it as an Actions artifact, and pushes it to itch.io via
+# butler when ITCH_API_KEY / ITCH_USER / ITCH_GAME are set as repo secrets.
+# Nothing it produces is code-signed.
 
 on:
-  push:
-    tags:
-      - "v*"
+  # No `push: tags` trigger, on purpose. v0.1.0 ships the two self-host images
+  # (release.yml) and nothing else: no desktop build is claimed as released,
+  # and neither an itch.io key nor a macOS/Windows signing identity exists on
+  # this repo. Left on the tag, this workflow would have put three red jobs
+  # next to the release, for artifacts nobody was going to download.
+  #
+  # Before adding `push: { tags: ["v*"] }` back above workflow_dispatch:
+  #   - decide how the builds are distributed: itch.io needs the ITCH_API_KEY,
+  #     ITCH_USER and ITCH_GAME secrets; GitHub Releases would need
+  #     `permissions: contents: write` AND dropping `--publish never` below
+  #   - sign them: a macOS Developer ID certificate plus notarization
+  #     credentials (electron-builder reads CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID,
+  #     APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID) and a Windows certificate
+  #     (WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD), exposed to the Package step —
+  #     unsigned builds are blocked by Gatekeeper and flagged by SmartScreen
+  #   - the butler push tags `--userversion` from GITHUB_REF_NAME, which is the
+  #     tag on a tag run but the branch name ("main") on a dispatch
+  #   - run a dispatch of this workflow green on all three legs first
   workflow_dispatch:
 
 # The API origin the static export is built against.
@@ -47,12 +64,20 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    # Job-level rather than step-level, so the butler `if:` guards below can see
+    # it. A step's own `env:` is not in scope for that step's `if:`, so with the
+    # key declared only on the steps they were skipped even with the secret set.
+    env:
+      ITCH_API_KEY: ${{ secrets.ITCH_API_KEY }}
+
     steps:
       - uses: actions/checkout@v4
 
+      # No `version:` input. pnpm/action-setup@v4 reads `packageManager` from
+      # the root package.json, and an explicit `version: 11` next to
+      # "pnpm@11.1.2" is not treated as compatible: the action throws
+      # "Multiple versions of pnpm specified" and every leg died here.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - uses: actions/setup-node@v4
         with:
@@ -115,8 +140,14 @@ jobs:
       - name: Generate desktop icons
         run: pnpm icons:desktop
 
+      # `--publish never`, explicitly. With GH_TOKEN set, electron-builder
+      # publishes on its own: on a tag (or a dispatch) it picks the github
+      # provider and tries to create a release, which this repo's read-only
+      # workflow token answers with a 403 — a red job after a good build. The
+      # artifacts reach users through upload-artifact and butler below, never
+      # through electron-builder.
       - name: Package (electron-builder)
-        run: pnpm exec electron-builder --${{ matrix.target }}
+        run: pnpm exec electron-builder --${{ matrix.target }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -129,8 +160,6 @@ jobs:
       - name: Install butler (itch.io)
         if: env.ITCH_API_KEY != ''
         shell: bash
-        env:
-          ITCH_API_KEY: ${{ secrets.ITCH_API_KEY }}
         run: |
           case "${{ matrix.os }}" in
             macos-latest)  URL=https://broth.itch.ovh/butler/darwin-amd64/LATEST/archive/default ;;
@@ -148,7 +177,6 @@ jobs:
           BUTLER_API_KEY: ${{ secrets.ITCH_API_KEY }}
           ITCH_USER: ${{ secrets.ITCH_USER }}
           ITCH_GAME: ${{ secrets.ITCH_GAME }}
-          ITCH_API_KEY: ${{ secrets.ITCH_API_KEY }}
         run: |
           ARTIFACT=$(ls ${{ matrix.artifact-glob }} | head -n1)
           butler push "$ARTIFACT" "$ITCH_USER/$ITCH_GAME:${{ matrix.butler-channel }}" \

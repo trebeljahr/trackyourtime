@@ -1,13 +1,31 @@
 name: Mobile Release
 
-# Triggered by pushing a tag like v0.1.0 or manual dispatch.
-# Builds an Android AAB and an iOS archive. Store uploads are gated
-# on secrets — without them the jobs just produce artifacts.
+# Manual dispatch only (Actions -> Mobile Release -> Run workflow); a `v*` tag
+# does not start it — see the note under `on:`. Builds an Android AAB and an iOS
+# archive. Signing and store uploads are gated on secrets — without them the
+# Android job produces an UNSIGNED bundle as an Actions artifact, and the iOS
+# job cannot archive at all (no development team is configured).
 
 on:
-  push:
-    tags:
-      - "v*"
+  # No `push: tags` trigger, on purpose. v0.1.0 ships the two self-host images
+  # (release.yml) and nothing else: no store build is claimed as released, and
+  # none of the signing or store secrets exist on this repo. Left on the tag,
+  # the iOS job would go red at Archive, and the Android job would go green and
+  # upload an unsigned .aab as an artifact of the tag's run — downloadable from this public
+  # repo for 90 days, looking like a release artifact.
+  #
+  # Before adding `push: { tags: ["v*"] }` back above workflow_dispatch:
+  #   - Android: the ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+  #     ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD secrets (docs/deploy.md ->
+  #     "Android release signing"), plus PLAY_SERVICE_ACCOUNT_JSON and
+  #     ANDROID_PACKAGE_NAME for the Play upload
+  #   - iOS: DEVELOPMENT_TEAM set in ios/App/App.xcodeproj, a committed
+  #     ios/App/ExportOptions.plist, and the APPLE_CERTIFICATE_BASE64,
+  #     APPLE_CERTIFICATE_PASSWORD, APPLE_API_KEY_BASE64, APPLE_API_KEY_ID and
+  #     APPLE_API_ISSUER_ID secrets — moved into the iOS job's job-level
+  #     `env:`, because its `if:` guards read them and a step's own `env:` is
+  #     not in scope for that step's `if:` (Export IPA has no env at all)
+  #   - run a dispatch of this workflow green on both jobs first
   workflow_dispatch:
 
 # The API origin baked into the static export. See the long note in
@@ -31,17 +49,22 @@ jobs:
     # The four names on the right are the GitHub secrets to set; the four on the
     # left are exactly what android/app/build.gradle's signing block reads.
     # docs/deploy.md -> "Android release signing" has the commands.
+    #
+    # PLAY_SERVICE_ACCOUNT_JSON is here for the same reason: the Play upload's
+    # `if:` reads it, and declared only on that step it was never visible to
+    # the guard, so the upload skipped even with the secret set.
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
       - uses: actions/checkout@v4
 
+      # No `version:` input — see desktop-release.yml. action-setup reads
+      # `packageManager` from package.json and throws on a differing pin.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - uses: actions/setup-node@v4
         with:
@@ -118,8 +141,6 @@ jobs:
       - name: Upload to Play Store (internal track)
         if: env.PLAY_SERVICE_ACCOUNT_JSON != ''
         uses: r0adkll/upload-google-play@v1
-        env:
-          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: ${{ secrets.ANDROID_PACKAGE_NAME }}
@@ -131,9 +152,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `version:` input — see desktop-release.yml. action-setup reads
+      # `packageManager` from package.json and throws on a differing pin.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - uses: actions/setup-node@v4
         with:

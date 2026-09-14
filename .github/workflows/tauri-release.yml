@@ -1,7 +1,7 @@
 name: Tauri Release
 
-# Triggered by pushing a tag like v0.1.0 or manual dispatch.
-# Builds the Tauri desktop app per platform. Signing/notarization steps
+# Manual dispatch only; a `v*` tag does not start it — see the note under
+# `on:`. Builds the Tauri desktop app per platform. Signing/notarization steps
 # run only when the matching secrets are configured:
 #
 # macOS (signed + notarized):
@@ -23,9 +23,24 @@ name: Tauri Release
 # The API origin is NOT among them — see the env block below.
 
 on:
-  push:
-    tags:
-      - "v*"
+  # No `push: tags` trigger, on purpose. The Tauri tree is unrendered Hatchkit
+  # scaffolding, not a configured app: src-tauri/Cargo.toml still reads
+  # `name = "{{projectName}}"` (not a valid crate name, so cargo refuses the
+  # manifest), tauri.conf.json carries `com.example.{{bundleId}}` and category
+  # "Game", and .hatchkit.json enables only the Electron `desktop` feature —
+  # CLAUDE.md allows one desktop wrapper per project. On a tag, all three jobs
+  # would go red at `pnpm tauri build`, next to a release (v0.1.0) that ships only
+  # the self-host images from release.yml. None of the signing secrets listed
+  # above exist on this repo either, so a green build would still be unsigned.
+  #
+  # Before adding `push: { tags: ["v*"] }` back above workflow_dispatch —
+  # or instead, delete src-tauri/ and this file:
+  #   - fill in the placeholders (crate name, productName, identifier) and set
+  #     a real bundle category, and decide Tauri replaces Electron
+  #   - configure the macOS and Windows signing secrets listed above
+  #   - run a dispatch of this workflow green on all three jobs first
+  #
+  # A dispatch today fails the same way; this is parked, not runnable.
   workflow_dispatch:
 
 permissions:
