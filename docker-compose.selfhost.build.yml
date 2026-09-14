@@ -1,0 +1,56 @@
+# Opt-in: build the two app images from this clone instead of pulling them.
+#
+#   git clone --branch v0.1.0 https://github.com/trebeljahr/tracktime.git
+#   cd tracktime
+#   docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml up -d --build
+#
+# Give the machine 4 GB of RAM or more. `next build` for the web app is the
+# memory-hungry step and is killed on the 1–2 GB box that pulling is sized for.
+#
+# Use it when you changed the source, when ghcr.io is unreachable from the
+# machine, or when you want a version that has no published images. Everyone
+# else runs docker-compose.selfhost.yml on its own, which pulls and never
+# builds — see the comment on its `server` service for why that file carries no
+# `build:` section of its own.
+#
+# To go back to the published images, run the same command without the second
+# `-f`. Compose then pulls ghcr.io/…:${TRACKTIME_VERSION} and recreates both
+# containers.
+#
+# ── Why the images get their own local names ─────────────────────────────
+#
+# A build tagged with the ghcr name would sit under the release tag it did not
+# come from. `pull_policy: missing` in the base file then finds that image
+# locally and never pulls the real one, so a machine that built once before a
+# release existed would keep running the local build as `…:v0.1.0` for good.
+# `tracktime-server:local` and `tracktime-client-selfhost:local` cannot be
+# mistaken for a release, and `docker image inspect` shows them with no
+# RepoDigests, which is how a pulled image is told apart from a built one.
+#
+# `pull_policy: build` makes every `up` rebuild (from cache when nothing
+# changed), so an edited checkout cannot keep running a stale local image.
+#
+# Both files must stay in the repository root: relative paths in an override
+# resolve against the directory of the FIRST `-f` file, and `context: .` has to
+# be the root of the monorepo.
+
+services:
+  server:
+    image: tracktime-server:local
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: packages/server/Dockerfile
+
+  client:
+    image: tracktime-client-selfhost:local
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: packages/client/Dockerfile.selfhost
+      args:
+        # Empty on purpose — this is the whole point of the self-host client
+        # image. With no API URL compiled in, the bundle calls relative URLs
+        # and Caddy makes them the same origin as the page. A value here would
+        # bind the build to one host. See packages/client/Dockerfile.selfhost.
+        NEXT_PUBLIC_API_URL: ""

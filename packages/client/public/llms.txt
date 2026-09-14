@@ -20,7 +20,7 @@ Track Your Time is for freelancers, consultants and small studios who bill clien
 **Current limits**
 
 - The web app cannot invite team members. The data model has workspaces with members, but in practice each account is one private workspace.
-- There is no tagged release yet. The first self-hosted start builds the images from source and needs a server with about 4 GB of RAM.
+- There is no tagged release yet, so there are no published images to pull. Until the first release, self-hosting means building the images yourself, which needs about 4 GB of RAM.
 - A self-hosted instance has open sign-up. The application has no setting to close registration. The self-hosting guide lists workarounds at the proxy.
 - The Chrome extension, the Raycast extension and the phone apps are not in any store yet.
 - The Chrome extension has its server address compiled in. To use it with your own server, edit `packages/extension/manifest.config.ts` and build it.

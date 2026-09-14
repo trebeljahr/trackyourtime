@@ -2,18 +2,20 @@
 
 ## Supported versions
 
-Track Your Time is pre-1.0. The root `package.json` says `0.1.0`, there are no
-tagged releases, and there are no maintenance branches. Security fixes land on
-the latest commit of `main` and nowhere else.
+Track Your Time is pre-1.0. Releases are `v*` tags, starting with `v0.1.0`,
+and there are no maintenance branches. Security fixes land on `main` and ship
+in the next release. No fix is backported to an older release.
 
 | Version                | Supported          |
 | ---------------------- | ------------------ |
 | Latest commit on `main` | Yes               |
+| Newest `v*` release     | Until the next release |
 | Any older commit        | No                |
 | Deployed images built from an older commit | No |
 
-If you run a self-hosted instance, "supported" means: update to current `main`
-and rebuild. There is no backport path.
+If you run a self-hosted instance, "supported" means: move to the newest
+release tag, or build current `main` yourself when a fix is not released yet.
+There is no backport path.
 
 ## Reporting a vulnerability
 

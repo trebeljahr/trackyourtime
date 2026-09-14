@@ -3,6 +3,9 @@
 #   cp .env.selfhost.example .env          # then edit APP_DOMAIN + BETTER_AUTH_SECRET
 #   docker compose -f docker-compose.selfhost.yml up -d
 #
+# `up` pulls the published amd64/arm64 images for TRACKTIME_VERSION and never
+# builds. Building from a clone is opt-in: docker-compose.selfhost.build.yml.
+#
 # ── Topology ─────────────────────────────────────────────────────────────
 #
 #   internet ──▶ caddy :80 :443 ──┬──▶ server :5159   /api/*  and  /ws
@@ -34,7 +37,7 @@
 #
 # That one is the two-app Coolify split in docker-compose.server.yml and
 # docker-compose.client.yml (see docs/deploy.md), where the web app and the
-# API are on genuinely different hosts and Traefik does the routing. Those
+# API are on genuinely different hosts and Coolify's proxy does the routing. Those
 # files are untouched by this one; nothing here interacts with them.
 
 name: tracktime
@@ -80,6 +83,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+      # See the note on `server`'s healthcheck. Matters most here: `up --wait`
+      # and `ps` report the stack healthy only once this probe has passed.
+      start_interval: 5s
 
   # ── API, WebSocket sync, everything stateful ───────────────────────────
   #
@@ -89,14 +95,22 @@ services:
   # the half of a user's devices that happened to land on the same process.
   server:
     image: ghcr.io/trebeljahr/tracktime-server:${TRACKTIME_VERSION:-v0.1.0}
-    # `image:` and `build:` together, deliberately. With both present Compose
-    # takes the published image when there is one and falls back to building
-    # from this checkout when there is not, so `up -d` works before a release
-    # tag exists as well as after. Force either half with
-    # `docker compose ... pull` or `docker compose ... build`.
-    build:
-      context: .
-      dockerfile: packages/server/Dockerfile
+    # Published images only, and no `build:` section — deliberately. Compose
+    # ignores a failed pull for any service it knows how to build and quietly
+    # builds it instead, whatever `pull_policy` says. A mistyped tag, a release
+    # that was never published and a package that is still private would all
+    # turn into a `next build` that needs 4 GB of RAM and gets killed on the
+    # 1–2 GB machine this stack is sized for, with nothing on screen saying
+    # why. Without `build:`, the same failure stops `up` with the registry's
+    # own error.
+    #
+    # `missing` pulls on the first start and whenever TRACKTIME_VERSION
+    # changes (a new tag is a new image reference), then starts from the local
+    # copy, so a restart does not need the registry to be reachable.
+    #
+    # To build from a clone instead, add docker-compose.selfhost.build.yml —
+    # see its header, and "Where the images come from" in docs/self-hosting.md.
+    pull_policy: missing
     restart: unless-stopped
     # No `ports:` — the proxy reaches it over the compose network.
     expose:
@@ -185,6 +199,14 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
+      # Probe every 5s while inside start_period, every 30s after it. Without
+      # this the first probe runs only once `interval` has passed, so a server
+      # that is ready in three seconds is still reported `starting` for thirty,
+      # and Caddy — which waits for it to be healthy — waits with it.
+      # Needs Docker Engine 25.0 or newer; an older engine ignores the field
+      # and falls back to the 30s interval, so the stack still starts.
+      # Compose refuses start_interval without start_period, so keep both.
+      start_interval: 5s
 
   # ── The web app: a static export behind the proxy ──────────────────────
   #
@@ -195,13 +217,12 @@ services:
   # domain you do not own.
   client:
     image: ghcr.io/trebeljahr/tracktime-client-selfhost:${TRACKTIME_VERSION:-v0.1.0}
-    # Built locally when the tag is not present, exactly like `server` above.
-    # The empty API URL is the whole point of this image — see the Dockerfile.
-    build:
-      context: .
-      dockerfile: packages/client/Dockerfile.selfhost
-      args:
-        NEXT_PUBLIC_API_URL: ""
+    # Pulled, never built here, for the same reason as `server` above — and
+    # this is the image that makes the reason concrete: `next build` is the
+    # memory-hungry step. The empty API URL is the whole point of this image;
+    # see packages/client/Dockerfile.selfhost, and the override file for a
+    # build that keeps it empty.
+    pull_policy: missing
     restart: unless-stopped
     expose:
       - "8080"
@@ -211,6 +232,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+      # See the note on `server`'s healthcheck.
+      start_interval: 5s
 
   # ── Database ───────────────────────────────────────────────────────────
   #

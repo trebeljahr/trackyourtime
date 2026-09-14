@@ -104,7 +104,7 @@ Stated plainly, because the code has more scaffolding than product in these area
 - **Avatar upload / object storage.** An S3 service module exists and nothing imports it. `avatarUrl` is a field with no upload path behind it.
 - **Search, a command palette, and third-party integrations.** No global search, no palette, no calendar sync, no issue-tracker or commit import. Import is file-based only.
 - **Email verification is off.** Password reset, verification and invitation mail goes out over SMTP once `SMTP_HOST` is set, and falls back to logging the URL to the server console when no transport is configured at all — which is the default local setup. `requireEmailVerification` is still `false`.
-- **CI has never gone green.** The build-and-deploy workflow has two runs in its history — one failed at the build/test job, the other at E2E — so the Docker image builds and the deploy path have never actually executed. The self-host images are published by a separate tag-triggered workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)), which has not run either — no `v*` tag has been cut yet, so `docker compose` builds them locally until one is.
+- **CI has never gone green.** The build-and-deploy workflow has two runs in its history — one failed at the build/test job, the other at E2E — so the Docker image builds and the deploy path have never actually executed. The self-host images are published by a separate tag-triggered workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)), which has not run either — no `v*` tag has been cut yet, so `docker-compose.selfhost.yml`, which only pulls, has nothing to pull until one is, and running it means the opt-in local build in `docker-compose.selfhost.build.yml`.
 
 ## Self-hosting
 
@@ -126,7 +126,8 @@ docker compose -f docker-compose.selfhost.yml up -d
 
 | File | Purpose |
 | --- | --- |
-| `docker-compose.selfhost.yml` | **Self-hosting.** Everything on one domain behind Caddy, with Mongo and Redis included. The one you want. |
+| `docker-compose.selfhost.yml` | **Self-hosting.** Everything on one domain behind Caddy, with Mongo and Redis included. Pulls the published images. The one you want. |
+| `docker-compose.selfhost.build.yml` | Opt-in override for `docker-compose.selfhost.yml` that builds both app images from the clone instead of pulling them. Needs about 4 GB of memory. |
 | `docker-compose.dev.yml` | Local dev infra only: Mongo, Redis, SeaweedFS S3. No app containers. |
 | `docker-compose.server.yml` | The maintainer's production API. One service, `server`. Expects an externally managed Mongo/Redis. |
 | `docker-compose.client.yml` | The maintainer's production web app. One service, `client`. |

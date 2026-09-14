@@ -75,7 +75,7 @@ What it does:
 What it cannot do yet:
 
 - The web app cannot invite team members. The data model has workspaces with members, but in practice one account is one private workspace.
-- There is no tagged release, so there are no published Docker images. The first start builds the images from source and needs about 4 GB of RAM.
+- There is no tagged release yet, so there are no published Docker images. Until the first release, you build the images yourself, which needs about 4 GB of RAM.
 - Anyone who can reach your domain can create an account. The application has no setting to close sign-up, and the self-hosting guide lists workarounds at the proxy.
 - The Chrome extension, the Raycast extension and the phone apps are not in any store yet.
 - The Chrome extension has its server address compiled in. For your own server, you edit one config file and build it. The Raycast extension has server preferences, so one build works with any server.

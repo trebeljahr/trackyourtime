@@ -21,11 +21,14 @@ This is not the maintainer's own deployment. That one is a two-domain split on
 Coolify, documented in [`deploy.md`](https://github.com/trebeljahr/tracktime/blob/main/docs/deploy.md). Nothing here interacts with
 it.
 
-**One limit to know before you start.** No release has been published yet:
-`git tag` in the repository prints nothing. There are no version-tagged images
-to pull, so the first start builds both images from source on your server.
-That build needs about 4 GB of memory. A smaller server works if you add swap
-([Step 0.4](#step-04-add-swap-if-the-server-has-less-than-4-gb-of-ram)).
+**One thing to check before you start.** The compose file pulls the published
+images for one release tag and never builds them. Releases are the `v*` tags
+listed on the repository's Releases page, starting with `v0.1.0`. If the tag
+you want has no published images, `docker compose pull` stops with a registry
+error, and the only way to run that version is to build both images yourself
+([Where the images come from](#where-the-images-come-from)). That build needs
+about 4 GB of memory, or less RAM plus swap
+([Step 0.4](#step-04-add-swap-if-you-build-the-images-yourself)).
 
 ## Contents
 
@@ -77,7 +80,8 @@ Before you send it, make sure the assistant has these:
 The assistant does **not** need an account with any service. There is no
 registry login, no API key, no licence key and no sign-up with a third party.
 Everything it downloads comes from public URLs: the Docker install script, the
-GitHub repository and the public base images.
+GitHub repository, the app images on `ghcr.io` and the public MongoDB, Redis
+and Caddy images on Docker Hub.
 
 **Keep your secrets out of the chat.** `BETTER_AUTH_SECRET` and the whole
 `.env` file stay on the server. Step 4 writes the secret straight into `.env`
@@ -111,11 +115,11 @@ Let's Encrypt at no cost. The figures below are guidance, not benchmarks:
 
 | | Guidance |
 |---|---|
-| RAM, building the images on the server (needed today) | 4 GB, or less RAM plus a swapfile. `next build` for the web app uses the most memory, and the kernel kills it on a 1 GB server with no swap. |
-| RAM, running the stack | 1 GB works for a single user. 2 GB is comfortable. MongoDB uses the most. |
-| RAM, pulling published images (once a release exists) | Same as running the stack. |
+| RAM, pulling the published images (the default) | 1 GB works for a single user. 2 GB is comfortable. MongoDB uses the most. |
+| RAM, building the images yourself (opt-in) | 4 GB, or less RAM plus a swapfile. `next build` for the web app uses the most memory, and the kernel kills it on a 1 GB server with no swap. Running the stack afterwards needs only the 1–2 GB above. |
+| Time for the first start | Mostly download time when you pull, so it depends on your connection. Later starts use the local copies and take seconds. Building the images yourself takes much longer, and is slowest on 1 vCPU. |
 | Disk | 5 GB for images and volumes, plus your data. Time entries are small. A heavy year of tracking takes megabytes. A local build needs several GB more for the build cache, which `docker builder prune` frees afterwards. |
-| CPU | 1 vCPU is enough to run it. The first build is slow on 1 vCPU. PDF and CSV generation is the only bursty work at runtime. |
+| CPU | 1 vCPU is enough to run it. PDF and CSV generation is the only bursty work at runtime. |
 
 **What it does not do.** There is no clustering and no horizontal scaling. The
 server must run as exactly one replica, because live sync fans out inside the
@@ -134,13 +138,15 @@ file runs one replica. Keep it that way.
 | A domain, with an `A` record pointing at the server | Also an `AAAA` record if the server has IPv6. The record must resolve **before** you start the stack, or certificate issuance fails. |
 | Ports 80 and 443 reachable from the internet | Port 80 is not optional: the ACME HTTP challenge uses it. 443/udp is also published, for HTTP/3. |
 | Root, or a user with `sudo` | |
-| About 4 GB of memory for the first build | RAM plus swap. See the limit at the top of this guide. |
+| Outbound access to `ghcr.io` and Docker Hub | For the first start and for every upgrade. Restarts use the local copies of the images. |
+| 1–2 GB of memory | Enough to pull and run the published images. Building the images yourself needs about 4 GB, RAM plus swap. See the limit at the top of this guide. |
 
-**ARM servers.** The release workflow builds `linux/amd64` and `linux/arm64`
-images. Until a release exists, the local build also runs natively on ARM,
-because every base image is multi-arch. MongoDB 7.0 on ARM needs an ARMv8.2-A
-CPU or newer. An Ampere VPS, a Raspberry Pi 5 and an Apple-silicon machine
-qualify. A Raspberry Pi 4 or older does not.
+**ARM servers.** Each release tag covers `linux/amd64` and `linux/arm64`, and
+Docker pulls the one that matches the server, so an ARM server runs a native
+image with no emulation. A local build also runs natively on ARM, because
+every base image is multi-arch. 32-bit ARM is not published. MongoDB 7.0 on
+ARM needs an ARMv8.2-A CPU or newer. An Ampere VPS, a Raspberry Pi 5 and an
+Apple-silicon machine qualify. A Raspberry Pi 4 or older does not.
 
 ---
 
@@ -276,10 +282,14 @@ sudo apt-get update
 sudo apt-get install -y git
 ```
 
-#### Step 0.4. Add swap if the server has less than 4 GB of RAM
+#### Step 0.4. Add swap if you build the images yourself
 
-The first start builds the images on the server, and the web-app build needs
-about 4 GB of memory. RAM plus swap counts.
+Skip this step if you pull the published images, which is the default. Pulling
+and running the stack fits in 1–2 GB.
+
+Building the images on the server is opt-in
+([Where the images come from](#where-the-images-come-from)), and the web-app
+build needs about 4 GB of memory. RAM plus swap counts.
 
 **Run**
 
@@ -373,19 +383,29 @@ git clone https://github.com/trebeljahr/tracktime.git
 cd tracktime
 ```
 
-**Expect** `ls docker-compose.selfhost.yml Caddyfile .env.selfhost.example` to
-print the three file names with no error.
+Then check out the release you will run. The compose file and the images must
+come from the same release, and `TRACKTIME_VERSION` in `.env.selfhost.example`
+names it:
 
-The stack reads only those three files. Clone the whole repository anyway: with
-no published release, Docker builds the images from this checkout, and the
-build needs the whole tree.
+```bash
+git checkout "$(sed -n 's/^TRACKTIME_VERSION=//p' .env.selfhost.example)"
+```
+
+**Expect** `git describe --tags` to print the same tag, for example `v0.1.0`,
+and `ls docker-compose.selfhost.yml Caddyfile .env.selfhost.example` to print
+the three file names with no error.
+
+The stack reads only those three files. The clone also brings
+`scripts/selfhost-check.sh`, which [Step 8](#step-8-verify-the-install) runs,
+and the source that an opt-in local build needs.
 
 **If it fails**
 
 | Symptom | Fix |
 |---|---|
-| `fatal: destination path 'tracktime' already exists` | A clone is already there. Run `cd tracktime` and continue. |
+| `fatal: destination path 'tracktime' already exists` | A clone is already there. Run `cd tracktime`, `git fetch --tags`, and continue. |
 | `Could not resolve host: github.com` | The server has no outbound DNS or internet access. Fix the network first. |
+| `error: pathspec 'v…' did not match any file(s) known to git` | That release has not been published. Stay on `main` and see the limit at the top of this guide. |
 
 ### Step 3. Create your `.env`
 
@@ -457,7 +477,7 @@ commented out:
 |---|---|
 | `APP_DOMAIN` | Always. The site address, and therefore the certificate that Caddy requests. |
 | `BETTER_AUTH_SECRET` | Always. |
-| `TRACKTIME_VERSION` | The image tag to pull. Bump it to upgrade once releases exist. See [Upgrading](#upgrading). |
+| `TRACKTIME_VERSION` | The release tag of both app images, already set to the release the example file shipped with. Change it only to upgrade or roll back. See [Upgrading](#upgrading). |
 | `APP_URL` | Only when the origin is not `https://${APP_DOMAIN}`: a plain-HTTP local trial, or a non-standard port. |
 | `SMTP_*`, `EMAIL_FROM` | Only for outgoing mail. See [Email](#email). |
 | `TRUST_STORE_APPS` | Only to refuse the phone apps and the store extension. It is `true` by default. See [The other clients](#the-other-clients). |
@@ -477,23 +497,34 @@ WebSocket URL from its origin, which still resolves to `example.com/ws`.
 
 ### Step 6. Start the stack
 
+**Run** the pull on its own first. It downloads every image and starts
+nothing, so a problem with the images shows up before any container exists:
+
+```bash
+docker compose -f docker-compose.selfhost.yml pull
+```
+
+**Expect** one `Pulled` line per service and exit status `0`. Compose pulls
+`ghcr.io/trebeljahr/tracktime-server` and
+`ghcr.io/trebeljahr/tracktime-client-selfhost` at the tag in
+`TRACKTIME_VERSION`, and `mongo`, `redis` and `caddy` from Docker Hub. Docker
+picks the `amd64` or `arm64` variant that matches the server. This step is
+most of the first start's time, and how long it takes depends on your
+connection. Nothing is built.
+
 **Run**
 
 ```bash
 docker compose -f docker-compose.selfhost.yml up -d
 ```
 
-**Expect** a long first run. Compose first tries to pull
-`ghcr.io/trebeljahr/tracktime-server` and
-`ghcr.io/trebeljahr/tracktime-client-selfhost` at the tag in
-`TRACKTIME_VERSION`. No release exists yet, so both pulls fail, and Compose
-builds the two images from the clone. The build takes several minutes. The web
-app is the slowest part. `mongo`, `redis` and `caddy` are pulled from Docker
-Hub.
-
-The command ends with one line per container, such as
+**Expect** the command to end with one line per container, such as
 `✔ Container tracktime-server-1  Started` or `Healthy`. Its exit status is
-`0`. Later starts take seconds.
+`0`. Later starts use the local images and take seconds.
+
+If you build the images yourself instead, run the build command from
+[Where the images come from](#where-the-images-come-from) in place of both
+commands above.
 
 To avoid typing `-f docker-compose.selfhost.yml` on every command, export it
 once per shell:
@@ -508,11 +539,14 @@ The rest of this guide keeps the flag, so every block works when pasted.
 
 | Symptom | Fix |
 |---|---|
-| `exit code: 137`, or `Killed`, during the build | The kernel stopped the build because memory ran out. Add swap ([Step 0.4](#step-04-add-swap-if-the-server-has-less-than-4-gb-of-ram)) and run the `up -d` command again. The finished build stages are cached. |
+| `manifest unknown`, or `…: not found` | No image has this tag. `TRACKTIME_VERSION` is misspelled, or that release was never published. Compare it with `git tag`. Nothing was built and no container started. |
+| `denied`, or `unauthorized` | The image package does not exist or is not public. Check that the image names in `docker-compose.selfhost.yml` are unedited. You do not need a registry login, so do not add one. |
+| `dial tcp`, `i/o timeout`, or `no such host` for `ghcr.io` or `registry-1.docker.io` | The server cannot reach the registry. Check outbound DNS and HTTPS, then run `pull` again. |
+| `exit code: 137`, or `Killed`, during a build | You ran the opt-in local build and the kernel stopped it because memory ran out. Add swap ([Step 0.4](#step-04-add-swap-if-you-build-the-images-yourself)) and run the build command again. The finished build stages are cached. |
 | `required variable APP_DOMAIN is missing a value` | Compose found no `.env` with `APP_DOMAIN` in the current directory. `cd` into the clone, or repeat [Step 5](#step-5-set-your-domain). The compose file stops on purpose rather than request a certificate for an empty name. |
 | `required variable BETTER_AUTH_SECRET is missing a value` | Repeat [Step 4](#step-4-generate-the-session-secret). |
 | `Bind for 0.0.0.0:80 failed: port is already allocated`, or `address already in use` | Another program owns port 80 or 443, often a web server installed with the OS image. `sudo ss -tlnp` lists every listening program. Find the one on `:80` or `:443` and stop it. |
-| `no space left on device` | The build cache filled the disk. Run `docker builder prune`, free space, and run `up -d` again. |
+| `no space left on device` | The disk is full. After a local build, the build cache is the usual cause: run `docker builder prune`. Free space, and run the command again. |
 | `permission denied while trying to connect to the Docker daemon socket` | See [Step 0.1](#step-01-install-docker-engine-and-the-compose-plugin). |
 
 ### Step 7. Wait for the services to become healthy
@@ -552,7 +586,7 @@ curl -sS https://track.example.com/api/health
 **Expect** one line of JSON:
 
 ```json
-{"status":"ok","db":true,"webUrl":"https://track.example.com","version":"","timestamp":"2026-09-13T12:00:00.000Z"}
+{"status":"ok","db":true,"webUrl":"https://track.example.com","version":"<40-character commit hash>","timestamp":"2026-09-13T12:00:00.000Z"}
 ```
 
 - `status` is `ok` when the server answers.
@@ -560,8 +594,24 @@ curl -sS https://track.example.com/api/health
 - `webUrl` is the origin the server derived from `APP_URL`. It must match what
   you type in the browser, character for character. Fix it now if it does not,
   rather than debugging sign-in later.
-- `version` is the commit the image was built from. Self-host images are built
-  without that value, so it is empty, and that is expected.
+- `version` is the commit the server image was built from. A published release
+  image carries it, so it tells you exactly which release runs. For `v0.1.0`
+  it equals the output of `git rev-list -n 1 v0.1.0`. An image you built
+  yourself has an empty `version`, and that is expected.
+
+**Run** this to confirm that both app images were pulled from the registry,
+not built on the server:
+
+```bash
+docker image inspect --format '{{.RepoDigests}}' "ghcr.io/trebeljahr/tracktime-server:$(sed -n 's/^TRACKTIME_VERSION=//p' .env)" "ghcr.io/trebeljahr/tracktime-client-selfhost:$(sed -n 's/^TRACKTIME_VERSION=//p' .env)"
+```
+
+**Expect** two lines, each holding one or more
+`ghcr.io/trebeljahr/…@sha256:…` entries. A pulled image records the registry
+digest it came from. A locally built image has no digest, and is named
+`tracktime-server:local` or `tracktime-client-selfhost:local` instead of the
+`ghcr.io` names, so `docker image inspect` reports `No such image` for the
+`ghcr.io` name when you built.
 
 **Run** the full check script from the clone directory:
 
@@ -693,30 +743,79 @@ instance on the internet.
 
 ### Where the images come from
 
-The `server` and `client` services each carry both an `image:` and a `build:`
-key, so `up -d` works whether or not a release exists. Compose uses the
-published image for `TRACKTIME_VERSION` when it can pull one. When it cannot,
-it builds from your clone. The `build:` blocks already name the right context,
-Dockerfile and build arguments. One of those arguments is the empty
-`NEXT_PUBLIC_API_URL`, which makes the web app use its own origin for the API.
+**By default, from the registry.** The `server` and `client` services name the
+published images `ghcr.io/trebeljahr/tracktime-server:${TRACKTIME_VERSION}` and
+`ghcr.io/trebeljahr/tracktime-client-selfhost:${TRACKTIME_VERSION}`. Each tag
+covers `linux/amd64` and `linux/arm64`, and Docker pulls the one that matches
+the server. The images for a release exist once its tag is pushed and
+[`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) has run.
+No registry login is needed.
 
-Images for a version exist only after that tag is pushed and
-[`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) has run. No
-tag exists yet, so today every install builds locally. To avoid building on a
-small server, build on another machine and push the images to your own
-registry.
+Both services set `pull_policy: missing` and have no `build:` section. So:
 
-To force one source or the other:
+- The first `pull` or `up -d` downloads both images. So does the first one
+  after you change `TRACKTIME_VERSION`, because a new tag is a new image.
+- Every other start uses the local copy and does not contact the registry.
+- When an image cannot be pulled, `pull` and `up -d` stop with the registry's
+  error. Nothing is built and no container starts. The
+  [Step 6](#step-6-start-the-stack) table lists the errors and their causes.
+
+**Why there is no automatic build fallback.** Compose treats a failed pull
+differently when a service also has a `build:` section: it ignores the error
+and builds from source, whatever `pull_policy` says. A typo in the tag would
+then start a `next build` that needs 4 GB of memory. On the 1–2 GB server this
+stack is sized for, the kernel kills that build, and nothing on screen says
+why. Building is therefore a separate, deliberate step.
+
+**Building the images yourself.** Use this when you changed the source, when
+the server cannot reach `ghcr.io`, or when you want a version that has no
+published images. You need the clone from [Step 2](#step-2-get-the-files),
+checked out at the version you want, and about 4 GB of memory, RAM plus swap
+([Step 0.4](#step-04-add-swap-if-you-build-the-images-yourself)).
+
+**Run** this from the clone, in place of `pull` and `up -d`:
 
 ```bash
-docker compose -f docker-compose.selfhost.yml pull
+docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml up -d --build
 ```
+
+**Expect** a much longer first run than a pull. The web-app build is the
+slowest and most memory-hungry part. The command ends with the same one line
+per container as [Step 6](#step-6-start-the-stack).
+
+`docker-compose.selfhost.build.yml` builds from the same Dockerfiles the
+release workflow uses, including the empty `NEXT_PUBLIC_API_URL`, which makes
+the web app use its own origin for the API. Every `up` with this file rebuilds,
+from the build cache when nothing changed, so an edited checkout never keeps
+running a stale image. Both compose files must stay in the root of the clone.
+
+The local images are named `tracktime-server:local` and
+`tracktime-client-selfhost:local`, never the `ghcr.io` names. A local build
+therefore cannot sit under a release tag and stop the real image from being
+pulled later. To go back to the published images, run the commands from
+[Step 6](#step-6-start-the-stack) without the second `-f`. Compose then pulls
+the `ghcr.io` images and recreates both containers.
+
+**If you ran this stack before `v0.1.0` was published.** Earlier versions of
+the compose file built the images on the server under the `ghcr.io` names. A
+server that did that already holds a local image called
+`ghcr.io/trebeljahr/tracktime-server:v0.1.0`, and `pull_policy: missing` keeps
+using it: `pull` prints `Skipped - Image is already present locally`. Replace
+the local build with the published image once:
 
 ```bash
-docker compose -f docker-compose.selfhost.yml build
+docker compose -f docker-compose.selfhost.yml pull --policy always
 ```
 
-`pull` fetches published images only. `build` builds locally only.
+Then run `up -d`. The repo-digest check in
+[Step 8](#step-8-verify-the-install) confirms the containers now run the
+published images.
+
+To build the two local images without starting or restarting anything:
+
+```bash
+docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml build
+```
 
 Do **not** use `ghcr.io/trebeljahr/tracktime-client:main` as the self-host
 client image. That is the maintainer's build, with the maintainer's API host
@@ -1148,58 +1247,81 @@ Take a dump first. Always:
 docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/tracktime" --archive --gzip > pre-upgrade-$(date +%Y%m%d-%H%M%S).archive.gz
 ```
 
-### Upgrading while no release exists
-
-Today every install runs a local build of the `main` branch. An upgrade is a
-newer local build. Run these from the clone directory:
-
-```bash
-git pull --ff-only
-```
-
-```bash
-docker compose -f docker-compose.selfhost.yml up -d --build
-```
-
-**Expect** the build to run again, and `ps` to show five healthy services
-afterwards. Run `scripts/selfhost-check.sh track.example.com` to confirm.
-
-A local build is tagged with the value of `TRACKTIME_VERSION`. When you later
-switch to a published release, run `pull` explicitly, as below. Otherwise
-Compose keeps using the local image that carries the same tag.
-
 ### Upgrading to a published release
 
-Both images carry the same tag, so one variable covers the whole stack. Set
-`TRACKTIME_VERSION` in `.env` to the release you want, then:
+Both app images carry the same tag, so one variable covers the whole stack.
+The compose file and `Caddyfile` can change between releases too, so move the
+clone to the same tag first. Run these from the clone directory, with
+`vX.Y.Z` replaced by the release you want:
+
+```bash
+git fetch --tags
+```
+
+```bash
+git checkout vX.Y.Z
+```
+
+If you edited `Caddyfile` and the new release changes it, `git checkout`
+refuses and names the file. Run `git stash`, repeat the checkout, then run
+`git stash pop` and resolve any conflict in `Caddyfile`.
+
+Set `TRACKTIME_VERSION=vX.Y.Z` in `.env`, then:
 
 ```bash
 docker compose -f docker-compose.selfhost.yml pull
 ```
 
+**Expect** exit status `0`. `pull` downloads the new images while the old
+containers keep running. When the tag does not exist, it stops with
+`not found` before anything restarts, so a typo in `TRACKTIME_VERSION` costs
+no downtime.
+
 ```bash
 docker compose -f docker-compose.selfhost.yml up -d
 ```
 
-Compose recreates only the containers whose image changed. Expect a few seconds
-of downtime on the server container. Every connected client's sync socket
-reconnects on its own afterwards. Run `scripts/selfhost-check.sh` again to
-confirm.
+Compose recreates only the containers whose image or configuration changed.
+The server is unavailable while its container restarts. Every connected
+client's sync socket reconnects on its own afterwards. Run
+`scripts/selfhost-check.sh track.example.com` again to confirm, and check that
+`version` in `/api/health` changed (see [Step 8](#step-8-verify-the-install)).
+
+### Upgrading when you build the images yourself
+
+Check out the new tag as above, or pull the branch you build from, then
+rebuild:
+
+```bash
+docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml up -d --build
+```
+
+**Expect** the build to run again, and `ps` to show five healthy services
+afterwards.
 
 ### Which tag to pin
 
 | Tag | Meaning |
 |---|---|
 | `vX.Y.Z` | An exact release. The default, and the recommendation. |
-| `X.Y` | The newest patch of that minor line. |
-| `latest` | The newest stable release. Prereleases never move it. |
+| `vX.Y.Z-rc.N` | A prerelease. Published under this exact tag only. It never moves `X.Y` or `latest`. |
+| `X.Y` | The newest stable patch release of that minor line. |
+| `latest` | The newest stable release. |
 | `:main` | **Not a release.** The maintainer's own deploy tag, built from every push to `main`. Do not set `TRACKTIME_VERSION` to it. |
+
+The release workflow publishes in this order. It pushes the exact `vX.Y.Z` tag
+for both images first. It then pulls that tag with no registry login and
+starts this compose stack from it, once on `amd64` and once on `arm64`. `X.Y`
+and `latest` move to the new release only after both starts pass. A release
+that fails that check therefore never becomes `latest`, though its exact tag
+stays published.
 
 ### Rolling back
 
-Set `TRACKTIME_VERSION` back to the previous release and repeat `pull` and
-`up -d`. If the newer version wrote data that the older one cannot read,
-restore the dump you took before upgrading (see
+Check out the previous tag, set `TRACKTIME_VERSION` back to it, and repeat
+`pull` and `up -d`. If you build the images yourself, check out the previous
+tag and run the build command instead. If the newer version wrote data that
+the older one cannot read, restore the dump you took before upgrading (see
 [Backup and restore](#backup-and-restore)).
 
 ### Migrations
@@ -1464,12 +1586,24 @@ The state of every container, including which one is unhealthy:
 docker compose -f docker-compose.selfhost.yml ps
 ```
 
+### `pull` or `up` stops with a registry error
+
+The default compose file never builds, so an image it cannot pull stops the
+command, and no container starts. Read the last error line and match it
+against the table in [Step 6](#step-6-start-the-stack): `not found` is a tag
+that does not exist, `denied` is an image that is not public, and a DNS or
+timeout error is a network problem. Fix the cause and run `pull` again. Do not
+add a `build:` section to `docker-compose.selfhost.yml` to get past it; use
+the opt-in build file from
+[Where the images come from](#where-the-images-come-from).
+
 ### The build is killed (exit code 137)
 
-`docker compose up -d` or `build` stops with `exit code: 137`, or the log says
-`Killed`. The kernel's out-of-memory killer ended the build, almost always
-during `next build` for the web app. Add a 4 GB swapfile
-([Step 0.4](#step-04-add-swap-if-the-server-has-less-than-4-gb-of-ram)) and run
+This happens only with the opt-in local build.
+`docker compose … up -d --build` or `build` stops with `exit code: 137`, or
+the log says `Killed`. The kernel's out-of-memory killer ended the build,
+almost always during `next build` for the web app. Add a 4 GB swapfile
+([Step 0.4](#step-04-add-swap-if-you-build-the-images-yourself)) and run
 the command again. `dmesg | grep -i 'out of memory'` confirms the cause.
 
 ### `403 INVALID_ORIGIN` on sign-in
@@ -1586,6 +1720,11 @@ Caddy skips ACME for `localhost` in both cases. Do not combine
 Caddy redirects `http://localhost` to `https://localhost`, so the browser's
 origin no longer matches `APP_URL` and sign-in fails with `403 INVALID_ORIGIN`.
 
+Both setups assume Caddy answers on port 80 (and 443). If you map it to
+another host port, `APP_URL` must be the exact address in the browser,
+port included, for example `APP_URL=http://localhost:8080`. Without the port,
+sign-in fails with `403 INVALID_ORIGIN`.
+
 Use one spelling consistently. `127.0.0.1` is a different origin from
 `localhost` for both the session cookie and the origin check, and the server
 deliberately does not treat them as the same.
@@ -1644,7 +1783,8 @@ While Mongo is unhealthy the server does not start at all, because
 
 | File | Role |
 |---|---|
-| `docker-compose.selfhost.yml` | The stack. Five services, five volumes, one set of published ports |
+| `docker-compose.selfhost.yml` | The stack. Five services, five volumes, one set of published ports. Pulls the published images and never builds |
+| `docker-compose.selfhost.build.yml` | Opt-in override that builds the two app images from the clone instead of pulling them. Needs about 4 GB of memory |
 | `.env.selfhost.example` | Copy to `.env`. Two values are required, and the rest are commented out |
 | `Caddyfile` | The single-domain routing rules: `/api/*` and `/ws` to the server, everything else to the web app |
 | `scripts/selfhost-check.sh` | Verifies a running install, one `PASS`, `FAIL` or `SKIP` line per check |
@@ -1654,5 +1794,5 @@ While Mongo is unhealthy the server does not start at all, because
 | `packages/server/src/cli/admin.ts` | The admin CLI, compiled into the server image as `dist/cli/admin.js` |
 | `docker-compose.selfhost.ci.yml` | CI override: runs the stack with images built from the checkout, on `localhost` |
 | [`.github/workflows/selfhost-smoke.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/selfhost-smoke.yml) | Boots the stack on pull requests that change it, and runs `doctor`, `create-user` and `reset-password` against it |
-| [`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) | Publishes the multi-arch, version-tagged images on a `v*` tag |
+| [`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) | On a `v*` tag, builds both images for `amd64` and `arm64`, pushes the exact tag, starts the stack from an anonymous pull on both, then moves `X.Y` and `latest` |
 | [`docs/deploy.md`](https://github.com/trebeljahr/tracktime/blob/main/docs/deploy.md) | The maintainer's own two-domain Coolify deployment, not this one |
