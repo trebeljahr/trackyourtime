@@ -119,3 +119,7 @@ npm-debug.log*
 # directory itself has to be un-ignored before its contents can be.
 !packages/extension/public/icons/
 !packages/extension/public/icons/**
+
+# Validator jars, the XRechnung configuration, samples and reports from
+# `pnpm einvoice:validate` (scripts/einvoice-validate.mjs).
+.cache/

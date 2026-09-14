@@ -9,12 +9,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   WORKSPACE_EXPORT_VERSION,
-  type InvoiceIssuer,
+  type BusinessProfileValues,
   type WorkspaceExport,
 } from "@starter/shared";
 import { workspaceJsonCatalog } from "../services/import/parse.js";
 
-const profile: InvoiceIssuer = {
+const profile: BusinessProfileValues = {
   legalName: "Alice Consulting",
   addressLines: ["Hauptstr. 1"],
   postalCode: "10115",
@@ -27,6 +27,21 @@ const profile: InvoiceIssuer = {
   paymentDetails: "IBAN DE00 1234\nBIC TESTDEFF",
   paymentTermsDays: 14,
   invoiceFooter: "Thank you.",
+  vatId: "DE123456789",
+  taxNumber: "12/345/67890",
+  registrationNumber: "HRB 12345",
+  sellerIdentifier: null,
+  contactName: "Alice Example",
+  electronicAddress: "billing@example.com",
+  electronicAddressScheme: "EM",
+  iban: "DE02120300000000202051",
+  bic: "BYLADEM1001",
+  bankName: "Example Bank",
+  accountHolder: "Alice Consulting",
+  smallBusiness: false,
+  smallBusinessNote: null,
+  defaultTaxCategory: "S",
+  defaultTaxRate: 19,
 };
 
 const exported = (overrides: Partial<WorkspaceExport> = {}): WorkspaceExport => ({
@@ -50,6 +65,11 @@ const exported = (overrides: Partial<WorkspaceExport> = {}): WorkspaceExport => 
         taxId: "DE555",
         email: null,
         reference: "PO-7",
+        vatId: "DE987654321",
+        electronicAddress: "991-12345-67",
+        electronicAddressScheme: "0204",
+        preferredFormat: "xrechnung",
+        defaultTaxCategory: "AE",
       },
     },
     { name: "No Billing Ltd", color: "#222222", archived: false },
@@ -109,5 +129,74 @@ describe("business identity export round trip", () => {
     assert.equal(read.businessProfile?.country, null);
     assert.equal(read.businessProfile?.paymentTermsDays, null);
     assert.equal(read.clients[0]?.billing, undefined);
+  });
+
+  it("a profile written before e-invoicing leaves the e-invoice keys OUT, so the restore keeps stored values", () => {
+    const older = {
+      legalName: "Alice Consulting",
+      addressLines: ["Hauptstr. 1"],
+      postalCode: "10115",
+      city: "Berlin",
+      country: "DE",
+      taxId: "DE123456789",
+      email: "billing@example.com",
+      phone: null,
+      website: null,
+      paymentDetails: null,
+      paymentTermsDays: 14,
+      invoiceFooter: null,
+    };
+    const read = workspaceJsonCatalog(JSON.stringify({ ...exported(), businessProfile: older }));
+    assert.ok(read?.businessProfile);
+    for (const key of ["vatId", "iban", "bic", "electronicAddress", "smallBusiness", "defaultTaxRate"]) {
+      assert.equal(key in read.businessProfile, false, `${key} must stay absent`);
+    }
+    assert.equal(read.businessProfile.taxId, "DE123456789");
+  });
+
+  it("invalid e-invoice values degrade to null instead of dropping the profile or the client", () => {
+    const text = JSON.stringify({
+      ...exported(),
+      businessProfile: {
+        ...profile,
+        iban: "DE00 1234",
+        bic: "nope",
+        vatId: "123",
+        electronicAddress: "not an email",
+        electronicAddressScheme: "EM",
+        // S needs a rate above 0: the pair contradicts itself and goes as a pair.
+        defaultTaxCategory: "S",
+        defaultTaxRate: 0,
+      },
+      clients: [
+        {
+          name: "Acme",
+          color: "#111111",
+          archived: false,
+          billing: {
+            city: "Hamburg",
+            vatId: "??",
+            electronicAddressScheme: "XX",
+            electronicAddress: "x@example.com",
+            preferredFormat: "fax",
+            defaultTaxCategory: "Q",
+          },
+        },
+      ],
+    });
+    const read = workspaceJsonCatalog(text);
+    assert.ok(read?.businessProfile);
+    const p = read.businessProfile;
+    assert.deepEqual(
+      [p.iban, p.bic, p.vatId, p.electronicAddress, p.electronicAddressScheme, p.defaultTaxCategory, p.defaultTaxRate],
+      [null, null, null, null, null, null, null],
+    );
+    assert.equal(p.legalName, "Alice Consulting");
+    const billing = read.clients[0]?.billing;
+    assert.equal(billing?.city, "Hamburg");
+    assert.deepEqual(
+      [billing?.vatId, billing?.electronicAddress, billing?.electronicAddressScheme, billing?.preferredFormat, billing?.defaultTaxCategory],
+      [null, null, null, null, null],
+    );
   });
 });

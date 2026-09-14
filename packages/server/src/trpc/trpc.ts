@@ -4,8 +4,26 @@ import {
   resolveWorkspace,
   workspaceIdFromInput,
 } from "../auth/workspace.js";
+import { EinvoiceFillRefusedError, EinvoiceNotReadyError } from "../services/einvoice/errors.js";
 
-const t = initTRPC.context<Context>().create();
+const t = initTRPC.context<Context>().create({
+  errorFormatter({ shape, error }) {
+    return {
+      ...shape,
+      data: {
+        ...shape.data,
+        // The structured refusal of an e-invoice export or fill: which field
+        // is missing and where to fix it. null on every other error, so the
+        // client reads typed issues and never parses a message.
+        einvoiceIssues:
+          error.cause instanceof EinvoiceNotReadyError ? [...error.cause.issues] : null,
+        // A fill refusal with nothing to list, as a stable code to translate.
+        einvoiceFillRefusal:
+          error.cause instanceof EinvoiceFillRefusedError ? error.cause.code : null,
+      },
+    };
+  },
+});
 
 export const router = t.router;
 export const publicProcedure = t.procedure;

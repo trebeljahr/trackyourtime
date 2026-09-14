@@ -1279,8 +1279,10 @@ Four rules, each of which fails quietly if broken:
   has none. An invoice without them prints the client name as "Billed to".
 - **`Client.billing` is never `required` and has no default.** A client row
   from before it validates, saves and exports untouched; the wire reads it as
-  `null`. `clients.update` replaces the subdocument whole, and an all-blank one
-  is stored as `null`.
+  `null`. `clients.update` merges the input over the stored subdocument (a key
+  left out keeps its value, `null` clears it; `billing: null` clears it all),
+  and an all-blank one is stored as `null`. `settings.updateBusinessProfile`
+  merges the same way.
 - **The profile is read like money.** `settings.businessProfile` answers owner,
   admin or a member with `canViewOthersMoney`; `settings.updateBusinessProfile`
   is owner/admin. A redacted export drops the profile and the invoice parties
@@ -1291,6 +1293,10 @@ Four rules, each of which fails quietly if broken:
   snapshotted language; payment terms print as "payable within N days, by
   <due date>", where the date is the invoice's own `dueDate` — the create
   dialog only *suggests* it from the terms (`dueDateFromTerms`).
+
+The e-invoice fields (VAT ID, tax number, bank, electronic address, default
+VAT, …) are more keys on these same two parties and snapshots; their rules are
+in "E-invoices (ZUGFeRD / XRechnung)" below.
 
 ### Background jobs (scheduler)
 
@@ -1330,6 +1336,260 @@ Four rules, each of which fails quietly if broken:
   never the cap or stop. With no transport the reminder is logged and still
   claimed, so the log gets one line per timer, not one per poll.
   `reminderSentAt` has no default and is never required, so old rows validate.
+
+### E-invoices (ZUGFeRD / XRechnung)
+
+An invoice downloads three ways: the plain PDF, a ZUGFeRD PDF (PDF/A-3b with
+the EN 16931 XML embedded as `factur-x.xml`) and an XRechnung 3.0 XML file.
+There is no second data model: e-invoicing extends the two parties of
+"Invoice issuer and recipient" above. The business profile (Settings →
+Billing → Business profile, `settings.businessProfile` /
+`updateBusinessProfile`) gains `vatId`, `taxNumber`, `registrationNumber`,
+`sellerIdentifier`, `contactName`, `electronicAddress` + scheme, `iban`,
+`bic`, `bankName`, `accountHolder`, `smallBusiness` + note and a default VAT
+category and rate. `Client.billing` (Clients → Edit → Billing details, written
+by `clients.create/update`) gains `vatId`, `electronicAddress` + scheme,
+`preferredFormat` and `defaultTaxCategory`. `Invoice.issuer` /
+`Invoice.recipient` snapshot the same keys. The field sets live once, in
+`models/einvoice-schemas.ts`, spread into the four schemas; the shared types
+and checks are `@starter/shared/einvoice`. User docs:
+`docs-site/docs/e-invoices.md`.
+
+Procedures, all spread into the invoices router from
+`trpc/routers/invoice-einvoice.ts`: `invoices.einvoiceCheck` (issues, what a
+fill would write, issues left after it, the client's preferred format,
+whether an issued XML is stored), `invoices.attachEinvoiceData` (the fill),
+`invoices.exportZugferd` and `invoices.exportXrechnung`. `invoices.preview`
+and `invoices.create` resolve per-line VAT (`services/einvoice/resolve-tax.ts`).
+Every one of them runs the invoice gate (`trpc/routers/invoice-gate.ts`) first,
+so a caller without invoice access gets `NOT_FOUND`, as on `invoices.get`.
+
+`services/einvoice/cii.ts` writes UN/CEFACT CII for both outputs: the
+`factur-x.xml` inside a ZUGFeRD PDF (profile `en16931`) and an XRechnung 3.0
+file (profile `xrechnung`). It is hand-written over a small tree writer
+(`xml.ts`), with no XML dependency.
+
+```bash
+UPDATE_GOLDEN=1 pnpm --filter @starter/server test      # regenerate the golden XML files
+JAVA=/opt/homebrew/opt/openjdk@11/bin/java pnpm einvoice:validate   # Mustang + KoSIT over every sample
+pnpm --filter @starter/server run einvoice:samples -- --out <dir>   # the sample files alone, no Java
+TEST_MONGODB_URI=mongodb://127.0.0.1:<port> pnpm --filter @starter/server test   # invoice-einvoice / invoice-create-tax need a database
+E2E_SERVER_PORT=<free> E2E_CLIENT_PORT=<free> MONGODB_URI=mongodb://127.0.0.1:<port>/<own-db> \
+  npx playwright test e2e/einvoice.spec.ts e2e/invoices.spec.ts   # UI flow; asserts file bytes, never runs Java
+```
+
+The data rules first. Each of these fails without an error anywhere:
+
+- **Party data is a snapshot, filled per value and never overwritten.**
+  Main's rule decides whether a snapshot exists at create (`issuerSnapshot`:
+  profile not empty; `recipientSnapshot`: client has billing), and either may
+  be incomplete. `invoices.attachEinvoiceData` fills only absent parts and
+  `null` leaves from *today's* profile and client, after the user confirmed
+  the exact list, and logs it in `Invoice.einvoice.fills` (on the wire:
+  `einvoiceFills`). Its write is conditional on `updatedAt` (`CONFLICT` when
+  the invoice changed since the read), it publishes a sync event and sends no
+  webhook. Overwriting a stored value would make the e-invoice disagree with
+  the PDF the customer already holds; refusing to fill at all would lock an
+  invoice out of e-invoicing forever over one missing postcode.
+- **A profile save and a client billing update merge; they never replace.**
+  `mergeIdentityInput` overlays the keys the input carries: a key left out
+  keeps its stored value and `null` clears it, so a stale tab, an older export
+  or an integrator on an older API version cannot erase a field it never knew.
+  The cross-field checks (`businessProfileProblems`,
+  `electronicAddressProblems`) run on the MERGED row;
+  `BusinessProfileInvalidError` becomes `BAD_REQUEST` in
+  `settings.updateBusinessProfile`.
+- **Main's free-text `taxId` stays, and nothing guesses what it is.** An
+  e-invoice must say VAT ID (BT-31) or tax number (BT-32). The PDF prints
+  `taxId` beside them unless it repeats one of the two (`taxIdentityLines` in
+  `invoice-pdf-blocks.ts`, the one copy of that rule), so a fill that adds a
+  VAT ID never takes a tax number off a sent page; an issuer with only `taxId`
+  is refused with `SELLER_TAX_ID_UNCLASSIFIED`, and both forms offer a
+  one-click move into the right field.
+- **`ClientBilling.reference` is BT-10**, the buyer reference, which is where a
+  public-sector client's Leitweg-ID goes. XRechnung requires it
+  (`BUYER_REFERENCE_MISSING`, BR-DE-15); ZUGFeRD does not.
+- **The electronic address defaults from the email once, at snapshot time**
+  (`withDefaultElectronicAddress`, scheme `EM`), so the XML reads the snapshot
+  and derives nothing, and a fill copies the defaulted pair.
+- **BT-20 is `Invoice.paymentTerms`**, the due sentence the plain PDF prints,
+  frozen at create or fill (`payment-terms.ts`). A fill never takes
+  `paymentTermsDays` from today's profile, so the PDF and the XML cannot state
+  different terms.
+- **A VAT category is chosen, never inferred from a rate.** 0 % is exempt,
+  reverse charge, not subject to VAT or zero rated, and each needs different
+  wording and different identifiers. Per line the first match wins: a
+  `lineTax` entry, the request's `tax`, its `taxRate > 0` (S at that rate), the
+  client's default category, a small-business profile (E), the profile's
+  default. When a line matches nothing, no line gets a category and the
+  invoice is plain-PDF only, exactly as before. A legacy invoice with a rate
+  above 0 becomes `S` at that rate on fill; one at 0 % or `null` makes the
+  user pick.
+- **Stored amounts are the contract, so a rounding difference refuses.** VAT
+  is computed per (category, rate) from the summed line cents, rounded once
+  (`totals.ts`). A legacy invoice's tax was rounded with float
+  `Math.round(x * 100) / 100`, whose half-cent ties can land a cent away;
+  `TOTALS_MISMATCH` then refuses the fill and the export, with both figure
+  sets, and writes nothing. Never "repair" the stored totals.
+- **An issued XML makes the snapshot final.** Once `einvoice.issuedXml` holds
+  either profile, `einvoiceCheck` answers `fill: null, fillLocked: true` and
+  `attachEinvoiceData` refuses with `FILL_LOCKED_BY_ISSUED_XML` (its filter
+  also requires both paths null, since storing the XML never bumps
+  `updatedAt`). Otherwise a fill would redraw the ZUGFeRD page around an XML
+  that no longer matches it. The fill `$set`s only the dotted leaves it lists
+  (`FillPlan.writes`), never a normalised party, so an old snapshot gains no
+  key it never had. Refusals without issues carry a code in
+  `error.data.einvoiceFillRefusal`, which the client translates.
+- **The first export of a non-draft invoice is stored and served forever.**
+  `einvoice.issuedXml.<profile>` is written once with a conditional update, and
+  a racing export serves the winner's bytes. Drafts are generated fresh. This
+  is deliberately not tied to `updateStatus`: marking an invoice sent must
+  never fail because e-invoice data is missing.
+- **A refusal is structured, not a string.** Exports throw
+  `PRECONDITION_FAILED` whose `cause` carries the issues; the tRPC
+  `errorFormatter` copies them to `error.data.einvoiceIssues`. Each issue has a
+  `code`, the dotted `field` of the exact input, `fixIn` (`businessProfile`,
+  `clientBilling` or `invoice`) and, for client issues, `clientId`. Every other
+  error carries `einvoiceIssues: null`. The panel builds its deep links from
+  exactly those, so a message that names a field without the `field` path
+  gives the user nothing to click.
+- **The new fields go wherever main's identity fields already go.** Client
+  billing is on the `Client` wire, in `GET /api/v1/clients` (the hand-written
+  `clientBillingResponseSchema` in `routes-table.ts`, then
+  `pnpm run openapi:emit`), in webhooks, in the JSON export and import. The
+  importer degrades an invalid value to `null` and reads a profile's e-invoice
+  keys only when the file has them, so restoring an older file keeps them. A
+  redacted export drops the profile, both parties and `taxBreakdown`, and nulls
+  each line's `taxRate`. REST v1 still has no invoice routes, and
+  `einvoice.issuedXml` is never mapped by `toClientInvoice`, never exported
+  and never on a webhook.
+
+On the client (`components/einvoice/`, `components/invoices/einvoice-*`):
+
+- **The download buttons are never disabled by the check.** `einvoiceCheck`
+  only decides the hint and whether the panel opens. The server is the
+  authority, and a stored issued XRechnung XML downloads even when today's
+  check would complain, so a check stale by one settings edit must not block
+  the file. ZUGFeRD is the exception: its page is drawn from the snapshot, so
+  `exportZugferd` validates the snapshot even when an issued XML is stored.
+- **Client and server validate a field with the same zod schema.**
+  `billing-fields.ts` maps each input to the shared schema from
+  `@starter/shared`; a second regex in a component is how the two start
+  disagreeing about what a VAT ID is.
+- **No second form.** The e-invoice fields are sections of main's
+  `business-profile-form.tsx` and of the billing section of
+  `client-form-dialog.tsx` (ids and test ids `${prefix}-${key}` with prefixes
+  `business-profile` and `client-billing`, via `IdentityInput` /
+  `PostalFields`). Each saves with its existing mutation.
+- **Deep links are `/settings?tab=billing&field=<key>` and
+  `/clients?billing=<clientId>&field=<key>`, plus `&from=invoice:<id>`, read
+  from `location` in an effect.** `useSearchParams` would force a Suspense
+  boundary under the static export. `useDeepLinkFocus` finds the input through
+  its wrapper's `data-field="<key>"`, and `<key>` is the issue's `field` path
+  after its first dot (`clientBilling.reference` → `reference`). Rename a key
+  on one side and the link opens the right page with nothing selected;
+  `e2e/einvoice.spec.ts` asserts the focus.
+- **The client dialog focuses its field in `onOpenAutoFocus`, too.** Opened
+  over the invoice dialog ("Add the VAT ID"), the form's own effect runs before
+  the new dialog's focus scope is active, so the outer dialog's trap takes the
+  focus straight back. The e2e spec asserts the focused VAT ID.
+
+The output rules:
+
+- **The two e-invoice profiles differ in BT-24 and nothing else.**
+  `buildCiiXml(invoice, "en16931")` and `(…, "xrechnung")` must stay identical
+  apart from the guideline id line, and `einvoice-cii.test.ts` asserts that line
+  by line. A branch on `profile` anywhere else in `cii.ts` forks the validated
+  output in two. What a profile *requires* belongs in `validate.ts`.
+- **No empty element, ever.** PEPPOL-EN16931-R008 rejects an XRechnung that
+  contains `<ram:LineTwo></ram:LineTwo>`, and nothing about such a file looks
+  wrong. `el()` returns `null` for blank text and for a parent whose children all
+  dropped, so optional business terms are passed in unconditionally. Do not
+  "simplify" that into string templates.
+- **Order is schema, not style.** CII is `xs:sequence` all the way down. In
+  `ram:ApplicableTradeTax`, `ExemptionReason` comes before `BasisAmount`, and
+  `ExemptionReasonCode` after `CategoryCode`. A reordered builder still produces
+  well-formed XML, which only the validators reject.
+- **Every amount is `formatCents(toCents(x))`.** `String(0.1 + 0.2)` and
+  `1e21.toString()` are XML-valid numbers, and BR-DEC rejects both. Rates are
+  `formatPercent`, prices `formatDecimal`, hours `billedHoursQuantity` (6 dp).
+  A 2-dp quantity trips PEPPOL-EN16931-R120 on an ordinary hourly line.
+- **The serializer reads the snapshot and computes nothing.** The breakdown and
+  totals are the stored ones, and `assertCiiInvariants` throws when they disagree
+  with the lines. Do not "fix" a mismatch there by recomputing. That would issue
+  an XML whose totals differ from the PDF the customer already has.
+- **`Invoice.to` is exclusive and `issueDate` is UTC.** BT-74 and BT-72 are
+  `lastBilledDateKey(to)`; the raw bound is one day late. `from` and `to` are
+  server-local midnights, issue and due dates UTC midnights, and
+  `services/einvoice/format.ts` reads each the way the router wrote it.
+- **Golden files are the contract. `UPDATE_GOLDEN=1` is a decision, not a fix.**
+  After regenerating, read the diff and run `pnpm einvoice:validate` before
+  committing. The Java validators are the only check of schema and schematron;
+  the Node tests check structure. The sample generator refuses to run on output
+  that differs from the goldens, so CI never validates something the unit tests
+  would reject. Java never runs in `pnpm test`.
+- **The validator script fails closed.** It requires an explicit `rep:accept`
+  and Mustang's final `valid` in addition to exit codes. For a PDF it reads
+  Mustang's `<pdf>` section (flavour `3b`, `isCompliant=true`, no failed
+  clause) on its own: Mustang 2.26.0 exits 0 and ends on an overall `valid` for
+  a PDF veraPDF rejects, so exit code and final summary say nothing about
+  PDF/A. It also proves each run against three deliberately broken files (one
+  per verdict: KoSIT, Mustang XML, veraPDF), because a validator that stopped
+  detecting errors looks exactly like one that found none. Waiving a KoSIT
+  warning means adding its code to `WAIVED_KOSIT_WARNINGS` with a reason, in the
+  diff. Tool versions and checksums live in `scripts/einvoice-validate.mjs` only.
+- **The ZUGFeRD PDF is the plain renderer with registered fonts.**
+  `renderZugferdPdf` (`services/einvoice/pdfa3.ts`) passes a variant to
+  `renderInvoicePdf` that registers Noto Sans under the names `Helvetica` and
+  `Helvetica-Bold`; pdfkit resolves registered names first, so there is no second
+  drawing to drift. Any literal standard-14 name in `invoice-pdf.ts`
+  (`.font("Times-Roman")`) silently puts an unembedded font into every ZUGFeRD
+  PDF and breaks PDF/A. Use `INVOICE_PDF_FONT_NAMES`. `invoice-pdf-blocks.ts`
+  holds pure helpers only (tax identity lines, breakdown rows, exemption
+  reasons, bank lines) and draws nothing; every label comes from the `invoice`
+  server catalog.
+- **The variant constructs the document with `font: ""`.** pdfkit's default
+  loads the standard Helvetica and caches it under the very name the variant
+  registers, so that cached standard font would win. Passing the Noto path
+  instead is valid PDF but never caches the registered alias, and pdfkit
+  re-parses the TTF on every `font()` call: seconds per invoice.
+- **pdfkit writes `info.Title/Author/Subject/Keywords` into XMP unescaped.** An
+  invoice number or seller name with `&` produces malformed XMP, and the PDF then
+  fails PDF/A with nothing visibly wrong. The variant deletes those keys before
+  `end()` and appends its own escaped `dc:` block (`services/einvoice/xmp.ts`).
+  Never set them in a PDF/A variant.
+- **`pdfVersion: "1.7"` is load-bearing.** With pdfkit's default 1.3,
+  `endMetadata()` writes no `/Metadata` stream at all, and the file is not PDF/A.
+- **A glyph the font lacks is a PDF/A violation, not a missing character.**
+  `coverInvoiceText` replaces it with `?` in the drawn copy only; the embedded
+  XML and the XMP keep the real text. `loadPdfFonts().hasGlyph` reads pdfkit's
+  private `_font.font`, which `pdf-fonts.test.ts` pins.
+- **The embedded XML is the argument, byte for byte.** `renderZugferdPdf` never
+  builds XML, so a stored issued XML is re-wrapped unchanged, and
+  `einvoice-pdfa3.test.ts` inflates the attachment and compares bytes.
+- **The fonts ship only if the Dockerfile copies `assets/`.** The runtime stage
+  copies `dist`, `package.json` and `node_modules`; without
+  `COPY --from=build /prod/assets ./assets` every ZUGFeRD export in production is
+  a 500 while every test passes. `assets/fonts/README.md` holds each file's
+  SHA-256, and `pdf-fonts.test.ts` checks the files against it.
+- **The plain PDF stays PDF 1.3 with Helvetica, and says what the XML says.**
+  Main's renderer prints the VAT ID / tax number / registration number lines
+  (and no legacy `taxId` beside them), one tax row per breakdown row with the
+  old single tax row as the fallback, the exemption reasons, the bank lines,
+  and the stored `paymentTerms` as its due line. Each is drawn only when the
+  invoice carries it, so a legacy invoice prints as before. On an invoice with
+  a category O line no VAT ID prints, matching BR-O-02 in the XML. The Period
+  row ends on the last billed day (`billedPeriodDates`, BT-74) only when the
+  invoice froze a `paymentTerms` sentence, i.e. was created with this feature;
+  an older one keeps printing the exclusive `to` it was sent with, because a
+  re-render must reproduce the page the customer holds
+  (`invoice-pdf-locale.test.ts` pins that page). Tax rows format through
+  `pdfFormat(locale)` like every other figure — German reads "USt. 19 % auf
+  1.234,50".
+- **What the validators confirm, and nothing more.** CI's `einvoice-validate`
+  workflow passes every sample through Mustang 2.26.0 (veraPDF for PDF/A-3b)
+  and the KoSIT validator 1.6.3 with the XRechnung 3.0.2 configuration. User
+  docs and copy say exactly that; never "certified" or "compliant".
 
 ### Public REST API and webhooks
 

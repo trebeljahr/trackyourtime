@@ -7,12 +7,13 @@ import {
   emptyPreviewReason,
   exclusionNotices,
   formatHours,
-  parseTaxRate,
+  linesHaveMixedTax,
   previewIsBillable,
   reconcileDueDate,
   shiftDateKey,
   statusActionLabel,
   statusTransitions,
+  taxCategoryLabel,
   taxLabel,
   totalHours,
 } from "./types";
@@ -202,28 +203,6 @@ describe("taxLabel", () => {
   });
 });
 
-describe("parseTaxRate", () => {
-  it("reads an empty field as no tax line, not as 0%", () => {
-    expect(parseTaxRate("")).toEqual({ ok: true, value: null });
-    expect(parseTaxRate("   ")).toEqual({ ok: true, value: null });
-  });
-
-  it("reads 0 as a real, deliberate 0%", () => {
-    expect(parseTaxRate("0")).toEqual({ ok: true, value: 0 });
-  });
-
-  it("accepts the range the server accepts", () => {
-    expect(parseTaxRate("19")).toEqual({ ok: true, value: 19 });
-    expect(parseTaxRate("100")).toEqual({ ok: true, value: 100 });
-  });
-
-  it("rejects what the server would reject, before the round trip", () => {
-    expect(parseTaxRate("-1").ok).toBe(false);
-    expect(parseTaxRate("101").ok).toBe(false);
-    expect(parseTaxRate("nineteen").ok).toBe(false);
-  });
-});
-
 describe("dates", () => {
   it("shifts a local date key without drifting across a month end", () => {
     expect(shiftDateKey("2026-01-31", 1)).toBe("2026-02-01");
@@ -246,5 +225,31 @@ describe("dates", () => {
 
   it("leaves a due date that is already valid untouched", () => {
     expect(reconcileDueDate("2026-09-01", "2026-09-30")).toBe("2026-09-30");
+  });
+});
+
+describe("taxCategoryLabel", () => {
+  it("names the standard rate with its percentage", () => {
+    expect(taxCategoryLabel("S", 19)).toBe("VAT 19 %");
+    expect(taxCategoryLabel("S", 7.5)).toBe("VAT 7.5 %");
+  });
+
+  it("names the zero-rate categories without a rate", () => {
+    expect(taxCategoryLabel("AE", 0)).toBe("Reverse charge");
+    expect(taxCategoryLabel("O", 0)).toBe("Not subject to VAT");
+    expect(taxCategoryLabel("E", 0)).toBe("Exempt");
+    expect(taxCategoryLabel("Z", 0)).toBe("0 % zero rated");
+  });
+});
+
+describe("linesHaveMixedTax", () => {
+  const taxed = (taxCategory?: "S" | "E", taxRate?: number): InvoiceLineItem =>
+    line(taxCategory === undefined ? {} : { taxCategory, taxRate });
+
+  it("is false for uniform or legacy lines and true for different categories", () => {
+    expect(linesHaveMixedTax([taxed("S", 19), taxed("S", 19)])).toBe(false);
+    expect(linesHaveMixedTax([taxed(), taxed()])).toBe(false);
+    expect(linesHaveMixedTax([taxed("S", 19), taxed("E", 0)])).toBe(true);
+    expect(linesHaveMixedTax([taxed("S", 19), taxed("S", 7)])).toBe(true);
   });
 });

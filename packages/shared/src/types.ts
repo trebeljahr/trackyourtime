@@ -1,3 +1,10 @@
+import type {
+  EinvoiceFill,
+  ElectronicAddressScheme,
+  InvoiceFormat,
+  TaxBreakdownRow,
+  TaxCategory,
+} from "./einvoice.js";
 import type { Locale, LocalePreference } from "./locale.js";
 
 /** User theme preference. */
@@ -244,8 +251,21 @@ export type ClientBilling = {
   /** VAT number or other tax id, as the customer states it. */
   taxId: string | null;
   email: string | null;
-  /** The customer's own reference — a purchase order, a cost centre. */
+  /**
+   * The customer's own reference — a purchase order, a cost centre. On an
+   * e-invoice this is the buyer reference (BT-10), where a public-sector
+   * customer's Leitweg-ID goes.
+   */
   reference: string | null;
+  /** VAT identification number (BT-48), compact and upper case. */
+  vatId: string | null;
+  /** Where e-invoices are delivered (BT-49). Both set or both null. */
+  electronicAddress: string | null;
+  electronicAddressScheme: ElectronicAddressScheme | null;
+  /** How this client wants invoices; null means the plain PDF. Not snapshotted. */
+  preferredFormat: InvoiceFormat | null;
+  /** Default VAT category for new invoices, e.g. AE for an EU business. Not snapshotted. */
+  defaultTaxCategory: TaxCategory | null;
 };
 
 /**
@@ -270,6 +290,34 @@ export type BusinessProfile = {
   paymentTermsDays: number | null;
   /** A line printed at the bottom of every invoice. */
   invoiceFooter: string | null;
+  /** VAT identification number (BT-31), compact and upper case. */
+  vatId: string | null;
+  /** National tax number, "Steuernummer" (BT-32). */
+  taxNumber: string | null;
+  /** Commercial register entry (BT-30). */
+  registrationNumber: string | null;
+  /** Any other seller identifier (BT-29). */
+  sellerIdentifier: string | null;
+  /** Contact person (BT-41). */
+  contactName: string | null;
+  /** Where e-invoices are sent from (BT-34). Both set or both null. */
+  electronicAddress: string | null;
+  electronicAddressScheme: ElectronicAddressScheme | null;
+  /** BT-84, compact and upper case. */
+  iban: string | null;
+  /** BT-86, compact and upper case. */
+  bic: string | null;
+  bankName: string | null;
+  /** BT-85. */
+  accountHolder: string | null;
+  /** Invoices without VAT under § 19 UStG. `false` when never set. */
+  smallBusiness: boolean;
+  /** The exemption text for a small business (BT-120 of category E). */
+  smallBusinessNote: string | null;
+  /** Default VAT category for new invoices. */
+  defaultTaxCategory: TaxCategory | null;
+  /** Default rate with category S; null or 0 otherwise. */
+  defaultTaxRate: number | null;
   /** `null` until the profile has been saved once. */
   updatedAt: string | null;
 };
@@ -633,6 +681,10 @@ export type InvoiceLineItem = {
   currency: string;
   /** `hours × hourlyRate`, rounded to 2dp. */
   amount: number;
+  /** Absent on invoices created before e-invoicing, until attachEinvoiceData fills it. */
+  taxCategory?: TaxCategory;
+  /** Percent. Present iff taxCategory is. */
+  taxRate?: number;
 };
 
 /** A generated invoice for one client over one date range. */
@@ -688,15 +740,30 @@ export type Invoice = {
    * invoices; `clientName` is then the whole of "Billed to".
    */
   recipient?: InvoiceRecipient | null;
+  /** EN 16931 VAT breakdown, stored at creation. Absent when categories were not resolved. */
+  taxBreakdown?: TaxBreakdownRow[];
+  /** BT-20: the due sentence in the invoice's language, frozen at create or fill. */
+  paymentTerms?: string | null;
+  /** Audit of attachEinvoiceData calls. Absent when none happened. */
+  einvoiceFills?: EinvoiceFill[];
   createdAt: string;
   updatedAt: string;
 };
 
-/** Snapshot of {@link BusinessProfile} copied onto one invoice. */
-export type InvoiceIssuer = Omit<BusinessProfile, "workspaceId" | "updatedAt">;
+/** Every business profile value, blanks collapsed — what `normalizeBusinessProfile` returns. */
+export type BusinessProfileValues = Omit<BusinessProfile, "workspaceId" | "updatedAt">;
+
+/**
+ * Snapshot of {@link BusinessProfile} copied onto one invoice. The defaults
+ * steer create and are not facts about the issuer, so they are left out.
+ */
+export type InvoiceIssuer = Omit<
+  BusinessProfileValues,
+  "defaultTaxCategory" | "defaultTaxRate" | "smallBusinessNote"
+>;
 
 /** Snapshot of the client's name and {@link ClientBilling} on one invoice. */
-export type InvoiceRecipient = ClientBilling & {
+export type InvoiceRecipient = Omit<ClientBilling, "preferredFormat" | "defaultTaxCategory"> & {
   /** The client's display name at issue time — same value as `clientName`. */
   name: string;
 };

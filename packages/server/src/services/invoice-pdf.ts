@@ -27,6 +27,11 @@
  * setting or the request's headers, any of which can change after the invoice
  * was sent. An invoice without a `locale` predates localisation and renders in
  * English.
+ *
+ * The ZUGFeRD hybrid (`einvoice/pdfa3.ts`) is this same drawing with a
+ * variant: see `InvoicePdfVariant`. The e-invoice data (VAT breakdown,
+ * exemption reasons, VAT id and bank fields) prints only when the snapshot
+ * carries it, through the pure helpers in `invoice-pdf-blocks.ts`.
  */
 import PDFDocument from "pdfkit";
 import {
@@ -38,6 +43,14 @@ import {
   type Locale,
 } from "@starter/shared";
 import { serverT, type ServerTranslator } from "../i18n/index.js";
+import { billedPeriodDates } from "./einvoice/format.js";
+import {
+  bankLines,
+  breakdownTotalRows,
+  exemptionReasons,
+  omitsVatIds,
+  taxIdentityLines,
+} from "./invoice-pdf-blocks.js";
 import { sanitizePdfText } from "./pdf.js";
 import { pdfFormat, type PdfFormat } from "./pdf-format.js";
 
@@ -59,6 +72,24 @@ const FOOTER_BAND = 18;
 
 const FONT = "Helvetica";
 const FONT_BOLD = "Helvetica-Bold";
+
+/**
+ * The names every draw call uses. A variant may `registerFont()` these to
+ * substitute embedded faces: pdfkit resolves a registered name before its
+ * standard-14 table, so no drawing line changes. A literal standard-14 name
+ * anywhere else in this file would put an unembedded font into every PDF/A.
+ */
+export const INVOICE_PDF_FONT_NAMES = { regular: FONT, bold: FONT_BOLD } as const;
+
+/** Everything that makes a variant of the same drawing: document options, fonts, and what happens before end(). */
+export type InvoicePdfVariant = {
+  /** Spread over pageOptions() in the constructor only. addPage keeps using pageOptions(). */
+  documentOptions: PDFKit.PDFDocumentOptions;
+  /** After construction and the info fields, before the first draw. */
+  prepare(doc: PDFKit.PDFDocument): void;
+  /** After the last draw, immediately before doc.end(). */
+  finish(doc: PDFKit.PDFDocument): void;
+};
 
 const TITLE_SIZE = 20;
 const HEADING_SIZE = 9;
@@ -178,19 +209,27 @@ function drawFooter(sheet: Sheet): void {
   doc.fillColor(INK);
 }
 
-/** The issuer's lines, in print order: name, address, tax id, contact. */
+/**
+ * The issuer's lines, in print order: name, address, tax ids, registration,
+ * contact. The VAT id and tax number replace the legacy tax id when the
+ * snapshot has either (see `taxIdentityLines`); a snapshot from before
+ * e-invoicing has neither and prints as it always did.
+ */
 function issuerLines(
   issuer: InvoiceIssuer,
   t: ServerTranslator<"invoice">,
+  omitVatId: boolean,
 ): PartyLine[] {
-  const contact = [issuer.email, issuer.phone, issuer.website]
-    .filter((part): part is string => part !== null)
+  const contact = [issuer.contactName ?? null, issuer.email, issuer.phone, issuer.website]
+    .filter((part): part is string => part !== null && part !== undefined)
     .join(" · ");
+  const registrationNumber = issuer.registrationNumber ?? null;
   return [
     ...(issuer.legalName ? [{ text: issuer.legalName, bold: true }] : []),
     ...formatPostalAddress(issuer).map((text) => ({ text, bold: false })),
-    ...(issuer.taxId
-      ? [{ text: t("taxId", { taxId: issuer.taxId }), bold: false }]
+    ...taxIdentityLines(issuer, t, { omitVatId }).map((text) => ({ text, bold: false })),
+    ...(registrationNumber
+      ? [{ text: t("registrationNumber", { registrationNumber }), bold: false }]
       : []),
     ...(contact ? [{ text: contact, bold: false }] : []),
   ];
@@ -205,6 +244,7 @@ function recipientLines(
   invoice: Invoice,
   recipient: InvoiceRecipient | null,
   t: ServerTranslator<"invoice">,
+  omitVatId: boolean,
 ): PartyLine[] {
   if (!recipient) return [{ text: invoice.clientName, bold: true }];
   const legalName =
@@ -215,9 +255,7 @@ function recipientLines(
     { text: recipient.name, bold: true },
     ...(legalName ? [{ text: legalName, bold: false }] : []),
     ...formatPostalAddress(recipient).map((text) => ({ text, bold: false })),
-    ...(recipient.taxId
-      ? [{ text: t("taxId", { taxId: recipient.taxId }), bold: false }]
-      : []),
+    ...taxIdentityLines(recipient, t, { omitVatId }).map((text) => ({ text, bold: false })),
     ...(recipient.email ? [{ text: recipient.email, bold: false }] : []),
     ...(recipient.reference
       ? [{ text: t("reference", { reference: recipient.reference }), bold: false }]
@@ -275,13 +313,16 @@ function drawHeaderBlock(sheet: Sheet): void {
 
   const half = sheet.width / 2;
   const issuer = invoice.issuer ?? null;
+  // BR-O-02: the XML of an invoice with a not-subject line carries no VAT id,
+  // and the page it is the "Alternative" of may not show one either.
+  const omitVatId = omitsVatIds(invoice);
   const recipientBottom = drawParty(
     sheet,
     sheet.left,
     sheet.y,
     half - 8,
     t("billedTo"),
-    recipientLines(invoice, invoice.recipient ?? null, t),
+    recipientLines(invoice, invoice.recipient ?? null, t, omitVatId),
   );
   const issuerBottom = issuer
     ? drawParty(
@@ -290,18 +331,27 @@ function drawHeaderBlock(sheet: Sheet): void {
         sheet.y,
         half,
         t("from"),
-        issuerLines(issuer, t),
+        issuerLines(issuer, t, omitVatId),
       )
     : sheet.y;
   sheet.y = Math.max(recipientBottom, issuerBottom) + 8;
 
+  // `to` is the exclusive bound, midnight of the day after the last billed
+  // day; the page names the last billed day, as BT-74 does.
+  const period = billedPeriodDates(invoice.from, invoice.to);
   const rows: [string, string][] = [
     [t("status"), t("statusValue", { status: invoice.status })],
     [t("issueDate"), format.date(invoice.issueDate)],
     [t("dueDate"), format.date(invoice.dueDate)],
     [
       t("period"),
-      t("periodRange", { from: format.date(invoice.from), to: format.date(invoice.to) }),
+      // An invoice created since e-invoicing (it froze a BT-20 sentence) ends
+      // on the last billed day, the date its XML carries as BT-74. Older
+      // invoices keep the exclusive `to` they were sent with: a re-render must
+      // reproduce the page the customer already holds.
+      invoice.paymentTerms
+        ? t("periodRange", { from: format.date(period.start), to: format.date(period.end) })
+        : t("periodRange", { from: format.date(invoice.from), to: format.date(invoice.to) }),
     ],
     [t("groupedBy"), t("groupByValue", { groupBy: invoice.groupBy })],
   ];
@@ -440,10 +490,15 @@ function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
       strong: false,
     },
   ];
-  // A null tax rate means the invoice carries no tax line at all; 0 is a real
+  // A stored VAT breakdown prints one row per category and rate, each naming
+  // its taxable amount. Without one — every invoice from before e-invoicing —
+  // a null tax rate means the invoice carries no tax line at all; 0 is a real
   // 0% and still prints, because "no VAT charged" is a statement a customer
   // may need to see.
-  if (invoice.taxRate !== null) {
+  const breakdown = breakdownTotalRows(invoice, t, format);
+  if (breakdown.length > 0) {
+    rows.push(...breakdown);
+  } else if (invoice.taxRate !== null) {
     rows.push({
       label: t("tax", { rate: format.plain(invoice.taxRate) }),
       value: format.amount(invoice.taxAmount),
@@ -483,9 +538,11 @@ function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
 }
 
 /**
- * When payment is due, in words. Terms print only when the issuer had terms
- * at creation; the due date itself is always the invoice's own field, which
- * the person may have moved off the suggestion.
+ * When payment is due, in words: the frozen BT-20 sentence when the invoice
+ * stores one, so the page and the e-invoice cannot state different terms, and
+ * otherwise the same sentence built from the snapshot. Terms print only when
+ * the issuer had terms at creation; the due date itself is always the
+ * invoice's own field, which the person may have moved off the suggestion.
  */
 function dueLine(
   invoice: Invoice,
@@ -493,6 +550,11 @@ function dueLine(
   t: ServerTranslator<"invoice">,
   format: PdfFormat,
 ): string {
+  // The sentence frozen at creation (BT-20) wins, so the page and the XML say
+  // the same thing; invoices from before it existed keep the derived line.
+  if (typeof invoice.paymentTerms === "string" && invoice.paymentTerms.trim() !== "") {
+    return invoice.paymentTerms;
+  }
   const date = format.date(invoice.dueDate);
   return issuer.paymentTermsDays === null
     ? t("dueBy", { date })
@@ -563,14 +625,16 @@ function drawParagraph(
 export async function renderInvoicePdf(
   invoice: Invoice,
   meta: InvoicePdfMeta,
+  variant?: InvoicePdfVariant,
 ): Promise<Buffer> {
-  const doc = new PDFDocument(pageOptions());
+  const doc = new PDFDocument({ ...pageOptions(), ...variant?.documentOptions });
   // Absent = issued before localisation = English, forever.
   const locale: Locale = invoice.locale ?? "en";
   const t = serverT(locale, "invoice");
   const format = pdfFormat(locale);
   doc.info.Title = sanitizePdfText(t("title", { number: invoice.number }));
   doc.info.Creator = "Track Your Time";
+  variant?.prepare(doc);
   const chunks: Buffer[] = [];
 
   return new Promise<Buffer>((resolve, reject) => {
@@ -610,6 +674,7 @@ export async function renderInvoicePdf(
 
       drawRule(sheet, false);
       drawTotals(sheet, columns);
+      drawParagraph(sheet, columns, t("vatNote"), exemptionReasons(invoice).join("\n"), true);
 
       drawParagraph(sheet, columns, t("notes"), invoice.notes);
 
@@ -619,7 +684,7 @@ export async function renderInvoicePdf(
           sheet,
           columns,
           t("paymentDetails"),
-          [dueLine(invoice, issuer, t, sheet.format), issuer.paymentDetails]
+          [dueLine(invoice, issuer, t, sheet.format), ...bankLines(issuer, t), issuer.paymentDetails]
             .filter((part): part is string => part !== null)
             .join("\n"),
           true,
@@ -627,6 +692,7 @@ export async function renderInvoicePdf(
         drawParagraph(sheet, columns, null, issuer.invoiceFooter, true);
       }
 
+      variant?.finish(doc);
       doc.end();
     } catch (error) {
       reject(error instanceof Error ? error : new Error(String(error)));

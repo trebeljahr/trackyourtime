@@ -4,9 +4,14 @@
 // is indistinguishable from a missing one (NOT_FOUND, never FORBIDDEN).
 import { TRPCError } from "@trpc/server";
 import {
+  EMPTY_CLIENT_BILLING,
+  electronicAddressProblems,
+  mergeIdentityInput,
   normalizeClientBilling,
   pickCatalogColor,
   type Client as ClientWire,
+  type ClientBilling,
+  type ClientBillingFields,
   type ClientListInput,
   type CreateClientInput,
   type UpdateClientInput,
@@ -21,6 +26,25 @@ import { assertUniqueCatalogName } from "./names.js";
 
 const notFound = (): TRPCError =>
   new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+
+/**
+ * Billing details as they will be stored: `input` over `stored`, a key left
+ * out keeping its stored value and `null` clearing it. The electronic address
+ * pair is checked on the merged row, because either half may be the stored
+ * one — and the normaliser would otherwise drop a value without its scheme.
+ */
+function mergedBilling(
+  stored: ClientBilling | null | undefined,
+  input: ClientBillingFields,
+): ClientBilling | null {
+  const base = normalizeClientBilling(stored) ?? EMPTY_CLIENT_BILLING;
+  const merged = mergeIdentityInput<ClientBillingFields>(base, input);
+  const [problem] = electronicAddressProblems(merged, false);
+  if (problem) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: problem.message });
+  }
+  return normalizeClientBilling(merged);
+}
 
 const assertUniqueClientName = (
   workspaceId: string,
@@ -69,14 +93,15 @@ export async function createClient(
   input: CreateClientInput,
 ): Promise<ClientWire> {
   const name = input.name.trim();
+  // Written only when there is something to write, so a client created
+  // without billing details looks exactly like one created before they existed.
+  // Validated before any query, so a refused payload costs no round trip.
+  const billing = input.billing ? mergedBilling(null, input.billing) : null;
   await assertUniqueClientName(scope.workspaceId, name);
 
   const existing = await Client.countDocuments({
     workspaceId: scope.workspaceId,
   });
-  // Written only when there is something to write, so a client created
-  // without billing details looks exactly like one created before they existed.
-  const billing = normalizeClientBilling(input.billing);
   const created = await Client.create({
     workspaceId: scope.workspaceId,
     createdBy: scope.userId,
@@ -104,6 +129,19 @@ export async function updateClient(
     await assertUniqueClientName(scope.workspaceId, input.name, input.id);
   }
 
+  // Billing merges over what is stored, so it is read first; `null` clears it
+  // whole and a merge that leaves every field blank clears it too.
+  let billing: { billing: ClientBilling | null } | Record<string, never> = {};
+  if (input.billing === null) {
+    billing = { billing: null };
+  } else if (input.billing !== undefined) {
+    const current = await Client.findOne({ _id: input.id, workspaceId: scope.workspaceId })
+      .select("billing")
+      .lean();
+    if (!current) throw notFound();
+    billing = { billing: mergedBilling(current.billing, input.billing) };
+  }
+
   const updated = await Client.findOneAndUpdate(
     { _id: input.id, workspaceId: scope.workspaceId },
     {
@@ -114,10 +152,7 @@ export async function updateClient(
         ...(input.invoiceLocale !== undefined
           ? { invoiceLocale: input.invoiceLocale }
           : {}),
-        // Replaces the subdocument whole; an all-blank one clears it to null.
-        ...(input.billing !== undefined
-          ? { billing: normalizeClientBilling(input.billing) }
-          : {}),
+        ...billing,
       },
     },
     { returnDocument: "after" },

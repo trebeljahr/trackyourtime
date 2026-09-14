@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { InvoiceLineItem } from "@starter/shared";
+import type { InvoiceLineItem, TaxBreakdownRow } from "@starter/shared";
 
 import {
   Table,
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { useFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
-import { formatHours, taxLabel, totalHours } from "./types";
+import { formatHours, taxCategoryLabel, taxLabel, totalHours } from "./types";
 
 export type InvoiceLinesProps = {
   lineItems: InvoiceLineItem[];
@@ -24,6 +24,13 @@ export type InvoiceLinesProps = {
   currency: string;
   /** Prefix for every test id, so preview and detail never collide. */
   testIdPrefix: string;
+  /**
+   * One tax row per VAT category and rate. Absent or null: the single
+   * `taxRate` row exactly as before, so legacy invoices render unchanged.
+   */
+  taxBreakdown?: TaxBreakdownRow[] | null;
+  /** A VAT column: the stored label (detail) or a control per line (create dialog). */
+  renderLineTax?: ((line: InvoiceLineItem, index: number) => React.ReactNode) | null;
 };
 
 /**
@@ -43,11 +50,15 @@ export function InvoiceLines({
   total,
   currency,
   testIdPrefix,
+  taxBreakdown = null,
+  renderLineTax = null,
 }: InvoiceLinesProps): React.JSX.Element {
   const t = useT("reports");
   const tc = useT("common");
+  const te = useT("einvoice");
   const f = useFormat();
   const money = (amount: number): string => f.money(amount, currency);
+  const breakdown = taxBreakdown && taxBreakdown.length > 0 ? taxBreakdown : null;
 
   return (
     <div className="space-y-3">
@@ -58,11 +69,16 @@ export function InvoiceLines({
               <TableHead>{t("invoices.columns.line")}</TableHead>
               <TableHead className="text-right">{t("invoices.columns.hours")}</TableHead>
               <TableHead className="text-right">{tc("fields.rate")}</TableHead>
+              {renderLineTax ? (
+                <TableHead data-testid={`${testIdPrefix}-vat-column`}>
+                  {te("lines.vatColumn")}
+                </TableHead>
+              ) : null}
               <TableHead className="text-right">{tc("fields.amount")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {lineItems.map((line) => (
+            {lineItems.map((line, index) => (
               <TableRow key={line.key} data-testid={`${testIdPrefix}-line`}>
                 <TableCell className="font-medium">{line.label}</TableCell>
                 <TableCell className="text-right tabular-nums">
@@ -71,6 +87,11 @@ export function InvoiceLines({
                 <TableCell className="text-right tabular-nums text-muted-foreground">
                   {money(line.hourlyRate)}
                 </TableCell>
+                {renderLineTax ? (
+                  <TableCell data-testid={`${testIdPrefix}-line-tax`}>
+                    {renderLineTax(line, index)}
+                  </TableCell>
+                ) : null}
                 <TableCell className="text-right tabular-nums">
                   {money(line.amount)}
                 </TableCell>
@@ -99,7 +120,29 @@ export function InvoiceLines({
             {money(subtotal)}
           </dd>
         </div>
-        {taxRate === null ? null : (
+        {breakdown ? (
+          breakdown.map((row) => (
+            <div
+              key={`${row.category}:${row.rate}`}
+              className="flex justify-between gap-3"
+              data-testid={`${testIdPrefix}-tax-row`}
+              data-category={row.category}
+            >
+              <dt>
+                <span>{taxCategoryLabel(row.category, row.rate)}</span>
+                {row.exemptionReason ? (
+                  <span
+                    className="block text-xs text-muted-foreground"
+                    data-testid={`${testIdPrefix}-tax-reason`}
+                  >
+                    {row.exemptionReason}
+                  </span>
+                ) : null}
+              </dt>
+              <dd className="tabular-nums">{money(row.taxAmount)}</dd>
+            </div>
+          ))
+        ) : taxRate === null ? null : (
           <div className="flex justify-between">
             <dt>{taxLabel(taxRate, f.locale)}</dt>
             <dd className="tabular-nums" data-testid={`${testIdPrefix}-tax`}>

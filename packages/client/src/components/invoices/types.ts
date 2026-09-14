@@ -1,5 +1,15 @@
 import { addDays, format, parseISO } from "date-fns";
-import type { Invoice, InvoiceLineItem, InvoiceStatus } from "@starter/shared";
+import type {
+  ExemptionNotes,
+  Invoice,
+  InvoiceLineItem,
+  InvoiceStatus,
+  LineTax,
+  TaxBreakdownRow,
+  TaxCategory,
+} from "@starter/shared";
+
+import { translate } from "@/i18n/translate";
 
 import type { ClientLocale } from "@/i18n/config";
 import {
@@ -55,6 +65,12 @@ export type InvoicePreviewData = {
   skippedMissingRate: number;
   /** Time in range already billed on an earlier invoice. */
   skippedInvoiced: number;
+  /** One row per VAT category and rate; null when the lines carry no category. */
+  taxBreakdown: TaxBreakdownRow[] | null;
+  /** The category and rate per line that create would stamp; null = unresolved. */
+  resolvedTax: { lines: Array<{ key: string } & LineTax> } | null;
+  /** The exemption notes create would print, defaults resolved. */
+  exemptionNotes: ExemptionNotes;
 };
 
 /** What `invoices.remove` resolves to. */
@@ -261,6 +277,27 @@ export function taxLabel(
       maximumFractionDigits: 4,
     }),
   });
+}
+
+/**
+ * "VAT 19 %", "Exempt", "Reverse charge" — a breakdown row's own label, in the
+ * UI language. The rate is shown only for the standard category.
+ */
+export function taxCategoryLabel(category: TaxCategory, rate: number): string {
+  const t = translate("einvoice");
+  if (category === "S") {
+    const shown = Number.isInteger(rate) ? String(rate) : String(Math.round(rate * 100) / 100);
+    return t("lines.breakdown.S", { rate: shown });
+  }
+  return t(`lines.breakdown.${category}`);
+}
+
+/** True when the lines do not all share one category and rate (the detail then shows a VAT column). */
+export function linesHaveMixedTax(lineItems: readonly InvoiceLineItem[]): boolean {
+  const keys = new Set(
+    lineItems.map((line) => (line.taxCategory === undefined ? "none" : `${line.taxCategory}:${line.taxRate ?? 0}`)),
+  );
+  return keys.size > 1;
 }
 
 // ── dates ────────────────────────────────────────────────────────────

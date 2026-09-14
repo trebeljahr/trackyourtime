@@ -15,7 +15,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
-  InvoiceIssuer,
+  BusinessProfileValues,
   Visibility,
   WorkspaceExport,
   WorkspaceExportClient,
@@ -86,7 +86,7 @@ const visibility = (
  * it, so a fixture forced to set it could not represent one.
  */
 type ExhaustiveExport = Required<Omit<WorkspaceExport, "moneyRedacted">> & {
-  businessProfile: InvoiceIssuer;
+  businessProfile: BusinessProfileValues;
   /** Typed `undefined` rather than dropped: readable, and impossible to set. */
   moneyRedacted?: undefined;
   settings: Required<WorkspaceExportSettings>;
@@ -120,6 +120,21 @@ const fixture = (): ExhaustiveExport => ({
     paymentDetails: "IBAN DE00 0000 0000 0000",
     paymentTermsDays: 14,
     invoiceFooter: null,
+    vatId: "DE123456789",
+    taxNumber: null,
+    registrationNumber: null,
+    sellerIdentifier: null,
+    contactName: "Alice Example",
+    electronicAddress: "billing@example.com",
+    electronicAddressScheme: "EM",
+    iban: "DE02120300000000202051",
+    bic: null,
+    bankName: null,
+    accountHolder: null,
+    smallBusiness: false,
+    smallBusinessNote: null,
+    defaultTaxCategory: "S",
+    defaultTaxRate: 19,
   },
   clients: [
     {
@@ -135,6 +150,11 @@ const fixture = (): ExhaustiveExport => ({
         taxId: null,
         email: null,
         reference: "PO-7",
+        vatId: "DE987654321",
+        electronicAddress: null,
+        electronicAddressScheme: null,
+        preferredFormat: "zugferd",
+        defaultTaxCategory: "S",
       },
     },
   ],
@@ -246,6 +266,8 @@ const fixture = (): ExhaustiveExport => ({
           hourlyRate: 120,
           currency: "EUR",
           amount: 180,
+          taxCategory: "S",
+          taxRate: 19,
         },
       ],
       subtotal: 180,
@@ -267,6 +289,18 @@ const fixture = (): ExhaustiveExport => ({
         paymentDetails: "IBAN DE00 0000 0000 0000",
         paymentTermsDays: 14,
         invoiceFooter: null,
+        vatId: "DE123456789",
+        taxNumber: null,
+        registrationNumber: null,
+        sellerIdentifier: null,
+        contactName: null,
+        electronicAddress: null,
+        electronicAddressScheme: null,
+        iban: "DE02120300000000202051",
+        bic: null,
+        bankName: null,
+        accountHolder: null,
+        smallBusiness: false,
       },
       recipient: {
         name: "Internal",
@@ -278,7 +312,21 @@ const fixture = (): ExhaustiveExport => ({
         taxId: null,
         email: null,
         reference: null,
+        vatId: null,
+        electronicAddress: null,
+        electronicAddressScheme: null,
       },
+      taxBreakdown: [
+        {
+          category: "S",
+          rate: 19,
+          basisAmount: 180,
+          taxAmount: 34.2,
+          exemptionReason: null,
+          exemptionReasonCode: null,
+        },
+      ],
+      paymentTerms: "Payable within 14 days, by 2026-09-15.",
       createdAt: "2026-09-01T09:00:00.000Z",
     },
   ],
@@ -290,7 +338,8 @@ const fixture = (): ExhaustiveExport => ({
  * reading them takes the money flag, so a redacted file does not state them
  * at all — and an import reads their absence as "not said".
  */
-const IDENTITY_PATH = /^(businessProfile|invoices\[\d+\]\.(issuer|recipient))(\.|\[|$)/;
+const IDENTITY_PATH =
+  /^(businessProfile|invoices\[\d+\]\.(issuer|recipient|taxBreakdown))(\.|\[|$)/;
 
 /** Both configurations that are refused money, run through every rule below. */
 const REDACTED_VIEWERS: readonly Visibility[] = [
@@ -310,6 +359,24 @@ test("the walker actually finds the money fields it is meant to guard", () => {
   assert.ok(paths.includes("settings.defaultHourlyRate"));
   assert.ok(paths.includes("invoices[0].total"));
   assert.ok(paths.includes("invoices[0].lineItems[0].amount"));
+  assert.ok(paths.includes("invoices[0].lineItems[0].taxRate"));
+  assert.ok(paths.includes("invoices[0].taxBreakdown[0].taxAmount"));
+});
+
+test("a redacted invoice loses its VAT breakdown and line rates, and keeps categories and terms", () => {
+  for (const viewer of REDACTED_VIEWERS) {
+    const invoice = redactExportMoney(fixture(), viewer).invoices?.[0];
+    assert.ok(invoice);
+    // Every row of a breakdown is a basis and a tax amount: it goes whole.
+    assert.equal("taxBreakdown" in invoice, false);
+    assert.strictEqual(invoice.lineItems[0]?.taxRate, null);
+    // A category and the due sentence state no figure.
+    assert.equal(invoice.lineItems[0]?.taxCategory, "S");
+    assert.equal(invoice.paymentTerms, "Payable within 14 days, by 2026-09-15.");
+  }
+  const kept = redactExportMoney(fixture(), visibility(true, true)).invoices?.[0];
+  assert.equal(kept?.taxBreakdown?.[0]?.taxAmount, 34.2);
+  assert.equal(kept?.lineItems[0]?.taxRate, 19);
 });
 
 test("a member who may not see others' money gets a document with no amount anywhere", () => {

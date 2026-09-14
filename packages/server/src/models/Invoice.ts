@@ -1,7 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose";
 import {
   SUPPORTED_LOCALES,
-  normalizeBusinessProfile,
+  normalizeIssuer,
   normalizeRecipient,
   type Invoice as InvoiceWire,
   type InvoiceIssuer,
@@ -9,7 +9,16 @@ import {
   type InvoiceRecipient,
   type InvoiceStatus,
   type Locale,
+  type TaxBreakdownRow,
 } from "@starter/shared";
+import {
+  einvoiceMetaSchema,
+  issuerIdentityFields,
+  lineTaxFields,
+  recipientIdentityFields,
+  taxBreakdownRowSchema,
+  type EinvoiceMetaDoc,
+} from "./einvoice-schemas.js";
 
 /**
  * An invoice is a SNAPSHOT, not a query.
@@ -46,6 +55,12 @@ export interface IInvoice extends Document {
   issuer?: InvoiceIssuer | null;
   /** Snapshotted at creation; absent when the client had no billing details. */
   recipient?: InvoiceRecipient | null;
+  /** EN 16931 VAT breakdown; absent when the lines carry no categories. */
+  taxBreakdown?: TaxBreakdownRow[] | null;
+  /** BT-20, frozen at create or fill; absent on invoices from before e-invoicing. */
+  paymentTerms?: string | null;
+  /** Fill audit and stored issued XML. `issuedXml` never reaches the wire. */
+  einvoice?: EinvoiceMetaDoc | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -80,6 +95,12 @@ export type InvoiceDocLike = {
   issuer?: InvoiceIssuer | null;
   /** Snapshotted at creation; absent when the client had no billing details. */
   recipient?: InvoiceRecipient | null;
+  /** EN 16931 VAT breakdown; absent when the lines carry no categories. */
+  taxBreakdown?: TaxBreakdownRow[] | null;
+  /** BT-20, frozen at create or fill; absent on invoices from before e-invoicing. */
+  paymentTerms?: string | null;
+  /** Fill audit and stored issued XML. `issuedXml` never reaches the wire. */
+  einvoice?: EinvoiceMetaDoc | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -95,6 +116,7 @@ const lineItemSchema = new Schema<InvoiceLineItem>(
     hourlyRate: { type: Number, required: true, min: 0 },
     currency: { type: String, required: true },
     amount: { type: Number, required: true },
+    ...lineTaxFields,
   },
   { _id: false },
 );
@@ -116,6 +138,7 @@ const issuerSchema = new Schema<InvoiceIssuer>(
     paymentDetails: { type: String, default: null },
     paymentTermsDays: { type: Number, default: null },
     invoiceFooter: { type: String, default: null },
+    ...issuerIdentityFields,
   },
   { _id: false },
 );
@@ -131,6 +154,7 @@ const recipientSchema = new Schema<InvoiceRecipient>(
     taxId: { type: String, default: null },
     email: { type: String, default: null },
     reference: { type: String, default: null },
+    ...recipientIdentityFields,
   },
   { _id: false },
 );
@@ -176,6 +200,10 @@ const invoiceSchema = new Schema<IInvoice>(
     locale: { type: String, enum: [...SUPPORTED_LOCALES] },
     issuer: { type: issuerSchema, default: undefined },
     recipient: { type: recipientSchema, default: undefined },
+    // Snapshots too: no defaults, so a legacy invoice reads and saves untouched.
+    taxBreakdown: { type: [taxBreakdownRowSchema], default: undefined },
+    paymentTerms: { type: String, maxlength: 500 },
+    einvoice: { type: einvoiceMetaSchema, default: undefined },
   },
   { timestamps: true },
 );
@@ -220,6 +248,9 @@ export function toClientInvoice(doc: InvoiceDocLike): InvoiceWire {
       hourlyRate: line.hourlyRate,
       currency: line.currency,
       amount: line.amount,
+      ...(line.taxCategory
+        ? { taxCategory: line.taxCategory, taxRate: line.taxRate ?? 0 }
+        : {}),
     })),
     subtotal: doc.subtotal,
     taxRate: doc.taxRate ?? null,
@@ -229,9 +260,37 @@ export function toClientInvoice(doc: InvoiceDocLike): InvoiceWire {
     entryIds: doc.entryIds ?? [],
     notes: doc.notes ?? null,
     ...(doc.locale ? { locale: doc.locale } : {}),
-    issuer: doc.issuer ? normalizeBusinessProfile(doc.issuer) : null,
+    issuer: doc.issuer ? normalizeIssuer(doc.issuer) : null,
     recipient: doc.recipient ? normalizeRecipient(doc.recipient) : null,
+    // Each e-invoice field only when the document has it, so an invoice from
+    // before e-invoicing serialises exactly as it did.
+    ...(doc.taxBreakdown && doc.taxBreakdown.length > 0
+      ? { taxBreakdown: doc.taxBreakdown.map(copyBreakdownRow) }
+      : {}),
+    ...(doc.paymentTerms !== undefined ? { paymentTerms: doc.paymentTerms ?? null } : {}),
+    ...(doc.einvoice?.fills && doc.einvoice.fills.length > 0
+      ? {
+          einvoiceFills: doc.einvoice.fills.map((fill) => ({
+            at: fill.at.toISOString(),
+            by: fill.by,
+            fields: [...(fill.fields ?? [])],
+          })),
+        }
+      : {}),
+    // einvoice.issuedXml is deliberately never mapped.
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
+  };
+}
+
+/** A plain copy of a stored breakdown row (a hydrated subdocument carries more). */
+function copyBreakdownRow(row: TaxBreakdownRow): TaxBreakdownRow {
+  return {
+    category: row.category,
+    rate: row.rate,
+    basisAmount: row.basisAmount,
+    taxAmount: row.taxAmount,
+    exemptionReason: row.exemptionReason ?? null,
+    exemptionReasonCode: row.exemptionReasonCode ?? null,
   };
 }

@@ -20,6 +20,7 @@ import {
   getResolvedSettings,
 } from "../../models/Settings.js";
 import {
+  BusinessProfileInvalidError,
   getBusinessProfile,
   saveBusinessProfile,
 } from "../../models/BusinessProfile.js";
@@ -180,7 +181,18 @@ export const settingsRouter = router({
         });
       }
       const { originId, ...fields } = input;
-      const profile = await saveBusinessProfile(ctx.workspaceId, fields);
+      let profile: BusinessProfile;
+      try {
+        profile = await saveBusinessProfile(ctx.workspaceId, fields);
+      } catch (error) {
+        // A cross-field rule failed on the MERGED row (a key the input left
+        // out kept a stored value the new ones contradict). That is the
+        // caller's input, not a server fault.
+        if (error instanceof BusinessProfileInvalidError) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message, cause: error });
+        }
+        throw error;
+      }
       void publishSync(ctx.workspaceId, { kind: "settings.changed" }, originId);
       return profile;
     }),

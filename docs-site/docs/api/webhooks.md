@@ -83,12 +83,26 @@ The body is one envelope:
 An `invoice` carries the two parties as they stood when it was created:
 `issuer` (the workspace's business profile: `legalName`, `addressLines`,
 `postalCode`, `city`, `country`, `taxId`, `email`, `phone`, `website`,
-`paymentDetails`, `paymentTermsDays`, `invoiceFooter`) and `recipient` (the
-client's `name` plus `legalName`, `addressLines`, `postalCode`, `city`,
-`country`, `taxId`, `email`, `reference`). Blank fields are `null`. Either is
-`null` when there was nothing to copy, and on invoices created before these
-fields existed. They never change after creation, so the payload of
-`invoice.status_changed` shows the same parties as `invoice.created`.
+`paymentDetails`, `paymentTermsDays`, `invoiceFooter`, `vatId`, `taxNumber`,
+`registrationNumber`, `sellerIdentifier`, `contactName`, `electronicAddress`,
+`electronicAddressScheme`, `iban`, `bic`, `bankName`, `accountHolder`,
+`smallBusiness`) and `recipient` (the client's `name` plus `legalName`,
+`addressLines`, `postalCode`, `city`, `country`, `taxId`, `email`, `reference`,
+`vatId`, `electronicAddress`, `electronicAddressScheme`). Blank fields are
+`null`. Either party is `null` when there was nothing to copy, and on invoices
+created before these fields existed.
+
+An invoice with VAT categories also carries `taxCategory` and `taxRate` on
+each line, `taxBreakdown` (one row per category and rate: `category`, `rate`,
+`basisAmount`, `taxAmount`, `exemptionReason`, `exemptionReasonCode`) and
+`paymentTerms` (the due sentence printed on the invoice). Each of these keys is
+absent on an invoice that has no value for it.
+
+A stored value never changes. "Fill missing details" in the app can add a
+value that was `null` or absent, and it never changes an amount. Each fill is
+listed in `einvoiceFills` (`at`, `by` as a user id, and the `fields` it set). It sends no
+webhook, so the next `invoice.status_changed` is the first payload that shows
+the added values.
 
 `entry.deleted` carries `authorId` explicitly rather than the id alone, because who
 authored it is what decides whether you are allowed to be told about it at all.

@@ -24,6 +24,18 @@ export function InvoicesScreen(): React.JSX.Element {
   const list = trpc.invoices.list.useQuery(INVOICE_LIST_INPUT);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [creating, setCreating] = React.useState(false);
+  const [linkedId, setLinkedId] = React.useState<string | null>(null);
+
+  // `?invoice=<id>`: the way back from fixing billing data for one invoice.
+  // Read from `location`, like settings `?tab=`, and applied once the list
+  // has the invoice.
+  React.useEffect(() => {
+    setLinkedId(new URLSearchParams(window.location.search).get("invoice"));
+  }, []);
+  if (linkedId !== null && list.data) {
+    setLinkedId(null);
+    if (list.data.invoices.some((invoice) => invoice.id === linkedId)) setSelectedId(linkedId);
+  }
 
   const invoices: InvoiceRow[] = list.data?.invoices ?? [];
   // Resolved from the list rather than held as its own object, so a status

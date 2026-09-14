@@ -20,6 +20,7 @@ import { TRPCError } from "@trpc/server";
 import { Types } from "mongoose";
 import { canUseInvoices } from "@starter/shared";
 import type { WorkspaceRole } from "@starter/shared";
+import { UserPreferencesModel } from "../models/Settings.js";
 import { WebhookSubscription } from "../models/WebhookSubscription.js";
 import {
   INVOICE_PERMISSION_REQUIRED,
@@ -41,9 +42,12 @@ import {
 const store = freshStore();
 const restoreStore = installStore(store);
 const restoreWebhooks = stubModel(WebhookSubscription, memoryCollection());
+// Read by preview and create for the issuer's language preference.
+const restorePreferences = stubModel(UserPreferencesModel, memoryCollection());
 after(() => {
   restoreStore();
   restoreWebhooks();
+  restorePreferences();
 });
 
 const INVOICE_ID = new Types.ObjectId("64b7f9c2e13a4d5f6a7b8f01");
@@ -199,6 +203,44 @@ for (const callerSpec of CALLERS) {
         assert.equal(store.invoices.rows.length, 1);
       }
     });
+
+    // The e-invoice procedures address the invoice by id too: NOT_FOUND for a
+    // refused caller, before the invoice, the client or the profile is read.
+    it("einvoiceCheck", async () => {
+      const call = caller().einvoiceCheck({ id: String(INVOICE_ID), profile: "xrechnung" });
+      if (allowed) {
+        // A pre-e-invoicing fixture: no parties, no categories.
+        assert.equal((await call).ready, false);
+      } else {
+        await refusedWith(call, "NOT_FOUND");
+        assertNothingRead();
+        assert.equal(store.businessProfiles.queries.length, 0, "the profile was read");
+      }
+    });
+
+    it("attachEinvoiceData", async () => {
+      const call = caller().attachEinvoiceData({ id: String(INVOICE_ID), confirm: true });
+      if (allowed) {
+        // No tax rate on the fixture: the 0 % category must be chosen first.
+        await refusedWith(call, "BAD_REQUEST");
+      } else {
+        await refusedWith(call, "NOT_FOUND");
+        assertNothingRead();
+      }
+      assert.equal("einvoice" in (store.invoices.rows[0] ?? {}), false);
+    });
+
+    for (const exporter of ["exportZugferd", "exportXrechnung"] as const) {
+      it(exporter, async () => {
+        const call = caller()[exporter]({ id: String(INVOICE_ID) });
+        if (allowed) {
+          await refusedWith(call, "PRECONDITION_FAILED");
+        } else {
+          await refusedWith(call, "NOT_FOUND");
+          assertNothingRead();
+        }
+      });
+    }
 
     it("preview", async () => {
       const call = caller().preview({ ...RANGE, groupBy: "project" });

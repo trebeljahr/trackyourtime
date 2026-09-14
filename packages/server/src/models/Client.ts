@@ -6,6 +6,7 @@ import {
   type ClientBilling,
   type Locale,
 } from "@starter/shared";
+import { clientBillingEinvoiceFields } from "./einvoice-schemas.js";
 
 export const DEFAULT_CLIENT_COLOR = "#64748b";
 
@@ -56,6 +57,7 @@ const clientBillingSchema = new Schema<ClientBilling>(
     taxId: { type: String, default: null, maxlength: 60 },
     email: { type: String, default: null, maxlength: 254 },
     reference: { type: String, default: null, maxlength: 120 },
+    ...clientBillingEinvoiceFields,
   },
   { _id: false },
 );

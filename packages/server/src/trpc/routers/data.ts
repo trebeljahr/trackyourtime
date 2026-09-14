@@ -25,9 +25,10 @@ import {
   canUseInvoices,
   importInputSchema,
   importUndoSchema,
-  issuerSnapshot,
+  isIdentityEmpty,
   normalizeBusinessProfile,
   normalizeClientBilling,
+  normalizeIssuer,
   normalizeRecipient,
   resolveHourlyRate,
   resolveTimeZone,
@@ -52,6 +53,7 @@ import {
   type WorkspaceRole,
 } from "@starter/shared";
 import {
+  BusinessProfileInvalidError,
   BusinessProfileModel,
   saveBusinessProfile,
 } from "../../models/BusinessProfile.js";
@@ -468,11 +470,76 @@ async function restoreWorkspaceSettings(args: {
       { upsert: true },
     );
   }
-  // Replaced whole, like `settings.updateBusinessProfile` does. A file that
-  // states no profile leaves the destination's alone — absence is "not said".
-  if (profile) await saveBusinessProfile(workspaceId, profile);
+  // Merged like `settings.updateBusinessProfile`: a key the file does not
+  // carry (a file written before that field existed) keeps the destination's
+  // value, and a file that states no profile leaves it alone entirely —
+  // absence is "not said".
+  if (profile) await restoreBusinessProfile(workspaceId, profile);
   void publishSync(workspaceId, { kind: "settings.changed" }, originId);
   return true;
+}
+
+type ImportedBusinessProfile = NonNullable<WorkspaceExport["businessProfile"]>;
+
+/**
+ * The keys to leave out of an imported profile when the merge contradicts
+ * itself at `path`, given what was already left out. The default category and
+ * rate go first, then the small-business flag they contradict, then the
+ * electronic address pair; `null` when nothing is left to try.
+ */
+export function profileKeysToDrop(
+  path: string,
+  dropped: ReadonlySet<string>,
+): readonly (keyof ImportedBusinessProfile)[] | null {
+  if (path === "defaultTaxCategory" || path === "defaultTaxRate") {
+    if (!dropped.has("defaultTaxCategory")) return ["defaultTaxCategory", "defaultTaxRate"];
+    if (!dropped.has("smallBusiness")) return ["smallBusiness"];
+    return null;
+  }
+  if (path === "electronicAddress" || path === "electronicAddressScheme") {
+    return dropped.has("electronicAddress") ? null : ["electronicAddress", "electronicAddressScheme"];
+  }
+  return dropped.has(path) ? null : [path as keyof ImportedBusinessProfile];
+}
+
+/**
+ * Restore the file's profile over the stored one. When the merged row
+ * contradicts itself (the file says small business, the destination keeps a
+ * 19 % default), only the contradicting keys are left out and the rest — legal
+ * name, address, VAT ID, bank details — is restored. Failing the whole import
+ * would lose the entries the user came for; skipping the whole profile would
+ * lose everything else in it without a word.
+ */
+export async function restoreBusinessProfile(
+  workspaceId: string,
+  profile: ImportedBusinessProfile,
+): Promise<void> {
+  const remaining: Record<string, unknown> = { ...profile };
+  const dropped = new Set<string>();
+  for (;;) {
+    try {
+      await saveBusinessProfile(workspaceId, remaining as ImportedBusinessProfile);
+      break;
+    } catch (error) {
+      if (!(error instanceof BusinessProfileInvalidError)) throw error;
+      const keys = profileKeysToDrop(error.path, dropped);
+      if (keys === null) {
+        console.warn(
+          `[import] business profile not restored for ${workspaceId}: ${error.path}: ${error.message}`,
+        );
+        return;
+      }
+      for (const key of keys) {
+        dropped.add(key);
+        delete remaining[key];
+      }
+    }
+  }
+  if (dropped.size > 0) {
+    console.warn(
+      `[import] business profile restored for ${workspaceId} without ${[...dropped].join(", ")}: they contradicted the stored values`,
+    );
+  }
 }
 
 /**
@@ -813,6 +880,8 @@ async function buildWorkspaceExport(args: {
           ...(authorScope ? { createdBy: authorScope.authorId } : {}),
           ...(dateRange ? { issueDate: dateRange } : {}),
         })
+          // The stored issued XML is hundreds of KB and never exported.
+          .select("-einvoice.issuedXml")
           .sort({ issueDate: 1 })
           // One past the cap, like the entries below: a plain limit would drop
           // the newest invoices out of a file that still reads as a full backup.
@@ -826,7 +895,12 @@ async function buildWorkspaceExport(args: {
     includeInvoices
       ? BusinessProfileModel.findOne({ workspaceId })
           .lean()
-          .then((doc) => issuerSnapshot(doc) ?? undefined)
+          .then((doc) => {
+            // Every stored key, the e-invoice defaults included; omitted
+            // while the profile is empty, as before.
+            const values = normalizeBusinessProfile(doc);
+            return isIdentityEmpty(values) ? undefined : values;
+          })
       : Promise.resolve(undefined),
   ]);
 
@@ -922,6 +996,9 @@ async function buildWorkspaceExport(args: {
         hourlyRate: line.hourlyRate,
         currency: line.currency,
         amount: line.amount,
+        ...(line.taxCategory
+          ? { taxCategory: line.taxCategory, taxRate: line.taxRate ?? 0 }
+          : {}),
       })),
       subtotal: invoice.subtotal,
       taxRate: invoice.taxRate ?? null,
@@ -929,10 +1006,27 @@ async function buildWorkspaceExport(args: {
       total: invoice.total,
       currency: invoice.currency,
       notes: invoice.notes ?? null,
-      ...(invoice.issuer ? { issuer: normalizeBusinessProfile(invoice.issuer) } : {}),
+      ...(invoice.issuer ? { issuer: normalizeIssuer(invoice.issuer) } : {}),
       ...(invoice.recipient
         ? { recipient: normalizeRecipient(invoice.recipient) }
         : {}),
+      ...(invoice.taxBreakdown && invoice.taxBreakdown.length > 0
+        ? {
+            taxBreakdown: invoice.taxBreakdown.map((row) => ({
+              category: row.category,
+              rate: row.rate,
+              basisAmount: row.basisAmount,
+              taxAmount: row.taxAmount,
+              exemptionReason: row.exemptionReason ?? null,
+              exemptionReasonCode: row.exemptionReasonCode ?? null,
+            })),
+          }
+        : {}),
+      ...(invoice.paymentTerms !== undefined
+        ? { paymentTerms: invoice.paymentTerms ?? null }
+        : {}),
+      // `einvoice` (the fill audit and the stored issued XML) is not part of
+      // the file: invoices are never restored, so it could serve nothing.
       createdAt: invoice.createdAt.toISOString(),
       // `entryIds` is deliberately absent: an entry has no identity in this
       // format, so exporting them would write ids that address nothing —

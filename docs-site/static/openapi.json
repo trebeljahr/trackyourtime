@@ -3161,6 +3161,74 @@
                                         "type": "null"
                                       }
                                     ]
+                                  },
+                                  "vatId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "electronicAddress": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "electronicAddressScheme": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "9930",
+                                          "EM",
+                                          "0204",
+                                          "0088"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "preferredFormat": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "pdf",
+                                          "zugferd",
+                                          "xrechnung"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "defaultTaxCategory": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "S",
+                                          "Z",
+                                          "E",
+                                          "AE",
+                                          "O"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -3171,7 +3239,12 @@
                                   "country",
                                   "taxId",
                                   "email",
-                                  "reference"
+                                  "reference",
+                                  "vatId",
+                                  "electronicAddress",
+                                  "electronicAddressScheme",
+                                  "preferredFormat",
+                                  "defaultTaxCategory"
                                 ],
                                 "additionalProperties": false
                               },
@@ -3443,6 +3516,76 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "vatId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "electronicAddress": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 200
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "electronicAddressScheme": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "9930",
+                                  "EM",
+                                  "0204",
+                                  "0088"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "preferredFormat": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "pdf",
+                                  "zugferd",
+                                  "xrechnung"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "defaultTaxCategory": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "S",
+                                  "Z",
+                                  "E",
+                                  "AE",
+                                  "O"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         }
                       },
@@ -3592,6 +3735,74 @@
                                       "type": "null"
                                     }
                                   ]
+                                },
+                                "vatId": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "electronicAddress": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "electronicAddressScheme": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "9930",
+                                        "EM",
+                                        "0204",
+                                        "0088"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "preferredFormat": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "pdf",
+                                        "zugferd",
+                                        "xrechnung"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "defaultTaxCategory": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "S",
+                                        "Z",
+                                        "E",
+                                        "AE",
+                                        "O"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -3602,7 +3813,12 @@
                                 "country",
                                 "taxId",
                                 "email",
-                                "reference"
+                                "reference",
+                                "vatId",
+                                "electronicAddress",
+                                "electronicAddressScheme",
+                                "preferredFormat",
+                                "defaultTaxCategory"
                               ],
                               "additionalProperties": false
                             },
@@ -3885,6 +4101,74 @@
                                       "type": "null"
                                     }
                                   ]
+                                },
+                                "vatId": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "electronicAddress": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "electronicAddressScheme": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "9930",
+                                        "EM",
+                                        "0204",
+                                        "0088"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "preferredFormat": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "pdf",
+                                        "zugferd",
+                                        "xrechnung"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "defaultTaxCategory": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "S",
+                                        "Z",
+                                        "E",
+                                        "AE",
+                                        "O"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -3895,7 +4179,12 @@
                                 "country",
                                 "taxId",
                                 "email",
-                                "reference"
+                                "reference",
+                                "vatId",
+                                "electronicAddress",
+                                "electronicAddressScheme",
+                                "preferredFormat",
+                                "defaultTaxCategory"
                               ],
                               "additionalProperties": false
                             },
@@ -4179,6 +4468,76 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "vatId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "electronicAddress": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 200
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "electronicAddressScheme": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "9930",
+                                  "EM",
+                                  "0204",
+                                  "0088"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "preferredFormat": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "pdf",
+                                  "zugferd",
+                                  "xrechnung"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "defaultTaxCategory": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "S",
+                                  "Z",
+                                  "E",
+                                  "AE",
+                                  "O"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         }
                       },
@@ -4325,6 +4684,74 @@
                                       "type": "null"
                                     }
                                   ]
+                                },
+                                "vatId": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "electronicAddress": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "electronicAddressScheme": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "9930",
+                                        "EM",
+                                        "0204",
+                                        "0088"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "preferredFormat": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "pdf",
+                                        "zugferd",
+                                        "xrechnung"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "defaultTaxCategory": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "S",
+                                        "Z",
+                                        "E",
+                                        "AE",
+                                        "O"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -4335,7 +4762,12 @@
                                 "country",
                                 "taxId",
                                 "email",
-                                "reference"
+                                "reference",
+                                "vatId",
+                                "electronicAddress",
+                                "electronicAddressScheme",
+                                "preferredFormat",
+                                "defaultTaxCategory"
                               ],
                               "additionalProperties": false
                             },
@@ -4814,6 +5246,74 @@
                                       "type": "null"
                                     }
                                   ]
+                                },
+                                "vatId": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "electronicAddress": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "electronicAddressScheme": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "9930",
+                                        "EM",
+                                        "0204",
+                                        "0088"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "preferredFormat": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "pdf",
+                                        "zugferd",
+                                        "xrechnung"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "defaultTaxCategory": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "S",
+                                        "Z",
+                                        "E",
+                                        "AE",
+                                        "O"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -4824,7 +5324,12 @@
                                 "country",
                                 "taxId",
                                 "email",
-                                "reference"
+                                "reference",
+                                "vatId",
+                                "electronicAddress",
+                                "electronicAddressScheme",
+                                "preferredFormat",
+                                "defaultTaxCategory"
                               ],
                               "additionalProperties": false
                             },

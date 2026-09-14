@@ -16,6 +16,20 @@ import type { IdleBehavior, RunawayBehavior } from "./types.js";
 import { API_TOKEN_SCOPES } from "./api-tokens.js";
 import { WEBHOOK_EVENTS } from "./webhooks.js";
 import { LOCALE_PREFERENCES, SUPPORTED_LOCALES } from "./locale.js";
+import {
+  IDENTITY_LIMITS,
+  bicInput,
+  electronicAddressSchemeSchema,
+  exemptionNotesSchema,
+  ibanInput,
+  invoiceFormatSchema,
+  lineTaxSchema,
+  refineBusinessProfileEinvoice,
+  refineElectronicAddress,
+  taxCategorySchema,
+  vatIdInput,
+  vatRateSchema,
+} from "./einvoice.js";
 
 /** A supported interface/document language, e.g. "de". */
 export const localeSchema = z.enum(SUPPORTED_LOCALES);
@@ -166,26 +180,59 @@ const postalIdentityFields = {
   email: identityText(254),
 };
 
-/**
- * A client's billing details. Replaces the whole subdocument when sent; a
- * payload with every field blank is stored as "no billing details".
- */
-export const clientBillingSchema = z.object({
-  ...postalIdentityFields,
-  reference: identityText(120),
-});
+/** Electronic address pair (BT-34 / BT-49); the value rule depends on the scheme. */
+const electronicAddressFields = {
+  electronicAddress: identityText(IDENTITY_LIMITS.electronicAddress),
+  electronicAddressScheme: electronicAddressSchemeSchema.nullish(),
+};
 
-/** The workspace's issuer profile, replaced as a whole on save. */
-export const updateBusinessProfileSchema = z.object({
-  ...postalIdentityFields,
-  phone: identityText(40),
-  website: identityText(200),
-  paymentDetails: identityText(1_000),
-  /** Net days from the issue date; `null` states no terms. */
-  paymentTermsDays: z.number().int().min(0).max(365).nullish(),
-  invoiceFooter: identityText(500),
-  originId,
-});
+/**
+ * A client's billing details. A key left out keeps its stored value and
+ * `null` (or blank) clears it; a payload that leaves every field blank is
+ * stored as "no billing details".
+ */
+export const clientBillingSchema = z
+  .object({
+    ...postalIdentityFields,
+    reference: identityText(IDENTITY_LIMITS.reference),
+    vatId: vatIdInput,
+    ...electronicAddressFields,
+    preferredFormat: invoiceFormatSchema.nullish(),
+    defaultTaxCategory: taxCategorySchema.nullish(),
+  })
+  .superRefine(refineElectronicAddress);
+
+/**
+ * The workspace's issuer profile. A key left out keeps its stored value and
+ * `null` (or blank) clears it, so a form or an import written before a field
+ * existed cannot erase it by omission.
+ */
+export const updateBusinessProfileSchema = z
+  .object({
+    ...postalIdentityFields,
+    phone: identityText(IDENTITY_LIMITS.phone),
+    website: identityText(IDENTITY_LIMITS.website),
+    paymentDetails: identityText(IDENTITY_LIMITS.paymentDetails),
+    /** Net days from the issue date; `null` states no terms. */
+    paymentTermsDays: z.number().int().min(0).max(365).nullish(),
+    invoiceFooter: identityText(IDENTITY_LIMITS.invoiceFooter),
+    vatId: vatIdInput,
+    taxNumber: identityText(IDENTITY_LIMITS.taxNumber),
+    registrationNumber: identityText(IDENTITY_LIMITS.registrationNumber),
+    sellerIdentifier: identityText(IDENTITY_LIMITS.sellerIdentifier),
+    contactName: identityText(IDENTITY_LIMITS.contactName),
+    ...electronicAddressFields,
+    iban: ibanInput,
+    bic: bicInput,
+    bankName: identityText(IDENTITY_LIMITS.bankName),
+    accountHolder: identityText(IDENTITY_LIMITS.accountHolder),
+    smallBusiness: z.boolean().nullish(),
+    smallBusinessNote: identityText(IDENTITY_LIMITS.smallBusinessNote),
+    defaultTaxCategory: taxCategorySchema.nullish(),
+    defaultTaxRate: vatRateSchema.nullish(),
+    originId,
+  })
+  .superRefine(refineBusinessProfileEinvoice);
 
 export const createClientSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
@@ -554,13 +601,39 @@ export const taxRateSchema = z.number().min(0).max(100);
  * Dry run: roll billable time up into lines WITHOUT writing anything, so the
  * UI can show exactly what would be invoiced before committing to a number.
  */
-export const invoicePreviewSchema = z.object({
-  clientId: idString,
-  from: isoDateOrDateTimeSchema,
-  to: isoDateOrDateTimeSchema,
-  groupBy: invoiceGroupBySchema.default("project"),
-  taxRate: taxRateSchema.nullish(),
-});
+/**
+ * Per-line VAT for preview and create. `tax` applies to every line, `lineTax`
+ * overrides it by line key (a key matching no gathered line is a
+ * BAD_REQUEST). Absent both, the client's and the profile's defaults decide,
+ * and failing those the invoice carries no categories at all.
+ */
+const invoiceTaxFields = {
+  tax: lineTaxSchema.optional(),
+  lineTax: z
+    .array(lineTaxSchema.and(z.object({ key: z.string().min(1).max(200) })))
+    .max(500)
+    .optional(),
+  exemptionNotes: exemptionNotesSchema.optional(),
+};
+
+const taxAgreesWithRate = (input: {
+  tax?: { rate: number } | undefined;
+  taxRate?: number | null | undefined;
+}): boolean =>
+  input.tax === undefined || input.taxRate == null || input.taxRate === input.tax.rate;
+
+const TAX_RATE_DISAGREES = { message: "taxRate and tax.rate disagree", path: ["taxRate"] };
+
+export const invoicePreviewSchema = z
+  .object({
+    clientId: idString,
+    from: isoDateOrDateTimeSchema,
+    to: isoDateOrDateTimeSchema,
+    groupBy: invoiceGroupBySchema.default("project"),
+    taxRate: taxRateSchema.nullish(),
+    ...invoiceTaxFields,
+  })
+  .refine(taxAgreesWithRate, TAX_RATE_DISAGREES);
 
 export const createInvoiceSchema = z.object({
   clientId: idString,
@@ -578,8 +651,9 @@ export const createInvoiceSchema = z.object({
    * the issuer (`resolveInvoiceLocale`), and snapshotted either way.
    */
   locale: localeSchema.optional(),
+  ...invoiceTaxFields,
   originId,
-});
+}).refine(taxAgreesWithRate, TAX_RATE_DISAGREES);
 
 export const updateInvoiceStatusSchema = z.object({
   id: idString,

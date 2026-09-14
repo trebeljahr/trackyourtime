@@ -10,7 +10,11 @@ import { after, describe, it } from "node:test";
 import mongoose from "mongoose";
 import { TRPCError } from "@trpc/server";
 import type { WorkspaceRole } from "@starter/shared";
-import { BusinessProfileModel } from "../models/BusinessProfile.js";
+import {
+  BusinessProfileInvalidError,
+  BusinessProfileModel,
+  saveBusinessProfile,
+} from "../models/BusinessProfile.js";
 import {
   WorkspaceMember,
   type WorkspaceMemberDocLike,
@@ -128,4 +132,38 @@ describe("business profile permissions", () => {
       assert.equal(profile.country, "GB");
     });
   }
+});
+
+describe("saving the business profile merges over the stored row", () => {
+  it("keeps a field the update leaves out, and clears one sent as null", async () => {
+    stored = null;
+    writes = 0;
+    await saveBusinessProfile(WORKSPACE, {
+      legalName: "Example GmbH",
+      iban: "DE02120300000000202051",
+      vatId: "DE123456789",
+    });
+    // A form or an export file written before the e-invoice fields existed.
+    const profile = await saveBusinessProfile(WORKSPACE, { legalName: "Example AG", vatId: null });
+    assert.equal(writes, 2);
+    assert.equal(profile.legalName, "Example AG");
+    assert.equal(profile.iban, "DE02120300000000202051");
+    assert.equal(profile.vatId, null);
+    assert.equal(profile.smallBusiness, false);
+  });
+
+  it("checks cross-field rules on the merged row and writes nothing when one fails", async () => {
+    stored = null;
+    await saveBusinessProfile(WORKSPACE, { defaultTaxCategory: "S", defaultTaxRate: 19 });
+    writes = 0;
+    await assert.rejects(
+      saveBusinessProfile(WORKSPACE, { defaultTaxRate: null }),
+      (error: unknown) => error instanceof BusinessProfileInvalidError && error.path === "defaultTaxRate",
+    );
+    await assert.rejects(
+      saveBusinessProfile(WORKSPACE, { electronicAddress: "invoices@example.com" }),
+      (error: unknown) => error instanceof BusinessProfileInvalidError && error.path === "electronicAddressScheme",
+    );
+    assert.equal(writes, 0);
+  });
 });

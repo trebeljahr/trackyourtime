@@ -44,6 +44,9 @@ ENV COMMIT_SHA=$COMMIT_SHA
 # Self-contained prod bundle from `pnpm deploy` — dist + package.json +
 # node_modules (with @starter/shared materialised, no symlinks).
 COPY --from=build /prod/dist ./dist
+# Fonts the e-invoice PDF embeds (PDF/A forbids the standard-14 fonts), read at
+# runtime from ../../assets relative to dist/services.
+COPY --from=build /prod/assets ./assets
 COPY --from=build /prod/package.json ./
 COPY --from=build /prod/node_modules ./node_modules
 

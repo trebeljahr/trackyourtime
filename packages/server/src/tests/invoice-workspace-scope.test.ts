@@ -113,7 +113,7 @@ const matchesFilter = (
   return Object.entries(filter).every(([key, value]) => fields[key] === value);
 };
 
-type LeanQuery<T> = { lean: () => Promise<T> };
+type LeanQuery<T> = { lean: () => Promise<T>; select: (projection: string) => LeanQuery<T> };
 
 // mongoose's `findOne` is overloaded a dozen ways and not one of those
 // overloads describes a stub, so each model is reached through `unknown`.
@@ -136,19 +136,24 @@ const realMemberFindOne = stubbableMember.findOne;
 /** The filters the router actually queried invoices with, newest last. */
 let queried: Record<string, unknown>[] = [];
 
-stubbableInvoice.findOne = (filter) => ({
-  lean: async () => {
+/** A lean query whose projection is ignored: nothing here reads a projected-out field. */
+const leanQuery = <T>(run: () => Promise<T>): LeanQuery<T> => {
+  const query: LeanQuery<T> = { lean: run, select: () => query };
+  return query;
+};
+
+stubbableInvoice.findOne = (filter) =>
+  leanQuery(async () => {
     queried.push(filter);
     return matchesFilter(invoiceDoc, filter) ? invoiceDoc : null;
-  },
-});
+  });
 
-stubbableMember.findOne = (filter) => ({
-  lean: async () =>
+stubbableMember.findOne = (filter) =>
+  leanQuery(async () =>
     filter.workspaceId === WORKSPACE && filter.userId === ALICE
       ? membership
       : null,
-});
+  );
 
 after(() => {
   stubbableInvoice.findOne = realInvoiceFindOne;

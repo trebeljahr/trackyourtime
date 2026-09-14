@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { CreateInvoiceInput, InvoiceStatus } from "@starter/shared";
+import type { CreateInvoiceInput, EinvoiceIssue, InvoiceStatus } from "@starter/shared";
 
 import { errorMessage } from "@/components/catalog/types";
 import { toast } from "@/components/ui/sonner";
@@ -10,6 +10,7 @@ import { translate } from "@/i18n/translate";
 import { downloadBase64 } from "@/lib/download";
 import { trpc } from "@/lib/trpc";
 import { statusLabel, type InvoiceRow } from "./types";
+import { einvoiceIssuesFromError } from "./use-einvoice";
 
 /**
  * Mutations for the invoicing screens.
@@ -23,6 +24,12 @@ import { statusLabel, type InvoiceRow } from "./types";
  * here waits for the real answer and then invalidates.
  */
 
+/** A refusal carrying e-invoice issues is returned for the panel to show, never toasted. */
+export type EinvoiceDownloadOutcome =
+  | { kind: "downloaded" }
+  | { kind: "refused"; issues: EinvoiceIssue[] }
+  | { kind: "error" };
+
 /** `originId` is stamped by the hook, never by a caller. */
 export type CreateInvoiceVars = Omit<CreateInvoiceInput, "originId">;
 
@@ -33,6 +40,10 @@ export type InvoiceMutations = {
   removeInvoice: (id: string) => void;
   /** Fetches the server-rendered PDF and hands it to the browser. */
   downloadPdf: (invoice: Pick<InvoiceRow, "id" | "number">) => Promise<void>;
+  /** PDF/A-3 with the EN 16931 XML embedded. */
+  downloadZugferd: (invoice: Pick<InvoiceRow, "id" | "number">) => Promise<EinvoiceDownloadOutcome>;
+  /** The XRechnung XML alone. */
+  downloadXrechnung: (invoice: Pick<InvoiceRow, "id" | "number">) => Promise<EinvoiceDownloadOutcome>;
   isCreating: boolean;
   isBusy: boolean;
 };
@@ -122,6 +133,41 @@ export function useInvoiceMutations(): InvoiceMutations {
     [utils],
   );
 
+  /**
+   * Same transport as the plain PDF. `utils.….fetch` uses the default
+   * `staleTime` of 0, so a second click after fixing the profile really asks
+   * the server again — do not give these fetches a staleTime.
+   */
+  const downloadEinvoice = React.useCallback(
+    async (
+      invoice: Pick<InvoiceRow, "id" | "number">,
+      format: "zugferd" | "xrechnung",
+    ): Promise<EinvoiceDownloadOutcome> => {
+      setDownloading(true);
+      try {
+        const result =
+          format === "zugferd"
+            ? await utils.invoices.exportZugferd.fetch({ id: invoice.id })
+            : await utils.invoices.exportXrechnung.fetch({ id: invoice.id });
+        downloadBase64(result.filename, result.base64, result.mimeType);
+        return { kind: "downloaded" };
+      } catch (error) {
+        const issues = einvoiceIssuesFromError(error);
+        if (issues !== null && issues.length > 0) return { kind: "refused", issues };
+        toast.error(
+          errorMessage(
+            error,
+            translate("einvoice")("panel.downloadError", { number: invoice.number }),
+          ),
+        );
+        return { kind: "error" };
+      } finally {
+        setDownloading(false);
+      }
+    },
+    [utils],
+  );
+
   return {
     createInvoice: (vars) =>
       create.mutateAsync({ ...vars, originId: ORIGIN_ID }).catch(() => null),
@@ -132,6 +178,8 @@ export function useInvoiceMutations(): InvoiceMutations {
       remove.mutate({ id, originId: ORIGIN_ID });
     },
     downloadPdf,
+    downloadZugferd: (invoice) => downloadEinvoice(invoice, "zugferd"),
+    downloadXrechnung: (invoice) => downloadEinvoice(invoice, "xrechnung"),
     isCreating: create.isPending,
     isBusy:
       create.isPending ||

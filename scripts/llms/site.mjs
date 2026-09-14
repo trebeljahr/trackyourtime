@@ -61,6 +61,7 @@ export const DOC_SECTIONS = [
     title: "Start here",
     ids: ["intro", "choosing-a-self-hosted-time-tracker", "self-hosting"],
   },
+  { title: "Invoicing", ids: ["e-invoices"] },
   { title: "AI assistants", ids: ["mcp"] },
   { title: "REST API", ids: ["api/overview", "api/authentication", "api/errors"] },
 ];
@@ -71,7 +72,7 @@ export const EXCLUDED_DOC_IDS = ["getting-started", "architecture"];
 export function renderHeader() {
   return `# ${PRODUCT_NAME}
 
-> Open-source time tracking you host on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline, and tracked hours become reports and PDF invoices.
+> Open-source time tracking you host on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline, and tracked hours become reports and invoices: a plain PDF, a ZUGFeRD PDF or an XRechnung file.
 
 ${PRODUCT_NAME} is for freelancers, consultants and small studios who bill clients by the hour and want that data on a server they control. The code is on GitHub at ${REPO_URL} under AGPL-3.0-or-later. A hosted instance runs at ${WEB_URL} and is free while in beta.
 
@@ -83,7 +84,7 @@ ${PRODUCT_NAME} is for freelancers, consultants and small studios who bill clien
 - The web app, the extensions and the phone apps keep tracking without a connection. They send the queued changes when the connection returns.
 - A timer you stop on one device stops on every other open device at once, over a WebSocket.
 - Each project has an hourly rate. Reports show totals by project, client, task, tag, day, week or month, or list every entry. Both views export to CSV and PDF.
-- An invoice collects a client's unbilled billable hours and downloads as a PDF. An hour on an invoice cannot be billed again.
+- An invoice collects a client's unbilled billable hours. It downloads as a plain PDF, as a ZUGFeRD PDF or as an XRechnung XML file. An hour on an invoice cannot be billed again.
 - Every install has every feature. There are no paid plugins and no premium tier.
 - The server has a REST API at \`/api/v1\` with an OpenAPI document, and sends webhooks signed with HMAC-SHA256.
 - An MCP server lets an AI assistant start and stop timers, log past time and list entries. It also lists and creates clients, projects, tasks and tags, and reads summary reports. It runs from a clone of the repository and has no invoice tools.

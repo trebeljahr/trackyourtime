@@ -9,12 +9,25 @@ import {
   IDLE_BEHAVIORS,
   IMPORT_DAY_START_HOUR,
   MAX_IMPORT_ENTRY_SEC,
+  ELECTRONIC_ADDRESS_SCHEMES,
+  IDENTITY_LIMITS,
+  INVOICE_FORMATS,
+  TAX_CATEGORIES,
+  businessProfileProblems,
   dayKeyInZone,
-  issuerSnapshot,
+  isIdentityEmpty,
+  isValidBic,
+  isValidElectronicAddress,
+  isValidIban,
+  isValidVatId,
+  normalizeBusinessProfile,
   normalizeClientBilling,
+  stripSpacesUpper,
   zonedWallClockToMs,
+  type BusinessProfileFields,
+  type BusinessProfileValues,
   type ClientBilling,
-  type InvoiceIssuer,
+  type ElectronicAddressScheme,
   type ImportColumn,
   type ImportColumnRole,
   type ImportDateOrder,
@@ -607,9 +620,35 @@ const readPostalFields = (row: Record<string, unknown>) => ({
   email: text(row.email, 254),
 });
 
+/** One of `options`, or `null` — an unknown enum value reads as "not said". */
+const oneOfOrNull = <T extends string>(options: readonly T[], value: unknown): T | null =>
+  typeof value === "string" && (options as readonly string[]).includes(value) ? (value as T) : null;
+
+/** A compact identifier (VAT ID, IBAN, BIC) that passes its check, or `null`. */
+const checkedId = (value: unknown, max: number, valid: (compact: string) => boolean): string | null => {
+  if (typeof value !== "string") return null;
+  const compact = stripSpacesUpper(value);
+  return compact !== "" && compact.length <= max && valid(compact) ? compact : null;
+};
+
+/**
+ * The electronic address pair, both or neither: an address whose scheme is
+ * unknown, or whose value its scheme rejects, cannot be sent to.
+ */
+const readElectronicAddress = (
+  row: Record<string, unknown>,
+): { electronicAddress: string | null; electronicAddressScheme: ElectronicAddressScheme | null } => {
+  const scheme = oneOfOrNull(ELECTRONIC_ADDRESS_SCHEMES, row.electronicAddressScheme);
+  const address = text(row.electronicAddress, IDENTITY_LIMITS.electronicAddress);
+  return scheme && address !== "" && isValidElectronicAddress(scheme, address)
+    ? { electronicAddress: address, electronicAddressScheme: scheme }
+    : { electronicAddress: null, electronicAddressScheme: null };
+};
+
 /**
  * A client's billing subdocument, or nothing. Every field is optional, so a
- * malformed one degrades to blank rather than dropping the client.
+ * malformed one degrades to blank rather than dropping the client — an
+ * invalid VAT ID, electronic address or enum value included.
  */
 export function readExportBilling(value: unknown): ClientBilling | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -619,19 +658,44 @@ export function readExportBilling(value: unknown): ClientBilling | null {
   return normalizeClientBilling({
     ...readPostalFields(row),
     reference: text(row.reference, 120),
+    vatId: checkedId(row.vatId, IDENTITY_LIMITS.vatId, isValidVatId),
+    ...readElectronicAddress(row),
+    preferredFormat: oneOfOrNull(INVOICE_FORMATS, row.preferredFormat),
+    defaultTaxCategory: oneOfOrNull(TAX_CATEGORIES, row.defaultTaxCategory),
   });
 }
 
-/** The business profile section, or nothing when absent or all blank. */
+/** The e-invoice keys of a business profile, each read only when the file carries it. */
+const PROFILE_EINVOICE_TEXT = {
+  taxNumber: IDENTITY_LIMITS.taxNumber,
+  registrationNumber: IDENTITY_LIMITS.registrationNumber,
+  sellerIdentifier: IDENTITY_LIMITS.sellerIdentifier,
+  contactName: IDENTITY_LIMITS.contactName,
+  bankName: IDENTITY_LIMITS.bankName,
+  accountHolder: IDENTITY_LIMITS.accountHolder,
+  smallBusinessNote: IDENTITY_LIMITS.smallBusinessNote,
+} as const;
+
+/**
+ * The business profile section, or nothing when absent or all blank.
+ *
+ * Main's keys are read as they always were. A key added for e-invoicing is
+ * read ONLY when the file has it: the restore merges this over the stored
+ * profile, so a file written before e-invoicing must leave a stored IBAN or
+ * VAT ID alone rather than clear it by omission. Invalid values degrade to
+ * `null`, and a default category/rate pair that contradicts itself is dropped
+ * as a pair.
+ */
 export function readExportBusinessProfile(
   value: unknown,
-): InvoiceIssuer | undefined {
+): BusinessProfileValues | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return undefined;
   }
   const row = value as Record<string, unknown>;
+  const has = (key: string): boolean => Object.prototype.hasOwnProperty.call(row, key);
   const terms = row.paymentTermsDays;
-  const issuer = issuerSnapshot({
+  const fields: BusinessProfileFields = {
     ...readPostalFields(row),
     phone: text(row.phone, 40),
     website: text(row.website, 200),
@@ -641,8 +705,43 @@ export function readExportBusinessProfile(
         ? terms
         : null,
     invoiceFooter: text(row.invoiceFooter, 500),
-  });
-  return issuer ?? undefined;
+  };
+  for (const [key, max] of Object.entries(PROFILE_EINVOICE_TEXT)) {
+    if (has(key)) (fields as Record<string, unknown>)[key] = text(row[key], max);
+  }
+  if (has("vatId")) fields.vatId = checkedId(row.vatId, IDENTITY_LIMITS.vatId, isValidVatId);
+  if (has("iban")) fields.iban = checkedId(row.iban, IDENTITY_LIMITS.iban, isValidIban);
+  if (has("bic")) fields.bic = checkedId(row.bic, IDENTITY_LIMITS.bic, isValidBic);
+  if (has("electronicAddress") || has("electronicAddressScheme")) {
+    Object.assign(fields, readElectronicAddress(row));
+  }
+  if (has("smallBusiness")) fields.smallBusiness = row.smallBusiness === true;
+  if (has("defaultTaxCategory") || has("defaultTaxRate")) {
+    const rate = row.defaultTaxRate;
+    const pair = {
+      defaultTaxCategory: oneOfOrNull(TAX_CATEGORIES, row.defaultTaxCategory),
+      defaultTaxRate:
+        typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 100
+          ? Math.round(rate * 100) / 100
+          : null,
+    };
+    const contradicts = businessProfileProblems(pair, false).length > 0;
+    Object.assign(
+      fields,
+      contradicts ? { defaultTaxCategory: null, defaultTaxRate: null } : pair,
+    );
+  }
+
+  if (isIdentityEmpty(normalizeBusinessProfile(fields))) return undefined;
+  // The keys left out above must stay OUT, not become null — see the comment
+  // on this function. Typed as the full profile because that is what an
+  // export writes; `saveBusinessProfile` merges it key by key.
+  const present = Object.fromEntries(
+    Object.entries(normalizeBusinessProfile(fields)).filter(
+      ([key]) => key in fields,
+    ),
+  );
+  return present as BusinessProfileValues;
 }
 
 function readExportProjects(value: unknown): WorkspaceExportProject[] {

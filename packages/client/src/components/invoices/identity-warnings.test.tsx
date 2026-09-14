@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { emptyBusinessProfile, type Client } from "@starter/shared";
+import { EMPTY_CLIENT_BILLING, emptyBusinessProfile, type Client } from "@starter/shared";
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -60,6 +60,7 @@ describe("InvoiceIdentityWarnings", () => {
       <InvoiceIdentityWarnings
         profile={completeProfile}
         client={client({
+          ...EMPTY_CLIENT_BILLING,
           legalName: null,
           addressLines: [],
           postalCode: "20095",
@@ -84,6 +85,7 @@ describe("InvoiceIdentityWarnings", () => {
       <InvoiceIdentityWarnings
         profile={completeProfile}
         client={client({
+          ...EMPTY_CLIENT_BILLING,
           legalName: "Acme Holding",
           addressLines: [],
           postalCode: null,

@@ -18,6 +18,9 @@ export const invoice = {
   from: "From",
   billedTo: "Billed to",
   taxId: "Tax ID: {taxId}",
+  vatId: "VAT ID: {vatId}",
+  taxNumber: "Tax number: {taxNumber}",
+  registrationNumber: "Registration: {registrationNumber}",
   reference: "Your reference: {reference}",
   status: "Status",
   statusValue: "{status, select, draft {Draft} sent {Sent} paid {Paid} other {{status}}}",
@@ -38,9 +41,20 @@ export const invoice = {
   subtotal: "Subtotal ({currency})",
   /** `rate` is a formatted number without its percent sign. */
   tax: "Tax ({rate}%)",
+  /**
+   * One row per VAT breakdown row. `rate` is a formatted number without its
+   * percent sign; `basis` is the row's taxable amount (BT-116), already formatted.
+   */
+  taxRow:
+    "{category, select, S {VAT {rate}% on {basis}} Z {Zero-rated (0%) on {basis}} E {VAT exempt on {basis}} AE {Reverse charge on {basis}} O {Not subject to VAT on {basis}} other {VAT {rate}% on {basis}}}",
+  vatNote: "VAT note",
   total: "Total ({currency})",
   notes: "Notes",
   paymentDetails: "Payment details",
+  iban: "IBAN: {iban}",
+  bic: "BIC: {bic}",
+  bank: "Bank: {bank}",
+  accountHolder: "Account holder: {accountHolder}",
   dueBy: "Payable by {date}.",
   dueWithinTerms:
     "{days, plural, =0 {Payable on receipt, by {date}.} one {Payable within # day, by {date}.} other {Payable within # days, by {date}.}}",

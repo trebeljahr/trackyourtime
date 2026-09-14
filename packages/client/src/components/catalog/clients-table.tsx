@@ -76,6 +76,8 @@ export type ClientsTableProps = {
   isLoading: boolean;
   isFiltered: boolean;
   onCreate: () => void;
+  /** The issuer's country, for the default VAT category suggestion. */
+  issuerCountry?: string | null;
 };
 
 export function ClientsTable({
@@ -84,6 +86,7 @@ export function ClientsTable({
   isLoading,
   isFiltered,
   onCreate,
+  issuerCountry = null,
 }: ClientsTableProps): React.JSX.Element {
   const t = useT("catalog");
   const tc = useT("common");
@@ -280,6 +283,7 @@ export function ClientsTable({
           if (!next) setEditing(null);
         }}
         client={editing}
+        issuerCountry={issuerCountry}
       />
 
       <ConfirmDialog

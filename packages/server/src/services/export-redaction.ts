@@ -101,20 +101,26 @@ export function redactExportMoney(
   // Invoices keep their quantities — hours are a time question, and an
   // invoice with no seconds on it could not be read as a record at all — and
   // lose every amount, including `taxRate`, which is a percent of exactly the
-  // figures that just went.
+  // figures that just went. The VAT breakdown goes whole (every row is a basis
+  // and a tax amount) and a line's rate goes with the amounts; its category
+  // and the payment terms sentence state no figure and stay.
   const invoices: WorkspaceExportInvoice[] | undefined = document.invoices
-    ? document.invoices.map((invoice) => ({
-        ...invoice,
-        subtotal: null,
-        taxRate: null,
-        taxAmount: null,
-        total: null,
-        lineItems: invoice.lineItems.map((line) => ({
-          ...line,
-          hourlyRate: null,
-          amount: null,
-        })),
-      }))
+    ? document.invoices.map(({ taxBreakdown: _breakdown, ...invoice }) => {
+        void _breakdown;
+        return {
+          ...invoice,
+          subtotal: null,
+          taxRate: null,
+          taxAmount: null,
+          total: null,
+          lineItems: invoice.lineItems.map((line) => ({
+            ...line,
+            hourlyRate: null,
+            amount: null,
+            ...(line.taxRate !== undefined ? { taxRate: null } : {}),
+          })),
+        };
+      })
     : document.invoices;
 
   // The business profile carries payment details, and reading it takes what

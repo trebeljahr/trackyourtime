@@ -5,6 +5,7 @@ import * as React from "react";
 import { CatalogScreen } from "@/components/catalog/catalog-screen";
 import { ClientFormDialog } from "@/components/catalog/client-form-dialog";
 import { ClientsTable } from "@/components/catalog/clients-table";
+import { useDeepLink } from "@/components/einvoice/use-deep-link-focus";
 import {
   CLIENT_LIST_INPUT,
   PROJECT_LIST_INPUT,
@@ -20,6 +21,10 @@ export default function ClientsPage(): React.JSX.Element {
   const [search, setSearch] = React.useState("");
   const [showArchived, setShowArchived] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
+  // `?billing=<clientId>&field=<key>&from=invoice:<id>`: an e-invoice issue
+  // sent the person here to fix one billing detail of one client.
+  const link = useDeepLink();
+  const [linkDismissed, setLinkDismissed] = React.useState(false);
 
   const clientsQuery = trpc.clients.list.useQuery(CLIENT_LIST_INPUT, {
     staleTime: 30_000,
@@ -29,6 +34,14 @@ export default function ClientsPage(): React.JSX.Element {
     staleTime: 30_000,
   });
 
+  // For the default VAT category suggestion. A role that may not read the
+  // profile simply gets no suggestion.
+  const profileQuery = trpc.settings.businessProfile.useQuery(undefined, {
+    retry: false,
+    staleTime: 30_000,
+  });
+  const issuerCountry = profileQuery.data?.country ?? null;
+
   const allClients = React.useMemo<ClientRow[]>(
     () => clientsQuery.data ?? [],
     [clientsQuery.data],
@@ -37,6 +50,12 @@ export default function ClientsPage(): React.JSX.Element {
     () => projectsQuery.data ?? [],
     [projectsQuery.data],
   );
+
+  // Looked up in the unfiltered list: an archived client can still be billed.
+  const linkedClient =
+    link.billingClientId === null || linkDismissed
+      ? null
+      : (allClients.find((client) => client.id === link.billingClientId) ?? null);
 
   const needle = search.trim().toLowerCase();
 
@@ -72,9 +91,25 @@ export default function ClientsPage(): React.JSX.Element {
         isLoading={clientsQuery.isLoading}
         isFiltered={needle !== ""}
         onCreate={() => setCreating(true)}
+        issuerCountry={issuerCountry}
       />
 
-      <ClientFormDialog open={creating} onOpenChange={setCreating} />
+      <ClientFormDialog
+        open={creating}
+        onOpenChange={setCreating}
+        issuerCountry={issuerCountry}
+      />
+
+      <ClientFormDialog
+        open={linkedClient !== null}
+        onOpenChange={(next) => {
+          if (!next) setLinkDismissed(true);
+        }}
+        client={linkedClient}
+        focusBillingField={link.field}
+        fromInvoiceId={link.fromInvoiceId}
+        issuerCountry={issuerCountry}
+      />
     </CatalogScreen>
   );
 }

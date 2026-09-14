@@ -22,16 +22,19 @@ import {
   createTagSchema,
   createTaskSchema,
   detailedReportSchema,
+  electronicAddressSchemeSchema,
   entryListSchema,
   entrySourceSchema,
   idleBehaviorSchema,
   localeSchema,
+  invoiceFormatSchema,
   projectListSchema,
   startTimerSchema,
   stopTimerSchema,
   summaryReportSchema,
   tagListSchema,
   taskListSchema,
+  taxCategorySchema,
   updateClientSchema,
   updateEntrySchema,
   updateProjectSchema,
@@ -156,7 +159,18 @@ const clientBillingResponseSchema = z.object({
   country: z.string().nullable(),
   taxId: z.string().nullable(),
   email: z.string().nullable(),
+  /** The buyer's reference (BT-10); for a German public buyer, its Leitweg-ID. */
   reference: z.string().nullable(),
+  /** The buyer's VAT ID (BT-48), compact and upper case. */
+  vatId: z.string().nullable(),
+  /** Where e-invoices are delivered (BT-49); set together with its scheme. */
+  electronicAddress: z.string().nullable(),
+  /** EM = email, 0204 = Leitweg-ID, 9930 = VAT ID, 0088 = GLN. */
+  electronicAddressScheme: electronicAddressSchemeSchema.nullable(),
+  /** The format this client receives invoices in by default. */
+  preferredFormat: invoiceFormatSchema.nullable(),
+  /** The VAT category a new invoice for this client uses by default. */
+  defaultTaxCategory: taxCategorySchema.nullable(),
 });
 
 const clientShape = {

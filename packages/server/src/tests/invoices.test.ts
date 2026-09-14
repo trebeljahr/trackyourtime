@@ -12,6 +12,8 @@ import {
   yearOfIsoDate,
 } from "../services/invoice-number.js";
 import { invoicePdfFilename, renderInvoicePdf } from "../services/invoice-pdf.js";
+import { pdfFormat } from "../services/pdf-format.js";
+import { pageTexts } from "./support/pdf-bytes.js";
 import {
   invoiceLineItems,
   invoiceTotals,
@@ -534,5 +536,34 @@ describe("renderInvoicePdf", () => {
         { generatedAt: "2026-09-01T08:00:00.000Z" },
       ),
     );
+  });
+
+  it("stays a plain PDF 1.3 with the standard font and no attachment", async () => {
+    // The ZUGFeRD variant shares this renderer; without a variant nothing of
+    // PDF/A may leak into the plain export.
+    const bytes = await renderInvoicePdf(invoice(), {
+      generatedAt: "2026-09-01T08:00:00.000Z",
+    });
+    const raw = bytes.toString("latin1");
+    assert.equal(raw.slice(0, 8), "%PDF-1.3");
+    assert.ok(raw.includes("/BaseFont /Helvetica"));
+    assert.ok(!raw.includes("/EmbeddedFiles"));
+    assert.ok(!raw.includes("/Metadata"));
+  });
+
+  it("prints the last billed day as the end of the period on an invoice with frozen terms", async () => {
+    // `to` is midnight of the day AFTER the last billed day (server-local).
+    const range = { from: new Date(2026, 7, 1).toISOString(), to: new Date(2026, 8, 1).toISOString() };
+    const meta = { generatedAt: "2026-09-01T08:00:00.000Z" };
+    const current = await renderInvoicePdf(
+      invoice({ ...range, paymentTerms: "Payable by 2026-09-15." }),
+      meta,
+    );
+    assert.ok(pageTexts(current).join("\n").includes("2026-08-01 to 2026-08-31"));
+    // Without the BT-20 snapshot the invoice predates e-invoicing and keeps
+    // the exclusive bound it was sent with.
+    const legacy = await renderInvoicePdf(invoice(range), meta);
+    const f = pdfFormat("en");
+    assert.ok(pageTexts(legacy).join("\n").includes(`${f.date(range.from)} to ${f.date(range.to)}`));
   });
 });

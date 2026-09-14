@@ -9,15 +9,18 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useLocale } from "@/i18n/locale-store";
 import { useT } from "@/i18n/use-t";
+import { EinvoicePanel } from "./einvoice-panel";
 import { InvoiceLines } from "./invoice-lines";
 import {
   canDeleteInvoice,
   formatDate,
   formatRange,
+  linesHaveMixedTax,
   statusActionLabel,
   statusBadgeTone,
   statusLabel,
   statusTransitions,
+  taxCategoryLabel,
   type InvoiceRow,
 } from "./types";
 import { useInvoiceMutations } from "./use-invoices";
@@ -131,6 +134,15 @@ export function InvoiceDetail({
         total={invoice.total}
         currency={invoice.currency}
         testIdPrefix="invoice-detail"
+        taxBreakdown={invoice.taxBreakdown ?? null}
+        renderLineTax={
+          linesHaveMixedTax(invoice.lineItems)
+            ? (line) =>
+                line.taxCategory === undefined
+                  ? "—"
+                  : taxCategoryLabel(line.taxCategory, line.taxRate ?? 0)
+            : null
+        }
       />
 
       {invoice.notes ? (
@@ -141,6 +153,8 @@ export function InvoiceDetail({
           {invoice.notes}
         </p>
       ) : null}
+
+      <EinvoicePanel invoice={invoice} />
 
       <p className="text-xs text-muted-foreground" data-testid="invoice-detail-entries">
         {deletable

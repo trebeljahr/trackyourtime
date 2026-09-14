@@ -10,8 +10,10 @@
 // form and the stored row cannot disagree about what "empty" means.
 import * as React from "react";
 
+import { DEEP_LINK_HIGHLIGHT_CLASS } from "@/components/einvoice/use-deep-link-focus";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 /** How many street lines the forms offer. The server accepts up to four. */
 export const ADDRESS_LINE_COUNT = 2;
@@ -74,7 +76,63 @@ export type PostalFieldsProps = {
   /** Prefix for element ids and `data-testid`s, e.g. "business-profile". */
   prefix: string;
   disabled?: boolean;
+  /**
+   * Render the free-text tax ID input. The e-invoice forms render it
+   * themselves, beside the VAT ID it is meant to become.
+   */
+  showTaxId?: boolean;
 };
+
+export type IdentityInputProps = Omit<React.ComponentProps<typeof Input>, "id" | "onChange"> & {
+  prefix: string;
+  /** Main's model key: the input's id and test id suffix, and its `data-field`. */
+  fieldKey: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  hint?: React.ReactNode;
+  /** Shown instead of the hint, and marks the input invalid. */
+  error?: string | null;
+  className?: string;
+};
+
+/**
+ * One labelled input of an identity form, wrapped in `data-field` so an
+ * e-invoice deep link (`?field=<key>`) can focus and highlight it.
+ */
+export function IdentityInput({
+  prefix,
+  fieldKey,
+  label,
+  value,
+  onChange,
+  hint,
+  error = null,
+  className,
+  ...inputProps
+}: IdentityInputProps): React.JSX.Element {
+  const id = `${prefix}-${fieldKey}`;
+  return (
+    <div className={cn("space-y-1.5", DEEP_LINK_HIGHLIGHT_CLASS, className)} data-field={fieldKey}>
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        value={value}
+        aria-invalid={error !== null}
+        onChange={(event) => onChange(event.target.value)}
+        data-testid={id}
+        {...inputProps}
+      />
+      {error !== null ? (
+        <p className="text-sm text-destructive" data-testid={`${id}-error`}>
+          {error}
+        </p>
+      ) : hint ? (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
 
 export function PostalFields({
   draft,
@@ -82,6 +140,7 @@ export function PostalFields({
   labels,
   prefix,
   disabled = false,
+  showTaxId = true,
 }: PostalFieldsProps): React.JSX.Element {
   const set = <K extends keyof PostalDraft>(key: K, value: PostalDraft[K]): void =>
     onChange({ ...draft, [key]: value });
@@ -92,7 +151,7 @@ export function PostalFields({
     label: string,
     props: React.ComponentProps<typeof Input> = {},
   ): React.JSX.Element => (
-    <div className="space-y-1.5">
+    <div className={cn("space-y-1.5", DEEP_LINK_HIGHLIGHT_CLASS)} data-field={key}>
       <Label htmlFor={`${prefix}-${key}`}>{label}</Label>
       <Input
         id={`${prefix}-${key}`}
@@ -111,7 +170,12 @@ export function PostalFields({
         {field("legalName", labels.legalName, { maxLength: 200 })}
       </div>
       {draft.addressLines.map((line, index) => (
-        <div className="space-y-1.5 sm:col-span-2" key={index}>
+        <div
+          className={cn("space-y-1.5 sm:col-span-2", DEEP_LINK_HIGHLIGHT_CLASS)}
+          key={index}
+          // A deep link to the street lands on the first line.
+          data-field={index === 0 ? "addressLines" : undefined}
+        >
           <Label htmlFor={`${prefix}-address-${index}`}>
             {labels.addressLine(index + 1)}
           </Label>
@@ -143,7 +207,7 @@ export function PostalFields({
           </p>
         ) : null}
       </div>
-      {field("taxId", labels.taxId, { maxLength: 60 })}
+      {showTaxId ? field("taxId", labels.taxId, { maxLength: 60 }) : null}
       <div className="sm:col-span-2">
         {field("email", labels.email, { type: "email", maxLength: 254 })}
       </div>

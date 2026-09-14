@@ -22,7 +22,9 @@
  * implementation of it (`services/import/`).
  */
 import { z } from "zod";
+import type { TaxBreakdownRow, TaxCategory } from "./einvoice.js";
 import type {
+  BusinessProfileValues,
   ClientBilling,
   IdleBehavior,
   InvoiceIssuer,
@@ -319,7 +321,7 @@ export type WorkspaceExport = {
    * profile was never filled in, in files older than profiles, and in a
    * redacted export — it carries payment details, which follow the money rule.
    */
-  businessProfile?: InvoiceIssuer;
+  businessProfile?: BusinessProfileValues;
   clients: WorkspaceExportClient[];
   projects: WorkspaceExportProject[];
   tasks: WorkspaceExportTask[];
@@ -438,6 +440,13 @@ export type WorkspaceExportInvoice = {
    */
   issuer?: InvoiceIssuer | null;
   recipient?: InvoiceRecipient | null;
+  /**
+   * MONEY — the EN 16931 VAT breakdown as stored. Absent on invoices without
+   * line categories, and dropped whole from a redacted export.
+   */
+  taxBreakdown?: TaxBreakdownRow[];
+  /** BT-20: the due sentence as frozen on the invoice. */
+  paymentTerms?: string | null;
   createdAt: string;
 };
 
@@ -456,6 +465,10 @@ export type WorkspaceExportInvoiceLine = {
   currency: string;
   /** MONEY — `hours × hourlyRate`, rounded once, at creation. */
   amount: number | null;
+  /** The line's VAT category. Absent on invoices without categories. */
+  taxCategory?: TaxCategory;
+  /** Percent; `null` only when the export was redacted. Present iff taxCategory is. */
+  taxRate?: number | null;
 };
 
 export type WorkspaceExportClient = {

@@ -18,7 +18,6 @@
 // standing up Mongo.
 import { TRPCError } from "@trpc/server";
 import {
-  canUseInvoices,
   createInvoiceSchema,
   entryAmount,
   idInputSchema,
@@ -26,21 +25,23 @@ import {
   invoicePdfSchema,
   invoicePreviewSchema,
   issuerSnapshot,
+  normalizeClientBilling,
   recipientSnapshot,
   resolveInvoiceLocale,
-  sumAmounts,
   updateInvoiceStatusSchema,
+  type ClientBilling,
+  type ExemptionNotes,
   type Invoice as InvoiceWire,
   type InvoiceLineItem,
   type InvoiceRecipient,
   type InvoiceStatus,
+  type LineTax,
   type Locale,
   type PdfExportResult,
-  type Visibility,
-  type WorkspaceRole,
+  type TaxBreakdownRow,
 } from "@starter/shared";
 import mongoose, { Types } from "mongoose";
-import { BusinessProfileModel } from "../../models/BusinessProfile.js";
+import { getBusinessProfile } from "../../models/BusinessProfile.js";
 import { Client } from "../../models/Client.js";
 import { Invoice, toClientInvoice, type IInvoice } from "../../models/Invoice.js";
 import { Project } from "../../models/Project.js";
@@ -56,9 +57,25 @@ import {
   yearOfIsoDate,
 } from "../../services/invoice-number.js";
 import { invoicePdfFilename, renderInvoicePdf } from "../../services/invoice-pdf.js";
+import { paymentTermsSentence } from "../../services/einvoice/payment-terms.js";
+import {
+  applyInvoiceTax,
+  resolveInvoiceTax,
+  type TaxedInvoiceFigures,
+} from "../../services/einvoice/resolve-tax.js";
 import { publishSync } from "../../ws/sync.js";
 import { emitWebhookEvent } from "../../services/webhooks/emit.js";
 import { workspaceProcedure, router } from "../trpc.js";
+import {
+  requireInvoiceAuthoring,
+  requireInvoiceById,
+  mayUseInvoices,
+} from "./invoice-gate.js";
+import { invoiceEinvoiceProcedures, WITHOUT_ISSUED_XML } from "./invoice-einvoice.js";
+
+// Moved to their own modules; re-exported so existing importers keep working.
+export { INVOICE_PERMISSION_REQUIRED } from "./invoice-gate.js";
+export { invoiceTotals, type InvoiceTotals } from "../../services/einvoice/resolve-tax.js";
 
 const DEFAULT_LIST_LIMIT = 50;
 
@@ -310,35 +327,6 @@ export function invoiceLineItems(
   return lines.map((entry) => entry.line);
 }
 
-// ── totals (pure) ────────────────────────────────────────────────────
-
-export type InvoiceTotals = {
-  subtotal: number;
-  taxAmount: number;
-  total: number;
-};
-
-/**
- * Subtotal, tax and total.
- *
- * The subtotal sums already-rounded line amounts through `sumAmounts`, which
- * adds in integer cents — summing floats directly is how a twelve-line
- * invoice ends up a cent off its own lines. Tax is a percentage OF THE
- * SUBTOTAL, rounded once; `null` means no tax line at all (0 is a real 0%,
- * which still prints).
- */
-export function invoiceTotals(
-  lineItems: readonly InvoiceLineItem[],
-  taxRate: number | null,
-): InvoiceTotals {
-  const subtotal = sumAmounts(lineItems.map((line) => line.amount));
-  const taxAmount =
-    taxRate === null || !Number.isFinite(taxRate)
-      ? 0
-      : roundCents((subtotal * taxRate) / 100);
-  return { subtotal, taxAmount, total: sumAmounts([subtotal, taxAmount]) };
-}
-
 // ── status transitions (pure) ────────────────────────────────────────
 
 /**
@@ -448,6 +436,12 @@ export type InvoicePreview = {
    * client's, else the issuer's explicit preference, else English.
    */
   locale: Locale;
+  /** One row per VAT category and rate; null when the lines carry no category. */
+  taxBreakdown: TaxBreakdownRow[] | null;
+  /** The category and rate per line that `create` would stamp; null = unresolved. */
+  resolvedTax: { lines: Array<{ key: string } & LineTax> } | null;
+  /** The exemption notes `create` would print, defaults resolved. */
+  exemptionNotes: ExemptionNotes;
 };
 
 /** Everything a preview or a create needs, gathered in one place. */
@@ -455,11 +449,13 @@ type Gathered = {
   clientName: string;
   /** The client's billing details as they stand now, for `create` to freeze. */
   recipient: InvoiceRecipient | null;
-  /** The client's own invoice language, when it has one. */
+  /** The same details normalised, for the client's default VAT category. */
+  clientBilling: ClientBilling | null;
+  /** The client's document language, when it has one. */
   clientLocale: Locale | null;
   selection: BillableSelection;
+  /** Lines as rolled up, before any VAT category is applied. */
   lineItems: InvoiceLineItem[];
-  totals: InvoiceTotals;
   currency: string;
 };
 
@@ -578,15 +574,15 @@ const gather = async (
   assertSingleCurrency(selection.currencies);
 
   const lineItems = invoiceLineItems(selection.billable, input.groupBy);
-  const totals = invoiceTotals(lineItems, input.taxRate ?? null);
+  const recipient = recipientSnapshot(client.name, client.billing);
 
   return {
     clientName: client.name,
-    recipient: recipientSnapshot(client.name, client.billing),
+    recipient,
+    clientBilling: normalizeClientBilling(client.billing),
     clientLocale: client.invoiceLocale ?? null,
     selection,
     lineItems,
-    totals,
     currency: selection.currencies[0] ?? settings.currency,
   };
 };
@@ -615,6 +611,54 @@ const invoiceLocaleFor = async (
             .lean()
         )?.locale ?? null);
   return resolveInvoiceLocale({ override, clientLocale, issuerPreference });
+};
+
+type TaxInput = Parameters<typeof resolveInvoiceTax>[1];
+
+/**
+ * VAT categories and figures for the gathered lines. A category is only ever
+ * CHOSEN — by the request, the client's default or the business profile — and
+ * when nothing chooses one for every line, the figures are exactly the plain
+ * rate-on-subtotal ones this router always wrote. Creating an invoice never
+ * fails for an e-invoice reason: a plain PDF must always be possible.
+ */
+const taxGathered = async (
+  workspaceId: string,
+  gathered: Gathered,
+  input: TaxInput,
+  locale: Locale,
+): Promise<{
+  taxed: TaxedInvoiceFigures;
+  resolvedTax: InvoicePreview["resolvedTax"];
+  exemptionNotes: ExemptionNotes;
+  profile: Awaited<ReturnType<typeof getBusinessProfile>>;
+}> => {
+  const profile = await getBusinessProfile(workspaceId);
+  const resolved = resolveInvoiceTax(
+    gathered.lineItems.map((line) => line.key),
+    input,
+    { client: gathered.clientBilling, profile, locale },
+  );
+  if (resolved.kind === "unknownKeys") {
+    throw badRequest(`Unknown line keys: ${resolved.keys.join(", ")}`);
+  }
+  const taxed = applyInvoiceTax(gathered.lineItems, resolved, input.taxRate ?? null);
+  if (resolved.kind !== "resolved") {
+    return { taxed, resolvedTax: null, exemptionNotes: {}, profile };
+  }
+  const exemptionNotes: ExemptionNotes = {};
+  for (const category of ["E", "AE", "O"] as const) {
+    const note = resolved.notes[category];
+    if (note !== undefined) exemptionNotes[category] = note;
+  }
+  return {
+    taxed,
+    resolvedTax: {
+      lines: resolved.lines.map((line) => ({ key: line.key, category: line.category, rate: line.rate })),
+    },
+    exemptionNotes,
+    profile,
+  };
 };
 
 /**
@@ -661,54 +705,6 @@ const decodeCursor = (cursor: string): DecodedCursor | null => {
   return { createdAt: new Date(createdAtMs), id: new Types.ObjectId(rawId) };
 };
 
-/**
- * The refusal for a caller who may not use invoices at all, on the two
- * procedures that do not address an existing invoice. Stable, so the client
- * can explain it rather than printing a server string.
- */
-export const INVOICE_PERMISSION_REQUIRED = "invoice-permission-required";
-
-/** What the invoice gate reads off the request, and nothing more. */
-type InvoiceCaller = {
-  membership: { role: WorkspaceRole };
-  visibility: Visibility;
-};
-
-/**
- * THE INVOICE GATE. Every procedure below asks it FIRST, before any query.
- *
- * An invoice merges whoever's billable hours fell in its range into one line,
- * so it discloses colleagues' time and money at once — `canUseInvoices` is
- * the rule (owner or admin, with both visibility flags). How a refusal reads
- * depends on what was asked:
- *
- *  - `list` answers an empty page: "no invoices you may see" is true, and a
- *    screen that lists nothing needs no error state.
- *  - Anything addressing an invoice BY ID answers NOT_FOUND, exactly as for an
- *    id that does not exist. FORBIDDEN there would confirm that the id is a
- *    real invoice in this workspace. The gate runs before the lookup, so the
- *    two answers are indistinguishable in timing as well as shape.
- *  - `preview` and `create` address no existing document, so there is nothing
- *    to hide by pretending: FORBIDDEN with {@link INVOICE_PERMISSION_REQUIRED}.
- *    It is the only honest answer, and gathering first would have read every
- *    colleague's billable entries for somebody who may see none of them.
- */
-const mayUseInvoices = (caller: InvoiceCaller): boolean =>
-  canUseInvoices(caller.membership.role, caller.visibility);
-
-const requireInvoiceById = (caller: InvoiceCaller): void => {
-  if (!mayUseInvoices(caller)) throw notFound();
-};
-
-const requireInvoiceAuthoring = (caller: InvoiceCaller): void => {
-  if (!mayUseInvoices(caller)) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: INVOICE_PERMISSION_REQUIRED,
-    });
-  }
-};
-
 export type InvoiceRemoveResult = {
   deleted: boolean;
   /** How many entries became billable again. */
@@ -723,17 +719,25 @@ export const invoicesRouter = router({
       requireInvoiceAuthoring(ctx);
       const workspaceId = ctx.workspaceId;
       const gathered = await gather(workspaceId, input);
-      const taxRate = input.taxRate ?? null;
+      // The preview input carries no language override; the notes it shows
+      // are in the language the client or the issuer's preference names.
+      const locale = await invoiceLocaleFor(ctx.user.id, gathered.clientLocale, undefined);
+      const { taxed, resolvedTax, exemptionNotes } = await taxGathered(
+        workspaceId,
+        gathered,
+        input,
+        locale,
+      );
 
       return {
         clientId: input.clientId,
         clientName: gathered.clientName,
         groupBy: input.groupBy,
-        lineItems: gathered.lineItems,
-        subtotal: gathered.totals.subtotal,
-        taxRate,
-        taxAmount: gathered.totals.taxAmount,
-        total: gathered.totals.total,
+        lineItems: taxed.lineItems,
+        subtotal: taxed.subtotal,
+        taxRate: taxed.taxRate,
+        taxAmount: taxed.taxAmount,
+        total: taxed.total,
         currency: gathered.currency,
         entryIds: gathered.selection.billable.map((entry) => entry.id),
         // A preview has no issue date yet, so the suggestion is sequenced by
@@ -742,7 +746,10 @@ export const invoicesRouter = router({
         suggestedNumber: await suggestNumber(workspaceId, new Date().getFullYear()),
         skippedMissingRate: gathered.selection.skippedMissingRate,
         skippedInvoiced: gathered.selection.skippedInvoiced,
-        locale: await invoiceLocaleFor(ctx.user.id, gathered.clientLocale, undefined),
+        locale,
+        taxBreakdown: taxed.taxBreakdown,
+        resolvedTax,
+        exemptionNotes,
       };
     }),
 
@@ -791,9 +798,9 @@ export const invoicesRouter = router({
             nextInvoiceNumber(await recentNumbers(workspaceId), issueYear),
           );
 
-      const issuer = issuerSnapshot(
-        await BusinessProfileModel.findOne({ workspaceId }).lean(),
-      );
+      const locale = await invoiceLocaleFor(ctx.user.id, gathered.clientLocale, input.locale);
+      const { taxed, profile } = await taxGathered(workspaceId, gathered, input, locale);
+      const issuer = issuerSnapshot(profile);
 
       const draft = {
         workspaceId,
@@ -806,27 +813,34 @@ export const invoicesRouter = router({
         from: range.from,
         to: range.to,
         groupBy: input.groupBy,
-        lineItems: gathered.lineItems,
-        subtotal: gathered.totals.subtotal,
-        taxRate: input.taxRate ?? null,
-        taxAmount: gathered.totals.taxAmount,
-        total: gathered.totals.total,
+        lineItems: taxed.lineItems,
+        subtotal: taxed.subtotal,
+        taxRate: taxed.taxRate,
+        taxAmount: taxed.taxAmount,
+        total: taxed.total,
         currency: gathered.currency,
         entryIds,
         notes: input.notes ?? null,
+        // Stamped so a re-render never changes the language of a document
+        // the customer holds; the exemption notes and payment terms below are
+        // written in it.
+        locale,
+        ...(taxed.taxBreakdown ? { taxBreakdown: taxed.taxBreakdown } : {}),
+        // BT-20: the due sentence the plain PDF prints, frozen with the
+        // terms the issuer snapshot carries. Built from the STORED dates, so
+        // an offset in the request cannot print a day BT-9 does not carry.
+        paymentTerms: paymentTermsSentence(
+          locale,
+          issuer?.paymentTermsDays ?? null,
+          dueDate.toISOString(),
+          { issueDateIso: issueDate.toISOString() },
+        ),
         // Both parties are frozen here and never re-read: correcting the
         // profile or the client's address afterwards must not rewrite an
         // invoice the customer already holds. Omitted rather than null when
         // there is nothing to freeze, so the document matches the old shape.
         ...(issuer ? { issuer } : {}),
         ...(gathered.recipient ? { recipient: gathered.recipient } : {}),
-        // Snapshotted like every figure above: a later change to the client's
-        // or the issuer's language must never re-language a sent document.
-        locale: await invoiceLocaleFor(
-          ctx.user.id,
-          gathered.clientLocale,
-          input.locale,
-        ),
       };
 
       // Numbering is settled by the unique index on { workspaceId, number }, not
@@ -926,6 +940,7 @@ export const invoicesRouter = router({
 
       // One past the page, so "is there more?" needs no second query.
       const docs = await Invoice.find({ $and: conditions })
+        .select(WITHOUT_ISSUED_XML)
         .sort({ createdAt: -1, _id: -1 })
         .limit(limit + 1)
         .lean();
@@ -944,7 +959,9 @@ export const invoicesRouter = router({
       const doc = await Invoice.findOne({
         _id: requireObjectId(input.id, "Invoice not found"),
         workspaceId: ctx.workspaceId,
-      }).lean();
+      })
+        .select(WITHOUT_ISSUED_XML)
+        .lean();
       if (!doc) throw notFound();
       return toClientInvoice(doc);
     }),
@@ -975,7 +992,7 @@ export const invoicesRouter = router({
       const updated = await Invoice.findOneAndUpdate(
         { _id: input.id, workspaceId, status: current.status },
         { $set: { status: input.status } },
-        { returnDocument: "after" },
+        { returnDocument: "after", projection: { "einvoice.issuedXml": 0 } },
       ).lean();
       // The `status: current.status` guard makes the write conditional on the
       // state we validated against, so a concurrent transition cannot be
@@ -1066,7 +1083,9 @@ export const invoicesRouter = router({
       const doc = await Invoice.findOne({
         _id: requireObjectId(input.id, "Invoice not found"),
         workspaceId: ctx.workspaceId,
-      }).lean();
+      })
+        .select(WITHOUT_ISSUED_XML)
+        .lean();
       if (!doc) throw notFound();
 
       const invoice = toClientInvoice(doc);
@@ -1080,4 +1099,7 @@ export const invoicesRouter = router({
         mimeType: "application/pdf",
       };
     }),
+
+  // einvoiceCheck, attachEinvoiceData, exportZugferd, exportXrechnung.
+  ...invoiceEinvoiceProcedures,
 });

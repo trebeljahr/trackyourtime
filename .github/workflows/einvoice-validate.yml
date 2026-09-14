@@ -1,0 +1,83 @@
+name: einvoice-validate
+
+# Generates the fixture e-invoices through the real serializer and PDF renderer and
+# runs them through the reference validators (Mustang/veraPDF for ZUGFeRD PDF/A-3b,
+# KoSIT for XRechnung 3.0). Reads nothing secret, writes nowhere: safe from forks.
+# Versions and checksums live in scripts/einvoice-validate.mjs only.
+#
+# Deliberately a separate workflow, not a job in build-and-deploy.yml, so it can
+# never end up in the deploy `needs:` chain. Make it a required check in branch
+# protection if e-invoices should gate merging.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/server/src/services/einvoice/**"
+      - "packages/server/src/services/invoice-pdf*.ts"
+      - "packages/server/src/services/pdf-fonts.ts"
+      - "packages/server/src/services/pdf.ts"
+      - "packages/server/src/scripts/einvoice-samples.ts"
+      - "packages/server/src/tests/fixtures/einvoice/**"
+      - "packages/server/assets/fonts/**"
+      - "packages/server/src/i18n/**"
+      - "packages/shared/src/**"
+      - "scripts/einvoice-validate.mjs"
+      - ".github/workflows/einvoice-validate.yml"
+      - "pnpm-lock.yaml"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "packages/server/src/services/einvoice/**"
+      - "packages/server/src/services/invoice-pdf*.ts"
+      - "packages/server/src/services/pdf-fonts.ts"
+      - "packages/server/src/services/pdf.ts"
+      - "packages/server/src/scripts/einvoice-samples.ts"
+      - "packages/server/src/tests/fixtures/einvoice/**"
+      - "packages/server/assets/fonts/**"
+      - "packages/server/src/i18n/**"
+      - "packages/shared/src/**"
+      - "scripts/einvoice-validate.mjs"
+      - ".github/workflows/einvoice-validate.yml"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # All three tools need only Java 11; 21 matches mobile-release.yml.
+          java-version: 21
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @starter/shared run build
+      - name: Cache validator jars
+        uses: actions/cache@v4
+        with:
+          path: .cache/einvoice-validators
+          key: einvoice-validators-${{ hashFiles('scripts/einvoice-validate.mjs') }}
+      - name: Validate
+        run: pnpm run einvoice:validate
+        env:
+          JAVA: ${{ env.JAVA_HOME }}/bin/java
+      - name: Upload samples and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: einvoice-validation
+          path: .cache/einvoice-validation
+          retention-days: 14

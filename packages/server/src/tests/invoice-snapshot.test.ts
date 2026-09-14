@@ -137,6 +137,9 @@ describe("invoice snapshots", () => {
       taxId: null,
       email: null,
       reference: "PO-7",
+      vatId: null,
+      electronicAddress: null,
+      electronicAddressScheme: null,
     });
   });
 

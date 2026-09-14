@@ -10,6 +10,7 @@ import {
   type Locale,
 } from "@starter/shared";
 
+import { ClientFormDialog } from "@/components/catalog/client-form-dialog";
 import { CLIENT_LIST_INPUT } from "@/components/catalog/types";
 import {
   DateRangePicker,
@@ -44,10 +45,20 @@ import { cn } from "@/lib/utils";
 import { InvoiceIdentityWarnings } from "./identity-warnings";
 import { InvoiceLines } from "./invoice-lines";
 import {
+  INITIAL_INVOICE_TAX_STATE,
+  InvoiceTaxSection,
+  lineTaxRenderer,
+  missingExemptionNotes,
+  noteCategoriesInUse,
+  pruneLineOverrides,
+  stateFromResolvedTax,
+  taxInputsFromState,
+  type InvoiceTaxState,
+} from "./invoice-tax-section";
+import {
   defaultInvoiceDates,
   emptyPreviewReason,
   exclusionNotices,
-  parseTaxRate,
   previewIsBillable,
   reconcileDueDate,
   type InvoiceGroupBy,
@@ -138,7 +149,19 @@ function NewInvoiceForm({
     rangeForPreset("thisMonth", format.weekStartsOn),
   );
   const [groupBy, setGroupBy] = React.useState<InvoiceGroupBy>("project");
-  const [taxInput, setTaxInput] = React.useState("");
+  const te = useT("einvoice");
+  const [taxState, setTaxState] = React.useState<InvoiceTaxState>(INITIAL_INVOICE_TAX_STATE);
+  // The server's resolution is adopted once per client, and never after an edit.
+  const [adoptedFor, setAdoptedFor] = React.useState<string | null>(null);
+  // Whether the client and profile defaults alone resolved every line.
+  const [defaultsResolved, setDefaultsResolved] = React.useState(false);
+  // Line keys from the last preview answer. Held apart from the query so a
+  // pending re-fetch (data undefined) cannot flip the request back and forth.
+  const [knownLines, setKnownLines] = React.useState<Array<{ key: string; label: string }>>([]);
+  // The selected client's billing details, opened over this dialog so the
+  // half-built invoice survives adding a VAT ID.
+  const [editingClientBilling, setEditingClientBilling] = React.useState(false);
+  const utils = trpc.useUtils();
   const [dates, setDates] = React.useState(() => defaultInvoiceDates());
   // Once the person picks a due date it is theirs; until then it follows the
   // business profile's payment terms, when there are any.
@@ -172,13 +195,14 @@ function NewInvoiceForm({
     [clients.data],
   );
 
-  const tax = parseTaxRate(taxInput);
-  const taxRate = tax.ok ? tax.value : null;
-  const taxError = tax.ok
-    ? null
-    : tax.error === "outOfRange"
-      ? t("invoices.form.taxOutOfRange")
-      : t("invoices.form.taxNotNumber");
+  const lineKeys = knownLines.map((line) => line.key);
+  const taxResult = taxInputsFromState(taxState, lineKeys);
+  const tax = { ok: taxResult.ok };
+  // Untouched: send no tax at all and let the server resolve client → profile
+  // defaults, which is exactly what the section then shows. Preview and create
+  // read this ONE object, so the two cannot drift.
+  const taxInputs = taxState.touched && taxResult.ok ? taxResult.inputs : {};
+  const notesMissing = taxState.touched ? missingExemptionNotes(taxState, lineKeys) : [];
 
   // What "Automatic" resolves to right now, named on the option so nobody has
   // to guess. The server resolves it again with the same function and
@@ -198,12 +222,41 @@ function NewInvoiceForm({
       from: range.from,
       to: range.to,
       groupBy,
-      taxRate,
+      ...taxInputs,
     },
     { enabled: clientId !== null && tax.ok, staleTime: 0 },
   );
 
   const data = preview.data;
+
+  if (data && data.lineItems.map((line) => line.key).join("\n") !== lineKeys.join("\n")) {
+    const nextLines = data.lineItems.map((line) => ({ key: line.key, label: line.label }));
+    setKnownLines(nextLines);
+    // Another range or grouping: keep each override whose line is still billed.
+    const pruned = pruneLineOverrides(taxState, nextLines.map((line) => line.key));
+    if (pruned !== taxState) setTaxState(pruned);
+  }
+  if (data && clientId !== null && adoptedFor !== clientId && !taxState.touched) {
+    setAdoptedFor(clientId);
+    setDefaultsResolved(data.resolvedTax !== null);
+    setTaxState(stateFromResolvedTax(data.resolvedTax, data.exemptionNotes));
+  }
+  // A category chosen after adoption gets the server's default reason once.
+  if (data && taxState.touched) {
+    const unfilled = noteCategoriesInUse(taxState, lineKeys).filter(
+      (category) => taxState.notes[category] === undefined && data.exemptionNotes[category],
+    );
+    if (unfilled.length > 0) {
+      const filled = { ...taxState.notes };
+      for (const category of unfilled) filled[category] = data.exemptionNotes[category] ?? "";
+      setTaxState({ ...taxState, notes: filled });
+    }
+  }
+
+  const changeTax = (next: InvoiceTaxState): void => {
+    setConfirming(false);
+    setTaxState(next);
+  };
   const billable = previewIsBillable(data);
   const notices = data ? exclusionNotices(data, f.locale) : [];
 
@@ -229,13 +282,13 @@ function NewInvoiceForm({
   };
 
   const submit = async (): Promise<void> => {
-    if (clientId === null || !tax.ok || !billable) return;
+    if (clientId === null || !taxResult.ok || !billable || notesMissing.length > 0) return;
     const vars: CreateInvoiceVars = {
       clientId,
       from: range.from,
       to: range.to,
       groupBy,
-      taxRate,
+      ...taxInputs,
       issueDate: dates.issueDate,
       dueDate,
       ...(notes.trim() === "" ? {} : { notes: notes.trim() }),
@@ -270,6 +323,11 @@ function NewInvoiceForm({
             onChange={(next) => {
               setConfirming(false);
               setClientId(next);
+              // Another client has other defaults and other line keys.
+              setTaxState(INITIAL_INVOICE_TAX_STATE);
+              setAdoptedFor(null);
+              setDefaultsResolved(false);
+              setKnownLines([]);
             }}
             placeholder={t("invoices.form.selectClient")}
             searchPlaceholder={t("filters.clients.search")}
@@ -312,30 +370,6 @@ function NewInvoiceForm({
               </Button>
             ))}
           </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="invoice-tax">{t("invoices.form.taxRate")}</Label>
-          <Input
-            id="invoice-tax"
-            inputMode="decimal"
-            placeholder={t("invoices.noTax")}
-            value={taxInput}
-            onChange={(event) => {
-              setConfirming(false);
-              setTaxInput(event.target.value);
-            }}
-            data-testid="invoice-tax-input"
-          />
-          {taxError ? (
-            <p className="text-sm text-destructive" data-testid="invoice-tax-error">
-              {taxError}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {t("invoices.form.taxHint")}
-            </p>
-          )}
         </div>
 
         <div className="space-y-2">
@@ -404,6 +438,32 @@ function NewInvoiceForm({
         </div>
       </div>
 
+      <InvoiceTaxSection
+        lines={knownLines}
+        value={taxState}
+        onChange={changeTax}
+        hasBuyerVatId={
+          selectedClient === null ? null : (selectedClient.billing?.vatId ?? null) !== null
+        }
+        clientId={clientId}
+        onEditClientBilling={() => setEditingClientBilling(true)}
+        unsetAllowed={!defaultsResolved}
+      />
+
+      <ClientFormDialog
+        open={editingClientBilling && selectedClient !== null}
+        onOpenChange={(next) => {
+          if (next) return;
+          setEditingClientBilling(false);
+          // A VAT ID or default category added there changes the warning and
+          // the preview's resolved tax; the client list refreshes itself.
+          void utils.invoices.preview.invalidate();
+        }}
+        client={selectedClient}
+        focusBillingField="vatId"
+        issuerCountry={profile.data?.country ?? null}
+      />
+
       <div className="space-y-2">
         <Label htmlFor="invoice-notes">{t("invoices.form.notes")}</Label>
         <Textarea
@@ -444,8 +504,8 @@ function NewInvoiceForm({
             {t("invoices.form.pickClient")}
           </p>
         ) : !tax.ok ? (
-          <p className="text-sm text-muted-foreground">
-            {t("invoices.form.fixTax")}
+          <p className="text-sm text-muted-foreground" data-testid="invoice-preview-tax-invalid">
+            {!taxResult.ok && taxResult.errorKey === "oMixed" ? te("tax.oMixed") : te("tax.rate")}
           </p>
         ) : preview.isPending ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -491,6 +551,10 @@ function NewInvoiceForm({
                 total={data.total}
                 currency={data.currency}
                 testIdPrefix="invoice-preview"
+                taxBreakdown={data.taxBreakdown}
+                renderLineTax={lineTaxRenderer(taxState, changeTax, (line) =>
+                  te("tax.lineLabel", { line }),
+                )}
               />
             ) : (
               <p
@@ -558,7 +622,7 @@ function NewInvoiceForm({
           <Button
             type="button"
             onClick={() => setConfirming(true)}
-            disabled={!billable || !tax.ok || isCreating}
+            disabled={!billable || !tax.ok || notesMissing.length > 0 || isCreating}
             data-testid="invoice-create"
           >
             {t("invoices.form.create")}

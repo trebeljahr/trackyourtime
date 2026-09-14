@@ -17,3 +17,4 @@ packages/raycast/raycast-env.d.ts linguist-generated=true
 *.png binary
 *.ico binary
 *.icns binary
+*.ttf binary

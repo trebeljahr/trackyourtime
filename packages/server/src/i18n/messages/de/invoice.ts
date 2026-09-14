@@ -11,6 +11,9 @@ export const invoice: Translation<typeof source> = {
   from: "Von",
   billedTo: "Rechnungsempfänger",
   taxId: "Steuernummer: {taxId}",
+  vatId: "USt-IdNr.: {vatId}",
+  taxNumber: "Steuernummer: {taxNumber}",
+  registrationNumber: "Registernummer: {registrationNumber}",
   reference: "Referenz: {reference}",
   status: "Status",
   statusValue: "{status, select, draft {Entwurf} sent {versendet} paid {bezahlt} other {{status}}}",
@@ -31,9 +34,16 @@ export const invoice: Translation<typeof source> = {
   subtotal: "Zwischensumme ({currency})",
   // No-break space between the number and its unit, per the glossary.
   tax: "USt. ({rate} %)",
+  taxRow:
+    "{category, select, S {USt. {rate} % auf {basis}} Z {Nullsatz (0 %) auf {basis}} E {Steuerfrei auf {basis}} AE {Reverse Charge auf {basis}} O {Nicht steuerbar auf {basis}} other {USt. {rate} % auf {basis}}}",
+  vatNote: "Hinweis zur Umsatzsteuer",
   total: "Gesamtbetrag ({currency})",
   notes: "Anmerkungen",
   paymentDetails: "Zahlungsinformationen",
+  iban: "IBAN: {iban}",
+  bic: "BIC: {bic}",
+  bank: "Bank: {bank}",
+  accountHolder: "Kontoinhaber: {accountHolder}",
   dueBy: "Zahlbar bis zum {date}.",
   dueWithinTerms:
     "{days, plural, =0 {Zahlbar sofort nach Erhalt, bis zum {date}.} one {Zahlbar innerhalb von # Tag, bis zum {date}.} other {Zahlbar innerhalb von # Tagen, bis zum {date}.}}",
