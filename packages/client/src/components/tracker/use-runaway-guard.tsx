@@ -10,6 +10,7 @@ import {
   type EntryMutations,
 } from "@/components/tracker/use-entry-mutations";
 import { trpc } from "@/lib/trpc";
+import { isOwnEntry, useViewerId } from "@/components/tracker/own-entries";
 
 /** Prefix keeps one toast per entry, so a re-render never stacks duplicates. */
 const toastId = (entryId: string): string => `runaway:${entryId}`;
@@ -38,16 +39,21 @@ export const useRunawayGuard = (mutations: EntryMutations): void => {
     refetchOnWindowFocus: true,
   });
 
+  // A colleague's runaway timer is theirs to answer, not the viewer's — and
+  // `entries.resolveRunaway` would refuse the answer anyway.
+  const viewerId = useViewerId();
   const marked: Marked[] = React.useMemo(() => {
     const pages = query.data?.pages ?? [];
     return pages
       .flatMap((page) => page.entries)
       .flatMap((entry) =>
-        entry.runaway && entry.runaway.resolvedAt === null
+        isOwnEntry(entry, viewerId) &&
+        entry.runaway &&
+        entry.runaway.resolvedAt === null
           ? [{ entry: entry as TimeEntry, mark: entry.runaway }]
           : [],
       );
-  }, [query.data]);
+  }, [query.data, viewerId]);
 
   const { resolveRunaway } = mutations;
 

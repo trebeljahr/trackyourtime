@@ -16,6 +16,7 @@ import {
   type DayGroup,
 } from "@/components/tracker/grouping";
 import { LiveDuration } from "@/components/tracker/live-duration";
+import { ownEntries, useViewerId } from "@/components/tracker/own-entries";
 import {
   TRACKER_LIST_INPUT,
   useEntryMutations,
@@ -162,9 +163,13 @@ export function EntryList(): React.JSX.Element {
     staleTime: 30_000,
   });
 
+  // Only the viewer's own entries: see components/tracker/own-entries.ts for
+  // why a colleague's row must never reach an editable list.
+  const viewerId = useViewerId();
   const entries = React.useMemo(
-    () => query.data?.pages.flatMap((page) => page.entries) ?? [],
-    [query.data]
+    () =>
+      ownEntries(query.data?.pages.flatMap((page) => page.entries) ?? [], viewerId),
+    [query.data, viewerId]
   );
   const days = React.useMemo(() => groupEntriesByDay(entries), [entries]);
 
@@ -172,6 +177,7 @@ export function EntryList(): React.JSX.Element {
     running === null ? null : toLocalDateKey(new Date(running.start));
 
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = query;
+  const loadedPages = query.data?.pages.length ?? 0;
 
   // Guarded with a ref rather than `isFetchingNextPage`: the observer fires
   // again the moment a page lands and the sentinel is still in view, and React
@@ -203,7 +209,9 @@ export function EntryList(): React.JSX.Element {
     return () => {
       observer.disconnect();
     };
-  }, [fetchNextPage, hasNextPage, entries.length]);
+    // Keyed on pages, not on the filtered entry count: a page holding only
+    // colleagues' entries adds no rows, and the sentinel must still re-arm.
+  }, [fetchNextPage, hasNextPage, loadedPages]);
 
   const handleEdit = React.useCallback((entry: DetailedEntry): void => {
     setEditing(entry);
@@ -236,7 +244,9 @@ export function EntryList(): React.JSX.Element {
     );
   }
 
-  if (entries.length === 0) {
+  // A page can be entirely colleagues' entries for somebody who may see them;
+  // filtered to nothing, that is "keep loading", not "nothing tracked yet".
+  if (entries.length === 0 && !hasNextPage) {
     return (
       <EmptyState
         icon={Timer}

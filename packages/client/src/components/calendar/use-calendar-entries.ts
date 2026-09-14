@@ -29,6 +29,7 @@ import {
   type StepBody,
 } from "./calendar-history";
 import { entrySource } from "@/lib/entry-source";
+import { ownEntries, useViewerId } from "@/components/tracker/own-entries";
 
 /** The exact `entries.list` input the calendar screen is showing. */
 export type CalendarQueryInput = {
@@ -96,8 +97,15 @@ export const useCalendarEntries = (
     staleTime: 10_000,
     enabled,
   });
+  // The calendar is the viewer's own time: every block on it can be dragged,
+  // resized and deleted. See components/tracker/own-entries.ts.
+  const viewerId = useViewerId();
+  const entries = React.useMemo(
+    () => ownEntries(query.data?.entries ?? [], viewerId),
+    [query.data, viewerId]
+  );
   return {
-    entries: query.data?.entries ?? [],
+    entries,
     isLoading: enabled && query.isPending,
   };
 };
@@ -131,6 +139,9 @@ export const useCalendarActions = (
 ): CalendarActions => {
   const utils = trpc.useUtils();
   const { currency } = useFormatSettings();
+  // Stamped on the optimistic block so the own-entries filter keeps it on
+  // screen until the server's answer replaces it.
+  const viewerId = useViewerId();
   const projects = trpc.projects.list.useQuery({});
   const projectsData = projects.data;
 
@@ -238,7 +249,7 @@ export const useCalendarActions = (
       const optimistic: DetailedEntry = {
         id: `optimistic-${now}`,
         workspaceId: "",
-        authorId: "",
+        authorId: viewerId ?? "",
         description: variables.description ?? "",
         projectId,
         taskId: variables.taskId ?? null,
