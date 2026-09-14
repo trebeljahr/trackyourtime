@@ -138,11 +138,61 @@ export const clientListSchema = z.object({
  */
 const entryTimeZone = z.string().max(64).optional();
 
+// ── business identity (invoice issuer + recipient) ───────────────────
+
+/**
+ * A free-text identity field. Blank and `null` mean the same thing — the
+ * server stores both as `null` — so a form can send what it holds.
+ */
+const identityText = (max: number) => z.string().max(max).nullish();
+
+/** ISO 3166-1 alpha-2, either case; blank clears it. */
+export const countryCodeSchema = z
+  .string()
+  .regex(/^([A-Za-z]{2})?$/, "Country must be a 2-letter ISO 3166 code");
+
+/** Street lines in print order; blank lines are dropped on save. */
+const addressLinesSchema = z.array(z.string().max(200)).max(4);
+
+/** Fields a client's billing details and the business profile share. */
+const postalIdentityFields = {
+  legalName: identityText(200),
+  addressLines: addressLinesSchema.optional(),
+  postalCode: identityText(20),
+  city: identityText(120),
+  country: countryCodeSchema.nullish(),
+  taxId: identityText(60),
+  email: identityText(254),
+};
+
+/**
+ * A client's billing details. Replaces the whole subdocument when sent; a
+ * payload with every field blank is stored as "no billing details".
+ */
+export const clientBillingSchema = z.object({
+  ...postalIdentityFields,
+  reference: identityText(120),
+});
+
+/** The workspace's issuer profile, replaced as a whole on save. */
+export const updateBusinessProfileSchema = z.object({
+  ...postalIdentityFields,
+  phone: identityText(40),
+  website: identityText(200),
+  paymentDetails: identityText(1_000),
+  /** Net days from the issue date; `null` states no terms. */
+  paymentTermsDays: z.number().int().min(0).max(365).nullish(),
+  invoiceFooter: identityText(500),
+  originId,
+});
+
 export const createClientSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
   color: hexColorSchema.optional(),
   /** Language of this client's invoices; omitted/null = the issuer's. */
   invoiceLocale: localeSchema.nullish(),
+  /** Who invoices are addressed to; omitted/null = no billing details. */
+  billing: clientBillingSchema.nullish(),
   originId,
 });
 
@@ -153,6 +203,8 @@ export const updateClientSchema = z.object({
   archived: z.boolean().optional(),
   /** `null` clears it back to "the issuer's language". */
   invoiceLocale: localeSchema.nullish(),
+  /** Omitted keeps the current details; `null` clears them. */
+  billing: clientBillingSchema.nullish(),
   originId,
 });
 
@@ -654,6 +706,10 @@ export type IdInput = z.infer<typeof idInputSchema>;
 export type ClientListInput = z.infer<typeof clientListSchema>;
 export type CreateClientInput = z.infer<typeof createClientSchema>;
 export type UpdateClientInput = z.infer<typeof updateClientSchema>;
+export type ClientBillingInput = z.infer<typeof clientBillingSchema>;
+export type UpdateBusinessProfileInput = z.infer<
+  typeof updateBusinessProfileSchema
+>;
 export type ProjectListInput = z.infer<typeof projectListSchema>;
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;

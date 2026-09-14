@@ -89,6 +89,11 @@ export type WebhookDeliveryWire = {
 export type WebhookEventData =
   | { kind: "entry"; entry: TimeEntry }
   | { kind: "entry-deleted"; id: string; authorId: string }
+  /**
+   * The whole `Invoice` wire shape, so `issuer` and `recipient` — the parties
+   * frozen at creation — travel with both invoice events. Any field added to
+   * `Invoice` reaches integrators here; document it in docs-site webhooks.md.
+   */
   | { kind: "invoice"; invoice: Invoice }
   | {
       kind: "invoice-status";

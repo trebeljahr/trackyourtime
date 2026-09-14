@@ -22,7 +22,14 @@
  * implementation of it (`services/import/`).
  */
 import { z } from "zod";
-import type { IdleBehavior, InvoiceStatus, WeekStart } from "./types.js";
+import type {
+  ClientBilling,
+  IdleBehavior,
+  InvoiceIssuer,
+  InvoiceRecipient,
+  InvoiceStatus,
+  WeekStart,
+} from "./types.js";
 
 /** Hard ceilings, enforced server-side. A file past either is refused whole. */
 export const MAX_IMPORT_BYTES = 8_000_000;
@@ -217,6 +224,8 @@ export type ImportSections = {
   /**
    * True when the file states workspace policy a commit could restore. A v1
    * file has no settings section and still says this much: its currency.
+   * The business profile counts as policy here: it is restored with the
+   * settings, under the same owner/admin check, or not at all.
    */
   settings: boolean;
   /** Pins in the file. Restored onto the CALLING user, and only on request. */
@@ -247,7 +256,10 @@ export type ImportResult = {
   tasksCreated: number;
   tagsCreated: number;
   favoritesCreated: number;
-  /** True when this import also rewrote the workspace's money/calendar policy. */
+  /**
+   * True when this import also rewrote the workspace's money/calendar policy
+   * or its business profile.
+   */
   settingsRestored: boolean;
   totalSec: number;
   firstStart: string | null;
@@ -302,6 +314,12 @@ export type WorkspaceExport = {
   moneyRedacted?: boolean;
   /** Workspace money and calendar policy. Absent in v1 files. */
   settings?: WorkspaceExportSettings;
+  /**
+   * The issuer identity printed on the workspace's invoices. Absent when the
+   * profile was never filled in, in files older than profiles, and in a
+   * redacted export — it carries payment details, which follow the money rule.
+   */
+  businessProfile?: InvoiceIssuer;
   clients: WorkspaceExportClient[];
   projects: WorkspaceExportProject[];
   tasks: WorkspaceExportTask[];
@@ -413,6 +431,13 @@ export type WorkspaceExportInvoice = {
   total: number | null;
   currency: string;
   notes: string | null;
+  /**
+   * The two parties as frozen on the invoice. Absent on invoices created
+   * before snapshots existed, and dropped from a redacted export along with
+   * the amounts. Export-only, like the rest of the invoice.
+   */
+  issuer?: InvoiceIssuer | null;
+  recipient?: InvoiceRecipient | null;
   createdAt: string;
 };
 
@@ -437,6 +462,12 @@ export type WorkspaceExportClient = {
   name: string;
   color: string;
   archived: boolean;
+  /**
+   * Who invoices are addressed to. Absent or null for a client with none —
+   * including every client in a file older than billing details. Restored
+   * onto a client the import creates; an existing client keeps its own.
+   */
+  billing?: ClientBilling | null;
 };
 
 export type WorkspaceExportProject = {

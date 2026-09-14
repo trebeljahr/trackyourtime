@@ -210,8 +210,62 @@ export type Client = {
    * before invoices were localised has no such field.
    */
   invoiceLocale?: Locale | null;
+  /**
+   * Who an invoice is addressed to. `null` for a client nobody has filled
+   * in, which is every client created before billing details existed.
+   */
+  billing?: ClientBilling | null;
   createdAt: string;
   updatedAt: string;
+};
+
+/**
+ * A client's billing identity — what an invoice prints under "Billed to".
+ *
+ * Every field is optional and a blank one is `null`, never `""`. A client
+ * row predating this shape has no such subdocument at all, and must keep
+ * loading, editing and exporting exactly as before.
+ */
+export type ClientBilling = {
+  /** Registered name when it differs from the display name. */
+  legalName: string | null;
+  /** Street lines, in print order. Empty when unknown. */
+  addressLines: string[];
+  postalCode: string | null;
+  city: string | null;
+  /** ISO 3166-1 alpha-2, upper case, e.g. "DE". */
+  country: string | null;
+  /** VAT number or other tax id, as the customer states it. */
+  taxId: string | null;
+  email: string | null;
+  /** The customer's own reference — a purchase order, a cost centre. */
+  reference: string | null;
+};
+
+/**
+ * The workspace's own business identity: who issues its invoices, and how
+ * they are to be paid. One per workspace, every field optional.
+ */
+export type BusinessProfile = {
+  workspaceId: string;
+  legalName: string | null;
+  addressLines: string[];
+  postalCode: string | null;
+  city: string | null;
+  /** ISO 3166-1 alpha-2, upper case. */
+  country: string | null;
+  taxId: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  /** Free text: bank, IBAN, payment link — printed as written. */
+  paymentDetails: string | null;
+  /** Net days. Suggests an invoice's due date; `null` states no terms. */
+  paymentTermsDays: number | null;
+  /** A line printed at the bottom of every invoice. */
+  invoiceFooter: string | null;
+  /** `null` until the profile has been saved once. */
+  updatedAt: string | null;
 };
 
 /** A project that time is tracked against. */
@@ -617,6 +671,26 @@ export type Invoice = {
    * were English and must stay English on every re-render.
    */
   locale?: Locale;
+  /**
+   * The business profile as it stood when the invoice was created. `null` on
+   * an invoice created before issuer snapshots existed, or while the profile
+   * was empty. Never re-read from the live profile.
+   */
+  issuer?: InvoiceIssuer | null;
+  /**
+   * The client's billing details as they stood at creation. `null` on older
+   * invoices; `clientName` is then the whole of "Billed to".
+   */
+  recipient?: InvoiceRecipient | null;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Snapshot of {@link BusinessProfile} copied onto one invoice. */
+export type InvoiceIssuer = Omit<BusinessProfile, "workspaceId" | "updatedAt">;
+
+/** Snapshot of the client's name and {@link ClientBilling} on one invoice. */
+export type InvoiceRecipient = ClientBilling & {
+  /** The client's display name at issue time — same value as `clientName`. */
+  name: string;
 };
