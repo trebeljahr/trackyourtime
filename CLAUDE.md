@@ -789,13 +789,13 @@ What is deleted:
 
 - **A workspace the person is alone in**, with everything scoped to it:
   entries, catalog, favorites, invoices, import batches, API tokens, webhooks
-  and their deliveries, workspace settings, invitations, the organization and
-  both membership records.
+  and their deliveries, workspace settings, the business profile, invitations,
+  the organization and both membership records.
 - **In a workspace other people use**, only the person's own rows: entries
   they authored that are NOT on an invoice, favorites, API tokens, webhooks
   they created (with deliveries), imports they ran, invitations they sent, and
-  both membership records. The catalog, invoices, invoiced entries and
-  workspace settings stay with the workspace.
+  both membership records. The catalog, invoices, invoiced entries,
+  workspace settings and the business profile stay with the workspace.
 - **Everywhere**: user preferences, profile, device-flow codes, and pending
   invitations addressed to the email.
 
@@ -966,9 +966,41 @@ rules:
 
 The CSV export is written in the exact column shape the importer recognises,
 so a spreadsheet round trip is supported rather than lucky. The JSON export is
-the lossless one (colors, archived catalog rows, project rates) and references
-the catalog **by name**, so it can be imported into a different workspace or
-into an empty one after the database it came from is gone.
+the lossless one (colors, archived catalog rows, project rates, client
+billing details, the business profile) and references the catalog **by name**,
+so it can be imported into a different workspace or into an empty one after
+the database it came from is gone.
+
+### Invoice issuer and recipient
+
+An invoice names two parties. The **business profile** (`BusinessProfile`,
+one per workspace, every field optional) is the issuer: legal name, address,
+tax id, contact, payment details, payment terms, footer. **`Client.billing`**
+(optional subdocument) is the recipient: legal name, address, tax id, email,
+the customer's reference. `@starter/shared/business-identity` owns the one
+rule for both — blank is `null`, never `""` — and the snapshot helpers.
+
+Four rules, each of which fails quietly if broken:
+
+- **Both parties are frozen at `invoices.create`** (`Invoice.issuer`,
+  `Invoice.recipient`) and never re-read: the PDF renders from the invoice
+  alone, so fixing an address later cannot rewrite a document a customer
+  holds. Neither subdocument has a default, for the reason `Invoice.locale`
+  has none. An invoice without them prints the client name as "Billed to".
+- **`Client.billing` is never `required` and has no default.** A client row
+  from before it validates, saves and exports untouched; the wire reads it as
+  `null`. `clients.update` replaces the subdocument whole, and an all-blank one
+  is stored as `null`.
+- **The profile is read like money.** `settings.businessProfile` answers owner,
+  admin or a member with `canViewOthersMoney`; `settings.updateBusinessProfile`
+  is owner/admin. A redacted export drops the profile and the invoice parties
+  whole (they carry payment details); a client's billing address is catalog and
+  stays. An import restores the profile only with `restoreSettings`, under the
+  same owner/admin check, and only onto clients it creates.
+- **The PDF's words come from the `invoice` server catalog** in the invoice's
+  snapshotted language; payment terms print as "payable within N days, by
+  <due date>", where the date is the invoice's own `dueDate` — the create
+  dialog only *suggests* it from the terms (`dueDateFromTerms`).
 
 ### Background jobs (scheduler)
 
