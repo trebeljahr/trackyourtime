@@ -38,6 +38,14 @@ export class InvalidRoleError extends Error {
   }
 }
 
+/** Ownership handed to somebody with no `WorkspaceMember` row. */
+export class TransferTargetNotMemberError extends Error {
+  constructor() {
+    super("membership: ownership can only go to a current member");
+    this.name = "TransferTargetNotMemberError";
+  }
+}
+
 /**
  * Refuse anything but the exact role strings.
  *
@@ -226,6 +234,12 @@ export async function transferOwnership(
 ): Promise<void> {
   const { workspaceId, fromUserId, toUserId } = args;
   if (fromUserId === toUserId) return;
+  // The mirror is what makes somebody an owner the app acts on. Promoting a
+  // person who has none (a removal a crash cut in half) would write "owner"
+  // onto a `member` row nothing reads, and the demotion below would then
+  // leave the workspace with no owner at all.
+  const target = await store.find("workspaceMembers", { workspaceId, userId: toUserId });
+  if (target.length === 0) throw new TransferTargetNotMemberError();
   await ensureOwner(store, workspaceId, toUserId);
   await store.updateMany(
     "authMembers",

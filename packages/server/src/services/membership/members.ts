@@ -59,7 +59,17 @@ export type WorkspaceUser = { id: string; name?: string | null; email?: string |
 /** The caller, as the workspace middleware resolved them. */
 export type WorkspaceActor = MembershipActor & { workspaceId: string };
 
-type Target = { memberId: string; userId: string; role: WorkspaceRole };
+type Target = {
+  memberId: string;
+  userId: string;
+  role: WorkspaceRole;
+  /**
+   * Whether the person still has a `WorkspaceMember` row. False only for a
+   * removal a crash cut in half: a `member` row with no mirror, which the app
+   * already reads as "not in the workspace".
+   */
+  hasAccess: boolean;
+};
 
 const changed = (
   workspaceId: string,
@@ -93,7 +103,27 @@ async function findTarget(
   // The role the APP acts on is the mirror's; `member` answers only when the
   // mirror is already gone (a removal being retried).
   const [app] = await store.find("workspaceMembers", { workspaceId, userId });
-  return { memberId, userId, role: asRole((app ?? auth)?.role) };
+  return { memberId, userId, role: asRole((app ?? auth)?.role), hasAccess: app !== undefined };
+}
+
+/**
+ * {@link findTarget}, for an action that only makes sense on somebody who is
+ * really in the workspace. A half-removed person answers NOT_FOUND — the same
+ * as anybody else the app does not consider a member.
+ *
+ * Only `remove` may act on a half-removed person, because finishing that
+ * removal is exactly what it is for. Transferring ownership to one would
+ * promote a `member` row nobody authorizes from and then demote the only
+ * real owner: a workspace with no owner at all.
+ */
+async function findMember(
+  store: MembershipRowStore,
+  workspaceId: string,
+  memberId: string,
+): Promise<Target> {
+  const target = await findTarget(store, workspaceId, memberId);
+  if (!target.hasAccess) throw membershipNotFound();
+  return target;
 }
 
 async function mirrorRows(
@@ -196,7 +226,7 @@ export async function updateMemberRole(
   actor: WorkspaceActor,
   input: { memberId: string; role: WorkspaceRole },
 ): Promise<WorkspaceMemberRow> {
-  const target = await findTarget(deps.store, actor.workspaceId, input.memberId);
+  const target = await findMember(deps.store, actor.workspaceId, input.memberId);
   const owners = ownersIn(await mirrorRows(deps.store, actor.workspaceId));
   assertAllowed(refuseRoleChange(actor, target, input.role, owners));
 
@@ -214,7 +244,7 @@ export async function updateMemberVisibility(
   actor: WorkspaceActor,
   input: { memberId: string; canViewOthersTime?: boolean; canViewOthersMoney?: boolean },
 ): Promise<WorkspaceMemberRow> {
-  const target = await findTarget(deps.store, actor.workspaceId, input.memberId);
+  const target = await findMember(deps.store, actor.workspaceId, input.memberId);
   const patch = {
     ...(input.canViewOthersTime !== undefined
       ? { canViewOthersTime: input.canViewOthersTime }
@@ -308,7 +338,7 @@ export async function transferOwnership(
   actor: WorkspaceActor,
   input: { memberId: string },
 ): Promise<{ ok: true }> {
-  const target = await findTarget(deps.store, actor.workspaceId, input.memberId);
+  const target = await findMember(deps.store, actor.workspaceId, input.memberId);
   assertAllowed(refuseTransfer(actor, target));
 
   await transferOwnershipRecords(deps.store, {

@@ -400,6 +400,30 @@ describe("members.transferOwnership", () => {
     await notFound(() => transferOwnership(deps(), as("olivia"), { memberId: memberId("ben", "ws-b") }));
     assert.equal(recordsOf(store, "ben", "ws-b").mirror?.role, "member");
   });
+
+  it("never goes to a half-removed person — that would leave the workspace with no owner", async () => {
+    // A removal a crash cut in half: the mirror is gone, the `member` row stays.
+    store.rows.workspaceMembers = store.rows.workspaceMembers.filter(
+      (r) => !(r.workspaceId === "ws-a" && r.userId === PEOPLE.mia.id),
+    );
+    await notFound(() => transferOwnership(deps(), as("olivia"), { memberId: memberId("mia", "ws-a") }));
+    await notFound(() =>
+      updateMemberRole(deps(), as("olivia"), { memberId: memberId("mia", "ws-a"), role: "admin" }),
+    );
+    await notFound(() =>
+      updateMemberVisibility(deps(), as("olivia"), {
+        memberId: memberId("mia", "ws-a"),
+        canViewOthersMoney: true,
+      }),
+    );
+    const owners = store.rows.workspaceMembers.filter((r) => r.workspaceId === "ws-a" && r.role === "owner");
+    assert.deepEqual(owners.map((r) => r.userId), [PEOPLE.olivia.id]);
+    assert.equal(recordsOf(store, "olivia", "ws-a").member?.role, "owner");
+    assert.equal(recordsOf(store, "mia", "ws-a").member?.role, "member");
+    // Finishing the removal is still possible.
+    await removeMember(deps(), as("olivia"), { memberId: memberId("mia", "ws-a") });
+    assert.equal(recordsOf(store, "mia", "ws-a").member, undefined);
+  });
 });
 
 describe("members.list", () => {

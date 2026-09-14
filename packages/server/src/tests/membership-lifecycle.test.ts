@@ -17,6 +17,7 @@ import {
   setRole,
   setVisibility,
   transferOwnership,
+  TransferTargetNotMemberError,
 } from "../services/membership/lifecycle.js";
 import { membersOf } from "../services/membership/records.js";
 import {
@@ -202,6 +203,16 @@ describe("transferOwnership", () => {
     const merged = await membersOf(store, "ws-a");
     assert.ok(merged.some((r) => r.role === "owner"));
     assert.equal(failures, 4);
+  });
+
+  it("refuses a target with no mirror row, writing nothing", async () => {
+    store.rows.workspaceMembers = store.rows.workspaceMembers.filter(
+      (r) => !(r.workspaceId === "ws-a" && r.userId === PEOPLE.mia.id),
+    );
+    const before = JSON.stringify(store.rows);
+    await assert.rejects(() => transfer(store), TransferTargetNotMemberError);
+    assert.equal(JSON.stringify(store.rows), before);
+    assert.deepEqual(ownersIn(store, "ws-a"), [PEOPLE.olivia.id]);
   });
 
   it("ends with exactly one owner in both records", async () => {
