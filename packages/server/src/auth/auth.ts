@@ -18,6 +18,8 @@ import {
   twoFactorPlugin,
   type AuthMail,
 } from "./account-security.js";
+import { passwordResetEmail } from "../services/transactional-email.js";
+import { preferredLocale } from "../services/user-locale.js";
 import { DEVICE_FLOW_CLIENT_IDS } from "./client-label.js";
 import { createPersonalWorkspace } from "./personal-workspace.js";
 import {
@@ -85,7 +87,13 @@ export async function initAuth(): Promise<void> {
        * once after the deploy that configures mail (docs/deploy.md).
        */
       requireEmailVerification: isEmailDeliveryConfigured(),
-      async sendResetPassword({ user, url }: { user: { email: string }; url: string }) {
+      async sendResetPassword({
+        user,
+        url,
+      }: {
+        user: { id: string; email: string };
+        url: string;
+      }) {
         // Branch on whether *any* transport is configured, never on one
         // provider's variables: a Listmonk-shaped check would log the reset
         // URL and return on a self-host that has SMTP set up perfectly well,
@@ -97,12 +105,8 @@ export async function initAuth(): Promise<void> {
           return;
         }
         try {
-          await sendEmail({
-            to: user.email,
-            subject: "Reset your password",
-            text: `Click this link to reset your password: ${url}`,
-            html: `<p>Click <a href="${url}">here</a> to reset your password.</p>`,
-          });
+          const locale = await preferredLocale([user.id]);
+          await sendEmail({ to: user.email, ...passwordResetEmail(locale, url) });
         } catch (error) {
           logAuthUrl("Password reset", user.email, url);
           throw error;
@@ -115,18 +119,22 @@ export async function initAuth(): Promise<void> {
      * reads `sendVerificationEmail` from THIS block only; under
      * `emailAndPassword` it was never called. See `auth/account-security.ts`.
      */
-    emailVerification: emailVerificationOptions(async (url: string, mail: AuthMail) => {
-      if (!isEmailDeliveryConfigured()) {
-        logAuthUrl("Verification", mail.to, url);
-        return;
-      }
-      try {
-        await sendEmail(mail);
-      } catch (error) {
-        logAuthUrl("Verification", mail.to, url);
-        throw error;
-      }
-    }),
+    emailVerification: emailVerificationOptions(
+      async (url: string, mail: AuthMail) => {
+        if (!isEmailDeliveryConfigured()) {
+          logAuthUrl("Verification", mail.to, url);
+          return;
+        }
+        try {
+          await sendEmail(mail);
+        } catch (error) {
+          logAuthUrl("Verification", mail.to, url);
+          throw error;
+        }
+      },
+      // The recipient's explicit preference; English when there is none.
+      (userId) => preferredLocale([userId]),
+    ),
 
     user: {
       /**

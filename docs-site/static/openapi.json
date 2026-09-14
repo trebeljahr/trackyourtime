@@ -3180,6 +3180,20 @@
                               }
                             ]
                           },
+                          "invoiceLocale": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "en",
+                                  "de"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time",
@@ -3597,6 +3611,20 @@
                             }
                           ]
                         },
+                        "invoiceLocale": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "en",
+                                "de"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time",
@@ -3870,6 +3898,20 @@
                                 "reference"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "invoiceLocale": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "en",
+                                "de"
+                              ]
                             },
                             {
                               "type": "null"
@@ -4296,6 +4338,20 @@
                                 "reference"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "invoiceLocale": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "en",
+                                "de"
+                              ]
                             },
                             {
                               "type": "null"
@@ -4771,6 +4827,20 @@
                                 "reference"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "invoiceLocale": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "en",
+                                "de"
+                              ]
                             },
                             {
                               "type": "null"

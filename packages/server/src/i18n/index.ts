@@ -1,5 +1,6 @@
 /**
- * Translated server text: invoice PDFs and transactional email.
+ * Translated server text: invoice PDFs, report PDF exports and transactional
+ * email.
  *
  * Separate from the web client's catalog on purpose. The server renders
  * documents that outlive any session — an invoice PDF is re-rendered months
@@ -19,12 +20,14 @@ import { DEFAULT_LOCALE, type Locale } from "@starter/shared";
 
 import { email as deEmail } from "./messages/de/email.js";
 import { invoice as deInvoice } from "./messages/de/invoice.js";
+import { report as deReport } from "./messages/de/report.js";
 import { email as enEmail } from "./messages/en/email.js";
 import { invoice as enInvoice } from "./messages/en/invoice.js";
+import { report as enReport } from "./messages/en/report.js";
 
 export const serverMessages = {
-  en: { invoice: enInvoice, email: enEmail },
-  de: { invoice: deInvoice, email: deEmail },
+  en: { invoice: enInvoice, email: enEmail, report: enReport },
+  de: { invoice: deInvoice, email: deEmail, report: deReport },
 } as const;
 
 export type ServerMessages = (typeof serverMessages)["en"];

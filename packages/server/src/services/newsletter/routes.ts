@@ -10,6 +10,7 @@
  */
 
 import type { Express, Request, Response } from "express";
+import { isLocale } from "@starter/shared";
 import {
   checkRateLimit,
   confirmSubscription,
@@ -39,8 +40,9 @@ function siteUrl(): string {
   return (process.env.NEWSLETTER_SITE_URL ?? process.env.FRONTEND_URL ?? "").replace(/\/$/, "");
 }
 
-function siteName(): string {
-  return process.env.NEWSLETTER_SITE_NAME ?? "this newsletter";
+/** Unset = the confirmation email names no site, in its own language. */
+function siteName(): string | undefined {
+  return process.env.NEWSLETTER_SITE_NAME || undefined;
 }
 
 export function registerNewsletterRoutes(app: Express): void {
@@ -55,7 +57,7 @@ export function registerNewsletterRoutes(app: Express): void {
       return;
     }
 
-    const body = (req.body ?? {}) as { email?: string; website?: string };
+    const body = (req.body ?? {}) as { email?: string; website?: string; locale?: unknown };
 
     // Honeypot — real users never fill this. Return a 200-shaped
     // success so bots get no signal about what tripped them.
@@ -97,7 +99,14 @@ export function registerNewsletterRoutes(app: Express): void {
     const confirmUrl = `${base}/api/newsletter/confirm?token=${encodeURIComponent(token)}`;
 
     try {
-      await sendConfirmationEmail({ to: email, confirmUrl, siteName: siteName() });
+      const name = siteName();
+      await sendConfirmationEmail({
+        to: email,
+        confirmUrl,
+        ...(name ? { siteName: name } : {}),
+        // The form's language, when it sends one; anything else is English.
+        ...(isLocale(body.locale) ? { locale: body.locale } : {}),
+      });
     } catch (err) {
       log("error", "subscribe", "send_confirmation_failed", {
         ip,

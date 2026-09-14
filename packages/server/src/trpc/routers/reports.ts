@@ -86,8 +86,10 @@ import {
   renderDetailedPdf,
   renderSummaryPdf,
   renderWeeklyPdf,
+  reportPdfTitle,
   type PdfReportMeta,
 } from "../../services/pdf.js";
+import { preferredLocale } from "../../services/user-locale.js";
 import { workspaceProcedure, router } from "../trpc.js";
 
 /**
@@ -1544,9 +1546,14 @@ export const reportsRouter = router({
       const range = parseRange(input);
       const exportZone = resolveTimeZone(input.timeZone);
       const generatedAt = new Date().toISOString();
+      // The exporting device's language, else the exporter's explicit
+      // preference, else English. The CSV sibling above takes none: its
+      // headers are the importer's contract.
+      const locale = input.locale ?? (await preferredLocale([ctx.user.id]));
 
       const meta = (title: string, currency: string): PdfReportMeta => ({
         title,
+        locale,
         from: dayKeyInZone(range.fromMs, exportZone),
         to: dayKeyInZone(range.toMs - 1, exportZone),
         timeZone: exportZone,
@@ -1569,7 +1576,8 @@ export const reportsRouter = router({
         const result = await buildSummary(scope, input, groupBy);
         const bytes = await renderSummaryPdf(
           result,
-          meta(`Summary report by ${groupBy}`, result.currency),
+          meta(reportPdfTitle(locale, { kind: "summary", groupBy }), result.currency),
+          groupBy,
         );
         return encode("summary", bytes);
       }
@@ -1581,7 +1589,7 @@ export const reportsRouter = router({
         const settings = await getOrCreateWorkspaceSettings(scope.workspaceId);
         const bytes = await renderWeeklyPdf(
           result,
-          meta("Weekly timesheet", settings.currency),
+          meta(reportPdfTitle(locale, { kind: "weekly" }), settings.currency),
         );
         return encode("weekly", bytes);
       }
@@ -1608,7 +1616,7 @@ export const reportsRouter = router({
 
       const bytes = await renderDetailedPdf(
         { entries, totalSec: 0, totalAmount: null, currency, moneyVisible },
-        meta("Detailed report", currency),
+        meta(reportPdfTitle(locale, { kind: "detailed" }), currency),
       );
       return encode("detailed", bytes);
     }),

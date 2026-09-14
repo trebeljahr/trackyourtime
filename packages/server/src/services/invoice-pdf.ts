@@ -9,10 +9,10 @@
  * every figure on it is a snapshot that must never be recomputed. Bending the
  * report renderer to also produce that shape would make both harder to read.
  *
- * The text hygiene is shared, though: `sanitizePdfText` and `formatPdfAmount`
- * are imported from the report renderer so a description with a stray control
- * character or an amount with a thousands separator behaves identically in
- * both documents.
+ * The text hygiene is shared, though: `sanitizePdfText` is imported from the
+ * report renderer so a description with a stray control character behaves
+ * identically in both documents, and both format figures through
+ * `services/pdf-format.ts`.
  *
  * Everything here renders from the PERSISTED `Invoice` wire object. Nothing is
  * looked up, nothing is re-derived — a document already sent to a customer has
@@ -21,8 +21,12 @@
  * creation, and an invoice from before they existed carries neither and
  * prints the client name alone, exactly as it always did.
  *
- * Every word on the page comes from the `invoice` server catalog, in the
- * language snapshotted on the invoice (`invoice.locale`, English when absent).
+ * Every word on the page comes from the `invoice` server catalog, and every
+ * figure is formatted, in the language snapshotted on the invoice
+ * (`invoice.locale`) — never the viewer's preference, the client's current
+ * setting or the request's headers, any of which can change after the invoice
+ * was sent. An invoice without a `locale` predates localisation and renders in
+ * English.
  */
 import PDFDocument from "pdfkit";
 import {
@@ -31,9 +35,11 @@ import {
   type InvoiceIssuer,
   type InvoiceLineItem,
   type InvoiceRecipient,
+  type Locale,
 } from "@starter/shared";
 import { serverT, type ServerTranslator } from "../i18n/index.js";
-import { formatPdfAmount, sanitizePdfText } from "./pdf.js";
+import { sanitizePdfText } from "./pdf.js";
+import { pdfFormat, type PdfFormat } from "./pdf-format.js";
 
 /** The only thing not already on the invoice: when this copy was printed. */
 export type InvoicePdfMeta = {
@@ -123,6 +129,7 @@ type Sheet = {
   invoice: Invoice;
   meta: InvoicePdfMeta;
   t: ServerTranslator<"invoice">;
+  format: PdfFormat;
   left: number;
   width: number;
   top: number;
@@ -130,9 +137,6 @@ type Sheet = {
   y: number;
   page: number;
 };
-
-/** "2026-08-31T22:00:00.000Z" → "2026-08-31". Dates on an invoice are dates. */
-const isoDate = (value: string): string => sanitizePdfText(value).slice(0, 10);
 
 const columnsFor = (
   t: ServerTranslator<"invoice">,
@@ -255,7 +259,7 @@ function drawParty(
 
 /** The masthead: title, the two parties side by side, then the dates. */
 function drawHeaderBlock(sheet: Sheet): void {
-  const { doc, invoice, t } = sheet;
+  const { doc, invoice, t, format } = sheet;
 
   doc
     .font(FONT_BOLD)
@@ -293,11 +297,11 @@ function drawHeaderBlock(sheet: Sheet): void {
 
   const rows: [string, string][] = [
     [t("status"), t("statusValue", { status: invoice.status })],
-    [t("issueDate"), isoDate(invoice.issueDate)],
-    [t("dueDate"), isoDate(invoice.dueDate)],
+    [t("issueDate"), format.date(invoice.issueDate)],
+    [t("dueDate"), format.date(invoice.dueDate)],
     [
       t("period"),
-      t("periodRange", { from: isoDate(invoice.from), to: isoDate(invoice.to) }),
+      t("periodRange", { from: format.date(invoice.from), to: format.date(invoice.to) }),
     ],
     [t("groupedBy"), t("groupByValue", { groupBy: invoice.groupBy })],
   ];
@@ -328,7 +332,7 @@ function drawHeaderBlock(sheet: Sheet): void {
       sanitizePdfText(
         t("amountsIn", {
           currency: invoice.currency,
-          generatedAt: sheet.meta.generatedAt,
+          generatedAt: format.timestamp(sheet.meta.generatedAt),
         }),
       ),
       sheet.left,
@@ -410,20 +414,17 @@ const headerCells = (columns: SizedColumn[]): Partial<Cells> =>
     columns.map((column) => [column.key, column.header]),
   ) as Partial<Cells>;
 
-/** `2.5` → "2.50" — the quantity column always shows two decimals. */
-const formatHours = (hours: number): string =>
-  Number.isFinite(hours) ? hours.toFixed(2) : "0.00";
-
-const lineCells = (line: InvoiceLineItem): Cells => ({
+/** `2.5` → "2.50" ("2,50") — the quantity column always shows two decimals. */
+const lineCells = (format: PdfFormat, line: InvoiceLineItem): Cells => ({
   label: line.label,
-  hours: formatHours(line.hours),
-  rate: formatPdfAmount(line.hourlyRate),
-  amount: formatPdfAmount(line.amount),
+  hours: format.hours(line.hours),
+  rate: format.amount(line.hourlyRate),
+  amount: format.amount(line.amount),
 });
 
 /** The subtotal / tax / total stack, right-aligned under the amount column. */
 function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
-  const { doc, invoice, t } = sheet;
+  const { doc, invoice, t, format } = sheet;
   const amountColumn = columns[columns.length - 1];
   if (amountColumn === undefined) return;
 
@@ -435,7 +436,7 @@ function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
   const rows: { label: string; value: string; strong: boolean }[] = [
     {
       label: t("subtotal", { currency: invoice.currency }),
-      value: formatPdfAmount(invoice.subtotal),
+      value: format.amount(invoice.subtotal),
       strong: false,
     },
   ];
@@ -444,14 +445,14 @@ function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
   // may need to see.
   if (invoice.taxRate !== null) {
     rows.push({
-      label: t("tax", { rate: invoice.taxRate }),
-      value: formatPdfAmount(invoice.taxAmount),
+      label: t("tax", { rate: format.plain(invoice.taxRate) }),
+      value: format.amount(invoice.taxAmount),
       strong: false,
     });
   }
   rows.push({
     label: t("total", { currency: invoice.currency }),
-    value: formatPdfAmount(invoice.total),
+    value: format.amount(invoice.total),
     strong: true,
   });
 
@@ -490,8 +491,9 @@ function dueLine(
   invoice: Invoice,
   issuer: InvoiceIssuer,
   t: ServerTranslator<"invoice">,
+  format: PdfFormat,
 ): string {
-  const date = isoDate(invoice.dueDate);
+  const date = format.date(invoice.dueDate);
   return issuer.paymentTermsDays === null
     ? t("dueBy", { date })
     : t("dueWithinTerms", { days: issuer.paymentTermsDays, date });
@@ -563,7 +565,10 @@ export async function renderInvoicePdf(
   meta: InvoicePdfMeta,
 ): Promise<Buffer> {
   const doc = new PDFDocument(pageOptions());
-  const t = serverT(invoice.locale, "invoice");
+  // Absent = issued before localisation = English, forever.
+  const locale: Locale = invoice.locale ?? "en";
+  const t = serverT(locale, "invoice");
+  const format = pdfFormat(locale);
   doc.info.Title = sanitizePdfText(t("title", { number: invoice.number }));
   doc.info.Creator = "Track Your Time";
   const chunks: Buffer[] = [];
@@ -579,6 +584,7 @@ export async function renderInvoicePdf(
         invoice,
         meta,
         t,
+        format,
         left: MARGINS.left,
         width: doc.page.width - MARGINS.left - MARGINS.right,
         top: MARGINS.top,
@@ -598,7 +604,7 @@ export async function renderInvoicePdf(
       } else {
         for (const line of invoice.lineItems) {
           ensureSpace(sheet, columns, ROW_HEIGHT);
-          drawRow(sheet, columns, lineCells(line), "body");
+          drawRow(sheet, columns, lineCells(format, line), "body");
         }
       }
 
@@ -613,7 +619,7 @@ export async function renderInvoicePdf(
           sheet,
           columns,
           t("paymentDetails"),
-          [dueLine(invoice, issuer, t), issuer.paymentDetails]
+          [dueLine(invoice, issuer, t, sheet.format), issuer.paymentDetails]
             .filter((part): part is string => part !== null)
             .join("\n"),
           true,

@@ -27,12 +27,14 @@ import {
   invoicePreviewSchema,
   issuerSnapshot,
   recipientSnapshot,
+  resolveInvoiceLocale,
   sumAmounts,
   updateInvoiceStatusSchema,
   type Invoice as InvoiceWire,
   type InvoiceLineItem,
   type InvoiceRecipient,
   type InvoiceStatus,
+  type Locale,
   type PdfExportResult,
   type Visibility,
   type WorkspaceRole,
@@ -42,7 +44,10 @@ import { BusinessProfileModel } from "../../models/BusinessProfile.js";
 import { Client } from "../../models/Client.js";
 import { Invoice, toClientInvoice, type IInvoice } from "../../models/Invoice.js";
 import { Project } from "../../models/Project.js";
-import { getOrCreateWorkspaceSettings } from "../../models/Settings.js";
+import {
+  getOrCreateWorkspaceSettings,
+  UserPreferencesModel,
+} from "../../models/Settings.js";
 import { Task } from "../../models/Task.js";
 import { TimeEntry } from "../../models/TimeEntry.js";
 import {
@@ -438,6 +443,11 @@ export type InvoicePreview = {
   skippedMissingRate: number;
   /** Entries in this range already billed on an earlier invoice. */
   skippedInvoiced: number;
+  /**
+   * The language `create` would snapshot when given no override: the
+   * client's, else the issuer's explicit preference, else English.
+   */
+  locale: Locale;
 };
 
 /** Everything a preview or a create needs, gathered in one place. */
@@ -445,6 +455,8 @@ type Gathered = {
   clientName: string;
   /** The client's billing details as they stand now, for `create` to freeze. */
   recipient: InvoiceRecipient | null;
+  /** The client's own invoice language, when it has one. */
+  clientLocale: Locale | null;
   selection: BillableSelection;
   lineItems: InvoiceLineItem[];
   totals: InvoiceTotals;
@@ -486,7 +498,7 @@ const gather = async (
     _id: requireObjectId(input.clientId, "Client not found"),
     workspaceId,
   })
-    .select("name billing")
+    .select("name billing invoiceLocale")
     .lean();
   if (!client) throw notFound("Client not found");
 
@@ -571,11 +583,38 @@ const gather = async (
   return {
     clientName: client.name,
     recipient: recipientSnapshot(client.name, client.billing),
+    clientLocale: client.invoiceLocale ?? null,
     selection,
     lineItems,
     totals,
     currency: selection.currencies[0] ?? settings.currency,
   };
+};
+
+/**
+ * The language a new invoice is written in — resolved once, by
+ * `resolveInvoiceLocale`, and then snapshotted onto the document.
+ *
+ * The issuer's preference is read without seeding a preferences document: a
+ * person who never opened Settings has none, which means "system", which
+ * contributes nothing here (the server has no device to resolve it against).
+ */
+const invoiceLocaleFor = async (
+  issuerId: string,
+  clientLocale: Locale | null,
+  override: Locale | undefined,
+): Promise<Locale> => {
+  // The preference is only consulted when nothing ahead of it decides, so the
+  // read is skipped then; the ORDER stays resolveInvoiceLocale's alone.
+  const issuerPreference =
+    override || clientLocale
+      ? null
+      : ((
+          await UserPreferencesModel.findOne({ userId: issuerId })
+            .select("locale")
+            .lean()
+        )?.locale ?? null);
+  return resolveInvoiceLocale({ override, clientLocale, issuerPreference });
 };
 
 /**
@@ -703,6 +742,7 @@ export const invoicesRouter = router({
         suggestedNumber: await suggestNumber(workspaceId, new Date().getFullYear()),
         skippedMissingRate: gathered.selection.skippedMissingRate,
         skippedInvoiced: gathered.selection.skippedInvoiced,
+        locale: await invoiceLocaleFor(ctx.user.id, gathered.clientLocale, undefined),
       };
     }),
 
@@ -780,6 +820,13 @@ export const invoicesRouter = router({
         // there is nothing to freeze, so the document matches the old shape.
         ...(issuer ? { issuer } : {}),
         ...(gathered.recipient ? { recipient: gathered.recipient } : {}),
+        // Snapshotted like every figure above: a later change to the client's
+        // or the issuer's language must never re-language a sent document.
+        locale: await invoiceLocaleFor(
+          ctx.user.id,
+          gathered.clientLocale,
+          input.locale,
+        ),
       };
 
       // Numbering is settled by the unique index on { workspaceId, number }, not

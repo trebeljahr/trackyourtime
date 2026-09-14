@@ -84,6 +84,7 @@ export async function createClient(
     color: input.color ?? pickCatalogColor(existing),
     archived: false,
     ...(billing ? { billing } : {}),
+    invoiceLocale: input.invoiceLocale ?? null,
   });
 
   void publishSync(
@@ -110,6 +111,9 @@ export async function updateClient(
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
         ...(input.color !== undefined ? { color: input.color } : {}),
         ...(input.archived !== undefined ? { archived: input.archived } : {}),
+        ...(input.invoiceLocale !== undefined
+          ? { invoiceLocale: input.invoiceLocale }
+          : {}),
         // Replaces the subdocument whole; an all-blank one clears it to null.
         ...(input.billing !== undefined
           ? { billing: normalizeClientBilling(input.billing) }

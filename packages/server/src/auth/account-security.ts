@@ -36,6 +36,8 @@
  */
 import { createAuthMiddleware } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins/two-factor";
+import { DEFAULT_LOCALE, type Locale } from "@starter/shared";
+import { verificationEmail } from "../services/transactional-email.js";
 
 /** The account name an authenticator app shows beside the code. */
 export const TWO_FACTOR_ISSUER = "Track Your Time";
@@ -94,11 +96,22 @@ export type AuthMailSender = (url: string, mail: AuthMail) => Promise<void>;
  * the NEW address and switches the email only when that link is followed,
  * which proves the person controls the address they asked for.
  */
-export function emailVerificationOptions(send: AuthMailSender): {
+export function emailVerificationOptions(
+  send: AuthMailSender,
+  /**
+   * The language to write in for this user — `preferredLocale` in production.
+   * Defaults to English so a caller with no preference store (a test) needs
+   * none.
+   */
+  localeFor: (userId: string | undefined) => Promise<Locale> = async () => DEFAULT_LOCALE,
+): {
   sendOnSignUp: boolean;
   sendOnSignIn: boolean;
   autoSignInAfterVerification: boolean;
-  sendVerificationEmail: (data: { user: { email: string }; url: string }) => Promise<void>;
+  sendVerificationEmail: (data: {
+    user: { id?: string; email: string };
+    url: string;
+  }) => Promise<void>;
 } {
   return {
     sendOnSignUp: true,
@@ -108,12 +121,8 @@ export function emailVerificationOptions(send: AuthMailSender): {
     sendOnSignIn: false,
     autoSignInAfterVerification: false,
     async sendVerificationEmail({ user, url }) {
-      await send(url, {
-        to: user.email,
-        subject: "Verify your email address",
-        text: `Open this link to verify your email address: ${url}`,
-        html: `<p><a href="${url}">Verify your email address</a></p>`,
-      });
+      const locale = await localeFor(user.id);
+      await send(url, { to: user.email, ...verificationEmail(locale, url) });
     },
   };
 }

@@ -16,6 +16,8 @@
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { DEFAULT_LOCALE, type Locale } from "@starter/shared";
+import { newsletterConfirmationEmail } from "../transactional-email.js";
 import {
   isConfirmedOnList,
   confirmSubscription as listmonkConfirm,
@@ -115,52 +117,34 @@ export type SendConfirmationEmailParams = {
   /** Fully-qualified confirmation URL the recipient should click. */
   confirmUrl: string;
   /** Display name of the site/newsletter — shown in the email body
-   *  and the call-to-action. Falls back to "this newsletter". */
+   *  and the call-to-action. Falls back to "this newsletter", in the
+   *  email's language. */
   siteName?: string;
+  /** The language of the page the address was entered on. A subscriber
+   *  has no account and so no stored preference; English when absent. */
+  locale?: Locale;
 };
 
-/** Render + send the double-opt-in confirmation email. Customise the
- *  HTML by editing `renderConfirmationHtml` below — the template is
- *  intentionally plain so projects can adapt it without dragging in
- *  react-email or a templating dependency. */
+/** Render + send the double-opt-in confirmation email. The words live in
+ *  the `email` catalog and the layout in
+ *  `newsletterConfirmationEmail` (services/transactional-email.ts) — the
+ *  template is intentionally plain so projects can adapt it without
+ *  dragging in react-email or a templating dependency. */
 export async function sendConfirmationEmail(params: SendConfirmationEmailParams): Promise<void> {
   // The recipient must exist as a Listmonk subscriber before /api/tx
   // accepts the send. Create them as `unconfirmed` so they show up in
   // the admin UI even if they never click the confirmation link.
   await upsertSubscriber(params.to, "unconfirmed");
-  const siteName = params.siteName ?? "this newsletter";
+  const rendered = newsletterConfirmationEmail(params.locale ?? DEFAULT_LOCALE, {
+    confirmUrl: params.confirmUrl,
+    ...(params.siteName ? { siteName: params.siteName } : {}),
+    days: Math.round(CONFIRM_TOKEN_TTL_MS / (24 * 60 * 60 * 1000)),
+  });
   await sendTransactional({
     to: params.to,
-    subject: `Confirm your subscription · ${siteName}`,
-    html: renderConfirmationHtml({ confirmUrl: params.confirmUrl, siteName }),
+    subject: rendered.subject,
+    html: rendered.html,
   });
-}
-
-function renderConfirmationHtml(args: { confirmUrl: string; siteName: string }): string {
-  // Plain HTML on purpose — no react-email, no templating engine.
-  // Adjust styling / branding by editing this function.
-  const esc = (s: string): string =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  return `<!doctype html>
-<html>
-  <head><meta charset="utf-8"></head>
-  <body style="font-family:system-ui,sans-serif;line-height:1.55;color:#1a1a1a;max-width:560px;margin:0 auto;padding:32px 24px;">
-    <h1 style="font-size:22px;margin:0 0 16px 0;font-weight:600;">Confirm your subscription</h1>
-    <p style="margin:0 0 16px 0;">You're one click away from <strong>${esc(args.siteName)}</strong>.</p>
-    <p style="margin:0 0 24px 0;">Tap the button below to verify this address and finish signing up. The link is good for 21 days.</p>
-    <p style="margin:24px 0;">
-      <a href="${esc(args.confirmUrl)}" style="display:inline-block;padding:12px 22px;background:#111;color:#fff;text-decoration:none;border-radius:6px;font-weight:500;">
-        Confirm my subscription
-      </a>
-    </p>
-    <p style="margin:24px 0 8px 0;font-size:13px;color:#555;">Or paste this URL into your browser:</p>
-    <p style="margin:0 0 24px 0;font-size:13px;color:#555;word-break:break-all;">${esc(args.confirmUrl)}</p>
-    <hr style="border:0;border-top:1px solid #e5e5e5;margin:32px 0;">
-    <p style="margin:0;font-size:12px;color:#777;">
-      If you didn't sign up, ignore this email — no list membership is created until you click. The link expires in 21 days.
-    </p>
-  </body>
-</html>`;
 }
 
 /** Thin re-export so route code can stay close to its previous shape. */

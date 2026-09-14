@@ -17,7 +17,7 @@ import { Client } from "../../models/Client.js";
 import { Favorite } from "../../models/Favorite.js";
 import { Invoice } from "../../models/Invoice.js";
 import { Project } from "../../models/Project.js";
-import { WorkspaceSettingsModel } from "../../models/Settings.js";
+import { UserPreferencesModel, WorkspaceSettingsModel } from "../../models/Settings.js";
 import { Tag } from "../../models/Tag.js";
 import { Task } from "../../models/Task.js";
 import { TimeEntry } from "../../models/TimeEntry.js";
@@ -125,6 +125,7 @@ export type Store = {
   invoices: MemoryCollection;
   settings: MemoryCollection;
   businessProfiles: MemoryCollection;
+  userPreferences: MemoryCollection;
 };
 
 /** A fresh copy of the whole workspace. */
@@ -181,6 +182,8 @@ export const freshStore = (): Store => ({
   ]),
   // Read by invoice creation and the workspace export (the issuer header).
   businessProfiles: memoryCollection(),
+  // Read by invoice creation for the issuer's language. Nobody has chosen one.
+  userPreferences: memoryCollection(),
 });
 
 /**
@@ -199,6 +202,7 @@ export const installStore = (store: Store): (() => void) => {
     stubModel(Invoice, store.invoices),
     stubModel(WorkspaceSettingsModel, store.settings),
     stubModel(BusinessProfileModel, store.businessProfiles),
+    stubModel(UserPreferencesModel, store.userPreferences),
   ];
   return () => {
     for (const restore of restores) restore();

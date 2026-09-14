@@ -20,7 +20,7 @@ export const invoice: Translation<typeof source> = {
   periodRange: "{from} bis {to}",
   groupedBy: "Gruppiert nach",
   groupByValue: "{groupBy, select, project {Projekt} task {Tätigkeit} other {{groupBy}}}",
-  amountsIn: "Beträge in {currency} · erstellt {generatedAt}",
+  amountsIn: "Beträge in {currency} · erstellt am {generatedAt}",
   columns: {
     description: "Beschreibung",
     hours: "Stunden",
@@ -29,8 +29,9 @@ export const invoice: Translation<typeof source> = {
   },
   noLines: "Keine abrechenbare Zeit in diesem Zeitraum.",
   subtotal: "Zwischensumme ({currency})",
-  tax: "USt. ({rate, number} %)",
-  total: "Summe ({currency})",
+  // No-break space between the number and its unit, per the glossary.
+  tax: "USt. ({rate} %)",
+  total: "Gesamtbetrag ({currency})",
   notes: "Anmerkungen",
   paymentDetails: "Zahlungsinformationen",
   dueBy: "Zahlbar bis zum {date}.",

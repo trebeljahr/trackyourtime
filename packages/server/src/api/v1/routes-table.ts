@@ -25,6 +25,7 @@ import {
   entryListSchema,
   entrySourceSchema,
   idleBehaviorSchema,
+  localeSchema,
   projectListSchema,
   startTimerSchema,
   stopTimerSchema,
@@ -167,6 +168,11 @@ const clientShape = {
   archived: z.boolean(),
   /** `null` when the client has no billing details. */
   billing: clientBillingResponseSchema.nullable(),
+  /**
+   * The language this client's invoices are written in; `null` = the
+   * issuer's. Readable because it is writable on the same resource.
+   */
+  invoiceLocale: localeSchema.nullable().optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 };

@@ -240,7 +240,7 @@ describe("invoice PDF parties", () => {
       "Rechnungsempfänger",
       "Steuernummer: DE555",
       "Zahlungsinformationen",
-      "Zahlbar innerhalb von 14 Tagen, bis zum 2025-03-15.",
+      "Zahlbar innerhalb von 14 Tagen, bis zum 15.03.2025.",
     ]) {
       assert.ok(text.includes(expected), `German PDF is missing "${expected}"`);
     }

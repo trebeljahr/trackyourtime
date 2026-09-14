@@ -78,7 +78,8 @@ import {
   planFavoriteRestore,
   settingsRestoreFields,
 } from "../../services/import/restore.js";
-import { csvFilename, toCsv, type CsvColumn } from "../../services/csv.js";
+import { csvFilename } from "../../services/csv.js";
+import { workspaceEntriesCsv } from "../../services/workspace-csv.js";
 import {
   exportKeepsMoney,
   redactExportMoney,
@@ -702,29 +703,6 @@ const summarize = (
     if (last === null || row.start > last) last = row.start;
   }
   return { totalSec, firstStart: first, lastStart: last };
-};
-
-/** The CSV this app writes — and the one its own importer reads back. */
-const EXPORT_COLUMNS: CsvColumn[] = [
-  { key: "start", header: "Start" },
-  { key: "end", header: "End" },
-  { key: "duration", header: "Duration" },
-  { key: "description", header: "Description" },
-  { key: "project", header: "Project" },
-  { key: "client", header: "Client" },
-  { key: "task", header: "Task" },
-  { key: "tags", header: "Tags" },
-  { key: "billable", header: "Billable" },
-  { key: "rate", header: "Rate" },
-  { key: "currency", header: "Currency" },
-];
-
-const hms = (seconds: number): string => {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const rest = seconds % 60;
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return `${pad(hours)}:${pad(minutes)}:${pad(rest)}`;
 };
 
 /** `from`/`to` as one Mongo range, or `null` for an unbounded export. */
@@ -1493,31 +1471,15 @@ export const dataRouter = router({
           role: ctx.membership.role,
         });
 
-        const rows = data.entries.map((entry) => ({
-          start: entry.start,
-          end: entry.end ?? "",
-          duration: hms(entry.durationSec),
-          description: entry.description,
-          project: entry.projectName ?? "",
-          client: entry.clientName ?? "",
-          task: entry.taskName ?? "",
-          tags: entry.tagNames.join(", "),
-          billable: entry.billable ? "Yes" : "No",
-          // Blank for a rate-less entry and for a redacted one alike — the
-          // Rate COLUMN stays either way, because the header set is the shape
-          // this app's own importer reads back, and dropping a column would
-          // change the file's shape depending on who exported it.
-          rate: entry.hourlyRate ?? "",
-          currency: entry.currency,
-        }));
-
         return {
           filename: csvFilename(
             "entries",
             input.from ?? "all",
             input.to ?? "all",
           ),
-          csv: toCsv(rows, EXPORT_COLUMNS),
+          // English headers and values whatever the exporter's language: the
+          // file is the importer's contract (services/workspace-csv.ts).
+          csv: workspaceEntriesCsv(data.entries),
           mimeType: "text/csv",
         };
       },

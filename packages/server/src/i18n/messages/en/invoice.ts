@@ -5,6 +5,10 @@
  * syntax as in the web client. Server text is rendered in a locale decided by
  * the DOCUMENT (an invoice's snapshotted `locale`, an email recipient's stored
  * preference), never by the request that happens to trigger it.
+ *
+ * Numbers, dates and percentages arrive already formatted (strings): a PDF
+ * font has no glyph for some of the spaces `Intl` emits, so the renderer owns
+ * formatting (services/pdf-format.ts) and the messages only place the result.
  */
 export const invoice = {
   title: "Invoice {number}",
@@ -32,7 +36,8 @@ export const invoice = {
   },
   noLines: "No billable time in this range.",
   subtotal: "Subtotal ({currency})",
-  tax: "Tax ({rate, number}%)",
+  /** `rate` is a formatted number without its percent sign. */
+  tax: "Tax ({rate}%)",
   total: "Total ({currency})",
   notes: "Notes",
   paymentDetails: "Payment details",

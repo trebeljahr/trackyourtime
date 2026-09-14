@@ -47,14 +47,26 @@ import {
   sumAmounts,
   type DetailedEntry,
   type DetailedReportResult,
+  type Locale,
+  type ReportGroupBy,
   type SummaryReportResult,
   type WeeklyReportResult,
 } from "@starter/shared";
+import { serverT, type ServerTranslator } from "../i18n/index.js";
+import { pdfFormat, type PdfFormat } from "./pdf-format.js";
 
 /** Page furniture shared by every report PDF. */
 export type PdfReportMeta = {
-  /** Headline, e.g. "Summary report by project". */
+  /**
+   * Headline, e.g. "Summary report by project". Already in `locale` — build it
+   * with `reportPdfTitle`.
+   */
   title: string;
+  /**
+   * The language of every label and figure. Absent = English, byte-identical
+   * to the export before it was localised.
+   */
+  locale?: Locale;
   /** ISO date or datetime — start of the reported range. */
   from: string;
   /** ISO date or datetime — end of the reported range. */
@@ -126,9 +138,15 @@ const CONTROL_CHARS =
   // eslint-disable-next-line no-control-regex
   /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u2028\u2029]/g;
 
-/** One cell is one line: control chars out, runs of whitespace collapsed. */
+/**
+ * One cell is one line: control chars out, runs of whitespace collapsed.
+ *
+ * Except U+00A0 NO-BREAK SPACE, which is kept: German figures put one between
+ * a number and its unit ("19 %"), WinAnsi can draw it, and collapsing it into
+ * an ordinary space would split "19" from "%" in any run that wraps.
+ */
 export function sanitizePdfText(value: string): string {
-  return value.replace(CONTROL_CHARS, " ").replace(/\s+/g, " ").trim();
+  return value.replace(CONTROL_CHARS, " ").replace(/[^\S\u00a0]+/g, " ").trim();
 }
 
 const ELLIPSIS = "...";
@@ -218,6 +236,8 @@ function sizeColumns(columns: PdfColumn[], available: number): SizedColumn[] {
 type Sheet = {
   doc: PDFKit.PDFDocument;
   meta: PdfReportMeta;
+  t: ServerTranslator<"report">;
+  format: PdfFormat;
   layout: PageLayout;
   left: number;
   width: number;
@@ -235,9 +255,12 @@ function createSheet(
   meta: PdfReportMeta,
   layout: PageLayout,
 ): Sheet {
+  const locale: Locale = meta.locale ?? "en";
   return {
     doc,
     meta,
+    t: serverT(locale, "report"),
+    format: pdfFormat(locale),
     layout,
     left: MARGINS.left,
     width: doc.page.width - MARGINS.left - MARGINS.right,
@@ -249,19 +272,19 @@ function createSheet(
 }
 
 function drawFooter(sheet: Sheet): void {
-  const { doc } = sheet;
+  const { doc, t } = sheet;
   doc
     .font(FONT)
     .fontSize(META_SIZE)
     .fillColor(MUTED)
     .text(
-      `Track Your Time · ${sheet.meta.timeZone}`,
+      t("footer.product", { timeZone: sheet.meta.timeZone }),
       sheet.left,
       doc.page.height - MARGINS.bottom - 12,
       { width: sheet.width, align: "left", lineBreak: false },
     )
     .text(
-      `Page ${sheet.page}`,
+      t("footer.page", { page: String(sheet.page) }),
       sheet.left,
       doc.page.height - MARGINS.bottom - 12,
       { width: sheet.width, align: "right", lineBreak: false },
@@ -271,7 +294,7 @@ function drawFooter(sheet: Sheet): void {
 
 /** Full masthead — first page only. */
 function drawTitleBlock(sheet: Sheet): void {
-  const { doc, meta } = sheet;
+  const { doc, meta, t, format } = sheet;
 
   doc
     .font(FONT_BOLD)
@@ -290,7 +313,11 @@ function drawTitleBlock(sheet: Sheet): void {
     .fontSize(SUBTITLE_SIZE)
     .fillColor(INK)
     .text(
-      `${meta.from} to ${meta.to} · time zone ${meta.timeZone}`,
+      t("range", {
+        from: format.date(meta.from),
+        to: format.date(meta.to),
+        timeZone: meta.timeZone,
+      }),
       sheet.left,
       sheet.y,
       { width: sheet.width, lineBreak: false },
@@ -302,8 +329,11 @@ function drawTitleBlock(sheet: Sheet): void {
     .fillColor(MUTED)
     .text(
       meta.moneyVisible === false
-        ? `generated ${meta.generatedAt}`
-        : `Amounts in ${sanitizePdfText(meta.currency)} · generated ${meta.generatedAt}`,
+        ? t("generated", { generatedAt: format.timestamp(meta.generatedAt) })
+        : t("amountsIn", {
+            currency: sanitizePdfText(meta.currency),
+            generatedAt: format.timestamp(meta.generatedAt),
+          }),
       sheet.left,
       sheet.y,
       { width: sheet.width, lineBreak: false },
@@ -314,7 +344,7 @@ function drawTitleBlock(sheet: Sheet): void {
 
 /** One-line masthead — every page after the first. */
 function drawContinuationHeader(sheet: Sheet): void {
-  const { doc, meta } = sheet;
+  const { doc, meta, t, format } = sheet;
   doc
     .font(FONT_BOLD)
     .fontSize(SUBTITLE_SIZE)
@@ -328,7 +358,11 @@ function drawContinuationHeader(sheet: Sheet): void {
     .fontSize(META_SIZE)
     .fillColor(MUTED)
     .text(
-      `${meta.from} to ${meta.to} · ${meta.timeZone} · continued`,
+      t("continued", {
+        from: format.date(meta.from),
+        to: format.date(meta.to),
+        timeZone: meta.timeZone,
+      }),
       sheet.left,
       sheet.y + 1,
       { width: sheet.width, align: "right", lineBreak: false },
@@ -352,7 +386,7 @@ function drawStats(
       .font(FONT)
       .fontSize(META_SIZE)
       .fillColor(MUTED)
-      .text(stat.label.toUpperCase(), x, sheet.y, {
+      .text(stat.label.toLocaleUpperCase(sheet.meta.locale ?? "en"), x, sheet.y, {
         width: columnWidth,
         lineBreak: false,
       });
@@ -510,10 +544,68 @@ async function bufferDocument(
 
 // ── renderers ────────────────────────────────────────────────────────
 
-/** Render a grouped summary report. */
+/**
+ * A report's headline in `locale` — the one piece of `PdfReportMeta` the
+ * caller supplies as text, so it comes from the same catalog as the page.
+ */
+export function reportPdfTitle(
+  locale: Locale | undefined,
+  report: { kind: "summary"; groupBy: ReportGroupBy } | { kind: "detailed" | "weekly" },
+): string {
+  const t = serverT(locale ?? "en", "report");
+  if (report.kind === "summary") return t("title.summary", { groupBy: report.groupBy });
+  return report.kind === "detailed" ? t("title.detailed") : t("title.weekly");
+}
+
+/**
+ * A summary group's row label in the export's language.
+ *
+ * The report query labels groups in English, because that label is also API
+ * data read by integrators. Only the rows whose label the query INVENTED are
+ * relabelled — the unassigned bucket and the calendar groupings; a project
+ * name is the user's own text and is never touched. English keeps the query's
+ * label verbatim.
+ */
+function summaryGroupLabel(
+  sheet: Sheet,
+  groupBy: ReportGroupBy | undefined,
+  group: { key: string; label: string },
+): string {
+  if (sheet.meta.locale === undefined || sheet.meta.locale === "en" || !groupBy) {
+    return group.label;
+  }
+  const { t, format } = sheet;
+  switch (groupBy) {
+    case "project":
+    case "client":
+    case "task":
+    case "tag":
+      return group.key === "none" ? t(`unassigned.${groupBy}`) : group.label;
+    case "member":
+      // A member's name is their own text. Only the two fallbacks the query
+      // writes (FORMER_MEMBER_LABEL / UNNAMED_MEMBER_LABEL in
+      // trpc/routers/reports.ts) are the query's words, and are relabelled.
+      if (group.label === "Former member") return t("member.former");
+      if (group.label === "Unnamed member") return t("member.unnamed");
+      return group.label;
+    case "day":
+      return format.date(group.key);
+    case "week": {
+      const ms = Date.parse(`${group.key}T00:00:00Z`);
+      if (Number.isNaN(ms)) return group.label;
+      const end = new Date(ms + 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      return t("weekRange", { from: format.date(group.key), to: format.date(end) });
+    }
+    case "month":
+      return format.month(group.key);
+  }
+}
+
+/** Render a grouped summary report. `groupBy` lets group rows be relabelled. */
 export async function renderSummaryPdf(
   result: SummaryReportResult,
   meta: PdfReportMeta,
+  groupBy?: ReportGroupBy,
 ): Promise<Buffer> {
   const currency = sanitizePdfText(result.currency || meta.currency);
   // Money is decided by the RESULT, which the report builder already
@@ -523,28 +615,29 @@ export async function renderSummaryPdf(
   const money = result.moneyVisible !== false && result.totalAmount !== null;
 
   return bufferDocument(meta, "portrait", (sheet) => {
+    const { t, format } = sheet;
     drawStats(sheet, [
-      { label: "Total tracked", value: formatDuration(result.totalSec, "hms") },
-      { label: "Billable", value: formatDuration(result.billableSec, "hms") },
+      { label: t("stats.totalTracked"), value: formatDuration(result.totalSec, "hms") },
+      { label: t("stats.billable"), value: formatDuration(result.billableSec, "hms") },
       ...(money
         ? [
             {
-              label: `Amount (${currency})`,
-              value: formatPdfAmount(result.totalAmount ?? 0),
+              label: t("stats.amount", { currency }),
+              value: format.amount(result.totalAmount ?? 0),
             },
           ]
         : []),
     ]);
 
     const table = createTable(sheet, [
-      { key: "label", header: "Group", width: null },
-      { key: "duration", header: "Duration", width: 78, align: "right" },
-      { key: "billable", header: "Billable", width: 78, align: "right" },
+      { key: "label", header: t("columns.group"), width: null },
+      { key: "duration", header: t("columns.duration"), width: 78, align: "right" },
+      { key: "billable", header: t("columns.billable"), width: 78, align: "right" },
       ...(money
         ? [
             {
               key: "amount",
-              header: `Amount (${currency})`,
+              header: t("columns.amount", { currency }),
               width: 90,
               align: "right" as const,
             },
@@ -553,31 +646,35 @@ export async function renderSummaryPdf(
     ]);
 
     if (result.groups.length === 0) {
-      table.empty("No time tracked in this range.");
+      table.empty(t("empty.range"));
     } else {
       for (const group of result.groups) {
         table.row({
-          label: group.label,
+          label: summaryGroupLabel(sheet, groupBy, group),
           duration: formatDuration(group.seconds, "hms"),
           billable: formatDuration(group.billableSec, "hms"),
-          ...(money ? { amount: formatPdfAmount(group.amount ?? 0) } : {}),
+          ...(money ? { amount: format.amount(group.amount ?? 0) } : {}),
         });
       }
     }
 
     table.total({
-      label: "Total",
+      label: t("total"),
       duration: formatDuration(result.totalSec, "hms"),
       billable: formatDuration(result.billableSec, "hms"),
-      ...(money ? { amount: formatPdfAmount(result.totalAmount ?? 0) } : {}),
+      ...(money ? { amount: format.amount(result.totalAmount ?? 0) } : {}),
     });
   });
 }
 
 /** "09:00 - 10:30", or "09:00 - running" for an entry still on the clock. */
-function entryClockRange(entry: DetailedEntry, timeZone: string): string {
+function entryClockRange(
+  t: ServerTranslator<"report">,
+  entry: DetailedEntry,
+  timeZone: string,
+): string {
   const start = formatClockInZone(entry.start, timeZone);
-  if (entry.end === null) return `${start} - running`;
+  if (entry.end === null) return t("running", { start });
   return `${start} - ${formatClockInZone(entry.end, timeZone)}`;
 }
 
@@ -610,28 +707,29 @@ export async function renderDetailedPdf(
     : 0;
 
   return bufferDocument(meta, "portrait", (sheet) => {
+    const { t, format } = sheet;
     drawStats(sheet, [
-      { label: "Entries", value: String(result.entries.length) },
-      { label: "Total tracked", value: formatDuration(totalSec, "hms") },
+      { label: t("stats.entries"), value: format.count(result.entries.length) },
+      { label: t("stats.totalTracked"), value: formatDuration(totalSec, "hms") },
       ...(money
-        ? [{ label: `Amount (${currency})`, value: formatPdfAmount(totalAmount) }]
+        ? [{ label: t("stats.amount", { currency }), value: format.amount(totalAmount) }]
         : []),
     ]);
 
     const table = createTable(sheet, [
-      { key: "date", header: "Date", width: 54 },
-      { key: "time", header: "Time", width: 72 },
-      { key: "duration", header: "Duration", width: 46, align: "right" },
-      { key: "description", header: "Description", width: null },
-      { key: "project", header: "Project / Task", width: 100 },
+      { key: "date", header: t("columns.date"), width: 54 },
+      { key: "time", header: t("columns.time"), width: 72 },
+      { key: "duration", header: t("columns.duration"), width: 46, align: "right" },
+      { key: "description", header: t("columns.description"), width: null },
+      { key: "project", header: t("columns.projectTask"), width: 100 },
       // A one-letter header is legible only because the column is a tick box:
       // "Y" or nothing. Anything wider would come out of the description.
-      { key: "billable", header: "B", width: 16 },
+      { key: "billable", header: t("columns.billableShort"), width: 16 },
       ...(money
         ? [
             {
               key: "amount",
-              header: `Amount (${currency})`,
+              header: t("columns.amount", { currency }),
               width: 74,
               align: "right" as const,
             },
@@ -640,42 +738,29 @@ export async function renderDetailedPdf(
     ]);
 
     if (result.entries.length === 0) {
-      table.empty("No time tracked in this range.");
+      table.empty(t("empty.range"));
     } else {
       for (const entry of result.entries) {
-        const project = entry.projectName ?? "No project";
+        const project = entry.projectName ?? t("noProject");
         table.row({
-          date: dayKeyInZone(Date.parse(entry.start), timeZone),
-          time: entryClockRange(entry, timeZone),
+          date: format.date(dayKeyInZone(Date.parse(entry.start), timeZone)),
+          time: entryClockRange(t, entry, timeZone),
           duration: formatDuration(entryDurationSec(entry, nowMs), "hms"),
-          description: entry.description || "(no description)",
+          description: entry.description || t("noDescription"),
           project:
             entry.taskName === null ? project : `${project} / ${entry.taskName}`,
-          billable: entry.billable ? "Y" : "",
-          ...(money ? { amount: formatPdfAmount(entry.amount ?? 0) } : {}),
+          billable: entry.billable ? t("billableMark") : "",
+          ...(money ? { amount: format.amount(entry.amount ?? 0) } : {}),
         });
       }
     }
 
     table.total({
-      date: "Total",
+      date: t("total"),
       duration: formatDuration(totalSec, "hms"),
-      ...(money ? { amount: formatPdfAmount(totalAmount) } : {}),
+      ...(money ? { amount: format.amount(totalAmount) } : {}),
     });
   });
-}
-
-const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
-
-/** "Mon 09-01" — the weekday makes a bare date column readable at a glance. */
-function weeklyDayHeader(dayKey: string): string {
-  // The key is a plain "YYYY-MM-DD"; reading it as UTC keeps the weekday
-  // independent of the server's own zone, which is the whole point of the
-  // day-key representation.
-  const ms = Date.parse(`${dayKey}T00:00:00Z`);
-  if (Number.isNaN(ms)) return dayKey;
-  const weekday = WEEKDAY_NAMES[new Date(ms).getUTCDay()] ?? "";
-  return `${weekday} ${dayKey.slice(5)}`;
 }
 
 /**
@@ -692,28 +777,33 @@ export async function renderWeeklyPdf(
   const dayCount = result.days.length;
 
   return bufferDocument(meta, "landscape", (sheet) => {
+    const { t, format } = sheet;
+    const firstDay = result.days[0];
+    const lastDay = result.days[dayCount - 1];
     drawStats(sheet, [
-      { label: "Total tracked", value: formatDuration(result.totalSec, "hms") },
-      { label: "Rows", value: String(result.rows.length) },
+      { label: t("stats.totalTracked"), value: formatDuration(result.totalSec, "hms") },
+      { label: t("stats.rows"), value: format.count(result.rows.length) },
       {
-        label: "Week",
+        label: t("stats.week"),
         value:
-          dayCount === 0
+          firstDay === undefined || lastDay === undefined
             ? "—"
-            : `${result.days[0]} to ${result.days[dayCount - 1]}`,
+            : t("weekRange", { from: format.date(firstDay), to: format.date(lastDay) }),
       },
     ]);
 
     const dayWidth = dayCount === 0 ? 0 : 72;
     const table = createTable(sheet, [
-      { key: "label", header: "Project / Task", width: null },
+      { key: "label", header: t("columns.projectTask"), width: null },
       ...result.days.map((day, index) => ({
         key: `day:${index}`,
-        header: weeklyDayHeader(day),
+        // "Mon 09-01" — the weekday makes a bare date column readable at a
+        // glance. Read in UTC, so the weekday never depends on the host zone.
+        header: format.weekdayDate(day),
         width: dayWidth,
         align: "right" as const,
       })),
-      { key: "total", header: "Total", width: 72, align: "right" as const },
+      { key: "total", header: t("columns.total"), width: 72, align: "right" as const },
     ]);
 
     const dayCells = (seconds: number[]): PdfCells => {
@@ -728,7 +818,7 @@ export async function renderWeeklyPdf(
     };
 
     if (result.rows.length === 0) {
-      table.empty("No time tracked in this week.");
+      table.empty(t("empty.week"));
     } else {
       for (const row of result.rows) {
         table.row({
@@ -740,7 +830,7 @@ export async function renderWeeklyPdf(
     }
 
     table.total({
-      label: "Total",
+      label: t("total"),
       ...dayCells(result.dayTotals),
       total: formatDuration(result.totalSec, "hms"),
     });
