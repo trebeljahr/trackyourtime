@@ -460,7 +460,8 @@ commented out:
 | `TRACKTIME_VERSION` | The image tag to pull. Bump it to upgrade once releases exist. See [Upgrading](#upgrading). |
 | `APP_URL` | Only when the origin is not `https://${APP_DOMAIN}`: a plain-HTTP local trial, or a non-standard port. |
 | `SMTP_*`, `EMAIL_FROM` | Only for outgoing mail. See [Email](#email). |
-| `TRUSTED_ORIGINS` | Only for the browser extension or a native shell. See [The other clients](#the-other-clients). |
+| `TRUST_STORE_APPS` | Only to refuse the phone apps and the store extension. It is `true` by default. See [The other clients](#the-other-clients). |
+| `TRUSTED_ORIGINS` | Only for an extension you built yourself, or a web app that copies data in directly. See [The other clients](#the-other-clients). |
 | `MONGODB_URI`, `REDIS_URL` | Only to use a managed database instead of the containers. |
 
 The app must run at the **root** of the domain. Hosting it under
@@ -1110,38 +1111,76 @@ unset. Prefer plain SMTP, see [Email](#email).
 
 ## The other clients
 
-Both are optional. The web app is complete on its own.
+All of them are optional. The web app is complete on its own. None of them
+needs a rebuild or a config change to use your server: the store builds of the
+browser extension and the phone apps let the person choose a server, and your
+server accepts them by default.
+
+`TRUST_STORE_APPS` is `true` in `docker-compose.selfhost.yml`. It adds these
+origins to the trusted list:
+
+| Client | Origin |
+|---|---|
+| iOS app | `capacitor://localhost` |
+| Android app | `https://localhost` |
+| Chrome extension from the Web Store | `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` |
+| Raycast extension | None. Raycast sends no `Origin`. |
+
+To accept sign-ins from your own web app only, set `TRUST_STORE_APPS=false` in
+`.env`.
+
+**What every client checks before it saves your address.** It calls
+`https://track.example.com/api/health` and shows the release the server
+reports. It refuses, with a plain message:
+
+- an address that does not answer,
+- an answer that is not from Track Your Time,
+- a server that cannot reach its database,
+- `http://` on any host except `localhost`.
+
+The phone apps also refuse a server that does not trust them yet, and name the
+setting to change. Under a single domain, enter the bare app origin,
+`https://track.example.com`, not an `api.` subdomain.
 
 ### Browser extension
 
-The extension compiles its API URL in at build time, so you build your own. In
-`packages/extension/manifest.config.ts`, edit `BUILD_TARGETS.production` to
-point at your origin. Under a single domain that is the bare app origin, not an
-`api.` subdomain. Change both fields:
+1. Open the popup and choose **Change server** below the sign-in form.
+2. Choose **My own server**, enter `https://track.example.com`, and confirm.
+3. Chrome asks to let the extension read and change data on
+   `track.example.com`. Allow it. The grant covers that one host. The extension
+   asks for no other host, and has no access to any site until you choose a
+   server.
+4. Sign in.
 
-```ts
-apiUrl: "https://track.example.com",
-hostPermissions: ["https://track.example.com/*"],
-```
+**Switching servers signs the extension out** of the old server. If its offline
+queue holds unsent changes, the popup shows how many and discards them only
+after you confirm. The extension's queue belongs to its session.
 
-Then build it on a machine with Node and pnpm, and load `dist-prod/` as an
-unpacked extension:
+**If you remove the extension's site access** at `chrome://extensions`, the
+popup says so and offers **Allow access**.
 
-```bash
-pnpm run build:extension:prod
-```
+**An extension you built yourself.** `pnpm run build:extension:prod` pins the
+store key by default, so an unpacked `dist-prod/` has the store id and needs no
+entry. If you build with your own `EXTENSION_KEY`, print the id with
+`pnpm run extension:id prod`, add `chrome-extension://<id>` to
+`TRUSTED_ORIGINS`, and run `docker compose -f docker-compose.selfhost.yml up -d server`.
 
-An unpacked extension's id, and so its `chrome-extension://<id>` origin, comes
-from the path the browser loaded it from. Print yours:
+### iOS and Android apps
 
-```bash
-pnpm run extension:id prod
-```
+1. On the sign-in screen, choose **Change** next to **Server**.
+2. Choose **My own server**, enter `https://track.example.com`, and choose
+   **Use this server**.
+3. Sign in, or create an account on your server.
 
-**Add that origin to `TRUSTED_ORIGINS`** in your `.env`, then run
-`docker compose -f docker-compose.selfhost.yml up -d server`. Without it, the
-server refuses sign-in from the extension with `403 INVALID_ORIGIN` before it
-checks the password. Separate several origins with commas.
+The app stores the choice on the device. Switching signs the app out of the old
+server and clears what it cached from it.
+
+**Offline changes stay on the device, labelled with their server.** The app
+sends them only to the server they were made for, never to a different one.
+Settings → Devices lists them, with a way to discard them.
+
+A phone needs `https://` with a valid certificate. The app accepts plain
+`http://` only for `localhost`, which on a phone is the phone itself.
 
 ### Raycast extension
 
@@ -1158,6 +1197,69 @@ Set both preference fields in Raycast Settings → Extensions → Track Your Tim
 | **Web App URL** | `https://track.example.com`, the same value |
 
 Left empty, they fall back to the maintainer's hosts, so fill in both.
+
+A session belongs to the server that issued it. After you change the API URL,
+Raycast asks you to pair again. Changes it queued offline wait for the server
+they were queued against.
+
+---
+
+## Moving between hosted and self-hosted
+
+Settings → Data → **Move to another server** copies a workspace from the server
+you are signed in to onto another server. It works in both directions: from
+Track Your Time cloud to your own server, and back.
+
+**Steps**
+
+1. Choose the target: **Track Your Time cloud**, or **My own server** and its
+   address. Choose **Check server**.
+2. Sign in to your account on the target, or create one there.
+3. Choose **Copy**. The dialog shows the counts that arrived, and whether every
+   exported entry is on the target.
+4. On a phone, choose **Switch this device to** the target. In a browser, open
+   the target's web app and sign in there.
+
+**What moves:** entries, clients, projects, tasks, tags, workspace settings
+(currency, rates, week start) and your pinned quick starts.
+
+**What does not move:**
+
+- a running timer. Stop it first.
+- issued invoices. The export carries them as a record, and the import does not
+  re-create them.
+- clients, projects, tasks and tags that no entry uses.
+
+**What to know**
+
+- **It is a copy.** Nothing on the old server changes. Delete the old account
+  there (Settings → Account) after you check the data on the new server.
+- **You can run it again.** The target recognises entries it already has and
+  skips them, so a move that stopped part-way finishes when you start it again.
+- **Settings are restored only into an empty workspace.** Into a workspace that
+  has entries, the move adds the entries and leaves its settings alone.
+- **Large workspaces move in parts.** One import accepts 25,000 rows, so the
+  move splits the history into date ranges and imports them in order.
+
+### Direct copy, or a file
+
+The copy runs directly from your device when the target accepts requests from
+where the app runs. The phone apps qualify against a server with
+`TRUST_STORE_APPS=true`. A web app on one domain usually cannot reach a server
+on another, because the browser blocks it. The dialog then moves the data
+through a file:
+
+1. Choose **Download the move file**. A large workspace gives several files.
+2. Open the target's web app, sign in, and go to Settings → Data →
+   **Import your history**.
+3. Choose the file. The preview shows what it will create. **Restore workspace
+   settings** and **Restore pinned quick starts** are on when the workspace is
+   empty. Import, then repeat for each file.
+
+To copy from a web app directly, add its origin to the target's
+`TRUSTED_ORIGINS` for the move, for example
+`TRUSTED_ORIGINS=https://trackyourtime.dev` on your server. Remove it
+afterwards.
 
 ---
 
@@ -1224,8 +1326,10 @@ in `TRUSTED_ORIGINS`. So:
   `docker compose -f docker-compose.selfhost.yml up -d server`.
   `selfhost-check.sh` reports this mismatch as a `webUrl` failure.
 
-- **From the browser extension:** add its `chrome-extension://<id>` origin to
-  `TRUSTED_ORIGINS`. See [The other clients](#the-other-clients).
+- **From the phone apps or the store extension:** check that `TRUST_STORE_APPS`
+  is not `false`. An extension you built yourself needs its
+  `chrome-extension://<id>` origin in `TRUSTED_ORIGINS`. See
+  [The other clients](#the-other-clients).
 
 **`curl` does not reproduce this.** curl sends no `Origin` and no `Sec-Fetch-*`
 headers, so the origin check does not run. The request that fails in the
