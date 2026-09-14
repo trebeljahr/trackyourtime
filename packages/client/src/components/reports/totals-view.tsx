@@ -17,10 +17,12 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_GROUP_BY,
-  GROUP_BY_OPTIONS,
   PARAM_FOR_GROUP_BY,
-  parseGroupBy,
+  effectiveGroupBy,
+  groupByOptionsFor,
 } from "@/components/reports/group-by";
+import { MoneyHiddenNote } from "@/components/reports/member-reporting";
+import { useT } from "@/i18n/use-t";
 import { KpiRow, type KpiItem } from "@/components/reports/kpi-row";
 import { MONEY_WITHHELD } from "@/components/reports/report-money";
 import {
@@ -45,15 +47,27 @@ const percent = (part: number, whole: number): string =>
 export function TotalsView({
   filters,
   onExportReady,
+  memberReporting = false,
 }: ReportViewProps): React.JSX.Element {
   const { filters: reportFilters, setParam, getParam } = filters;
   const fmt = useFormatSettings();
   const searchParams = useSearchParams();
+  const tm = useT("members");
 
-  const groupBy = parseGroupBy(getParam(REPORT_PARAM.groupBy));
+  const groupBy = effectiveGroupBy(getParam(REPORT_PARAM.groupBy), memberReporting);
+
+  // "Member" is the one grouping that arrived with the catalog; the others
+  // still carry their English labels from before it.
+  const groupByOptions = React.useMemo(
+    () =>
+      groupByOptionsFor(memberReporting).map((option) =>
+        option.id === "member" ? { ...option, label: tm("reports.groupBy") } : option
+      ),
+    [memberReporting, tm]
+  );
 
   const dimension =
-    GROUP_BY_OPTIONS.find((option) => option.id === groupBy)?.label ?? "Project";
+    groupByOptions.find((option) => option.id === groupBy)?.label ?? "Project";
 
   const query = trpc.reports.summary.useQuery(
     { ...reportFilters, groupBy },
@@ -165,6 +179,7 @@ export function TotalsView({
   return (
     <div className="space-y-4" data-testid="summary-report">
       {isLoading ? <KpiRowSkeleton /> : <KpiRow items={kpis} />}
+      <MoneyHiddenNote moneyVisible={result?.moneyVisible} />
 
       {/*
         Budgets sit under the KPIs and above the group-by switch: they are a
@@ -182,7 +197,7 @@ export function TotalsView({
         <span className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Group by
         </span>
-        {GROUP_BY_OPTIONS.map((option) => (
+        {groupByOptions.map((option) => (
           <Button
             key={option.id}
             type="button"

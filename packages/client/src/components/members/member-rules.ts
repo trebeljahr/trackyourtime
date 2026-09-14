@@ -95,14 +95,18 @@ export const pickActiveWorkspace = (
 /**
  * Whether Reports offers the member filter and "group by member".
  *
- * Shown to anyone who can see colleagues' time, and to owners and admins of a
- * shared workspace even when their own time flag is closed — they manage the
- * people in it. The server intersects `memberIds` with what the caller may
- * see, so for them a colleague's id narrows to an empty report, never to the
- * colleague's time.
+ * Only in a workspace with somebody else in it — alone, both would list one
+ * name, which is clutter on every solo user's report. There, it is shown to
+ * anyone who can see colleagues' time, and to owners and admins even when
+ * their own time flag is closed, because they manage the people in it. The
+ * server intersects `memberIds` with what the caller may see, so for them a
+ * colleague's id narrows to an empty report, never to the colleague's time.
  */
 export const canReportByMember = (workspace: WorkspaceSummary | null): boolean => {
-  if (workspace === null) return false;
-  if (workspace.permissions.viewOthersTime) return true;
-  return workspace.memberCount > 1 && (workspace.role === "owner" || workspace.role === "admin");
+  if (workspace === null || workspace.memberCount <= 1) return false;
+  return (
+    workspace.permissions.viewOthersTime ||
+    workspace.role === "owner" ||
+    workspace.role === "admin"
+  );
 };

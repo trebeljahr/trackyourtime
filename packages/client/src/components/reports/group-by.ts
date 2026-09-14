@@ -12,6 +12,7 @@ export const GROUP_BY_OPTIONS: { id: ReportGroupBy; label: string }[] = [
   { id: "client", label: "Client" },
   { id: "task", label: "Task" },
   { id: "tag", label: "Tag" },
+  { id: "member", label: "Member" },
   { id: "day", label: "Day" },
   { id: "week", label: "Week" },
   { id: "month", label: "Month" },
@@ -35,4 +36,30 @@ export const PARAM_FOR_GROUP_BY: Partial<Record<ReportGroupBy, string>> = {
   client: REPORT_PARAM.clients,
   task: REPORT_PARAM.tasks,
   tag: REPORT_PARAM.tags,
+  member: REPORT_PARAM.members,
+};
+
+/**
+ * The groupings this viewer is offered. "Member" only when Reports offers the
+ * member filter at all (`canReportByMember`): for somebody who sees only their
+ * own time it is a one-row table with their own name in it.
+ */
+export const groupByOptionsFor = (
+  memberReporting: boolean
+): { id: ReportGroupBy; label: string }[] =>
+  memberReporting
+    ? GROUP_BY_OPTIONS
+    : GROUP_BY_OPTIONS.filter((option) => option.id !== "member");
+
+/**
+ * The grouping in effect: the URL's, unless it names one this viewer is not
+ * offered, in which case the default. A shared `group=member` link must never
+ * leave a report grouped by a switch that is not on screen.
+ */
+export const effectiveGroupBy = (
+  raw: string | null,
+  memberReporting: boolean
+): ReportGroupBy => {
+  const parsed = parseGroupBy(raw);
+  return parsed === "member" && !memberReporting ? DEFAULT_GROUP_BY : parsed;
 };

@@ -8,7 +8,8 @@ import type { ReportView } from "@/lib/report-links";
 import { cn } from "@/lib/utils";
 import { EntriesView } from "@/components/reports/entries-view";
 import { ExportMenu } from "@/components/reports/export-menu";
-import { parseGroupBy } from "@/components/reports/group-by";
+import { effectiveGroupBy } from "@/components/reports/group-by";
+import { useMemberReporting } from "@/components/reports/member-reporting";
 import { ReportFiltersBar } from "@/components/reports/report-filters";
 import { ReportPageSkeleton } from "@/components/reports/report-skeletons";
 import { TotalsView } from "@/components/reports/totals-view";
@@ -32,7 +33,8 @@ const VIEW_OPTIONS: { id: ReportView; label: string }[] = [
  * `kpi-total` / `kpi-amount`, and rendering one also means one report query.
  */
 export function ReportsScreen(): React.JSX.Element {
-  const filters = useReportFilters();
+  const memberReporting = useMemberReporting();
+  const filters = useReportFilters({ memberFilter: memberReporting });
   const { state, filters: reportFilters, getParam, view, setView } = filters;
 
   // Readiness is recorded against the view that reported it, so a switch reads
@@ -87,13 +89,17 @@ export function ReportsScreen(): React.JSX.Element {
 
       <ReportFiltersBar
         filters={filters}
+        memberFilter={memberReporting}
         trailing={
           <ExportMenu
             report={view === "totals" ? "summary" : "detailed"}
             filters={reportFilters}
             groupBy={
               view === "totals"
-                ? parseGroupBy(getParam(REPORT_PARAM.groupBy))
+                ? effectiveGroupBy(
+                    getParam(REPORT_PARAM.groupBy),
+                    memberReporting
+                  )
                 : undefined
             }
             disabled={!exportReady}
@@ -102,7 +108,11 @@ export function ReportsScreen(): React.JSX.Element {
       />
 
       {view === "totals" ? (
-        <TotalsView filters={filters} onExportReady={onExportReady} />
+        <TotalsView
+          filters={filters}
+          onExportReady={onExportReady}
+          memberReporting={memberReporting}
+        />
       ) : (
         <EntriesView filters={filters} onExportReady={onExportReady} />
       )}

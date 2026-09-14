@@ -175,6 +175,7 @@ describe("member rules", () => {
   it("offers member reporting to people who manage or see a shared workspace", () => {
     expect(canReportByMember(null)).toBe(false);
     expect(canReportByMember(workspaceFor("owner"))).toBe(true);
+    expect(canReportByMember(workspaceFor("owner", { memberCount: 1 }))).toBe(false);
     expect(canReportByMember(workspaceFor("admin"))).toBe(true);
     expect(canReportByMember(workspaceFor("admin", { memberCount: 1 }))).toBe(false);
     expect(canReportByMember(workspaceFor("member"))).toBe(false);

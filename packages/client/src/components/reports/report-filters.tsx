@@ -29,6 +29,7 @@ import {
   type MultiSelectOption,
 } from "@/components/reports/multi-select";
 import { TagFilter } from "@/components/tags/tag-filter";
+import { MemberFilter } from "@/components/reports/member-reporting";
 import {
   type BillableFilter,
   type UseReportFiltersResult,
@@ -136,6 +137,8 @@ export type ReportFiltersBarProps = {
   /** Rendered at the end, right-aligned - normally `<ExportMenu />`. */
   trailing?: React.ReactNode;
   className?: string;
+  /** Offer the member filter — see `useMemberReporting` for who gets it. */
+  memberFilter?: boolean;
 };
 
 /**
@@ -147,6 +150,7 @@ export function ReportFiltersBar({
   filters,
   trailing,
   className,
+  memberFilter = false,
 }: ReportFiltersBarProps): React.JSX.Element {
   const {
     state,
@@ -302,6 +306,13 @@ export function ReportFiltersBar({
           value={state.tagIds}
           onChange={(ids) => setIds("tagIds", ids)}
         />
+
+        {memberFilter ? (
+          <MemberFilter
+            value={state.memberIds ?? []}
+            onChange={(ids) => setIds("memberIds", ids)}
+          />
+        ) : null}
 
         <Select
           value={state.billable}

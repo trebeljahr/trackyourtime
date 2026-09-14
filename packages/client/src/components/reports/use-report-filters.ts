@@ -27,6 +27,7 @@ export const REPORT_PARAM = {
   clients: "clients",
   tasks: "tasks",
   tags: "tags",
+  members: "members",
   billable: "billable",
   search: "q",
   groupBy: "group",
@@ -44,6 +45,11 @@ export type ReportFilterState = {
   clientIds: string[];
   taskIds: string[];
   tagIds: string[];
+  /**
+   * Authors to narrow to. Optional so a state built before members existed
+   * still type-checks; absent and empty both mean "everyone the caller may see".
+   */
+  memberIds?: string[];
   billable: BillableFilter;
   search: string;
 };
@@ -53,13 +59,15 @@ export type IdFilterKey =
   | "projectIds"
   | "clientIds"
   | "taskIds"
-  | "tagIds";
+  | "tagIds"
+  | "memberIds";
 
 const PARAM_FOR_IDS: Record<IdFilterKey, string> = {
   projectIds: REPORT_PARAM.projects,
   clientIds: REPORT_PARAM.clients,
   taskIds: REPORT_PARAM.tasks,
   tagIds: REPORT_PARAM.tags,
+  memberIds: REPORT_PARAM.members,
 };
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
@@ -109,6 +117,7 @@ export const toReportFilters = (state: ReportFilterState): ReportFilters => ({
   ...(state.clientIds.length > 0 ? { clientIds: state.clientIds } : {}),
   ...(state.taskIds.length > 0 ? { taskIds: state.taskIds } : {}),
   ...(state.tagIds.length > 0 ? { tagIds: state.tagIds } : {}),
+  ...((state.memberIds ?? []).length > 0 ? { memberIds: state.memberIds } : {}),
   ...(state.billable === "all" ? {} : { billable: state.billable === "yes" }),
   ...(state.search.trim().length > 0 ? { search: state.search.trim() } : {}),
 });
@@ -153,6 +162,8 @@ export type ReportViewProps = {
   filters: UseReportFiltersResult;
   /** Whether the export has anything to describe yet. */
   onExportReady: (ready: boolean) => void;
+  /** Whether "group by member" is offered — see `useMemberReporting`. */
+  memberReporting?: boolean;
 };
 
 /**
@@ -161,7 +172,21 @@ export type ReportViewProps = {
  * Nothing is written until the user actually changes something, so a bare
  * `/reports` keeps a clean URL while still defaulting to this week.
  */
-export const useReportFilters = (): UseReportFiltersResult => {
+export type UseReportFiltersOptions = {
+  /**
+   * Whether this viewer is offered the member filter. When they are not, a
+   * `members` param in the URL (a link an admin shared, say) is ignored rather
+   * than applied: a filter nobody can see or clear is a report that silently
+   * shows less than the screen claims. The server intersects it with what the
+   * caller may see either way, so this is about honesty, not access.
+   */
+  memberFilter?: boolean;
+};
+
+export const useReportFilters = (
+  options: UseReportFiltersOptions = {}
+): UseReportFiltersResult => {
+  const memberFilter = options.memberFilter === true;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -188,6 +213,9 @@ export const useReportFilters = (): UseReportFiltersResult => {
   const clientsParam = searchParams.get(REPORT_PARAM.clients);
   const tasksParam = searchParams.get(REPORT_PARAM.tasks);
   const tagsParam = searchParams.get(REPORT_PARAM.tags);
+  const membersParam = memberFilter
+    ? searchParams.get(REPORT_PARAM.members)
+    : null;
   const billableParam = searchParams.get(REPORT_PARAM.billable);
   const searchParam = searchParams.get(REPORT_PARAM.search);
 
@@ -198,6 +226,7 @@ export const useReportFilters = (): UseReportFiltersResult => {
       clientIds: parseIds(clientsParam),
       taskIds: parseIds(tasksParam),
       tagIds: parseIds(tagsParam),
+      memberIds: parseIds(membersParam),
       billable: parseBillable(billableParam),
       search: searchParam ?? "",
     }),
@@ -207,6 +236,7 @@ export const useReportFilters = (): UseReportFiltersResult => {
       clientsParam,
       tasksParam,
       tagsParam,
+      membersParam,
       billableParam,
       searchParam,
     ]
@@ -297,6 +327,7 @@ export const useReportFilters = (): UseReportFiltersResult => {
       [REPORT_PARAM.clients]: null,
       [REPORT_PARAM.tasks]: null,
       [REPORT_PARAM.tags]: null,
+      [REPORT_PARAM.members]: null,
       [REPORT_PARAM.billable]: null,
       [REPORT_PARAM.search]: null,
     });
@@ -312,6 +343,7 @@ export const useReportFilters = (): UseReportFiltersResult => {
     state.clientIds.length > 0 ||
     state.taskIds.length > 0 ||
     state.tagIds.length > 0 ||
+    (state.memberIds ?? []).length > 0 ||
     state.billable !== "all" ||
     state.search.trim().length > 0;
 

@@ -33,6 +33,7 @@ import {
 } from "@/components/reports/detailed-table";
 import { KpiRow, type KpiItem } from "@/components/reports/kpi-row";
 import { MONEY_WITHHELD } from "@/components/reports/report-money";
+import { MoneyHiddenNote } from "@/components/reports/member-reporting";
 import {
   KpiRowSkeleton,
   TableSkeleton,
@@ -364,6 +365,7 @@ export function EntriesView({
   return (
     <div className="space-y-4" data-testid="detailed-report">
       {isLoading ? <KpiRowSkeleton /> : <KpiRow items={kpis} />}
+      <MoneyHiddenNote moneyVisible={totals?.moneyVisible} />
 
       <Card>
         <CardContent className="pt-6">
