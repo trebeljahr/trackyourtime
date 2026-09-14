@@ -454,7 +454,14 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {t("palette.openHint")} <kbd className="ml-1 font-mono">⌘K</kbd>
+                  {t("palette.openHint")} <kbd className="ml-1 font-mono">
+                    {/* Only mounted while the tooltip is open, so reading the
+                        platform cannot disagree with the prerendered HTML. */}
+                    {typeof navigator !== "undefined" &&
+                    /Mac|iPhone|iPad/.test(navigator.platform)
+                      ? "⌘K"
+                      : "Ctrl+K"}
+                  </kbd>
                 </TooltipContent>
               </Tooltip>
               <RunningTimerIndicator />
