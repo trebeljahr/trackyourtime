@@ -41,6 +41,9 @@ export const CLIENT_HEADER = "x-tracktime-client";
 /** Response header better-auth's bearer plugin returns the session token on. */
 const SESSION_TOKEN_HEADER = "set-auth-token";
 
+/** `AuthError.code` for a two-factor account signing in through `signInWithPassword`. */
+export const TWO_FACTOR_UNSUPPORTED = "TWO_FACTOR_UNSUPPORTED";
+
 export class AuthError extends Error {
   readonly code: string;
 
@@ -150,6 +153,16 @@ async function issueSession(
     throw new AuthError(
       asString(body.message) ?? failure,
       asString(body.code) ?? `HTTP_${response.status}`,
+    );
+  }
+
+  // A two-factor account answers a correct password with a challenge and no
+  // session. The challenge is a cookie this helper cannot carry, so name the
+  // reason instead of reporting a missing token.
+  if (body.twoFactorRedirect === true) {
+    throw new AuthError(
+      "This account uses two-factor authentication, which this client does not support yet. Sign in on the web app.",
+      TWO_FACTOR_UNSUPPORTED,
     );
   }
 
