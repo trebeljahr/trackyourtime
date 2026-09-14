@@ -114,9 +114,33 @@ export function createApp() {
   registerApiV1Routes(app);
 
   // ── 6. Health endpoint ─────────────────────────────────────────────
-  app.get("/api/health", (_req, res) => {
+  app.get("/api/health", (req, res) => {
+    // Readable from ANY origin. A client choosing a server calls this before
+    // it is trusted anywhere — the phone app checking a self-hosted address,
+    // the web app checking the server it is about to move to — and a CORS
+    // failure would read as "unreachable" when the truth is "reachable, but
+    // it does not trust you yet", which is the one thing worth telling them.
+    // Nothing here is secret, and no credentials are involved: a trusted
+    // origin already got its own `Access-Control-Allow-Origin` from cors()
+    // above, and is left alone.
+    if (!res.getHeader("Access-Control-Allow-Origin")) {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    }
+    const origin = req.headers.origin;
     res.json({
       status: "ok",
+      // Names the software, so "a server answered" and "a Track Your Time
+      // server answered" are different results for a client validating an
+      // address somebody typed.
+      service: "tracktime",
+      release: env.RELEASE,
+      // Whether the Origin that asked may sign in here, or null when the
+      // request carried none (curl, Raycast). Lets a client say "add this
+      // origin to TRUSTED_ORIGINS" instead of failing later with a bare 403.
+      originTrusted:
+        typeof origin === "string"
+          ? getTrustedOrigins().includes(origin)
+          : null,
       db: isDatabaseReady(),
       // Where this API's web app lives. The browser extension has only an API
       // URL configured, and needs somewhere to send "Open Track Your Time" — asking

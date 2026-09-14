@@ -18,3 +18,4 @@ export * from "./visibility.js";
 export * from "./account-deletion.js";
 export * from "./locale.js";
 export * from "./i18n-catalog.js";
+export * from "./store-clients.js";

@@ -1,4 +1,5 @@
 import { createId } from "./ids.js";
+import { sameServerOrigin } from "./server-origin.js";
 import type { KeyValueStorage } from "./storage.js";
 
 export type QueuedMutation = {
@@ -22,10 +23,26 @@ export type QueuedMutation = {
    * session token in the same store.
    */
   owner?: string;
+  /**
+   * The server origin this row was queued against.
+   *
+   * A client can be pointed at a different server, and a queued start replayed
+   * into the wrong one is tracked time filed on a server the person has left
+   * — or, worse, one where the same email belongs to someone else. So a row
+   * replays only against the origin it was made for. Optional for the same
+   * reason `owner` is: rows from before the stamp decode without it, and they
+   * were all made against the build's default server — see `isQueuedOn`.
+   */
+  server?: string;
 };
 
 export type OfflineQueue = {
-  enqueue(op: string, payload: unknown, owner?: string): Promise<QueuedMutation>;
+  enqueue(
+    op: string,
+    payload: unknown,
+    owner?: string,
+    server?: string
+  ): Promise<QueuedMutation>;
   list(): Promise<QueuedMutation[]>;
   size(): Promise<number>;
   remove(id: string): Promise<void>;
@@ -37,7 +54,19 @@ export type OfflineQueue = {
    * the alternative to claiming them is either stranding them forever or
    * letting the account after next replay them.
    */
-  adoptUnowned(owner: string): Promise<number>;
+  adoptUnowned(
+    owner: string,
+    where?: (mutation: QueuedMutation) => boolean
+  ): Promise<number>;
+  /**
+   * Stamp every row that names no server with `server`, and report how many.
+   *
+   * For a client whose build default is not where its old rows went — Raycast,
+   * whose server has always been a preference — the honest owner of an
+   * unstamped row is the server in use when this build first ran, so it
+   * claims them once, eagerly, before the preference can change.
+   */
+  adoptUnserved(server: string): Promise<number>;
   /**
    * Run `runner` over the queue in order, dropping each mutation as it
    * succeeds. Stops at the first failure and leaves that mutation (and
@@ -84,10 +113,19 @@ const isQueuedMutation = (value: unknown): value is QueuedMutation => {
  * a corrupt or hand-edited row compare equal to nothing and sit in the queue
  * forever, or — worse — compare equal to whatever `undefined` is treated as.
  */
-const normalize = (mutation: QueuedMutation): QueuedMutation =>
-  typeof mutation.owner === "string" && mutation.owner.length > 0
+const normalize = (mutation: QueuedMutation): QueuedMutation => {
+  const owner =
+    typeof mutation.owner === "string" && mutation.owner.length > 0
+      ? mutation.owner
+      : undefined;
+  const server =
+    typeof mutation.server === "string" && mutation.server.length > 0
+      ? mutation.server
+      : undefined;
+  return owner === mutation.owner && server === mutation.server
     ? mutation
-    : { ...mutation, owner: undefined };
+    : { ...mutation, owner, server };
+};
 
 /**
  * True when `owner` may replay `mutation`.
@@ -117,6 +155,22 @@ export const isForeignTo = (
   mutation: Pick<QueuedMutation, "owner">,
   owner: string | null
 ): boolean => mutation.owner !== undefined && mutation.owner !== owner;
+
+/**
+ * True when `mutation` was queued against `server`.
+ *
+ * `legacyServer` answers for rows written before the server stamp existed.
+ * Every one of those was made against the client's built-in default — no
+ * client could be pointed anywhere else yet — so that is the server they
+ * belong to, whichever one the client uses today. Comparing against the
+ * CURRENT server instead would hand them to whichever server the person
+ * switched to first.
+ */
+export const isQueuedOn = (
+  mutation: Pick<QueuedMutation, "server">,
+  server: string,
+  legacyServer: string
+): boolean => sameServerOrigin(mutation.server ?? legacyServer, server);
 
 /**
  * Durable FIFO of mutations made while offline or during a failed request.
@@ -167,7 +221,7 @@ export const createOfflineQueue = ({
   };
 
   return {
-    enqueue: (op, payload, owner) =>
+    enqueue: (op, payload, owner, server) =>
       serial(async () => {
         const mutation: QueuedMutation = {
           id: createId(),
@@ -175,6 +229,7 @@ export const createOfflineQueue = ({
           payload,
           createdAt: new Date().toISOString(),
           owner,
+          server,
         };
         const mutations = await read();
         mutations.push(mutation);
@@ -194,15 +249,28 @@ export const createOfflineQueue = ({
 
     clear: () => serial(async () => write([])),
 
-    adoptUnowned: (owner) =>
+    adoptUnowned: (owner, where) =>
       serial(async () => {
         const mutations = await read();
-        const unowned = mutations.filter((m) => m.owner === undefined);
+        // `where` keeps an account from claiming rows it could never have
+        // made: an account on one server adopting a row queued against another.
+        const claimable = (m: QueuedMutation): boolean =>
+          m.owner === undefined && (where === undefined || where(m));
+        const unowned = mutations.filter(claimable);
         if (unowned.length === 0) return 0;
-        await write(
-          mutations.map((m) => (m.owner === undefined ? { ...m, owner } : m))
-        );
+        await write(mutations.map((m) => (claimable(m) ? { ...m, owner } : m)));
         return unowned.length;
+      }),
+
+    adoptUnserved: (server) =>
+      serial(async () => {
+        const mutations = await read();
+        const unserved = mutations.filter((m) => m.server === undefined);
+        if (unserved.length === 0) return 0;
+        await write(
+          mutations.map((m) => (m.server === undefined ? { ...m, server } : m))
+        );
+        return unserved.length;
       }),
 
     flush: (runner, options) =>

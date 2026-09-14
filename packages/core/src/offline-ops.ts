@@ -285,6 +285,8 @@ export type QueuedMutationSummary = {
   description: string | null;
   /** When the work happened — the payload's own start, else when it queued. */
   at: string;
+  /** The server origin it was queued against, when the row says. */
+  server: string | null;
 };
 
 export const describeQueuedMutation = (
@@ -292,7 +294,13 @@ export const describeQueuedMutation = (
 ): QueuedMutationSummary => {
   const decoded = decodeOfflineMutation(row);
   if (decoded === null) {
-    return { queueId: row.id, op: null, description: null, at: row.createdAt };
+    return {
+      queueId: row.id,
+      op: null,
+      description: null,
+      at: row.createdAt,
+      server: row.server ?? null,
+    };
   }
   const input = decoded.input as { description?: string; start?: string };
   return {
@@ -300,5 +308,6 @@ export const describeQueuedMutation = (
     op: decoded.op,
     description: input.description ?? null,
     at: input.start ?? row.createdAt,
+    server: row.server ?? null,
   };
 };

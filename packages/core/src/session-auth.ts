@@ -27,7 +27,13 @@ export type ClientId =
   | "tracktime-cli"
   | "tracktime-extension"
   | "tracktime-desktop"
-  | "tracktime-mobile";
+  | "tracktime-mobile"
+  /**
+   * The web app, holding a bearer session of its own on a server it is not
+   * served by — the "Move to another server" flow signs in to the target that
+   * way. Its ordinary session is a cookie and never goes through here.
+   */
+  | "web";
 
 /** Header a client sets so the devices list can name it. */
 export const CLIENT_HEADER = "x-tracktime-client";
@@ -105,21 +111,44 @@ export async function signInWithPassword(
   options: SessionAuthOptions,
   credentials: PasswordCredentials,
 ): Promise<IssuedSession> {
+  return issueSession(options, "/sign-in/email", credentials, "Sign-in failed");
+}
+
+export type SignUpDetails = PasswordCredentials & { name: string };
+
+/**
+ * Create an account and return its session token, the same way
+ * {@link signInWithPassword} does — the server signs a new account straight in,
+ * and the bearer plugin hands the token back on the same header.
+ */
+export async function signUpWithPassword(
+  options: SessionAuthOptions,
+  details: SignUpDetails,
+): Promise<IssuedSession> {
+  return issueSession(options, "/sign-up/email", details, "Could not create the account");
+}
+
+async function issueSession(
+  options: SessionAuthOptions,
+  path: string,
+  payload: Record<string, string>,
+  failure: string,
+): Promise<IssuedSession> {
   const doFetch = resolveFetch(options.fetchImpl);
 
-  const response = await doFetch(authUrl(options.baseUrl, "/sign-in/email"), {
+  const response = await doFetch(authUrl(options.baseUrl, path), {
     method: "POST",
     headers: {
       "content-type": "application/json",
       [CLIENT_HEADER]: options.clientId,
     },
-    body: JSON.stringify(credentials),
+    body: JSON.stringify(payload),
   });
 
   const body = await readJson(response);
   if (!response.ok) {
     throw new AuthError(
-      asString(body.message) ?? "Sign-in failed",
+      asString(body.message) ?? failure,
       asString(body.code) ?? `HTTP_${response.status}`,
     );
   }

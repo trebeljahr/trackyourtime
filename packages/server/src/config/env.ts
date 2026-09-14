@@ -1,7 +1,8 @@
 import { config as dotenvxConfig } from "@dotenvx/dotenvx";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { STORE_APP_ORIGINS } from "@starter/shared";
 
 // dotenvx handles encrypted .env files transparently. It looks for
 // `DOTENV_PRIVATE_KEY_*` either in the process env (Coolify / CI set
@@ -21,6 +22,19 @@ const envFile =
 const envPath = resolve(serverRoot, envFile);
 if (existsSync(envPath)) {
   dotenvxConfig({ path: envPath });
+}
+
+/** `version` from this package's package.json, or "" when it cannot be read. */
+function readRelease(): string {
+  try {
+    const parsed: unknown = JSON.parse(
+      readFileSync(resolve(serverRoot, "package.json"), "utf8"),
+    );
+    const version = (parsed as { version?: unknown }).version;
+    return typeof version === "string" ? version : "";
+  } catch {
+    return "";
+  }
 }
 
 function getRequired(key: string): string {
@@ -196,6 +210,14 @@ export const env = {
   // credentials:true — register a custom protocol in the main process
   // and list it here instead.
   TRUSTED_ORIGINS: getOptional("TRUSTED_ORIGINS"),
+  // Trust the store-distributed clients — the iOS and Android apps
+  // (capacitor://localhost, https://localhost) and the Chrome Web Store
+  // extension, whose id is pinned in @starter/shared's store-clients.ts. Those
+  // builds let a person choose any server, so a self-hosted server has to
+  // accept them without anyone editing TRUSTED_ORIGINS; the self-host compose
+  // file defaults this to true. Off unless set, so the hosted deploy's trust
+  // list stays exactly what its Coolify env fields say.
+  TRUST_STORE_APPS: getOptional("TRUST_STORE_APPS").trim().toLowerCase() === "true",
 
   // The git commit this image was built from, baked in as a Docker build arg
   // (see packages/server/Dockerfile). Reported by /api/health so "is the
@@ -203,6 +225,10 @@ export const env = {
   // archaeology session. Empty outside a CI image build, which is correct —
   // a local `pnpm dev` has no commit it was built from.
   COMMIT_SHA: getOptional("COMMIT_SHA"),
+  // The release this server is, from packages/server/package.json — which the
+  // image carries (see the Dockerfile's runtime stage). Reported by
+  // /api/health so a client choosing a server can say what it found there.
+  RELEASE: readRelease(),
   GOOGLE_CLIENT_ID: getOptional("GOOGLE_CLIENT_ID"),
   GOOGLE_CLIENT_SECRET: getOptional("GOOGLE_CLIENT_SECRET"),
 
@@ -327,13 +353,43 @@ function withLocalhostAliases(origins: string[]): string[] {
   return [...new Set(aliased)];
 }
 
+export interface TrustedOriginSource {
+  frontendUrl: string;
+  /** The raw TRUSTED_ORIGINS csv. */
+  trustedOrigins: string;
+  trustStoreApps: boolean;
+  isProduction: boolean;
+}
+
+/**
+ * The trusted-origin rule, as a pure function of its inputs so the
+ * TRUST_STORE_APPS switch can be asserted without rebooting the env module.
+ * FRONTEND_URL leads, the csv follows, and the store clients come last; a
+ * duplicate (someone who listed capacitor://localhost by hand AND turned the
+ * switch on) is kept once.
+ */
+export function buildTrustedOrigins(source: TrustedOriginSource): string[] {
+  const extras = source.trustedOrigins
+    ? source.trustedOrigins.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
+  const listed = source.frontendUrl ? [source.frontendUrl, ...extras] : extras;
+  const origins = [
+    ...new Set(
+      source.trustStoreApps ? [...listed, ...STORE_APP_ORIGINS] : listed,
+    ),
+  ];
+  return source.isProduction ? origins : withLocalhostAliases(origins);
+}
+
 /** All origins trusted for CORS + better-auth. Merges FRONTEND_URL with
  *  the optional TRUSTED_ORIGINS CSV so native shells (Capacitor, custom
- *  Electron protocols) can authenticate against the same API. */
+ *  Electron protocols) can authenticate against the same API, plus the store
+ *  clients when TRUST_STORE_APPS is on. */
 export function getTrustedOrigins(): string[] {
-  const extras = env.TRUSTED_ORIGINS
-    ? env.TRUSTED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean)
-    : [];
-  const origins = env.FRONTEND_URL ? [env.FRONTEND_URL, ...extras] : extras;
-  return env.isProduction ? origins : withLocalhostAliases(origins);
+  return buildTrustedOrigins({
+    frontendUrl: env.FRONTEND_URL,
+    trustedOrigins: env.TRUSTED_ORIGINS,
+    trustStoreApps: env.TRUST_STORE_APPS,
+    isProduction: env.isProduction,
+  });
 }
