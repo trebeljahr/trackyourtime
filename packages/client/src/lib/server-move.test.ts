@@ -248,7 +248,7 @@ describe("moveWorkspace", () => {
 
 describe("movePartFilename", () => {
   it("names a single file plainly and numbers parts", () => {
-    expect(movePartFilename(0, 1, "2026-09-13")).toBe("tracktime-move-2026-09-13.json");
-    expect(movePartFilename(1, 3, "2026-09-13")).toBe("tracktime-move-2026-09-13-part-2-of-3.json");
+    expect(movePartFilename(0, 1, "2026-09-13")).toBe("trackyourtime-move-2026-09-13.json");
+    expect(movePartFilename(1, 3, "2026-09-13")).toBe("trackyourtime-move-2026-09-13-part-2-of-3.json");
   });
 });

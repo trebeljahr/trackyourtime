@@ -24,7 +24,7 @@ export type PinnedRow = {
   taskId: string | null;
 };
 
-const STORAGE_KEY = "tracktime.timesheet-rows";
+const STORAGE_KEY = "trackyourtime.timesheet-rows";
 
 /** Stable identity, so a snapshot that has not changed re-renders nothing. */
 const EMPTY: PinnedRow[] = [];

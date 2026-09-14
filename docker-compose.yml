@@ -13,7 +13,7 @@
 
 services:
   server:
-    image: ${SERVER_IMAGE:-ghcr.io/trebeljahr/tracktime-server:main}
+    image: ${SERVER_IMAGE:-ghcr.io/trebeljahr/trackyourtime-server:main}
     environment:
       PORT: "5159"
       MONGODB_URI: mongodb://mongo:27017/${DB_NAME:-app}
@@ -48,7 +48,7 @@ services:
     restart: unless-stopped
 
   client:
-    image: ${CLIENT_IMAGE:-ghcr.io/trebeljahr/tracktime-client:main}
+    image: ${CLIENT_IMAGE:-ghcr.io/trebeljahr/trackyourtime-client:main}
     environment:
       # Pin client port — Coolify's app-level PORT (set for the server)
       # would otherwise bleed into every service.

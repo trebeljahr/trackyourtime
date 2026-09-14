@@ -1,6 +1,6 @@
 import { LaunchType, launchCommand, showHUD } from "@raycast/api";
 import { toQuickStart } from "@starter/core";
-import { getTracktime } from "./lib/api.js";
+import { getTrackYourTime } from "./lib/api.js";
 import { pendingCounts } from "./lib/offline.js";
 import { formatDurationShort, isoDaysAgo } from "./lib/format.js";
 import { noteTimerEcho } from "./lib/storage.js";
@@ -38,7 +38,7 @@ const queuedSuffix = async (): Promise<string> => {
 
 export default async function ToggleTimer(): Promise<void> {
   try {
-    const api = await getTracktime();
+    const api = await getTrackYourTime();
     const running = await api.current();
 
     if (running) {

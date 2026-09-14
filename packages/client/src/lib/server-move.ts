@@ -183,11 +183,11 @@ export async function exportMoveParts(
   return parts;
 }
 
-/** "tracktime-move-2026-09-13.json", or "…-part-2-of-3.json" when split. */
+/** "trackyourtime-move-2026-09-13.json", or "…-part-2-of-3.json" when split. */
 export const movePartFilename = (index: number, total: number, stamp: string): string =>
   total === 1
-    ? `tracktime-move-${stamp}.json`
-    : `tracktime-move-${stamp}-part-${index + 1}-of-${total}.json`;
+    ? `trackyourtime-move-${stamp}.json`
+    : `trackyourtime-move-${stamp}-part-${index + 1}-of-${total}.json`;
 
 // ── importing ────────────────────────────────────────────────────────
 

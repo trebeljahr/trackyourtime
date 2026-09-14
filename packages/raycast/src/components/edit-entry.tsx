@@ -9,7 +9,7 @@ import {
 } from "@raycast/api";
 import type { DetailedEntry } from "@starter/core";
 import { useState } from "react";
-import { getTracktime } from "../lib/api.js";
+import { getTrackYourTime } from "../lib/api.js";
 import { refreshMenuBar, showFailureToast } from "../lib/ui.js";
 import { DescriptionPicker } from "./description-picker.js";
 import {
@@ -74,7 +74,7 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
 
     setSubmitting(true);
     try {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       await api.update({
         id: entry.id,
         description: values.description.trim(),

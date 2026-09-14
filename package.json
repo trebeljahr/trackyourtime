@@ -1,5 +1,5 @@
 {
-  "name": "tracktime",
+  "name": "trackyourtime",
   "version": "0.1.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
@@ -16,10 +16,10 @@
     "build": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/server run build && pnpm --filter @starter/client run build",
     "build:server": "pnpm --filter @starter/shared run build && pnpm --filter @starter/server run build",
     "build:client": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/client run build",
-    "build:raycast": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter tracktime-raycast run build",
+    "build:raycast": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter trackyourtime-raycast run build",
     "build:mcp": "pnpm --filter @starter/shared run build && pnpm --filter @starter/mcp run build",
     "test:mcp:integration": "pnpm --filter @starter/shared run build && pnpm --filter @starter/mcp run test:integration",
-    "dev:raycast": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter tracktime-raycast run dev",
+    "dev:raycast": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter trackyourtime-raycast run dev",
     "dev:extension": "pnpm --filter @starter/extension run dev",
     "build:extension": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/extension run build",
     "build:extension:prod": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/extension run build:prod",
@@ -101,7 +101,7 @@
     "@capacitor/status-bar": "^8.0.2"
   },
   "build": {
-    "appId": "com.trebeljahr.tracktime",
+    "appId": "com.trebeljahr.trackyourtime",
     "productName": "Track Your Time",
     "directories": {
       "output": "release",

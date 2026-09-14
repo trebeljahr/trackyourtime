@@ -3,8 +3,8 @@
 A release is a `vX.Y.Z` git tag. Pushing one runs
 `.github/workflows/release.yml`, which publishes two images for self-hosters:
 
-- `ghcr.io/trebeljahr/tracktime-server`
-- `ghcr.io/trebeljahr/tracktime-client-selfhost`
+- `ghcr.io/trebeljahr/trackyourtime-server`
+- `ghcr.io/trebeljahr/trackyourtime-client-selfhost`
 
 Both are built for `linux/amd64` and `linux/arm64`. Nothing is deployed, and
 no GitHub Release is created. The hosted instance still deploys from
@@ -58,13 +58,13 @@ The server image reports its commit in `/api/health` as `version`.
 
    **On the first release, `smoke` fails, and that is expected.** GHCR creates
    a new package as private, so the anonymous pull of
-   `tracktime-client-selfhost` is denied. `promote` is skipped, so `0.1` and
+   `trackyourtime-client-selfhost` is denied. `promote` is skipped, so `0.1` and
    `latest` do not exist yet. To fix it:
 
    1. Open
-      <https://github.com/users/trebeljahr/packages/container/tracktime-client-selfhost/settings>.
+      <https://github.com/users/trebeljahr/packages/container/trackyourtime-client-selfhost/settings>.
    2. Change visibility → Public. This cannot be changed back.
-   3. Check `tracktime-server` is also Public.
+   3. Check `trackyourtime-server` is also Public.
    4. In the failed run, click "Re-run failed jobs". This re-runs `smoke` and
       then `promote`. Nothing is rebuilt.
 

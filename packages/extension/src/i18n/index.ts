@@ -38,7 +38,7 @@ export type ExtensionTranslator<N extends ExtensionNamespace> = _Translator<Exte
 
 export const extensionMessages = { en, de } as const;
 
-const STORAGE_KEY = "tracktime.locale";
+const STORAGE_KEY = "trackyourtime.locale";
 
 const languages = (): readonly string[] =>
   typeof navigator === "undefined" ? [] : navigator.languages ?? [navigator.language];

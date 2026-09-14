@@ -67,7 +67,7 @@ test("the queue stores the server stamp and filters a flush by it", async () => 
 test("a malformed stamp reads as no stamp", async () => {
   const storage = memoryStorage();
   await storage.setItem(
-    "tracktime.offline-queue",
+    "trackyourtime.offline-queue",
     JSON.stringify([
       { id: "a", op: "entries.stop", payload: {}, createdAt: "2026-09-13T00:00:00Z", server: 42 },
       { id: "b", op: "entries.stop", payload: {}, createdAt: "2026-09-13T00:00:00Z", server: "" },

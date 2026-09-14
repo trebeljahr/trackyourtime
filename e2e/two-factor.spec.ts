@@ -100,7 +100,7 @@ test.describe("Two-factor authentication", () => {
     // A token client (the extension's signInWithPassword) gets no token.
     const response = await request.post(`${API}/api/auth/sign-in/email`, {
       data: { email, password: PASSWORD },
-      headers: { "x-tracktime-client": "tracktime-extension", origin: `http://127.0.0.1:${process.env.E2E_CLIENT_PORT ?? "49762"}` },
+      headers: { "x-trackyourtime-client": "trackyourtime-extension", origin: `http://127.0.0.1:${process.env.E2E_CLIENT_PORT ?? "49762"}` },
     });
     expect(response.ok()).toBe(true);
     expect(await response.json()).toMatchObject({ twoFactorRedirect: true });

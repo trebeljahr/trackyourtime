@@ -78,10 +78,10 @@ test.describe("PDF export", () => {
     ]);
 
     // Same naming rule as the CSV export (`csvFilename` in services/csv.ts):
-    // "tracktime-<report>-<from>_<to>", only with a .pdf suffix. Asserted with
+    // "trackyourtime-<report>-<from>_<to>", only with a .pdf suffix. Asserted with
     // the range in it, so a filename that silently lost the dates still fails.
     expect(download.suggestedFilename()).toMatch(
-      /^tracktime-summary-\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.pdf$/,
+      /^trackyourtime-summary-\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.pdf$/,
     );
 
     const path = await download.path();
@@ -116,7 +116,7 @@ test.describe("PDF export", () => {
     ]);
 
     expect(download.suggestedFilename()).toMatch(
-      /^tracktime-detailed-\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.pdf$/,
+      /^trackyourtime-detailed-\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.pdf$/,
     );
     const path = await download.path();
     expect(path).not.toBeNull();

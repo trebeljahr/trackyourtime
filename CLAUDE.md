@@ -9,11 +9,21 @@ The product people see is **Track Your Time** (`PRODUCT_NAME` in
 Home-screen labels use the short form **Track Time** — the web manifest's
 `short_name`, Capacitor `appName`, `CFBundleDisplayName` and the Android
 `app_name` / `title_activity_main`, which `scripts/build-mobile.mjs` asserts
-agree. Everything a user never reads keeps `tracktime`: package names, bundle
-ids, storage/Keychain keys, the `x-tracktime-client` header and client ids,
-the `X-Tracktime-*` webhook headers, Docker images, `TRACKTIME_VERSION`,
-database and bucket names, export filenames. Renaming any of those breaks
-stored sessions, queued data, integrations or deploys.
+agree.
+
+Every identifier is `trackyourtime` too, since 2026-09-14, before any release
+or store listing existed: the GitHub repo, the GHCR images, the bundle id
+`com.trebeljahr.trackyourtime`, storage/Keychain keys, the
+`x-trackyourtime-client` header and client ids, the `X-TrackYourTime-*` webhook
+headers, `TRACKYOURTIME_VERSION`, database names and export filenames. From
+here on these are contracts — a rename would break stored sessions, queued
+data, integrations and self-hosters' `.env` files.
+
+What still says `tracktime`, on purpose: the `*.tracktime.trebeljahr.com` hosts
+in the deploy history and the hatchkit dev URL, the `tracktime` slug and every
+provisioned resource in `.hatchkit.json` (the R2 bucket `tracktime-assets`, the
+SES identity), because those name live infrastructure that code cannot move;
+and the on-disk checkout path `~/projects/tracktime`.
 
 ## Hatchkit Context
 
@@ -334,7 +344,7 @@ sits on a splash that `launchAutoHide: false` never hides.
 one and deploys; for a bundled build the loop is `pnpm build:mobile android`,
 then `cd android && ./gradlew :app:assembleDebug`, then `adb install -r
 app/build/outputs/apk/debug/app-debug.apk` and `adb shell am start -n
-com.trebeljahr.tracktime/.MainActivity`. `adb exec-out screencap -p > shot.png`
+com.trebeljahr.trackyourtime/.MainActivity`. `adb exec-out screencap -p > shot.png`
 is the screenshot. Three traps that cost real time:
 
 - A bundled build's origin is `https://localhost`, and a fetch from an https
@@ -428,7 +438,7 @@ cd ios/App && xcodebuild -project App.xcodeproj -scheme App -configuration Debug
   -sdk iphonesimulator -destination "platform=iOS Simulator,id=$UDID" \
   -derivedDataPath /tmp/dd build
 xcrun simctl install "$UDID" /tmp/dd/Build/Products/Debug-iphonesimulator/App.app
-xcrun simctl launch "$UDID" com.trebeljahr.tracktime
+xcrun simctl launch "$UDID" com.trebeljahr.trackyourtime
 xcrun simctl io "$UDID" screenshot --type=png out.png
 ```
 
@@ -645,7 +655,7 @@ the very thing being replaced.
   The create hook alone is the trap — a shortened row comes back at the global
   value the first time it is used. The refresh reads the client **stamped on
   the session row**, never the request that triggered it, so a WebSocket
-  re-check (whose handshake carries no `x-tracktime-client`) cannot demote a
+  re-check (whose handshake carries no `x-trackyourtime-client`) cannot demote a
   phone, and a browser cannot promote itself later. The global stays at the
   long value on purpose — the refresh *trigger* is computed against it — and
   `ws/auth.ts` asks with `disableRefresh` so a socket's liveness probe stops
@@ -697,15 +707,15 @@ Use the helpers in `@starter/core` (`session-auth.ts`):
 ```ts
 // Client shows its own sign-in form (browser extension popup):
 const { token } = await signInWithPassword(
-  { baseUrl, clientId: "tracktime-extension" },
+  { baseUrl, clientId: "trackyourtime-extension" },
   { email, password },
 );
 
 // Client cannot show a form (Raycast, CLI) — RFC 8628 device flow:
-const auth = await startDeviceAuthorization({ baseUrl, clientId: "tracktime-raycast" });
+const auth = await startDeviceAuthorization({ baseUrl, clientId: "trackyourtime-raycast" });
 // show auth.userCode, open auth.verificationUriComplete
 const { token } = await pollForDeviceSession(
-  { baseUrl, clientId: "tracktime-raycast" },
+  { baseUrl, clientId: "trackyourtime-raycast" },
   auth.deviceCode,
   { intervalSeconds: auth.intervalSeconds },
 );
@@ -729,7 +739,7 @@ per-session revocation in Settings → Devices.
 
 Store that token in real secret storage (Keychain, `chrome.storage.session`,
 the Raycast password store), never a plain config file. Clients send
-`x-tracktime-client` so their session is named in Settings → Devices, where
+`x-trackyourtime-client` so their session is named in Settings → Devices, where
 any of them can be signed out. Device-flow client ids are allowlisted in
 `auth/client-label.ts`.
 
@@ -845,7 +855,7 @@ Settings → Account → Delete account is better-auth's own `POST
 /api/auth/delete-user`, not a tRPC procedure. better-auth resolves the session
 with the cookie cache off, accepts the bearer token (so the mobile shells use
 the same path), verifies the password and removes the user, accounts and
-every session. tracktime's data goes in `beforeDelete`
+every session. trackyourtime's data goes in `beforeDelete`
 (`auth/account-deletion.ts` → `services/account-deletion/`).
 
 What is deleted:
@@ -1351,7 +1361,7 @@ HTTP endpoints, `session-auth.ts` for the device flow, the shared
 the browser extension and CLI inherit it; only Raycast UI belongs here.
 
 - Auth: device flow, token in Raycast's encrypted `LocalStorage`, sent as
-  `Authorization: Bearer <token>` with `x-tracktime-client: tracktime-raycast`.
+  `Authorization: Bearer <token>` with `x-trackyourtime-client: trackyourtime-raycast`.
 - `raycast-env.d.ts` is generated from `package.json` by `ray build` and is
   committed, so `pnpm typecheck` works without Raycast installed.
 - Adding a command is the change to argue about, not adding a feature to one.
@@ -1488,7 +1498,7 @@ shim that injects `source`). Raycast's own files are the storage bindings.
 What fails quietly if it is changed:
 
 - **`api.ts` is the only choke point.** Every surface already goes through
-  `Tracktime`, so the offline path is inside the wrappers rather than in each
+  `TrackYourTime`, so the offline path is inside the wrappers rather than in each
   command. Writes go through `writing()` — drain first, and queue if anything
   is still waiting, because sending a new mutation ahead of older queued ones
   lands it out of order and `entries.stop` in particular resolves against
@@ -1530,8 +1540,8 @@ What fails quietly if it is changed:
 
 ### Deployment (two Coolify apps, two hosts)
 
-Production is two apps on **two hosts of one zone**: `tracktime-client` on
-`https://trackyourtime.dev` and `tracktime-server` on
+Production is two apps on **two hosts of one zone**: `trackyourtime-client` on
+`https://trackyourtime.dev` and `trackyourtime-server` on
 `https://api.trackyourtime.dev`, from `docker-compose.client.yml` and
 `docker-compose.server.yml`. The service name inside each file (`client` /
 `server`) is load-bearing — Coolify keys `docker_compose_domains` by it, and a

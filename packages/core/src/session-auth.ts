@@ -23,11 +23,11 @@
 
 /** Which client is signing in. Labels the row in Settings → Devices. */
 export type ClientId =
-  | "tracktime-raycast"
-  | "tracktime-cli"
-  | "tracktime-extension"
-  | "tracktime-desktop"
-  | "tracktime-mobile"
+  | "trackyourtime-raycast"
+  | "trackyourtime-cli"
+  | "trackyourtime-extension"
+  | "trackyourtime-desktop"
+  | "trackyourtime-mobile"
   /**
    * The web app, holding a bearer session of its own on a server it is not
    * served by — the "Move to another server" flow signs in to the target that
@@ -36,7 +36,7 @@ export type ClientId =
   | "web";
 
 /** Header a client sets so the devices list can name it. */
-export const CLIENT_HEADER = "x-tracktime-client";
+export const CLIENT_HEADER = "x-trackyourtime-client";
 
 /** Response header better-auth's bearer plugin returns the session token on. */
 const SESSION_TOKEN_HEADER = "set-auth-token";
@@ -55,7 +55,7 @@ export class AuthError extends Error {
 }
 
 export type SessionAuthOptions = {
-  /** Server origin, e.g. `https://api.tracktime.example`. */
+  /** Server origin, e.g. `https://api.trackyourtime.example`. */
   baseUrl: string;
   /** Identifies this client to the server. */
   clientId: ClientId;

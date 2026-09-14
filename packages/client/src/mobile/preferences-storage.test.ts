@@ -13,8 +13,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { preferencesStorage } from "@/mobile/preferences-storage";
 
-const QUEUE_KEY = "tracktime.offline-queue";
-const MARKER_KEY = "tracktime.preferences-migrated";
+const QUEUE_KEY = "trackyourtime.offline-queue";
+const MARKER_KEY = "trackyourtime.preferences-migrated";
 
 /** A fake @capacitor/preferences: the three calls, over a Map. */
 const fakePlugin = (seed: Record<string, string> = {}) => {

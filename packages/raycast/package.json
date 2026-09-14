@@ -1,6 +1,6 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "tracktime-raycast",
+  "name": "trackyourtime-raycast",
   "title": "Track Your Time",
   "description": "Start, stop and edit Track Your Time timers from Raycast, with a live menu bar clock.",
   "icon": "icon.png",

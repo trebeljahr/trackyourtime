@@ -19,7 +19,7 @@ import { idleWatcher } from "@/lib/idle-watcher";
 import { trpc } from "@/lib/trpc";
 
 /** Toast id, so a second reading replaces the prompt instead of stacking one. */
-const IDLE_TOAST_ID = "tracktime-idle";
+const IDLE_TOAST_ID = "trackyourtime-idle";
 
 const timerRefOf = (
   entry: {

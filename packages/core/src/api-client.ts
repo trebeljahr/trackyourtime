@@ -110,7 +110,7 @@ export const createApiClient = ({
   const headers = (): Record<string, string> => {
     const base: Record<string, string> = { "content-type": "application/json" };
     if (token) base.authorization = `Bearer ${token}`;
-    if (clientId) base["x-tracktime-client"] = clientId;
+    if (clientId) base["x-trackyourtime-client"] = clientId;
     return base;
   };
 

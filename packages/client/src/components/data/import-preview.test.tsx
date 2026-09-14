@@ -36,7 +36,7 @@ const preview = (overrides: Partial<ImportPreview> = {}): ImportPreview => ({
   firstStart: "2026-08-21T07:00:00.000Z",
   lastStart: "2026-08-22T07:00:00.000Z",
   newClients: ["Internal"],
-  newProjects: ["tracktime"],
+  newProjects: ["trackyourtime"],
   newTasks: [],
   newTags: ["deep work"],
   issues: [],
@@ -81,7 +81,7 @@ describe("import preview", () => {
     renderPreview(preview());
 
     expect(screen.getByTestId("import-new-projects").textContent).toContain(
-      "tracktime",
+      "trackyourtime",
     );
     expect(screen.getByTestId("import-new-tags").textContent).toContain(
       "deep work",

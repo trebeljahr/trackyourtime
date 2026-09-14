@@ -21,7 +21,7 @@
 
 services:
   client:
-    image: ${CLIENT_IMAGE:-ghcr.io/trebeljahr/tracktime-client:main}
+    image: ${CLIENT_IMAGE:-ghcr.io/trebeljahr/trackyourtime-client:main}
     # Always re-pull the tag before starting. Without this, Docker keeps the
     # image it already has for `:main` and a deploy silently runs the PREVIOUS
     # build: the container comes up healthy, Coolify reports the new commit,

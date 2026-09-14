@@ -27,7 +27,7 @@ export type ServerToClientMessage =
       workspaceId?: string;
     };
 
-// ── tracktime realtime sync ──────────────────────────────────────────
+// ── trackyourtime realtime sync ──────────────────────────────────────────
 //
 // Every mutation broadcasts a SyncEvent into the owner's own room
 // ("user:<ownerId>"). The mutation's `originId` (a per-tab uuid) is echoed

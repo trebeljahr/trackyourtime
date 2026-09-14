@@ -2,10 +2,10 @@
 
 A self-hostable time tracker: clients, projects, tasks, tags, billable rates, reports and invoices, with a web app, a browser extension and a Raycast extension sharing one backend.
 
-The product was called tracktime until September 2026. The repository, package names, bundle ids and storage keys keep that name, so existing installs, sessions and queued data carry over.
+The product was called tracktime until September 2026. The repository, images, bundle ids and every other identifier were renamed to `trackyourtime` before the first release.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![build-and-deploy](https://github.com/trebeljahr/tracktime/actions/workflows/build-and-deploy.yml/badge.svg?branch=main)](https://github.com/trebeljahr/tracktime/actions/workflows/build-and-deploy.yml?query=branch%3Amain)
+[![build-and-deploy](https://github.com/trebeljahr/trackyourtime/actions/workflows/build-and-deploy.yml/badge.svg?branch=main)](https://github.com/trebeljahr/trackyourtime/actions/workflows/build-and-deploy.yml?query=branch%3Amain)
 
 Hosted instance: <https://trackyourtime.dev>, with the API on its own host at <https://api.trackyourtime.dev> — [`docs/deploy.md`](docs/deploy.md) explains the topology and why the domain moved.
 
@@ -88,8 +88,8 @@ Everything is scoped to a workspace, but today that is effectively one workspace
 | **Raycast extension** (macOS) | Working and broad — 4 commands (menu bar timer, a live one-second timer view, an entries browser and an open-dashboard action), with full catalog CRUD reached through pushed forms rather than commands of its own. Not published to the Raycast store, and it has **no offline queue**: a mutation made without connectivity is lost, unlike the same action from the web app or extension. |
 | **Desktop** (Electron) | Real but thin. Window lifecycle, persisted fullscreen preference, external-link handling and `powerMonitor`-backed idle reporting over IPC. No tray icon, no global shortcuts, no auto-update, no signing setup. Never built or distributed. |
 | **Desktop** (Tauri) | Scaffolding only — 24 lines of Rust with an empty setup and a Steamworks block inherited from the starter this repo was generated from. Do not count it as a desktop app. |
-| **Mobile** (Capacitor) | Config and a small JS bridge only. No `ios/` or `android/` directory exists, the bundle id is still `com.example.tracktime`, and nothing has been run on a device — despite the `dev:ios` / `dev:android` / `build:mobile` scripts existing in `package.json`. |
-| **CLI** | Does not exist. `tracktime-cli` appears only as an allowlisted device-flow client id. |
+| **Mobile** (Capacitor) | Config and a small JS bridge only. No `ios/` or `android/` directory exists, the bundle id is still `com.example.trackyourtime`, and nothing has been run on a device — despite the `dev:ios` / `dev:android` / `build:mobile` scripts existing in `package.json`. |
+| **CLI** | Does not exist. `trackyourtime-cli` appears only as an allowlisted device-flow client id. |
 | **MCP server** (`packages/mcp`) | Working. Lets Claude Desktop, Claude Code or any MCP client start and stop timers, log time, list entries, manage the catalog and run the summary report, through the public REST API with an API token. stdio only, not published to npm — run it from a clone. See [MCP server](#mcp-server). |
 
 ## Not there yet
@@ -135,7 +135,7 @@ docker compose -f docker-compose.selfhost.yml up -d
 
 The service names `server` and `client` are load-bearing under Coolify — it keys routing by them. Do not rename them.
 
-Under the self-host layout the client image is built with an **empty** `NEXT_PUBLIC_API_URL`, so every call the browser makes is same-origin and the image works on anybody's domain. That is why it is published separately as `ghcr.io/trebeljahr/tracktime-client-selfhost` — the `:main` client image bakes in the maintainer's own API host.
+Under the self-host layout the client image is built with an **empty** `NEXT_PUBLIC_API_URL`, so every call the browser makes is same-origin and the image works on anybody's domain. That is why it is published separately as `ghcr.io/trebeljahr/trackyourtime-client-selfhost` — the `:main` client image bakes in the maintainer's own API host.
 
 ### `TRUSTED_ORIGINS`
 
@@ -176,7 +176,7 @@ Requires Node 24 (`.nvmrc`), pnpm 11 via corepack, and Docker for the local infr
 corepack enable
 nvm install && nvm use
 
-git clone https://github.com/trebeljahr/tracktime.git && cd tracktime
+git clone https://github.com/trebeljahr/trackyourtime.git && cd trackyourtime
 pnpm install
 
 # REQUIRED — .env.development is not tracked, so create it from the example

@@ -249,8 +249,8 @@ describe("service worker restarts", () => {
     fakeChrome.alarms.clear();
     await recoverActivity();
     expect([...fakeChrome.alarms.keys()].sort()).toEqual([
-      "tracktime.activity.heartbeat",
-      "tracktime.activity.prune",
+      "trackyourtime.activity.heartbeat",
+      "trackyourtime.activity.prune",
     ]);
     await applyActivitySettings({ enabled: false });
     expect(fakeChrome.alarms.size).toBe(0);

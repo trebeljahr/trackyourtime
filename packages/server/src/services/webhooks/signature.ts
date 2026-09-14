@@ -7,10 +7,10 @@
 import { createHmac } from "node:crypto";
 
 export const WEBHOOK_SIGNATURE_HEADERS = {
-  event: "X-Tracktime-Event",
-  delivery: "X-Tracktime-Delivery",
-  timestamp: "X-Tracktime-Timestamp",
-  signature: "X-Tracktime-Signature",
+  event: "X-TrackYourTime-Event",
+  delivery: "X-TrackYourTime-Delivery",
+  timestamp: "X-TrackYourTime-Timestamp",
+  signature: "X-TrackYourTime-Signature",
 } as const;
 
 /** The version prefix on the signature header value. */

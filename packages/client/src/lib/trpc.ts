@@ -42,7 +42,7 @@ export function getTRPCClient() {
         headers: () => {
           const token = getNativeToken();
           return {
-            "x-tracktime-client": isNative() ? "tracktime-mobile" : "web",
+            "x-trackyourtime-client": isNative() ? "trackyourtime-mobile" : "web",
             ...(token ? { authorization: `Bearer ${token}` } : {}),
           };
         },

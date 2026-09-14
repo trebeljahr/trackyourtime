@@ -97,7 +97,7 @@ export function ExportPanel(): React.JSX.Element {
   const exportJson = React.useCallback((): void => {
     run("json", async () => {
       const data = await buildJson.mutateAsync(range);
-      const filename = `tracktime-export-${stamp()}.json`;
+      const filename = `trackyourtime-export-${stamp()}.json`;
       downloadBlob(
         filename,
         new Blob([JSON.stringify(data, null, 2)], {

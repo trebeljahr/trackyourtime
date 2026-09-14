@@ -148,7 +148,7 @@ export type ServerInfo = {
   originTrusted: boolean | null;
 };
 
-export type ServerCheckProblem = "unreachable" | "not-tracktime" | "unhealthy";
+export type ServerCheckProblem = "unreachable" | "not-trackyourtime" | "unhealthy";
 
 export type ServerCheck =
   | { ok: true; server: ServerInfo }
@@ -209,7 +209,7 @@ export async function checkServer(
 
   const notOurs: ServerCheck = {
     ok: false,
-    problem: "not-tracktime",
+    problem: "not-trackyourtime",
     message: `${host} answered, but it is not a Track Your Time server. Enter the address you open Track Your Time at.`,
   };
 
@@ -224,7 +224,7 @@ export async function checkServer(
     return notOurs;
   }
 
-  const marked = body.service === "tracktime";
+  const marked = body.service === "trackyourtime";
   const shaped = body.status === "ok" && typeof body.webUrl === "string";
   if (!shaped || (body.service !== undefined && !marked)) return notOurs;
 

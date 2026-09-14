@@ -46,7 +46,7 @@ describe("assertDeliverableUrl", () => {
   });
 
   it("accepts an ordinary public https target", async () => {
-    const url = await assertDeliverableUrl("https://1.1.1.1/hooks/tracktime");
+    const url = await assertDeliverableUrl("https://1.1.1.1/hooks/trackyourtime");
     assert.equal(url.hostname, "1.1.1.1");
   });
 });
@@ -191,7 +191,7 @@ describe("postSignedDelivery", () => {
         address: "127.0.0.1",
         headers: {
           "Content-Type": "application/json",
-          "X-Tracktime-Event": "entry.stopped",
+          "X-TrackYourTime-Event": "entry.stopped",
         },
         body: '{"id":"d1"}',
         timeoutMs: 2_000,

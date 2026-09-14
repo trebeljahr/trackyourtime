@@ -14,10 +14,10 @@ export { SUPPORTED_LOCALES, type Locale };
 export type ClientLocale = Locale | "pseudo";
 
 /** The stored preference. Must match LOCALE_SCRIPT in app/pre-paint.ts. */
-export const LOCALE_STORAGE_KEY = "tracktime.locale";
+export const LOCALE_STORAGE_KEY = "trackyourtime.locale";
 
 /** Dev-only pseudo-locale switch. Must match LOCALE_SCRIPT in app/pre-paint.ts. */
-export const LOCALE_OVERRIDE_STORAGE_KEY = "tracktime.locale.override";
+export const LOCALE_OVERRIDE_STORAGE_KEY = "trackyourtime.locale.override";
 
 /** Set on <html> by LOCALE_SCRIPT while the rendered language is still wrong. */
 export const LOCALE_PENDING_ATTRIBUTE = "data-locale-pending";

@@ -1,5 +1,5 @@
 /**
- * The five fields every tracktime form asks for, rendered once.
+ * The five fields every trackyourtime form asks for, rendered once.
  *
  * Three Raycast forms compose an entry — start a timer, log past work, edit
  * an entry — and all three ask exactly the same five questions, because

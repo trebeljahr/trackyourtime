@@ -151,7 +151,7 @@ describe("runaway-reminder job", { skip: skipWithoutDatabase }, () => {
     await WebhookSubscription.create({
       workspaceId: WORKSPACE,
       createdBy: ALICE,
-      url: "https://hooks.example.com/tracktime",
+      url: "https://hooks.example.com/trackyourtime",
       secret: "whsec_test",
       events: ["entry.stopped"],
     });

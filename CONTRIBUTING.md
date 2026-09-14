@@ -126,8 +126,8 @@ nvm install && nvm use     # or your Node version manager of choice
 ### First run
 
 ```bash
-git clone https://github.com/trebeljahr/tracktime.git
-cd tracktime
+git clone https://github.com/trebeljahr/trackyourtime.git
+cd trackyourtime
 pnpm install
 ```
 
@@ -152,7 +152,7 @@ process environment, which takes precedence over the file.
 ```bash
 pnpm run dev:infra    # docker compose -f docker-compose.dev.yml up -d
                       # mongo:7 on 27017, redis:7-alpine on 6379,
-                      # seaweedfs S3 on 9000 (bucket tracktime-dev)
+                      # seaweedfs S3 on 9000 (bucket trackyourtime-dev)
 pnpm run dev          # client 3392, API 5159
 ```
 
@@ -515,7 +515,7 @@ the full policy, including what to put in a report and the expected timelines.
 
 ## Questions
 
-Open a [question issue](https://github.com/trebeljahr/tracktime/issues/new?template=question.yml)
+Open a [question issue](https://github.com/trebeljahr/trackyourtime/issues/new?template=question.yml)
 — GitHub Discussions are not enabled on this repository, so the issue tracker
 is where questions go — or email <ricotrebeljahr@gmail.com>.
 [SUPPORT.md](SUPPORT.md) says which to use and what to expect. The hosted app is at <https://trackyourtime.dev>, with the

@@ -132,7 +132,7 @@ export function createApp() {
       // Names the software, so "a server answered" and "a Track Your Time
       // server answered" are different results for a client validating an
       // address somebody typed.
-      service: "tracktime",
+      service: "trackyourtime",
       release: env.RELEASE,
       // Whether the Origin that asked may sign in here, or null when the
       // request carried none (curl, Raycast). Lets a client say "add this

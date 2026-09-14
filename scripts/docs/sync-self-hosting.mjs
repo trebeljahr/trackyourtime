@@ -29,7 +29,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const SOURCE_PATH = "docs/self-hosting.md";
 export const TARGET_PATH = "docs-site/docs/self-hosting.md";
-export const BLOB_URL = "https://github.com/trebeljahr/tracktime/blob/main";
+export const BLOB_URL = "https://github.com/trebeljahr/trackyourtime/blob/main";
 
 const FRONT_MATTER = [
   "---",

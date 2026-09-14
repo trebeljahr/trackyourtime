@@ -30,7 +30,7 @@ export type TimerEcho = {
 };
 
 /** One key per install, shared by every surface the install renders. */
-export const TIMER_ECHO_KEY = "tracktime.timer.echo";
+export const TIMER_ECHO_KEY = "trackyourtime.timer.echo";
 
 const isEcho = (value: unknown): value is TimerEcho => {
   if (typeof value !== "object" || value === null) return false;

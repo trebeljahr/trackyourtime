@@ -23,13 +23,13 @@ const lines = (csv: string): string[] => {
 
 test("toCsv writes a BOM, a header row and CRLF line endings", () => {
   const csv = toCsv(
-    [{ description: "Wrote tests", project: "tracktime", seconds: 3600 }],
+    [{ description: "Wrote tests", project: "trackyourtime", seconds: 3600 }],
     columns
   );
 
   assert.equal(
     csv,
-    `${BOM}Description,Project,Seconds${CRLF}Wrote tests,tracktime,3600${CRLF}`
+    `${BOM}Description,Project,Seconds${CRLF}Wrote tests,trackyourtime,3600${CRLF}`
   );
   assert.ok(!csv.includes("\n\n"));
 });
@@ -143,14 +143,14 @@ test("toCsv does not guard a negative number written as a number", () => {
 test("csvFilename builds a report filename from the range", () => {
   assert.equal(
     csvFilename("detailed", "2026-08-01", "2026-08-31"),
-    "tracktime-detailed-2026-08-01_2026-08-31.csv"
+    "trackyourtime-detailed-2026-08-01_2026-08-31.csv"
   );
 });
 
 test("csvFilename strips characters a filesystem or header would choke on", () => {
   assert.equal(
     csvFilename("summary by project", "2026/08/01", "2026 08 31"),
-    "tracktime-summary-by-project-2026-08-01_2026-08-31.csv"
+    "trackyourtime-summary-by-project-2026-08-01_2026-08-31.csv"
   );
   assert.ok(!csvFilename("../../etc/passwd", "a", "b").includes("/"));
   assert.ok(!csvFilename('weekly"', "a", "b").includes('"'));

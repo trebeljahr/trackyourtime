@@ -32,7 +32,7 @@ const INPUT_EVENTS = [
  * Treating that silence as idleness would pause timers for people who are
  * working, which is the single worst thing this feature could do. So the web
  * detector only accumulates idleness while its window is both visible *and*
- * focused — "tracktime is the window you are looking at, and you are not
+ * focused — "trackyourtime is the window you are looking at, and you are not
  * touching it" — and reports `active` the rest of the time.
  *
  * The Electron shell replaces this with `powerMonitor.getSystemIdleTime()`,
@@ -141,7 +141,7 @@ export type IdleTestBridge = {
 
 declare global {
   interface Window {
-    __tracktimeIdle?: IdleTestBridge;
+    __trackYourTimeIdle?: IdleTestBridge;
   }
 }
 
@@ -163,7 +163,7 @@ export const useIdleSignal = (
 
     const emit = (reading: IdleReading): void => callbackRef.current(reading);
 
-    window.__tracktimeIdle = {
+    window.__trackYourTimeIdle = {
       simulate: (signal, idleSeconds = 0) => {
         const atMs = Date.now();
         emit({
@@ -178,7 +178,7 @@ export const useIdleSignal = (
 
     return () => {
       stop();
-      delete window.__tracktimeIdle;
+      delete window.__trackYourTimeIdle;
     };
   }, [enabled]);
 };

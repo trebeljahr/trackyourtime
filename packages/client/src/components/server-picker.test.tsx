@@ -160,7 +160,7 @@ describe("the login page on a phone", () => {
   it("says plainly when the address is not a Track Your Time server", async () => {
     checkServer.mockResolvedValue({
       ok: false,
-      problem: "not-tracktime",
+      problem: "not-trackyourtime",
       message: "track.example.com answered, but it is not a Track Your Time server.",
     });
     await openPicker();

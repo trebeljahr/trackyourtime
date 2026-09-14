@@ -14,7 +14,7 @@ export type UserProfile = {
   };
 };
 
-// ── tracktime domain ─────────────────────────────────────────────────
+// ── trackyourtime domain ─────────────────────────────────────────────────
 //
 // Every document is scoped by `workspaceId` — a better-auth organization id.
 // Scope ("who may see this") and authorship ("who tracked this") are separate
@@ -89,7 +89,7 @@ export type Visibility = {
  *
  * "import" is likewise its own source rather than "api": a backfilled entry
  * was never measured by a timer here, so a report that wants to say "tracked
- * with tracktime" and an undo that wants to remove only what a file brought in
+ * with trackyourtime" and an undo that wants to remove only what a file brought in
  * both need to tell it apart from time this app watched tick by.
  */
 export type EntrySource =
@@ -568,8 +568,8 @@ export type ResolvedSettings = WorkspaceSettings & Omit<UserPreferences, "userId
 };
 
 /**
- * Which tracktime client a session was created from. Set by the client
- * itself (`x-tracktime-client` header, or the device-flow `client_id`), so
+ * Which trackyourtime client a session was created from. Set by the client
+ * itself (`x-trackyourtime-client` header, or the device-flow `client_id`), so
  * treat it as a label, never as a permission.
  */
 export type ClientKind =

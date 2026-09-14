@@ -12,7 +12,7 @@ import type { WorkspaceRole } from "./types.js";
  * The only role strings a membership may hold, in rank order.
  *
  * better-auth's plugin accepts comma-joined roles ("admin,owner") and grants
- * the union. tracktime never writes one and treats any string not in this
+ * the union. trackyourtime never writes one and treats any string not in this
  * list as the lowest role, so a stray value can never widen access.
  * `WorkspaceRole` itself is exported from ./types.ts.
  */
@@ -35,7 +35,7 @@ export type InvitableRole = (typeof INVITABLE_ROLES)[number];
  * per session: the extension and Raycast have no say over the web app's
  * session, which is why every request carries an explicit `workspaceId`.
  */
-export const ACTIVE_WORKSPACE_STORAGE_KEY = "tracktime.active-workspace";
+export const ACTIVE_WORKSPACE_STORAGE_KEY = "trackyourtime.active-workspace";
 
 export type WorkspacePermissions = {
   inviteMembers: boolean;

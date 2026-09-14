@@ -126,7 +126,7 @@ describe("keystores cannot be committed", () => {
     // the only state they should ever be in inside this tree.
     expect(isIgnored("android/app/release.keystore")).toBe(true);
     expect(isIgnored("android/app/upload.jks")).toBe(true);
-    expect(isIgnored("tracktime-upload.keystore")).toBe(true);
+    expect(isIgnored("trackyourtime-upload.keystore")).toBe(true);
   });
 
   it("has none checked in", () => {

@@ -14,7 +14,7 @@ import {
   type DetailedEntry,
   type DetailedFavorite,
 } from "@starter/core";
-import type { ProjectWithStats, Tracktime } from "./api.js";
+import type { ProjectWithStats, TrackYourTime } from "./api.js";
 import { isoDaysAgo } from "./format.js";
 import { pendingCounts } from "./offline.js";
 import { loadTimerEcho } from "./storage.js";
@@ -86,7 +86,7 @@ const shortlist = (
  * needs the whole catalog, not just the projects it was recently used with.
  */
 export const loadTimerSnapshot = async (
-  api: Tracktime,
+  api: TrackYourTime,
   { recentLimit }: { recentLimit: number },
 ): Promise<TimerSnapshot> => {
   const now = Date.now();

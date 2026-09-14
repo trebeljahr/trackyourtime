@@ -1,7 +1,7 @@
 import { useCachedPromise } from "@raycast/utils";
 import { useEffect, useRef, useState } from "react";
 import { reconcileRunning, type TimerEcho } from "@starter/core";
-import { getTracktime, type Tracktime } from "./api.js";
+import { getTrackYourTime, type TrackYourTime } from "./api.js";
 import { loadTimerEcho } from "./storage.js";
 import { isAuthFailure, showFailureToast } from "./ui.js";
 
@@ -23,13 +23,13 @@ export type ApiHookResult<T> = {
  */
 export function useApi<T>(
   cacheKey: string,
-  loader: (api: Tracktime) => Promise<T>,
+  loader: (api: TrackYourTime) => Promise<T>,
   options?: { execute?: boolean },
 ): ApiHookResult<T> {
   const { data, isLoading, error, revalidate } = useCachedPromise(
     // The key is passed as an argument, not closed over, because that is what
     // `useCachedPromise` hashes into its cache slot.
-    async (_key: string): Promise<T> => loader(await getTracktime()),
+    async (_key: string): Promise<T> => loader(await getTrackYourTime()),
     [cacheKey],
     {
       execute: options?.execute,
@@ -53,7 +53,7 @@ export function useApi<T>(
  * Re-run a loader on a timer, for a surface that has to notice a change it
  * did not make itself.
  *
- * Every tracktime client refreshes the menu bar after its own mutations, so
+ * Every trackyourtime client refreshes the menu bar after its own mutations, so
  * this is only about the ones that cannot: a timer started in the web app, on
  * another machine, or by a build of this extension that is not running.
  */
@@ -90,7 +90,7 @@ export function useWatchRunning(
     let cancelled = false;
     const check = async (): Promise<void> => {
       try {
-        const api = await getTracktime();
+        const api = await getTrackYourTime();
         const current = await api.current();
         if (!cancelled && (current?.id ?? null) !== runningId) revalidate();
       } catch {

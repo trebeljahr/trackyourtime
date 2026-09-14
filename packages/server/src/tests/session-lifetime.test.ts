@@ -98,19 +98,19 @@ describe("which client is creating a session", () => {
   it("reads the header a first-party client sets", () => {
     assert.equal(
       clientKindForNewSession({
-        headers: headers({ "x-tracktime-client": "tracktime-mobile" }),
+        headers: headers({ "x-trackyourtime-client": "trackyourtime-mobile" }),
       }),
       "mobile",
     );
     assert.equal(
-      clientKindForNewSession({ headers: headers({ "x-tracktime-client": "web" }) }),
+      clientKindForNewSession({ headers: headers({ "x-trackyourtime-client": "web" }) }),
       "web",
     );
   });
 
   it("falls back to the device flow's client_id, which sends no header", () => {
     assert.equal(
-      clientKindForNewSession({ body: { client_id: "tracktime-raycast" } }),
+      clientKindForNewSession({ body: { client_id: "trackyourtime-raycast" } }),
       "raycast",
     );
   });
@@ -124,14 +124,14 @@ describe("which client is creating a session", () => {
     const now = Date.UTC(2026, 0, 1);
     assert.equal(
       expiryForNewSession(
-        { headers: headers({ "x-tracktime-client": "tracktime-mobile" }) },
+        { headers: headers({ "x-trackyourtime-client": "trackyourtime-mobile" }) },
         now,
       ).getTime(),
       now + TOKEN_CLIENT_SESSION_SECONDS * 1000,
     );
     assert.equal(
       expiryForNewSession(
-        { headers: headers({ "x-tracktime-client": "web" }) },
+        { headers: headers({ "x-trackyourtime-client": "web" }) },
         now,
       ).getTime(),
       now + BROWSER_SESSION_SECONDS * 1000,
@@ -159,7 +159,7 @@ describe("which client owns a session being refreshed", () => {
     assert.equal(
       clientKindForSessionRefresh({
         ...stamped("web"),
-        headers: headers({ "x-tracktime-client": "tracktime-mobile" }),
+        headers: headers({ "x-trackyourtime-client": "trackyourtime-mobile" }),
       }),
       "web",
     );
@@ -168,7 +168,7 @@ describe("which client owns a session being refreshed", () => {
         { expiresAt: new Date() },
         {
           ...stamped("web"),
-          headers: headers({ "x-tracktime-client": "tracktime-mobile" }),
+          headers: headers({ "x-trackyourtime-client": "trackyourtime-mobile" }),
         },
         0,
       )?.getTime(),
@@ -179,7 +179,7 @@ describe("which client owns a session being refreshed", () => {
   it("falls back to the request's header when no session is on the context", () => {
     assert.equal(
       clientKindForSessionRefresh({
-        headers: headers({ "x-tracktime-client": "tracktime-raycast" }),
+        headers: headers({ "x-trackyourtime-client": "trackyourtime-raycast" }),
       }),
       "raycast",
     );

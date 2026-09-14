@@ -9,7 +9,7 @@ import {
 } from "@raycast/api";
 import type { Project } from "@starter/core";
 import { useState } from "react";
-import { getTracktime, type ProjectWithStats } from "../../lib/api.js";
+import { getTrackYourTime, type ProjectWithStats } from "../../lib/api.js";
 import { NONE, parseOptionalNumber } from "../../lib/catalog.js";
 import { useApi } from "../../lib/hooks.js";
 import { showFailureToast } from "../../lib/ui.js";
@@ -98,7 +98,7 @@ export function ProjectForm({
 
     setSubmitting(true);
     try {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       const saved = project
         ? await api.updateProject({ id: project.id, ...fields })
         : await api.createProject(fields);

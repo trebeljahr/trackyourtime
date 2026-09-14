@@ -25,7 +25,7 @@ import type { Client } from "@starter/core";
 import type { ProjectWithStats, TagWithStats, TaskWithStats } from "./api.js";
 import { raycastStorage } from "./storage.js";
 
-const CACHE_KEY = "tracktime.local-cache";
+const CACHE_KEY = "trackyourtime.local-cache";
 
 /** Entries written from Raycast are stamped `api`, like every other call it makes. */
 const SOURCE = "api" as const;

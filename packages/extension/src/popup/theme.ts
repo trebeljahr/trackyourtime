@@ -15,7 +15,7 @@ import type { ThemePreference } from "@starter/core";
  * The extension popup has its own origin, so nothing else can see it.
  */
 
-const STORAGE_KEY = "tracktime.theme";
+const STORAGE_KEY = "trackyourtime.theme";
 
 const isTheme = (value: unknown): value is ThemePreference =>
   value === "light" || value === "dark" || value === "system";

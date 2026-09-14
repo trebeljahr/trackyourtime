@@ -49,8 +49,8 @@ test("trusted origins merge in the TRUSTED_ORIGINS csv", () => {
 // throw can be asserted without mutating the environment the other tests run
 // against.
 const APP = "https://track.example.com";
-const WEB = "https://tracktime.example.com";
-const API = "https://api.tracktime.example.com";
+const WEB = "https://trackyourtime.example.com";
+const API = "https://api.trackyourtime.example.com";
 
 test("APP_URL alone supplies both auth URLs", () => {
   const resolved = resolveAppUrls(

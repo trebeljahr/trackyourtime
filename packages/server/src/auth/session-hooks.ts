@@ -65,7 +65,7 @@ function headersOf(context: MaybeSessionHookContext): Headers | null {
 /**
  * Which client is creating this session.
  *
- * Password sign-in carries `x-tracktime-client`; the device flow carries
+ * Password sign-in carries `x-trackyourtime-client`; the device flow carries
  * `client_id` in the `/device/token` body and no header at all. The header
  * wins when it names something, so a device-flow request that also labels
  * itself is taken at its word.
@@ -96,7 +96,7 @@ export function clientKindForNewSession(
  * its own socket.
  *
  * Reading the row also closes the reverse hole: a browser session cannot talk
- * itself into the long window later by sending `x-tracktime-client: mobile` on
+ * itself into the long window later by sending `x-trackyourtime-client: mobile` on
  * a refresh — the window is fixed at sign-in, when the label is also what the
  * devices list will show.
  *

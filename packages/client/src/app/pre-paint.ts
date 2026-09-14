@@ -16,7 +16,7 @@
  * disturb the `cap` class the script below may already have added, and the
  * two are order-independent because of it.
  */
-export const THEME_SCRIPT = `(function(){try{var c=localStorage.getItem("tracktime.theme");if(c!=="light"&&c!=="dark")c=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";var r=document.documentElement;r.classList.remove("light","dark");r.classList.add(c);r.style.colorScheme=c;}catch(e){}})();`;
+export const THEME_SCRIPT = `(function(){try{var c=localStorage.getItem("trackyourtime.theme");if(c!=="light"&&c!=="dark")c=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";var r=document.documentElement;r.classList.remove("light","dark");r.classList.add(c);r.style.colorScheme=c;}catch(e){}})();`;
 
 /**
  * Marks the document as running inside the native shell, before the first
@@ -90,9 +90,9 @@ export const NATIVE_SHELL_SCRIPT = `(function(){try{var c=window.Capacitor;if(!c
 export const localeScript = (allowPseudo: boolean): string =>
   `(function(){try{var r=document.documentElement,l="en",s=null;` +
   `if(/^\\/de(\\/|$)/.test(location.pathname)){r.lang="de";r.setAttribute("data-locale","de");return;}` +
-  `try{s=localStorage.getItem("tracktime.locale");}catch(e){}` +
+  `try{s=localStorage.getItem("trackyourtime.locale");}catch(e){}` +
   (allowPseudo
-    ? `var q=null,o=null;try{q=new URLSearchParams(location.search).get("locale");o=localStorage.getItem("tracktime.locale.override");}catch(e){}` +
+    ? `var q=null,o=null;try{q=new URLSearchParams(location.search).get("locale");o=localStorage.getItem("trackyourtime.locale.override");}catch(e){}` +
       `if(q==="pseudo"||(q!=="off"&&o==="pseudo")){l="pseudo";}else `
     : ``) +
   `if(s==="en"||s==="de"){l=s;}else{var n=navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language||""];` +

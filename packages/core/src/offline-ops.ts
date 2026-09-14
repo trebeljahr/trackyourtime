@@ -15,7 +15,7 @@ import type { IdleWatcher } from "./idle.js";
 import type { QueuedMutation } from "./offline-queue.js";
 import type { EntrySource } from "@starter/shared";
 
-export const OFFLINE_QUEUE_STORAGE_KEY = "tracktime.offline-queue";
+export const OFFLINE_QUEUE_STORAGE_KEY = "trackyourtime.offline-queue";
 
 /**
  * Where the last account to own the queue is remembered.
@@ -29,7 +29,7 @@ export const OFFLINE_QUEUE_STORAGE_KEY = "tracktime.offline-queue";
  * It is an id, not a credential: the token lives in the Keychain, this lives
  * beside the data it describes.
  */
-export const OFFLINE_QUEUE_OWNER_STORAGE_KEY = "tracktime.offline-queue-owner";
+export const OFFLINE_QUEUE_OWNER_STORAGE_KEY = "trackyourtime.offline-queue-owner";
 
 /** Entries invented client-side carry this prefix until the server replies. */
 export const TEMP_ID_PREFIX = "temp-";

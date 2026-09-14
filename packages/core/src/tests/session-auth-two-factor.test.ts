@@ -24,7 +24,7 @@ describe("signInWithPassword and two-factor accounts", () => {
       signInWithPassword(
         {
           baseUrl: "http://localhost:5159",
-          clientId: "tracktime-extension",
+          clientId: "trackyourtime-extension",
           fetchImpl: respond(
             { twoFactorRedirect: true, twoFactorMethods: ["totp"] },
             { "set-cookie": "better-auth.two_factor=2fa-x.sig; Path=/; HttpOnly" },
@@ -40,7 +40,7 @@ describe("signInWithPassword and two-factor accounts", () => {
     const issued = await signInWithPassword(
       {
         baseUrl: "http://localhost:5159",
-        clientId: "tracktime-extension",
+        clientId: "trackyourtime-extension",
         fetchImpl: respond(
           { token: "raw", user: { id: "u1", email: "alice@example.com" } },
           { "set-auth-token": "signed.token" },

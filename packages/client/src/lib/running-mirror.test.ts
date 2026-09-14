@@ -75,17 +75,17 @@ describe("the mirror", () => {
   it("refuses to restore an entry that is not running", async () => {
     // A finished entry, as an older build might have left it behind.
     backing.set(
-      "tracktime.running-entry",
+      "trackyourtime.running-entry",
       JSON.stringify({ ...running, end: "2026-08-21T10:00:00.000Z" }),
     );
     expect(await readRunningMirror()).toBeNull();
   });
 
   it("treats an unreadable mirror as nothing running", async () => {
-    backing.set("tracktime.running-entry", "{oops");
+    backing.set("trackyourtime.running-entry", "{oops");
     expect(await readRunningMirror()).toBeNull();
 
-    backing.set("tracktime.running-entry", JSON.stringify({ id: "e1" }));
+    backing.set("trackyourtime.running-entry", JSON.stringify({ id: "e1" }));
     expect(await readRunningMirror()).toBeNull();
   });
 

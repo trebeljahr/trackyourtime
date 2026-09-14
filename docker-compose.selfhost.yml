@@ -3,7 +3,7 @@
 #   cp .env.selfhost.example .env          # then edit APP_DOMAIN + BETTER_AUTH_SECRET
 #   docker compose -f docker-compose.selfhost.yml up -d
 #
-# `up` pulls the published amd64/arm64 images for TRACKTIME_VERSION and never
+# `up` pulls the published amd64/arm64 images for TRACKYOURTIME_VERSION and never
 # builds. Building from a clone is opt-in: docker-compose.selfhost.build.yml.
 #
 # ── Topology ─────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@
 # it removes the cross-origin cookie and CORS surface entirely.
 #
 # The app must therefore be served at the ROOT of the domain. Hosting it under
-# https://host/tracktime/ breaks the sync socket, which is derived from
+# https://host/trackyourtime/ breaks the sync socket, which is derived from
 # window.location.origin and would still resolve to wss://host/ws.
 #
 # ── This is NOT the owner's production deploy ────────────────────────────
@@ -40,7 +40,7 @@
 # API are on genuinely different hosts and Coolify's proxy does the routing. Those
 # files are untouched by this one; nothing here interacts with them.
 
-name: tracktime
+name: trackyourtime
 
 services:
   # ── Reverse proxy + TLS ────────────────────────────────────────────────
@@ -94,7 +94,7 @@ services:
   # replica would not error, it would silently deliver live updates to only
   # the half of a user's devices that happened to land on the same process.
   server:
-    image: ghcr.io/trebeljahr/tracktime-server:${TRACKTIME_VERSION:-v0.1.0}
+    image: ghcr.io/trebeljahr/trackyourtime-server:${TRACKYOURTIME_VERSION:-v0.1.0}
     # Published images only, and no `build:` section — deliberately. Compose
     # ignores a failed pull for any service it knows how to build and quietly
     # builds it instead, whatever `pull_policy` says. A mistyped tag, a release
@@ -104,7 +104,7 @@ services:
     # why. Without `build:`, the same failure stops `up` with the registry's
     # own error.
     #
-    # `missing` pulls on the first start and whenever TRACKTIME_VERSION
+    # `missing` pulls on the first start and whenever TRACKYOURTIME_VERSION
     # changes (a new tag is a new image reference), then starts from the local
     # copy, so a restart does not need the registry to be reachable.
     #
@@ -134,7 +134,7 @@ services:
       # Override either to point at a managed database instead; the local
       # mongo/redis services then simply go unused (comment them out below
       # along with the depends_on entries).
-      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/tracktime}
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/trackyourtime}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
 
       # Accept sign-ins from the store-installed clients with no extra step:
@@ -216,7 +216,7 @@ services:
   # Pulling `-client` here would give you a login screen that posts to a
   # domain you do not own.
   client:
-    image: ghcr.io/trebeljahr/tracktime-client-selfhost:${TRACKTIME_VERSION:-v0.1.0}
+    image: ghcr.io/trebeljahr/trackyourtime-client-selfhost:${TRACKYOURTIME_VERSION:-v0.1.0}
     # Pulled, never built here, for the same reason as `server` above — and
     # this is the image that makes the reason concrete: `next build` is the
     # memory-hungry step. The empty API URL is the whole point of this image;

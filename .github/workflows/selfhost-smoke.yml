@@ -64,7 +64,7 @@ jobs:
           file: packages/server/Dockerfile
           load: true
           push: false
-          tags: tracktime-server:selfhost-ci
+          tags: trackyourtime-server:selfhost-ci
           cache-from: type=gha,scope=selfhost-smoke-server
           cache-to: type=gha,mode=max,scope=selfhost-smoke-server
 
@@ -75,7 +75,7 @@ jobs:
           file: packages/client/Dockerfile.selfhost
           load: true
           push: false
-          tags: tracktime-client-selfhost:selfhost-ci
+          tags: trackyourtime-client-selfhost:selfhost-ci
           # Empty on purpose: the self-host bundle calls its own origin.
           build-args: |
             NEXT_PUBLIC_API_URL=

@@ -1,7 +1,7 @@
 import type { Image } from "@raycast/api";
 
 /**
- * The tracktime mark, for any Raycast surface that shows the app itself
+ * The trackyourtime mark, for any Raycast surface that shows the app itself
  * rather than an action.
  *
  * `assets/menu-bar.png` is generated from

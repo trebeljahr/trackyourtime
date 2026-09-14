@@ -9,7 +9,7 @@ import {
 } from "@raycast/api";
 import type { Task } from "@starter/core";
 import { useState } from "react";
-import { getTracktime } from "../../lib/api.js";
+import { getTrackYourTime } from "../../lib/api.js";
 import { showFailureToast } from "../../lib/ui.js";
 
 type Props = {
@@ -40,7 +40,7 @@ export function TaskForm({ task, onSaved }: Props): React.JSX.Element {
 
     setSubmitting(true);
     try {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       const saved = task
         ? await api.updateTask({ id: task.id, name: trimmed, done })
         : await api.createTask({ name: trimmed });

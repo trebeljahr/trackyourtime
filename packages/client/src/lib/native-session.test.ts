@@ -59,8 +59,8 @@ const load = async (options: {
   return { keychain, preferences, module };
 };
 
-const TOKEN_KEY = "tracktime.session-token";
-const MARKER_KEY = "tracktime.installed";
+const TOKEN_KEY = "trackyourtime.session-token";
+const MARKER_KEY = "trackyourtime.installed";
 
 beforeEach(() => {
   vi.resetModules();

@@ -7,7 +7,7 @@
  * a submission.
  */
 
-export const REPO_URL = "https://github.com/trebeljahr/tracktime";
+export const REPO_URL = "https://github.com/trebeljahr/trackyourtime";
 export const OPENAPI_URL = "https://api.trackyourtime.dev/api/v1/openapi.json";
 export const SELF_HOSTING_URL = `${REPO_URL}/blob/main/docs/self-hosting.md`;
 export const ISSUES_URL = `${REPO_URL}/issues`;
@@ -20,7 +20,7 @@ export const CONTACT_EMAIL = "ricotrebeljahr@gmail.com";
  */
 export const DONATE_URL: string | null = null;
 
-/** The product name as a stranger reads it. Code, storage keys and headers keep `tracktime`. */
+/** The product name as a stranger reads it. Identifiers use `trackyourtime`. */
 export const PRODUCT_NAME = "Track Your Time";
 
 export type StoreId = "chrome" | "raycast" | "appStore" | "googlePlay";

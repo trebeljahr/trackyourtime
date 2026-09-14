@@ -22,7 +22,7 @@ import {
 } from "@starter/core";
 import { chromeStorage, localStorageArea } from "../lib/chrome-storage";
 
-const IDLE_STATE_KEY = "tracktime.idle-watcher";
+const IDLE_STATE_KEY = "trackyourtime.idle-watcher";
 
 const EMPTY_STATE: IdleWatcherState = {
   ownedEntryId: null,

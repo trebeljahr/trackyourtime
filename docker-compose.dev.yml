@@ -39,7 +39,7 @@ services:
     environment:
       # Omitting AWS creds keeps SeaweedFS in development allow-all mode.
       # The app still sends its local dev credentials from .env.development.
-      S3_BUCKET: tracktime-dev
+      S3_BUCKET: trackyourtime-dev
     volumes:
       - seaweedfs-data:/data
     restart: unless-stopped

@@ -18,20 +18,20 @@ import { apiUrl } from "./preferences.js";
  * so anyone holding it is the user until it is revoked from Settings →
  * Devices.
  */
-const TOKEN_KEY = "tracktime.session.token";
-const EMAIL_KEY = "tracktime.session.email";
-const USER_KEY = "tracktime.session.userId";
+const TOKEN_KEY = "trackyourtime.session.token";
+const EMAIL_KEY = "trackyourtime.session.email";
+const USER_KEY = "trackyourtime.session.userId";
 /**
  * The server that issued the token. A token is a credential for ONE server:
  * after the API URL preference is pointed somewhere else, sending it along
  * would hand this account's session to a server that has no business holding
  * it. So a token is only ever used against the origin stored beside it.
  */
-const SERVER_KEY = "tracktime.session.server";
-const ORIGIN_KEY = "tracktime.originId";
+const SERVER_KEY = "trackyourtime.session.server";
+const ORIGIN_KEY = "trackyourtime.originId";
 
 /** Names this client in Settings → Devices, and in the device flow. */
-export const CLIENT_ID = "tracktime-raycast" as const;
+export const CLIENT_ID = "trackyourtime-raycast" as const;
 
 export type StoredSession = {
   token: string;

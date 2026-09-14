@@ -42,7 +42,7 @@ export function emitWebhookEvent(
     const rows = subscriptions.map((subscription) => {
       // The row's `_id` is minted HERE rather than by the insert, so the
       // envelope can carry it. There is exactly one delivery id in the
-      // product: this value is the envelope's `id`, the `X-Tracktime-Delivery`
+      // product: this value is the envelope's `id`, the `X-TrackYourTime-Delivery`
       // header, and the id of the row the settings delivery log lists. A
       // separate random id for the wire would give an integrator a dedup key
       // that matches nothing they can look up when a delivery fails.

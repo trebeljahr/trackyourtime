@@ -39,7 +39,7 @@ if [ -z "${CI:-}" ]; then
 
   # SeaweedFS S3 on port 9002
   ensure_container starter-e2e-seaweedfs -p 9002:8333 \
-    -e S3_BUCKET=tracktime-e2e \
+    -e S3_BUCKET=trackyourtime-e2e \
     --tmpfs /data chrislusf/seaweedfs:latest
 
   # Wait for SeaweedFS. The image creates S3_BUCKET on startup.

@@ -16,8 +16,8 @@ export const PRODUCT_NAME = "Track Your Time";
 export const WEB_URL = "https://trackyourtime.dev";
 export const API_URL = "https://api.trackyourtime.dev";
 export const OPENAPI_URL = `${API_URL}/api/v1/openapi.json`;
-export const REPO_URL = "https://github.com/trebeljahr/tracktime";
-export const RAW_URL = "https://raw.githubusercontent.com/trebeljahr/tracktime/main";
+export const REPO_URL = "https://github.com/trebeljahr/trackyourtime";
+export const RAW_URL = "https://raw.githubusercontent.com/trebeljahr/trackyourtime/main";
 export const BLOB_URL = `${REPO_URL}/blob/main`;
 
 /**

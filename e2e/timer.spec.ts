@@ -12,7 +12,7 @@ const PASSWORD = "SecurePassword123!";
  */
 declare global {
   interface Window {
-    __tracktimeIdle?: {
+    __trackYourTimeIdle?: {
       simulate: (
         signal: "active" | "idle" | "locked",
         idleSeconds?: number,
@@ -151,13 +151,13 @@ test.describe("Timer", () => {
     await expect(runningRows(page)).toHaveCount(1);
 
     // The detector is the OS in real life, so the test injects a reading
-    // instead of idling for a real minute. `__tracktimeIdle` feeds exactly the
+    // instead of idling for a real minute. `__trackYourTimeIdle` feeds exactly the
     // signal `chrome.idle` and `powerMonitor` feed — it grants the page
     // nothing it does not already have — and it only exists once idle
     // detection is enabled, which is why the settings come first.
     await expect
       .poll(() =>
-        page.evaluate(() => typeof window.__tracktimeIdle?.simulate),
+        page.evaluate(() => typeof window.__trackYourTimeIdle?.simulate),
       )
       .toBe("function");
 
@@ -170,7 +170,7 @@ test.describe("Timer", () => {
     // default) and is the only signal a test can raise without burning a real
     // minute of wall clock. The threshold path is covered exhaustively in
     // `core-idle.test.ts`, where the clock is a parameter.
-    await page.evaluate(() => window.__tracktimeIdle?.simulate("locked"));
+    await page.evaluate(() => window.__trackYourTimeIdle?.simulate("locked"));
 
     // Paused: the entry is closed, nothing is running, and the seconds it had
     // before the lock survive — a truncation is clamped to stay after the
@@ -180,7 +180,7 @@ test.describe("Timer", () => {
     await expect(paused).toHaveAttribute("data-running", "false");
 
     // Back at the keyboard: the same work reopens, by itself.
-    await page.evaluate(() => window.__tracktimeIdle?.simulate("active"));
+    await page.evaluate(() => window.__trackYourTimeIdle?.simulate("active"));
 
     // A resume is two chained writes — close the old entry, open a new one —
     // and the list is briefly inconsistent while `entries.start` is in flight:

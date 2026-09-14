@@ -46,7 +46,7 @@ say what they cover.
 - [ ] I have added or updated tests covering the change, or explained above why none are needed
 - [ ] I have updated the documentation where behaviour changed (`README.md`, `CLAUDE.md`, `docs/`, `docs-site/`)
 - [ ] This pull request is focused on one concern
-- [ ] I have read [CONTRIBUTING.md](https://github.com/trebeljahr/tracktime/blob/main/CONTRIBUTING.md)
+- [ ] I have read [CONTRIBUTING.md](https://github.com/trebeljahr/trackyourtime/blob/main/CONTRIBUTING.md)
 
 <!--
 Not signed off yet?

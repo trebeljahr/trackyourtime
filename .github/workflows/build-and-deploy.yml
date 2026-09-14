@@ -27,6 +27,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Image names are spelled out, never derived from the repository name. A
+# repository rename would otherwise move every push to a new GHCR package —
+# which GHCR creates private — while Coolify and self-hosters keep pulling the
+# old name. Renaming the repo must not rename the images as a side effect.
+env:
+  IMAGE_OWNER_REPO: trebeljahr/trackyourtime
+
 permissions:
   contents: read
   packages: write
@@ -133,15 +140,15 @@ jobs:
           done
           # Both bucket names: the job env below sets S3_BUCKET_NAME to
           # starter-e2e, but playwright.config.ts's server webServer `env:`
-          # block hardcodes tracktime-e2e and overrides it — so the bucket the
-          # server actually writes to is tracktime-e2e.
+          # block hardcodes trackyourtime-e2e and overrides it — so the bucket the
+          # server actually writes to is trackyourtime-e2e.
           docker run --rm --network host \
             --entrypoint sh minio/mc:latest -c \
             "mc alias set local http://127.0.0.1:9002 minioadmin minioadmin && \
              mc mb --ignore-existing local/starter-e2e && \
              mc anonymous set download local/starter-e2e && \
-             mc mb --ignore-existing local/tracktime-e2e && \
-             mc anonymous set download local/tracktime-e2e"
+             mc mb --ignore-existing local/trackyourtime-e2e && \
+             mc anonymous set download local/trackyourtime-e2e"
 
       - run: npx playwright install --with-deps chromium
 
@@ -185,8 +192,8 @@ jobs:
           build-args: |
             COMMIT_SHA=${{ github.sha }}
           tags: |
-            ghcr.io/${{ github.repository }}-server:main
-            ghcr.io/${{ github.repository }}-server:${{ github.sha }}
+            ghcr.io/${{ env.IMAGE_OWNER_REPO }}-server:main
+            ghcr.io/${{ env.IMAGE_OWNER_REPO }}-server:${{ github.sha }}
 
   # PUSH ONLY, for the same reason as build-server. Keep the `if:`.
   build-client:
@@ -235,8 +242,8 @@ jobs:
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
             COMMIT_SHA=${{ github.sha }}
           tags: |
-            ghcr.io/${{ github.repository }}-client:main
-            ghcr.io/${{ github.repository }}-client:${{ github.sha }}
+            ghcr.io/${{ env.IMAGE_OWNER_REPO }}-client:main
+            ghcr.io/${{ env.IMAGE_OWNER_REPO }}-client:${{ github.sha }}
 
   # Deploy job — the topology is TWO Coolify apps on TWO hosts of one zone:
   # the client on trackyourtime.dev and the server on api.trackyourtime.dev.
@@ -295,9 +302,9 @@ jobs:
             echo "pinned $2=$3"
           }
           pin "$COOLIFY_SERVER_RESOURCE_UUID" SERVER_IMAGE \
-            "ghcr.io/${{ github.repository }}-server:${{ github.sha }}"
+            "ghcr.io/${{ env.IMAGE_OWNER_REPO }}-server:${{ github.sha }}"
           pin "$COOLIFY_CLIENT_RESOURCE_UUID" CLIENT_IMAGE \
-            "ghcr.io/${{ github.repository }}-client:${{ github.sha }}"
+            "ghcr.io/${{ env.IMAGE_OWNER_REPO }}-client:${{ github.sha }}"
 
       - name: Deploy server app via Coolify API
         env:

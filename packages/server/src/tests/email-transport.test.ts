@@ -74,7 +74,7 @@ describe("selectEmailTransport", () => {
       selectEmailTransport({
         ...fullListmonk,
         LISTMONK_FROM_EMAIL: "",
-        LISTMONK_FROM: "Tracktime <noreply@example.com>",
+        LISTMONK_FROM: "Track Your Time <noreply@example.com>",
       }),
       "listmonk",
     );
@@ -113,9 +113,9 @@ describe("resolveFromAddress", () => {
     assert.equal(
       resolveFromAddress({
         ...fullListmonk,
-        LISTMONK_FROM: "Tracktime <noreply@example.com>",
+        LISTMONK_FROM: "Track Your Time <noreply@example.com>",
       }),
-      "Tracktime <noreply@example.com>",
+      "Track Your Time <noreply@example.com>",
     );
     assert.equal(resolveFromAddress(fullListmonk), "noreply@example.com");
   });

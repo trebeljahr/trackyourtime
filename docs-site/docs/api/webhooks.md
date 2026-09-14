@@ -30,18 +30,18 @@ and creating another.
 ```http
 POST /your-endpoint HTTP/1.1
 Content-Type: application/json
-X-Tracktime-Event: entry.stopped
-X-Tracktime-Delivery: 6650f1c3a4b21d0e8c7f9a12
-X-Tracktime-Timestamp: 1789012345
-X-Tracktime-Signature: v1=6f3a…c2
+X-TrackYourTime-Event: entry.stopped
+X-TrackYourTime-Delivery: 6650f1c3a4b21d0e8c7f9a12
+X-TrackYourTime-Timestamp: 1789012345
+X-TrackYourTime-Signature: v1=6f3a…c2
 ```
 
 | Header | Meaning |
 | --- | --- |
-| `X-Tracktime-Event` | The event name, so you can route without parsing the body. |
-| `X-Tracktime-Delivery` | This delivery's id: 24 lowercase hex characters. Stable across retries — use it to deduplicate. |
-| `X-Tracktime-Timestamp` | Unix seconds at signing time. Part of the signed string. |
-| `X-Tracktime-Signature` | `v1=` plus the hex HMAC-SHA256. |
+| `X-TrackYourTime-Event` | The event name, so you can route without parsing the body. |
+| `X-TrackYourTime-Delivery` | This delivery's id: 24 lowercase hex characters. Stable across retries — use it to deduplicate. |
+| `X-TrackYourTime-Timestamp` | Unix seconds at signing time. Part of the signed string. |
+| `X-TrackYourTime-Signature` | `v1=` plus the hex HMAC-SHA256. |
 
 The body is one envelope:
 
@@ -104,15 +104,15 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import express from "express";
 
 const app = express();
-const SECRET = process.env.TRACKTIME_WEBHOOK_SECRET;
+const SECRET = process.env.TRACKYOURTIME_WEBHOOK_SECRET;
 const TOLERANCE_SECONDS = 300;
 
 // The RAW bytes, not a parsed-and-reserialized object. `JSON.stringify` gives
 // no key-ordering guarantee across object identities, so re-serializing the
 // parsed body produces a different string and every signature fails.
-app.post("/hooks/tracktime", express.raw({ type: "application/json" }), (req, res) => {
-  const timestamp = req.get("X-Tracktime-Timestamp") ?? "";
-  const header = req.get("X-Tracktime-Signature") ?? "";
+app.post("/hooks/trackyourtime", express.raw({ type: "application/json" }), (req, res) => {
+  const timestamp = req.get("X-TrackYourTime-Timestamp") ?? "";
+  const header = req.get("X-TrackYourTime-Signature") ?? "";
   const rawBody = req.body.toString("utf8");
 
   // Reject a stale delivery. The timestamp is INSIDE the signed string, so it
@@ -142,7 +142,7 @@ app.post("/hooks/tracktime", express.raw({ type: "application/json" }), (req, re
 });
 ```
 
-Deduplicate on `X-Tracktime-Delivery`: a retry after a timeout carries the same id, and
+Deduplicate on `X-TrackYourTime-Delivery`: a retry after a timeout carries the same id, and
 your endpoint may well have already processed the delivery it timed out on.
 
 There is only one delivery id. The header, the envelope's `id`, and the id of the row

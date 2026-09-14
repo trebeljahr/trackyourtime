@@ -26,17 +26,17 @@ def canSignRelease = releaseKeystoreFile.exists() &&
     releaseStorePassword && releaseKeyAlias && releaseKeyPassword
 if (!canSignRelease) {
     logger.lifecycle(
-        "tracktime: no release signing key (need android/app/release.keystore " +
+        "trackyourtime: no release signing key (need android/app/release.keystore " +
         "plus KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) — a release build " +
         "will be UNSIGNED and cannot be uploaded to Play."
     )
 }
 
 android {
-    namespace = "com.trebeljahr.tracktime"
+    namespace = "com.trebeljahr.trackyourtime"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.trebeljahr.tracktime"
+        applicationId "com.trebeljahr.trackyourtime"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

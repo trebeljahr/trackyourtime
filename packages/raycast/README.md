@@ -149,11 +149,11 @@ signing it out there kills this extension's access immediately.
 
 ```bash
 pnpm --filter @starter/core run build   # the extension imports the built dist
-pnpm --filter tracktime-raycast run dev # ray develop, hot reloads into Raycast
+pnpm --filter trackyourtime-raycast run dev # ray develop, hot reloads into Raycast
 ```
 
 ```bash
-pnpm --filter tracktime-raycast run build
+pnpm --filter trackyourtime-raycast run build
 ```
 
 The extension is a thin shell over [`@starter/core`](../core): API calls go

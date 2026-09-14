@@ -14,7 +14,7 @@ import {
   toQuickStart,
   type DetailedEntry,
 } from "@starter/core";
-import { getTracktime } from "./lib/api.js";
+import { getTrackYourTime } from "./lib/api.js";
 import { isLocalEntry } from "./lib/overlay.js";
 import {
   formatClock,
@@ -177,7 +177,7 @@ export default function Entries(): React.JSX.Element {
     if (!confirmed) return;
 
     await run(async () => {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       await api.remove(entry.id);
       return "Entry deleted";
     }, "Could not delete the entry");
@@ -240,7 +240,7 @@ export default function Entries(): React.JSX.Element {
                           icon={Icon.Stop}
                           onAction={() =>
                             run(async () => {
-                              const api = await getTracktime();
+                              const api = await getTrackYourTime();
                               await api.stop(entry.id);
                               return "Timer stopped";
                             }, "Could not stop the timer")
@@ -252,7 +252,7 @@ export default function Entries(): React.JSX.Element {
                           icon={Icon.Play}
                           onAction={() =>
                             run(async () => {
-                              const api = await getTracktime();
+                              const api = await getTrackYourTime();
                               await api.continue(entry.id, toQuickStart(entry));
                               return "Timer started";
                             }, "Could not start the timer")

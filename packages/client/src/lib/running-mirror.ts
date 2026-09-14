@@ -33,7 +33,7 @@ import type { TimeEntry } from "@starter/shared";
 import { isNative } from "@/mobile/bridge";
 import { preferencesStorage } from "@/mobile/preferences-storage";
 
-const MIRROR_KEY = "tracktime.running-entry";
+const MIRROR_KEY = "trackyourtime.running-entry";
 
 let storage: KeyValueStorage | null = null;
 

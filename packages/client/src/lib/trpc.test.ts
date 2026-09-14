@@ -77,7 +77,7 @@ describe("tRPC link on the web", () => {
     const link = await loadLink({ native: false, token: null });
     const headers = link.headers();
 
-    expect(headers).toEqual({ "x-tracktime-client": "web" });
+    expect(headers).toEqual({ "x-trackyourtime-client": "web" });
     expect("authorization" in headers).toBe(false);
   });
 
@@ -101,7 +101,7 @@ describe("tRPC link on native", () => {
     const link = await loadLink({ native: true, token: "session-token" });
 
     expect(link.headers()).toEqual({
-      "x-tracktime-client": "tracktime-mobile",
+      "x-trackyourtime-client": "trackyourtime-mobile",
       authorization: "Bearer session-token",
     });
   });

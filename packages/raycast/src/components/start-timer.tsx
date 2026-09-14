@@ -8,7 +8,7 @@ import {
   showToast,
 } from "@raycast/api";
 import { useState } from "react";
-import { getTracktime } from "../lib/api.js";
+import { getTrackYourTime } from "../lib/api.js";
 import { webLink } from "../lib/preferences.js";
 import { refreshMenuBar, showFailureToast } from "../lib/ui.js";
 import { DescriptionPicker } from "./description-picker.js";
@@ -57,7 +57,7 @@ export function StartTimer(): React.JSX.Element {
   const submit = async (values: FormValues): Promise<void> => {
     setSubmitting(true);
     try {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       const entry = await api.start({
         description: values.description.trim(),
         projectId: orNull(values.projectId),

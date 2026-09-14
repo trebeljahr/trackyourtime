@@ -27,17 +27,17 @@ export default defineConfig({
         PORT: E2E_SERVER_PORT,
         MONGODB_URI:
           process.env.MONGODB_URI ??
-          "mongodb://127.0.0.1:27018/tracktime-e2e",
+          "mongodb://127.0.0.1:27018/trackyourtime-e2e",
         REDIS_URL: process.env.REDIS_URL ?? "redis://127.0.0.1:6380",
         BETTER_AUTH_SECRET: "e2e-test-secret",
         BETTER_AUTH_URL: `http://127.0.0.1:${E2E_SERVER_PORT}`,
         FRONTEND_URL: `http://127.0.0.1:${E2E_CLIENT_PORT}`,
         S3_ENDPOINT: process.env.S3_ENDPOINT ?? "http://127.0.0.1:9002",
         S3_FORCE_PATH_STYLE: "true",
-        S3_BUCKET_NAME: "tracktime-e2e",
+        S3_BUCKET_NAME: "trackyourtime-e2e",
         S3_PUBLIC_URL:
           process.env.S3_PUBLIC_URL ??
-          "http://127.0.0.1:9002/tracktime-e2e",
+          "http://127.0.0.1:9002/trackyourtime-e2e",
         AWS_ACCESS_KEY_ID: "hatchkit-dev",
         AWS_SECRET_ACCESS_KEY: "hatchkit-dev",
         AWS_REGION: "us-east-1",

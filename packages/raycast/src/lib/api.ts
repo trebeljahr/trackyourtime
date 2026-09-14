@@ -171,7 +171,7 @@ export type ListInput = {
   cursor?: string;
 };
 
-export type Tracktime = {
+export type TrackYourTime = {
   /** The running entry, or null when the timer is stopped. */
   current(): Promise<TimeEntry | null>;
   start(input: StartInput): Promise<TimeEntry>;
@@ -351,7 +351,7 @@ const cachedDescriptions = (
   return [...out.values()].slice(0, input?.limit ?? 20);
 };
 
-const wrap = (client: ApiClient, originId: string): Tracktime => {
+const wrap = (client: ApiClient, originId: string): TrackYourTime => {
   /**
    * One call per queued op, bound to this client.
    *
@@ -987,7 +987,7 @@ const wrap = (client: ApiClient, originId: string): Tracktime => {
  * Throws {@link NotSignedInError} when there is no token, which every command
  * turns into "run Sign in to Track Your Time" rather than a raw failure toast.
  */
-export async function getTracktime(): Promise<Tracktime> {
+export async function getTrackYourTime(): Promise<TrackYourTime> {
   const session = await getStoredSession();
   if (!session) throw new NotSignedInError();
 

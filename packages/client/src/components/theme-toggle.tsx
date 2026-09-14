@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 export type ThemeChoice = "light" | "dark" | "system";
 
 /** Where the choice is persisted. Must match the no-flash script in app/layout. */
-export const THEME_STORAGE_KEY = "tracktime.theme";
+export const THEME_STORAGE_KEY = "trackyourtime.theme";
 
 const isThemeChoice = (value: unknown): value is ThemeChoice =>
   value === "light" || value === "dark" || value === "system";
@@ -33,7 +33,7 @@ const prefersDark = (): boolean =>
  * choice predates the theme being synced at all, and is therefore worth
  * pushing up rather than overwriting — see the migration note there.
  */
-export const THEME_SYNCED_KEY = "tracktime.theme.synced";
+export const THEME_SYNCED_KEY = "trackyourtime.theme.synced";
 
 const readStoredChoice = (): ThemeChoice => {
   if (typeof window === "undefined") return "system";

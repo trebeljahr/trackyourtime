@@ -5,7 +5,7 @@
 // `auth.api.createOrganization`, which the signup hook uses to create every
 // personal workspace. What it must not do is take requests. Its endpoints
 // write only its own tables and never the app's `WorkspaceMember` — the one
-// record tracktime authorizes from — so every one of them reachable over HTTP
+// record trackyourtime authorizes from — so every one of them reachable over HTTP
 // was a way around the membership rules:
 //
 //  - `update-member-role` accepts comma-joined roles ("admin,owner"), which

@@ -20,7 +20,7 @@ import {
   type DescriptionSuggestion,
 } from "@starter/core";
 import { useState } from "react";
-import { getTracktime } from "../lib/api.js";
+import { getTrackYourTime } from "../lib/api.js";
 import { formatDayHeading } from "../lib/format.js";
 import { useApi } from "../lib/hooks.js";
 import { SignedOutView } from "./signed-out.js";

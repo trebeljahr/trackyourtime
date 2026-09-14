@@ -22,7 +22,7 @@ import type {
   ActivitySegment,
 } from "@starter/core/activity/index";
 
-export const ACTIVITY_DB_NAME = "tracktime-activity";
+export const ACTIVITY_DB_NAME = "trackyourtime-activity";
 const ACTIVITY_DB_VERSION = 1;
 
 const SEGMENTS = "segments";

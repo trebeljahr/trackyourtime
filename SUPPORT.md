@@ -7,9 +7,9 @@ place is most of what makes a question answerable.
 
 | You want to | Go here |
 |---|---|
-| Ask how something works, or get help self-hosting | [Question form](https://github.com/trebeljahr/tracktime/issues/new?template=question.yml) — GitHub Discussions are not enabled here, so questions go in the issue tracker |
-| Report something that behaves wrongly | [Bug report form](https://github.com/trebeljahr/tracktime/issues/new?template=bug_report.yml) |
-| Suggest a change or addition | [Feature request form](https://github.com/trebeljahr/tracktime/issues/new?template=feature_request.yml) |
+| Ask how something works, or get help self-hosting | [Question form](https://github.com/trebeljahr/trackyourtime/issues/new?template=question.yml) — GitHub Discussions are not enabled here, so questions go in the issue tracker |
+| Report something that behaves wrongly | [Bug report form](https://github.com/trebeljahr/trackyourtime/issues/new?template=bug_report.yml) |
+| Suggest a change or addition | [Feature request form](https://github.com/trebeljahr/trackyourtime/issues/new?template=feature_request.yml) |
 | Report a security vulnerability | **Not a public issue.** Email <ricotrebeljahr@gmail.com> — see [SECURITY.md](SECURITY.md) |
 | Fix it yourself | [CONTRIBUTING.md](CONTRIBUTING.md) |
 

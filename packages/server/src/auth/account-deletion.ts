@@ -5,7 +5,7 @@
 // cannot delete anything), it accepts a bearer token like every other endpoint
 // (so the mobile shells, which have no cookie, use the same path as the web),
 // it verifies a password when one is sent, and it removes the user, accounts
-// and every session afterwards. What it does not know about is tracktime's
+// and every session afterwards. What it does not know about is trackyourtime's
 // data, which is `beforeDelete`'s job here, and one policy it gets too loose.
 //
 // That policy: with no password in the body, better-auth deletes on a *fresh*

@@ -72,8 +72,8 @@ const VISIBLE_RANGE_OPTIONS: {
   { id: "full", label: "0:00 – 24:00", range: { startMin: 0, endMin: 1440 } },
 ];
 
-const RANGE_STORAGE_KEY = "tracktime.calendar.range";
-const ZOOM_STORAGE_KEY = "tracktime.calendar.zoom";
+const RANGE_STORAGE_KEY = "trackyourtime.calendar.range";
+const ZOOM_STORAGE_KEY = "trackyourtime.calendar.zoom";
 
 const readStoredRangeId = (): string => {
   if (typeof window === "undefined") return "work";

@@ -195,10 +195,10 @@ test("entryListSchema bounds the page size", () => {
 // ── catalog ──────────────────────────────────────────────────────────
 
 test("createProjectSchema treats client and rate as optional and nullable", () => {
-  assert.ok(accepts(createProjectSchema, { name: "tracktime" }));
+  assert.ok(accepts(createProjectSchema, { name: "trackyourtime" }));
   assert.ok(
     accepts(createProjectSchema, {
-      name: "tracktime",
+      name: "trackyourtime",
       color: "#4f46e5",
       clientId: null,
       billableDefault: false,

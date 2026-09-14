@@ -27,7 +27,7 @@
 
 services:
   server:
-    image: ${SERVER_IMAGE:-ghcr.io/trebeljahr/tracktime-server:main}
+    image: ${SERVER_IMAGE:-ghcr.io/trebeljahr/trackyourtime-server:main}
     # Always re-pull the tag before starting. Without this, Docker keeps the
     # image it already has for `:main` and a deploy silently runs the PREVIOUS
     # build: the container comes up healthy, Coolify reports the new commit,

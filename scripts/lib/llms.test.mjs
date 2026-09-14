@@ -105,7 +105,7 @@ describe("webLinkRewriter", () => {
     assert.equal(rewrite("./errors.md#slugs"), `${RAW_URL}/docs-site/docs/api/errors.md#slugs`);
     assert.equal(
       webLinkRewriter(REPO_ROOT, "docs/self-hosting.md")("../.github/workflows/release.yml"),
-      "https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml",
+      "https://github.com/trebeljahr/trackyourtime/blob/main/.github/workflows/release.yml",
     );
   });
 

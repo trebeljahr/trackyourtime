@@ -15,7 +15,7 @@ import {
 
 const OPTIONS = {
   baseUrl: "https://api.example.test",
-  clientId: "tracktime-cli" as const,
+  clientId: "trackyourtime-cli" as const,
 };
 
 type StubResponse = {
@@ -62,8 +62,8 @@ describe("signInWithPassword", () => {
     expect(session.userId).toBe("user_1");
     expect(calls[0].url).toBe("https://api.example.test/api/auth/sign-in/email");
     expect(
-      (calls[0].init?.headers as Record<string, string>)["x-tracktime-client"]
-    ).toBe("tracktime-cli");
+      (calls[0].init?.headers as Record<string, string>)["x-trackyourtime-client"]
+    ).toBe("trackyourtime-cli");
   });
 
   it("fails loudly when the server returns no session token", async () => {
@@ -118,7 +118,7 @@ describe("startDeviceAuthorization", () => {
     expect(auth.deviceCode).toBe("dev_1");
     expect(auth.intervalSeconds).toBe(5);
     expect(JSON.parse(String(calls[0].init?.body)).client_id).toBe(
-      "tracktime-cli"
+      "trackyourtime-cli"
     );
   });
 

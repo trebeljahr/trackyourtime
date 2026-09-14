@@ -67,7 +67,7 @@ export function toCsv(rows: CsvRow[], columns: CsvColumn[]): string {
 
 /**
  * Build a download filename like
- * `tracktime-detailed-2026-08-01_2026-08-31.csv`. `from`/`to` are local
+ * `trackyourtime-detailed-2026-08-01_2026-08-31.csv`. `from`/`to` are local
  * "YYYY-MM-DD" day keys.
  */
 export function csvFilename(
@@ -77,5 +77,5 @@ export function csvFilename(
 ): string {
   const safe = (value: string): string =>
     value.replace(/[^0-9A-Za-z-]/g, "-");
-  return `tracktime-${safe(report)}-${safe(from)}_${safe(to)}.csv`;
+  return `trackyourtime-${safe(report)}-${safe(from)}_${safe(to)}.csv`;
 }

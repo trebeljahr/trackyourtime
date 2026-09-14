@@ -61,7 +61,7 @@ function resolveAuthBaseUrl(): string {
  * the app's scripts run, but module evaluation order is not something to
  * stake a session label on.
  */
-const clientHeader = (): string => (isNative() ? "tracktime-mobile" : "web");
+const clientHeader = (): string => (isNative() ? "trackyourtime-mobile" : "web");
 
 /**
  * The fetch every auth call goes through.
@@ -103,7 +103,7 @@ export const authClient = createAuthClient({
      * show "Chrome on macOS" instead of an unlabelled row.
      */
     onRequest: (context) => {
-      context.headers.set("x-tracktime-client", clientHeader());
+      context.headers.set("x-trackyourtime-client", clientHeader());
       return context;
     },
     /**

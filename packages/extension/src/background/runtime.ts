@@ -268,7 +268,7 @@ export async function enqueueOffline<K extends OfflineOp>(
  * offers Start again, and pressing it queues a second start that replays as a
  * duplicate the moment the network returns.
  */
-const OPTIMISTIC_RUNNING_KEY = "tracktime.optimistic-running";
+const OPTIMISTIC_RUNNING_KEY = "trackyourtime.optimistic-running";
 
 let optimisticStore: KeyValueStorage | null = null;
 
@@ -341,7 +341,7 @@ const rehydrateOptimisticRunning = async (): Promise<void> => {
  * queued work, so "the queue is empty" is a sound and total clear condition and
  * removes any need to reconcile a replayed row against a temp id.
  */
-const OPTIMISTIC_ENTRIES_KEY = "tracktime.optimistic-entries";
+const OPTIMISTIC_ENTRIES_KEY = "trackyourtime.optimistic-entries";
 
 export type OptimisticEntries = { upserts: TimeEntry[]; deletes: string[] };
 

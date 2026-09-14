@@ -22,7 +22,7 @@ const roleOf = (
 test("split date and time columns place an entry, tags and all", () => {
   const file = [
     "Project,Client,Description,Task,Tags,Billable,Start Date,Start Time,End Date,End Time,Duration (h)",
-    'tracktime,Internal,"Wrote the importer",Imports,"deep work, tooling",Yes,2026-08-21,09:00:00,2026-08-21,10:30:00,01:30:00',
+    'trackyourtime,Internal,"Wrote the importer",Imports,"deep work, tooling",Yes,2026-08-21,09:00:00,2026-08-21,10:30:00,01:30:00',
   ].join("\n");
 
   const result = parse(file);
@@ -34,7 +34,7 @@ test("split date and time columns place an entry, tags and all", () => {
   assert.equal(row.end, "2026-08-21T10:30:00.000Z");
   assert.equal(row.durationSec, 5400);
   assert.equal(row.description, "Wrote the importer");
-  assert.equal(row.projectName, "tracktime");
+  assert.equal(row.projectName, "trackyourtime");
   assert.equal(row.clientName, "Internal");
   assert.equal(row.taskName, "Imports");
   assert.deepEqual(row.tagNames, ["deep work", "tooling"]);
@@ -44,7 +44,7 @@ test("split date and time columns place an entry, tags and all", () => {
 test("wall-clock cells are read in the zone the import was given", () => {
   const file = [
     "Description,Project,Start Date,Start Time,End Time",
-    "Standup,tracktime,2026-08-21,09:00,09:15",
+    "Standup,trackyourtime,2026-08-21,09:00,09:15",
   ].join("\n");
 
   const result = parse(file, "Europe/Berlin");
@@ -55,7 +55,7 @@ test("wall-clock cells are read in the zone the import was given", () => {
 test("one-cell instants need no date column at all", () => {
   const file = [
     "Description,Project,Start,End",
-    "Refactor,tracktime,2026-08-21T09:00:00Z,2026-08-21T11:00:00Z",
+    "Refactor,trackyourtime,2026-08-21T09:00:00Z,2026-08-21T11:00:00Z",
   ].join("\n");
 
   const result = parse(file);
@@ -68,7 +68,7 @@ test("one-cell instants need no date column at all", () => {
 test("a start and a duration is enough; the end is derived", () => {
   const file = [
     "Description,Project,Start,Duration",
-    "Review,tracktime,2026-08-21T09:00:00Z,0:45",
+    "Review,trackyourtime,2026-08-21T09:00:00Z,0:45",
   ].join("\n");
 
   const result = parse(file);
@@ -79,9 +79,9 @@ test("a start and a duration is enough; the end is derived", () => {
 test("a day and a number of hours stacks entries from the working-day start", () => {
   const file = [
     "Date,Client,Project,Task,Notes,Hours,Billable",
-    "2026-08-21,Internal,tracktime,Imports,Mapping columns,3.5,Yes",
-    "2026-08-21,Internal,tracktime,Imports,Duplicate check,1.5,Yes",
-    "2026-08-22,Internal,tracktime,Imports,Undo,2,No",
+    "2026-08-21,Internal,trackyourtime,Imports,Mapping columns,3.5,Yes",
+    "2026-08-21,Internal,trackyourtime,Imports,Duplicate check,1.5,Yes",
+    "2026-08-22,Internal,trackyourtime,Imports,Undo,2,No",
   ].join("\n");
 
   const result = parse(file);
@@ -121,7 +121,7 @@ test("an end DATE column is believed instead of the overnight guess", () => {
 test("semicolon files with comma decimals are read as one field per column", () => {
   const file = [
     "Beschreibung;Projekt;Start;Dauer",
-    "Doku;tracktime;21.08.2026 09:00;1,5",
+    "Doku;trackyourtime;21.08.2026 09:00;1,5",
   ].join("\n");
 
   const result = parse(file);
@@ -132,8 +132,8 @@ test("semicolon files with comma decimals are read as one field per column", () 
 test("quoted fields keep their commas and newlines", () => {
   const file = [
     "Description,Project,Start,End",
-    '"Rewrote the parser, twice",tracktime,2026-08-21T09:00:00Z,2026-08-21T10:00:00Z',
-    '"Wrote it\nagain",tracktime,2026-08-21T11:00:00Z,2026-08-21T12:00:00Z',
+    '"Rewrote the parser, twice",trackyourtime,2026-08-21T09:00:00Z,2026-08-21T10:00:00Z',
+    '"Wrote it\nagain",trackyourtime,2026-08-21T11:00:00Z,2026-08-21T12:00:00Z',
   ].join("\n");
 
   const result = parse(file);
@@ -154,7 +154,7 @@ test("the delimiter is sniffed from structure, not from the first comma", () => 
 });
 
 test("identical rows are kept but marked, so nothing is silently dropped", () => {
-  const line = "Standup,tracktime,2026-08-21T09:00:00Z,2026-08-21T09:15:00Z";
+  const line = "Standup,trackyourtime,2026-08-21T09:00:00Z,2026-08-21T09:15:00Z";
   const file = ["Description,Project,Start,End", line, line].join("\n");
 
   const result = parse(file);
@@ -167,9 +167,9 @@ test("identical rows are kept but marked, so nothing is silently dropped", () =>
 test("a row that cannot be placed becomes one issue, not a failed import", () => {
   const file = [
     "Description,Project,Start,End",
-    "Good,tracktime,2026-08-21T09:00:00Z,2026-08-21T10:00:00Z",
-    "Bad,tracktime,whenever,2026-08-21T10:00:00Z",
-    "Backwards,tracktime,2026-08-21T12:00:00Z,2026-08-21T11:00:00Z",
+    "Good,trackyourtime,2026-08-21T09:00:00Z,2026-08-21T10:00:00Z",
+    "Bad,trackyourtime,whenever,2026-08-21T10:00:00Z",
+    "Backwards,trackyourtime,2026-08-21T12:00:00Z,2026-08-21T11:00:00Z",
   ].join("\n");
 
   const result = parse(file);
@@ -187,7 +187,7 @@ test("a row that cannot be placed becomes one issue, not a failed import", () =>
 });
 
 test("a file with no time information at all is refused as unusable", () => {
-  const file = ["Description,Project", "Something,tracktime"].join("\n");
+  const file = ["Description,Project", "Something,trackyourtime"].join("\n");
   const result = parse(file);
   assert.equal(result.shape, "unusable");
   assert.equal(result.rows.length, 0);
@@ -196,7 +196,7 @@ test("a file with no time information at all is refused as unusable", () => {
 test("a column pointed somewhere by hand wins over detection", () => {
   const file = [
     "Notes,Thing,Start,End",
-    "Standup,tracktime,2026-08-21T09:00:00Z,2026-08-21T09:15:00Z",
+    "Standup,trackyourtime,2026-08-21T09:00:00Z,2026-08-21T09:15:00Z",
   ].join("\n");
 
   const detected = parse(file);
@@ -206,7 +206,7 @@ test("a column pointed somewhere by hand wins over detection", () => {
     timeZone: "UTC",
     overrides: new Map([[1, "project"]]),
   });
-  assert.equal(overridden.rows[0]?.projectName, "tracktime");
+  assert.equal(overridden.rows[0]?.projectName, "trackyourtime");
   assert.equal(
     overridden.columns.find((column) => column.header === "Thing")?.overridden,
     true,
@@ -216,7 +216,7 @@ test("a column pointed somewhere by hand wins over detection", () => {
 test("this app's own CSV export is read back by the same detection", () => {
   const file = [
     "Start,End,Duration,Description,Project,Client,Task,Tags,Billable,Rate,Currency",
-    '2026-08-21T09:00:00.000Z,2026-08-21T10:30:00.000Z,01:30:00,Wrote the importer,tracktime,Internal,Imports,"deep work, tooling",Yes,90,EUR',
+    '2026-08-21T09:00:00.000Z,2026-08-21T10:30:00.000Z,01:30:00,Wrote the importer,trackyourtime,Internal,Imports,"deep work, tooling",Yes,90,EUR',
   ].join("\n");
 
   const result = parse(file);
@@ -242,7 +242,7 @@ test("this app's own JSON export is read back losslessly", () => {
       {
         description: "Wrote the importer",
         clientName: "Internal",
-        projectName: "tracktime",
+        projectName: "trackyourtime",
         taskName: "Imports",
         tagNames: ["deep work"],
         billable: true,
@@ -259,7 +259,7 @@ test("this app's own JSON export is read back losslessly", () => {
   const result = parse(file);
   assert.equal(result.format, "workspace-json");
   assert.equal(result.rows.length, 1);
-  assert.equal(result.rows[0]?.projectName, "tracktime");
+  assert.equal(result.rows[0]?.projectName, "trackyourtime");
   assert.equal(result.rows[0]?.hourlyRate, 90);
 });
 
@@ -335,7 +335,7 @@ test("a valid catalog survives the read unchanged", () => {
       entries: [],
       projects: [
         {
-          name: "tracktime",
+          name: "trackyourtime",
           color: "#222222",
           clientName: "Internal",
           billableDefault: false,
@@ -351,7 +351,7 @@ test("a valid catalog survives the read unchanged", () => {
   );
 
   assert.deepEqual(doc?.projects[0], {
-    name: "tracktime",
+    name: "trackyourtime",
     color: "#222222",
     clientName: "Internal",
     billableDefault: false,

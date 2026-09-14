@@ -98,7 +98,7 @@ const answering =
 
 const HEALTH = {
   status: "ok",
-  service: "tracktime",
+  service: "trackyourtime",
   release: "0.1.0",
   db: true,
   webUrl: "https://track.example.com",
@@ -181,7 +181,7 @@ test("anything else that answers is not a Track Your Time server", async () => {
       fetchImpl: answering(status, body),
     });
     assert.ok(!result.ok, JSON.stringify(body));
-    assert.equal(result.problem, "not-tracktime");
+    assert.equal(result.problem, "not-trackyourtime");
   }
 });
 

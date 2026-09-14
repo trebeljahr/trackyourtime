@@ -92,7 +92,7 @@ Those call `trpc.<router>.<procedure>.useQuery()` / `.useMutation()`.
 
 **2. tRPC client.** `packages/client/src/lib/trpc.ts` — one `httpBatchLink` to
 `` `${process.env.NEXT_PUBLIC_API_URL || ""}/api/trpc` ``, with
-`credentials: "include"` and an `x-tracktime-client: web` header (that header is
+`credentials: "include"` and an `x-trackyourtime-client: web` header (that header is
 what names the session in Settings → Devices). Mounted by
 `packages/client/src/providers/trpc-provider.tsx`. `NEXT_PUBLIC_API_URL` is
 inlined at build time — a static export cannot follow a moved origin. On the
@@ -244,7 +244,7 @@ client ids listed in `packages/server/src/auth/client-label.ts`
 (`DEVICE_FLOW_CLIENT_IDS`). Tokens belong in real secret storage, never a config
 file.
 
-**`x-tracktime-client`** names a session in Settings → Devices, where any of
+**`x-trackyourtime-client`** names a session in Settings → Devices, where any of
 them can be revoked — killing the HTTP and WebSocket paths at once. It is
 self-reported and **cosmetic**; `client-label.ts` says so at the top. Never
 branch on it for authorization.

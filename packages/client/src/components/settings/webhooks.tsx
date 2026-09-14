@@ -493,9 +493,9 @@ function VerifyingDeliveriesHint(): React.JSX.Element {
       <p className="font-medium text-foreground">Verifying a delivery</p>
       <p className="mt-1">
         Each request carries{" "}
-        <code className="font-mono text-foreground">X-Tracktime-Timestamp</code>{" "}
+        <code className="font-mono text-foreground">X-TrackYourTime-Timestamp</code>{" "}
         and{" "}
-        <code className="font-mono text-foreground">X-Tracktime-Signature</code>
+        <code className="font-mono text-foreground">X-TrackYourTime-Signature</code>
         . Recompute the HMAC-SHA256 of{" "}
         <code className="font-mono text-foreground">
           &lt;timestamp&gt;.&lt;raw body&gt;

@@ -23,7 +23,7 @@ import {
   type SettingsSection,
 } from "./route";
 
-const KEY = "tracktime.popup-route";
+const KEY = "trackyourtime.popup-route";
 
 /** Past this the popup is being opened afresh, not returned to. */
 const ROUTE_MEMORY_MS = 120_000;

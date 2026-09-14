@@ -86,10 +86,10 @@ describe("signWebhookBody", () => {
 describe("the header names", () => {
   it("are the ones the docs and every receiver are written against", () => {
     assert.deepEqual({ ...WEBHOOK_SIGNATURE_HEADERS }, {
-      event: "X-Tracktime-Event",
-      delivery: "X-Tracktime-Delivery",
-      timestamp: "X-Tracktime-Timestamp",
-      signature: "X-Tracktime-Signature",
+      event: "X-TrackYourTime-Event",
+      delivery: "X-TrackYourTime-Delivery",
+      timestamp: "X-TrackYourTime-Timestamp",
+      signature: "X-TrackYourTime-Signature",
     });
     assert.equal(WEBHOOK_SIGNATURE_VERSION, "v1");
   });

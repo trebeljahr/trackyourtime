@@ -16,7 +16,7 @@
 #   DOCKER_CONTEXT=colima-tt-verify CHECK_FLOATING=1 scripts/verify-release-images.sh v0.1.0
 #
 # The script only ever removes the containers, network and volumes of its own
-# compose project (tracktime-verify-<pid>), but the default colima VM is where
+# compose project (trackyourtime-verify-<pid>), but the default colima VM is where
 # real dev containers live, so it refuses the `colima` context unless
 # ALLOW_DEFAULT_CONTEXT=1. The images it pulls stay in the VM's image store.
 #
@@ -25,7 +25,7 @@
 #   1. Registry, curl only: an anonymous pull token for each package, the
 #      exact tag's manifest, and that the manifest is a list naming
 #      linux/amd64 AND linux/arm64. A package GHCR still has PRIVATE — which
-#      is what the first push of tracktime-client-selfhost creates — fails
+#      is what the first push of trackyourtime-client-selfhost creates — fails
 #      here with the fix spelled out.
 #   2. Docker, anonymously: a throwaway DOCKER_CONFIG with no auths and no
 #      credential store (your real ~/.docker is never written to, and your
@@ -49,7 +49,7 @@
 #                   free random port in 49152-65535. Bound on 127.0.0.1 only.
 #   EXPECTED_SHA    the commit /api/health must report as `version`.
 #   IMAGE_REPO      <owner>/<repo> the images are named after. Default
-#                   trebeljahr/tracktime; point it at a fork's packages to
+#                   trebeljahr/trackyourtime; point it at a fork's packages to
 #                   exercise the script before a real release exists.
 #   CHECK_FLOATING  1 = also check the `X.Y` and `latest` tags (step 8).
 #   REGISTRY_ONLY   1 = stop after step 1; no Docker needed.
@@ -63,7 +63,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/docker-compose.selfhost.yml"
-DEFAULT_IMAGE_REPO="trebeljahr/tracktime"
+DEFAULT_IMAGE_REPO="trebeljahr/trackyourtime"
 
 # ── Output ───────────────────────────────────────────────────────────────
 
@@ -403,7 +403,7 @@ cat >"$TMP_DIR/env" <<EOF
 APP_DOMAIN=$APP_URL
 APP_URL=$APP_URL
 BETTER_AUTH_SECRET=$(openssl rand -hex 32)
-TRACKTIME_VERSION=$VERSION
+TRACKYOURTIME_VERSION=$VERSION
 EOF
 
 # Only caddy's ports change. `!override` REPLACES the list (a plain merge
@@ -428,7 +428,7 @@ for var in $(grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*' "$COMPOSE_FILE" | sed 's/^\${
   COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES; do
   COMPOSE_UNSET="$COMPOSE_UNSET -u $var"
 done
-PROJECT="tracktime-verify-$$"
+PROJECT="trackyourtime-verify-$$"
 
 config_json="$(compose_project config --format json 2>&1)" \
   || fail "compose rejected the configuration: $config_json"

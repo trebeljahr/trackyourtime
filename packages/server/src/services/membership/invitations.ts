@@ -3,7 +3,7 @@
 // Invitation rows live in better-auth's own `invitation` collection with the
 // plugin's field names and statuses, so the account-deletion cascade (which
 // removes invitations a person sent and invitations addressed to them) keeps
-// working without knowing tracktime ever wrote one. Everything else about
+// working without knowing trackyourtime ever wrote one. Everything else about
 // them is decided here, not by the plugin: its endpoints answer 404 over HTTP.
 //
 // ── What proves the invitee is the invitee ──────────────────────────────

@@ -119,8 +119,8 @@ A fork that publishes under its own listing passes its own public key as
 `EXTENSION_KEY`, which overrides the store key for either build:
 
 ```bash
-openssl genrsa 2048 | openssl pkcs8 -topk8 -nocrypt -out tracktime-extension.pem
-openssl rsa -in tracktime-extension.pem -pubout -outform DER | base64 | tr -d '\n'
+openssl genrsa 2048 | openssl pkcs8 -topk8 -nocrypt -out trackyourtime-extension.pem
+openssl rsa -in trackyourtime-extension.pem -pubout -outform DER | base64 | tr -d '\n'
 ```
 
 Keep the `.pem` out of the repo. That fork's servers then need its
@@ -247,7 +247,7 @@ token is kept in `chrome.storage.session` — memory-only, so it never touches
 disk and is gone after a browser restart. Signing in again is the intended
 cost of that; do not move the token to `chrome.storage.local`.
 
-The session appears in Settings → Devices as `tracktime-extension` and can be
+The session appears in Settings → Devices as `trackyourtime-extension` and can be
 revoked from there, which kills both the HTTP and the WebSocket path.
 
 ## Icons

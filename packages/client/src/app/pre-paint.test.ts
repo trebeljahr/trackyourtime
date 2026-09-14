@@ -128,7 +128,7 @@ describe("LOCALE_SCRIPT", () => {
 
   it("a stored choice beats the device", () => {
     setLanguages(["de-DE"]);
-    window.localStorage.setItem("tracktime.locale", "en");
+    window.localStorage.setItem("trackyourtime.locale", "en");
     run(localeScript(false));
     expect(root.lang).toBe("en");
     expect(root.hasAttribute(LOCALE_PENDING_ATTRIBUTE)).toBe(false);

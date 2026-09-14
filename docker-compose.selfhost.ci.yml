@@ -24,14 +24,14 @@
 
 services:
   server:
-    image: tracktime-server:selfhost-ci
+    image: trackyourtime-server:selfhost-ci
     pull_policy: never
     healthcheck:
       interval: 5s
       start_period: 60s
 
   client:
-    image: tracktime-client-selfhost:selfhost-ci
+    image: trackyourtime-client-selfhost:selfhost-ci
     pull_policy: never
     healthcheck:
       interval: 5s

@@ -4,8 +4,8 @@ Two Coolify apps on **two hosts of one zone**:
 
 | Coolify app | Routed at | Compose file | Serves |
 |---|---|---|---|
-| `tracktime-client` | `https://trackyourtime.dev` | `docker-compose.client.yml` | the Next web app |
-| `tracktime-server` | `https://api.trackyourtime.dev` | `docker-compose.server.yml` | the Express API, tRPC and the `/api/ws` socket |
+| `trackyourtime-client` | `https://trackyourtime.dev` | `docker-compose.client.yml` | the Next web app |
+| `trackyourtime-server` | `https://api.trackyourtime.dev` | `docker-compose.server.yml` | the Express API, tRPC and the `/api/ws` socket |
 
 ## Why a new domain — the history, because both halves still matter
 
@@ -113,13 +113,13 @@ before this change still connects wherever `/ws` is still routed.
 
 ## One-time setup in Coolify
 
-1. **Databases.** `tracktime-mongo` already exists as a Coolify database.
+1. **Databases.** `trackyourtime-mongo` already exists as a Coolify database.
    Add a Redis one if you want it; the server treats `REDIS_URL` as optional
    and logs "skipping Redis connection" when it is unset.
 2. **Two applications**, both from this repo, build pack `dockercompose`:
-   - `tracktime-server` → compose path `docker-compose.server.yml`,
+   - `trackyourtime-server` → compose path `docker-compose.server.yml`,
      domain `https://api.trackyourtime.dev`
-   - `tracktime-client` → compose path `docker-compose.client.yml`,
+   - `trackyourtime-client` → compose path `docker-compose.client.yml`,
      domain `https://trackyourtime.dev`
 
    **Give each a bare host and no path.** A path in the domain field is what
@@ -203,7 +203,7 @@ run of the backfill, or every existing user gets a verification link instead
 of a session:
 
 ```bash
-# in the running server container (Coolify → tracktime-server → Terminal)
+# in the running server container (Coolify → trackyourtime-server → Terminal)
 node dist/scripts/backfill-email-verified.js --before <deploy time, ISO 8601>
 # from a checkout, against the production MONGODB_URI
 pnpm --filter @starter/server run backfill:email-verified -- --before <deploy time>
@@ -354,9 +354,9 @@ committed by accident at all):
 
 ```bash
 keytool -genkeypair -v \
-  -keystore ~/keys/tracktime-upload.keystore \
+  -keystore ~/keys/trackyourtime-upload.keystore \
   -storetype PKCS12 \
-  -alias tracktime \
+  -alias trackyourtime \
   -keyalg RSA -keysize 2048 \
   -validity 10000
 ```
@@ -374,13 +374,13 @@ The names on the left are what the workflow reads. `gh secret set NAME` with no
 `--body` prompts for the value and does not echo it:
 
 ```bash
-base64 -i ~/keys/tracktime-upload.keystore | gh secret set ANDROID_KEYSTORE_BASE64
+base64 -i ~/keys/trackyourtime-upload.keystore | gh secret set ANDROID_KEYSTORE_BASE64
 gh secret set ANDROID_KEYSTORE_PASSWORD   # the password from step 1
-gh secret set ANDROID_KEY_ALIAS --body tracktime
+gh secret set ANDROID_KEY_ALIAS --body trackyourtime
 gh secret set ANDROID_KEY_PASSWORD        # the same password, for PKCS12
 ```
 
-On Linux, `base64 -w0 ~/keys/tracktime-upload.keystore | gh secret set …` —
+On Linux, `base64 -w0 ~/keys/trackyourtime-upload.keystore | gh secret set …` —
 GNU `base64` wraps at 76 columns without `-w0` and macOS `base64` takes `-i`
 instead. Either way the workflow's `base64 -d` accepts wrapped input, so a
 newline in the secret is harmless; what matters is that the whole file is in
@@ -403,9 +403,9 @@ The gradle block reads a keystore at `android/app/release.keystore` — the same
 path the workflow decodes to — plus three environment variables:
 
 ```bash
-cp ~/keys/tracktime-upload.keystore android/app/release.keystore
+cp ~/keys/trackyourtime-upload.keystore android/app/release.keystore
 cd android
-KEYSTORE_PASSWORD='…' KEY_ALIAS=tracktime KEY_PASSWORD='…' ./gradlew bundleRelease
+KEYSTORE_PASSWORD='…' KEY_ALIAS=trackyourtime KEY_PASSWORD='…' ./gradlew bundleRelease
 jarsigner -verify -verbose:summary \
   app/build/outputs/bundle/release/app-release.aab
 ```
@@ -414,7 +414,7 @@ jarsigner -verify -verbose:summary \
 certificate is self-signed — that is expected and correct for an upload key.
 
 **Without any of that, `./gradlew bundleRelease` still works.** It logs
-`tracktime: no release signing key …` and produces an unsigned bundle, which is
+`trackyourtime: no release signing key …` and produces an unsigned bundle, which is
 what you want for a build you are only going to `bundletool` onto a device. The
 guard exists so that a fresh checkout is not a Gradle error; CI is where an
 unsigned artifact must not pass silently, and there it does not.

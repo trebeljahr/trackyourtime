@@ -20,12 +20,12 @@ const CLIENT_PORT = process.env.E2E_CLIENT_PORT ?? "49762";
 const TARGET_PORT = process.env.E2E_TARGET_SERVER_PORT ?? "49764";
 const TARGET = `http://127.0.0.1:${TARGET_PORT}`;
 const SOURCE_URI =
-  process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27018/tracktime-e2e";
+  process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27018/trackyourtime-e2e";
 
 /** The source database's URI with `-move-target` on the database name. */
 const targetUri = (): string => {
   const url = new URL(SOURCE_URI);
-  url.pathname = `${url.pathname.replace(/\/$/, "") || "/tracktime-e2e"}-move-target`;
+  url.pathname = `${url.pathname.replace(/\/$/, "") || "/trackyourtime-e2e"}-move-target`;
   return url.toString();
 };
 
@@ -233,7 +233,7 @@ test.describe("Move to another server", () => {
       page.waitForEvent("download"),
       page.getByTestId("move-file-download").click(),
     ]);
-    expect(download.suggestedFilename()).toMatch(/^tracktime-move-\d{4}-\d{2}-\d{2}\.json$/);
+    expect(download.suggestedFilename()).toMatch(/^trackyourtime-move-\d{4}-\d{2}-\d{2}\.json$/);
     await expect(page.getByTestId("move-file-saved")).toHaveText("Saved 1 file.");
     const file = await download.path();
     const doc = JSON.parse(await readFile(file, "utf8")) as { entries: unknown[] };

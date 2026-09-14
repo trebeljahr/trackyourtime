@@ -140,7 +140,7 @@ describe("problemFromTRPCError", () => {
 
   it("still hides the message when a route names a 5xx slug", () => {
     const problem = problemFromTRPCError(
-      new ApiProblemError("storage-unavailable", 500, "bucket tracktime-prod is unreachable"),
+      new ApiProblemError("storage-unavailable", 500, "bucket trackyourtime-prod is unreachable"),
       INSTANCE,
     );
     assert.equal(problem.detail, INTERNAL_DETAIL);

@@ -9,7 +9,7 @@ import {
 } from "@raycast/api";
 import type { Client } from "@starter/core";
 import { useState } from "react";
-import { getTracktime } from "../../lib/api.js";
+import { getTrackYourTime } from "../../lib/api.js";
 import { showFailureToast } from "../../lib/ui.js";
 import { AUTOMATIC, ColorField } from "./color-field.js";
 
@@ -36,7 +36,7 @@ export function ClientForm({ client, onSaved }: Props): React.JSX.Element {
 
     setSubmitting(true);
     try {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       const saved = client
         ? await api.updateClient({
             id: client.id,

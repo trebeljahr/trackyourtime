@@ -10,7 +10,7 @@
  */
 import { chromeStorage, sessionStorageArea } from "./chrome-storage";
 
-export const SESSION_STORAGE_KEY = "tracktime.session";
+export const SESSION_STORAGE_KEY = "trackyourtime.session";
 
 /** Shaped like core's `IssuedSession` — `token` is the credential. */
 export type StoredSession = {

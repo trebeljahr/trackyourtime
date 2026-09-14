@@ -9,7 +9,7 @@ import {
 } from "@raycast/api";
 import type { Tag } from "@starter/core";
 import { useState } from "react";
-import { getTracktime } from "../../lib/api.js";
+import { getTrackYourTime } from "../../lib/api.js";
 import { showFailureToast } from "../../lib/ui.js";
 import { AUTOMATIC, ColorField } from "./color-field.js";
 
@@ -35,7 +35,7 @@ export function TagForm({ tag, onSaved }: Props): React.JSX.Element {
 
     setSubmitting(true);
     try {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       const saved = tag
         ? await api.updateTag({
             id: tag.id,

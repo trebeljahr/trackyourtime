@@ -44,8 +44,8 @@ describe("resolveSyncUrl", () => {
   });
 
   it("keeps a base path, so a proxied sub-path deployment still resolves", () => {
-    expect(resolveSyncUrl("https://example.test/tracktime", "")).toBe(
-      "wss://example.test/tracktime/api/ws",
+    expect(resolveSyncUrl("https://example.test/trackyourtime", "")).toBe(
+      "wss://example.test/trackyourtime/api/ws",
     );
   });
 

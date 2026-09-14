@@ -41,7 +41,7 @@ const entry = (overrides: Partial<DetailedEntry> = {}): DetailedEntry => {
     importId: null,
     createdAt: start,
     updatedAt: start,
-    projectName: "tracktime",
+    projectName: "trackyourtime",
     projectColor: "#4f46e5",
     clientName: null,
     taskName: null,

@@ -23,7 +23,7 @@ appears in an open browser tab immediately.
 
 ```bash
 curl -s https://api.trackyourtime.dev/api/v1/me \
-  -H "Authorization: Bearer $TRACKTIME_TOKEN"
+  -H "Authorization: Bearer $TRACKYOURTIME_TOKEN"
 ```
 
 ```json
@@ -82,7 +82,7 @@ default set by the server) and then feed each response's `nextCursor` back as th
 
 ```bash
 curl -s -G https://api.trackyourtime.dev/api/v1/entries \
-  -H "Authorization: Bearer $TRACKTIME_TOKEN" \
+  -H "Authorization: Bearer $TRACKYOURTIME_TOKEN" \
   --data-urlencode "from=2026-09-01" \
   --data-urlencode "to=2026-09-30" \
   --data-urlencode "limit=100" \

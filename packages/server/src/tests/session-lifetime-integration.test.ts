@@ -127,7 +127,7 @@ async function signUp(
   const response = await auth.api.signUpEmail({
     body: { email, password: "password1234", name: `user ${seq}` },
     headers: new Headers(
-      clientHeader ? { "x-tracktime-client": clientHeader } : {},
+      clientHeader ? { "x-trackyourtime-client": clientHeader } : {},
     ),
     returnHeaders: true,
   });
@@ -153,7 +153,7 @@ const useSession = (token: string, clientHeader: string | null) =>
   auth.api.getSession({
     headers: new Headers({
       authorization: `Bearer ${token}`,
-      ...(clientHeader ? { "x-tracktime-client": clientHeader } : {}),
+      ...(clientHeader ? { "x-trackyourtime-client": clientHeader } : {}),
     }),
     // The cookie cache would answer without ever reaching the row, which is
     // exactly the path a refresh is not on.
@@ -179,7 +179,7 @@ describe("better-auth honours the per-client session window", () => {
   });
 
   it("creates a mobile session with thirty", async () => {
-    const { row } = await signUp("tracktime-mobile");
+    const { row } = await signUp("trackyourtime-mobile");
     assert.equal(row.client, "mobile");
     assert.equal(
       daysOut(row.expiresAt),
@@ -188,7 +188,7 @@ describe("better-auth honours the per-client session window", () => {
   });
 
   it("creates a Raycast session with thirty", async () => {
-    const { row } = await signUp("tracktime-raycast");
+    const { row } = await signUp("trackyourtime-raycast");
     assert.equal(row.client, "raycast");
     assert.equal(
       daysOut(row.expiresAt),
@@ -215,9 +215,9 @@ describe("better-auth honours the per-client session window", () => {
   });
 
   it("keeps a mobile session at thirty days across a refresh", async () => {
-    const { token, row } = await signUp("tracktime-mobile");
+    const { token, row } = await signUp("trackyourtime-mobile");
     makeDueForRefresh(row);
-    await useSession(token, "tracktime-mobile");
+    await useSession(token, "trackyourtime-mobile");
     assert.equal(
       daysOut(rowFor(row.id).expiresAt),
       TOKEN_CLIENT_SESSION_SECONDS / 86_400,
@@ -226,9 +226,9 @@ describe("better-auth honours the per-client session window", () => {
 
   it("keeps a mobile session at thirty when the request names no client", async () => {
     // The WebSocket liveness re-check replays the handshake's headers, and a
-    // handshake carries no `x-tracktime-client`. Deciding from the request
+    // handshake carries no `x-trackyourtime-client`. Deciding from the request
     // rather than from the row would quietly demote every socketed phone.
-    const { token, row } = await signUp("tracktime-mobile");
+    const { token, row } = await signUp("trackyourtime-mobile");
     makeDueForRefresh(row);
     await useSession(token, null);
     assert.equal(
@@ -240,7 +240,7 @@ describe("better-auth honours the per-client session window", () => {
   it("will not let a browser session claim the long window on a refresh", async () => {
     const { token, row } = await signUp("web");
     makeDueForRefresh(row);
-    await useSession(token, "tracktime-mobile");
+    await useSession(token, "trackyourtime-mobile");
     assert.equal(
       daysOut(rowFor(row.id).expiresAt),
       BROWSER_SESSION_SECONDS / 86_400,
@@ -251,7 +251,7 @@ describe("better-auth honours the per-client session window", () => {
     // `ws/auth.ts` asks with `disableRefresh` so the liveness probe stops
     // renewing what it is only meant to be checking. That flag must not also
     // turn the probe into a cache read, or a revoked device keeps its socket.
-    const { token, row } = await signUp("tracktime-mobile");
+    const { token, row } = await signUp("trackyourtime-mobile");
     const alive = await auth.api.getSession({
       headers: new Headers({ authorization: `Bearer ${token}` }),
       query: { disableCookieCache: true, disableRefresh: true },

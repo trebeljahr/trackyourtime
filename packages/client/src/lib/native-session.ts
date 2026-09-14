@@ -42,13 +42,13 @@ import { isNative } from "@/mobile/bridge";
 import { hydrateApiOrigin } from "@/lib/api-origin";
 
 /** Keychain item holding the better-auth session token. */
-const TOKEN_KEY = "tracktime.session-token";
+const TOKEN_KEY = "trackyourtime.session-token";
 
 /**
  * Preferences marker proving this install has run before. Preferences is
  * wiped when the app is deleted; the Keychain is not.
  */
-const INSTALL_MARKER_KEY = "tracktime.installed";
+const INSTALL_MARKER_KEY = "trackyourtime.installed";
 
 // ── the store ────────────────────────────────────────────────────────
 

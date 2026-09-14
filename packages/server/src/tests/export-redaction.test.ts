@@ -140,7 +140,7 @@ const fixture = (): ExhaustiveExport => ({
   ],
   projects: [
     {
-      name: "tracktime",
+      name: "trackyourtime",
       color: "#222222",
       clientName: "Internal",
       billableDefault: true,
@@ -165,14 +165,14 @@ const fixture = (): ExhaustiveExport => ({
     },
   ],
   tasks: [
-    { name: "Imports", projectName: "tracktime", done: false, archived: false },
+    { name: "Imports", projectName: "trackyourtime", done: false, archived: false },
   ],
   tags: [{ name: "deep work", color: "#444444", archived: false }],
   entries: [
     {
       description: "Wrote the exporter",
       clientName: "Internal",
-      projectName: "tracktime",
+      projectName: "trackyourtime",
       taskName: "Imports",
       tagNames: ["deep work"],
       billable: true,
@@ -220,7 +220,7 @@ const fixture = (): ExhaustiveExport => ({
     {
       description: "Stand-up",
       clientName: "Internal",
-      projectName: "tracktime",
+      projectName: "trackyourtime",
       taskName: null,
       billable: false,
       order: 0,
@@ -238,8 +238,8 @@ const fixture = (): ExhaustiveExport => ({
       groupBy: "project",
       lineItems: [
         {
-          label: "tracktime",
-          projectName: "tracktime",
+          label: "trackyourtime",
+          projectName: "trackyourtime",
           taskName: null,
           seconds: 5400,
           hours: 1.5,
@@ -338,7 +338,7 @@ test("an entry's own rate is the rate card, so it goes with the rate card", () =
   // The disclosure this rule exists for: `resolveHourlyRate` snapshots the
   // project's rate (or the workspace default) onto every entry, so keeping
   // entry rates for a member scoped to their own rows would hand back both
-  // redacted figures — 120 keyed by "tracktime", 95 from the default — and a
+  // redacted figures — 120 keyed by "trackyourtime", 95 from the default — and a
   // billable second booked against each project enumerates the whole card.
   const redacted = redactExportMoney(fixture(), visibility(false, false));
 
@@ -395,7 +395,7 @@ test("redaction takes the money and nothing else", () => {
   assert.equal(redacted.currency, "EUR");
   // Hours are a time target; the time question is `canViewOthersTime`.
   assert.equal(redacted.projects[0]?.estimatedHours, 40);
-  assert.equal(redacted.projects[0]?.name, "tracktime");
+  assert.equal(redacted.projects[0]?.name, "trackyourtime");
   assert.deepEqual(redacted.clients, original.clients);
   assert.deepEqual(redacted.tasks, original.tasks);
   assert.deepEqual(redacted.tags, original.tags);

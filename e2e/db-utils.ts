@@ -2,10 +2,10 @@ import { MongoClient } from "mongodb";
 
 // Must match the database the E2E server writes to (see playwright.config.ts).
 // It previously defaulted to "starter-e2e" while the server used
-// "tracktime-e2e", so cleanDatabase() was emptying a database nothing used and
+// "trackyourtime-e2e", so cleanDatabase() was emptying a database nothing used and
 // state leaked between tests.
 const MONGODB_URI =
-  process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27018/tracktime-e2e";
+  process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27018/trackyourtime-e2e";
 
 let client: MongoClient | null = null;
 

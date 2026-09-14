@@ -62,7 +62,7 @@
 #              `latest` points at.
 #
 # See docs/releasing.md for the maintainer's runbook, including the one
-# manual step of the FIRST release (making tracktime-client-selfhost public).
+# manual step of the FIRST release (making trackyourtime-client-selfhost public).
 
 name: release
 
@@ -90,6 +90,13 @@ concurrency:
 # Read-only by default. `packages: write` is granted per job, to the build,
 # merge and promote jobs only — never to smoke, whose whole point is to prove
 # the images can be pulled by someone holding no token at all.
+# Image names are spelled out, never derived from the repository name. A
+# repository rename would otherwise move every push to a new GHCR package —
+# which GHCR creates private — while Coolify and self-hosters keep pulling the
+# old name. Renaming the repo must not rename the images as a side effect.
+env:
+  IMAGE_OWNER_REPO: trebeljahr/trackyourtime
+
 permissions:
   contents: read
 
@@ -212,11 +219,11 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}-server
+          images: ghcr.io/${{ env.IMAGE_OWNER_REPO }}-server
           flavor: latest=false
           tags: type=raw,value=${{ needs.prepare.outputs.version }}
           labels: |
-            org.opencontainers.image.title=tracktime-server
+            org.opencontainers.image.title=trackyourtime-server
             org.opencontainers.image.description=Track Your Time API server
             org.opencontainers.image.licenses=AGPL-3.0-or-later
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
@@ -241,7 +248,7 @@ jobs:
           # Publishing: push the image by DIGEST, untagged, for `merge` to
           # join. Dry run: `cacheonly` builds everything and keeps nothing but
           # the layer cache.
-          outputs: ${{ needs.prepare.outputs.push == 'true' && format('type=image,name=ghcr.io/{0}-server,push-by-digest=true,name-canonical=true,push=true', github.repository) || 'type=cacheonly' }}
+          outputs: ${{ needs.prepare.outputs.push == 'true' && format('type=image,name=ghcr.io/{0}-server,push-by-digest=true,name-canonical=true,push=true', env.IMAGE_OWNER_REPO) || 'type=cacheonly' }}
           # Explicit rather than build-push-action's implicit default, and
           # mode=max is safe here: no secret and no API URL is a build arg, so
           # the recorded build parameters disclose nothing. Off on a dry run,
@@ -306,11 +313,11 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}-client-selfhost
+          images: ghcr.io/${{ env.IMAGE_OWNER_REPO }}-client-selfhost
           flavor: latest=false
           tags: type=raw,value=${{ needs.prepare.outputs.version }}
           labels: |
-            org.opencontainers.image.title=tracktime-client-selfhost
+            org.opencontainers.image.title=trackyourtime-client-selfhost
             org.opencontainers.image.description=Track Your Time web app, same-origin build for self-hosting
             org.opencontainers.image.licenses=AGPL-3.0-or-later
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
@@ -341,7 +348,7 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_URL=
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: ${{ needs.prepare.outputs.push == 'true' && format('type=image,name=ghcr.io/{0}-client-selfhost,push-by-digest=true,name-canonical=true,push=true', github.repository) || 'type=cacheonly' }}
+          outputs: ${{ needs.prepare.outputs.push == 'true' && format('type=image,name=ghcr.io/{0}-client-selfhost,push-by-digest=true,name-canonical=true,push=true', env.IMAGE_OWNER_REPO) || 'type=cacheonly' }}
           provenance: ${{ needs.prepare.outputs.push == 'true' && 'mode=max' || 'false' }}
           sbom: ${{ needs.prepare.outputs.push == 'true' }}
           cache-from: type=gha,scope=release-client-selfhost-${{ matrix.arch }}
@@ -385,7 +392,9 @@ jobs:
       matrix:
         image: [server, client-selfhost]
     env:
-      IMAGE: ghcr.io/${{ github.repository }}-${{ matrix.image }}
+      # Job-level env cannot read the `env` context; keep in step with
+      # IMAGE_OWNER_REPO at the top of this file.
+      IMAGE: ghcr.io/trebeljahr/trackyourtime-${{ matrix.image }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -416,7 +425,7 @@ jobs:
           flavor: latest=false
           tags: type=raw,value=${{ needs.prepare.outputs.version }}
           annotations: |
-            org.opencontainers.image.title=tracktime-${{ matrix.image }}
+            org.opencontainers.image.title=trackyourtime-${{ matrix.image }}
             org.opencontainers.image.description=${{ matrix.image == 'server' && 'Track Your Time API server' || 'Track Your Time web app, same-origin build for self-hosting' }}
             org.opencontainers.image.licenses=AGPL-3.0-or-later
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
@@ -469,7 +478,7 @@ jobs:
   # pushed. No login step anywhere in this job and no `packages` permission:
   # a pull that only works with a token proves nothing about what a
   # self-hoster will see. On the FIRST publish this fails by design —
-  # GHCR creates tracktime-client-selfhost PRIVATE — and the script's error
+  # GHCR creates trackyourtime-client-selfhost PRIVATE — and the script's error
   # says how to flip it; then "Re-run failed jobs" re-runs smoke and promote
   # without rebuilding anything.
   smoke:
@@ -501,9 +510,8 @@ jobs:
       - name: Pull and start the release anonymously
         env:
           EXPECTED_SHA: ${{ needs.prepare.outputs.sha }}
-          # The packages this run pushed. The script defaults to the upstream
-          # repo's, so a fork's release would otherwise smoke-test upstream.
-          IMAGE_REPO: ${{ github.repository }}
+          # The packages this run pushed, named once at the top of this file.
+          IMAGE_REPO: ${{ env.IMAGE_OWNER_REPO }}
           VERIFY_PORT: "80"
           VERSION: ${{ needs.prepare.outputs.version }}
         run: scripts/verify-release-images.sh "$VERSION"
@@ -533,7 +541,7 @@ jobs:
 
       - name: Move the floating tags
         env:
-          IMAGE: ghcr.io/${{ github.repository }}-${{ matrix.image }}
+          IMAGE: ghcr.io/${{ env.IMAGE_OWNER_REPO }}-${{ matrix.image }}
           VERSION: ${{ needs.prepare.outputs.version }}
           LATEST: ${{ needs.prepare.outputs.latest }}
           MINOR: ${{ needs.prepare.outputs.minor }}

@@ -17,6 +17,6 @@ These docs are for three kinds of reader.
 
 **You want to connect it to something.** The [MCP server](./mcp.md) lets an AI assistant start timers, log time and read reports. The [REST API](./api/overview.md) and [webhooks](./api/webhooks.md) serve every other integration.
 
-A hosted instance runs at [trackyourtime.dev](https://trackyourtime.dev), and the code is on [GitHub](https://github.com/trebeljahr/tracktime) under AGPL-3.0-or-later.
+A hosted instance runs at [trackyourtime.dev](https://trackyourtime.dev), and the code is on [GitHub](https://github.com/trebeljahr/trackyourtime) under AGPL-3.0-or-later.
 
 Every page on this site also exists as plain Markdown. Add `.md` to a page's address, or use `/index.md` for this page. [`/llms.txt`](pathname:///llms.txt) lists all of them.

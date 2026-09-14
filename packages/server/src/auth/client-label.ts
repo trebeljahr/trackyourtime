@@ -6,15 +6,15 @@
 import type { ClientKind } from "@starter/shared";
 
 /** Header a first-party client sets to name itself in the devices list. */
-export const CLIENT_HEADER = "x-tracktime-client";
+export const CLIENT_HEADER = "x-trackyourtime-client";
 
 /** `client_id` values the device-authorization flow accepts. */
 export const DEVICE_FLOW_CLIENT_IDS: Record<string, ClientKind> = {
-  "tracktime-raycast": "raycast",
-  "tracktime-cli": "cli",
-  "tracktime-extension": "extension",
-  "tracktime-desktop": "desktop",
-  "tracktime-mobile": "mobile",
+  "trackyourtime-raycast": "raycast",
+  "trackyourtime-cli": "cli",
+  "trackyourtime-extension": "extension",
+  "trackyourtime-desktop": "desktop",
+  "trackyourtime-mobile": "mobile",
 };
 
 const CLIENT_KINDS: readonly ClientKind[] = [

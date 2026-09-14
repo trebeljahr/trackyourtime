@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Seeds one plausible freelancer's month into a running tracktime server, for
+ * Seeds one plausible freelancer's month into a running trackyourtime server, for
  * screenshots of the marketing pages and the store listings.
  *
  *   node scripts/marketing/seed-demo.mjs http://127.0.0.1:52417 http://localhost:52419

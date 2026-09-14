@@ -17,8 +17,8 @@ describe("normalizeClientKind", () => {
   });
 
   it("maps device-flow client ids onto their kind", () => {
-    assert.equal(normalizeClientKind("tracktime-raycast"), "raycast");
-    assert.equal(normalizeClientKind("tracktime-cli"), "cli");
+    assert.equal(normalizeClientKind("trackyourtime-raycast"), "raycast");
+    assert.equal(normalizeClientKind("trackyourtime-cli"), "cli");
   });
 
   it("is case- and whitespace-insensitive", () => {
@@ -35,7 +35,7 @@ describe("normalizeClientKind", () => {
 
 describe("clientKindFromHeaders", () => {
   it("reads the client header", () => {
-    const headers = new Headers({ [CLIENT_HEADER]: "tracktime-cli" });
+    const headers = new Headers({ [CLIENT_HEADER]: "trackyourtime-cli" });
     assert.equal(clientKindFromHeaders(headers), "cli");
   });
 
@@ -78,7 +78,7 @@ describe("DEVICE_FLOW_CLIENT_IDS", () => {
   it("is the allowlist the device flow validates against", () => {
     // Guards the validateClient callback in auth.ts: an unlisted client id
     // must not be able to start a pairing flow.
-    assert.ok(Object.hasOwn(DEVICE_FLOW_CLIENT_IDS, "tracktime-raycast"));
+    assert.ok(Object.hasOwn(DEVICE_FLOW_CLIENT_IDS, "trackyourtime-raycast"));
     assert.ok(!Object.hasOwn(DEVICE_FLOW_CLIENT_IDS, "attacker-app"));
   });
 });

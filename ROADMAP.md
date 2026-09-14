@@ -113,7 +113,7 @@ before writing any of it.
 
 ### A CLI
 
-**Exists.** `tracktime-cli` is already an allowlisted device-flow client id in
+**Exists.** `trackyourtime-cli` is already an allowlisted device-flow client id in
 `packages/server/src/auth/client-label.ts`, and `packages/core` is the
 framework-free runtime (API client, device-flow sign-in, offline queue, timer
 store) that a CLI would be built on — the same package Raycast uses.
@@ -162,7 +162,7 @@ over IPC. Capacitor has config and a small JS bridge.
 
 **Missing.** For desktop: no tray, no global shortcuts, no auto-update, no
 signing setup, and it has never been built or distributed. For mobile: no
-`ios/` or `android/` directory, the bundle id is still `com.example.tracktime`,
+`ios/` or `android/` directory, the bundle id is still `com.example.trackyourtime`,
 and nothing has run on a device.
 
 **Would have to be built.** Mostly release engineering rather than features:

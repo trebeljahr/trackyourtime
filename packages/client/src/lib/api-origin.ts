@@ -34,7 +34,7 @@ import { isNative } from "@/mobile/bridge";
 import { preferencesStorage } from "@/mobile/preferences-storage";
 
 /** Preferences key holding the chosen server. Absent means the build default. */
-export const SERVER_CHOICE_STORAGE_KEY = "tracktime.server-choice";
+export const SERVER_CHOICE_STORAGE_KEY = "trackyourtime.server-choice";
 
 const trimOrigin = (value: string): string => value.trim().replace(/\/+$/, "");
 

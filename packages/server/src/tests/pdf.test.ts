@@ -122,7 +122,7 @@ const entry = (overrides: Partial<DetailedEntry> = {}): DetailedEntry => ({
   runaway: null,
   createdAt: "2026-08-03T09:30:00.000Z",
   updatedAt: "2026-08-03T09:30:00.000Z",
-  projectName: "tracktime",
+  projectName: "trackyourtime",
   projectColor: "#8b5cf6",
   clientName: "Internal",
   taskName: "Exports",
@@ -198,7 +198,7 @@ test("renderSummaryPdf produces a real PDF", async () => {
       groups: [
         {
           key: "project-1",
-          label: "tracktime",
+          label: "trackyourtime",
           color: "#8b5cf6",
           seconds: 9000,
           billableSec: 9000,
@@ -226,7 +226,7 @@ test("renderSummaryPdf produces a real PDF", async () => {
   assert.ok(page.includes("Europe/Berlin"));
   assert.ok(page.includes("generated 2026-09-01T08:00:00.000Z"));
   assert.ok(page.includes("Amount (EUR)"));
-  assert.ok(page.includes("tracktime"));
+  assert.ok(page.includes("trackyourtime"));
   assert.ok(page.includes("No project"));
   // Group durations and the totals row, both via formatDuration.
   assert.ok(page.includes("2:30:00"));
@@ -320,7 +320,7 @@ test("renderDetailedPdf produces a real PDF", async () => {
   const [page] = pageTexts(bytes);
   assert.ok(page !== undefined);
   assert.ok(page.includes("Wrote the exporter"));
-  assert.ok(page.includes("tracktime / Exports"));
+  assert.ok(page.includes("trackyourtime / Exports"));
   // 07:00Z is 09:00 in Europe/Berlin — the report's zone, not the server's.
   assert.ok(page.includes("09:00 - 11:30"));
   // A still-running entry has no end time to print.
@@ -402,7 +402,7 @@ test("renderWeeklyPdf produces a landscape PDF", async () => {
       {
         projectId: "project-1",
         taskId: null,
-        label: "tracktime",
+        label: "trackyourtime",
         color: "#8b5cf6",
         daySeconds: [3600, 0, 7200, 0, 1800, 0, 0],
         totalSec: 12_600,

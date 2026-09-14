@@ -3,7 +3,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * The tracktime mark.
+ * The trackyourtime mark.
  *
  * Inlined rather than an `<img src="/brand/mark-tile.svg">` so it paints with
  * the first render instead of after a second request — it sits in the sidebar

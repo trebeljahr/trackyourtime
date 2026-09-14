@@ -25,7 +25,7 @@ import {
 } from "@raycast/api";
 import { defaultManualRange } from "@starter/core";
 import { useState } from "react";
-import { getTracktime } from "../lib/api.js";
+import { getTrackYourTime } from "../lib/api.js";
 import { formatDurationShort } from "../lib/format.js";
 import { refreshMenuBar, showFailureToast } from "../lib/ui.js";
 import { DescriptionPicker } from "./description-picker.js";
@@ -105,7 +105,7 @@ export function LogTime({ onSaved }: Props): React.JSX.Element {
 
     setSubmitting(true);
     try {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       const entry = await api.create({
         description: values.description.trim(),
         projectId: orNull(values.projectId),

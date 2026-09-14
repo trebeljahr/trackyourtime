@@ -28,7 +28,7 @@ These uses are fine, and you do not need permission for them:
   project — in documentation, issues, comparisons, blog posts, talks, reviews,
   or academic work.
 - **Linking.** Link to the repository at
-  <https://github.com/trebeljahr/tracktime> or to the hosted app.
+  <https://github.com/trebeljahr/trackyourtime> or to the hosted app.
 - **Unmodified redistribution.** Redistribute the source code as-is, name and
   attribution intact. Keeping the name in place there is exactly what the AGPL
   expects of you.

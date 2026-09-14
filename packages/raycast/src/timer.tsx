@@ -25,7 +25,7 @@ import { LogTime } from "./components/log-time.js";
 import { SignedOutView } from "./components/signed-out.js";
 import { SignIn } from "./components/sign-in.js";
 import { StartTimer } from "./components/start-timer.js";
-import { getTracktime, type ProjectWithStats } from "./lib/api.js";
+import { getTrackYourTime, type ProjectWithStats } from "./lib/api.js";
 import { discardForeign, listForeign } from "./lib/offline.js";
 import { isLocalEntry } from "./lib/overlay.js";
 import {
@@ -111,7 +111,7 @@ export default function Timer(): React.JSX.Element {
 
   const stop = (entry: DetailedEntry): Promise<void> =>
     run(async () => {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       const stopped = await api.stop(entry.id);
       return `Stopped — ${formatDurationShort(stopped.durationSec)}`;
     }, "Could not stop the timer");
@@ -128,7 +128,7 @@ export default function Timer(): React.JSX.Element {
     if (!confirmed) return;
 
     await run(async () => {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       await api.discard(entry.id);
       return "Timer discarded";
     }, "Could not discard the timer");
@@ -144,7 +144,7 @@ export default function Timer(): React.JSX.Element {
     project: ProjectWithStats | null,
   ): Promise<void> =>
     run(async () => {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       // The task is left alone: moving an entry to another project does not
       // revise what the work was.
       await api.update({ id: entry.id, projectId: project?.id ?? null });
@@ -156,7 +156,7 @@ export default function Timer(): React.JSX.Element {
     pinned: DetailedFavorite | undefined,
   ): Promise<void> =>
     run(async () => {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       if (pinned) {
         await api.removeFavorite(pinned.id);
         return "Favorite removed";
@@ -506,7 +506,7 @@ export default function Timer(): React.JSX.Element {
                       icon={Icon.Play}
                       onAction={() =>
                         run(async () => {
-                          const api = await getTracktime();
+                          const api = await getTrackYourTime();
                           await api.startQuick(repairQuickStart(favorite));
                           return `Started — ${quickStartLabel(favorite)}`;
                         }, "Could not start the timer")
@@ -518,7 +518,7 @@ export default function Timer(): React.JSX.Element {
                       shortcut={{ modifiers: ["cmd"], key: "f" }}
                       onAction={() =>
                         run(async () => {
-                          const api = await getTracktime();
+                          const api = await getTrackYourTime();
                           await api.removeFavorite(favorite.id);
                           return "Favorite removed";
                         }, "Could not remove the favorite")
@@ -558,7 +558,7 @@ export default function Timer(): React.JSX.Element {
                       icon={Icon.Play}
                       onAction={() =>
                         run(async () => {
-                          const api = await getTracktime();
+                          const api = await getTrackYourTime();
                           await api.continue(entry.id, toQuickStart(entry));
                           return `Started — ${entryLabel(entry)}`;
                         }, "Could not start the timer")

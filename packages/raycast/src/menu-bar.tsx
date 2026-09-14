@@ -16,7 +16,7 @@ import {
   toQuickStart,
   type DetailedEntry,
 } from "@starter/core";
-import { getTracktime, type ProjectWithStats } from "./lib/api.js";
+import { getTrackYourTime, type ProjectWithStats } from "./lib/api.js";
 import { BRAND_MARK } from "./lib/brand.js";
 import {
   formatClock,
@@ -196,7 +196,7 @@ export default function MenuBar(): React.JSX.Element | null {
     project: ProjectWithStats | null,
   ): void => {
     void act(async () => {
-      const api = await getTracktime();
+      const api = await getTrackYourTime();
       // The task is left alone: moving an entry to another project does not
       // revise what the work was.
       await api.update({ id: entry.id, projectId: project?.id ?? null });
@@ -251,7 +251,7 @@ export default function MenuBar(): React.JSX.Element | null {
             shortcut={{ modifiers: ["cmd"], key: "s" }}
             onAction={() => {
               void act(async () => {
-                const api = await getTracktime();
+                const api = await getTrackYourTime();
                 const stopped = await api.stop();
                 await showToast({
                   style: Toast.Style.Success,
@@ -291,7 +291,7 @@ export default function MenuBar(): React.JSX.Element | null {
             shortcut={{ modifiers: ["cmd"], key: "f" }}
             onAction={() => {
               void act(async () => {
-                const api = await getTracktime();
+                const api = await getTrackYourTime();
                 if (pinned) {
                   await api.removeFavorite(pinned.id);
                   await showToast({
@@ -314,7 +314,7 @@ export default function MenuBar(): React.JSX.Element | null {
             shortcut={{ modifiers: ["cmd", "shift"], key: "backspace" }}
             onAction={() => {
               void act(async () => {
-                const api = await getTracktime();
+                const api = await getTrackYourTime();
                 await api.discard();
                 await showToast({
                   style: Toast.Style.Success,
@@ -348,7 +348,7 @@ export default function MenuBar(): React.JSX.Element | null {
               icon={Icon.Star}
               onAction={() => {
                 void act(async () => {
-                  const api = await getTracktime();
+                  const api = await getTrackYourTime();
                   await api.startQuick(repairQuickStart(favorite));
                   await showToast({
                     style: Toast.Style.Success,
@@ -372,7 +372,7 @@ export default function MenuBar(): React.JSX.Element | null {
               icon={Icon.ArrowClockwise}
               onAction={() => {
                 void act(async () => {
-                  const api = await getTracktime();
+                  const api = await getTrackYourTime();
                   await api.continue(entry.id, toQuickStart(entry));
                   await showToast({
                     style: Toast.Style.Success,

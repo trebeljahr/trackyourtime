@@ -131,8 +131,8 @@ const processEnv = (): BuildEnv =>
  * Store key by default; `EXTENSION_KEY` overrides it for either target, for a
  * fork that publishes under its own listing. Generate one with:
  *
- *   openssl genrsa 2048 | openssl pkcs8 -topk8 -nocrypt -out tracktime.pem
- *   openssl rsa -in tracktime.pem -pubout -outform DER | base64 | tr -d '\n'
+ *   openssl genrsa 2048 | openssl pkcs8 -topk8 -nocrypt -out trackyourtime.pem
+ *   openssl rsa -in trackyourtime.pem -pubout -outform DER | base64 | tr -d '\n'
  *
  * Keep the .pem out of the repo; only the public half belongs in a manifest.
  */

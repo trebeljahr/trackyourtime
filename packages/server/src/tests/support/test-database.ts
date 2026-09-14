@@ -32,7 +32,7 @@ export async function connectTestDatabase(
   label: string,
   models: readonly mongoose.Model<never>[] = [],
 ): Promise<void> {
-  const dbName = `tracktime-unit-${label}-${randomUUID().slice(0, 8)}`;
+  const dbName = `trackyourtime-unit-${label}-${randomUUID().slice(0, 8)}`;
   await mongoose.connect(uri, { dbName, serverSelectionTimeoutMS: 5000 });
   for (const model of models) {
     await model.syncIndexes();
@@ -45,7 +45,7 @@ export async function dropTestDatabase(): Promise<void> {
   const dbName = mongoose.connection.db?.databaseName ?? "";
   // The name was generated above; refuse anything else rather than trusting
   // that nothing reconnected mongoose somewhere in between.
-  if (dbName.startsWith("tracktime-unit-")) {
+  if (dbName.startsWith("trackyourtime-unit-")) {
     await mongoose.connection.dropDatabase();
   }
   await mongoose.disconnect();

@@ -229,7 +229,7 @@ const docsPort = includeDocs
 
 const mongoHost = process.env.MONGO_HOST ?? "127.0.0.1";
 const mongoPort = process.env.MONGO_PORT ?? "27017";
-const dbName = `tracktime-dev-${instanceId}`;
+const dbName = `trackyourtime-dev-${instanceId}`;
 const mongoUri =
   process.env.MONGODB_URI ?? `mongodb://${mongoHost}:${mongoPort}/${dbName}`;
 

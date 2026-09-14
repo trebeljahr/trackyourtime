@@ -28,7 +28,7 @@ const v2 = (overrides: Partial<WorkspaceExport> = {}): WorkspaceExport => ({
   clients: [{ name: "Internal", color: "#111111", archived: false }],
   projects: [
     {
-      name: "tracktime",
+      name: "trackyourtime",
       color: "#222222",
       clientName: "Internal",
       billableDefault: true,
@@ -48,7 +48,7 @@ const v2 = (overrides: Partial<WorkspaceExport> = {}): WorkspaceExport => ({
     {
       description: "Wrote the exporter",
       clientName: "Internal",
-      projectName: "tracktime",
+      projectName: "trackyourtime",
       taskName: "Imports",
       tagNames: ["deep work"],
       billable: true,
@@ -64,7 +64,7 @@ const v2 = (overrides: Partial<WorkspaceExport> = {}): WorkspaceExport => ({
     {
       description: "Stand-up",
       clientName: "Internal",
-      projectName: "tracktime",
+      projectName: "trackyourtime",
       taskName: null,
       billable: false,
       order: 0,
@@ -82,8 +82,8 @@ const v2 = (overrides: Partial<WorkspaceExport> = {}): WorkspaceExport => ({
       groupBy: "project",
       lineItems: [
         {
-          label: "tracktime",
-          projectName: "tracktime",
+          label: "trackyourtime",
+          projectName: "trackyourtime",
           taskName: null,
           seconds: 5400,
           hours: 1.5,
@@ -207,7 +207,7 @@ const pin = (
 ): WorkspaceExportFavorite => ({
   description: "Stand-up",
   clientName: "Internal",
-  projectName: "tracktime",
+  projectName: "trackyourtime",
   taskName: null,
   billable: false,
   order: 0,
@@ -216,7 +216,7 @@ const pin = (
 
 /** A destination workspace holding one project with one task. */
 const resolveKnown = (favorite: WorkspaceExportFavorite) => ({
-  projectId: favorite.projectName === "tracktime" ? "project-1" : null,
+  projectId: favorite.projectName === "trackyourtime" ? "project-1" : null,
   taskId: favorite.taskName === "Imports" ? "task-1" : null,
 });
 

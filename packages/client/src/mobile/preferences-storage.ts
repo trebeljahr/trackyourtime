@@ -27,7 +27,7 @@ import { isNative } from "./bridge";
  * Preferences is wiped on delete, so a reinstall re-runs a migration that has
  * nothing left to find — which is harmless and correct.
  */
-const MIGRATION_MARKER_KEY = "tracktime.preferences-migrated";
+const MIGRATION_MARKER_KEY = "trackyourtime.preferences-migrated";
 
 /** The plugin surface this module uses, so nothing here holds the Proxy. */
 type PreferencesPlugin = {

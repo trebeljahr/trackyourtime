@@ -34,7 +34,7 @@ export {
   type OfflineOverlay,
 };
 
-const OVERLAY_KEY = "tracktime.offline.overlay";
+const OVERLAY_KEY = "trackyourtime.offline.overlay";
 
 /** Never throws: a surface that cannot read this must still draw the server's answer. */
 export const loadOverlay = async (): Promise<OfflineOverlay> => {

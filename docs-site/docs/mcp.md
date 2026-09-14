@@ -53,11 +53,11 @@ configuration file. Revoke it in **Settings → Integrations → API tokens** wh
 You need Node.js 24 or newer, pnpm and git.
 
 ```bash
-git clone https://github.com/trebeljahr/tracktime.git
+git clone https://github.com/trebeljahr/trackyourtime.git
 ```
 
 ```bash
-cd tracktime && pnpm install && pnpm build:mcp
+cd trackyourtime && pnpm install && pnpm build:mcp
 ```
 
 **Expect:** the last line of output comes from `tsc` with no errors, and
@@ -88,18 +88,18 @@ The server reads two environment variables.
 | `TRACKYOURTIME_API_TOKEN` | Required. The `tt_…` token from step 1. |
 | `TRACKYOURTIME_API_URL` | Optional. Defaults to `https://api.trackyourtime.dev`. For a self-hosted instance, use its origin, for example `https://track.example.com`. A pasted `…/api/v1` suffix is accepted too. |
 
-Replace `/path/to/tracktime` below with the absolute path of your clone.
+Replace `/path/to/trackyourtime` below with the absolute path of your clone.
 
 ### Claude Code
 
 ```bash
-claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token -- node /path/to/tracktime/packages/mcp/dist/index.js
+claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token -- node /path/to/trackyourtime/packages/mcp/dist/index.js
 ```
 
 For a self-hosted instance, add a second `--env`:
 
 ```bash
-claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token --env TRACKYOURTIME_API_URL=https://track.example.com -- node /path/to/tracktime/packages/mcp/dist/index.js
+claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token --env TRACKYOURTIME_API_URL=https://track.example.com -- node /path/to/trackyourtime/packages/mcp/dist/index.js
 ```
 
 Add `--scope user` to make it available in every project. Run `claude mcp list` to
@@ -116,7 +116,7 @@ on Windows in `%APPDATA%\Claude\`). Add the server under `mcpServers`:
   "mcpServers": {
     "trackyourtime": {
       "command": "node",
-      "args": ["/path/to/tracktime/packages/mcp/dist/index.js"],
+      "args": ["/path/to/trackyourtime/packages/mcp/dist/index.js"],
       "env": {
         "TRACKYOURTIME_API_TOKEN": "tt_your_token",
         "TRACKYOURTIME_API_URL": "https://api.trackyourtime.dev"
@@ -133,7 +133,7 @@ Restart Claude Desktop. The tools appear under the tools menu in a new chat.
 Any client that launches stdio servers works. Give it:
 
 - **command:** `node`
-- **arguments:** `/path/to/tracktime/packages/mcp/dist/index.js`
+- **arguments:** `/path/to/trackyourtime/packages/mcp/dist/index.js`
 - **environment:** `TRACKYOURTIME_API_TOKEN`, and `TRACKYOURTIME_API_URL` for a
   self-hosted instance
 

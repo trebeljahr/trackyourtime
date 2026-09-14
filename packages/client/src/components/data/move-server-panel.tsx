@@ -148,7 +148,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
   const utils = trpc.useUtils();
   const currentOrigin = getAbsoluteApiOrigin();
   const here = serverLabel(currentOrigin);
-  const clientId: ClientId = native ? "tracktime-mobile" : "web";
+  const clientId: ClientId = native ? "trackyourtime-mobile" : "web";
 
   const [step, setStep] = React.useState<Step>({ kind: "target" });
   const [error, setError] = React.useState<string | null>(null);

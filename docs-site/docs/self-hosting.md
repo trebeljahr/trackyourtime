@@ -18,7 +18,7 @@ command. **Expect** says what success looks like. **If it fails** lists the
 usual causes and their fixes.
 
 This is not the maintainer's own deployment. That one is a two-domain split on
-Coolify, documented in [`deploy.md`](https://github.com/trebeljahr/tracktime/blob/main/docs/deploy.md). Nothing here interacts with
+Coolify, documented in [`deploy.md`](https://github.com/trebeljahr/trackyourtime/blob/main/docs/deploy.md). Nothing here interacts with
 it.
 
 **One thing to check before you start.** The compose file pulls the published
@@ -65,7 +65,7 @@ An assistant with shell access to your server can do the whole install. Copy
 this prompt and replace `<domain>` with your domain:
 
 ```text
-Set up Track Your Time on my Ubuntu server at <domain>, following https://github.com/trebeljahr/tracktime/blob/main/docs/self-hosting.md. Run scripts/selfhost-check.sh <domain> at the end and show me its output.
+Set up Track Your Time on my Ubuntu server at <domain>, following https://github.com/trebeljahr/trackyourtime/blob/main/docs/self-hosting.md. Run scripts/selfhost-check.sh <domain> at the end and show me its output.
 ```
 
 Before you send it, make sure the assistant has these:
@@ -98,8 +98,8 @@ One domain and five containers, all on your server:
 | Container | Image | Does |
 |---|---|---|
 | `caddy` | `caddy:2.11-alpine` | TLS. The only container with published ports. Sends `/api/*` and `/ws` to the server, and everything else to the web app. |
-| `server` | `ghcr.io/trebeljahr/tracktime-server` | The API (tRPC and REST), authentication and the live-sync WebSocket. |
-| `client` | `ghcr.io/trebeljahr/tracktime-client-selfhost` | The web app: a static export served by a second, small Caddy. |
+| `server` | `ghcr.io/trebeljahr/trackyourtime-server` | The API (tRPC and REST), authentication and the live-sync WebSocket. |
+| `client` | `ghcr.io/trebeljahr/trackyourtime-client-selfhost` | The web app: a static export served by a second, small Caddy. |
 | `mongo` | `mongo:7.0` | All of your data, including accounts and sessions. |
 | `redis` | `redis:7.4-alpine` | Present but unused. See [Optional integrations](#optional-integrations). |
 
@@ -376,19 +376,19 @@ record, `dig +short track.example.com AAAA` prints the server's IPv6 address.
 **Run**
 
 ```bash
-git clone https://github.com/trebeljahr/tracktime.git
+git clone https://github.com/trebeljahr/trackyourtime.git
 ```
 
 ```bash
-cd tracktime
+cd trackyourtime
 ```
 
 Then check out the release you will run. The compose file and the images must
-come from the same release, and `TRACKTIME_VERSION` in `.env.selfhost.example`
+come from the same release, and `TRACKYOURTIME_VERSION` in `.env.selfhost.example`
 names it:
 
 ```bash
-git checkout "$(sed -n 's/^TRACKTIME_VERSION=//p' .env.selfhost.example)"
+git checkout "$(sed -n 's/^TRACKYOURTIME_VERSION=//p' .env.selfhost.example)"
 ```
 
 **Expect** `git describe --tags` to print the same tag, for example `v0.1.0`,
@@ -403,7 +403,7 @@ and the source that an opt-in local build needs.
 
 | Symptom | Fix |
 |---|---|
-| `fatal: destination path 'tracktime' already exists` | A clone is already there. Run `cd tracktime`, `git fetch --tags`, and continue. |
+| `fatal: destination path 'trackyourtime' already exists` | A clone is already there. Run `cd trackyourtime`, `git fetch --tags`, and continue. |
 | `Could not resolve host: github.com` | The server has no outbound DNS or internet access. Fix the network first. |
 | `error: pathspec 'v…' did not match any file(s) known to git` | That release has not been published. Stay on `main` and see the limit at the top of this guide. |
 
@@ -477,7 +477,7 @@ commented out:
 |---|---|
 | `APP_DOMAIN` | Always. The site address, and therefore the certificate that Caddy requests. |
 | `BETTER_AUTH_SECRET` | Always. |
-| `TRACKTIME_VERSION` | The release tag of both app images, already set to the release the example file shipped with. Change it only to upgrade or roll back. See [Upgrading](#upgrading). |
+| `TRACKYOURTIME_VERSION` | The release tag of both app images, already set to the release the example file shipped with. Change it only to upgrade or roll back. See [Upgrading](#upgrading). |
 | `APP_URL` | Only when the origin is not `https://${APP_DOMAIN}`: a plain-HTTP local trial, or a non-standard port. |
 | `SMTP_*`, `EMAIL_FROM` | Only for outgoing mail. See [Email](#email). |
 | `TRUST_STORE_APPS` | Only to refuse the phone apps and the store extension. It is `true` by default. See [The other clients](#the-other-clients). |
@@ -485,7 +485,7 @@ commented out:
 | `MONGODB_URI`, `REDIS_URL` | Only to use a managed database instead of the containers. |
 
 The app must run at the **root** of the domain. Hosting it under
-`https://example.com/tracktime/` breaks live sync: the browser derives the
+`https://example.com/trackyourtime/` breaks live sync: the browser derives the
 WebSocket URL from its origin, which still resolves to `example.com/ws`.
 
 **If it fails**
@@ -505,9 +505,9 @@ docker compose -f docker-compose.selfhost.yml pull
 ```
 
 **Expect** one `Pulled` line per service and exit status `0`. Compose pulls
-`ghcr.io/trebeljahr/tracktime-server` and
-`ghcr.io/trebeljahr/tracktime-client-selfhost` at the tag in
-`TRACKTIME_VERSION`, and `mongo`, `redis` and `caddy` from Docker Hub. Docker
+`ghcr.io/trebeljahr/trackyourtime-server` and
+`ghcr.io/trebeljahr/trackyourtime-client-selfhost` at the tag in
+`TRACKYOURTIME_VERSION`, and `mongo`, `redis` and `caddy` from Docker Hub. Docker
 picks the `amd64` or `arm64` variant that matches the server. This step is
 most of the first start's time, and how long it takes depends on your
 connection. Nothing is built.
@@ -519,7 +519,7 @@ docker compose -f docker-compose.selfhost.yml up -d
 ```
 
 **Expect** the command to end with one line per container, such as
-`✔ Container tracktime-server-1  Started` or `Healthy`. Its exit status is
+`✔ Container trackyourtime-server-1  Started` or `Healthy`. Its exit status is
 `0`. Later starts use the local images and take seconds.
 
 If you build the images yourself instead, run the build command from
@@ -539,7 +539,7 @@ The rest of this guide keeps the flag, so every block works when pasted.
 
 | Symptom | Fix |
 |---|---|
-| `manifest unknown`, or `…: not found` | No image has this tag. `TRACKTIME_VERSION` is misspelled, or that release was never published. Compare it with `git tag`. Nothing was built and no container started. |
+| `manifest unknown`, or `…: not found` | No image has this tag. `TRACKYOURTIME_VERSION` is misspelled, or that release was never published. Compare it with `git tag`. Nothing was built and no container started. |
 | `denied`, or `unauthorized` | The image package does not exist or is not public. Check that the image names in `docker-compose.selfhost.yml` are unedited. You do not need a registry login, so do not add one. |
 | `dial tcp`, `i/o timeout`, or `no such host` for `ghcr.io` or `registry-1.docker.io` | The server cannot reach the registry. Check outbound DNS and HTTPS, then run `pull` again. |
 | `exit code: 137`, or `Killed`, during a build | You ran the opt-in local build and the kernel stopped it because memory ran out. Add swap ([Step 0.4](#step-04-add-swap-if-you-build-the-images-yourself)) and run the build command again. The finished build stages are cached. |
@@ -603,13 +603,13 @@ curl -sS https://track.example.com/api/health
 not built on the server:
 
 ```bash
-docker image inspect --format '{{.RepoDigests}}' "ghcr.io/trebeljahr/tracktime-server:$(sed -n 's/^TRACKTIME_VERSION=//p' .env)" "ghcr.io/trebeljahr/tracktime-client-selfhost:$(sed -n 's/^TRACKTIME_VERSION=//p' .env)"
+docker image inspect --format '{{.RepoDigests}}' "ghcr.io/trebeljahr/trackyourtime-server:$(sed -n 's/^TRACKYOURTIME_VERSION=//p' .env)" "ghcr.io/trebeljahr/trackyourtime-client-selfhost:$(sed -n 's/^TRACKYOURTIME_VERSION=//p' .env)"
 ```
 
 **Expect** two lines, each holding one or more
 `ghcr.io/trebeljahr/…@sha256:…` entries. A pulled image records the registry
 digest it came from. A locally built image has no digest, and is named
-`tracktime-server:local` or `tracktime-client-selfhost:local` instead of the
+`trackyourtime-server:local` or `trackyourtime-client-selfhost:local` instead of the
 `ghcr.io` names, so `docker image inspect` reports `No such image` for the
 `ghcr.io` name when you built.
 
@@ -676,7 +676,7 @@ that the cloud provider's firewall lets traffic in. Download it into a
 directory that holds no compose file:
 
 ```bash
-curl -fsSL -o selfhost-check.sh https://raw.githubusercontent.com/trebeljahr/tracktime/main/scripts/selfhost-check.sh
+curl -fsSL -o selfhost-check.sh https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/scripts/selfhost-check.sh
 ```
 
 ```bash
@@ -744,17 +744,17 @@ instance on the internet.
 ### Where the images come from
 
 **By default, from the registry.** The `server` and `client` services name the
-published images `ghcr.io/trebeljahr/tracktime-server:${TRACKTIME_VERSION}` and
-`ghcr.io/trebeljahr/tracktime-client-selfhost:${TRACKTIME_VERSION}`. Each tag
+published images `ghcr.io/trebeljahr/trackyourtime-server:${TRACKYOURTIME_VERSION}` and
+`ghcr.io/trebeljahr/trackyourtime-client-selfhost:${TRACKYOURTIME_VERSION}`. Each tag
 covers `linux/amd64` and `linux/arm64`, and Docker pulls the one that matches
 the server. The images for a release exist once its tag is pushed and
-[`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) has run.
+[`.github/workflows/release.yml`](https://github.com/trebeljahr/trackyourtime/blob/main/.github/workflows/release.yml) has run.
 No registry login is needed.
 
 Both services set `pull_policy: missing` and have no `build:` section. So:
 
 - The first `pull` or `up -d` downloads both images. So does the first one
-  after you change `TRACKTIME_VERSION`, because a new tag is a new image.
+  after you change `TRACKYOURTIME_VERSION`, because a new tag is a new image.
 - Every other start uses the local copy and does not contact the registry.
 - When an image cannot be pulled, `pull` and `up -d` stop with the registry's
   error. Nothing is built and no container starts. The
@@ -789,8 +789,8 @@ the web app use its own origin for the API. Every `up` with this file rebuilds,
 from the build cache when nothing changed, so an edited checkout never keeps
 running a stale image. Both compose files must stay in the root of the clone.
 
-The local images are named `tracktime-server:local` and
-`tracktime-client-selfhost:local`, never the `ghcr.io` names. A local build
+The local images are named `trackyourtime-server:local` and
+`trackyourtime-client-selfhost:local`, never the `ghcr.io` names. A local build
 therefore cannot sit under a release tag and stop the real image from being
 pulled later. To go back to the published images, run the commands from
 [Step 6](#step-6-start-the-stack) without the second `-f`. Compose then pulls
@@ -799,7 +799,7 @@ the `ghcr.io` images and recreates both containers.
 **If you ran this stack before `v0.1.0` was published.** Earlier versions of
 the compose file built the images on the server under the `ghcr.io` names. A
 server that did that already holds a local image called
-`ghcr.io/trebeljahr/tracktime-server:v0.1.0`, and `pull_policy: missing` keeps
+`ghcr.io/trebeljahr/trackyourtime-server:v0.1.0`, and `pull_policy: missing` keeps
 using it: `pull` prints `Skipped - Image is already present locally`. Replace
 the local build with the published image once:
 
@@ -817,7 +817,7 @@ To build the two local images without starting or restarting anything:
 docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml build
 ```
 
-Do **not** use `ghcr.io/trebeljahr/tracktime-client:main` as the self-host
+Do **not** use `ghcr.io/trebeljahr/trackyourtime-client:main` as the self-host
 client image. That is the maintainer's build, with the maintainer's API host
 compiled into the browser bundle. You would get a login screen that posts to a
 domain you do not own. The self-host image has the separate name
@@ -1200,30 +1200,30 @@ native client's origins into `TRUSTED_ORIGINS`. Unless you have a specific reaso
 *and* your accounts and sessions, because better-auth uses the same
 connection. A single dump is a complete backup of the instance.
 
-The compose project is named `tracktime`, so the volumes are:
+The compose project is named `trackyourtime`, so the volumes are:
 
 | Volume | Holds | Back up? |
 |---|---|---|
-| `tracktime_mongo-data` | All application and account data | Yes, but prefer `mongodump` below |
-| `tracktime_mongo-config` | MongoDB's own local config | No |
-| `tracktime_caddy-data` | Issued certificates and the ACME account key | Worth it, see below |
-| `tracktime_caddy-config` | Caddy's autosaved config | No |
-| `tracktime_redis-data` | Nothing the app reads | No |
+| `trackyourtime_mongo-data` | All application and account data | Yes, but prefer `mongodump` below |
+| `trackyourtime_mongo-config` | MongoDB's own local config | No |
+| `trackyourtime_caddy-data` | Issued certificates and the ACME account key | Worth it, see below |
+| `trackyourtime_caddy-config` | Caddy's autosaved config | No |
+| `trackyourtime_redis-data` | Nothing the app reads | No |
 
 Confirm the names on your server:
 
 ```bash
-docker volume ls | grep tracktime
+docker volume ls | grep trackyourtime
 ```
 
 ### Back up the database
 
 ```bash
-docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/tracktime" --archive --gzip > tracktime-$(date +%Y%m%d-%H%M%S).archive.gz
+docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/trackyourtime" --archive --gzip > trackyourtime-$(date +%Y%m%d-%H%M%S).archive.gz
 ```
 
 **Expect** the command to print `done dumping` lines on stderr and to leave a
-non-empty `tracktime-<date>.archive.gz` in the current directory.
+non-empty `trackyourtime-<date>.archive.gz` in the current directory.
 
 `mongodump` and `mongorestore` ship inside the `mongo:7.0` image, so there is
 nothing to install. The dump is consistent enough for a single-node instance,
@@ -1239,7 +1239,7 @@ docker compose -f docker-compose.selfhost.yml stop server
 ```
 
 ```bash
-docker compose -f docker-compose.selfhost.yml exec -T mongo mongorestore --uri "mongodb://127.0.0.1:27017" --archive --gzip --drop < tracktime-20260101-120000.archive.gz
+docker compose -f docker-compose.selfhost.yml exec -T mongo mongorestore --uri "mongodb://127.0.0.1:27017" --archive --gzip --drop < trackyourtime-20260101-120000.archive.gz
 ```
 
 ```bash
@@ -1252,7 +1252,7 @@ rollback to exactly the dumped state, drop the database first.
 
 ### Certificates
 
-`tracktime_caddy-data` holds the issued certificates and the ACME account key.
+`trackyourtime_caddy-data` holds the issued certificates and the ACME account key.
 Losing it is not fatal, because Caddy issues new certificates on the next
 start. Each new issuance counts against Let's Encrypt's rate limits, which
 matters if you rebuild a server often. To keep the volume, stop the stack first
@@ -1263,10 +1263,10 @@ docker compose -f docker-compose.selfhost.yml down
 ```
 
 ```bash
-docker run --rm -v tracktime_caddy-data:/data:ro -v "$PWD:/backup" alpine tar czf /backup/caddy-data.tar.gz -C /data .
+docker run --rm -v trackyourtime_caddy-data:/data:ro -v "$PWD:/backup" alpine tar czf /backup/caddy-data.tar.gz -C /data .
 ```
 
-The same `docker run … tar` pattern works for `tracktime_mongo-data` if you
+The same `docker run … tar` pattern works for `trackyourtime_mongo-data` if you
 prefer a file-level copy to a dump. Use it only with the stack stopped. A
 `mongodump` is the more portable backup.
 
@@ -1283,7 +1283,7 @@ losing it signs every device out.
 Take a dump first. Always:
 
 ```bash
-docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/tracktime" --archive --gzip > pre-upgrade-$(date +%Y%m%d-%H%M%S).archive.gz
+docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/trackyourtime" --archive --gzip > pre-upgrade-$(date +%Y%m%d-%H%M%S).archive.gz
 ```
 
 ### Upgrading to a published release
@@ -1305,7 +1305,7 @@ If you edited `Caddyfile` and the new release changes it, `git checkout`
 refuses and names the file. Run `git stash`, repeat the checkout, then run
 `git stash pop` and resolve any conflict in `Caddyfile`.
 
-Set `TRACKTIME_VERSION=vX.Y.Z` in `.env`, then:
+Set `TRACKYOURTIME_VERSION=vX.Y.Z` in `.env`, then:
 
 ```bash
 docker compose -f docker-compose.selfhost.yml pull
@@ -1313,7 +1313,7 @@ docker compose -f docker-compose.selfhost.yml pull
 
 **Expect** exit status `0`. `pull` downloads the new images while the old
 containers keep running. When the tag does not exist, it stops with
-`not found` before anything restarts, so a typo in `TRACKTIME_VERSION` costs
+`not found` before anything restarts, so a typo in `TRACKYOURTIME_VERSION` costs
 no downtime.
 
 ```bash
@@ -1346,7 +1346,7 @@ afterwards.
 | `vX.Y.Z-rc.N` | A prerelease. Published under this exact tag only. It never moves `X.Y` or `latest`. |
 | `X.Y` | The newest stable patch release of that minor line. |
 | `latest` | The newest stable release. |
-| `:main` | **Not a release.** The maintainer's own deploy tag, built from every push to `main`. Do not set `TRACKTIME_VERSION` to it. |
+| `:main` | **Not a release.** The maintainer's own deploy tag, built from every push to `main`. Do not set `TRACKYOURTIME_VERSION` to it. |
 
 The release workflow publishes in this order. It pushes the exact `vX.Y.Z` tag
 for both images first. It then pulls that tag with no registry login and
@@ -1357,7 +1357,7 @@ stays published.
 
 ### Rolling back
 
-Check out the previous tag, set `TRACKTIME_VERSION` back to it, and repeat
+Check out the previous tag, set `TRACKYOURTIME_VERSION` back to it, and repeat
 `pull` and `up -d`. If you build the images yourself, check out the previous
 tag and run the build command instead. If the newer version wrote data that
 the older one cannot read, restore the dump you took before upgrading (see
@@ -1791,7 +1791,7 @@ docker compose -f docker-compose.selfhost.yml logs mongo
 | Unclean shutdown | Recovery messages on start. This usually resolves itself. Give the healthcheck its `start_period` before assuming a failure. |
 | x86 CPU without AVX | `mongo:7.0` requires AVX. On an older or heavily virtualised x86 host it crashes immediately on start. Use a server with a newer CPU, or a managed database via `MONGODB_URI`. |
 | ARM CPU older than ARMv8.2-A | The same immediate crash, for example on a Raspberry Pi 4. Use newer hardware, or a managed database via `MONGODB_URI`. |
-| Volume permissions | After a manual restore of `tracktime_mongo-data` from a tarball, file ownership can be wrong. Restore with the `docker run … tar` pattern from [Backup and restore](#backup-and-restore), which keeps ownership. |
+| Volume permissions | After a manual restore of `trackyourtime_mongo-data` from a tarball, file ownership can be wrong. Restore with the `docker run … tar` pattern from [Backup and restore](#backup-and-restore), which keeps ownership. |
 | A data directory from a different major version | Mongo refuses to start on a newer binary. Restore a `mongodump` into a fresh volume rather than upgrading in place. |
 
 While Mongo is unhealthy the server does not start at all, because
@@ -1834,6 +1834,6 @@ While Mongo is unhealthy the server does not start at all, because
 | `packages/server/.env.example` | Every server variable, with an explanation for each |
 | `packages/server/src/cli/admin.ts` | The admin CLI, compiled into the server image as `dist/cli/admin.js` |
 | `docker-compose.selfhost.ci.yml` | CI override: runs the stack with images built from the checkout, on `localhost` |
-| [`.github/workflows/selfhost-smoke.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/selfhost-smoke.yml) | Boots the stack on pull requests that change it, and runs `doctor`, `create-user` and `reset-password` against it |
-| [`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) | On a `v*` tag, builds both images for `amd64` and `arm64`, pushes the exact tag, starts the stack from an anonymous pull on both, then moves `X.Y` and `latest` |
-| [`docs/deploy.md`](https://github.com/trebeljahr/tracktime/blob/main/docs/deploy.md) | The maintainer's own two-domain Coolify deployment, not this one |
+| [`.github/workflows/selfhost-smoke.yml`](https://github.com/trebeljahr/trackyourtime/blob/main/.github/workflows/selfhost-smoke.yml) | Boots the stack on pull requests that change it, and runs `doctor`, `create-user` and `reset-password` against it |
+| [`.github/workflows/release.yml`](https://github.com/trebeljahr/trackyourtime/blob/main/.github/workflows/release.yml) | On a `v*` tag, builds both images for `amd64` and `arm64`, pushes the exact tag, starts the stack from an anonymous pull on both, then moves `X.Y` and `latest` |
+| [`docs/deploy.md`](https://github.com/trebeljahr/trackyourtime/blob/main/docs/deploy.md) | The maintainer's own two-domain Coolify deployment, not this one |

@@ -119,7 +119,7 @@ export function WebhookForm({
           autoFocus
           maxLength={2000}
           inputMode="url"
-          placeholder="https://example.com/hooks/tracktime"
+          placeholder="https://example.com/hooks/trackyourtime"
           aria-invalid={urlError !== null}
           onChange={(field) => {
             setUrl(field.target.value);
@@ -248,7 +248,7 @@ export function CreateWebhookDialog({
               <DialogTitle>Webhook created</DialogTitle>
               <DialogDescription>
                 Every delivery carries an{" "}
-                <code>X-Tracktime-Signature</code> header. Verify it with this
+                <code>X-TrackYourTime-Signature</code> header. Verify it with this
                 secret before trusting the payload.
               </DialogDescription>
             </DialogHeader>

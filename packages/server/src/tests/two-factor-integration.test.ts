@@ -284,7 +284,7 @@ describe("two-factor sign-in", () => {
     const browser = verified.headers.get("set-auth-token");
     assert.ok(browser);
 
-    const code = await auth.api.deviceCode({ body: { client_id: "tracktime-raycast" } });
+    const code = await auth.api.deviceCode({ body: { client_id: "trackyourtime-raycast" } });
     // /device claims the code for the signed-in browser, then it approves.
     await auth.api.deviceVerify({
       query: { user_code: code.user_code },
@@ -298,7 +298,7 @@ describe("two-factor sign-in", () => {
       body: {
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
         device_code: code.device_code,
-        client_id: "tracktime-raycast",
+        client_id: "trackyourtime-raycast",
       },
     });
     assert.ok(issued.access_token, "the paired client needs no second factor of its own");

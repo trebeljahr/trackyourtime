@@ -28,7 +28,7 @@ import {
   webLink,
   webUrl,
 } from "../lib/preferences.js";
-import { getTracktime } from "../lib/api.js";
+import { getTrackYourTime } from "../lib/api.js";
 import { adoptUnownedHere } from "../lib/offline.js";
 import { describeFailure, refreshMenuBar } from "../lib/ui.js";
 
@@ -101,7 +101,7 @@ export function SignIn(): React.JSX.Element {
         const adopted = session.userId
           ? await adoptUnownedHere(session.userId)
           : 0;
-        const stuck = await (await getTracktime()).sync().catch(() => 0);
+        const stuck = await (await getTrackYourTime()).sync().catch(() => 0);
 
         await refreshMenuBar();
         setPhase({ kind: "signedIn", email: session.email });

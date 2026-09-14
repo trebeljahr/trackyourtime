@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { loadRoute, rememberRoute } from "./route-memory";
 import { defaultDraft, navigate, ROOT_STACK, viewOf } from "./route";
 
-const KEY = "tracktime.popup-route";
+const KEY = "trackyourtime.popup-route";
 
 const store = async (value: unknown): Promise<void> => {
   await chrome.storage.session.set({ [KEY]: JSON.stringify({ stack: value, at: Date.now() }) });

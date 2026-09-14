@@ -181,7 +181,7 @@ export const isQueuedOn = (
  */
 export const createOfflineQueue = ({
   storage,
-  key = "tracktime.offline-queue",
+  key = "trackyourtime.offline-queue",
 }: {
   storage: KeyValueStorage;
   key?: string;

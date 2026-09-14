@@ -269,8 +269,8 @@ Load it unpacked in Chrome. It is not in the Chrome Web Store.
 - `docker-compose.selfhost.yml` runs Caddy, the API, the web app, MongoDB and
   Redis behind one domain, with healthchecks and named volumes.
 - Images for linux/amd64 and linux/arm64:
-  `ghcr.io/trebeljahr/tracktime-server` and
-  `ghcr.io/trebeljahr/tracktime-client-selfhost`. `v0.1.0` is the exact tag.
+  `ghcr.io/trebeljahr/trackyourtime-server` and
+  `ghcr.io/trebeljahr/trackyourtime-client-selfhost`. `v0.1.0` is the exact tag.
   `0.1` and `latest` move to it after the release workflow has pulled and
   started both images anonymously on both architectures.
 - The default compose file pulls those images and stops with the registry's
@@ -344,8 +344,9 @@ The first three items matter to people who used the hosted app before this
 tag.
 
 - The product is now called Track Your Time. The home-screen label is
-  "Track Time". Code identifiers, package names and image names keep
-  `tracktime`.
+  "Track Time". The repository, images, bundle id, headers, client ids,
+  storage keys and database names changed from `tracktime` to
+  `trackyourtime` too.
 - The hosted app is at `https://trackyourtime.dev`, and its API at
   `https://api.trackyourtime.dev`.
 - Tasks no longer belong to a project. Changing an entry's project keeps its
@@ -411,5 +412,5 @@ tag.
   and admins who may see both. An invoice id answers "not found" to anyone
   else.
 
-[Unreleased]: https://github.com/trebeljahr/tracktime/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/trebeljahr/tracktime/releases/tag/v0.1.0
+[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.0

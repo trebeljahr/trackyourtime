@@ -23,7 +23,7 @@ export const appRouter = router({
   health: healthRouter,
   profile: profileRouter,
   billing: billingRouter,
-  // ── tracktime ──────────────────────────────────────────────────────
+  // ── trackyourtime ──────────────────────────────────────────────────────
   clients: clientsRouter,
   projects: projectsRouter,
   tasks: tasksRouter,

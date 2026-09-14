@@ -90,7 +90,7 @@ import { updateSettings } from "./settings";
 import { buildState } from "./state";
 import { startTimer, stopTimer, updateRunning } from "./timer";
 
-const BADGE_ALARM = "tracktime.badge";
+const BADGE_ALARM = "trackyourtime.badge";
 
 /**
  * Last API URL the worker resolved, for the cookie listener's domain check.
@@ -227,7 +227,7 @@ const signOut = async (): Promise<void> => {
 /** The worker's code for each way `checkServer` can refuse a server. */
 const SERVER_CHECK_CODES: Readonly<Record<ServerCheckProblem, string>> = {
   unreachable: "SERVER_UNREACHABLE",
-  "not-tracktime": "NOT_TRACKTIME",
+  "not-trackyourtime": "NOT_TRACKYOURTIME",
   unhealthy: "SERVER_UNHEALTHY",
 };
 

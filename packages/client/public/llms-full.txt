@@ -2,7 +2,7 @@
 
 > Open-source time tracking you host on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline, and tracked hours become reports and PDF invoices.
 
-Track Your Time is for freelancers, consultants and small studios who bill clients by the hour and want that data on a server they control. The code is on GitHub at https://github.com/trebeljahr/tracktime under AGPL-3.0-or-later. A hosted instance runs at https://trackyourtime.dev and is free while in beta.
+Track Your Time is for freelancers, consultants and small studios who bill clients by the hour and want that data on a server they control. The code is on GitHub at https://github.com/trebeljahr/trackyourtime under AGPL-3.0-or-later. A hosted instance runs at https://trackyourtime.dev and is free while in beta.
 
 **What it does today**
 
@@ -33,18 +33,18 @@ Point a domain at a Linux server with Docker, clone the repository, copy `.env.s
 
 ## Start here
 
-- [Choosing a self-hosted time tracker](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/choosing-a-self-hosted-time-tracker.md): Three kinds of self-hosted time tracker, what each one is good at, when to pick it, and what Track Your Time cannot do yet.
-- [Self-hosting guide](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs/self-hosting.md): Run Track Your Time on one server with one domain and Docker Compose: install, first account, email, backups, upgrades and troubleshooting.
+- [Choosing a self-hosted time tracker](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/choosing-a-self-hosted-time-tracker.md): Three kinds of self-hosted time tracker, what each one is good at, when to pick it, and what Track Your Time cannot do yet.
+- [Self-hosting guide](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs/self-hosting.md): Run Track Your Time on one server with one domain and Docker Compose: install, first account, email, backups, upgrades and troubleshooting.
 
 ## AI assistants
 
-- [MCP server](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/mcp.md): Start and stop timers, log time, list entries, manage clients, projects, tasks and tags, and summarise hours from Claude or any MCP client, on the hosted service or your own server.
+- [MCP server](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/mcp.md): Start and stop timers, log time, list entries, manage clients, projects, tasks and tags, and summarise hours from Claude or any MCP client, on the hosted service or your own server.
 
 ## REST API
 
-- [REST API](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/overview.md): The public REST API at /api/v1 — base URL, response envelope, cursor pagination, and what an API token can and cannot reach.
-- [Authentication](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/authentication.md): Minting an API token, the scope table, how a token's visibility is resolved, and what revoking one does.
-- [Errors](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/errors.md): RFC 9457 problem+json error bodies, the full slug table, and what each status means on this API.
+- [REST API](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/overview.md): The public REST API at /api/v1 — base URL, response envelope, cursor pagination, and what an API token can and cannot reach.
+- [Authentication](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/authentication.md): Minting an API token, the scope table, how a token's visibility is resolved, and what revoking one does.
+- [Errors](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/errors.md): RFC 9457 problem+json error bodies, the full slug table, and what each status means on this API.
 - [OpenAPI document](https://api.trackyourtime.dev/api/v1/openapi.json): The machine-readable description of every /api/v1 route, served by the hosted API.
 
 ## Web pages
@@ -56,17 +56,17 @@ Point a domain at a Linux server with Docker, clone the repository, copy `.env.s
 
 ## Optional
 
-- [API reference](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/reference.md): Every REST endpoint under /api/v1, the scope it requires, and where its parameters go.
-- [Webhooks](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/webhooks.md): Webhook event catalogue, the signed request format, a Node verification example, retry and auto-disable behaviour, and the SSRF policy.
-- [Rate limits](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/rate-limits.md): The per-token and per-workspace request budgets, the RateLimit headers on every response, and how the limit behaves without Redis.
-- [README](https://raw.githubusercontent.com/trebeljahr/tracktime/main/README.md): The full feature list, the repository layout and the development setup.
+- [API reference](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/reference.md): Every REST endpoint under /api/v1, the scope it requires, and where its parameters go.
+- [Webhooks](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/webhooks.md): Webhook event catalogue, the signed request format, a Node verification example, retry and auto-disable behaviour, and the SSRF policy.
+- [Rate limits](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/rate-limits.md): The per-token and per-workspace request budgets, the RateLimit headers on every response, and how the limit behaves without Redis.
+- [README](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/README.md): The full feature list, the repository layout and the development setup.
 - [llms-full.txt](https://trackyourtime.dev/llms-full.txt): This file plus the full text of the self-hosting guide, the MCP page and the main API pages.
 - [Privacy](https://trackyourtime.dev/privacy/): What the hosted service stores, why, who else sees it, and how to get it back or have it deleted.
 - [Support](https://trackyourtime.dev/support/): How to get help, and answers to common questions.
 
 ---
 
-Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/choosing-a-self-hosted-time-tracker.md
+Source: https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/choosing-a-self-hosted-time-tracker.md
 
 # Choosing a self-hosted time tracker
 
@@ -125,7 +125,7 @@ Pick an automatic activity tracker if:
 
 ## Track Your Time
 
-Track Your Time is a timer-first tracker for a person who bills clients by the hour. You start a timer against a client and a project, and the hours turn into reports and invoices. It runs on your own server from one Docker Compose file on one domain. The [self-hosting guide](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/self-hosting.md) has every command.
+Track Your Time is a timer-first tracker for a person who bills clients by the hour. You start a timer against a client and a project, and the hours turn into reports and invoices. It runs on your own server from one Docker Compose file on one domain. The [self-hosting guide](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/self-hosting.md) has every command.
 
 What it does:
 
@@ -135,7 +135,7 @@ What it does:
 - Each project has an hourly rate. Reports show totals by project, client, task, tag, day, week or month, or list every entry. Both views export to CSV and PDF.
 - An invoice collects a client's unbilled billable hours and downloads as a PDF. An hour on an invoice can't be billed a second time.
 - You can export a whole workspace as JSON or CSV. A CSV from another tool imports with a preview, and you can undo the import.
-- A [REST API](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/overview.md) with an OpenAPI document, signed [webhooks](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/webhooks.md) and an [MCP server](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/mcp.md) connect it to other tools and to AI assistants.
+- A [REST API](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/overview.md) with an OpenAPI document, signed [webhooks](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/webhooks.md) and an [MCP server](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/mcp.md) connect it to other tools and to AI assistants.
 - The licence is AGPL-3.0-or-later. Every install has every feature, and there is no paid tier.
 
 What it cannot do yet:
@@ -161,7 +161,7 @@ An activity tracker and a timer-first tracker can run side by side. The activity
 
 ---
 
-Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs/self-hosting.md
+Source: https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs/self-hosting.md
 
 # Self-hosting Track Your Time
 
@@ -175,7 +175,7 @@ command. **Expect** says what success looks like. **If it fails** lists the
 usual causes and their fixes.
 
 This is not the maintainer's own deployment. That one is a two-domain split on
-Coolify, documented in [`deploy.md`](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs/deploy.md). Nothing here interacts with
+Coolify, documented in [`deploy.md`](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs/deploy.md). Nothing here interacts with
 it.
 
 **One thing to check before you start.** The compose file pulls the published
@@ -222,7 +222,7 @@ An assistant with shell access to your server can do the whole install. Copy
 this prompt and replace `<domain>` with your domain:
 
 ```text
-Set up Track Your Time on my Ubuntu server at <domain>, following https://github.com/trebeljahr/tracktime/blob/main/docs/self-hosting.md. Run scripts/selfhost-check.sh <domain> at the end and show me its output.
+Set up Track Your Time on my Ubuntu server at <domain>, following https://github.com/trebeljahr/trackyourtime/blob/main/docs/self-hosting.md. Run scripts/selfhost-check.sh <domain> at the end and show me its output.
 ```
 
 Before you send it, make sure the assistant has these:
@@ -255,8 +255,8 @@ One domain and five containers, all on your server:
 | Container | Image | Does |
 |---|---|---|
 | `caddy` | `caddy:2.11-alpine` | TLS. The only container with published ports. Sends `/api/*` and `/ws` to the server, and everything else to the web app. |
-| `server` | `ghcr.io/trebeljahr/tracktime-server` | The API (tRPC and REST), authentication and the live-sync WebSocket. |
-| `client` | `ghcr.io/trebeljahr/tracktime-client-selfhost` | The web app: a static export served by a second, small Caddy. |
+| `server` | `ghcr.io/trebeljahr/trackyourtime-server` | The API (tRPC and REST), authentication and the live-sync WebSocket. |
+| `client` | `ghcr.io/trebeljahr/trackyourtime-client-selfhost` | The web app: a static export served by a second, small Caddy. |
 | `mongo` | `mongo:7.0` | All of your data, including accounts and sessions. |
 | `redis` | `redis:7.4-alpine` | Present but unused. See [Optional integrations](#optional-integrations). |
 
@@ -533,19 +533,19 @@ record, `dig +short track.example.com AAAA` prints the server's IPv6 address.
 **Run**
 
 ```bash
-git clone https://github.com/trebeljahr/tracktime.git
+git clone https://github.com/trebeljahr/trackyourtime.git
 ```
 
 ```bash
-cd tracktime
+cd trackyourtime
 ```
 
 Then check out the release you will run. The compose file and the images must
-come from the same release, and `TRACKTIME_VERSION` in `.env.selfhost.example`
+come from the same release, and `TRACKYOURTIME_VERSION` in `.env.selfhost.example`
 names it:
 
 ```bash
-git checkout "$(sed -n 's/^TRACKTIME_VERSION=//p' .env.selfhost.example)"
+git checkout "$(sed -n 's/^TRACKYOURTIME_VERSION=//p' .env.selfhost.example)"
 ```
 
 **Expect** `git describe --tags` to print the same tag, for example `v0.1.0`,
@@ -560,7 +560,7 @@ and the source that an opt-in local build needs.
 
 | Symptom | Fix |
 |---|---|
-| `fatal: destination path 'tracktime' already exists` | A clone is already there. Run `cd tracktime`, `git fetch --tags`, and continue. |
+| `fatal: destination path 'trackyourtime' already exists` | A clone is already there. Run `cd trackyourtime`, `git fetch --tags`, and continue. |
 | `Could not resolve host: github.com` | The server has no outbound DNS or internet access. Fix the network first. |
 | `error: pathspec 'v…' did not match any file(s) known to git` | That release has not been published. Stay on `main` and see the limit at the top of this guide. |
 
@@ -634,7 +634,7 @@ commented out:
 |---|---|
 | `APP_DOMAIN` | Always. The site address, and therefore the certificate that Caddy requests. |
 | `BETTER_AUTH_SECRET` | Always. |
-| `TRACKTIME_VERSION` | The release tag of both app images, already set to the release the example file shipped with. Change it only to upgrade or roll back. See [Upgrading](#upgrading). |
+| `TRACKYOURTIME_VERSION` | The release tag of both app images, already set to the release the example file shipped with. Change it only to upgrade or roll back. See [Upgrading](#upgrading). |
 | `APP_URL` | Only when the origin is not `https://${APP_DOMAIN}`: a plain-HTTP local trial, or a non-standard port. |
 | `SMTP_*`, `EMAIL_FROM` | Only for outgoing mail. See [Email](#email). |
 | `TRUST_STORE_APPS` | Only to refuse the phone apps and the store extension. It is `true` by default. See [The other clients](#the-other-clients). |
@@ -642,7 +642,7 @@ commented out:
 | `MONGODB_URI`, `REDIS_URL` | Only to use a managed database instead of the containers. |
 
 The app must run at the **root** of the domain. Hosting it under
-`https://example.com/tracktime/` breaks live sync: the browser derives the
+`https://example.com/trackyourtime/` breaks live sync: the browser derives the
 WebSocket URL from its origin, which still resolves to `example.com/ws`.
 
 **If it fails**
@@ -662,9 +662,9 @@ docker compose -f docker-compose.selfhost.yml pull
 ```
 
 **Expect** one `Pulled` line per service and exit status `0`. Compose pulls
-`ghcr.io/trebeljahr/tracktime-server` and
-`ghcr.io/trebeljahr/tracktime-client-selfhost` at the tag in
-`TRACKTIME_VERSION`, and `mongo`, `redis` and `caddy` from Docker Hub. Docker
+`ghcr.io/trebeljahr/trackyourtime-server` and
+`ghcr.io/trebeljahr/trackyourtime-client-selfhost` at the tag in
+`TRACKYOURTIME_VERSION`, and `mongo`, `redis` and `caddy` from Docker Hub. Docker
 picks the `amd64` or `arm64` variant that matches the server. This step is
 most of the first start's time, and how long it takes depends on your
 connection. Nothing is built.
@@ -676,7 +676,7 @@ docker compose -f docker-compose.selfhost.yml up -d
 ```
 
 **Expect** the command to end with one line per container, such as
-`✔ Container tracktime-server-1  Started` or `Healthy`. Its exit status is
+`✔ Container trackyourtime-server-1  Started` or `Healthy`. Its exit status is
 `0`. Later starts use the local images and take seconds.
 
 If you build the images yourself instead, run the build command from
@@ -696,7 +696,7 @@ The rest of this guide keeps the flag, so every block works when pasted.
 
 | Symptom | Fix |
 |---|---|
-| `manifest unknown`, or `…: not found` | No image has this tag. `TRACKTIME_VERSION` is misspelled, or that release was never published. Compare it with `git tag`. Nothing was built and no container started. |
+| `manifest unknown`, or `…: not found` | No image has this tag. `TRACKYOURTIME_VERSION` is misspelled, or that release was never published. Compare it with `git tag`. Nothing was built and no container started. |
 | `denied`, or `unauthorized` | The image package does not exist or is not public. Check that the image names in `docker-compose.selfhost.yml` are unedited. You do not need a registry login, so do not add one. |
 | `dial tcp`, `i/o timeout`, or `no such host` for `ghcr.io` or `registry-1.docker.io` | The server cannot reach the registry. Check outbound DNS and HTTPS, then run `pull` again. |
 | `exit code: 137`, or `Killed`, during a build | You ran the opt-in local build and the kernel stopped it because memory ran out. Add swap ([Step 0.4](#step-04-add-swap-if-you-build-the-images-yourself)) and run the build command again. The finished build stages are cached. |
@@ -760,13 +760,13 @@ curl -sS https://track.example.com/api/health
 not built on the server:
 
 ```bash
-docker image inspect --format '{{.RepoDigests}}' "ghcr.io/trebeljahr/tracktime-server:$(sed -n 's/^TRACKTIME_VERSION=//p' .env)" "ghcr.io/trebeljahr/tracktime-client-selfhost:$(sed -n 's/^TRACKTIME_VERSION=//p' .env)"
+docker image inspect --format '{{.RepoDigests}}' "ghcr.io/trebeljahr/trackyourtime-server:$(sed -n 's/^TRACKYOURTIME_VERSION=//p' .env)" "ghcr.io/trebeljahr/trackyourtime-client-selfhost:$(sed -n 's/^TRACKYOURTIME_VERSION=//p' .env)"
 ```
 
 **Expect** two lines, each holding one or more
 `ghcr.io/trebeljahr/…@sha256:…` entries. A pulled image records the registry
 digest it came from. A locally built image has no digest, and is named
-`tracktime-server:local` or `tracktime-client-selfhost:local` instead of the
+`trackyourtime-server:local` or `trackyourtime-client-selfhost:local` instead of the
 `ghcr.io` names, so `docker image inspect` reports `No such image` for the
 `ghcr.io` name when you built.
 
@@ -833,7 +833,7 @@ that the cloud provider's firewall lets traffic in. Download it into a
 directory that holds no compose file:
 
 ```bash
-curl -fsSL -o selfhost-check.sh https://raw.githubusercontent.com/trebeljahr/tracktime/main/scripts/selfhost-check.sh
+curl -fsSL -o selfhost-check.sh https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/scripts/selfhost-check.sh
 ```
 
 ```bash
@@ -901,17 +901,17 @@ instance on the internet.
 ### Where the images come from
 
 **By default, from the registry.** The `server` and `client` services name the
-published images `ghcr.io/trebeljahr/tracktime-server:${TRACKTIME_VERSION}` and
-`ghcr.io/trebeljahr/tracktime-client-selfhost:${TRACKTIME_VERSION}`. Each tag
+published images `ghcr.io/trebeljahr/trackyourtime-server:${TRACKYOURTIME_VERSION}` and
+`ghcr.io/trebeljahr/trackyourtime-client-selfhost:${TRACKYOURTIME_VERSION}`. Each tag
 covers `linux/amd64` and `linux/arm64`, and Docker pulls the one that matches
 the server. The images for a release exist once its tag is pushed and
-[`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) has run.
+[`.github/workflows/release.yml`](https://github.com/trebeljahr/trackyourtime/blob/main/.github/workflows/release.yml) has run.
 No registry login is needed.
 
 Both services set `pull_policy: missing` and have no `build:` section. So:
 
 - The first `pull` or `up -d` downloads both images. So does the first one
-  after you change `TRACKTIME_VERSION`, because a new tag is a new image.
+  after you change `TRACKYOURTIME_VERSION`, because a new tag is a new image.
 - Every other start uses the local copy and does not contact the registry.
 - When an image cannot be pulled, `pull` and `up -d` stop with the registry's
   error. Nothing is built and no container starts. The
@@ -946,8 +946,8 @@ the web app use its own origin for the API. Every `up` with this file rebuilds,
 from the build cache when nothing changed, so an edited checkout never keeps
 running a stale image. Both compose files must stay in the root of the clone.
 
-The local images are named `tracktime-server:local` and
-`tracktime-client-selfhost:local`, never the `ghcr.io` names. A local build
+The local images are named `trackyourtime-server:local` and
+`trackyourtime-client-selfhost:local`, never the `ghcr.io` names. A local build
 therefore cannot sit under a release tag and stop the real image from being
 pulled later. To go back to the published images, run the commands from
 [Step 6](#step-6-start-the-stack) without the second `-f`. Compose then pulls
@@ -956,7 +956,7 @@ the `ghcr.io` images and recreates both containers.
 **If you ran this stack before `v0.1.0` was published.** Earlier versions of
 the compose file built the images on the server under the `ghcr.io` names. A
 server that did that already holds a local image called
-`ghcr.io/trebeljahr/tracktime-server:v0.1.0`, and `pull_policy: missing` keeps
+`ghcr.io/trebeljahr/trackyourtime-server:v0.1.0`, and `pull_policy: missing` keeps
 using it: `pull` prints `Skipped - Image is already present locally`. Replace
 the local build with the published image once:
 
@@ -974,7 +974,7 @@ To build the two local images without starting or restarting anything:
 docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml build
 ```
 
-Do **not** use `ghcr.io/trebeljahr/tracktime-client:main` as the self-host
+Do **not** use `ghcr.io/trebeljahr/trackyourtime-client:main` as the self-host
 client image. That is the maintainer's build, with the maintainer's API host
 compiled into the browser bundle. You would get a login screen that posts to a
 domain you do not own. The self-host image has the separate name
@@ -1357,30 +1357,30 @@ native client's origins into `TRUSTED_ORIGINS`. Unless you have a specific reaso
 *and* your accounts and sessions, because better-auth uses the same
 connection. A single dump is a complete backup of the instance.
 
-The compose project is named `tracktime`, so the volumes are:
+The compose project is named `trackyourtime`, so the volumes are:
 
 | Volume | Holds | Back up? |
 |---|---|---|
-| `tracktime_mongo-data` | All application and account data | Yes, but prefer `mongodump` below |
-| `tracktime_mongo-config` | MongoDB's own local config | No |
-| `tracktime_caddy-data` | Issued certificates and the ACME account key | Worth it, see below |
-| `tracktime_caddy-config` | Caddy's autosaved config | No |
-| `tracktime_redis-data` | Nothing the app reads | No |
+| `trackyourtime_mongo-data` | All application and account data | Yes, but prefer `mongodump` below |
+| `trackyourtime_mongo-config` | MongoDB's own local config | No |
+| `trackyourtime_caddy-data` | Issued certificates and the ACME account key | Worth it, see below |
+| `trackyourtime_caddy-config` | Caddy's autosaved config | No |
+| `trackyourtime_redis-data` | Nothing the app reads | No |
 
 Confirm the names on your server:
 
 ```bash
-docker volume ls | grep tracktime
+docker volume ls | grep trackyourtime
 ```
 
 ### Back up the database
 
 ```bash
-docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/tracktime" --archive --gzip > tracktime-$(date +%Y%m%d-%H%M%S).archive.gz
+docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/trackyourtime" --archive --gzip > trackyourtime-$(date +%Y%m%d-%H%M%S).archive.gz
 ```
 
 **Expect** the command to print `done dumping` lines on stderr and to leave a
-non-empty `tracktime-<date>.archive.gz` in the current directory.
+non-empty `trackyourtime-<date>.archive.gz` in the current directory.
 
 `mongodump` and `mongorestore` ship inside the `mongo:7.0` image, so there is
 nothing to install. The dump is consistent enough for a single-node instance,
@@ -1396,7 +1396,7 @@ docker compose -f docker-compose.selfhost.yml stop server
 ```
 
 ```bash
-docker compose -f docker-compose.selfhost.yml exec -T mongo mongorestore --uri "mongodb://127.0.0.1:27017" --archive --gzip --drop < tracktime-20260101-120000.archive.gz
+docker compose -f docker-compose.selfhost.yml exec -T mongo mongorestore --uri "mongodb://127.0.0.1:27017" --archive --gzip --drop < trackyourtime-20260101-120000.archive.gz
 ```
 
 ```bash
@@ -1409,7 +1409,7 @@ rollback to exactly the dumped state, drop the database first.
 
 ### Certificates
 
-`tracktime_caddy-data` holds the issued certificates and the ACME account key.
+`trackyourtime_caddy-data` holds the issued certificates and the ACME account key.
 Losing it is not fatal, because Caddy issues new certificates on the next
 start. Each new issuance counts against Let's Encrypt's rate limits, which
 matters if you rebuild a server often. To keep the volume, stop the stack first
@@ -1420,10 +1420,10 @@ docker compose -f docker-compose.selfhost.yml down
 ```
 
 ```bash
-docker run --rm -v tracktime_caddy-data:/data:ro -v "$PWD:/backup" alpine tar czf /backup/caddy-data.tar.gz -C /data .
+docker run --rm -v trackyourtime_caddy-data:/data:ro -v "$PWD:/backup" alpine tar czf /backup/caddy-data.tar.gz -C /data .
 ```
 
-The same `docker run … tar` pattern works for `tracktime_mongo-data` if you
+The same `docker run … tar` pattern works for `trackyourtime_mongo-data` if you
 prefer a file-level copy to a dump. Use it only with the stack stopped. A
 `mongodump` is the more portable backup.
 
@@ -1440,7 +1440,7 @@ losing it signs every device out.
 Take a dump first. Always:
 
 ```bash
-docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/tracktime" --archive --gzip > pre-upgrade-$(date +%Y%m%d-%H%M%S).archive.gz
+docker compose -f docker-compose.selfhost.yml exec -T mongo mongodump --uri "mongodb://127.0.0.1:27017/trackyourtime" --archive --gzip > pre-upgrade-$(date +%Y%m%d-%H%M%S).archive.gz
 ```
 
 ### Upgrading to a published release
@@ -1462,7 +1462,7 @@ If you edited `Caddyfile` and the new release changes it, `git checkout`
 refuses and names the file. Run `git stash`, repeat the checkout, then run
 `git stash pop` and resolve any conflict in `Caddyfile`.
 
-Set `TRACKTIME_VERSION=vX.Y.Z` in `.env`, then:
+Set `TRACKYOURTIME_VERSION=vX.Y.Z` in `.env`, then:
 
 ```bash
 docker compose -f docker-compose.selfhost.yml pull
@@ -1470,7 +1470,7 @@ docker compose -f docker-compose.selfhost.yml pull
 
 **Expect** exit status `0`. `pull` downloads the new images while the old
 containers keep running. When the tag does not exist, it stops with
-`not found` before anything restarts, so a typo in `TRACKTIME_VERSION` costs
+`not found` before anything restarts, so a typo in `TRACKYOURTIME_VERSION` costs
 no downtime.
 
 ```bash
@@ -1503,7 +1503,7 @@ afterwards.
 | `vX.Y.Z-rc.N` | A prerelease. Published under this exact tag only. It never moves `X.Y` or `latest`. |
 | `X.Y` | The newest stable patch release of that minor line. |
 | `latest` | The newest stable release. |
-| `:main` | **Not a release.** The maintainer's own deploy tag, built from every push to `main`. Do not set `TRACKTIME_VERSION` to it. |
+| `:main` | **Not a release.** The maintainer's own deploy tag, built from every push to `main`. Do not set `TRACKYOURTIME_VERSION` to it. |
 
 The release workflow publishes in this order. It pushes the exact `vX.Y.Z` tag
 for both images first. It then pulls that tag with no registry login and
@@ -1514,7 +1514,7 @@ stays published.
 
 ### Rolling back
 
-Check out the previous tag, set `TRACKTIME_VERSION` back to it, and repeat
+Check out the previous tag, set `TRACKYOURTIME_VERSION` back to it, and repeat
 `pull` and `up -d`. If you build the images yourself, check out the previous
 tag and run the build command instead. If the newer version wrote data that
 the older one cannot read, restore the dump you took before upgrading (see
@@ -1948,7 +1948,7 @@ docker compose -f docker-compose.selfhost.yml logs mongo
 | Unclean shutdown | Recovery messages on start. This usually resolves itself. Give the healthcheck its `start_period` before assuming a failure. |
 | x86 CPU without AVX | `mongo:7.0` requires AVX. On an older or heavily virtualised x86 host it crashes immediately on start. Use a server with a newer CPU, or a managed database via `MONGODB_URI`. |
 | ARM CPU older than ARMv8.2-A | The same immediate crash, for example on a Raspberry Pi 4. Use newer hardware, or a managed database via `MONGODB_URI`. |
-| Volume permissions | After a manual restore of `tracktime_mongo-data` from a tarball, file ownership can be wrong. Restore with the `docker run … tar` pattern from [Backup and restore](#backup-and-restore), which keeps ownership. |
+| Volume permissions | After a manual restore of `trackyourtime_mongo-data` from a tarball, file ownership can be wrong. Restore with the `docker run … tar` pattern from [Backup and restore](#backup-and-restore), which keeps ownership. |
 | A data directory from a different major version | Mongo refuses to start on a newer binary. Restore a `mongodump` into a fresh volume rather than upgrading in place. |
 
 While Mongo is unhealthy the server does not start at all, because
@@ -1991,13 +1991,13 @@ While Mongo is unhealthy the server does not start at all, because
 | `packages/server/.env.example` | Every server variable, with an explanation for each |
 | `packages/server/src/cli/admin.ts` | The admin CLI, compiled into the server image as `dist/cli/admin.js` |
 | `docker-compose.selfhost.ci.yml` | CI override: runs the stack with images built from the checkout, on `localhost` |
-| [`.github/workflows/selfhost-smoke.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/selfhost-smoke.yml) | Boots the stack on pull requests that change it, and runs `doctor`, `create-user` and `reset-password` against it |
-| [`.github/workflows/release.yml`](https://github.com/trebeljahr/tracktime/blob/main/.github/workflows/release.yml) | On a `v*` tag, builds both images for `amd64` and `arm64`, pushes the exact tag, starts the stack from an anonymous pull on both, then moves `X.Y` and `latest` |
-| [`docs/deploy.md`](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs/deploy.md) | The maintainer's own two-domain Coolify deployment, not this one |
+| [`.github/workflows/selfhost-smoke.yml`](https://github.com/trebeljahr/trackyourtime/blob/main/.github/workflows/selfhost-smoke.yml) | Boots the stack on pull requests that change it, and runs `doctor`, `create-user` and `reset-password` against it |
+| [`.github/workflows/release.yml`](https://github.com/trebeljahr/trackyourtime/blob/main/.github/workflows/release.yml) | On a `v*` tag, builds both images for `amd64` and `arm64`, pushes the exact tag, starts the stack from an anonymous pull on both, then moves `X.Y` and `latest` |
+| [`docs/deploy.md`](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs/deploy.md) | The maintainer's own two-domain Coolify deployment, not this one |
 
 ---
 
-Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/mcp.md
+Source: https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/mcp.md
 
 # MCP server
 
@@ -2005,7 +2005,7 @@ Ask an assistant "what did I work on last week?" or "start a timer for the Acme
 website" and it answers from your own Track Your Time account. The MCP server
 connects any [Model Context Protocol](https://modelcontextprotocol.io) client —
 Claude Desktop, Claude Code, or another MCP client — to the
-[REST API](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/overview.md) with a personal API token.
+[REST API](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/overview.md) with a personal API token.
 
 It works with the hosted service at `https://api.trackyourtime.dev` and with any
 self-hosted instance. The REST API is the same code on both.
@@ -2048,11 +2048,11 @@ configuration file. Revoke it in **Settings → Integrations → API tokens** wh
 You need Node.js 24 or newer, pnpm and git.
 
 ```bash
-git clone https://github.com/trebeljahr/tracktime.git
+git clone https://github.com/trebeljahr/trackyourtime.git
 ```
 
 ```bash
-cd tracktime && pnpm install && pnpm build:mcp
+cd trackyourtime && pnpm install && pnpm build:mcp
 ```
 
 **Expect:** the last line of output comes from `tsc` with no errors, and
@@ -2083,18 +2083,18 @@ The server reads two environment variables.
 | `TRACKYOURTIME_API_TOKEN` | Required. The `tt_…` token from step 1. |
 | `TRACKYOURTIME_API_URL` | Optional. Defaults to `https://api.trackyourtime.dev`. For a self-hosted instance, use its origin, for example `https://track.example.com`. A pasted `…/api/v1` suffix is accepted too. |
 
-Replace `/path/to/tracktime` below with the absolute path of your clone.
+Replace `/path/to/trackyourtime` below with the absolute path of your clone.
 
 ### Claude Code
 
 ```bash
-claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token -- node /path/to/tracktime/packages/mcp/dist/index.js
+claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token -- node /path/to/trackyourtime/packages/mcp/dist/index.js
 ```
 
 For a self-hosted instance, add a second `--env`:
 
 ```bash
-claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token --env TRACKYOURTIME_API_URL=https://track.example.com -- node /path/to/tracktime/packages/mcp/dist/index.js
+claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token --env TRACKYOURTIME_API_URL=https://track.example.com -- node /path/to/trackyourtime/packages/mcp/dist/index.js
 ```
 
 Add `--scope user` to make it available in every project. Run `claude mcp list` to
@@ -2111,7 +2111,7 @@ on Windows in `%APPDATA%\Claude\`). Add the server under `mcpServers`:
   "mcpServers": {
     "trackyourtime": {
       "command": "node",
-      "args": ["/path/to/tracktime/packages/mcp/dist/index.js"],
+      "args": ["/path/to/trackyourtime/packages/mcp/dist/index.js"],
       "env": {
         "TRACKYOURTIME_API_TOKEN": "tt_your_token",
         "TRACKYOURTIME_API_URL": "https://api.trackyourtime.dev"
@@ -2128,7 +2128,7 @@ Restart Claude Desktop. The tools appear under the tools menu in a new chat.
 Any client that launches stdio servers works. Give it:
 
 - **command:** `node`
-- **arguments:** `/path/to/tracktime/packages/mcp/dist/index.js`
+- **arguments:** `/path/to/trackyourtime/packages/mcp/dist/index.js`
 - **environment:** `TRACKYOURTIME_API_TOKEN`, and `TRACKYOURTIME_API_URL` for a
   self-hosted instance
 
@@ -2169,7 +2169,7 @@ The summary report also buckets days in that zone.
 ## When something goes wrong
 
 Every failed tool call returns the server's own error, the problem type from the
-[RFC 9457 error document](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/errors.md), and one sentence on what to change.
+[RFC 9457 error document](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/errors.md), and one sentence on what to change.
 
 | What the assistant reports | Cause and fix |
 | --- | --- |
@@ -2195,7 +2195,7 @@ parts work.
 
 ---
 
-Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/overview.md
+Source: https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/overview.md
 
 # REST API
 
@@ -2217,7 +2217,7 @@ appears in an open browser tab immediately.
 
 ```bash
 curl -s https://api.trackyourtime.dev/api/v1/me \
-  -H "Authorization: Bearer $TRACKTIME_TOKEN"
+  -H "Authorization: Bearer $TRACKYOURTIME_TOKEN"
 ```
 
 ```json
@@ -2232,7 +2232,7 @@ curl -s https://api.trackyourtime.dev/api/v1/me \
 }
 ```
 
-See [Authentication](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/authentication.md) for the scope table and what those
+See [Authentication](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/authentication.md) for the scope table and what those
 visibility flags change.
 
 ## One token, one workspace
@@ -2266,7 +2266,7 @@ an absent key would make "no more pages" indistinguishable from a serialization 
 and a paging client would stop early without noticing.
 
 Errors are not enveloped. They are
-[RFC 9457 problem documents](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/errors.md) with their own media type.
+[RFC 9457 problem documents](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/errors.md) with their own media type.
 
 ## Pagination
 
@@ -2276,7 +2276,7 @@ default set by the server) and then feed each response's `nextCursor` back as th
 
 ```bash
 curl -s -G https://api.trackyourtime.dev/api/v1/entries \
-  -H "Authorization: Bearer $TRACKTIME_TOKEN" \
+  -H "Authorization: Bearer $TRACKYOURTIME_TOKEN" \
   --data-urlencode "from=2026-09-01" \
   --data-urlencode "to=2026-09-30" \
   --data-urlencode "limit=100" \
@@ -2330,7 +2330,7 @@ Both are deliberate omissions rather than gaps waiting to be filled.
 
 ---
 
-Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/authentication.md
+Source: https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/authentication.md
 
 # Authentication
 
@@ -2378,7 +2378,7 @@ Write does **not** imply read. A route that needs `entries:read` needs it even i
 token holds `entries:write` — so a token that only pushes entries in cannot be turned
 around and used to read the workspace's history.
 
-[The reference](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/reference.md) names the required scope for every route, and so does
+[The reference](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/reference.md) names the required scope for every route, and so does
 the OpenAPI document, as `x-required-scope` on each operation.
 
 ## What a token can see
@@ -2457,7 +2457,7 @@ full permissions, a token can only ever hold a subset.
 
 ---
 
-Source: https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/errors.md
+Source: https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/errors.md
 
 # Errors
 
@@ -2499,7 +2499,7 @@ Each `type` is `https://trackyourtime.dev/problems/` plus one of:
 | `no-such-route` | 404 | No route matches that method and path. |
 | `conflict` | 409 | The write collides with existing data — a duplicate name, an entry already invoiced. |
 | `payload-too-large` | 413 | The request body exceeds what the route accepts. |
-| `rate-limited` | 429 | See [Rate limits](https://raw.githubusercontent.com/trebeljahr/tracktime/main/docs-site/docs/api/rate-limits.md). |
+| `rate-limited` | 429 | See [Rate limits](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/rate-limits.md). |
 | `internal-error` | 500 | Something broke on the server. |
 
 ## Reading the statuses

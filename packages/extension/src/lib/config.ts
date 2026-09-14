@@ -39,10 +39,10 @@ const buildTimeApiUrl = ((): string => {
 
 export const DEFAULT_API_URL: string = buildTimeApiUrl;
 
-export const API_URL_STORAGE_KEY = "tracktime.api-url";
+export const API_URL_STORAGE_KEY = "trackyourtime.api-url";
 
 /** Names this client in Settings → Devices, and to the device-flow allowlist. */
-export const EXTENSION_CLIENT_ID: ClientId = "tracktime-extension";
+export const EXTENSION_CLIENT_ID: ClientId = "trackyourtime-extension";
 
 const storage = (): ReturnType<typeof chromeStorage> =>
   chromeStorage(localStorageArea());
@@ -73,7 +73,7 @@ export async function saveApiUrl(url: string): Promise<void> {
  * talking to. Kept beside the URL, and keyed by the origin inside it, so a
  * record left from an earlier server is recognisably not about this one.
  */
-export const SERVER_INFO_STORAGE_KEY = "tracktime.server-info";
+export const SERVER_INFO_STORAGE_KEY = "trackyourtime.server-info";
 
 export async function saveServerInfo(info: ServerInfo): Promise<void> {
   await storage().setItem(SERVER_INFO_STORAGE_KEY, JSON.stringify(info));

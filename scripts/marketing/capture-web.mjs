@@ -43,7 +43,7 @@ const context = await browser.newContext({
 });
 await context.addInitScript((value) => {
   try {
-    localStorage.setItem("tracktime.theme", value);
+    localStorage.setItem("trackyourtime.theme", value);
   } catch {}
 }, theme);
 const page = await context.newPage();

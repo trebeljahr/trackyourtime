@@ -24,7 +24,7 @@ const subscription = (
   overrides: Partial<WebhookSubscriptionWire> = {},
 ): WebhookSubscriptionWire => ({
   id: "w1",
-  url: "https://example.com/hooks/tracktime",
+  url: "https://example.com/hooks/trackyourtime",
   events: ["entry.started"],
   enabled: true,
   consecutiveFailures: 0,

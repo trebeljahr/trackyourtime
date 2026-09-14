@@ -10,8 +10,8 @@
 import { normalizeHostPattern } from "@starter/core/activity/index";
 import { chromeStorage, localStorageArea } from "../../lib/chrome-storage";
 
-export const ACTIVITY_SETTINGS_KEY = "tracktime.activity.settings";
-export const ACTIVITY_SCOPE_KEY = "tracktime.activity.scope";
+export const ACTIVITY_SETTINGS_KEY = "trackyourtime.activity.settings";
+export const ACTIVITY_SCOPE_KEY = "trackyourtime.activity.scope";
 
 export const DEFAULT_RETENTION_DAYS = 14;
 export const MIN_RETENTION_DAYS = 1;

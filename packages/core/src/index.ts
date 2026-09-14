@@ -1,4 +1,4 @@
-// Framework-free tracktime logic. Shared by the web client, the Electron and
+// Framework-free trackyourtime logic. Shared by the web client, the Electron and
 // Capacitor shells, and the planned Raycast + Chrome extension clients —
 // keep this package free of React, Next and any DOM-only assumption.
 

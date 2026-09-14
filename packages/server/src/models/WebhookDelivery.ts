@@ -10,7 +10,7 @@
 // permission change between enqueue and send is honoured.
 //
 // `_id` is assigned by the emitter, not by the insert: it is the delivery id
-// the envelope and the `X-Tracktime-Delivery` header carry, so it has to exist
+// the envelope and the `X-TrackYourTime-Delivery` header carry, so it has to exist
 // before the row does.
 import mongoose, { Schema, type Document } from "mongoose";
 import type {
@@ -93,7 +93,7 @@ export const WebhookDelivery = mongoose.model<IWebhookDelivery>(
  * Convert a delivery into the exact wire shape — never the envelope body.
  *
  * `id` is the row's `_id`, which `emitWebhookEvent` also wrote into the
- * envelope and which is therefore the `X-Tracktime-Delivery` header the
+ * envelope and which is therefore the `X-TrackYourTime-Delivery` header the
  * receiver saw. Deliberately ONE id space: an integrator told to deduplicate
  * on the header must be able to paste that value back and find this row in the
  * settings delivery log, and a second, wire-only id would leave them holding a

@@ -26,7 +26,7 @@ const resolveMode = (mode: string): BuildMode => {
  * describe one of them.
  */
 const manifestPlugin = (mode: BuildMode): Plugin => ({
-  name: "tracktime:manifest",
+  name: "trackyourtime:manifest",
   generateBundle() {
     this.emitFile({
       type: "asset",

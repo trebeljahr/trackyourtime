@@ -93,7 +93,7 @@ test.describe("Account deletion", () => {
     const api = await playwright.request.newContext({ baseURL: API });
     const signIn = await api.post("/api/auth/sign-in/email", {
       data: { email, password: PASSWORD },
-      headers: { "x-tracktime-client": "tracktime-mobile" },
+      headers: { "x-trackyourtime-client": "trackyourtime-mobile" },
     });
     expect(signIn.ok()).toBe(true);
     const token = signIn.headers()["set-auth-token"];

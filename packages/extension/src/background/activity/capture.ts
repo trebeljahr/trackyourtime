@@ -43,8 +43,8 @@ import {
   type OpenSegment,
 } from "./store";
 
-export const HEARTBEAT_ALARM = "tracktime.activity.heartbeat";
-export const PRUNE_ALARM = "tracktime.activity.prune";
+export const HEARTBEAT_ALARM = "trackyourtime.activity.heartbeat";
+export const PRUNE_ALARM = "trackyourtime.activity.prune";
 
 /** Chrome's floor for a periodic alarm in a packed extension. */
 const HEARTBEAT_MINUTES = 1;

@@ -77,7 +77,7 @@ export default async function config(phase: string): Promise<NextConfig> {
     const plugin = (await esmImport(
       "@hatchkit/dev-plugin-next",
     )) as LocalDevPlugin;
-    return plugin.withLocalDev(baseConfig, { slug: "tracktime" });
+    return plugin.withLocalDev(baseConfig, { slug: "trackyourtime" });
   } catch (err) {
     console.warn(
       "[next.config] @hatchkit/dev-plugin-next could not be loaded — " +

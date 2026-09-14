@@ -34,7 +34,7 @@ export const updateProfileSchema = z.object({
     .optional(),
 });
 
-// ── tracktime schemas ────────────────────────────────────────────────
+// ── trackyourtime schemas ────────────────────────────────────────────────
 
 /** Hex color like "#4f46e5". */
 export const hexColorSchema = z

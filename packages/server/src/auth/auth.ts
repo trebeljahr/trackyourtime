@@ -137,7 +137,7 @@ export async function initAuth(): Promise<void> {
 
       /**
        * Settings → Delete account, as `POST /api/auth/delete-user`. Everything
-       * tracktime owns is removed in `beforeDelete`, before better-auth removes
+       * trackyourtime owns is removed in `beforeDelete`, before better-auth removes
        * the user and every session; shared workspaces lose only this person's
        * rows. The password rule and the retry story are in
        * `auth/account-deletion.ts`.
@@ -244,7 +244,7 @@ export async function initAuth(): Promise<void> {
       bearer(),
 
       /**
-       * Workspaces. One organization IS one tracktime workspace — the plugin
+       * Workspaces. One organization IS one trackyourtime workspace — the plugin
        * owns identity, membership, invitations and roles as TABLES, while
        * `workspaceId` on the domain collections is what actually scopes data.
        *
@@ -256,7 +256,7 @@ export async function initAuth(): Promise<void> {
        * `sendInvitationEmail` here: the plugin never sends one.
        *
        * `teams` stays OFF deliberately. The plugin's teams are a SECOND
-       * nesting level inside an organization; tracktime's ownership scope is
+       * nesting level inside an organization; trackyourtime's ownership scope is
        * one level deep. Enabling it would put two scope ids in every query and
        * two pickers in every UI — including a 360px extension popup — for a
        * grouping nobody has asked for. `teamId` is additive if that changes.
