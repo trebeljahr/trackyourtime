@@ -81,13 +81,54 @@ terms; it is the reference when in doubt.
 | time format | Zeitformat | |
 | timer | Timer | the established German word in software; "Stoppuhr" reads as a toy |
 | timesheet | Stundenzettel | |
-| total | Gesamt | "Summe" in invoice totals |
+| total | Gesamt | the invoice's final line is „Gesamtbetrag“ |
 | Totals (report view) | Summen | the Reports switch; never „Übersicht“, which is dashboard |
 | track (time) | erfassen | "Zeit erfassen"; the nav item /track is "Erfassen" |
 | webhook | Webhook | |
 | week starts on | Woche beginnt am | |
 | weekly | wöchentlich | |
 | workspace | Arbeitsbereich | |
+
+### Added during extraction
+
+| English | German | Notes |
+| --- | --- | --- |
+| approve / decline (device code) | bestätigen / ablehnen | not „zustimmen“: „Dem Code konnte nicht zugestimmt werden“ is not idiomatic, and the device page has no other confirm action |
+| bill (verb), invoiced | abrechnen, abgerechnet | matches „abrechenbar“. An invoiced entry is „abgerechnet“, never „in einer Rechnung“; do not use „in Rechnung stellen“ |
+| billing (settings tab, project column) | Abrechnung | Stripe subscription billing is „Zahlungen“ |
+| breakdown (report) | Aufteilung | „Gruppieren nach“ for group by |
+| bulk actions / bulk edit | Sammelaktionen / Sammelbearbeitung | |
+| catalog (clients, projects, tasks and tags together) | Stammdaten | also the API scope „Stammdaten lesen“ |
+| command palette | Befehlspalette | |
+| Ctrl / Shift (shortcut hints) | Strg / Umschalt | ⌘ stays ⌘ |
+| decimal hours, duration format | Dezimalstunden, Dauerformat | |
+| delivery (webhook) | Zustellung | |
+| endpoint, event, payload (webhooks) | Endpunkt, Ereignis, Payload | |
+| estimate (project hours target) | Schätzung | |
+| hosted version, self-host | gehostete Version, selbst hosten | guide: „Anleitung zum Selbsthosten“ |
+| idle behaviours: ask / pause and resume / keep running / stop | Nachfragen / Pausieren und fortsetzen / Weiterlaufen lassen / Timer stoppen | away (state) = „abwesend“ |
+| invoice language | Rechnungssprache | |
+| invoice line, subtotal, tax rate | Position, Zwischensumme, Steuersatz | |
+| limits (settings tab) | Limits | |
+| Manage (nav section) | Verwalten | |
+| maximum entry length (runaway limit) | maximale Eintragsdauer | not „Höchstdauer“ or „Obergrenze“ — the setting's own label, repeated wherever the limit is named |
+| menu bar, toolbar, shortcut | Menüleiste, Symbolleiste, Tastenkürzel | |
+| phone (the device) / mobile app (the product) | Handy / Mobil-App | |
+| pin / unpin (quick starts) | anheften / nicht mehr anheften | not „lösen“, which also reads as *solve*; unpin is a tooltip and aria label, so its length costs nothing |
+| privacy policy | Datenschutzerklärung | |
+| queued (offline badge), unsynced | ausstehend, nicht synchronisiert | |
+| quick start | Schnellstart | |
+| revoke (token, device access) | widerrufen | signing a device out is „abmelden“ |
+| runaway timer; cap / stop (runaway behaviours) | vergessener Timer; Kürzen (gekürzt) / Stoppen | |
+| signing secret | Signaturschlüssel | |
+| subscribe / unsubscribe (newsletter) | abonnieren / abbestellen | never „abmelden“, which is sign out |
+| tracker bar | Timer-Leiste | |
+| undo / redo | Rückgängig / Wiederholen | |
+| weekly report | Wochenbericht | |
+| invoice notes | Anmerkungen | the form field and the PDF use the same word |
+| invoice PDF labels | Rechnungsempfänger, Rechnungsdatum, Fälligkeitsdatum, Leistungszeitraum, Zwischensumme, USt., Gesamtbetrag | no legal fields beyond what the English invoice prints |
+| popup (extension) | Pop-up | Duden spelling, in the app, the marketing pages and the store listing |
+| idle span („no input for 12 min“) | „{span} lang keine Eingabe“, „Bildschirm war {span} lang gesperrt“ | not „seit“, which says it is still going on |
 
 ### Decisions worth arguing about
 
@@ -113,6 +154,14 @@ terms; it is the reference when in doubt.
   "Track-Your-Time-Timer", "API-Token", "CSV-Datei", "E-Mail".
 - Plurals always use ICU `plural`, even when German and English happen to
   share a form: `{count, plural, one {# Eintrag} other {# Einträge}}`.
+
+- **Kunde is a weak noun.** Every case but the nominative singular is
+  „Kunden“: „Kunden bearbeiten“, „Kunden löschen“, „Nach Kunden filtern“,
+  „für den Kunden ‚{client}‘“, „Aufteilung nach Kunden“. „Kunde bearbeiten“
+  is a grammar error, not a short form.
+- **No sentence-initial „Sie“ for a plural antecedent.** „Sie bleiben
+  erhalten“ after a list of changes reads as the formal address this app never
+  uses. Repeat the noun: „Die Änderungen bleiben erhalten“.
 
 ## Typography
 

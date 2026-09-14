@@ -1944,7 +1944,12 @@ is snapshotted onto `Invoice.locale` like every figure on it: a re-render must
 never change the language of a document a customer holds. The model field has
 no default on purpose — an invoice without one predates localisation and is
 English forever. Server strings: `packages/server/src/i18n/` (`serverT(locale,
-"invoice" | "email")`), parity-tested in `tests/i18n-catalog.test.ts`.
+"invoice" | "email" | "report")`), parity-tested in `tests/i18n-catalog.test.ts`.
+A report PDF is written in the language the exporting device renders in
+(`exportPdfSchema.locale`), else the exporter's explicit preference, else
+English. Email goes out in the recipient's explicit preference, then — for an
+invitation to an address with no account — the inviter's, then English; the
+newsletter confirmation takes the subscribe form's page language.
 
 **Browser extension:** its own catalog in `packages/extension/src/i18n/`,
 resolved from the synced `settings.locale` with a synchronous `localStorage`
