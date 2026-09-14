@@ -4,7 +4,10 @@ import { expect, type Locator, type Page } from "@playwright/test";
 // ending in "/". A plain string in waitForURL/toHaveURL is an exact match and
 // would never match "/track/", so routes are matched by pattern instead.
 export const TRACK_URL = /\/track\/?$/;
-export const LOGIN_URL = /\/login\/?$/;
+// The login page may carry a query: the protected layout sends a signed-out
+// visitor to `/login/?next=<page>` (lib/safe-next.ts), and that redirect can
+// also race the sign-out button's own navigation to the bare `/login`.
+export const LOGIN_URL = /\/login\/?(\?.*)?$/;
 
 export async function signUpViaUI(
   page: Page,

@@ -55,6 +55,9 @@ test.describe("Authentication", () => {
     await page.context().clearCookies();
     await page.goto("/track");
     await expect(page).toHaveURL(LOGIN_URL);
+    // The requested page rides along, so signing in returns to it.
+    const next = new URL(page.url()).searchParams.get("next");
+    expect(next).toMatch(/^\/track\/?$/);
   });
 
   test("forgot password page shows confirmation", async ({ page }) => {

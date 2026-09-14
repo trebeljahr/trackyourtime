@@ -45,6 +45,26 @@ async function pickComboboxOption(
  * document. Reading the placeholder id yields locators that stop matching a
  * moment later, so wait for the real id before returning it.
  */
+/**
+ * Start the tracker and wait until the server has the entry.
+ *
+ * `data-state` flips optimistically, and a stop fired while `entries.start` is
+ * still in flight can reach the server first: it finds nothing running, the
+ * start then lands, and the timer stays on. That only shows under load, so a
+ * test that stops right after starting waits for the start to answer.
+ */
+async function startAndSettle(page: Page): Promise<void> {
+  const started = page.waitForResponse(
+    (response) => response.url().includes("entries.start") && response.ok(),
+  );
+  await page.getByTestId("tracker-toggle").click();
+  await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
+    "data-state",
+    "running",
+  );
+  await started;
+}
+
 async function idFromTestId(row: Locator, prefix: string): Promise<string> {
   await expect
     .poll(
@@ -277,11 +297,7 @@ test.describe("Projects catalog", () => {
     await page.goto("/track");
     await page.getByTestId("tracker-description").fill("Doomed project work");
     await pickComboboxOption(page, "tracker-project", PROJECT_NAME);
-    await page.getByTestId("tracker-toggle").click();
-    await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
-      "data-state",
-      "running",
-    );
+    await startAndSettle(page);
     // `data-state` flips optimistically, so waiting on it alone lets the test
     // navigate while `entries.stop` is still in flight; the request is then
     // aborted and the entry stays open, with nothing on screen to say so.
@@ -350,11 +366,7 @@ test.describe("Projects catalog", () => {
     await page.goto("/track");
     await page.getByTestId("tracker-description").fill("Billed work");
     await pickComboboxOption(page, "tracker-project", PROJECT_NAME);
-    await page.getByTestId("tracker-toggle").click();
-    await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
-      "data-state",
-      "running",
-    );
+    await startAndSettle(page);
     const stopped = page.waitForResponse(
       (response) =>
         response.url().includes("entries.stop") && response.status() === 200,
