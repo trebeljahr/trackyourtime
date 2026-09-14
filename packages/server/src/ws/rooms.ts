@@ -75,7 +75,7 @@ export class RoomManager {
     return this.rooms.size;
   }
 
-  /** How many sockets are in a room. */
+  /** How many sockets are placed, across every room. */
   getConnectionCount(): number {
     return this.socketToRoom.size;
   }
