@@ -53,9 +53,11 @@ terms; it is the reference when in doubt.
 | idle, idle detection | Inaktivität, Inaktivitätserkennung | "inaktiv" for the state |
 | import | importieren / Import | |
 | invoice | Rechnung | |
+| invitation | Einladung | "zurückziehen" for cancel, never "stornieren" |
 | issue date | Rechnungsdatum | |
 | member | Mitglied | |
 | offline queue | Offline-Warteschlange | |
+| ownership (transfer) | Inhaberschaft (übertragen) | |
 | paid | bezahlt | |
 | password | Passwort | |
 | project | Projekt | |

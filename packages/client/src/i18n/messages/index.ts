@@ -16,6 +16,7 @@ import { catalog as en_catalog } from "./en/catalog";
 import { settings as en_settings } from "./en/settings";
 import { shell as en_shell } from "./en/shell";
 import { marketing as en_marketing } from "./en/marketing";
+import { members as en_members } from "./en/members";
 import { common as de_common } from "./de/common";
 import { tracker as de_tracker } from "./de/tracker";
 import { calendar as de_calendar } from "./de/calendar";
@@ -24,6 +25,7 @@ import { catalog as de_catalog } from "./de/catalog";
 import { settings as de_settings } from "./de/settings";
 import { shell as de_shell } from "./de/shell";
 import { marketing as de_marketing } from "./de/marketing";
+import { members as de_members } from "./de/members";
 
 /** The source catalog. Its literal types drive key and argument checking. */
 export const en = {
@@ -35,6 +37,7 @@ export const en = {
   settings: en_settings,
   shell: en_shell,
   marketing: en_marketing,
+  members: en_members,
 } as const;
 
 export type Messages = typeof en;
@@ -50,6 +53,7 @@ export const de: Translation<Messages> = {
   settings: de_settings,
   shell: de_shell,
   marketing: de_marketing,
+  members: de_members,
 };
 
 export const NAMESPACES = Object.keys(en) as Namespace[];
