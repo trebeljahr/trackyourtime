@@ -66,7 +66,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       # `pnpm run build` compiles shared -> core -> server -> client, which
       # leaves packages/extension, packages/raycast and electron/ untypechecked
@@ -130,7 +130,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
 
