@@ -29,6 +29,7 @@ import { organization } from "better-auth/plugins/organization";
 import { ACCOUNT_DELETION_PASSWORD_REQUIRED } from "@starter/shared";
 
 import { accountDeletionOptions } from "../auth/account-deletion.js";
+import { twoFactorPlugin } from "../auth/account-security.js";
 import { authBeforeHook } from "../services/membership/organization-lockdown.js";
 import type { DeletionRowStore } from "../services/account-deletion/delete-account.js";
 import { memoryRowStore, type MemoryRowStore } from "./support/memory-row-store.js";
@@ -43,7 +44,8 @@ type MemoryDb = Record<
   | "organization"
   | "member"
   | "invitation"
-  | "deviceCode",
+  | "deviceCode"
+  | "twoFactor",
   Row[]
 >;
 
@@ -77,6 +79,7 @@ beforeEach(() => {
     member: [],
     invitation: [],
     deviceCode: [],
+    twoFactor: [],
   };
   appRows = memoryRowStore();
   failApp = false;
@@ -106,8 +109,9 @@ beforeEach(() => {
     // alone: the organization lockdown runs first and must not swallow it.
     hooks: { before: authBeforeHook },
     // The same plugin set as production: the cascade writes to the tables of
-    // both the organization and the device-authorization plugins.
+    // the organization, device-authorization and two-factor plugins.
     plugins: [
+      twoFactorPlugin(),
       bearer(),
       organization({ creatorRole: "owner" }),
       deviceAuthorization({ expiresIn: "10m", interval: "5s" }),
@@ -209,10 +213,14 @@ describe("POST /delete-user with a bearer token", () => {
     const otherDevice = second.headers.get("set-auth-token");
     assert.ok(otherDevice);
     await workspaceFor(alice);
+    // Her TOTP secret. Mongo has no foreign-key cascade, so better-auth's own
+    // deleteUser would leave it behind.
+    db.twoFactor.push({ id: "tf-alice", userId: alice.id, secret: "s", backupCodes: "b", verified: true });
 
     const result = await deleteAccount(alice.token, { password: PASSWORD });
 
     assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.deepEqual(db.twoFactor, []);
     assert.deepEqual(db.user, []);
     assert.deepEqual(db.account, []);
     assert.deepEqual(db.session, []);
