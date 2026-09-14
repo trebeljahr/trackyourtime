@@ -5,8 +5,11 @@ import {
   createId,
   createSyncClient,
   createTimerStore,
+  isOwnActivity,
   resolveSyncUrl,
   startTicking,
+  syncEventReach,
+  type SyncEventReach,
   type SyncClient,
   type SyncEvent,
   type SyncStatus,
@@ -97,69 +100,16 @@ export { resolveSyncUrl } from "@starter/core";
 type Utils = ReturnType<typeof trpc.useUtils>;
 
 /**
- * How much of an event concerns the workspace on screen.
- *
- * A person's socket carries every workspace they belong to, and the React
- * Query keys do not include the workspace (the link adds it below them) — so
- * an `entry.upserted` from workspace A invalidating `entries.list` while B is
- * on screen would refetch B for nothing at best, and anything that patched
- * caches from the payload would put A's row into B's list. So:
- *
- *  - `"all"`: the event is about this workspace, or about the person
- *    (no `workspaceId` on the envelope), or no workspace is resolved yet.
- *  - `"timer"`: another workspace's timer or entry event. The running timer is
- *    per PERSON — a start in A stops B's — so `entries.current` is refetched,
- *    and nothing else.
- *  - `"membership"`: another workspace's membership changed. Only the
- *    workspace list can be affected (a removal there shows up in the switcher
- *    and in the queue's held rows).
- *  - `"ignore"`: anything else from another workspace.
+ * How much of an event concerns the workspace on screen — see
+ * `syncEventReach` in core, shared with the extension and Raycast. The React
+ * Query keys do not include the workspace (the tRPC link adds it below them),
+ * so an `entry.upserted` from workspace A invalidating `entries.list` while B
+ * is on screen would at best refetch B for nothing.
  */
-export type SyncEventReach = "all" | "timer" | "membership" | "ignore";
+export { syncEventReach, type SyncEventReach };
 
-export const syncEventReach = (
-  event: SyncEvent,
-  eventWorkspaceId: string | undefined,
-  activeWorkspaceId: string | null
-): SyncEventReach => {
-  if (
-    eventWorkspaceId === undefined ||
-    activeWorkspaceId === null ||
-    eventWorkspaceId === activeWorkspaceId
-  ) {
-    return "all";
-  }
-  switch (event.kind) {
-    case "timer.started":
-    case "timer.stopped":
-    case "entry.upserted":
-    case "entry.deleted":
-      return "timer";
-    case "membership.changed":
-      return "membership";
-    default:
-      return "ignore";
-  }
-};
-
-/**
- * True when an event is evidence that THIS person was at a keyboard just now.
- *
- * In a shared workspace a colleague's entry events reach this socket too, and
- * a colleague typing is not a reason to believe this person is — counting it
- * would stop idle detection from ever pausing a laptop left open in an office
- * of people tracking time. Entry-bearing events count only for their author;
- * events about the person (no workspace on the envelope) always count; any
- * other workspace event cannot say who caused it, so it does not.
- */
-export const isOwnActivity = (
-  event: SyncEvent,
-  eventWorkspaceId: string | undefined,
-  userId: string | null
-): boolean => {
-  if ("entry" in event) return userId !== null && event.entry.authorId === userId;
-  return eventWorkspaceId === undefined;
-};
+/** Whether an event shows THIS person at a keyboard — see core. */
+export { isOwnActivity };
 
 /**
  * Map a sync event onto the query caches it invalidates. Reports depend on

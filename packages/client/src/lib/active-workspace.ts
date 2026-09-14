@@ -31,6 +31,7 @@
 import {
   ACTIVE_WORKSPACE_STORAGE_KEY,
   memoryStorage,
+  resolveActiveWorkspaceId,
   webStorage,
   type KeyValueStorage,
   type WorkspaceSummary,
@@ -151,22 +152,10 @@ const knownHere = (): KnownWorkspaces | null =>
 
 /**
  * The id to send: the stored choice when it is still a membership, else the
- * default. Pure, so the rule is tested without storage.
- *
- * With no list at all (a device that has never fetched one) the stored id is
- * the best available answer and is used as it is; the first list to arrive
- * validates it.
+ * default. The rule lives in core so the extension and Raycast resolve a
+ * stored id exactly the same way.
  */
-export const resolveActiveWorkspaceId = (
-  stored: string | null,
-  workspaces: readonly WorkspaceSummary[] | null
-): string | null => {
-  if (workspaces === null) return stored;
-  if (stored !== null && workspaces.some((w) => w.id === stored)) return stored;
-  return (
-    workspaces.find((w) => w.isDefault)?.id ?? workspaces[0]?.id ?? null
-  );
-};
+export { resolveActiveWorkspaceId };
 
 const publish = (notify = true): void => {
   const here = knownHere();
