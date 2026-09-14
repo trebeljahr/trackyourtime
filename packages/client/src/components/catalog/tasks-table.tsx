@@ -30,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { useAllTimeRange } from "@/lib/entry-links";
 import { CatalogName } from "./catalog-name";
@@ -54,6 +55,8 @@ export function TasksTable({
   isFiltered,
   onCreate,
 }: TasksTableProps): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const format = useFormatSettings();
   const { updateTask, setTaskArchived, removeTask } = useTaskMutations();
   // The Tracked column is a lifetime total, so its link has to span one too.
@@ -78,17 +81,19 @@ export function TasksTable({
     return (
       <EmptyState
         icon={ListChecks}
-        title={isFiltered ? "No tasks match these filters" : "No tasks yet"}
+        title={
+          isFiltered ? t("tasks.empty.filteredTitle") : t("tasks.empty.title")
+        }
         description={
           isFiltered
-            ? "Try clearing the search, or turn on “Show archived”."
-            : "Tasks name the kind of work. An entry can carry one, a project, both, or neither."
+            ? t("tasks.empty.filteredDescription")
+            : t("tasks.empty.description")
         }
         action={
           isFiltered ? undefined : (
             <Button onClick={onCreate} data-testid="tasks-empty-create">
               <Plus className="size-4" />
-              New task
+              {t("tasks.new")}
             </Button>
           )
         }
@@ -104,8 +109,8 @@ export function TasksTable({
           <TableHeader>
             <TableRow>
               <TableHead className="w-10" />
-              <TableHead>Task</TableHead>
-              <TableHead className="text-right">Tracked</TableHead>
+              <TableHead>{tc("fields.task")}</TableHead>
+              <TableHead className="text-right">{t("columns.tracked")}</TableHead>
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
@@ -119,7 +124,7 @@ export function TasksTable({
                 <TableCell>
                   <Checkbox
                     checked={task.done}
-                    aria-label={`Mark ${task.name} done`}
+                    aria-label={t("tasks.markDone", { name: task.name })}
                     onCheckedChange={(checked) => {
                       void updateTask({ id: task.id, done: checked === true });
                     }}
@@ -132,7 +137,7 @@ export function TasksTable({
                     name={task.name}
                     archived={task.archived}
                     done={task.done}
-                    editLabel={`Edit task "${task.name}"`}
+                    editLabel={t("tasks.editLabel", { name: task.name })}
                     onEdit={() => setEditing(task)}
                     nameTestId={`task-name-${task.id}`}
                   />
@@ -159,7 +164,7 @@ export function TasksTable({
                         variant="ghost"
                         size="icon"
                         className="size-7"
-                        aria-label={`Actions for ${task.name}`}
+                        aria-label={t("row.actions", { name: task.name })}
                         data-testid={`task-menu-${task.id}`}
                       >
                         <MoreHorizontal className="size-4" />
@@ -177,7 +182,7 @@ export function TasksTable({
                         data-testid={`task-edit-${task.id}`}
                       >
                         <Pencil className="size-4" />
-                        Edit
+                        {tc("actions.edit")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onSelect={() =>
@@ -190,7 +195,9 @@ export function TasksTable({
                         ) : (
                           <Archive className="size-4" />
                         )}
-                        {task.archived ? "Unarchive" : "Archive"}
+                        {task.archived
+                          ? tc("actions.unarchive")
+                          : tc("actions.archive")}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
@@ -199,7 +206,7 @@ export function TasksTable({
                         data-testid={`task-delete-${task.id}`}
                       >
                         <Trash2 className="size-4" />
-                        Delete
+                        {tc("actions.delete")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -223,13 +230,13 @@ export function TasksTable({
         onOpenChange={(next) => {
           if (!next) setPendingDelete(null);
         }}
-        title={`Delete "${pendingDelete?.name ?? ""}"?`}
+        title={t("tasks.delete.title", { name: pendingDelete?.name ?? "" })}
         description={
           pendingDelete && pendingDelete.totalSec > 0
-            ? "Entries booked on this task keep their tracked time and their project — they simply lose the task."
-            : "No time is tracked against this task."
+            ? t("tasks.delete.withTime")
+            : t("tasks.delete.noTime")
         }
-        confirmLabel="Delete task"
+        confirmLabel={t("tasks.delete.confirm")}
         onConfirm={() => {
           if (pendingDelete) removeTask(pendingDelete.id);
           setPendingDelete(null);

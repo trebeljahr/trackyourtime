@@ -19,6 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { translate, useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import { TagChips, tagChipList } from "@/components/tags/tag-chips";
 import {
@@ -113,9 +114,11 @@ export function TagPicker({
   testId = "tag-picker",
   variant = "chips",
   maxChips = 3,
-  placeholder = "Tags",
+  placeholder,
   className,
 }: TagPickerProps): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
 
@@ -149,7 +152,9 @@ export function TagPicker({
     const name = query.trim();
     if (name === "") return;
     if (value.length >= MAX_TAGS_PER_ENTRY) {
-      toast.error(`An entry can carry at most ${MAX_TAGS_PER_ENTRY} tags.`);
+      toast.error(
+        translate("catalog")("tags.picker.tooMany", { max: MAX_TAGS_PER_ENTRY }),
+      );
       return;
     }
     const created = await createTag({ name });
@@ -162,13 +167,15 @@ export function TagPicker({
 
   const triggerLabel = (): React.ReactNode => {
     if (selected.length === 0) {
-      return <span className="text-muted-foreground">{placeholder}</span>;
+      return (
+        <span className="text-muted-foreground">
+          {placeholder ?? tc("fields.tags")}
+        </span>
+      );
     }
     if (variant === "count") {
       return (
-        <span>
-          {selected.length} tag{selected.length === 1 ? "" : "s"}
-        </span>
+        <span>{tc("counts.tags", { count: selected.length })}</span>
       );
     }
     return (
@@ -188,7 +195,7 @@ export function TagPicker({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          aria-label="Tags"
+          aria-label={tc("fields.tags")}
           disabled={disabled}
           className={cn(
             "justify-start gap-1.5 overflow-hidden font-normal",
@@ -210,12 +217,12 @@ export function TagPicker({
           <CommandInput
             value={query}
             onValueChange={setQuery}
-            placeholder="Search or create a tag..."
+            placeholder={t("tags.picker.search")}
             data-testid={`${testId}-search`}
           />
           <CommandList>
             {showCreate ? null : (
-              <CommandEmpty>No tags yet — type one to create it.</CommandEmpty>
+              <CommandEmpty>{t("tags.picker.empty")}</CommandEmpty>
             )}
 
             <CommandGroup>
@@ -232,7 +239,9 @@ export function TagPicker({
                         value.length >= MAX_TAGS_PER_ENTRY
                       ) {
                         toast.error(
-                          `An entry can carry at most ${MAX_TAGS_PER_ENTRY} tags.`,
+                          translate("catalog")("tags.picker.tooMany", {
+                            max: MAX_TAGS_PER_ENTRY,
+                          }),
                         );
                         return;
                       }
@@ -259,7 +268,7 @@ export function TagPicker({
                     <span className="truncate">{tag.name}</span>
                     {tag.archived ? (
                       <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                        archived
+                        {t("row.archivedMarker")}
                       </span>
                     ) : null}
                   </CommandItem>
@@ -282,7 +291,7 @@ export function TagPicker({
                   >
                     <Plus className="size-4" />
                     <span className="truncate">
-                      Create &quot;{query.trim()}&quot;
+                      {t("tags.picker.create", { name: query.trim() })}
                     </span>
                   </CommandItem>
                 </CommandGroup>
@@ -303,7 +312,7 @@ export function TagPicker({
                   data-testid={`${testId}-clear`}
                 >
                   <X className="size-4" />
-                  Remove {value.length} tag{value.length === 1 ? "" : "s"}
+                  {t("tags.picker.remove", { count: value.length })}
                 </Button>
               </div>
             </>

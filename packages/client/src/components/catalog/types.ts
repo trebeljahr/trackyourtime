@@ -11,6 +11,7 @@ import type {
   UpdateProjectWithEntriesInput,
   UpdateTaskInput,
 } from "@starter/shared";
+import { userErrorMessage } from "@/lib/error-message";
 
 // The router's own output types live behind `@starter/server/trpc`, which
 // only re-exports `AppRouter`; `inferRouterOutputs` would need `@trpc/server`
@@ -104,12 +105,9 @@ export function errorCode(error: unknown): string | null {
   return typeof code === "string" ? code : null;
 }
 
+/** The server's message, or `fallback` — see `userErrorMessage`. */
 export function errorMessage(error: unknown, fallback: string): string {
-  if (typeof error === "object" && error !== null) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim() !== "") return message;
-  }
-  return fallback;
+  return userErrorMessage(error, fallback);
 }
 
 /** Duplicate names come back as CONFLICT and belong inline on the field. */

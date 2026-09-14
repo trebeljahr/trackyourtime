@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/popover";
 import { CATALOG_COLOR_PALETTE, isHexColor } from "@starter/shared";
 
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 /**
@@ -52,6 +53,7 @@ export function ColorPicker({
   className,
   testId = "color-picker",
 }: ColorPickerProps): React.JSX.Element {
+  const t = useT("catalog");
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState(value);
   const [lastValue, setLastValue] = React.useState(value);
@@ -90,7 +92,7 @@ export function ColorPicker({
           variant="outline"
           disabled={disabled}
           className={cn("justify-start gap-2 font-normal", className)}
-          aria-label={label ?? "Pick a colour"}
+          aria-label={label ?? t("colorPicker.pick")}
           data-testid={testId}
         >
           <span
@@ -145,7 +147,7 @@ export function ColorPicker({
               setDraft(next);
               onChange(next);
             }}
-            aria-label="Custom colour"
+            aria-label={t("colorPicker.custom")}
             className="h-8 w-10 shrink-0 cursor-pointer rounded border border-border bg-transparent p-0.5"
             data-testid={`${testId}-custom`}
           />
@@ -161,7 +163,7 @@ export function ColorPicker({
               if (event.key === "Escape") setDraft(value);
             }}
             spellCheck={false}
-            aria-label="Hex colour"
+            aria-label={t("colorPicker.hex")}
             placeholder="#4f46e5"
             className="h-8 font-mono text-xs"
             data-testid={`${testId}-hex`}

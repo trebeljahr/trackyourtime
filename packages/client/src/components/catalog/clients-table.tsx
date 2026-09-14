@@ -29,6 +29,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { useAllTimeRange } from "@/lib/entry-links";
 import { CatalogName } from "./catalog-name";
@@ -83,6 +85,9 @@ export function ClientsTable({
   isFiltered,
   onCreate,
 }: ClientsTableProps): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
+  const f = useFormat();
   const format = useFormatSettings();
   const { setClientArchived, removeClient } = useClientMutations();
   // The roll-ups on these rows are lifetime totals, so the entry log they
@@ -117,17 +122,21 @@ export function ClientsTable({
     return (
       <EmptyState
         icon={Users}
-        title={isFiltered ? "No clients match these filters" : "No clients yet"}
+        title={
+          isFiltered
+            ? t("clients.empty.filteredTitle")
+            : t("clients.empty.title")
+        }
         description={
           isFiltered
-            ? "Try clearing the search, or turn on “Show archived”."
-            : "Clients sit above projects and roll their tracked time together."
+            ? t("clients.empty.filteredDescription")
+            : t("clients.empty.description")
         }
         action={
           isFiltered ? undefined : (
             <Button onClick={onCreate} data-testid="clients-empty-create">
               <Plus className="size-4" />
-              New client
+              {t("clients.new")}
             </Button>
           )
         }
@@ -142,10 +151,10 @@ export function ClientsTable({
         <Table data-testid="clients-table">
           <TableHeader>
             <TableRow>
-              <TableHead>Client</TableHead>
-              <TableHead className="text-right">Projects</TableHead>
-              <TableHead className="text-right">Tracked</TableHead>
-              <TableHead className="text-right">Entries</TableHead>
+              <TableHead>{tc("fields.client")}</TableHead>
+              <TableHead className="text-right">{tc("fields.projects")}</TableHead>
+              <TableHead className="text-right">{t("columns.tracked")}</TableHead>
+              <TableHead className="text-right">{t("columns.entries")}</TableHead>
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
@@ -163,7 +172,7 @@ export function ClientsTable({
                       name={client.name}
                       color={client.color}
                       archived={client.archived}
-                      editLabel={`Edit client "${client.name}"`}
+                      editLabel={t("clients.editLabel", { name: client.name })}
                       onEdit={() => setEditing(client)}
                       testId={`client-name-${client.id}`}
                     />
@@ -173,7 +182,7 @@ export function ClientsTable({
                     className="text-right tabular-nums text-muted-foreground"
                     data-testid={`client-projects-${client.id}`}
                   >
-                    {rollup.projectCount}
+                    {f.number(rollup.projectCount)}
                   </TableCell>
 
                   <TableCell
@@ -200,7 +209,7 @@ export function ClientsTable({
                       label={client.name}
                       testId={`client-entries-link-${client.id}`}
                     >
-                      {rollup.entryCount}
+                      {f.number(rollup.entryCount)}
                     </EntriesLink>
                   </TableCell>
 
@@ -211,7 +220,7 @@ export function ClientsTable({
                           variant="ghost"
                           size="icon"
                           className="size-7"
-                          aria-label={`Actions for ${client.name}`}
+                          aria-label={t("row.actions", { name: client.name })}
                           data-testid={`client-menu-${client.id}`}
                         >
                           <MoreHorizontal className="size-4" />
@@ -229,7 +238,7 @@ export function ClientsTable({
                           data-testid={`client-edit-${client.id}`}
                         >
                           <Pencil className="size-4" />
-                          Edit
+                          {tc("actions.edit")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() =>
@@ -242,7 +251,9 @@ export function ClientsTable({
                           ) : (
                             <Archive className="size-4" />
                           )}
-                          {client.archived ? "Unarchive" : "Archive"}
+                          {client.archived
+                            ? tc("actions.unarchive")
+                            : tc("actions.archive")}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -251,7 +262,7 @@ export function ClientsTable({
                           data-testid={`client-delete-${client.id}`}
                         >
                           <Trash2 className="size-4" />
-                          Delete
+                          {tc("actions.delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -276,19 +287,16 @@ export function ClientsTable({
         onOpenChange={(next) => {
           if (!next) setPendingDelete(null);
         }}
-        title={`Delete "${pendingDelete?.name ?? ""}"?`}
+        title={t("clients.delete.title", { name: pendingDelete?.name ?? "" })}
         description={
           pendingStats.projectCount > 0
-            ? `Its ${pendingStats.projectCount} ${
-                pendingStats.projectCount === 1 ? "project" : "projects"
-              } are kept — they lose the client and keep every one of their ${
-                pendingStats.entryCount
-              } time ${
-                pendingStats.entryCount === 1 ? "entry" : "entries"
-              }. Archive instead if you want to keep the client.`
-            : "This client has no projects. Nothing else is affected."
+            ? t("clients.delete.withProjects", {
+                projects: pendingStats.projectCount,
+                entries: pendingStats.entryCount,
+              })
+            : t("clients.delete.noProjects")
         }
-        confirmLabel="Delete client"
+        confirmLabel={t("clients.delete.confirm")}
         onConfirm={() => {
           if (pendingDelete) removeClient(pendingDelete.id);
           setPendingDelete(null);

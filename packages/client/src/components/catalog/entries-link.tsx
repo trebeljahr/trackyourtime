@@ -7,6 +7,7 @@ import { Table2 } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { entriesHref, type EntriesLinkTarget } from "@/lib/entry-links";
 import type { DateRange } from "@/components/date-range-picker";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 export type EntriesLinkProps = {
@@ -34,6 +35,7 @@ export function EntriesLink({
   className,
   testId,
 }: EntriesLinkProps): React.JSX.Element {
+  const t = useT("catalog");
   return (
     <Link
       href={entriesHref(target, range)}
@@ -41,7 +43,7 @@ export function EntriesLink({
         "rounded underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
       )}
-      title={`Show time entries for ${label}`}
+      title={t("entriesLink.title", { name: label })}
       data-testid={testId}
     >
       {children}
@@ -63,11 +65,12 @@ export function ShowEntriesItem({
   range: DateRange;
   testId?: string;
 }): React.JSX.Element {
+  const t = useT("catalog");
   return (
     <DropdownMenuItem asChild data-testid={testId}>
       <Link href={entriesHref(target, range)}>
         <Table2 className="size-4" />
-        Show time entries
+        {t("entriesLink.menuItem")}
       </Link>
     </DropdownMenuItem>
   );

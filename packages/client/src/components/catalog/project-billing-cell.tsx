@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
+import { translate, useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import {
   billingChanged,
@@ -49,6 +50,8 @@ export function ProjectBillingCell({
   prompt,
   updateProject,
 }: ProjectBillingCellProps): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const format = useFormatSettings();
   const defaultRate = format.settings.defaultHourlyRate;
 
@@ -71,7 +74,7 @@ export function ProjectBillingCell({
     event.preventDefault();
     const hourlyRate = parseRate(rate);
     if (hourlyRate === "invalid") {
-      setRateError("Enter a rate of 0 or more, or leave it empty");
+      setRateError(t("projects.billing.rateInvalid"));
       return;
     }
     const next = { billableDefault: billable, hourlyRate };
@@ -89,12 +92,13 @@ export function ProjectBillingCell({
       });
       if (!saved) return;
       const rewritten = saved.entriesRewritten;
+      const messages = translate("catalog");
       toast.success(
         rewritten && rewritten.entries > 0
-          ? `Billing saved and ${rewritten.entries} ${
-              rewritten.entries === 1 ? "entry" : "entries"
-            } updated.`
-          : "Billing saved for new entries.",
+          ? messages("projects.billing.savedWithEntries", {
+              count: rewritten.entries,
+            })
+          : messages("projects.billing.saved"),
       );
     });
   };
@@ -109,27 +113,31 @@ export function ProjectBillingCell({
           variant="ghost"
           size="sm"
           className="-mx-2 h-auto min-h-8 gap-2 px-2 py-1 text-sm font-normal"
-          aria-label={`Edit billing for ${project.name}`}
+          aria-label={t("projects.billing.editLabel", { name: project.name })}
           data-testid={`project-billing-${project.id}`}
           data-billable={project.billableDefault ? "true" : "false"}
         >
           {project.billableDefault ? (
             <>
-              <Badge variant="secondary">Billable</Badge>
+              <Badge variant="secondary">{tc("fields.billable")}</Badge>
               <span
                 className="tabular-nums"
                 data-testid={`project-rate-${project.id}`}
               >
-                {format.money(effectiveRate)}/h
+                {t("projects.billing.rate", {
+                  amount: format.money(effectiveRate),
+                })}
                 {project.hourlyRate === null ? (
                   <span className="ml-1 text-xs text-muted-foreground">
-                    default
+                    {t("projects.billing.defaultMarker")}
                   </span>
                 ) : null}
               </span>
             </>
           ) : (
-            <span className="text-muted-foreground/70">Non-billable</span>
+            <span className="text-muted-foreground/70">
+              {tc("fields.nonBillable")}
+            </span>
           )}
         </Button>
       </PopoverTrigger>
@@ -142,7 +150,7 @@ export function ProjectBillingCell({
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor={`project-billing-billable-${project.id}`}>
-              Billable by default
+              {t("projects.billing.billableByDefault")}
             </Label>
             <Switch
               id={`project-billing-billable-${project.id}`}
@@ -154,14 +162,16 @@ export function ProjectBillingCell({
 
           <div className="space-y-1.5">
             <Label htmlFor={`project-billing-rate-${project.id}`}>
-              Hourly rate ({format.currency})
+              {t("projects.billing.hourlyRate", { currency: format.currency })}
             </Label>
             <Input
               id={`project-billing-rate-${project.id}`}
               inputMode="decimal"
               value={rate}
               disabled={!billable}
-              placeholder={`Default: ${format.money(defaultRate)}`}
+              placeholder={t("projects.billing.ratePlaceholder", {
+                amount: format.money(defaultRate),
+              })}
               aria-invalid={rateError !== null}
               onChange={(event) => {
                 setRate(event.target.value);
@@ -179,8 +189,8 @@ export function ProjectBillingCell({
             ) : (
               <p className="text-xs text-muted-foreground">
                 {billable
-                  ? "Leave empty to use the workspace default."
-                  : "Non-billable time carries no rate."}
+                  ? t("projects.billing.rateHint")
+                  : t("projects.billing.nonBillableHint")}
               </p>
             )}
           </div>
@@ -192,14 +202,14 @@ export function ProjectBillingCell({
               size="sm"
               onClick={() => setOpen(false)}
             >
-              Cancel
+              {tc("actions.cancel")}
             </Button>
             <Button
               type="submit"
               size="sm"
               data-testid="project-billing-save"
             >
-              Save
+              {tc("actions.save")}
             </Button>
           </div>
         </form>

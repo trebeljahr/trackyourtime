@@ -7,9 +7,12 @@ import { TaskFormDialog } from "@/components/catalog/task-form-dialog";
 import { TasksTable } from "@/components/catalog/tasks-table";
 import { TASK_LIST_INPUT, type TaskRow } from "@/components/catalog/types";
 import { useFormatSettings } from "@/lib/format";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 
 export default function TasksPage(): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const format = useFormatSettings();
 
   const [search, setSearch] = React.useState("");
@@ -45,22 +48,21 @@ export default function TasksPage(): React.JSX.Element {
 
   return (
     <CatalogScreen
-      title="Tasks"
-      description="What the work is, independent of which project it was for. An entry can carry a task, a project, both or neither — deleting a task keeps the entries booked on it."
-      actionLabel="New task"
+      title={tc("fields.tasks")}
+      description={t("tasks.description")}
+      actionLabel={t("tasks.new")}
       onAction={() => setCreating(true)}
       actionTestId="new-task"
       search={search}
       onSearchChange={setSearch}
-      searchPlaceholder="Search tasks"
+      searchPlaceholder={t("tasks.search")}
       showArchived={showArchived}
       onShowArchivedChange={setShowArchived}
-      summary={
-        <>
-          {visibleTasks.length} {visibleTasks.length === 1 ? "task" : "tasks"} ·{" "}
-          {openCount} open · {format.duration(trackedTotal)} tracked
-        </>
-      }
+      summary={t("tasks.summary", {
+        count: visibleTasks.length,
+        open: openCount,
+        duration: format.duration(trackedTotal),
+      })}
       hasError={tasksQuery.isError}
       testId="tasks-page"
     >

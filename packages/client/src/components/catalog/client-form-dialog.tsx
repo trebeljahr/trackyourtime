@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
-import type { ClientBillingInput } from "@starter/shared";
+import {
+  isLocale,
+  SUPPORTED_LOCALES,
+  type ClientBillingInput,
+  type Locale,
+} from "@starter/shared";
 
 import { ColorPicker, COLOR_PALETTE } from "@/components/color-picker";
 import { Button } from "@/components/ui/button";
@@ -23,7 +28,7 @@ import {
   postalDraftFrom,
   type PostalDraft,
 } from "@/components/invoices/identity-fields";
-import { useT } from "@/i18n/use-t";
+import { translate, useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import { useClientMutations } from "./use-catalog-mutations";
 import type { ClientRow } from "./types";
@@ -91,10 +96,15 @@ type ClientFormProps = {
 };
 
 function ClientForm({ client, onDone }: ClientFormProps): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const [name, setName] = React.useState(client?.name ?? "");
   const [color, setColor] = React.useState(client?.color ?? FALLBACK_COLOR);
+  // "" is "no preference": the invoice follows the issuer's own language.
+  const [invoiceLocale, setInvoiceLocale] = React.useState<Locale | "">(
+    client?.invoiceLocale ?? "",
+  );
   const [nameError, setNameError] = React.useState<string | null>(null);
-  const t = useT("catalog");
   const [billing, setBilling] = React.useState(() => billingDraftFrom(client));
   // Open when there is something to see, so an edit never hides stored details.
   const [billingOpen, setBillingOpen] = React.useState(
@@ -112,7 +122,7 @@ function ClientForm({ client, onDone }: ClientFormProps): React.JSX.Element {
 
     const trimmed = name.trim();
     if (trimmed === "") {
-      setNameError("Name is required");
+      setNameError(t("form.nameRequired"));
       return;
     }
     if (!billingValid) {
@@ -127,40 +137,46 @@ function ClientForm({ client, onDone }: ClientFormProps): React.JSX.Element {
       JSON.stringify(billingInputFromDraft(billingDraftFrom(client)));
     const billingPatch = billingChanged ? { billing: billingInput } : {};
 
+    // Sent as null, not omitted, so clearing the choice reaches the server.
+    const locale = invoiceLocale === "" ? null : invoiceLocale;
+
     if (client) {
       void updateClient({
         id: client.id,
         name: trimmed,
         color,
+        invoiceLocale: locale,
         ...billingPatch,
-      }).then(
-        (saved) => {
-          if (!saved) return;
-          toast.success("Client saved.");
-          onDone();
-        },
-      );
+      }).then((saved) => {
+        if (!saved) return;
+        toast.success(translate("catalog")("clients.form.saved"));
+        onDone();
+      });
       return;
     }
 
-    void createClient({ name: trimmed, color, ...billingPatch }).then((created) => {
-      if (!created) return;
-      toast.success(`Client "${created.name}" created.`);
-      onDone();
-    });
+    void createClient({ name: trimmed, color, invoiceLocale: locale, ...billingPatch }).then(
+      (created) => {
+        if (!created) return;
+        toast.success(
+          translate("catalog")("clients.form.created", { name: created.name }),
+        );
+        onDone();
+      },
+    );
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <DialogHeader>
-        <DialogTitle>{client ? "Edit client" : "New client"}</DialogTitle>
-        <DialogDescription>
-          Clients sit above projects and roll their tracked time together.
-        </DialogDescription>
+        <DialogTitle>
+          {client ? t("clients.form.titleEdit") : t("clients.form.titleNew")}
+        </DialogTitle>
+        <DialogDescription>{t("clients.form.description")}</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">
-        <Label htmlFor="client-name">Name</Label>
+        <Label htmlFor="client-name">{tc("fields.name")}</Label>
         <div className="flex items-center gap-2">
           <ColorPicker value={color} onChange={setColor} testId="client-color" />
           <Input
@@ -168,7 +184,7 @@ function ClientForm({ client, onDone }: ClientFormProps): React.JSX.Element {
             value={name}
             autoFocus
             maxLength={120}
-            placeholder="Acme Inc."
+            placeholder={t("clients.form.namePlaceholder")}
             aria-invalid={nameError !== null}
             onChange={(event) => {
               setName(event.target.value);
@@ -182,6 +198,32 @@ function ClientForm({ client, onDone }: ClientFormProps): React.JSX.Element {
             {nameError}
           </p>
         ) : null}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="client-invoice-locale">
+          {t("clients.form.invoiceLocale.label")}
+        </Label>
+        <select
+          id="client-invoice-locale"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          value={invoiceLocale}
+          onChange={(event) => {
+            const next = event.target.value;
+            setInvoiceLocale(isLocale(next) ? next : "");
+          }}
+          data-testid="client-invoice-locale"
+        >
+          <option value="">{t("clients.form.invoiceLocale.inherit")}</option>
+          {SUPPORTED_LOCALES.map((locale) => (
+            <option key={locale} value={locale} lang={locale}>
+              {t(`clients.form.invoiceLocale.${locale}`)}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          {t("clients.form.invoiceLocale.hint")}
+        </p>
       </div>
 
       <section className="space-y-3" data-testid="client-billing">
@@ -252,10 +294,10 @@ function ClientForm({ client, onDone }: ClientFormProps): React.JSX.Element {
           onClick={onDone}
           data-testid="client-cancel"
         >
-          Cancel
+          {tc("actions.cancel")}
         </Button>
         <Button type="submit" disabled={isSaving} data-testid="client-submit">
-          {client ? "Save changes" : "Create client"}
+          {client ? t("form.saveChanges") : t("clients.form.create")}
         </Button>
       </DialogFooter>
     </form>

@@ -30,6 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { budgetView } from "@/lib/budget-view";
 import { formatMoney, useFormatSettings } from "@/lib/format";
 import { useAllTimeRange } from "@/lib/entry-links";
@@ -59,6 +61,9 @@ export function ProjectsTable({
   isFiltered,
   onCreate,
 }: ProjectsTableProps): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
+  const f = useFormat();
   const format = useFormatSettings();
   const { setProjectArchived, removeProject, updateProject } =
     useProjectMutations();
@@ -73,10 +78,12 @@ export function ProjectsTable({
   const budgetFormat = React.useMemo(
     () => ({
       durationShort: format.durationShort,
-      money: formatMoney,
+      money: (amount: number, currency: string) =>
+        formatMoney(amount, currency, format.locale),
       fallbackCurrency: format.currency,
+      locale: format.locale,
     }),
-    [format.durationShort, format.currency],
+    [format.durationShort, format.currency, format.locale],
   );
 
   const [editing, setEditing] = React.useState<ProjectRow | null>(null);
@@ -102,17 +109,21 @@ export function ProjectsTable({
     return (
       <EmptyState
         icon={FolderKanban}
-        title={isFiltered ? "No projects match these filters" : "No projects yet"}
+        title={
+          isFiltered
+            ? t("projects.empty.filteredTitle")
+            : t("projects.empty.title")
+        }
         description={
           isFiltered
-            ? "Try clearing the search or client filter, or turn on “Show archived”."
-            : "Projects group tracked time and carry the billing defaults for new entries."
+            ? t("projects.empty.filteredDescription")
+            : t("projects.empty.description")
         }
         action={
           isFiltered ? undefined : (
             <Button onClick={onCreate} data-testid="projects-empty-create">
               <Plus className="size-4" />
-              New project
+              {t("projects.new")}
             </Button>
           )
         }
@@ -127,12 +138,12 @@ export function ProjectsTable({
         <Table data-testid="projects-table">
           <TableHeader>
             <TableRow>
-              <TableHead>Project</TableHead>
-              <TableHead>Client</TableHead>
-              <TableHead>Billing</TableHead>
-              <TableHead className="text-right">Tracked</TableHead>
-              <TableHead className="w-56">Budget</TableHead>
-              <TableHead className="text-right">Entries</TableHead>
+              <TableHead>{tc("fields.project")}</TableHead>
+              <TableHead>{tc("fields.client")}</TableHead>
+              <TableHead>{t("columns.billing")}</TableHead>
+              <TableHead className="text-right">{t("columns.tracked")}</TableHead>
+              <TableHead className="w-56">{t("columns.budget")}</TableHead>
+              <TableHead className="text-right">{t("columns.entries")}</TableHead>
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
@@ -149,7 +160,7 @@ export function ProjectsTable({
                         name={project.name}
                         color={project.color}
                         archived={project.archived}
-                        editLabel={`Edit project "${project.name}"`}
+                        editLabel={t("projects.editLabel", { name: project.name })}
                         onEdit={() => setEditing(project)}
                         testId={`project-name-${project.id}`}
                       />
@@ -161,7 +172,9 @@ export function ProjectsTable({
                           name={project.clientName}
                           color={project.clientColor}
                           nameClassName="font-normal"
-                          editLabel={`Edit client "${project.clientName}"`}
+                          editLabel={t("clients.editLabel", {
+                            name: project.clientName,
+                          })}
                           onEdit={() => {
                             const client = clients.find(
                               (row) => row.id === project.clientId,
@@ -171,7 +184,9 @@ export function ProjectsTable({
                           testId={`project-client-${project.id}`}
                         />
                       ) : (
-                        <span className="text-muted-foreground/70">—</span>
+                        <span className="text-muted-foreground/70">
+                          {t("row.empty")}
+                        </span>
                       )}
                     </TableCell>
 
@@ -200,7 +215,7 @@ export function ProjectsTable({
                     <TableCell data-testid={`project-budget-${project.id}`}>
                       <BudgetMeterCell
                         view={budgetView(project.progress, budgetFormat)}
-                        emptyLabel="No budget"
+                        emptyLabel={t("projects.noBudget")}
                         testId={`project-budget-meter-${project.id}`}
                       />
                     </TableCell>
@@ -215,7 +230,7 @@ export function ProjectsTable({
                         label={project.name}
                         testId={`project-entries-link-${project.id}`}
                       >
-                        {project.entryCount}
+                        {f.number(project.entryCount)}
                       </EntriesLink>
                     </TableCell>
 
@@ -226,7 +241,7 @@ export function ProjectsTable({
                             variant="ghost"
                             size="icon"
                             className="size-7"
-                            aria-label={`Actions for ${project.name}`}
+                            aria-label={t("row.actions", { name: project.name })}
                             data-testid={`project-menu-${project.id}`}
                           >
                             <MoreHorizontal className="size-4" />
@@ -244,7 +259,7 @@ export function ProjectsTable({
                             data-testid={`project-edit-${project.id}`}
                           >
                             <Pencil className="size-4" />
-                            Edit
+                            {tc("actions.edit")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() =>
@@ -257,7 +272,9 @@ export function ProjectsTable({
                             ) : (
                               <Archive className="size-4" />
                             )}
-                            {project.archived ? "Unarchive" : "Archive"}
+                            {project.archived
+                              ? tc("actions.unarchive")
+                              : tc("actions.archive")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -266,7 +283,7 @@ export function ProjectsTable({
                             data-testid={`project-delete-${project.id}`}
                           >
                             <Trash2 className="size-4" />
-                            Delete
+                            {tc("actions.delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -303,15 +320,15 @@ export function ProjectsTable({
         onOpenChange={(next) => {
           if (!next) setPendingDelete(null);
         }}
-        title={`Delete "${pendingDelete?.name ?? ""}"?`}
+        title={t("projects.delete.title", { name: pendingDelete?.name ?? "" })}
         description={
           pendingDelete && pendingDelete.entryCount > 0
-            ? `Its tasks are deleted with it. ${pendingDelete.entryCount} time ${
-                pendingDelete.entryCount === 1 ? "entry" : "entries"
-              } keep their tracked time and become project-less. Archive instead if you want to keep the project.`
-            : "This project has no tracked time. It is deleted along with its tasks."
+            ? t("projects.delete.withEntries", {
+                count: pendingDelete.entryCount,
+              })
+            : t("projects.delete.noEntries")
         }
-        confirmLabel="Delete project"
+        confirmLabel={t("projects.delete.confirm")}
         onConfirm={() => {
           if (pendingDelete) removeProject(pendingDelete.id);
           setPendingDelete(null);

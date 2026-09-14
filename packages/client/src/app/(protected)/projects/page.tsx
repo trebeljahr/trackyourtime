@@ -14,6 +14,7 @@ import {
 } from "@/components/catalog/types";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { useFormatSettings } from "@/lib/format";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 
 /** Sentinel used by the client filter for "projects with no client". */
@@ -23,6 +24,8 @@ const matches = (haystack: string | null, needle: string): boolean =>
   haystack !== null && haystack.toLowerCase().includes(needle);
 
 export default function ProjectsPage(): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const format = useFormatSettings();
 
   const [search, setSearch] = React.useState("");
@@ -73,14 +76,16 @@ export default function ProjectsPage(): React.JSX.Element {
 
   const clientFilterOptions = React.useMemo<ComboboxOption[]>(
     () => [
-      { value: NO_CLIENT, label: "No client", color: null },
+      { value: NO_CLIENT, label: tc("empty.noClient"), color: null },
       ...allClients.map((client) => ({
         value: client.id,
-        label: client.archived ? `${client.name} (archived)` : client.name,
+        label: client.archived
+          ? t("row.archivedName", { name: client.name })
+          : client.name,
         color: client.color,
       })),
     ],
-    [allClients],
+    [allClients, t, tc],
   );
 
   const trackedTotal = visibleProjects.reduce(
@@ -98,14 +103,14 @@ export default function ProjectsPage(): React.JSX.Element {
 
   return (
     <CatalogScreen
-      title="Projects"
-      description="Projects group tracked time and carry the billing defaults for new entries. Deleting one keeps its time entries — they just become project-less."
-      actionLabel="New project"
+      title={tc("fields.projects")}
+      description={t("projects.description")}
+      actionLabel={t("projects.new")}
       onAction={() => setCreating(true)}
       actionTestId="new-project"
       search={search}
       onSearchChange={setSearch}
-      searchPlaceholder="Search projects or clients"
+      searchPlaceholder={t("projects.search")}
       showArchived={showArchived}
       onShowArchivedChange={setShowArchived}
       filters={
@@ -113,24 +118,25 @@ export default function ProjectsPage(): React.JSX.Element {
           options={clientFilterOptions}
           value={clientFilter}
           onChange={setClientFilter}
-          placeholder="All clients"
-          searchPlaceholder="Filter by client..."
-          emptyText="No clients yet."
+          placeholder={t("projects.clientFilter.all")}
+          searchPlaceholder={t("projects.clientFilter.search")}
+          emptyText={t("projects.clientFilter.empty")}
           allowClear
-          clearLabel="All clients"
+          clearLabel={t("projects.clientFilter.all")}
           className="w-52"
           data-testid="catalog-client-filter"
         />
       }
       summary={
         <>
-          {visibleProjects.length}{" "}
-          {visibleProjects.length === 1 ? "project" : "projects"} ·{" "}
-          {format.duration(trackedTotal)} tracked
+          {t("projects.summary", {
+            count: visibleProjects.length,
+            duration: format.duration(trackedTotal),
+          })}
           {overBudget > 0 ? (
             <span className="text-destructive" data-testid="projects-over-budget">
               {" · "}
-              {overBudget} over budget
+              {t("projects.overBudget", { count: overBudget })}
             </span>
           ) : null}
         </>

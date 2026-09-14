@@ -11,6 +11,9 @@ import {
 
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import { intlLocale } from "@/i18n/format";
+import { getActiveLocale } from "@/i18n/locale-store";
+import { translate } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import {
   CLIENT_LIST_INPUT,
@@ -60,53 +63,79 @@ function retarget(row: ProjectRow, budget: ProjectBudget): ProjectRow["progress"
   );
 }
 
+/** Which catalog resource a message is about; an ICU `select` in the catalog. */
+export type CatalogKind = "client" | "project" | "task" | "tag";
+
+/**
+ * A refused write, as a toast or — for a duplicate name — inline on the field.
+ *
+ * The server's CONFLICT message is English; the name the user typed is all a
+ * localised one needs, so it is rebuilt here when the name is known.
+ */
 function reportError(
   error: unknown,
   fallback: string,
   handlers: CatalogErrorHandlers,
+  conflict?: { kind: CatalogKind; name: string | undefined },
 ): void {
-  const message = errorMessage(error, fallback);
-  if (isConflict(error) && handlers.onConflict) {
-    handlers.onConflict(message);
+  if (isConflict(error)) {
+    const message =
+      conflict?.name === undefined
+        ? errorMessage(error, fallback)
+        : translate("catalog")("errors.nameTaken", {
+            kind: conflict.kind,
+            name: conflict.name.trim(),
+          });
+    if (handlers.onConflict) {
+      handlers.onConflict(message);
+      return;
+    }
+    toast.error(message);
     return;
   }
-  toast.error(message);
+  toast.error(errorMessage(error, fallback));
 }
-
-const plural = (count: number, one: string, many: string): string =>
-  `${count} ${count === 1 ? one : many}`;
 
 /**
  * Deletion always succeeds now, so the toast reports the collateral rather
  * than the outcome: what was deleted alongside it, and what merely lost a
  * reference. Tracked time is never among the casualties.
  */
-function announceRemoval(result: RemoveResult, noun: string): void {
+function announceRemoval(
+  result: RemoveResult,
+  kind: Exclude<CatalogKind, "tag">,
+): void {
+  const t = translate("catalog");
   const detail: string[] = [];
   if (result.tasksDeleted > 0) {
-    detail.push(`${plural(result.tasksDeleted, "task", "tasks")} deleted`);
+    detail.push(t("removal.tasksDeleted", { count: result.tasksDeleted }));
   }
   if (result.projectsDetached > 0) {
     detail.push(
-      `${plural(result.projectsDetached, "project", "projects")} kept without a client`,
+      t("removal.projectsDetached", { count: result.projectsDetached }),
     );
   }
   if (result.entriesDetached > 0) {
     detail.push(
-      `${plural(result.entriesDetached, "time entry", "time entries")} kept without a ${noun}`,
+      t("removal.entriesDetached", { count: result.entriesDetached, kind }),
     );
   }
   if (result.favoritesDetached > 0) {
     detail.push(
-      `${plural(result.favoritesDetached, "favorite", "favorites")} kept without a ${noun}`,
+      t("removal.favoritesDetached", { count: result.favoritesDetached, kind }),
     );
   }
 
-  const name = `${noun.charAt(0).toUpperCase()}${noun.slice(1)}`;
+  // A unit list is a plain comma series ("a, b, c") in English, and follows
+  // each language's own punctuation elsewhere.
+  const list = new Intl.ListFormat(intlLocale(getActiveLocale()), {
+    type: "unit",
+    style: "short",
+  });
   toast.success(
     detail.length === 0
-      ? `${name} deleted.`
-      : `${name} deleted — ${detail.join(", ")}.`,
+      ? t("removal.deleted", { kind })
+      : t("removal.deletedWithDetail", { kind, detail: list.format(detail) }),
   );
 }
 
@@ -210,7 +239,10 @@ export function useProjectMutations(
     },
     onError: (error, _vars, context) => {
       rollbackProjects(context?.previous);
-      reportError(error, "Could not create the project.", handlers);
+      reportError(error, translate("catalog")("errors.createProject"), handlers, {
+        kind: "project",
+        name: _vars.name,
+      });
     },
     onSettled: settleProjects,
   });
@@ -271,7 +303,10 @@ export function useProjectMutations(
     },
     onError: (error, _vars, context) => {
       rollbackProjects(context?.previous);
-      reportError(error, "Could not save the project.", handlers);
+      reportError(error, translate("catalog")("errors.saveProject"), handlers, {
+        kind: "project",
+        name: _vars.name,
+      });
     },
     // A rewrite moves every entry-backed number: the entry lists, report
     // totals and the invoice preview's billable time.
@@ -300,7 +335,7 @@ export function useProjectMutations(
     },
     onError: (error, _vars, context) => {
       rollbackProjects(context?.previous);
-      reportError(error, "Could not archive the project.", handlers);
+      reportError(error, translate("catalog")("errors.archiveProject"), handlers);
     },
     onSettled: settleProjects,
   });
@@ -316,7 +351,7 @@ export function useProjectMutations(
     },
     onError: (error, _vars, context) => {
       rollbackProjects(context?.previous);
-      reportError(error, "Could not delete the project.", handlers);
+      reportError(error, translate("catalog")("errors.deleteProject"), handlers);
     },
     // The cascade drops the project's tasks and detaches its entries, so the
     // entry-backed caches are stale too.
@@ -394,6 +429,7 @@ export function useClientMutations(
         name: vars.name.trim(),
         color: vars.color ?? DEFAULT_COLOR,
         archived: false,
+        invoiceLocale: vars.invoiceLocale ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -402,7 +438,10 @@ export function useClientMutations(
     },
     onError: (error, _vars, context) => {
       rollbackClients(context?.previous);
-      reportError(error, "Could not create the client.", handlers);
+      reportError(error, translate("catalog")("errors.createClient"), handlers, {
+        kind: "client",
+        name: _vars.name,
+      });
     },
     onSettled: settleClients,
   });
@@ -423,6 +462,9 @@ export function useClientMutations(
                   ...(vars.archived !== undefined
                     ? { archived: vars.archived }
                     : {}),
+                  ...(vars.invoiceLocale !== undefined
+                    ? { invoiceLocale: vars.invoiceLocale }
+                    : {}),
                 }
               : row,
           ),
@@ -432,7 +474,10 @@ export function useClientMutations(
     },
     onError: (error, _vars, context) => {
       rollbackClients(context?.previous);
-      reportError(error, "Could not save the client.", handlers);
+      reportError(error, translate("catalog")("errors.saveClient"), handlers, {
+        kind: "client",
+        name: _vars.name,
+      });
     },
     onSettled: settleClients,
   });
@@ -449,7 +494,7 @@ export function useClientMutations(
     },
     onError: (error, _vars, context) => {
       rollbackClients(context?.previous);
-      reportError(error, "Could not archive the client.", handlers);
+      reportError(error, translate("catalog")("errors.archiveClient"), handlers);
     },
     onSettled: settleClients,
   });
@@ -465,7 +510,7 @@ export function useClientMutations(
     },
     onError: (error, _vars, context) => {
       rollbackClients(context?.previous);
-      reportError(error, "Could not delete the client.", handlers);
+      reportError(error, translate("catalog")("errors.deleteClient"), handlers);
     },
     onSettled: settleClients,
   });
@@ -546,7 +591,10 @@ export function useTaskMutations(
     },
     onError: (error, _vars, context) => {
       rollbackTasks(context?.previous);
-      reportError(error, "Could not add the task.", handlers);
+      reportError(error, translate("catalog")("errors.createTask"), handlers, {
+        kind: "task",
+        name: _vars.name,
+      });
     },
     onSettled: settleTasks,
   });
@@ -576,7 +624,10 @@ export function useTaskMutations(
     },
     onError: (error, _vars, context) => {
       rollbackTasks(context?.previous);
-      reportError(error, "Could not save the task.", handlers);
+      reportError(error, translate("catalog")("errors.saveTask"), handlers, {
+        kind: "task",
+        name: _vars.name,
+      });
     },
     onSettled: settleTasks,
   });
@@ -593,7 +644,7 @@ export function useTaskMutations(
     },
     onError: (error, _vars, context) => {
       rollbackTasks(context?.previous);
-      reportError(error, "Could not archive the task.", handlers);
+      reportError(error, translate("catalog")("errors.archiveTask"), handlers);
     },
     onSettled: settleTasks,
   });
@@ -609,7 +660,7 @@ export function useTaskMutations(
     },
     onError: (error, _vars, context) => {
       rollbackTasks(context?.previous);
-      reportError(error, "Could not delete the task.", handlers);
+      reportError(error, translate("catalog")("errors.deleteTask"), handlers);
     },
     // Deleting a task detaches the entries booked on it.
     onSettled: () => {

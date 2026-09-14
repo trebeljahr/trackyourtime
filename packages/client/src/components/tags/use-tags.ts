@@ -11,6 +11,7 @@ import {
   sortByName,
 } from "@/components/catalog/types";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import { translate } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 
 /**
@@ -127,8 +128,15 @@ export function useTagMutations(
   const utils = trpc.useUtils();
 
   const report = React.useCallback(
-    (error: unknown, fallback: string): void => {
-      const message = errorMessage(error, fallback);
+    (error: unknown, fallback: string, name?: string): void => {
+      // The server's CONFLICT message is English; rebuild it from the name.
+      const message =
+        isConflict(error) && name !== undefined
+          ? translate("catalog")("errors.nameTaken", {
+              kind: "tag",
+              name: name.trim(),
+            })
+          : errorMessage(error, fallback);
       if (isConflict(error) && handlers.onConflict) {
         handlers.onConflict(message);
         return;
@@ -181,7 +189,7 @@ export function useTagMutations(
     },
     onError: (error, _vars, context) => {
       rollback(context?.previous);
-      report(error, "Could not create the tag.");
+      report(error, translate("catalog")("errors.createTag"), _vars.name);
     },
     onSettled: settle,
   });
@@ -209,7 +217,7 @@ export function useTagMutations(
     },
     onError: (error, _vars, context) => {
       rollback(context?.previous);
-      report(error, "Could not save the tag.");
+      report(error, translate("catalog")("errors.saveTag"), _vars.name);
     },
     onSettled: settle,
   });
@@ -223,18 +231,18 @@ export function useTagMutations(
     onSuccess: (result: TagRemoveResult) => {
       // The server decides between the two — an archive announced as a delete
       // is a lie the user finds out about the next time they open the picker.
+      // `result.message` is the server's English sentence for the same fact,
+      // so the localised one is used in its place.
+      const t = translate("catalog");
       if (result.deleted) {
-        toast.success("Tag deleted.");
+        toast.success(t("tags.deleted"));
         return;
       }
-      toast.warning(
-        result.message ??
-          "Archived instead — tracked time still carries this tag.",
-      );
+      toast.warning(t("tags.archivedInstead"));
     },
     onError: (error, _vars, context) => {
       rollback(context?.previous);
-      report(error, "Could not delete the tag.");
+      report(error, translate("catalog")("errors.deleteTag"));
     },
     onSettled: () => {
       settle();

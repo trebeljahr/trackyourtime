@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
+import { translate, useT } from "@/i18n/use-t";
 import type { TaskRow } from "./types";
 import { useTaskMutations } from "./use-catalog-mutations";
 
@@ -66,6 +67,8 @@ type TaskFormProps = {
 };
 
 function TaskForm({ task, onDone }: TaskFormProps): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const [name, setName] = React.useState(task?.name ?? "");
   const [nameError, setNameError] = React.useState<string | null>(null);
 
@@ -79,14 +82,14 @@ function TaskForm({ task, onDone }: TaskFormProps): React.JSX.Element {
 
     const trimmed = name.trim();
     if (trimmed === "") {
-      setNameError("Name is required");
+      setNameError(t("form.nameRequired"));
       return;
     }
 
     if (task) {
       void updateTask({ id: task.id, name: trimmed }).then((saved) => {
         if (!saved) return;
-        toast.success("Task saved.");
+        toast.success(translate("catalog")("tasks.form.saved"));
         onDone();
       });
       return;
@@ -94,7 +97,9 @@ function TaskForm({ task, onDone }: TaskFormProps): React.JSX.Element {
 
     void createTask({ name: trimmed }).then((created) => {
       if (!created) return;
-      toast.success(`Task "${created.name}" created.`);
+      toast.success(
+        translate("catalog")("tasks.form.created", { name: created.name }),
+      );
       onDone({ id: created.id, name: created.name });
     });
   };
@@ -102,21 +107,20 @@ function TaskForm({ task, onDone }: TaskFormProps): React.JSX.Element {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <DialogHeader>
-        <DialogTitle>{task ? "Edit task" : "New task"}</DialogTitle>
-        <DialogDescription>
-          Tasks name the kind of work, whichever project it happens on. An
-          entry can carry one, a project, both, or neither.
-        </DialogDescription>
+        <DialogTitle>
+          {task ? t("tasks.form.titleEdit") : t("tasks.form.titleNew")}
+        </DialogTitle>
+        <DialogDescription>{t("tasks.form.description")}</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">
-        <Label htmlFor="task-name">Name</Label>
+        <Label htmlFor="task-name">{tc("fields.name")}</Label>
         <Input
           id="task-name"
           value={name}
           autoFocus
           maxLength={200}
-          placeholder="Write the launch post"
+          placeholder={t("tasks.form.namePlaceholder")}
           aria-invalid={nameError !== null}
           onChange={(event) => {
             setName(event.target.value);
@@ -140,10 +144,10 @@ function TaskForm({ task, onDone }: TaskFormProps): React.JSX.Element {
           onClick={() => onDone()}
           data-testid="task-cancel"
         >
-          Cancel
+          {tc("actions.cancel")}
         </Button>
         <Button type="submit" disabled={isSaving} data-testid="task-submit">
-          {task ? "Save changes" : "Create task"}
+          {task ? t("form.saveChanges") : t("tasks.form.create")}
         </Button>
       </DialogFooter>
     </form>

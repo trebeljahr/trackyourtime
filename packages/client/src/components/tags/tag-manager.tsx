@@ -48,6 +48,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/sonner";
+import { useFormat } from "@/i18n/use-format";
+import { translate, useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { useAllTimeRange } from "@/lib/entry-links";
 import {
@@ -70,28 +72,29 @@ export function removalPreview(tag: TagRow): {
   confirmLabel: string;
   description: string;
 } {
+  const t = translate("catalog");
+  const tc = translate("common");
   if (tag.entryCount > 0) {
-    const plural = tag.entryCount === 1 ? "entry" : "entries";
     return {
-      title: `Archive "${tag.name}"?`,
-      confirmLabel: "Archive",
-      description:
-        `${tag.entryCount} time ${plural} still carry this tag, so it will be ` +
-        "archived rather than deleted — the time keeps its label, and the tag " +
-        "stops being offered on new entries.",
+      title: t("tags.removal.archiveTitle", { name: tag.name }),
+      confirmLabel: tc("actions.archive"),
+      description: t("tags.removal.archiveDescription", {
+        count: tag.entryCount,
+      }),
     };
   }
   return {
-    title: `Delete "${tag.name}"?`,
-    confirmLabel: "Delete",
-    description:
-      "Nothing is tagged with it, so it will be deleted outright. This cannot " +
-      "be undone.",
+    title: t("tags.removal.deleteTitle", { name: tag.name }),
+    confirmLabel: tc("actions.delete"),
+    description: t("tags.removal.deleteDescription"),
   };
 }
 
 /** Tag management surface — create, rename, recolour, archive, delete. */
 export function TagManager(): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
+  const f = useFormat();
   const format = useFormatSettings();
   const allTime = useAllTimeRange();
   const { allTags, isLoading } = useTags({ includeArchived: true });
@@ -114,7 +117,7 @@ export function TagManager(): React.JSX.Element {
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={() => setCreating(true)} data-testid="new-tag">
           <Plus className="size-4" />
-          New tag
+          {t("tags.new")}
         </Button>
 
         {archivedCount > 0 ? (
@@ -124,7 +127,7 @@ export function TagManager(): React.JSX.Element {
               onCheckedChange={setShowArchived}
               data-testid="tags-show-archived"
             />
-            Show archived ({archivedCount})
+            {t("tags.showArchived", { count: archivedCount })}
           </label>
         ) : null}
       </div>
@@ -138,12 +141,12 @@ export function TagManager(): React.JSX.Element {
       ) : rows.length === 0 ? (
         <EmptyState
           icon={Tags}
-          title="No tags yet"
-          description="Tags cut across projects — “on-site”, “bugfix”, “needs review”. Add one here, or coin it straight from the tracker bar."
+          title={t("tags.empty.title")}
+          description={t("tags.empty.description")}
           action={
             <Button onClick={() => setCreating(true)} data-testid="tags-empty-create">
               <Plus className="size-4" />
-              New tag
+              {t("tags.new")}
             </Button>
           }
           testId="tags-empty"
@@ -153,9 +156,9 @@ export function TagManager(): React.JSX.Element {
           <Table data-testid="tags-table">
             <TableHeader>
               <TableRow>
-                <TableHead>Tag</TableHead>
-                <TableHead className="text-right">Entries</TableHead>
-                <TableHead className="text-right">Tracked</TableHead>
+                <TableHead>{tc("fields.tag")}</TableHead>
+                <TableHead className="text-right">{t("columns.entries")}</TableHead>
+                <TableHead className="text-right">{t("columns.tracked")}</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -171,7 +174,7 @@ export function TagManager(): React.JSX.Element {
                       name={tag.name}
                       color={tag.color}
                       archived={tag.archived}
-                      editLabel={`Edit tag "${tag.name}"`}
+                      editLabel={t("tags.editLabel", { name: tag.name })}
                       onEdit={() => setEditing(tag)}
                       nameTestId={`tag-name-${tag.id}`}
                     />
@@ -187,7 +190,7 @@ export function TagManager(): React.JSX.Element {
                       label={tag.name}
                       testId={`tag-entries-link-${tag.id}`}
                     >
-                      {tag.entryCount}
+                      {f.number(tag.entryCount)}
                     </EntriesLink>
                   </TableCell>
 
@@ -212,7 +215,7 @@ export function TagManager(): React.JSX.Element {
                           variant="ghost"
                           size="icon"
                           className="size-7"
-                          aria-label={`Actions for ${tag.name}`}
+                          aria-label={t("row.actions", { name: tag.name })}
                           data-testid={`tag-menu-${tag.id}`}
                         >
                           <MoreHorizontal className="size-4" />
@@ -230,7 +233,7 @@ export function TagManager(): React.JSX.Element {
                           data-testid={`tag-edit-${tag.id}`}
                         >
                           <Pencil className="size-4" />
-                          Edit
+                          {tc("actions.edit")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() => setTagArchived(tag.id, !tag.archived)}
@@ -241,7 +244,9 @@ export function TagManager(): React.JSX.Element {
                           ) : (
                             <Archive className="size-4" />
                           )}
-                          {tag.archived ? "Unarchive" : "Archive"}
+                          {tag.archived
+                            ? tc("actions.unarchive")
+                            : tc("actions.archive")}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -250,7 +255,7 @@ export function TagManager(): React.JSX.Element {
                           data-testid={`tag-delete-${tag.id}`}
                         >
                           <Trash2 className="size-4" />
-                          Delete
+                          {tc("actions.delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -325,6 +330,8 @@ type TagFormProps = {
 };
 
 function TagForm({ tag, onDone }: TagFormProps): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const [name, setName] = React.useState(tag?.name ?? "");
   const [color, setColor] = React.useState(
     tag?.color ?? COLOR_PALETTE[10] ?? FALLBACK_COLOR,
@@ -341,14 +348,14 @@ function TagForm({ tag, onDone }: TagFormProps): React.JSX.Element {
 
     const trimmed = name.trim();
     if (trimmed === "") {
-      setNameError("Name is required");
+      setNameError(t("form.nameRequired"));
       return;
     }
 
     if (tag) {
       void updateTag({ id: tag.id, name: trimmed, color }).then((saved) => {
         if (!saved) return;
-        toast.success("Tag saved.");
+        toast.success(translate("catalog")("tags.form.saved"));
         onDone();
       });
       return;
@@ -356,7 +363,9 @@ function TagForm({ tag, onDone }: TagFormProps): React.JSX.Element {
 
     void createTag({ name: trimmed, color }).then((created) => {
       if (!created) return;
-      toast.success(`Tag "${created.name}" created.`);
+      toast.success(
+        translate("catalog")("tags.form.created", { name: created.name }),
+      );
       onDone();
     });
   };
@@ -364,14 +373,14 @@ function TagForm({ tag, onDone }: TagFormProps): React.JSX.Element {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <DialogHeader>
-        <DialogTitle>{tag ? "Edit tag" : "New tag"}</DialogTitle>
-        <DialogDescription>
-          A label that cuts across projects. One entry can carry several.
-        </DialogDescription>
+        <DialogTitle>
+          {tag ? t("tags.form.titleEdit") : t("tags.form.titleNew")}
+        </DialogTitle>
+        <DialogDescription>{t("tags.form.description")}</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">
-        <Label htmlFor="tag-name">Name</Label>
+        <Label htmlFor="tag-name">{tc("fields.name")}</Label>
         <div className="flex items-center gap-2">
           <ColorPicker value={color} onChange={setColor} testId="tag-color" />
           <Input
@@ -379,7 +388,7 @@ function TagForm({ tag, onDone }: TagFormProps): React.JSX.Element {
             value={name}
             autoFocus
             maxLength={60}
-            placeholder="needs review"
+            placeholder={t("tags.form.namePlaceholder")}
             aria-invalid={nameError !== null}
             onChange={(event) => {
               setName(event.target.value);
@@ -402,10 +411,10 @@ function TagForm({ tag, onDone }: TagFormProps): React.JSX.Element {
           onClick={onDone}
           data-testid="tag-cancel"
         >
-          Cancel
+          {tc("actions.cancel")}
         </Button>
         <Button type="submit" disabled={isSaving} data-testid="tag-submit">
-          {tag ? "Save" : "Create"}
+          {tag ? tc("actions.save") : tc("actions.create")}
         </Button>
       </DialogFooter>
     </form>

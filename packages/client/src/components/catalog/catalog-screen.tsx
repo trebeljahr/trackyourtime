@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useT } from "@/i18n/use-t";
 
 export type CatalogScreenProps = {
   title: string;
@@ -51,6 +52,7 @@ export function CatalogScreen({
   children,
   testId,
 }: CatalogScreenProps): React.JSX.Element {
+  const t = useT("catalog");
   return (
     <div className="space-y-6" data-testid={testId}>
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -87,7 +89,7 @@ export function CatalogScreen({
             data-testid="catalog-show-archived"
           />
           <Label htmlFor="show-archived" className="text-sm font-normal">
-            Show archived
+            {t("screen.showArchived")}
           </Label>
         </div>
       </div>
@@ -97,7 +99,7 @@ export function CatalogScreen({
           className="rounded-md border border-destructive/40 px-3 py-2 text-sm text-destructive"
           data-testid="catalog-error"
         >
-          Could not load the catalog. Check your connection and try again.
+          {t("screen.loadError")}
         </p>
       ) : null}
 

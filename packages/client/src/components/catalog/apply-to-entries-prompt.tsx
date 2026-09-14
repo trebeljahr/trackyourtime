@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
+import { translate, useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { errorMessage, type ProjectRow } from "./types";
 
@@ -57,9 +58,6 @@ export type ApplyToEntriesPrompt = {
   dialog: React.JSX.Element;
 };
 
-const plural = (count: number, one: string, many: string): string =>
-  `${count} ${count === 1 ? one : many}`;
-
 /**
  * Entries snapshot their billable flag and rate when they are saved, so a
  * project's billing change reaches only new time by default. This is the one
@@ -70,6 +68,8 @@ const plural = (count: number, one: string, many: string): string =>
  * two cannot describe the same rewrite differently.
  */
 export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
+  const t = useT("catalog");
+  const tc = useT("common");
   const utils = trpc.useUtils();
   const [pending, setPending] = React.useState<Pending | null>(null);
 
@@ -85,7 +85,7 @@ export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
         );
       } catch (error) {
         toast.error(
-          errorMessage(error, "Could not count the entries on this project."),
+          errorMessage(error, translate("catalog")("errors.countEntries")),
         );
         return null;
       }
@@ -118,35 +118,30 @@ export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
         {pending ? (
           <>
             <DialogHeader>
-              <DialogTitle>Update existing entries?</DialogTitle>
+              <DialogTitle>{t("applyToEntries.title")}</DialogTitle>
               <DialogDescription asChild>
                 <div className="space-y-2 text-sm text-muted-foreground">
                   <p data-testid="apply-to-entries-count">
-                    {pending.impact.entries === 1
-                      ? `1 time entry on ${pending.project.name} keeps the billing it was saved with.`
-                      : `${pending.impact.entries} time entries on ${pending.project.name} keep the billing they were saved with.`}{" "}
-                    New entries use the new billing either way.
+                    {t("applyToEntries.count", {
+                      count: pending.impact.entries,
+                      project: pending.project.name,
+                    })}
                   </p>
                   <p>
                     {flagChanged
-                      ? `Updating marks ${
-                          pending.impact.entries === 1 ? "it" : "every one of them"
-                        } ${
-                          pending.next.billableDefault ? "billable" : "non-billable"
-                        }, including entries you changed by hand, and reprices ${
-                          pending.impact.entries === 1 ? "it" : "them"
-                        }.`
-                      : "Updating reprices billable time. Each entry keeps its own billable flag."}{" "}
-                    Report totals change to match.
+                      ? t("applyToEntries.flagChanged", {
+                          count: pending.impact.entries,
+                          billable: pending.next.billableDefault
+                            ? "billable"
+                            : "nonBillable",
+                        })
+                      : t("applyToEntries.rateOnly")}
                   </p>
                   {pending.impact.invoiced > 0 ? (
                     <p data-testid="apply-to-entries-invoiced">
-                      {plural(
-                        pending.impact.invoiced,
-                        "invoiced entry stays",
-                        "invoiced entries stay",
-                      )}{" "}
-                      as billed.
+                      {t("applyToEntries.invoiced", {
+                        count: pending.impact.invoiced,
+                      })}
                     </p>
                   ) : null}
                 </div>
@@ -158,20 +153,20 @@ export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
                 onClick={() => settle(null)}
                 data-testid="apply-to-entries-cancel"
               >
-                Cancel
+                {tc("actions.cancel")}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => settle("new-only")}
                 data-testid="apply-to-entries-new-only"
               >
-                Only new entries
+                {t("applyToEntries.newOnly")}
               </Button>
               <Button
                 onClick={() => settle("entries")}
                 data-testid="apply-to-entries-accept"
               >
-                Update {plural(pending.impact.entries, "entry", "entries")}
+                {t("applyToEntries.accept", { count: pending.impact.entries })}
               </Button>
             </DialogFooter>
           </>

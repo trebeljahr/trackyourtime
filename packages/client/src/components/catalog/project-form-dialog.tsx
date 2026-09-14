@@ -2,11 +2,7 @@
 
 import * as React from "react";
 import { ChevronRight } from "lucide-react";
-import {
-  IDLE_BEHAVIORS,
-  idleBehaviorLabel,
-  type IdleBehavior,
-} from "@starter/shared";
+import { IDLE_BEHAVIORS, type IdleBehavior } from "@starter/shared";
 
 import { ColorPicker, COLOR_PALETTE } from "@/components/color-picker";
 import { Button } from "@/components/ui/button";
@@ -23,6 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
+import type { Translator } from "@/i18n/translator";
+import { translate, useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useApplyToEntriesPrompt } from "./apply-to-entries-prompt";
@@ -61,6 +59,23 @@ function parseTarget(raw: string): number | null | typeof INVALID {
   const parsed = Number(raw.trim().replace(",", "."));
   if (!Number.isFinite(parsed) || parsed < 0) return INVALID;
   return parsed;
+}
+
+/** An idle behaviour's option label, in the rendered language. */
+function idleBehaviorLabel(
+  t: Translator<"catalog">,
+  behavior: IdleBehavior,
+): string {
+  switch (behavior) {
+    case "ask":
+      return t("projects.form.idle.behaviors.ask");
+    case "pause-and-resume":
+      return t("projects.form.idle.behaviors.pauseAndResume");
+    case "keep-running":
+      return t("projects.form.idle.behaviors.keepRunning");
+    case "stop":
+      return t("projects.form.idle.behaviors.stop");
+  }
 }
 
 /**
@@ -105,6 +120,8 @@ function ProjectForm({
   clients,
   onDone,
 }: ProjectFormProps): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const { currency, money, settings } = useFormatSettings();
 
   const [name, setName] = React.useState(project?.name ?? "");
@@ -165,10 +182,12 @@ function ProjectForm({
         .filter((client) => !client.archived || client.id === project?.clientId)
         .map((client) => ({
           value: client.id,
-          label: client.archived ? `${client.name} (archived)` : client.name,
+          label: client.archived
+            ? t("row.archivedName", { name: client.name })
+            : client.name,
           color: client.color,
         })),
-    [clients, project?.clientId]
+    [clients, project?.clientId, t]
   );
 
   const selectedClient = React.useMemo(
@@ -191,7 +210,7 @@ function ProjectForm({
 
     const trimmed = name.trim();
     if (trimmed === "") {
-      setNameError("Name is required");
+      setNameError(t("form.nameRequired"));
       return;
     }
 
@@ -199,7 +218,7 @@ function ProjectForm({
     if (rate.trim() !== "") {
       const parsed = Number(rate.trim().replace(",", "."));
       if (!Number.isFinite(parsed) || parsed < 0) {
-        setRateError("Enter a rate of 0 or more, or leave it empty");
+        setRateError(t("projects.billing.rateInvalid"));
         setShowAdvanced(true);
         return;
       }
@@ -210,13 +229,13 @@ function ProjectForm({
     // project is already over. The two must never collapse into each other.
     const estimatedHours = parseTarget(estimate);
     if (estimatedHours === INVALID) {
-      setEstimateError("Enter hours of 0 or more, or leave it empty");
+      setEstimateError(t("projects.form.targets.estimateInvalid"));
       setShowAdvanced(true);
       return;
     }
     const budgetAmount = parseTarget(budget);
     if (budgetAmount === INVALID) {
-      setBudgetError("Enter an amount of 0 or more, or leave it empty");
+      setBudgetError(t("projects.form.targets.budgetInvalid"));
       setShowAdvanced(true);
       return;
     }
@@ -246,12 +265,11 @@ function ProjectForm({
           });
           if (!saved) return;
           const rewritten = saved.entriesRewritten?.entries ?? 0;
+          const messages = translate("catalog");
           toast.success(
             rewritten > 0
-              ? `Project saved and ${rewritten} ${
-                  rewritten === 1 ? "entry" : "entries"
-                } updated.`
-              : "Project saved.",
+              ? messages("projects.form.savedWithEntries", { count: rewritten })
+              : messages("projects.form.saved"),
           );
           onDone();
         });
@@ -270,7 +288,9 @@ function ProjectForm({
       idleBehavior: idle,
     }).then((created) => {
       if (!created) return;
-      toast.success(`Project "${created.name}" created.`);
+      toast.success(
+        translate("catalog")("projects.form.created", { name: created.name }),
+      );
       onDone(created);
     });
   };
@@ -278,15 +298,14 @@ function ProjectForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <DialogHeader>
-        <DialogTitle>{project ? "Edit project" : "New project"}</DialogTitle>
-        <DialogDescription>
-          Projects group tracked time and carry the billing defaults for new
-          entries.
-        </DialogDescription>
+        <DialogTitle>
+          {project ? t("projects.form.titleEdit") : t("projects.form.titleNew")}
+        </DialogTitle>
+        <DialogDescription>{t("projects.form.description")}</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">
-        <Label htmlFor="project-name">Name</Label>
+        <Label htmlFor="project-name">{tc("fields.name")}</Label>
         <div className="flex items-center gap-2">
           <ColorPicker
             value={color}
@@ -298,7 +317,7 @@ function ProjectForm({
             value={name}
             autoFocus
             maxLength={120}
-            placeholder="Website redesign"
+            placeholder={t("projects.form.namePlaceholder")}
             aria-invalid={nameError !== null}
             onChange={(event) => {
               setName(event.target.value);
@@ -318,7 +337,7 @@ function ProjectForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="project-client">Client</Label>
+        <Label htmlFor="project-client">{tc("fields.client")}</Label>
         {/* The swatch is only rendered once a client is chosen: with none
             selected there is no colour to show, and a picker standing in for
             one would edit nothing. Typing a name and taking the "Create"
@@ -341,11 +360,11 @@ function ProjectForm({
             options={clientOptions}
             value={clientId}
             onChange={setClientId}
-            placeholder="No client"
-            searchPlaceholder="Search or type a new name…"
-            emptyText="No clients yet."
+            placeholder={tc("empty.noClient")}
+            searchPlaceholder={t("projects.form.client.search")}
+            emptyText={t("projects.form.client.empty")}
             allowClear
-            clearLabel="No client"
+            clearLabel={tc("empty.noClient")}
             onCreate={handleCreateClient}
             data-testid="project-client-combobox"
           />
@@ -375,9 +394,9 @@ function ProjectForm({
               showAdvanced && "rotate-90"
             )}
           />
-          Billing &amp; limits
+          {t("projects.form.advanced.toggle")}
           <span className="ml-auto text-xs text-muted-foreground">
-            Rate, targets, idle
+            {t("projects.form.advanced.summary")}
           </span>
         </Button>
 
@@ -388,9 +407,11 @@ function ProjectForm({
           >
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
-                <Label htmlFor="project-billable">Billable by default</Label>
+                <Label htmlFor="project-billable">
+                  {t("projects.billing.billableByDefault")}
+                </Label>
                 <p className="text-xs text-muted-foreground">
-                  New entries on this project start as billable.
+                  {t("projects.form.billableHint")}
                 </p>
               </div>
               <Switch
@@ -402,12 +423,16 @@ function ProjectForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="project-rate">Hourly rate ({currency})</Label>
+              <Label htmlFor="project-rate">
+                {t("projects.billing.hourlyRate", { currency })}
+              </Label>
               <Input
                 id="project-rate"
                 inputMode="decimal"
                 value={rate}
-                placeholder={`Default: ${money(settings.defaultHourlyRate)}`}
+                placeholder={t("projects.billing.ratePlaceholder", {
+                  amount: money(settings.defaultHourlyRate),
+                })}
                 aria-invalid={rateError !== null}
                 onChange={(event) => {
                   setRate(event.target.value);
@@ -416,7 +441,7 @@ function ProjectForm({
                 data-testid="project-rate-input"
               />
               <p className="text-xs text-muted-foreground">
-                Leave empty to fall back to the workspace default rate.
+                {t("projects.form.rateHint")}
               </p>
               {rateError ? (
                 <p
@@ -430,22 +455,22 @@ function ProjectForm({
 
             <fieldset className="space-y-3">
               <legend className="text-sm font-medium">
-                Estimate &amp; budget
+                {t("projects.form.targets.legend")}
               </legend>
               <p className="text-xs text-muted-foreground">
-                Lifetime targets for the whole project, not a monthly allowance.
-                Leave a field empty for no target — that is not the same as a
-                target of zero.
+                {t("projects.form.targets.hint")}
               </p>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="project-estimate">Estimated hours</Label>
+                  <Label htmlFor="project-estimate">
+                    {t("projects.form.targets.estimate")}
+                  </Label>
                   <Input
                     id="project-estimate"
                     inputMode="decimal"
                     value={estimate}
-                    placeholder="No estimate"
+                    placeholder={t("projects.form.targets.estimatePlaceholder")}
                     aria-invalid={estimateError !== null}
                     onChange={(event) => {
                       setEstimate(event.target.value);
@@ -465,13 +490,15 @@ function ProjectForm({
 
                 <div className="space-y-2">
                   <Label htmlFor="project-budget">
-                    Budget ({budgetCurrency})
+                    {t("projects.form.targets.budget", {
+                      currency: budgetCurrency,
+                    })}
                   </Label>
                   <Input
                     id="project-budget"
                     inputMode="decimal"
                     value={budget}
-                    placeholder="No budget"
+                    placeholder={t("projects.noBudget")}
                     aria-invalid={budgetError !== null}
                     onChange={(event) => {
                       setBudget(event.target.value);
@@ -497,14 +524,17 @@ function ProjectForm({
                   className="text-xs text-muted-foreground"
                   data-testid="project-budget-currency-note"
                 >
-                  This budget is in {project.budgetCurrency}, the workspace
-                  currency when it was set. Time tracked in {currency} is
-                  reported separately rather than converted.
+                  {t("projects.form.targets.currencyNote", {
+                    budgetCurrency: project.budgetCurrency,
+                    currency,
+                  })}
                 </p>
               ) : null}
             </fieldset>
             <div className="space-y-2">
-              <Label htmlFor="project-idle">When you go idle</Label>
+              <Label htmlFor="project-idle">
+                {t("projects.form.idle.label")}
+              </Label>
               <select
                 id="project-idle"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -514,17 +544,17 @@ function ProjectForm({
                 }
                 data-testid="project-idle-behavior"
               >
-                <option value="">Use the workspace setting</option>
+                <option value="">{t("projects.form.idle.inherit")}</option>
                 {IDLE_BEHAVIORS.map((behavior) => (
                   <option key={behavior} value={behavior}>
-                    {idleBehaviorLabel(behavior)}
+                    {idleBehaviorLabel(t, behavior)}
                   </option>
                 ))}
               </select>
               <p className="text-xs text-muted-foreground">
-                Pick “Keep running” for work that produces no typing — meetings,
-                calls, reading. It never switches idle detection on; that stays
-                a workspace setting.
+                {t("projects.form.idle.hint", {
+                  keepRunning: idleBehaviorLabel(t, "keep-running"),
+                })}
               </p>
             </div>
           </div>
@@ -540,10 +570,10 @@ function ProjectForm({
           onClick={() => onDone()}
           data-testid="project-cancel"
         >
-          Cancel
+          {tc("actions.cancel")}
         </Button>
         <Button type="submit" disabled={isSaving} data-testid="project-submit">
-          {project ? "Save changes" : "Create project"}
+          {project ? t("form.saveChanges") : t("projects.form.create")}
         </Button>
       </DialogFooter>
       {applyPrompt.dialog}

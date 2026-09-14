@@ -9,6 +9,7 @@ import {
 import { TagFormDialog } from "@/components/tags/tag-manager";
 import { pickableTags } from "@/components/tags/tag-picker";
 import { tagById, useTags, type TagRow } from "@/components/tags/use-tags";
+import { useT } from "@/i18n/use-t";
 
 export type TagFilterProps = {
   /** Selected tag ids; empty means "no tag filter", not "untagged only". */
@@ -33,6 +34,8 @@ export function TagFilter({
   className = "w-[9.5rem]",
   testId = "filter-tags",
 }: TagFilterProps): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const { allTags } = useTags({ includeArchived: true });
 
   // An archived tag still labels historical time, so it has to stay filterable
@@ -54,22 +57,22 @@ export function TagFilter({
   return (
     <>
       <MultiSelect
-        label="Tags"
+        label={tc("fields.tags")}
         options={options}
         value={value}
         onChange={onChange}
-        emptyText="No tags yet."
-        searchPlaceholder="Search tags..."
+        emptyText={t("tags.filter.empty")}
+        searchPlaceholder={t("tags.filter.search")}
         className={className}
         testId={testId}
-        editLabel="Edit tag"
+        editLabel={t("tags.filter.edit")}
         onEditOption={(option) => {
           setEditing(tagById(allTags, option.value));
           setDialogOpen(true);
         }}
         footerActions={[
           {
-            label: "New tag…",
+            label: t("tags.filter.new"),
             onSelect: () => {
               setEditing(null);
               setDialogOpen(true);

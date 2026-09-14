@@ -4,6 +4,7 @@ import * as React from "react";
 import { Pencil } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 /** The colour swatch every catalog row leads with. */
@@ -64,6 +65,7 @@ export function CatalogName({
   nameTestId,
   testId,
 }: CatalogNameProps): React.JSX.Element {
+  const tc = useT("common");
   return (
     <button
       type="button"
@@ -90,7 +92,7 @@ export function CatalogName({
       </span>
       {archived ? (
         <Badge variant="outline" className="shrink-0">
-          Archived
+          {tc("status.archived")}
         </Badge>
       ) : null}
       <Pencil

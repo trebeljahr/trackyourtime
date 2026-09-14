@@ -11,9 +11,12 @@ import {
   type ClientRow,
   type ProjectRow,
 } from "@/components/catalog/types";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 
 export default function ClientsPage(): React.JSX.Element {
+  const t = useT("catalog");
+  const tc = useT("common");
   const [search, setSearch] = React.useState("");
   const [showArchived, setShowArchived] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
@@ -49,22 +52,17 @@ export default function ClientsPage(): React.JSX.Element {
 
   return (
     <CatalogScreen
-      title="Clients"
-      description="Clients sit above projects and roll their tracked time together. Deleting one keeps its projects — they just become client-less."
-      actionLabel="New client"
+      title={tc("fields.clients")}
+      description={t("clients.description")}
+      actionLabel={t("clients.new")}
       onAction={() => setCreating(true)}
       actionTestId="new-client"
       search={search}
       onSearchChange={setSearch}
-      searchPlaceholder="Search clients"
+      searchPlaceholder={t("clients.search")}
       showArchived={showArchived}
       onShowArchivedChange={setShowArchived}
-      summary={
-        <>
-          {visibleClients.length}{" "}
-          {visibleClients.length === 1 ? "client" : "clients"}
-        </>
-      }
+      summary={tc("counts.clients", { count: visibleClients.length })}
       hasError={clientsQuery.isError}
       testId="clients-page"
     >
