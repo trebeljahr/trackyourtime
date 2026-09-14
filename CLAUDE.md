@@ -996,7 +996,7 @@ Four rules, each of which fails quietly if broken:
   is owner/admin. A redacted export drops the profile and the invoice parties
   whole (they carry payment details); a client's billing address is catalog and
   stays. An import restores the profile only with `restoreSettings`, under the
-  same owner/admin check, and only onto clients it creates.
+  same owner/admin check, and client billing only onto clients it creates.
 - **The PDF's words come from the `invoice` server catalog** in the invoice's
   snapshotted language; payment terms print as "payable within N days, by
   <due date>", where the date is the invoice's own `dueDate` — the create
