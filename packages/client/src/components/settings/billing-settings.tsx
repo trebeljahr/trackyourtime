@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatMoney } from "@/lib/format";
+import { BusinessProfileCard } from "@/components/settings/business-profile-form";
 import { NumberField } from "@/components/settings/number-field";
 import { SaveIndicator, SettingRow } from "@/components/settings/setting-row";
 import type { WorkspaceSettingsController } from "@/components/settings/use-workspace-settings";
@@ -49,7 +50,10 @@ export type BillingSettingsProps = {
   controller: WorkspaceSettingsController;
 };
 
-/** Default rate + currency, and the one sentence that explains snapshotting. */
+/**
+ * Default rate + currency, the one sentence that explains snapshotting, and
+ * the business profile every new invoice copies.
+ */
 export function BillingSettings({
   controller,
 }: BillingSettingsProps): React.JSX.Element {
@@ -65,86 +69,89 @@ export function BillingSettings({
   }, [settings.currency]);
 
   return (
-    <Card data-testid="settings-billing">
-      <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
-        <div className="space-y-1.5">
-          <CardTitle>Billing</CardTitle>
-          <CardDescription>
-            The rate applied to billable time when a project has no rate of its
-            own.
-          </CardDescription>
-        </div>
-        <SaveIndicator state={saveState} testId="billing-save-indicator" />
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="divide-y divide-border">
-          <SettingRow
-            title="Default hourly rate"
-            description="Used whenever a billable entry belongs to a project without its own rate."
-            htmlFor="default-hourly-rate"
-            testId="setting-default-rate"
-          >
-            <NumberField
-              id="default-hourly-rate"
-              value={settings.defaultHourlyRate}
-              onCommit={(defaultHourlyRate) => save({ defaultHourlyRate })}
-              min={0}
-              max={1_000_000}
-              step={0.01}
-              suffix={settings.currency}
-              testId="default-hourly-rate"
-              aria-label="Default hourly rate"
-            />
-          </SettingRow>
-
-          <SettingRow
-            title="Currency"
-            description={`Amounts render as ${formatMoney(1234.5, settings.currency)}.`}
-            htmlFor="workspace-currency"
-            testId="setting-currency"
-          >
-            <Select
-              value={settings.currency}
-              onValueChange={(currency) => save({ currency })}
+    <div className="space-y-6">
+      <Card data-testid="settings-billing">
+        <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
+          <div className="space-y-1.5">
+            <CardTitle>Billing</CardTitle>
+            <CardDescription>
+              The rate applied to billable time when a project has no rate of its
+              own.
+            </CardDescription>
+          </div>
+          <SaveIndicator state={saveState} testId="billing-save-indicator" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="divide-y divide-border">
+            <SettingRow
+              title="Default hourly rate"
+              description="Used whenever a billable entry belongs to a project without its own rate."
+              htmlFor="default-hourly-rate"
+              testId="setting-default-rate"
             >
-              <SelectTrigger
-                id="workspace-currency"
-                className="sm:w-56"
-                aria-label="Currency"
-                data-testid="currency-select"
-              >
-                <SelectValue placeholder="Select a currency" />
-              </SelectTrigger>
-              <SelectContent data-testid="currency-select-content">
-                {options.map((option) => (
-                  <SelectItem
-                    key={option.code}
-                    value={option.code}
-                    data-testid={`currency-option-${option.code}`}
-                  >
-                    <span className="font-medium">{option.code}</span>
-                    <span className="ml-2 text-muted-foreground">
-                      {option.label}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </SettingRow>
-        </div>
+              <NumberField
+                id="default-hourly-rate"
+                value={settings.defaultHourlyRate}
+                onCommit={(defaultHourlyRate) => save({ defaultHourlyRate })}
+                min={0}
+                max={1_000_000}
+                step={0.01}
+                suffix={settings.currency}
+                testId="default-hourly-rate"
+                aria-label="Default hourly rate"
+              />
+            </SettingRow>
 
-        <div
-          className="flex gap-3 rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground"
-          data-testid="rate-snapshot-note"
-        >
-          <Info className="mt-0.5 size-4 shrink-0" />
-          <p>
-            Changing the rate or currency only affects time you track from now
-            on — each entry stores the rate and currency that applied when it
-            was stopped, so past reports and invoices never move.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+            <SettingRow
+              title="Currency"
+              description={`Amounts render as ${formatMoney(1234.5, settings.currency)}.`}
+              htmlFor="workspace-currency"
+              testId="setting-currency"
+            >
+              <Select
+                value={settings.currency}
+                onValueChange={(currency) => save({ currency })}
+              >
+                <SelectTrigger
+                  id="workspace-currency"
+                  className="sm:w-56"
+                  aria-label="Currency"
+                  data-testid="currency-select"
+                >
+                  <SelectValue placeholder="Select a currency" />
+                </SelectTrigger>
+                <SelectContent data-testid="currency-select-content">
+                  {options.map((option) => (
+                    <SelectItem
+                      key={option.code}
+                      value={option.code}
+                      data-testid={`currency-option-${option.code}`}
+                    >
+                      <span className="font-medium">{option.code}</span>
+                      <span className="ml-2 text-muted-foreground">
+                        {option.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </SettingRow>
+          </div>
+
+          <div
+            className="flex gap-3 rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground"
+            data-testid="rate-snapshot-note"
+          >
+            <Info className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Changing the rate or currency only affects time you track from now
+              on — each entry stores the rate and currency that applied when it
+              was stopped, so past reports and invoices never move.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+      <BusinessProfileCard />
+    </div>
   );
 }

@@ -7,4 +7,18 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const catalog = {
+  clientBilling: {
+    toggle: "Billing details",
+    toggleHint: "What an invoice prints under “Billed to”. All fields are optional.",
+    legalName: "Legal name",
+    addressLine: "Address line {line}",
+    postalCode: "Postal code",
+    city: "City",
+    country: "Country code",
+    taxId: "Tax ID",
+    email: "Billing email",
+    reference: "Reference",
+    referenceHint: "The client’s purchase order or cost centre.",
+    invalidCountry: "Enter a two-letter country code.",
+  },
 } as const;

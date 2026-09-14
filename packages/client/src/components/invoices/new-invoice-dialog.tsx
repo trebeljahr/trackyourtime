@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { AlertTriangle, Info, Loader2, ShieldCheck } from "lucide-react";
+import { dueDateFromTerms } from "@starter/shared";
 
 import { CLIENT_LIST_INPUT } from "@/components/catalog/types";
 import {
@@ -25,6 +26,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatMoney, useFormatSettings } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/use-t";
+import { InvoiceIdentityWarnings } from "./identity-warnings";
 import { InvoiceLines } from "./invoice-lines";
 import {
   defaultInvoiceDates,
@@ -114,10 +117,26 @@ function NewInvoiceForm({
   const [groupBy, setGroupBy] = React.useState<InvoiceGroupBy>("project");
   const [taxInput, setTaxInput] = React.useState("");
   const [dates, setDates] = React.useState(() => defaultInvoiceDates());
+  // Once the person picks a due date it is theirs; until then it follows the
+  // business profile's payment terms, when there are any.
+  const [dueTouched, setDueTouched] = React.useState(false);
+  const t = useT("reports");
   const [notes, setNotes] = React.useState("");
   const [confirming, setConfirming] = React.useState(false);
 
   const clients = trpc.clients.list.useQuery(CLIENT_LIST_INPUT);
+  // A refusal (a role that may not read the profile) simply means no terms
+  // and no warning — creating the invoice is decided on the server.
+  const profile = trpc.settings.businessProfile.useQuery(undefined, {
+    retry: false,
+  });
+  const selectedClient =
+    (clients.data ?? []).find((client) => client.id === clientId) ?? null;
+  const termsDays = profile.data?.paymentTermsDays ?? null;
+  const suggestedDue = dueTouched
+    ? null
+    : dueDateFromTerms(dates.issueDate, termsDays);
+  const dueDate = suggestedDue ?? dates.dueDate;
   const clientOptions = React.useMemo(
     () =>
       (clients.data ?? [])
@@ -157,13 +176,14 @@ function NewInvoiceForm({
     setConfirming(false);
     setDates((current) => ({
       issueDate: next,
-      dueDate: reconcileDueDate(next, current.dueDate),
+      dueDate: reconcileDueDate(next, dueTouched ? current.dueDate : dueDate),
     }));
   };
 
   const setDueDate = (next: string): void => {
     if (next === "") return;
     setConfirming(false);
+    setDueTouched(true);
     setDates((current) => ({
       issueDate: current.issueDate,
       // The server refuses a due date before the issue date; clamp rather
@@ -181,7 +201,7 @@ function NewInvoiceForm({
       groupBy,
       taxRate,
       issueDate: dates.issueDate,
-      dueDate: dates.dueDate,
+      dueDate,
       ...(notes.trim() === "" ? {} : { notes: notes.trim() }),
     };
     const created = await createInvoice(vars);
@@ -299,10 +319,18 @@ function NewInvoiceForm({
           <Input
             id="invoice-due-date"
             type="date"
-            value={dates.dueDate}
+            value={dueDate}
             onChange={(event) => setDueDate(event.target.value)}
             data-testid="invoice-due-date"
           />
+          {suggestedDue !== null && termsDays !== null ? (
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="invoice-due-from-terms"
+            >
+              {t("invoiceIdentity.dueFromTerms", { days: termsDays })}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -317,6 +345,11 @@ function NewInvoiceForm({
           data-testid="invoice-notes"
         />
       </div>
+
+      <InvoiceIdentityWarnings
+        profile={profile.data}
+        client={selectedClient}
+      />
 
       <Separator />
 
