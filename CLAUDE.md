@@ -834,6 +834,83 @@ unowned ones (the reverse of sign-out, which keeps them — a deleted account ca
 never send them, and they must not replay under the next account), clears the
 running-timer mirror and the Keychain token. Rows another account queued stay.
 
+### Workspaces, members and invitations
+
+Membership changes only through tRPC — `workspaces`, `members` and
+`invitations`, one line each over `services/membership/`. better-auth's
+organization plugin stays installed for its tables (`organization`, `member`,
+`invitation`, the session's `activeOrganizationId`) and for the server-side
+`auth.api.createOrganization` the signup hook calls, but **every
+`/api/auth/organization/*` request that arrives over HTTP answers 404**
+(`organization-lockdown.ts`, wired as the instance's one `hooks.before`). Its
+endpoints write only `member`, never `WorkspaceMember`, accept `"admin,owner"`
+as a role, and refuse with 403/400 — each one was a way around the rules below.
+`tests/organization-http-lockdown.test.ts` hits all of them against the real
+library. `disableOrganizationDeletion` is on even server-side.
+
+Six rules, each of which fails quietly if broken:
+
+- **The mirror grants access; it is written last and deleted first.** The app
+  authorizes from `WorkspaceMember` alone (workspace middleware, API tokens,
+  webhook deliveries, sync fan-out). So add writes `member` then the mirror,
+  remove deletes the mirror, stops that person's running entry *in that
+  workspace only*, then deletes `member`. A crash in between always leaves less
+  access, and re-running the operation finishes it. Remove and leave keep the
+  person's entries — `memberDepartureSteps` deletes them and is for account
+  deletion only.
+- **Never zero owners.** Transfer promotes the target in both records first,
+  then demotes the previous owner — `member` before the mirror, so the person
+  who retries a half-finished transfer is still an owner. The last owner cannot
+  leave, be demoted or removed while anybody else remains; the only member
+  cannot leave at all. `membership-lifecycle.test.ts` fails every write in turn.
+- **Roles are exactly `owner|admin|member`; flags follow the role.** An owner's
+  two visibility flags are forced on; everybody else, invited admins included,
+  starts closed; a role change never grants a flag except to an owner. Owner is
+  reachable only by transfer — never by invitation or `updateRole`. A stored
+  unrecognised role reads as `member`.
+- **Foreign ids are NOT_FOUND before any permission is consulted.** Every
+  member/invitation lookup carries `ctx.workspaceId`; only a real row of the
+  caller's own workspace can earn FORBIDDEN, whose message is a stable code from
+  `MEMBERSHIP_REFUSALS` in `@starter/shared`. The matrix is in
+  `permissions.ts` and `members-permissions.test.ts`.
+- **Accepting an invitation needs the invited email, not a verified one.**
+  The proof is possession of the id — 96 CSPRNG bits (never an adapter
+  ObjectId, which is guessable), delivered to that inbox, or handed over by the
+  inviter from the link the UI shows when no mail transport is configured.
+  Requiring verification would make invitations unusable on exactly the
+  self-hosted instances with no mail to verify with. The email match
+  (case-insensitive) is what stops a forwarded link from being accepted under
+  somebody else's account, and it is checked before the status, so a wrong
+  account learns nothing about whether the link is live. The link is
+  `${FRONTEND_URL}/invite/?id=<id>` — a query parameter, because the static
+  export cannot serve `/invite/<id>`.
+- **An explicit `workspaceId` never falls back; a stale session default does.**
+  A request naming a workspace the caller is not in is NOT_FOUND — the offline
+  queue relies on a replayed row never landing in another workspace. A session
+  whose `activeOrganizationId` points at a workspace the person left falls back
+  to their oldest membership. `workspaces.setActive` writes the session row,
+  which the five-minute cookie cache can hide for that long; first-party
+  clients therefore send `workspaceId` explicitly, and every
+  `workspaceProcedure` must take an object input that allows it
+  (`workspace-resolution.test.ts` walks the router).
+
+Invitations are rows in better-auth's `invitation` collection with the
+plugin's field names, so account deletion's invitation cleanup covers them. A
+re-invite of a pending address refreshes and re-sends the same row; a workspace
+holds at most 50 pending, and an inviter sends at most 20 per hour (Redis when
+present, per process otherwise). The email goes through
+`sendWorkspaceInvitationEmail` with both names escaped after translation;
+with no transport, or a failed send, the invitation is kept, the URL is logged
+and `emailSent: false` tells the inviter to share the link.
+
+`entries.start` and `entries.continue` answer `replaced` when the start
+stopped a timer running in a different workspace — one running timer per
+person is the invariant, and nothing in workspace B shows A's timer ending.
+REST's start is confined to its token's workspace and is unchanged.
+Every lifecycle write publishes `membership.changed` to the workspace, and to
+the removed, leaving or accepting person directly, since the workspace fan-out
+no longer (or does not yet) reaches them.
+
 ### Catalog shape
 
 There is one hierarchy, and it is two levels deep: Client → Project. Tasks and
