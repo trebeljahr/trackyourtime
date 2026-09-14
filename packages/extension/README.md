@@ -96,6 +96,13 @@ has no content scripts, and does not read or change any web page. Plain http is
 accepted for localhost only, for someone running the server on the same
 machine.
 
+`optional_permissions` lists `tabs`, for activity capture. It is not granted at
+install and is requested only when the person turns on Settings → Activity,
+from that click. With it the extension reads the hostname (and, behind a
+second opt-in, the title) of the active tab so it can suggest time entries.
+What it reads stays in the browser's IndexedDB on that device; it is never
+sent anywhere, and only an entry the person accepts reaches the server.
+
 ### Production ids and TRUSTED_ORIGINS
 
 The production build pins the Web Store key, so its id is
@@ -183,6 +190,29 @@ it is in:
   means the server did not answer; a socket that is down while HTTP is fine
   reads **Polling**, because nothing is being lost — other devices' changes
   just arrive on the next poll instead of instantly.
+
+## Activity capture
+
+Off by default. Settings → Activity turns it on, which asks Chrome for the
+optional `tabs` permission. While it is on, the worker records which site has
+the person's attention — hostname only, titles behind their own switch — into
+IndexedDB, and the Suggestions screen (✦ in the header) offers the untracked
+stretches of a day as entries to accept, edit, dismiss or file by a local
+"always file this site under…" rule.
+
+- Code: `src/background/activity/` (capture, storage, retention, suggestions)
+  over the pure `@starter/core/activity` module (merging, subtraction, rules).
+- Never recorded: incognito tabs, excluded hosts, non-`http(s)` pages.
+- Nothing under `src/background/activity/` may import the runtime, the API
+  client or any network code; `import-graph.test.ts` walks the imports to
+  enforce it. An accepted suggestion leaves through `createEntry` in
+  `background/entries.ts`, offline queue included.
+- Activity, rules and dismissals are keyed by user id plus workspace id and
+  are deleted on sign-out and when another account signs in.
+
+```bash
+pnpm --filter @starter/extension test   # Vitest, with a fake chrome and fake-indexeddb
+```
 
 ## Build and load
 

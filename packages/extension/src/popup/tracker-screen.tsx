@@ -66,6 +66,8 @@ export type TrackerScreenProps = {
    */
   onOpenSettings: () => void;
   onOpenEntries: () => void;
+  /** The Suggestions screen. Its header button shows only while capture is on. */
+  onOpenSuggestions: () => void;
   /** Asks the worker what this person has called work like this before. */
   onSearchDescriptions: (query: string) => void;
   /** Loads the task list for a project into the worker's snapshot. */
@@ -148,6 +150,7 @@ export function TrackerScreen({
   onAnswerIdle,
   onOpenSettings,
   onOpenEntries,
+  onOpenSuggestions,
   onSearchDescriptions,
   onCreateClient,
   onCreateTag,
@@ -423,7 +426,12 @@ export function TrackerScreen({
       {/* No back and no title: the elapsed clock below is the title, and that
           is exactly what pays for a header on the one screen where every pixel
           is already spoken for. */}
-      <Header onOpenEntries={onOpenEntries} onOpenSettings={onOpenSettings} />
+      <Header
+        onOpenEntries={onOpenEntries}
+        onOpenSettings={onOpenSettings}
+        // Off by default, so by default the tracker looks exactly as it did.
+        onOpenSuggestions={state.activity.settings.enabled ? onOpenSuggestions : undefined}
+      />
 
       <div className="popup__body">
         {/* Above everything else: it is a question about the time already on

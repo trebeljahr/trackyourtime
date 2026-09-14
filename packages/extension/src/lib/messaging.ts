@@ -27,6 +27,13 @@ import type {
   TimeEntry,
   UpdateSettingsInput,
 } from "@starter/core";
+import type {
+  ActivityRule,
+  ActivitySuggestion,
+} from "@starter/core/activity/index";
+import type { ActivitySettings } from "../background/activity/settings";
+
+export type { ActivityRule, ActivitySettings, ActivitySuggestion };
 
 /**
  * Which of the popup's surfaces is on screen.
@@ -41,7 +48,40 @@ import type {
  * `state:get` already in flight when the user navigates still comes back
  * describing the screen they are now on.
  */
-export type PopupView = "tracker" | "settings" | "entries";
+export type PopupView = "tracker" | "settings" | "entries" | "suggestions";
+
+/**
+ * Everything the Suggestions screen and Settings → Activity render.
+ *
+ * `settings` and `permitted` are on every snapshot — they are two local reads,
+ * and the tracker's header decides from them whether to offer the screen at
+ * all. `suggestions` and `rules` are filled only for the views that show them.
+ */
+export type ActivitySnapshot = {
+  settings: ActivitySettings;
+  /** Whether the optional `tabs` permission is granted right now. */
+  permitted: boolean;
+  /** The calendar day, in this device's zone, the suggestions describe. */
+  day: string;
+  /**
+   * Untracked blocks on `day`, oldest first, or null when not loaded for this
+   * view. Instants are epoch ms, the shape core computes them in.
+   */
+  suggestions: ActivitySuggestion[] | null;
+  /** "Always file …" rules in the order they are tried, or null when not loaded. */
+  rules: ActivityRule[] | null;
+  /** Stored segments on this device, or null when not counted for this view. */
+  storedSegments: number | null;
+};
+
+/** The fields an accepted suggestion is filed with. */
+export type AcceptedFields = {
+  description: string;
+  projectId: string | null;
+  taskId: string | null;
+  billable?: boolean;
+  tagIds?: string[];
+};
 
 /**
  * What the settings screen may change.
@@ -278,7 +318,49 @@ export type PopupToBackground =
    * session id so a UI regression cannot reach the server.
    */
   | { type: "device:revoke"; id: string }
-  | { type: "devices:revoke-others" };
+  | { type: "devices:revoke-others" }
+  /**
+   * Which day the Suggestions screen shows, as a `YYYY-MM-DD` key in this
+   * device's zone. Held by the worker like the view, and re-sent by the popup
+   * whenever the snapshot's `activity.day` disagrees with its route.
+   */
+  | { type: "activity:day"; day: string }
+  /**
+   * Turn a suggestion into an entry.
+   *
+   * `start`/`end` are what the popup showed (epoch ms). The worker recomputes
+   * against the entries as they are NOW before creating anything, because the
+   * snapshot can be seconds old and the same span may have been tracked on
+   * another device since. A plain accept is clipped to what is still untracked;
+   * `edited: true` means the person set the times in the form themselves, which
+   * are kept as long as they still overlap an untracked block.
+   */
+  | ({
+      type: "activity:accept";
+      start: number;
+      end: number;
+      edited: boolean;
+    } & AcceptedFields)
+  /** Hide a suggestion by marking its span as accounted for, on this device only. */
+  | { type: "activity:dismiss"; start: number; end: number }
+  /** "Always file <pattern> under …", a local rule. */
+  | {
+      type: "activity:rule-add";
+      pattern: string;
+      projectId: string | null;
+      taskId: string | null;
+      description?: string;
+      billable?: boolean;
+      tagIds?: string[];
+    }
+  | { type: "activity:rule-remove"; id: string }
+  /**
+   * Change the capture settings. Enabling is refused unless the popup has
+   * already obtained the `tabs` permission from the click that asked for it.
+   */
+  | { type: "activity:settings"; patch: Partial<ActivitySettings> }
+  /** Settings → Activity → "Delete all activity now". */
+  | { type: "activity:wipe" };
 
 /**
  * Where the current session came from.
@@ -424,6 +506,8 @@ export type BackgroundState = {
    * most of its life describing a prefix the user has already moved past.
    */
   descriptionsFor: string | null;
+  /** Activity capture: always present, heavier halves scoped by view. */
+  activity: ActivitySnapshot;
 };
 
 export type BackgroundResponse =

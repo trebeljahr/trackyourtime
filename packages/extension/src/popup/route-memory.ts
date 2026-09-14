@@ -15,6 +15,8 @@
 import { chromeStorage, sessionStorageArea } from "../lib/chrome-storage";
 import {
   defaultDraft,
+  navigate,
+  ROOT_STACK,
   type EntryDraft,
   type PopupStack,
   type Route,
@@ -34,8 +36,12 @@ const SETTINGS_SECTIONS: ReadonlySet<string> = new Set([
   "idle",
   "limits",
   "devices",
+  "activity",
   "account",
 ]);
+
+const asDayOrNull = (value: unknown): string | null =>
+  typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -108,6 +114,21 @@ const parseRoute = (value: unknown): Route | null => {
     return { name: "entry-new", draft: parseDraft(record.draft) ?? defaultDraft() };
   }
 
+  if (record.name === "suggestions") {
+    // An unreadable day is today, not a reason to lose the screen.
+    return { name: "suggestions", day: asDayOrNull(record.day) };
+  }
+
+  if (record.name === "suggestion-edit") {
+    // Unlike a manual draft there is no sensible default to fall back to: the
+    // times ARE the suggestion. Without them, return to the list.
+    const draft = parseDraft(record.draft);
+    const day = asDayOrNull(record.day);
+    return draft === null
+      ? { name: "suggestions", day }
+      : { name: "suggestion-edit", day, draft };
+  }
+
   if (record.name === "settings") {
     const section = record.section;
     if (section === null || section === undefined) {
@@ -143,9 +164,14 @@ const parseStack = (value: unknown): PopupStack | null => {
     routes.push(route);
   }
 
-  const [first, ...rest] = routes;
-  if (first === undefined || first.name !== "tracker") return null;
-  return [first, ...rest];
+  const [first] = routes;
+  const top = routes[routes.length - 1];
+  if (first === undefined || first.name !== "tracker" || top === undefined) return null;
+  // Rebuilt from the top frame: `navigate` is a total function of the target,
+  // so this is the stack the user walked — and a frame narrowed to something
+  // else above (an unreadable suggestion draft becomes its list) cannot leave
+  // two copies of one screen to step back through.
+  return navigate(ROOT_STACK, top);
 };
 
 export async function rememberRoute(stack: PopupStack): Promise<void> {

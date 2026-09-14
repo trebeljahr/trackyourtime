@@ -30,7 +30,20 @@ import {
   type OfflineUpdateInput,
   type TimeEntry,
 } from "@starter/core";
-import type { EntryPage } from "../lib/messaging";
+import type { ActivityInterval } from "@starter/core/activity/index";
+import type {
+  AcceptedFields,
+  ActivitySnapshot,
+  EntryPage,
+  PopupView,
+} from "../lib/messaging";
+import { capturePermitted, loadActivityScope, loadActivitySettings } from "./activity/settings";
+import { countSegments } from "./activity/store";
+import {
+  activityRules,
+  suggestionsFor,
+  type SuggestionRange,
+} from "./activity/suggestions";
 import { BackgroundError } from "./errors";
 import {
   appendCachedEntries,
@@ -45,12 +58,14 @@ import {
   getCachedClients,
   getCachedEntries,
   getCachedProjects,
+  getCachedSettings,
   getCachedTasks,
   invalidateRecents,
   isTransportFailure,
   loadOptimisticEntries,
   markEntriesStale,
   ORIGIN_ID,
+  peekRunning,
   pendingSyncCount,
   setCachedEntries,
   upsertOptimisticEntry,
@@ -609,3 +624,237 @@ const queueRemove = async (input: OfflineIdInput): Promise<void> => {
   await deleteOptimisticEntry(input.id);
   markEntriesStale();
 };
+
+// ── activity suggestions ─────────────────────────────────────────────
+//
+// The network half of the Suggestions screen. Capture, storage and the
+// suggestion arithmetic live under ./activity and never touch the API; what
+// they need from the server — which time is already tracked — is fetched here
+// and handed in, and an accepted suggestion leaves through `createEntry` like
+// any other manual entry, offline queue included.
+
+const HOUR_MS = 3_600_000;
+
+/** How long a fetched set of tracked intervals answers the three-second poll. */
+const TRACKED_TTL_MS = 15_000;
+
+/** `entries.list` rows per page, and how many pages one day may take. */
+const TRACKED_PAGE_LIMIT = 200;
+const TRACKED_MAX_PAGES = 5;
+
+let trackedCache: { key: string; at: number; intervals: ActivityInterval[] } | null = null;
+
+/** The day the Suggestions screen shows; null means today. Lost on eviction, re-sent by the popup. */
+let activityDay: string | null = null;
+
+export const setActivityDay = (day: string): void => {
+  activityDay = /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+};
+
+const dayRange = (day: string, zone: string): SuggestionRange => ({
+  from: zonedDayStartMs(day, zone),
+  to: zonedDayStartMs(addDaysToKey(day, 1), zone),
+});
+
+const toInterval = (entry: { start: string; end: string | null }, now: number): ActivityInterval => ({
+  start: Date.parse(entry.start),
+  end: entry.end === null ? now : Date.parse(entry.end),
+});
+
+/**
+ * Everything this person has tracked that overlaps `range`, as intervals.
+ *
+ * Online, a fresh `entries.list`; offline, whatever the entry window cache
+ * holds. Either way the offline overlay is laid on top — a create still
+ * waiting in the queue is tracked time, and suggesting it again would invite a
+ * duplicate — and the running entry counts up to now. Only the signed-in
+ * person's own rows count: a colleague's entry in a shared workspace says
+ * nothing about what this browser was used for.
+ */
+export async function trackedIntervalsBetween(
+  range: SuggestionRange,
+  options: { fresh?: boolean } = {},
+): Promise<ActivityInterval[]> {
+  const now = Date.now();
+  const key = `${range.from}:${range.to}`;
+  if (
+    options.fresh !== true &&
+    trackedCache !== null &&
+    trackedCache.key === key &&
+    now - trackedCache.at < TRACKED_TTL_MS
+  ) {
+    return trackedCache.intervals;
+  }
+
+  const current = await ensureReady();
+  if (!current.session) throw notSignedIn();
+
+  const from = new Date(range.from).toISOString();
+  const to = new Date(range.to).toISOString();
+
+  let rows: DetailedEntry[] = [];
+  let fetched = false;
+  try {
+    let cursor: string | null = null;
+    for (let page = 0; page < TRACKED_MAX_PAGES; page += 1) {
+      const result: ListPage = await current.api.query<ListPage>("entries.list", {
+        from,
+        to,
+        limit: TRACKED_PAGE_LIMIT,
+        ...(cursor === null ? {} : { cursor }),
+      });
+      rows.push(...result.entries);
+      cursor = result.nextCursor ?? null;
+      if (cursor === null) break;
+    }
+    fetched = true;
+  } catch (error) {
+    if (!isTransportFailure(error)) throw error;
+    rows = getCachedEntries()?.entries ?? [];
+  }
+
+  // The overlay filters added rows by start, so look back far enough to catch
+  // a queued entry that began before the range and runs into it.
+  const overlaid = await applyOverlay(
+    rows,
+    new Date(range.from - 24 * HOUR_MS).toISOString(),
+    to,
+  );
+
+  const userId = getCachedSettings()?.userId ?? current.session.userId;
+  const mine = (entry: TimeEntry): boolean =>
+    userId === null || entry.authorId === "" || entry.authorId === userId;
+
+  const intervals = overlaid.entries.filter(mine).map((entry) => toInterval(entry, now));
+  const running = peekRunning();
+  if (running !== null && mine(running)) intervals.push(toInterval(running, now));
+
+  const clipped = intervals.filter(
+    (interval) => interval.end > range.from && interval.start < range.to,
+  );
+  if (fetched) trackedCache = { key, at: now, intervals: clipped };
+  return clipped;
+}
+
+const forgetTracked = (): void => {
+  trackedCache = null;
+};
+
+/**
+ * The activity half of the snapshot.
+ *
+ * Suggestions are computed only while the Suggestions screen is open, and the
+ * stored-row count only for Settings; a snapshot for any other view carries the
+ * two cheap local reads and nulls.
+ */
+export async function resolveActivitySnapshot(view: PopupView): Promise<ActivitySnapshot> {
+  const now = Date.now();
+  const zone = deviceTimeZone();
+  const today = dayKeyInZone(now, zone);
+  const day = activityDay !== null && activityDay <= today ? activityDay : today;
+
+  const [settings, permitted, scope] = await Promise.all([
+    loadActivitySettings(),
+    capturePermitted(),
+    loadActivityScope(),
+  ]);
+
+  const snapshot: ActivitySnapshot = {
+    settings,
+    permitted,
+    day,
+    suggestions: null,
+    rules: null,
+    storedSegments: null,
+  };
+
+  if (view === "suggestions") {
+    if (scope === null) return { ...snapshot, suggestions: [], rules: [] };
+    const range = dayRange(day, zone);
+    const tracked = await trackedIntervalsBetween(range);
+    return {
+      ...snapshot,
+      suggestions: await suggestionsFor(scope, range, tracked, now),
+      rules: await activityRules(scope),
+    };
+  }
+
+  if (view === "settings") {
+    return {
+      ...snapshot,
+      rules: scope === null ? [] : await activityRules(scope),
+      storedSegments: await countSegments().catch(() => 0),
+    };
+  }
+
+  return snapshot;
+}
+
+export type AcceptSuggestionInput = AcceptedFields & {
+  start: number;
+  end: number;
+  edited: boolean;
+};
+
+/**
+ * Turn a suggestion into a real entry, after checking it is still untracked.
+ *
+ * The snapshot the popup rendered can be seconds old, and in that time the same
+ * span may have been tracked from the web app or another device. So the
+ * suggestions are rebuilt against the entries as they are now, and:
+ *
+ * - nothing untracked overlaps the request any more → refused, nothing created;
+ * - a plain accept → clipped to the untracked block it overlaps most;
+ * - an edited accept → the person's own times, which they chose on purpose.
+ *
+ * Then it is an ordinary `createEntry`: `source: "extension"`, the device
+ * zone, and the offline queue when the server cannot be reached.
+ */
+export async function acceptSuggestion(input: AcceptSuggestionInput): Promise<void> {
+  const current = await ensureReady();
+  if (!current.session) throw notSignedIn();
+  if (!(input.end > input.start)) throw badTimeRange();
+
+  const scope = await loadActivityScope();
+  if (scope === null) {
+    throw new BackgroundError("ACTIVITY_UNAVAILABLE", "Activity capture has no account to file under yet.");
+  }
+
+  const now = Date.now();
+  const range: SuggestionRange = {
+    from: Math.min(input.start, input.end) - 12 * HOUR_MS,
+    to: Math.min(now, Math.max(input.start, input.end) + 12 * HOUR_MS),
+  };
+  const tracked = await trackedIntervalsBetween(range, { fresh: true });
+  const blocks = await suggestionsFor(scope, range, tracked, now);
+
+  const overlap = (block: { start: number; end: number }): number =>
+    Math.min(block.end, input.end) - Math.max(block.start, input.start);
+  const best = blocks
+    .filter((block) => overlap(block) > 0)
+    .sort((a, b) => overlap(b) - overlap(a))[0];
+
+  if (best === undefined) {
+    throw new BackgroundError(
+      "SUGGESTION_ALREADY_TRACKED",
+      "That time is already tracked or dismissed.",
+    );
+  }
+
+  const start = input.edited ? input.start : Math.max(input.start, best.start);
+  const end = input.edited ? input.end : Math.min(input.end, best.end);
+
+  forgetTracked();
+  await createEntry({
+    description: input.description,
+    projectId: input.projectId,
+    taskId: input.taskId,
+    billable: input.billable,
+    tagIds: input.tagIds,
+    start: new Date(start).toISOString(),
+    end: new Date(end).toISOString(),
+  });
+  // Again after: a poll that ran while the create was in flight may have
+  // cached the intervals from before it.
+  forgetTracked();
+}

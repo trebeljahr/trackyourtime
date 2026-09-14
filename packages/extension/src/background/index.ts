@@ -33,6 +33,19 @@ import type {
 } from "../lib/messaging";
 import { hasServerAccess } from "../lib/server-access";
 import { watchWebSession } from "../lib/web-session";
+import {
+  activityIdleChanged,
+  applyActivitySettings,
+  deleteAllActivity,
+  recoverActivity,
+  registerActivityListeners,
+  setActivityScope,
+} from "./activity/capture";
+import {
+  addActivityRuleFor,
+  dismissActivity,
+  removeActivityRuleFor,
+} from "./activity/suggestions";
 import { renderBadge } from "./badge";
 import {
   createClient,
@@ -43,8 +56,10 @@ import {
 import { searchDescriptions } from "./descriptions";
 import { listDevices, revokeDevice, revokeOtherDevices } from "./devices";
 import {
+  acceptSuggestion,
   createEntry,
   loadMoreEntries,
+  setActivityDay,
   removeEntry,
   updateEntry,
 } from "./entries";
@@ -68,6 +83,7 @@ import {
   peekRunning,
   reload,
   resolveRunning,
+  resolveSettings,
   setActiveView,
 } from "./runtime";
 import { updateSettings } from "./settings";
@@ -126,6 +142,13 @@ const refreshBadge = async (): Promise<void> => {
   // is the broken part — a refused upgrade, a proxy that will not upgrade —
   // HTTP still works, and the queue must not sit there unsent forever.
   await flushQueue().catch(() => undefined);
+
+  // Capture needs to know whose activity it is recording before the popup is
+  // ever opened, and settings are the read that names user and workspace.
+  const settings = await resolveSettings().catch(() => null);
+  if (settings !== null) {
+    await setActivityScope(settings.userId, settings.workspaceId).catch(() => undefined);
+  }
 
   // Re-checked on every badge tick: Chrome only reports idle *transitions*, so
   // one missed while the worker was gone would otherwise never be acted on.
@@ -309,6 +332,15 @@ const onServerAccessChanged = async (): Promise<void> => {
   await refreshBadge();
 };
 
+/** A local activity write that needs a signed-in scope and found none. */
+const requireActivity = (done: boolean): void => {
+  if (done) return;
+  throw new BackgroundError(
+    "ACTIVITY_UNAVAILABLE",
+    "Activity capture has no account to file under yet. Try again in a moment.",
+  );
+};
+
 const apply = async (message: PopupToBackground): Promise<void> => {
   switch (message.type) {
     case "state:get":
@@ -412,6 +444,46 @@ const apply = async (message: PopupToBackground): Promise<void> => {
       return revokeDevice(message.id);
     case "devices:revoke-others":
       return revokeOtherDevices();
+    case "activity:day":
+      return setActivityDay(message.day);
+    case "activity:accept":
+      return acceptSuggestion({
+        start: message.start,
+        end: message.end,
+        edited: message.edited,
+        description: message.description,
+        projectId: message.projectId,
+        taskId: message.taskId,
+        billable: message.billable,
+        tagIds: message.tagIds,
+      });
+    case "activity:dismiss":
+      return requireActivity(await dismissActivity(message.start, message.end));
+    case "activity:rule-add":
+      return requireActivity(
+        await addActivityRuleFor({
+          pattern: message.pattern,
+          projectId: message.projectId,
+          taskId: message.taskId,
+          description: message.description,
+          billable: message.billable,
+          tagIds: message.tagIds,
+        }),
+      );
+    case "activity:rule-remove":
+      return requireActivity(await removeActivityRuleFor(message.id));
+    case "activity:settings": {
+      const result = await applyActivitySettings(message.patch);
+      if (!result.ok) {
+        throw new BackgroundError(
+          "ACTIVITY_PERMISSION_REQUIRED",
+          "Chrome did not grant access to tabs, so activity capture stays off.",
+        );
+      }
+      return;
+    }
+    case "activity:wipe":
+      return deleteAllActivity();
     default: {
       // `apply` returns void, so falling off the end of this switch would be
       // valid TypeScript: a new message type added to the contract would
@@ -498,12 +570,16 @@ watchWebSession(
 chrome.idle.onStateChanged.addListener((state) => {
   void (async () => {
     if (state === "active") {
+      // Activity capture goes first and cannot fail the idle handling: it is a
+      // local read of the active tab, and it must not wait on a network call.
+      await activityIdleChanged("active", null).catch(() => undefined);
       // A return to input is what spends a pending "resume when they come
       // back", so it has to be reported even though nothing is idle.
       await observeIdle("active", 0);
       return;
     }
     const seconds = await syncDetectionInterval();
+    await activityIdleChanged(state, seconds).catch(() => undefined);
     await observeIdle(state, seconds ?? 0);
   })().catch(() => undefined);
 });
@@ -523,6 +599,10 @@ const onPermissionsChanged = (permissions: chrome.permissions.Permissions): void
 
 chrome.permissions.onRemoved.addListener(onPermissionsChanged);
 chrome.permissions.onAdded.addListener(onPermissionsChanged);
+// Tab, window-focus, heartbeat, prune and permission listeners for activity
+// capture. Registered unconditionally and synchronously like the rest; every
+// handler checks that capture is on before it records anything.
+registerActivityListeners();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== BADGE_ALARM) return;
@@ -559,3 +639,4 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap();
+void recoverActivity().catch(() => undefined);

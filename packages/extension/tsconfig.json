@@ -13,5 +13,8 @@
     "declaration": false,
     "declarationMap": false
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests run in Node under Vitest and are checked by tsconfig.test.json; the
+  // extension itself must keep compiling without Node's globals.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
 }

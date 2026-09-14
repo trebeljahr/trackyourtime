@@ -177,6 +177,11 @@ export function buildManifest(
     // person has walked away — a service worker sees no input events of its
     // own.
     permissions: ["storage", "alarms", "cookies", "idle"],
+    // Requested only when somebody turns on Settings → Activity, from that
+    // click — never at install. `tabs` is what exposes a tab's URL and title
+    // to activity capture, and Chrome words it as reading browsing history,
+    // which nobody who has not asked for capture should be shown.
+    optional_permissions: ["tabs"],
     host_permissions: target.hostPermissions,
     optional_host_permissions: target.optionalHostPermissions,
     icons: {

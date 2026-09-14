@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import type { Route } from "./route";
+import type { EntryDraft, Route } from "./route";
 import { EntriesScreen, type EntriesScreenProps } from "./entries-screen";
 import {
   EntryCreateScreen,
@@ -10,6 +10,10 @@ import {
   type EntryDetailScreenProps,
 } from "./entry-detail-screen";
 import { SettingsScreen, type SettingsScreenProps } from "./settings-screen";
+import {
+  SuggestionsScreen,
+  type SuggestionsScreenProps,
+} from "./suggestions-screen";
 import { TrackerScreen, type TrackerScreenProps } from "./tracker-screen";
 
 /**
@@ -37,6 +41,16 @@ export type ScreensProps = {
   entry: Omit<EntryDetailScreenProps, "id">;
   /** The create screen's props, minus the draft, which the route carries. */
   entryNew: Omit<EntryCreateScreenProps, "draft">;
+  /** The suggestions list, minus the day, which the route carries. */
+  suggestions: Omit<SuggestionsScreenProps, "day">;
+  /**
+   * The entry form opened on a suggestion: the create screen's props with its
+   * own submit, which accepts rather than creates.
+   */
+  suggestionEdit: Omit<EntryCreateScreenProps, "draft" | "onDraftChange" | "onCreateEntry"> & {
+    onDraftChange: (day: string | null, draft: EntryDraft) => void;
+    onAccept: (draft: EntryDraft) => Promise<boolean>;
+  };
 };
 
 export function Screens({
@@ -46,6 +60,8 @@ export function Screens({
   entries,
   entry,
   entryNew,
+  suggestions,
+  suggestionEdit,
 }: ScreensProps): JSX.Element {
   switch (route.name) {
     case "tracker":
@@ -58,5 +74,24 @@ export function Screens({
       return <EntryDetailScreen {...entry} id={route.id} />;
     case "entry-new":
       return <EntryCreateScreen {...entryNew} draft={route.draft} />;
+    case "suggestions":
+      return <SuggestionsScreen {...suggestions} day={route.day} />;
+    case "suggestion-edit": {
+      const { onDraftChange, onAccept, ...rest } = suggestionEdit;
+      return (
+        <EntryCreateScreen
+          {...rest}
+          draft={route.draft}
+          onDraftChange={(draft) => onDraftChange(route.day, draft)}
+          onCreateEntry={onAccept}
+          labels={{
+            title: "Accept suggestion",
+            submit: "Accept as entry",
+            busy: "Accepting…",
+            testId: "suggestion-edit",
+          }}
+        />
+      );
+    }
   }
 }

@@ -22,6 +22,8 @@ export type HeaderProps = {
   onOpenEntries?: () => void;
   onOpenSettings?: () => void;
   onNewEntry?: () => void;
+  /** Only offered while activity capture is on — see the tracker. */
+  onOpenSuggestions?: () => void;
   /**
    * A bare dot, never a label. The labelled status stays in the tracker's
    * footer, where there is room for the sentence that makes it useful.
@@ -35,6 +37,7 @@ export function Header({
   onOpenEntries,
   onOpenSettings,
   onNewEntry,
+  onOpenSuggestions,
   sync,
 }: HeaderProps): JSX.Element {
   return (
@@ -76,6 +79,19 @@ export function Header({
             data-testid="header-new-entry"
           >
             +
+          </button>
+        ) : null}
+
+        {onOpenSuggestions !== undefined ? (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Suggestions"
+            title="Suggestions from activity"
+            onClick={onOpenSuggestions}
+            data-testid="header-suggestions"
+          >
+            ✦
           </button>
         ) : null}
 

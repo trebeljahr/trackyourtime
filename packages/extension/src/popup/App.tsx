@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import type { QuickStart } from "@starter/core";
+import { dayKeyInZone, deviceTimeZone, type QuickStart } from "@starter/core";
 import {
   sendToBackground,
+  type AcceptedFields,
+  type ActivitySettings,
+  type ActivitySuggestion,
   type BackgroundResponse,
   type BackgroundState,
   type PopupToBackground,
@@ -95,6 +98,9 @@ export function App(): JSX.Element {
 
   /** The view a `view:set` is currently in flight for, so it is not re-sent. */
   const requestedViewRef = useRef<PopupView | null>(null);
+
+  /** The day an `activity:day` is in flight for, for the same reason. */
+  const requestedDayRef = useRef<string | null>(null);
 
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -236,6 +242,28 @@ export function App(): JSX.Element {
     if (requestedViewRef.current === desired) return;
     requestedViewRef.current = desired;
     void send({ type: "view:set", view: desired });
+  }, [state, stack, send]);
+
+  /**
+   * Tell the worker which day the Suggestions screen is showing.
+   *
+   * The same reconciliation as the view above: the route owns the day, the
+   * worker holds a copy that an eviction resets to today, and the snapshot's
+   * `activity.day` says which one it computed.
+   */
+  useEffect(() => {
+    if (state === null) return;
+    const top = topOf(stack);
+    if (top.name !== "suggestions" && top.name !== "suggestion-edit") return;
+    if (state.view !== "suggestions") return;
+    const desired = top.day ?? dayKeyInZone(Date.now(), deviceTimeZone());
+    if (state.activity.day === desired) {
+      requestedDayRef.current = null;
+      return;
+    }
+    if (requestedDayRef.current === desired) return;
+    requestedDayRef.current = desired;
+    void send({ type: "activity:day", day: desired });
   }, [state, stack, send]);
 
   /**
@@ -473,6 +501,104 @@ export function App(): JSX.Element {
     }, DRAFT_MEMORY_DEBOUNCE_MS);
   }, []);
 
+  /**
+   * A keystroke in a suggestion's entry form. Replaces the top frame without
+   * a navigation, exactly like {@link changeDraft} does for a manual entry.
+   */
+  const changeSuggestionDraft = useCallback((day: string | null, draft: EntryDraft): void => {
+    const next = navigate(stackRef.current, { name: "suggestion-edit", day, draft });
+    stackRef.current = next;
+    setStack(next);
+    if (draftTimerRef.current !== null) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      draftTimerRef.current = null;
+      void rememberRoute(stackRef.current);
+    }, DRAFT_MEMORY_DEBOUNCE_MS);
+  }, []);
+
+  const acceptSuggestion = useCallback(
+    async (suggestion: ActivitySuggestion, fields: AcceptedFields): Promise<boolean> => {
+      const ok = await send({
+        type: "activity:accept",
+        start: suggestion.start,
+        end: suggestion.end,
+        edited: false,
+        ...fields,
+      });
+      if (ok) setNote("Entry added.");
+      return ok;
+    },
+    [send],
+  );
+
+  const acceptEditedSuggestion = useCallback(
+    async (draft: EntryDraft): Promise<boolean> => {
+      const ok = await send({
+        type: "activity:accept",
+        start: Date.parse(draft.start),
+        end: Date.parse(draft.end),
+        edited: true,
+        description: draft.description.trim(),
+        projectId: draft.projectId,
+        taskId: draft.taskId,
+        billable: draft.billable,
+        tagIds: draft.tagIds,
+      });
+      if (ok) goBackWith("Entry added.");
+      return ok;
+    },
+    [send, goBackWith],
+  );
+
+  const dismissSuggestion = useCallback(
+    (suggestion: ActivitySuggestion): Promise<boolean> =>
+      send({ type: "activity:dismiss", start: suggestion.start, end: suggestion.end }),
+    [send],
+  );
+
+  const addActivityRule = useCallback(
+    (pattern: string, projectId: string | null): Promise<boolean> =>
+      send({ type: "activity:rule-add", pattern, projectId, taskId: null }),
+    [send],
+  );
+
+  const removeActivityRule = useCallback(
+    (id: string): Promise<boolean> => send({ type: "activity:rule-remove", id }),
+    [send],
+  );
+
+  const saveActivitySettings = useCallback(
+    (patch: Partial<ActivitySettings>): Promise<boolean> =>
+      send({ type: "activity:settings", patch }),
+    [send],
+  );
+
+  /**
+   * Ask Chrome for `tabs`. Must run inside the click: the prompt is refused
+   * outside a user gesture, so nothing may be awaited before this call.
+   */
+  const requestActivityPermission = useCallback(async (): Promise<boolean> => {
+    try {
+      const granted = await chrome.permissions.request({ permissions: ["tabs"] });
+      if (!granted) {
+        setError("Chrome did not grant access to tabs, so activity capture stays off.");
+      }
+      return granted;
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Could not ask Chrome for access to tabs.");
+      return false;
+    }
+  }, []);
+
+  const wipeActivity = useCallback(
+    async (): Promise<boolean> => {
+      const ok = await send({ type: "activity:wipe" });
+      if (ok) setNote("All captured activity was deleted from this device.");
+      return ok;
+    },
+    [send],
+  );
+
   const openSection = useCallback(
     (section: SettingsSection | null): void => {
       go({ name: "settings", section });
@@ -561,6 +687,7 @@ export function App(): JSX.Element {
             onAnswerIdle: (answer) => send({ type: "idle:answer", answer }),
             onOpenSettings: () => openSection(null),
             onOpenEntries: () => go({ name: "entries" }),
+            onOpenSuggestions: () => go({ name: "suggestions", day: null }),
             onSearchDescriptions: searchDescriptions,
             onCreateClient: createClient,
             onCreateTag: createTag,
@@ -580,6 +707,9 @@ export function App(): JSX.Element {
             onRevokeOtherDevices: revokeOtherDevices,
             onSignOut: signOut,
             onSetServer: setServer,
+            onSaveActivitySettings: saveActivitySettings,
+            onRequestActivityPermission: requestActivityPermission,
+            onWipeActivity: wipeActivity,
           }}
           entries={{
             state,
@@ -614,6 +744,43 @@ export function App(): JSX.Element {
             onGoTracker: goTracker,
             onDraftChange: changeDraft,
             onCreateEntry: createEntry,
+            onSearchDescriptions: searchDescriptions,
+            onCreateClient: createClient,
+            onCreateProject: createProject,
+            onCreateTag: createTag,
+            onCreateTask: createTask,
+          }}
+          suggestions={{
+            state,
+            error,
+            note,
+            onBack: goBack,
+            onGoTracker: goTracker,
+            onOpenActivitySettings: () => openSection("activity"),
+            onChangeDay: (day) => go({ name: "suggestions", day }),
+            onAccept: acceptSuggestion,
+            onEdit: (draft) => {
+              const top = topOf(stackRef.current);
+              go({
+                name: "suggestion-edit",
+                day: top.name === "suggestions" ? top.day : null,
+                draft,
+              });
+            },
+            onDismiss: dismissSuggestion,
+            onAddRule: addActivityRule,
+            onRemoveRule: removeActivityRule,
+            onCreateClient: createClient,
+            onCreateProject: createProject,
+          }}
+          suggestionEdit={{
+            state,
+            error,
+            note,
+            onBack: goBack,
+            onGoTracker: goTracker,
+            onDraftChange: changeSuggestionDraft,
+            onAccept: acceptEditedSuggestion,
             onSearchDescriptions: searchDescriptions,
             onCreateClient: createClient,
             onCreateProject: createProject,

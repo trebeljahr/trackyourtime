@@ -29,7 +29,7 @@
     "openapi:emit": "pnpm --filter @starter/shared run build && pnpm --filter @starter/server exec tsx src/api/v1/emit-openapi.ts",
     "icons:brand": "node scripts/icons-brand.mjs",
     "test": "pnpm run test:unit && pnpm run test:client && pnpm run test:e2e",
-    "test:unit": "pnpm --filter @starter/core run test && pnpm --filter @starter/server run test && pnpm --filter @starter/mcp run test",
+    "test:unit": "pnpm --filter @starter/core run test && pnpm --filter @starter/server run test && pnpm --filter @starter/mcp run test && pnpm --filter @starter/extension run test",
     "test:client": "pnpm --filter @starter/client run test",
     "test:e2e": "npx playwright test",
     "dev:infra": "docker-compose -f docker-compose.dev.yml up -d",

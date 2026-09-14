@@ -18,6 +18,7 @@ export type SettingsSection =
   | "idle"
   | "limits"
   | "devices"
+  | "activity"
   | "account";
 
 /**
@@ -57,7 +58,19 @@ export type Route =
   | { name: "settings"; section: SettingsSection | null }
   | { name: "entries" }
   | { name: "entry"; id: string }
-  | { name: "entry-new"; draft: EntryDraft };
+  | { name: "entry-new"; draft: EntryDraft }
+  /**
+   * Untracked activity as suggested entries. `day` is a `YYYY-MM-DD` key in
+   * this device's zone, or null for today — null rather than today's key so a
+   * route remembered just before midnight still opens on the new today.
+   */
+  | { name: "suggestions"; day: string | null }
+  /**
+   * A suggestion opened in the entry form before accepting it. The draft is on
+   * the route for the reason the manual create's is: a stolen focus must not
+   * cost what was typed.
+   */
+  | { name: "suggestion-edit"; day: string | null; draft: EntryDraft };
 
 /** Never empty; index 0 is always the tracker. */
 export type PopupStack = readonly [Route, ...Route[]];
@@ -78,6 +91,10 @@ export function viewOf(route: Route): PopupView {
       // of the page the list already fetched, so pushing it must not make the
       // worker drop what it is holding.
       return "entries";
+    case "suggestions":
+    case "suggestion-edit":
+      // The edit form accepts against the same suggestions the list shows.
+      return "suggestions";
   }
 }
 
@@ -100,7 +117,11 @@ export function navigate(stack: PopupStack, route: Route): PopupStack {
       return ROOT_STACK;
     case "settings":
     case "entries":
+    case "suggestions":
       return [ROOT_STACK[0], route];
+    case "suggestion-edit":
+      // Back out of the form lands on the list of the same day.
+      return [ROOT_STACK[0], { name: "suggestions", day: route.day }, route];
     case "entry":
     case "entry-new":
       // Always reached through the list, even when the route was restored from

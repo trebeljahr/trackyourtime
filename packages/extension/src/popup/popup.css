@@ -1430,4 +1430,88 @@ button.tag:hover .tag__x {
 .choice input {
   margin: 0;
   accent-color: var(--accent);
+
+/* ── activity suggestions ──────────────────────────────────────────── */
+
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.activity__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.activity__range,
+.activity__duration {
+  font-variant-numeric: tabular-nums;
+}
+
+.activity__duration {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.activity__keys,
+.activity__proposal {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.activity__off {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.activity__off p {
+  margin: 0;
+}
+
+.activity__rules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.activity__add {
+  display: flex;
+  gap: 6px;
+}
+
+.activity__add .input {
+  flex: 1;
+  min-width: 0;
 }

@@ -40,6 +40,19 @@ export type EntryCreateScreenProps = {
   onCreateProject: (name: string, clientId: string | null) => Promise<boolean>;
   onCreateTag: (name: string) => Promise<boolean>;
   onCreateTask: (name: string) => Promise<boolean>;
+  /**
+   * Wording for the other screen that writes a new entry through this form —
+   * accepting an edited activity suggestion. The form, the validation and the
+   * submit rule are the same; only what the screen calls itself differs.
+   */
+  labels?: { title: string; submit: string; busy: string; testId: string };
+};
+
+const CREATE_LABELS = {
+  title: "New entry",
+  submit: "Add entry",
+  busy: "Adding…",
+  testId: "entry-new",
 };
 
 export function EntryCreateScreen({
@@ -56,6 +69,7 @@ export function EntryCreateScreen({
   onCreateProject,
   onCreateTag,
   onCreateTask,
+  labels = CREATE_LABELS,
 }: EntryCreateScreenProps): JSX.Element {
   const [busy, setBusy] = useState(false);
   /** True while the project picker is naming a new project. */
@@ -100,8 +114,8 @@ export function EntryCreateScreen({
   };
 
   return (
-    <div className="screen" onKeyDown={onKeyDown} data-testid="entry-new-screen">
-      <Header title="New entry" onBack={onBack} sync={sync} />
+    <div className="screen" onKeyDown={onKeyDown} data-testid={`${labels.testId}-screen`}>
+      <Header title={labels.title} onBack={onBack} sync={sync} />
 
       <div className="popup__body">
         <p
@@ -109,7 +123,7 @@ export function EntryCreateScreen({
           className="notice screen__alert"
           role="alert"
           aria-live="assertive"
-          data-testid="entry-new-error"
+          data-testid={`${labels.testId}-error`}
         >
           {error ?? ""}
         </p>
@@ -148,7 +162,7 @@ export function EntryCreateScreen({
             onCreateTask={onCreateTask}
           />
 
-          <p className="detail__note" data-testid="entry-new-duration">
+          <p className="detail__note" data-testid={`${labels.testId}-duration`}>
             {valid
               ? `That is ${formatDuration(seconds, durationFormat)}.`
               : "The end has to be after the start."}
@@ -161,9 +175,9 @@ export function EntryCreateScreen({
             onClick={() => {
               void submit();
             }}
-            data-testid="entry-new-submit"
+            data-testid={`${labels.testId}-submit`}
           >
-            {busy ? "Adding…" : "Add entry"}
+            {busy ? labels.busy : labels.submit}
           </button>
         </div>
       </div>

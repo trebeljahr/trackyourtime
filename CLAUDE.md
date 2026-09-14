@@ -143,6 +143,7 @@ as production data — same handling rules apply).
 ```bash
 pnpm run test:unit                    # server unit tests (node:test)
 pnpm run test:client                  # client unit tests (Vitest)
+pnpm --filter @starter/extension test  # extension unit tests (Vitest, fake chrome)
 pnpm run test:e2e                     # Playwright E2E tests
 pnpm run build                        # build all packages
 ```
@@ -1468,6 +1469,42 @@ Five things the 380px popup does that are easy to break:
   rebuilt on every open, so learning the theme from the worker's answer would
   flash the wrong one several times a day. The media query is guarded on the
   attribute being absent, so it cannot fight an explicit choice.
+
+### Browser activity capture
+
+The extension can record which site has the person's attention and turn the
+untracked stretches into suggested entries. Off by default; Settings → Activity
+requests the optional `tabs` permission from the click that enables it.
+
+The arithmetic is `@starter/core/activity` — pure, epoch-ms, zone-free, so the
+desktop and Android capturers can feed the same `mergeSegments` /
+`buildSuggestions`. The extension half is `background/activity/`
+(capture, IndexedDB store, retention prune, suggestion composition) plus the
+Suggestions screen and the Activity settings section.
+
+Rules that fail quietly if broken:
+
+- **`background/activity/*` imports no runtime, API client or network code**,
+  and imports core only through the `@starter/core/activity/index` subpath —
+  the barrel would pull in the API client. `import-graph.test.ts` walks the
+  real graph. Tracked intervals are fetched in `background/entries.ts` and
+  handed in; an accepted suggestion leaves through `createEntry`, so it gets
+  `source: "extension"` and the offline queue for free.
+- **Accept recomputes first.** The popup's snapshot can be seconds old, and
+  the span may have been tracked on another device since. A plain accept is
+  clipped to what is still untracked; an edited one keeps the person's times
+  but is refused when nothing untracked overlaps them any more.
+- **A dismissal is subtracted exactly like an entry**, never matched by
+  range. A block that grows after being dismissed would otherwise reappear
+  whole; this way only the new activity surfaces.
+- **The open segment is persisted and heartbeated once a minute**, and one
+  whose `lastSeen` is over three minutes old is closed AT `lastSeen`. The
+  heartbeat never opens a segment — only an event says attention is somewhere.
+- **Everything is scoped `<userId>:<workspaceId>`** (from resolved settings).
+  A new scope deletes every other scope's rows; `forgetSession()` deletes all
+  of it and forgets the scope, so nothing records until someone signs in.
+  No server changes and no sync events: nothing leaves the device until an
+  entry is accepted.
 
 ### Browser extension build modes
 

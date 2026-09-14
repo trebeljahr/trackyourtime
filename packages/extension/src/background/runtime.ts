@@ -57,6 +57,7 @@ import {
   type StoredSession,
 } from "../lib/session";
 import { clearWebSessionCookie, readWebSessionToken } from "../lib/web-session";
+import { deleteAllActivity } from "./activity/capture";
 import { renderBadge } from "./badge";
 import {
   noteRemoteActivity,
@@ -1146,6 +1147,11 @@ export async function forgetSession(
   await clearOptimisticEntries();
   // The watcher's ownership claim names an entry in the account being left.
   await resetIdleWatcher();
+  // Captured activity, filing rules and dismissals are one person's, in one
+  // workspace — cleared for the same reason the queue is, and the scope with
+  // them so nothing more is recorded until somebody signs in again. A storage
+  // failure must not keep the token alive, so it is swallowed.
+  await deleteAllActivity({ forgetScope: true }).catch(() => undefined);
 
   // Deliberate on an explicit sign-out: signing out is synced, so the web app's
   // cookie goes too. NOT done when the server merely rejected the token — that

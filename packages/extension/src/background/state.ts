@@ -20,10 +20,15 @@ import {
   type TimeEntry,
 } from "@starter/core";
 import { loadServerInfo } from "../lib/config";
-import type { BackgroundState } from "../lib/messaging";
+import type { ActivitySnapshot, BackgroundState } from "../lib/messaging";
+import { setActivityScope } from "./activity/capture";
 import { hasServerAccess } from "../lib/server-access";
 import { fetchClients, fetchProjects, fetchTags, fetchTasks } from "./catalog";
-import { cachedEntryPage, resolveEntryPage } from "./entries";
+import {
+  cachedEntryPage,
+  resolveActivitySnapshot,
+  resolveEntryPage,
+} from "./entries";
 import { fetchFavorites, fetchRecents } from "./favorites";
 import { pendingIdle } from "./idle-state";
 import {
@@ -115,7 +120,10 @@ const resolveServerFacts = async (
   pendingSync: await pendingSyncCount(),
 });
 
-const signedOutState = (facts: ServerFacts): BackgroundState => ({
+const signedOutState = (
+  facts: ServerFacts,
+  activity: ActivitySnapshot,
+): BackgroundState => ({
   ...facts,
   signedIn: false,
   sessionSource: null,
@@ -139,6 +147,7 @@ const signedOutState = (facts: ServerFacts): BackgroundState => ({
   devices: null,
   descriptions: null,
   descriptionsFor: null,
+  activity,
 });
 
 /**
@@ -193,7 +202,10 @@ export async function buildState(): Promise<BackgroundState> {
   // with no session reaches for, so the menu must work before sign-in.
   const webUrl = await resolveWebUrl();
   if (!current.session) {
-    return signedOutState(await resolveServerFacts(current.apiUrl, webUrl));
+    return signedOutState(
+      await resolveServerFacts(current.apiUrl, webUrl),
+      await resolveActivitySnapshot("tracker"),
+    );
   }
 
   // Opening the popup is the moment someone is looking at the status, so it is
@@ -284,12 +296,28 @@ export async function buildState(): Promise<BackgroundState> {
   // server as answering on every failure.
   const settings = await localRead(resolveSettings, getCachedSettings());
 
+  // Whose activity capture files under. Settings are the one read that names
+  // both the user and the workspace, and a change here wipes the previous
+  // scope's rows — see `setActivityScope`.
+  if (settings !== null) {
+    await setActivityScope(settings.userId, settings.workspaceId).catch(() => undefined);
+  }
+
   // `softRead`, because this one genuinely hits the network once the window's
   // TTL has expired.
   const entries =
     view === "entries"
       ? await softRead(resolveEntryPage, entriesFallback)
       : null;
+
+  // Local reads plus, on the Suggestions screen, one `entries.list` for the
+  // tracked time to subtract. `localRead`, not `softRead`: offline that fetch
+  // degrades to the cached window inside `trackedIntervalsBetween`, so a
+  // success here is no evidence the server answered.
+  const activity = await localRead(
+    () => resolveActivitySnapshot(view),
+    await resolveActivitySnapshot("tracker"),
+  );
 
   // One read answering is enough to call the server reachable; only a snapshot
   // where nothing got through and something failed in transport is "offline".
@@ -302,7 +330,10 @@ export async function buildState(): Promise<BackgroundState> {
     // of looping on an error the user cannot act on. The web app's cookie is
     // left alone: an expired token is not a request to sign the browser out.
     await forgetSession();
-    return signedOutState(await resolveServerFacts(current.apiUrl, webUrl));
+    return signedOutState(
+      await resolveServerFacts(current.apiUrl, webUrl),
+      await resolveActivitySnapshot("tracker"),
+    );
   }
 
   return {
@@ -343,5 +374,6 @@ export async function buildState(): Promise<BackgroundState> {
     // blank a list the user is looking at.
     descriptions: getCachedDescriptions()?.rows ?? null,
     descriptionsFor: getCachedDescriptions()?.query ?? null,
+    activity,
   };
 }

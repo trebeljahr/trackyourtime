@@ -6,12 +6,17 @@ import {
   type JSX,
   type KeyboardEvent,
 } from "react";
-import type { BackgroundState, SettingsPatch } from "../lib/messaging";
+import type {
+  ActivitySettings,
+  BackgroundState,
+  SettingsPatch,
+} from "../lib/messaging";
 import { Header } from "./header";
 import { Section } from "./accordion";
 import { describeSync } from "./sync-label";
 import type { SettingsSection } from "./route";
 import { AccountSection, accountHint } from "./settings/account-section";
+import { ActivitySection, activityHint } from "./settings/activity-section";
 import { DevicesSection, devicesHint } from "./settings/devices-section";
 import { GeneralSection, generalHint } from "./settings/general-section";
 import { IdleSection, idleHint } from "./settings/idle-section";
@@ -56,6 +61,9 @@ export type SettingsScreenProps = {
     origin: string,
     discardUnsent: boolean,
   ) => Promise<SetServerOutcome>;
+  onSaveActivitySettings: (patch: Partial<ActivitySettings>) => Promise<boolean>;
+  onRequestActivityPermission: () => Promise<boolean>;
+  onWipeActivity: () => Promise<boolean>;
 };
 
 /** How long a section header says "Saved" after a successful write. */
@@ -75,6 +83,9 @@ export function SettingsScreen({
   onRevokeOtherDevices,
   onSignOut,
   onSetServer,
+  onSaveActivitySettings,
+  onRequestActivityPermission,
+  onWipeActivity,
 }: SettingsScreenProps): JSX.Element {
   const [saved, setSaved] = useState<SettingsSection | null>(null);
   const flashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,6 +248,32 @@ export function SettingsScreen({
             onRevoke={onRevokeDevice}
             onRevokeOthers={onRevokeOtherDevices}
             onSignOut={onSignOut}
+          />
+        </Section>
+
+        <hr className="rule" />
+
+        <Section
+          title="Activity"
+          hint={activityHint(state.activity)}
+          open={section === "activity"}
+          onToggle={() => toggle("activity")}
+          saved={saved === "activity"}
+          testId="settings-activity"
+        >
+          <ActivitySection
+            activity={state.activity}
+            onSave={async (patch) => {
+              const ok = await onSaveActivitySettings(patch);
+              if (ok) {
+                if (flashRef.current !== null) clearTimeout(flashRef.current);
+                setSaved("activity");
+                flashRef.current = setTimeout(() => setSaved(null), SAVED_FLASH_MS);
+              }
+              return ok;
+            }}
+            onRequestPermission={onRequestActivityPermission}
+            onWipe={onWipeActivity}
           />
         </Section>
 
