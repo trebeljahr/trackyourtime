@@ -13,7 +13,19 @@ import type { TimeEntry } from "./types.js";
 // ── Server → Client ──────────────────────────────────────────────────
 
 export type ServerToClientMessage =
-  | { type: "tt:sync"; event: SyncEvent; originId?: string };
+  | {
+      type: "tt:sync";
+      event: SyncEvent;
+      originId?: string;
+      /**
+       * The workspace the event happened in. A person's room receives every
+       * workspace they belong to, so a client showing workspace A must be
+       * able to tell that an `entry.upserted` belongs to B and not patch it
+       * into A's lists. Optional: `publishToUser` events are about the person
+       * (their own preferences, a device) and belong to no workspace.
+       */
+      workspaceId?: string;
+    };
 
 // ── tracktime realtime sync ──────────────────────────────────────────
 //

@@ -122,6 +122,12 @@ export type ReportGroupBy =
    * `totalSec` — that is correct, not a bug, and the UI has to say so.
    */
   | "tag"
+  /**
+   * One group per AUTHOR. Only ever groups rows the caller may already see —
+   * the author scope is applied to the match before any grouping — so a
+   * member who may not see colleagues' time gets exactly one group: their own.
+   */
+  | "member"
   | "day"
   | "week"
   | "month";

@@ -15,6 +15,12 @@ export type ReportFilters = {
    * Empty or absent means "no tag filter" — never "only untagged entries".
    */
   tagIds?: string[];
+  /**
+   * Keep only entries authored by one of these user ids. Intersected with the
+   * caller's author scope on the server — it can narrow what a report covers,
+   * never widen it.
+   */
+  memberIds?: string[];
   search?: string;
   /** IANA zone days are bucketed in. Defaults to UTC when absent. */
   timeZone?: string;
@@ -35,6 +41,19 @@ export type TrackedSpan = {
 
 export type SummaryReportInput = ReportFilters & { groupBy: ReportGroupBy };
 
+/**
+ * Money in a report is either the real figure or `null` — never a partial sum.
+ *
+ * A report is `moneyVisible: false` exactly when it spans colleagues' time
+ * while the caller may not see what that time is worth
+ * (`canViewOthersTime && !canViewOthersMoney`). There is no honest number for
+ * a total in that case: summing only the caller's own earnings under a total
+ * that covers everybody's hours reads as "the team earned this", and zeroing
+ * it reads as "nobody billed anything". So every money field is withheld as
+ * `null`, and clients render a dash rather than inventing a figure.
+ */
+export type ReportMoney = number | null;
+
 export type SummaryGroup = {
   /** Group identity — project/client/task id, or a date key for time buckets. */
   key: string;
@@ -42,7 +61,8 @@ export type SummaryGroup = {
   color: string | null;
   seconds: number;
   billableSec: number;
-  amount: number;
+  /** `null` when the report's money is withheld — see {@link ReportMoney}. */
+  amount: ReportMoney;
 };
 
 export type SummaryTimelinePoint = {
@@ -55,10 +75,12 @@ export type SummaryTimelinePoint = {
 export type SummaryReportResult = {
   totalSec: number;
   billableSec: number;
-  totalAmount: number;
+  totalAmount: ReportMoney;
   currency: string;
   groups: SummaryGroup[];
   timeline: SummaryTimelinePoint[];
+  /** False when every money field above is withheld as `null`. */
+  moneyVisible: boolean;
 };
 
 export type DetailedReportInput = ReportFilters & {
@@ -72,15 +94,22 @@ export type DetailedEntry = TimeEntry & {
   projectColor: string | null;
   clientName: string | null;
   taskName: string | null;
-  amount: number;
+  /**
+   * `null` when the caller may not see this row's money — a colleague's
+   * entry for a member without `canViewOthersMoney`. Never `0` for that case:
+   * zero is what genuinely unbillable time earns.
+   */
+  amount: number | null;
 };
 
 export type DetailedReportResult = {
   entries: DetailedEntry[];
   nextCursor?: string;
   totalSec: number;
-  totalAmount: number;
+  totalAmount: ReportMoney;
   currency: string;
+  /** False when `totalAmount` and every row's money are withheld. */
+  moneyVisible: boolean;
 };
 
 export type WeeklyReportInput = ReportFilters & {
@@ -104,6 +133,11 @@ export type WeeklyReportResult = {
   rows: WeeklyReportRow[];
   dayTotals: number[];
   totalSec: number;
+  /**
+   * The grid carries no money, but states the same flag as its siblings so a
+   * client can decide once, per report scope, whether to offer money columns.
+   */
+  moneyVisible: boolean;
 };
 
 /** Rows of a CSV export, already stringified by the server. */

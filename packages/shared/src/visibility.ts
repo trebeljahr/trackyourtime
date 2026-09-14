@@ -9,10 +9,13 @@
 // without a database, and so the clients can reason about a stripped payload
 // instead of rendering `hourlyRate: null` as "€0/h".
 import type { BudgetProgress } from "./budgets.js";
-import type { CatalogRemoveResult, Visibility } from "./types.js";
-import type { TimeEntry } from "./types.js";
+import type {
+  CatalogRemoveResult,
+  TimeEntry,
+  Visibility,
+  WorkspaceRole,
+} from "./types.js";
 import type { DetailedEntry } from "./reports.js";
-import { entryAmount } from "./rates.js";
 
 /** The two flags, without the `userId` that only a live request has. */
 export type VisibilityGrant = {
@@ -55,11 +58,10 @@ export function projectEntryForVisibility(
 /**
  * The same, for a report row.
  *
- * `amount` is RECOMPUTED from the stripped rate rather than left as it was —
- * copying it through would hand back the exact number the rate strip exists
- * to withhold. It becomes 0, which a caller must not present as "this work
- * earned nothing": the REST layer refuses money-bearing report routes
- * outright rather than serving a page of honest-looking zeros.
+ * `amount` is withheld as `null` alongside the rate, never copied through —
+ * that would hand back the exact number the rate strip exists to withhold —
+ * and never recomputed to `0`, which is what genuinely unbillable time earns
+ * and what a spreadsheet summing the column would silently believe.
  */
 export function projectDetailedEntry(
   entry: DetailedEntry,
@@ -67,11 +69,47 @@ export function projectDetailedEntry(
 ): DetailedEntry | null {
   if (!canSeeEntry(visibility, entry.authorId)) return null;
   if (canSeeMoneyFor(visibility, entry.authorId)) return entry;
-  return {
-    ...entry,
-    hourlyRate: null,
-    amount: entryAmount(entry.durationSec, null),
-  };
+  return { ...entry, hourlyRate: null, amount: null };
+}
+
+/**
+ * Whether a report scoped to this caller may carry money at all.
+ *
+ * False in exactly one of the four combinations: the report spans colleagues'
+ * time (`canViewOthersTime`) while their money is closed. A caller restricted
+ * to their own time sees only their own rows, so every amount is their own;
+ * a caller with both flags may see all of it. The same predicate REST's
+ * `requireMoneyVisibility` refuses on — tRPC projects instead of refusing,
+ * because the web app has time to show even when it has no money to show.
+ */
+export function reportMoneyVisible(visibility: Visibility): boolean {
+  return !(visibility.canViewOthersTime && !visibility.canViewOthersMoney);
+}
+
+/**
+ * May this member use invoicing in this workspace — list, read, create,
+ * change or delete invoices?
+ *
+ * An invoice is money end to end AND it merges whoever's billable hours fall
+ * in its range into one line, so the only caller it is honest to hand one to
+ * is somebody who may already see every colleague's time and every
+ * colleague's money. Role is required on top of both flags because issuing a
+ * document to a customer is a workspace decision, not a visibility one: a
+ * plain member with both flags open may read the numbers in a report, but
+ * does not bill the client.
+ *
+ * The owner of a personal workspace has both flags forced on, so solo use is
+ * unaffected.
+ */
+export function canUseInvoices(
+  role: WorkspaceRole,
+  visibility: Visibility,
+): boolean {
+  return (
+    (role === "owner" || role === "admin") &&
+    visibility.canViewOthersTime &&
+    visibility.canViewOthersMoney
+  );
 }
 
 /**

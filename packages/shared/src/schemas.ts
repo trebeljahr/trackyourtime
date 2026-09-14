@@ -93,6 +93,7 @@ export const reportGroupBySchema = z.enum([
   "client",
   "task",
   "tag",
+  "member",
   "day",
   "week",
   "month",
@@ -470,6 +471,15 @@ export const reportFiltersSchema = z.object({
   taskIds: z.array(idString).optional(),
   /** FILTER: keep entries carrying at least one of these tags (OR). */
   tagIds: z.array(idString).max(20).optional(),
+  /**
+   * FILTER: keep entries authored by one of these user ids (OR).
+   *
+   * Narrows the caller's author scope and never widens it: the server
+   * intersects it with what the caller may see, so a member restricted to
+   * their own rows who names a colleague gets an empty report, not an error
+   * that would confirm the colleague has time here.
+   */
+  memberIds: z.array(idString).max(100).optional(),
   billable: z.boolean().optional(),
   search: z.string().max(200).optional(),
   /**
@@ -486,6 +496,8 @@ export const reportFiltersSchema = z.object({
  */
 export const trackedSpanSchema = z.object({
   timeZone: z.string().max(64).optional(),
+  /** Same meaning, and the same intersection, as on `reportFiltersSchema`. */
+  memberIds: z.array(idString).max(100).optional(),
 });
 
 export const summaryReportSchema = reportFiltersSchema.extend({
