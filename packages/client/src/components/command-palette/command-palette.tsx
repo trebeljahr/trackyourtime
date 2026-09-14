@@ -221,7 +221,7 @@ function PaletteBody({
         value={search}
         onValueChange={setSearch}
         placeholder={t("palette.placeholder")}
-        onKeyDown={(event) => {
+        onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
           // Backspace on an empty confirmation goes back, like a breadcrumb.
           if (discardPage && event.key === "Backspace" && search === "") {
             event.preventDefault();
