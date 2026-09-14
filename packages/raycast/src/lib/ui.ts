@@ -39,6 +39,20 @@ export const isAlreadyStopped = (error: unknown): boolean =>
   error.httpStatus === 404 &&
   error.message === "No running timer";
 
+/**
+ * "Stopped your timer in Acme", when a start stopped a timer that ran in
+ * another workspace.
+ *
+ * The timer is the person's, so a start anywhere stops it wherever it runs.
+ * Inside one workspace that is the rule everybody already expects; across two
+ * it is an hour of work quietly ended somewhere the user is not looking, so
+ * every start surface says so.
+ */
+export const replacedNotice = (entry: {
+  replaced?: { workspaceName: string } | null;
+}): string | undefined =>
+  entry.replaced ? `Stopped your timer in ${entry.replaced.workspaceName}` : undefined;
+
 /** True when the failure means "your token is gone or no longer valid". */
 export const isAuthFailure = (error: unknown): boolean =>
   error instanceof NotSignedInError ||

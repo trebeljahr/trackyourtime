@@ -6,7 +6,7 @@ import {
   type IssuedSession,
 } from "@starter/core";
 import { clearCache } from "./local-cache.js";
-import { clearOverlay } from "./overlay.js";
+import { clearEveryOverlay } from "./overlay.js";
 import { apiUrl } from "./preferences.js";
 
 /**
@@ -129,8 +129,13 @@ export async function signOut(): Promise<void> {
   // that made them, so the next person to pair can neither replay them nor
   // read them — the timer surfaces only say how many there are and whose they
   // are not. Signing back in picks them up.
+  //
+  // Both are per workspace, and every workspace's copy goes. The workspace
+  // choice itself stays: it is stamped with this account, so the next account
+  // cannot read it, and the names in it are what describe this account's held
+  // rows when it signs back in.
   await clearCache();
-  await clearOverlay();
+  await clearEveryOverlay();
 }
 
 /**

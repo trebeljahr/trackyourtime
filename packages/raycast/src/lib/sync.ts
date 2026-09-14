@@ -16,10 +16,12 @@ import { useEffect, useRef, useState } from "react";
 import {
   createSyncClient,
   resolveSyncUrl,
+  syncEventReach,
   type SyncEvent,
 } from "@starter/core";
 import { getStoredSession } from "./auth.js";
 import { apiUrl } from "./preferences.js";
+import { activeWorkspaceId } from "./workspace.js";
 
 /**
  * Whether an event changes what the timer surfaces show. Catalog renames and
@@ -93,8 +95,22 @@ export function useSyncRevalidate(
       const created = createSyncClient({
         url,
         token: session.token,
-        onEvent: (event) => {
-          if (affectsTimer(event)) latest.current();
+        onEvent: (event, _originId, eventWorkspaceId) => {
+          if (!affectsTimer(event)) return;
+          if (eventWorkspaceId === undefined) {
+            latest.current();
+            return;
+          }
+          // The socket carries every workspace the person is in. Another
+          // workspace's catalog or favorites say nothing about the screen;
+          // its timer events still do, because the timer is the person's.
+          void activeWorkspaceId()
+            .catch(() => null)
+            .then((active) => {
+              if (syncEventReach(event, eventWorkspaceId, active) !== "ignore") {
+                latest.current();
+              }
+            });
         },
         // Reported so the cheaper pollers underneath can stand down while the
         // socket is carrying, and pick straight back up when it drops.

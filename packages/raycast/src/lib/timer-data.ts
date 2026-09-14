@@ -8,16 +8,23 @@
  */
 import {
   entryDurationSec,
+  isOwnEntry,
+  isTempId,
   quickStartKey,
   reconcileRunning,
   toQuickStart,
   type DetailedEntry,
   type DetailedFavorite,
+  type TimeEntry,
+  type WorkspaceSummary,
 } from "@starter/core";
 import type { ProjectWithStats, TrackYourTime } from "./api.js";
+import { getStoredUserId } from "./auth.js";
 import { isoDaysAgo } from "./format.js";
+import { loadCache } from "./local-cache.js";
 import { pendingCounts } from "./offline.js";
 import { loadTimerEcho } from "./storage.js";
+import { activeWorkspaceId, workspaceNameLookup } from "./workspace.js";
 
 /** How far back the "continue" shortlist looks. */
 export const RECENT_DAYS = 7;
@@ -41,11 +48,61 @@ export type TimerSnapshot = {
    */
   pending: number;
   /**
-   * Rows queued by a different account on this Mac. Never replayed under this
-   * session and never deleted — somebody tracked that time.
+   * Rows queued by a different account, for another server, or in a workspace
+   * this account has left. Never replayed under this session and never
+   * deleted — somebody tracked that time.
    */
   foreign: number;
+  /** How many of `foreign` were queued in a workspace this account left. */
+  left: number;
+  /** Every workspace this account belongs to; a switcher shows with two or more. */
+  workspaces: WorkspaceSummary[];
+  /** The workspace this snapshot was read from. */
+  activeWorkspaceId: string | null;
+  /**
+   * The running timer's workspace name, when it runs in a workspace other
+   * than the chosen one. The timer is the person's, so it shows wherever it
+   * runs — and says where, because this workspace's projects are not its own.
+   */
+  runningWorkspaceName: string | null;
 };
+
+/**
+ * Who this Mac is signed in as: the stored id, or the one the last settings
+ * read named for a session stored before ids were.
+ */
+export const resolveUserId = async (): Promise<string | null> =>
+  (await getStoredUserId()) ?? (await loadCache()).settings?.userId ?? null;
+
+/**
+ * The signed-in person's own entries.
+ *
+ * A member allowed to see colleagues' time gets their rows from the same
+ * `entries.list`, and every Raycast surface is personal: the menu bar total,
+ * the running clock, "Continue". An entry this Mac invented offline counts as
+ * its own whatever it is stamped with — nobody else could have made it here.
+ */
+export const ownOnly = (
+  entries: readonly DetailedEntry[],
+  userId: string | null,
+): DetailedEntry[] =>
+  entries.filter(
+    (entry) => isTempId(entry.id) || entry.authorId === "" || isOwnEntry(entry, userId),
+  );
+
+/**
+ * A running entry from another workspace, shaped for a row. Its project and
+ * task are that workspace's, which this Mac's catalog cannot name, so it is
+ * labelled by its description and the workspace it runs in.
+ */
+const elsewhere = (entry: TimeEntry): DetailedEntry => ({
+  ...entry,
+  projectName: null,
+  projectColor: null,
+  clientName: null,
+  taskName: null,
+  amount: 0,
+});
 
 const startOfToday = (): number => {
   const date = new Date();
@@ -98,7 +155,13 @@ export const loadTimerSnapshot = async (
   // below fall back to what this Mac already knows.
   await api.sync().catch(() => undefined);
 
-  const [{ entries }, favorites, projects] = await Promise.all([
+  // Before the reads, so a chosen workspace the account has since left is
+  // replaced by the default before anything is asked of it.
+  const workspaces = await api.workspaces().catch(() => []);
+  const workspaceId = await activeWorkspaceId();
+  const userId = await resolveUserId();
+
+  const [{ entries: fetched }, favorites, projects] = await Promise.all([
     api.list({
       from: isoDaysAgo(RECENT_DAYS),
       to: new Date(now + 60_000).toISOString(),
@@ -107,6 +170,8 @@ export const loadTimerSnapshot = async (
     api.favorites(),
     api.projects(),
   ]);
+
+  const entries = ownOnly(fetched, userId);
 
   const dayStart = startOfToday();
   const todaySec = entries.reduce((total, entry) => {
@@ -118,15 +183,25 @@ export const loadTimerSnapshot = async (
   // A read that started before a stop can still land after it, and would then
   // put the stopped timer back on screen. The echo settles that by time: a
   // transition recorded after `now` outranks anything in this response.
+  let windowRunning = entries.find((entry) => entry.end === null) ?? null;
+  let runningWorkspaceName: string | null = null;
+  if (windowRunning === null) {
+    // Nothing runs in THIS workspace's window, but the timer is per person:
+    // a start in another workspace — here, in the web app, on a phone — is
+    // this person's running timer. `entries.current` answers wherever it runs.
+    const current = await api.current().catch(() => null);
+    if (current !== null && current.workspaceId !== workspaceId && current.workspaceId !== "") {
+      windowRunning = elsewhere(current);
+      runningWorkspaceName = (await workspaceNameLookup())(current.workspaceId);
+    }
+  }
+
   const { running, refetch } = reconcileRunning(
-    {
-      running: entries.find((entry) => entry.end === null) ?? null,
-      fetchedAt: now,
-    },
+    { running: windowRunning, fetchedAt: now },
     await loadTimerEcho(),
   );
 
-  const { mine, foreign } = await pendingCounts();
+  const { mine, foreign, left } = await pendingCounts();
 
   return {
     running,
@@ -138,6 +213,10 @@ export const loadTimerSnapshot = async (
     refetch,
     pending: mine,
     foreign,
+    left,
+    workspaces,
+    activeWorkspaceId: workspaceId,
+    runningWorkspaceName: running?.id === windowRunning?.id ? runningWorkspaceName : null,
   };
 };
 

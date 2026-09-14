@@ -43,6 +43,7 @@ import { noteTimerEcho } from "./lib/storage.js";
 import {
   describeFailure,
   isAlreadyStopped,
+  replacedNotice,
   showFailureToast,
 } from "./lib/ui.js";
 
@@ -238,6 +239,13 @@ export default function MenuBar(): React.JSX.Element | null {
             icon={Icon.Dot}
             onAction={openTimer}
           />
+          {data?.runningWorkspaceName ? (
+            <MenuBarExtra.Item
+              title={`In ${data.runningWorkspaceName}`}
+              icon={Icon.Building}
+              onAction={openTimer}
+            />
+          ) : null}
           {entryHint(running) ? (
             <MenuBarExtra.Item
               title={entryHint(running) ?? ""}
@@ -349,11 +357,13 @@ export default function MenuBar(): React.JSX.Element | null {
               onAction={() => {
                 void act(async () => {
                   const api = await getTrackYourTime();
-                  await api.startQuick(repairQuickStart(favorite));
+                  const started = await api.startQuick(repairQuickStart(favorite));
                   await showToast({
                     style: Toast.Style.Success,
                     title: "Timer started",
-                    message: quickStartLabel(favorite),
+                    message: [quickStartLabel(favorite), replacedNotice(started)]
+                      .filter(Boolean)
+                      .join(" · "),
                   });
                 }, "Could not start the timer");
               }}
@@ -373,11 +383,13 @@ export default function MenuBar(): React.JSX.Element | null {
               onAction={() => {
                 void act(async () => {
                   const api = await getTrackYourTime();
-                  await api.continue(entry.id, toQuickStart(entry));
+                  const started = await api.continue(entry.id, toQuickStart(entry));
                   await showToast({
                     style: Toast.Style.Success,
                     title: "Timer started",
-                    message: entryLabel(entry),
+                    message: [entryLabel(entry), replacedNotice(started)]
+                      .filter(Boolean)
+                      .join(" · "),
                   });
                 }, "Could not start the timer");
               }}
@@ -402,8 +414,12 @@ export default function MenuBar(): React.JSX.Element | null {
           ) : null}
           {foreign > 0 ? (
             <MenuBarExtra.Item
-              title={`${foreign} from another account`}
-              subtitle="Sign in as that account to send them"
+              title={
+                (data?.left ?? 0) === foreign
+                  ? `${foreign} from a workspace you left`
+                  : `${foreign} for another account, server or workspace`
+              }
+              subtitle="Kept, never sent from here — open the Timer to review"
               icon={Icon.Person}
               onAction={openTimer}
             />

@@ -10,7 +10,7 @@ import {
 import { useState } from "react";
 import { getTrackYourTime } from "../lib/api.js";
 import { webLink } from "../lib/preferences.js";
-import { refreshMenuBar, showFailureToast } from "../lib/ui.js";
+import { refreshMenuBar, replacedNotice, showFailureToast } from "../lib/ui.js";
 import { DescriptionPicker } from "./description-picker.js";
 import {
   NONE,
@@ -69,7 +69,9 @@ export function StartTimer(): React.JSX.Element {
       await showToast({
         style: Toast.Style.Success,
         title: "Timer started",
-        message: entry.description || "No description",
+        message: [entry.description || "No description", replacedNotice(entry)]
+          .filter(Boolean)
+          .join(" · "),
       });
       await popToRoot();
     } catch (error) {

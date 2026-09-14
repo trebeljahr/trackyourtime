@@ -9,6 +9,10 @@
  *
  * Read on every render of every surface, so it is one small value and never a
  * network call.
+ *
+ * One overlay per workspace, like the read cache: the local copies of queued
+ * edits and creates are rows of the workspace they were made in, and applying
+ * them to another workspace's list would show A's work under B.
  */
 import {
   applyOverlay,
@@ -26,6 +30,7 @@ import {
   type OfflineOverlay,
 } from "@starter/core";
 import { raycastStorage } from "./storage.js";
+import { clearEveryWorkspace, workspaceKey } from "./workspace.js";
 
 export {
   applyOverlay,
@@ -36,10 +41,9 @@ export {
 
 const OVERLAY_KEY = "trackyourtime.offline.overlay";
 
-/** Never throws: a surface that cannot read this must still draw the server's answer. */
-export const loadOverlay = async (): Promise<OfflineOverlay> => {
+const loadOverlayAt = async (key: string): Promise<OfflineOverlay> => {
   try {
-    const raw = await raycastStorage.getItem(OVERLAY_KEY);
+    const raw = await raycastStorage.getItem(key);
     if (raw === null) return emptyOverlay();
     return parseOverlay(JSON.parse(raw) as unknown);
   } catch {
@@ -47,18 +51,34 @@ export const loadOverlay = async (): Promise<OfflineOverlay> => {
   }
 };
 
-const save = async (overlay: OfflineOverlay): Promise<void> => {
+/** Never throws: a surface that cannot read this must still draw the server's answer. */
+export const loadOverlay = async (): Promise<OfflineOverlay> => {
   try {
-    if (isOverlayEmpty(overlay)) await raycastStorage.removeItem(OVERLAY_KEY);
-    else await raycastStorage.setItem(OVERLAY_KEY, JSON.stringify(overlay));
+    return await loadOverlayAt(await workspaceKey(OVERLAY_KEY));
+  } catch {
+    return emptyOverlay();
+  }
+};
+
+const saveAt = async (key: string, overlay: OfflineOverlay): Promise<void> => {
+  try {
+    if (isOverlayEmpty(overlay)) await raycastStorage.removeItem(key);
+    else await raycastStorage.setItem(key, JSON.stringify(overlay));
   } catch {
     /* storage unavailable — the queue still holds the work itself */
   }
 };
 
+const save = async (overlay: OfflineOverlay): Promise<void> =>
+  saveAt(await workspaceKey(OVERLAY_KEY), overlay);
+
+/** One key for the read and the write — see `remember` in local-cache.ts. */
 const edit = async (
   change: (overlay: OfflineOverlay) => OfflineOverlay,
-): Promise<void> => save(change(await loadOverlay()));
+): Promise<void> => {
+  const key = await workspaceKey(OVERLAY_KEY);
+  await saveAt(key, change(await loadOverlayAt(key)));
+};
 
 export const noteOptimisticEntry = (entry: DetailedEntry): Promise<void> =>
   edit((overlay) => withOptimisticEntry(overlay, entry));
@@ -84,13 +104,21 @@ export const reconcileOverlay = async ({
   drained: boolean;
 }): Promise<void> => {
   if (drained) {
-    await save(emptyOverlay());
+    // Every workspace's: a drained queue can have replayed rows made in a
+    // workspace other than the one chosen now, and their local copies must not
+    // outlive them there either.
+    await clearEveryOverlay();
     return;
   }
   await edit((overlay) => withoutResolved(overlay, resolved));
 };
 
+/** The current workspace's overlay. */
 export const clearOverlay = (): Promise<void> => save(emptyOverlay());
+
+/** Every workspace's overlay — for a sign-out. */
+export const clearEveryOverlay = (): Promise<void> =>
+  clearEveryWorkspace(OVERLAY_KEY);
 
 /** True when this entry only exists here — the server has never heard of it. */
 export const isLocalEntry = (entry: { id: string }): boolean =>

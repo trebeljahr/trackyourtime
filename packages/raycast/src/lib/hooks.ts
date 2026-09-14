@@ -4,6 +4,57 @@ import { reconcileRunning, type TimerEcho } from "@starter/core";
 import { getTrackYourTime, type TrackYourTime } from "./api.js";
 import { loadTimerEcho } from "./storage.js";
 import { isAuthFailure, showFailureToast } from "./ui.js";
+import { activeWorkspaceId, onWorkspaceChanged } from "./workspace.js";
+
+/**
+ * How often a surface re-reads the chosen workspace. A local read; a switch
+ * made in another command reaches a menu bar that stays loaded within this.
+ */
+const WORKSPACE_POLL_MS = 5000;
+
+/**
+ * The workspace this command reads from, re-read from storage so a switch
+ * made anywhere in Raycast re-keys every loader. `resolved` is false until the
+ * first read, and no loader runs before it.
+ */
+export function useActiveWorkspaceId(): {
+  workspaceId: string | null;
+  resolved: boolean;
+} {
+  const [state, setState] = useState<{
+    workspaceId: string | null;
+    resolved: boolean;
+  }>({ workspaceId: null, resolved: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    const read = (): void => {
+      void activeWorkspaceId()
+        .catch(() => null)
+        .then((workspaceId) => {
+          if (cancelled) return;
+          setState((previous) =>
+            previous.resolved && previous.workspaceId === workspaceId
+              ? previous
+              : { workspaceId, resolved: true },
+          );
+        });
+    };
+    read();
+    const id = setInterval(read, WORKSPACE_POLL_MS);
+    const unsubscribe = onWorkspaceChanged(read);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      unsubscribe();
+    };
+  }, []);
+
+  return state;
+}
+
+/** A loaded value and the workspace its requests were addressed to. */
+type Tagged<T> = { workspaceId: string | null; value: T };
 
 export type ApiHookResult<T> = {
   data: T | undefined;
@@ -20,19 +71,34 @@ export type ApiHookResult<T> = {
  *
  * `cacheKey` namespaces the cached value — two loaders in one command must
  * not share a slot.
+ *
+ * The chosen workspace is part of every slot. `useCachedPromise` persists
+ * what it painted across launches, so a shared slot would paint workspace A's
+ * projects, entries and totals the instant a command opened pointed at B —
+ * and keep them there for as long as B's first read took, or forever offline.
  */
 export function useApi<T>(
   cacheKey: string,
   loader: (api: TrackYourTime) => Promise<T>,
   options?: { execute?: boolean },
 ): ApiHookResult<T> {
+  const workspace = useActiveWorkspaceId();
+  const scopedKey = `${cacheKey}@${workspace.workspaceId ?? "none"}`;
   const { data, isLoading, error, revalidate } = useCachedPromise(
     // The key is passed as an argument, not closed over, because that is what
     // `useCachedPromise` hashes into its cache slot.
-    async (_key: string): Promise<T> => loader(await getTrackYourTime()),
-    [cacheKey],
+    async (_key: string): Promise<Tagged<T>> => {
+      // Read before the load: the tag says which workspace the requests were
+      // addressed to, even when the load itself moves the choice.
+      const workspaceId = await activeWorkspaceId().catch(() => null);
+      return { workspaceId, value: await loader(await getTrackYourTime()) };
+    },
+    [scopedKey],
     {
-      execute: options?.execute,
+      execute: workspace.resolved && (options?.execute ?? true),
+      // Kept for a revalidation of the same slot, where it stops a flicker.
+      // Across a workspace change the previous data is the OTHER workspace's,
+      // which is what the tag check below refuses to hand out.
       keepPreviousData: true,
       onError: (failure) => {
         void showFailureToast(failure, "Could not reach Track Your Time");
@@ -41,7 +107,10 @@ export function useApi<T>(
   );
 
   return {
-    data,
+    data:
+      data !== undefined && workspace.resolved && data.workspaceId === workspace.workspaceId
+        ? data.value
+        : undefined,
     isLoading,
     error,
     signedOut: isAuthFailure(error),

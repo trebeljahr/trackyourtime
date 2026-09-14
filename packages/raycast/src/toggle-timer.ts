@@ -8,8 +8,10 @@ import { entryLabel, RECENT_DAYS } from "./lib/timer-data.js";
 import {
   isAlreadyStopped,
   refreshMenuBar,
+  replacedNotice,
   showFailureToast,
 } from "./lib/ui.js";
+import { ownOnly, resolveUserId } from "./lib/timer-data.js";
 
 /**
  * One hotkey for the whole loop: stop what is running, or pick the last thing
@@ -65,24 +67,33 @@ export default async function ToggleTimer(): Promise<void> {
 
     // The same window the Timer view and the menu bar call "recent", so the
     // entry a hotkey resumes is the one those surfaces show at the top.
+    //
+    // Several rows rather than one, and only this person's: in a shared
+    // workspace the newest entry can be a colleague's, and the hotkey resumes
+    // the work of whoever is pressing it.
     const { entries } = await api.list({
       from: isoDaysAgo(RECENT_DAYS),
       to: new Date().toISOString(),
-      limit: 1,
+      limit: 20,
     });
-    const last = entries[0];
+    const last = ownOnly(entries, await resolveUserId()).find(
+      (entry) => entry.end !== null,
+    );
 
     if (!last) {
       await launchCommand({ name: "timer", type: LaunchType.UserInitiated });
       return;
     }
 
-    await api.continue(last.id, toQuickStart(last));
+    const started = await api.continue(last.id, toQuickStart(last));
     await refreshMenuBar();
     // Labelled from the entry that was continued, not from the one that came
     // back: the list rows are joined with their project and client names, so
     // an entry with no description still reads as something.
-    await showHUD(`▶ Started — ${entryLabel(last)}${await queuedSuffix()}`);
+    const replaced = replacedNotice(started);
+    await showHUD(
+      `▶ Started — ${entryLabel(last)}${replaced ? ` · ${replaced}` : ""}${await queuedSuffix()}`,
+    );
   } catch (error) {
     await showFailureToast(error, "Could not toggle the timer");
   }

@@ -26,6 +26,8 @@ import {
   type OfflineUpdateInput,
   type Project,
   type QuickStart,
+  type StartTimerReplaced,
+  type WorkspaceSummary,
   type Tag,
   type Task,
   type TimeEntry,
@@ -42,12 +44,19 @@ import {
   rememberEntries,
 } from "./local-cache.js";
 import {
+  adoptUnstampedHere,
+  pendingCounts,
   cancelQueuedForTemp,
   enqueueOffline,
   flushOffline,
   getOfflineQueue,
   isTransportFailure,
 } from "./offline.js";
+import {
+  activeWorkspaceId,
+  installWorkspaceList,
+  knownWorkspaces,
+} from "./workspace.js";
 import {
   applyOverlay,
   loadOverlay,
@@ -163,6 +172,15 @@ export type UpdateTagInput = {
   archived?: boolean;
 };
 
+/**
+ * What a start or a continue answers with.
+ *
+ * `replaced` names the timer the start stopped when it ran in ANOTHER
+ * workspace — the timer is the person's, so a start anywhere stops it. Absent
+ * on an offline start, which cannot know.
+ */
+export type StartedEntry = TimeEntry & { replaced?: StartTimerReplaced | null };
+
 export type ListInput = {
   from: string;
   to: string;
@@ -174,7 +192,7 @@ export type ListInput = {
 export type TrackYourTime = {
   /** The running entry, or null when the timer is stopped. */
   current(): Promise<TimeEntry | null>;
-  start(input: StartInput): Promise<TimeEntry>;
+  start(input: StartInput): Promise<StartedEntry>;
   /** Log past work: an entry that is finished the moment it is written. */
   create(input: CreateInput): Promise<TimeEntry>;
   stop(id?: string): Promise<TimeEntry>;
@@ -188,7 +206,7 @@ export type TrackYourTime = {
    * has the row on screen, so it hands the fields over rather than leaving the
    * hotkey dead on a train.
    */
-  continue(id: string, quick?: QuickStart): Promise<TimeEntry>;
+  continue(id: string, quick?: QuickStart): Promise<StartedEntry>;
   /**
    * Start a favorite or a recent.
    *
@@ -196,7 +214,7 @@ export type TrackYourTime = {
    * is the same builder the web tracker and the extension use, so the entry a
    * favorite opens is identical whichever client opened it.
    */
-  startQuick(quick: QuickStart): Promise<TimeEntry>;
+  startQuick(quick: QuickStart): Promise<StartedEntry>;
   favorites(): Promise<DetailedFavorite[]>;
   addFavorite(quick: QuickStart): Promise<DetailedFavorite>;
   removeFavorite(id: string): Promise<{ success: true; id: string }>;
@@ -237,6 +255,15 @@ export type TrackYourTime = {
   updateTag(input: UpdateTagInput): Promise<Tag>;
 
   settings(): Promise<ResolvedSettings>;
+
+  /**
+   * The workspaces this account belongs to.
+   *
+   * A fresh answer is installed as the stored list — which moves the choice
+   * to the default when the chosen workspace is gone — and adopts queue rows
+   * from before workspaces. Offline, the last list this Mac saw.
+   */
+  workspaces(): Promise<WorkspaceSummary[]>;
 
   /**
    * Replay anything queued offline, and report how much of this account's work
@@ -351,7 +378,13 @@ const cachedDescriptions = (
   return [...out.values()].slice(0, input?.limit ?? 20);
 };
 
-const wrap = (client: ApiClient, originId: string): TrackYourTime => {
+const wrap = (
+  client: ApiClient,
+  originId: string,
+  /** Moved by a fresh list that no longer contains the chosen workspace. */
+  setWorkspaceId: (workspaceId: string | null) => void,
+  getWorkspaceId: () => string | null,
+): TrackYourTime => {
   /**
    * One call per queued op, bound to this client.
    *
@@ -377,11 +410,48 @@ const wrap = (client: ApiClient, originId: string): TrackYourTime => {
    * would send every future mutation straight to the queue and this Mac would
    * never talk to the server again.
    */
+  /**
+   * Ask for the membership list and install it. One request per client: every
+   * command builds a fresh client per load, so that is once per snapshot.
+   */
+  let listed: Promise<WorkspaceSummary[]> | null = null;
+  const liveWorkspaces = (): Promise<WorkspaceSummary[]> => {
+    listed ??= (async () => {
+      const list = await client.query<WorkspaceSummary[]>("workspaces.list");
+      const { activeId, moved } = await installWorkspaceList(list);
+      if (moved || getWorkspaceId() === null) setWorkspaceId(activeId);
+      if (activeId !== null) await adoptUnstampedHere(activeId);
+      return list;
+    })();
+    // A failed ask is not cached: the next caller in this process tries again.
+    listed.catch(() => {
+      listed = null;
+    });
+    return listed;
+  };
+
   const drain = async (): Promise<number> => {
     const size = await getOfflineQueue().size();
     if (size === 0) return 0;
 
-    const report = await flushOffline(mutators);
+    // Which workspaces a stamped row may still go to, asked fresh. Without an
+    // answer nothing is sent: a row cannot be checked against nothing, and a
+    // left workspace's refusal (NOT_FOUND) is a permanent rejection the flush
+    // would drop. Everything waits — which is also what a dead network wants.
+    let members: WorkspaceSummary[];
+    try {
+      members = await liveWorkspaces();
+    } catch {
+      // Only this account's sendable rows are "ahead of" a new mutation, as
+      // below. With none, the new mutation goes out live and meets whatever
+      // refused the list — a 401 then reaches the sign-in handling.
+      return (await pendingCounts()).mine;
+    }
+
+    const report = await flushOffline(
+      mutators,
+      new Set(members.map((workspace) => workspace.id)),
+    );
     await reconcileOverlay({
       resolved: report.resolved,
       drained: report.remaining - report.skipped === 0,
@@ -412,6 +482,11 @@ const wrap = (client: ApiClient, originId: string): TrackYourTime => {
     live: () => Promise<T>,
     queued: () => Promise<T>,
   ): Promise<T> => {
+    // A Mac that has never resolved a workspace does so before its first
+    // write: a write naming none lands in the SESSION's active workspace,
+    // which another client moves. Offline this fails and the row is stamped
+    // with nothing, to be adopted by the first workspace a list resolves.
+    if (getWorkspaceId() === null) await liveWorkspaces().catch(() => undefined);
     // A drain that throws is a storage failure, not a refused mutation — the
     // queue itself swallows every server and transport error into its result.
     // Whatever went wrong, we no longer know the queue is empty, so the safe
@@ -976,6 +1051,9 @@ const wrap = (client: ApiClient, originId: string): TrackYourTime => {
         },
       ),
 
+    workspaces: () =>
+      reading(liveWorkspaces, async () => (await knownWorkspaces()) ?? []),
+
     /** Replay what is queued, and report what is left. */
     sync: () => drain(),
   };
@@ -991,11 +1069,25 @@ export async function getTrackYourTime(): Promise<TrackYourTime> {
   const session = await getStoredSession();
   if (!session) throw new NotSignedInError();
 
+  // Resolved from storage once per client, and moved in place by a fresh list.
+  // Every command builds a client per load, so a switch made in another
+  // command reaches this one on its next read.
+  let workspaceId = await activeWorkspaceId();
   const client = createApiClient({
     baseUrl: apiUrl(),
     token: session.token,
     clientId: CLIENT_ID,
+    // Filled into every input that names no workspace. A replayed queue row
+    // names the one it was made in, and keeps it.
+    workspaceId: () => workspaceId,
   });
 
-  return wrap(client, await getOriginId());
+  return wrap(
+    client,
+    await getOriginId(),
+    (next) => {
+      workspaceId = next;
+    },
+    () => workspaceId,
+  );
 }

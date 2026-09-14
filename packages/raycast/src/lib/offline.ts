@@ -19,9 +19,11 @@ import {
   decodeOfflineMutation,
   describeQueuedMutation,
   isForeignTo,
+  isHeldByWorkspace,
   isPermanentRejection,
   isQueuedOn,
   isReplayableBy,
+  isReplayableIn,
   isTransportFailure as isTransportFailureCore,
   OFFLINE_QUEUE_STORAGE_KEY,
   replayOfflineMutation,
@@ -35,11 +37,17 @@ import {
   type QueuedMutationSummary,
   type ReplayIdMap,
   type StoredOfflinePayload,
+  type WorkspaceSummary,
 } from "@starter/core";
 import { NotSignedInError } from "./errors.js";
 import { getStoredUserId } from "./auth.js";
 import { raycastStorage } from "./storage.js";
 import { apiUrl } from "./preferences.js";
+import {
+  activeWorkspaceId,
+  knownWorkspaces,
+  workspaceNameLookup,
+} from "./workspace.js";
 
 let queue: OfflineQueue | null = null;
 
@@ -82,9 +90,49 @@ const ready = (): Promise<unknown> => {
 const isOnThisServer = (row: QueuedMutation): boolean =>
   isQueuedOn(row, apiUrl(), apiUrl());
 
-/** Not this session's to send: another server's row, or another account's. */
-const isElsewhere = (row: QueuedMutation, owner: string | null): boolean =>
-  !isOnThisServer(row) || isForeignTo(row, owner);
+/**
+ * Not this session's to send: another server's row, another account's, or one
+ * made in a workspace this account has left.
+ *
+ * The last is held for the same reason as the other two. Replaying it into
+ * the workspace it was made in is refused (NOT_FOUND) and the flush would
+ * drop it as a permanent refusal — a day of time gone with a toast. Replaying
+ * it anywhere else files it under the wrong client. So it is kept, counted
+ * and named until the person discards it.
+ */
+const isElsewhere = (
+  row: QueuedMutation,
+  owner: string | null,
+  workspaces: readonly WorkspaceSummary[] | null,
+): boolean =>
+  !isOnThisServer(row) ||
+  isForeignTo(row, owner) ||
+  isHeldByWorkspace(row, workspaces);
+
+/** True when the row is this account's, on this server, in a left workspace. */
+const isInLeftWorkspace = (
+  row: QueuedMutation,
+  owner: string | null,
+  workspaces: readonly WorkspaceSummary[] | null,
+): boolean =>
+  isOnThisServer(row) &&
+  !isForeignTo(row, owner) &&
+  isHeldByWorkspace(row, workspaces);
+
+/**
+ * Stamp this account's unstamped rows on this server with `workspaceId` — the
+ * first workspace a list resolves. Rows from a build before the stamp were all
+ * made in the one workspace there was; claiming them eagerly keeps a later
+ * switch from carrying them along.
+ */
+export async function adoptUnstampedHere(workspaceId: string): Promise<number> {
+  await ready();
+  const owner = await getStoredUserId();
+  return getOfflineQueue().adoptUnstampedWorkspace(
+    workspaceId,
+    (row) => isOnThisServer(row) && !isForeignTo(row, owner),
+  );
+}
 
 /**
  * Claim the unowned rows queued against the server in use for `userId` — and
@@ -116,12 +164,15 @@ export const isTransportFailure = (error: unknown): boolean =>
  * is the worst outcome available. The flush stops and everything keeps its
  * place until there is a session to replay it with.
  */
+//
+// FORBIDDEN is deliberately NOT one. In a shared workspace a 403 is a verdict
+// on one row by a session that is fine — a role change took away something
+// the row needed — so it cannot become acceptable by waiting or by signing in
+// again. Counting it here held every row behind it hostage under "sign in"
+// copy for a person who was signed in. It is a permanent refusal of that row.
 export const isAuthRefusal = (error: unknown): boolean =>
   error instanceof ApiError &&
-  (error.httpStatus === 401 ||
-    error.httpStatus === 403 ||
-    error.code === "UNAUTHORIZED" ||
-    error.code === "FORBIDDEN");
+  (error.httpStatus === 401 || error.code === "UNAUTHORIZED");
 
 // ── writing ──────────────────────────────────────────────────────────
 
@@ -147,14 +198,22 @@ export async function enqueueOffline<K extends OfflineOp>(
     payload,
     (await getStoredUserId()) ?? undefined,
     apiUrl(),
+    // The workspace it was made in, so a switch before the network returns
+    // cannot file it somewhere else: the replay sends this stamp explicitly.
+    (await activeWorkspaceId()) ?? undefined,
   );
 }
 
 export type PendingCounts = {
   /** Rows this account can replay. */
   mine: number;
-  /** Rows queued by a different account or for another server — kept, never replayed. */
+  /**
+   * Rows queued by a different account, for another server, or in a workspace
+   * this account has left — kept, never replayed.
+   */
   foreign: number;
+  /** How many of `foreign` are this account's rows in a workspace it left. */
+  left: number;
 };
 
 /**
@@ -169,8 +228,10 @@ export async function pendingCounts(): Promise<PendingCounts> {
   await ready();
   const rows = await getOfflineQueue().list();
   const owner = await getStoredUserId();
-  const foreign = rows.filter((row) => isElsewhere(row, owner)).length;
-  return { mine: rows.length - foreign, foreign };
+  const workspaces = await knownWorkspaces();
+  const foreign = rows.filter((row) => isElsewhere(row, owner, workspaces)).length;
+  const left = rows.filter((row) => isInLeftWorkspace(row, owner, workspaces)).length;
+  return { mine: rows.length - foreign, foreign, left };
 }
 
 /**
@@ -182,13 +243,28 @@ export async function pendingCounts(): Promise<PendingCounts> {
  * deleting "3 changes", and anybody can decide about two entries called
  * "Invoicing" from 21 August.
  */
-export async function listForeign(): Promise<QueuedMutationSummary[]> {
+export type ForeignQueuedRow = QueuedMutationSummary & {
+  /** This account's row, in a workspace it no longer belongs to. */
+  leftWorkspace: boolean;
+};
+
+export async function listForeign(): Promise<ForeignQueuedRow[]> {
   await ready();
   const owner = await getStoredUserId();
+  const workspaces = await knownWorkspaces();
+  // Names only from this account's own choice, so another account's rows are
+  // never described with workspace names this account happens to know.
+  const nameOf = await workspaceNameLookup();
   const rows = await getOfflineQueue().list();
   return rows
-    .filter((row) => isElsewhere(row, owner))
-    .map(describeQueuedMutation);
+    .filter((row) => isElsewhere(row, owner, workspaces))
+    .map((row) => ({
+      ...describeQueuedMutation(
+        row,
+        isForeignTo(row, owner) ? undefined : nameOf,
+      ),
+      leftWorkspace: isInLeftWorkspace(row, owner, workspaces),
+    }));
 }
 
 /**
@@ -203,9 +279,10 @@ export async function listForeign(): Promise<QueuedMutationSummary[]> {
 export async function discardForeign(): Promise<number> {
   await ready();
   const owner = await getStoredUserId();
+  const workspaces = await knownWorkspaces();
   const offline = getOfflineQueue();
   const theirs = (await offline.list()).filter((row) =>
-    isElsewhere(row, owner),
+    isElsewhere(row, owner, workspaces),
   );
   for (const row of theirs) await offline.remove(row.id);
   return theirs.length;
@@ -226,7 +303,7 @@ export async function cancelQueuedForTemp(tempId: string): Promise<boolean> {
   for (const row of rows) {
     // Never reach into another account's rows, even to cancel. An unowned row
     // is fair game: it is one this install queued before it knew the account.
-    if (isElsewhere(row, owner)) continue;
+    if (!isOnThisServer(row) || isForeignTo(row, owner)) continue;
     if (decodeOfflineMutation(row)?.tempId !== tempId) continue;
     await offline.remove(row.id);
     removed = true;
@@ -270,6 +347,12 @@ export type FlushReport = FlushResult & {
  */
 export async function flushOffline(
   mutators: OfflineReplayMutators,
+  /**
+   * The workspaces this account belongs to, as the server said just now. A
+   * stamped row for any other workspace is held in place — never replayed
+   * there, never replayed into the workspace chosen now, never dropped.
+   */
+  memberWorkspaceIds: ReadonlySet<string>,
 ): Promise<FlushReport> {
   await ready();
   const offline = getOfflineQueue();
@@ -301,7 +384,12 @@ export async function flushOffline(
         throw error;
       }
     },
-    { filter: (row) => isReplayableBy(row, owner) && isOnThisServer(row) },
+    {
+      filter: (row) =>
+        isReplayableBy(row, owner) &&
+        isOnThisServer(row) &&
+        isReplayableIn(row, memberWorkspaceIds),
+    },
   );
 
   return { ...result, refused, stale, resolved };

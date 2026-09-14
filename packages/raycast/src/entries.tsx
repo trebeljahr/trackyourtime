@@ -24,6 +24,7 @@ import {
   projectIcon,
 } from "./lib/format.js";
 import { useApi } from "./lib/hooks.js";
+import { ownOnly, resolveUserId } from "./lib/timer-data.js";
 import { webLink } from "./lib/preferences.js";
 import { refreshMenuBar, showFailureToast } from "./lib/ui.js";
 import { EditEntry } from "./components/edit-entry.js";
@@ -135,7 +136,10 @@ export default function Entries(): React.JSX.Element {
         to: new Date(Date.now() + 60_000).toISOString(),
         limit: 200,
       });
-      return entries;
+      // "Show All Time" is this person's time. A member allowed to see
+      // colleagues' entries gets them from the same list, and a colleague's
+      // row here would offer Continue and Edit on work that is not theirs.
+      return ownOnly(entries, await resolveUserId());
     },
   );
 

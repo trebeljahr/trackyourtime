@@ -13,6 +13,12 @@
  *
  * Written through from the API wrappers on every successful read, so no
  * surface has to remember to warm it.
+ *
+ * One cache per workspace (`workspaceKey`). Projects, tags, settings and the
+ * entry window all describe one workspace, and a single shared slot would
+ * paint workspace A's projects into B's offline picker — and shape B's
+ * optimistic entries with A's currency and rates — the moment the network
+ * dropped after a switch.
  */
 import type {
   DetailedEntry,
@@ -24,6 +30,7 @@ import type {
 import type { Client } from "@starter/core";
 import type { ProjectWithStats, TagWithStats, TaskWithStats } from "./api.js";
 import { raycastStorage } from "./storage.js";
+import { clearEveryWorkspace, workspaceKey } from "./workspace.js";
 
 const CACHE_KEY = "trackyourtime.local-cache";
 
@@ -60,13 +67,21 @@ const EMPTY: LocalCache = {
 const isCache = (value: unknown): value is Partial<LocalCache> =>
   typeof value === "object" && value !== null;
 
-/** Never throws: a surface that cannot read this must still try the network. */
-export const loadCache = async (): Promise<LocalCache> => {
+const loadCacheAt = async (key: string): Promise<LocalCache> => {
   try {
-    const raw = await raycastStorage.getItem(CACHE_KEY);
+    const raw = await raycastStorage.getItem(key);
     if (raw === null) return EMPTY;
     const parsed: unknown = JSON.parse(raw);
     return isCache(parsed) ? { ...EMPTY, ...parsed } : EMPTY;
+  } catch {
+    return EMPTY;
+  }
+};
+
+/** Never throws: a surface that cannot read this must still try the network. */
+export const loadCache = async (): Promise<LocalCache> => {
+  try {
+    return await loadCacheAt(await workspaceKey(CACHE_KEY));
   } catch {
     return EMPTY;
   }
@@ -82,7 +97,10 @@ export const loadCache = async (): Promise<LocalCache> => {
  * than truthiness, because null is a legitimate "not loaded" value to keep.
  */
 export const remember = async (parts: Partial<LocalCache>): Promise<void> => {
-  const current = await loadCache();
+  // One key for the read and the write, so a switch landing in between cannot
+  // file one workspace's answer under the other.
+  const key = await workspaceKey(CACHE_KEY);
+  const current = await loadCacheAt(key);
   const next: LocalCache = {
     entries: (parts.entries ?? current.entries).slice(0, MAX_ENTRIES),
     favorites: parts.favorites ?? current.favorites,
@@ -93,7 +111,7 @@ export const remember = async (parts: Partial<LocalCache>): Promise<void> => {
     settings: parts.settings === undefined ? current.settings : parts.settings,
   };
   try {
-    await raycastStorage.setItem(CACHE_KEY, JSON.stringify(next));
+    await raycastStorage.setItem(key, JSON.stringify(next));
   } catch {
     /* storage unavailable — reads still work, offline shaping gets less right */
   }
@@ -125,14 +143,8 @@ export const forgetEntry = async (id: string): Promise<void> => {
   await remember({ entries: current.entries.filter((entry) => entry.id !== id) });
 };
 
-/** Everything this Mac knows, wiped — used when the session is handed over. */
-export const clearCache = async (): Promise<void> => {
-  try {
-    await raycastStorage.removeItem(CACHE_KEY);
-  } catch {
-    /* ignore */
-  }
-};
+/** Everything this Mac knows, in every workspace, wiped — for a sign-out. */
+export const clearCache = (): Promise<void> => clearEveryWorkspace(CACHE_KEY);
 
 /**
  * The context to shape an optimistic entry with.
