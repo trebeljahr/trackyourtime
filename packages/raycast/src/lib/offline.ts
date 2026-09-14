@@ -191,6 +191,13 @@ export async function enqueueOffline<K extends OfflineOp>(
   op: K,
   input: OfflinePayloadMap[K],
   tempId?: string,
+  /**
+   * The workspace the live attempt was addressed to — the api client's own
+   * value. Storage is only the fallback: a switch made in another command
+   * while this attempt hung has already changed it, and a row stamped from
+   * there would replay somewhere the attempt never went.
+   */
+  workspaceId?: string | null,
 ): Promise<void> {
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
   await ready();
@@ -201,7 +208,7 @@ export async function enqueueOffline<K extends OfflineOp>(
     apiUrl(),
     // The workspace it was made in, so a switch before the network returns
     // cannot file it somewhere else: the replay sends this stamp explicitly.
-    (await activeWorkspaceId()) ?? undefined,
+    (workspaceId ?? (await activeWorkspaceId())) ?? undefined,
   );
 }
 

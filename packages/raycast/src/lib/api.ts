@@ -21,6 +21,8 @@ import {
   type DetailedEntry,
   type DetailedFavorite,
   type OfflineCreateInput,
+  type OfflineOp,
+  type OfflinePayloadMap,
   type OfflineReplayMutators,
   type OfflineStartInput,
   type OfflineUpdateInput,
@@ -392,6 +394,16 @@ const wrap = (
    * table here to drift out of step with the queue contract in
    * `@starter/core/offline-ops`.
    */
+  /**
+   * Queue a write in the workspace this client addresses its requests to, so
+   * the row and the attempt it replaces cannot disagree about where it goes.
+   */
+  const enqueue = <K extends OfflineOp>(
+    op: K,
+    input: OfflinePayloadMap[K],
+    tempId?: string,
+  ): Promise<void> => enqueueOffline(op, input, tempId, getWorkspaceId());
+
   const mutators: OfflineReplayMutators = {
     "entries.start": (input) => client.mutate("entries.start", input),
     "entries.stop": (input) => client.mutate("entries.stop", input),
@@ -546,7 +558,7 @@ const wrap = (
       timeZone: deviceTimeZone(),
       originId,
     };
-    await enqueueOffline("entries.start", payload, tempId);
+    await enqueue("entries.start", payload, tempId);
 
     const entry = buildOptimisticEntry(await loadShapeContext(), {
       id: tempId,
@@ -577,7 +589,7 @@ const wrap = (
     // `tempId` as its start, which is what lets the replay target the entry
     // that start produces.
     if (local && (id === undefined || id === local.id)) {
-      await enqueueOffline("entries.stop", { end, originId }, local.id);
+      await enqueue("entries.stop", { end, originId }, local.id);
       const stopped = stoppedEntryShape(context, local, end);
       await noteOptimisticEntry(stopped);
       await noteTimerEcho(null);
@@ -591,7 +603,7 @@ const wrap = (
       throw new ApiError("No running timer", "NOT_FOUND", 404);
     }
 
-    await enqueueOffline("entries.stop", { id: target, end, originId });
+    await enqueue("entries.stop", { id: target, end, originId });
     const base = await knownEntry(target, overlay);
     const stopped = base
       ? stoppedEntryShape(context, base, end)
@@ -667,7 +679,7 @@ const wrap = (
       timeZone: deviceTimeZone(),
       originId,
     };
-    await enqueueOffline("entries.create", payload, tempId);
+    await enqueue("entries.create", payload, tempId);
 
     const entry = buildOptimisticEntry(await loadShapeContext(), {
       id: tempId,
@@ -685,7 +697,7 @@ const wrap = (
 
   const queueUpdate = async (input: UpdateInput): Promise<DetailedEntry> => {
     const payload: OfflineUpdateInput = { ...input, originId };
-    await enqueueOffline("entries.update", payload);
+    await enqueue("entries.update", payload);
 
     const overlay = await loadOverlay();
     const base = await knownEntry(input.id, overlay);
@@ -769,7 +781,7 @@ const wrap = (
           // an id the server has never seen, and leaving the start queued
           // would resurrect the timer the moment the network returned.
           if (isTempId(target)) await cancelQueuedForTemp(target);
-          else await enqueueOffline("entries.discard", { id: target, originId });
+          else await enqueue("entries.discard", { id: target, originId });
           await noteOptimisticRemoval(target);
           await noteTimerEcho(null);
           return { success: true as const, id: target };
@@ -948,7 +960,7 @@ const wrap = (
           // Deleting a row that only exists as a queued create is done by
           // dropping that create — see `discard` for the same argument.
           if (isTempId(id)) await cancelQueuedForTemp(id);
-          else await enqueueOffline("entries.remove", { id, originId });
+          else await enqueue("entries.remove", { id, originId });
           await noteOptimisticRemoval(id);
           await forgetEntry(id);
           const echo = await loadTimerEcho();
