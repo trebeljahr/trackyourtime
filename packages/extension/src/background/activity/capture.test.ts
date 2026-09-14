@@ -301,6 +301,29 @@ describe("retention and wiping", () => {
     expect(await listRules(SCOPE)).toEqual([]);
   });
 
+  test("the same person switching workspace keeps their other workspace's rows", async () => {
+    await enableCapture();
+    await visit(0, "https://docs.example.com/");
+    await visit(10, "https://code.example.com/");
+    await putRule(SCOPE, { id: "r1", pattern: "docs.example.com" }, T0);
+    await setActivityScope("user-1", "ws-2");
+    await activityIdle();
+    expect((await readAllSegments()).map((row) => row.scope)).toEqual([SCOPE]);
+    expect(await listRules(SCOPE)).toHaveLength(1);
+    expect(await loadOpenSegment()).toBeNull();
+  });
+
+  test("excluding the host on screen does not store it, and purges what was stored", async () => {
+    await enableCapture();
+    await visit(0, "https://mail.example.com/");
+    await visit(10, "https://docs.example.com/");
+    await advanceTo(20);
+    await applyActivitySettings({ excludedHosts: ["*.example.com"] });
+    await activityIdle();
+    expect(await readAllSegments()).toEqual([]);
+    expect(await loadOpenSegment()).toBeNull();
+  });
+
   test("delete all activity with forgetScope stops recording until a scope is set", async () => {
     await enableCapture();
     await visit(0, "https://docs.example.com/");

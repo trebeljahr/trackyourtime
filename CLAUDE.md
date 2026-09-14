@@ -1501,8 +1501,13 @@ Rules that fail quietly if broken:
   whose `lastSeen` is over three minutes old is closed AT `lastSeen`. The
   heartbeat never opens a segment — only an event says attention is somewhere.
 - **Everything is scoped `<userId>:<workspaceId>`** (from resolved settings).
-  A new scope deletes every other scope's rows; `forgetSession()` deletes all
-  of it and forgets the scope, so nothing records until someone signs in.
+  A new scope deletes every other ACCOUNT's rows but keeps the same person's
+  other workspaces, so a workspace switch and back does not lose their rules;
+  `forgetSession()` deletes all of it and forgets the scope, so nothing
+  records until someone signs in.
+- **"Never record" applies to the past too.** A segment is written under the
+  settings current when it CLOSES (so excluding the host on screen does not
+  store it), and adding an exclusion purges stored segments it matches.
   No server changes and no sync events: nothing leaves the device until an
   entry is accepted.
 

@@ -207,6 +207,26 @@ export async function deleteEndedBefore(cutoff: number): Promise<number> {
   });
 }
 
+/** Delete every stored segment, any scope, that `matches`. Returns how many went. */
+export async function deleteSegmentsWhere(
+  matches: (segment: StoredSegment) => boolean,
+): Promise<number> {
+  return run([SEGMENTS], "readwrite", async (tx) => {
+    const store = tx.objectStore(SEGMENTS);
+    const keys = await requestToPromise(store.getAllKeys());
+    const values = (await requestToPromise(store.getAll())) as StoredSegment[];
+    let removed = 0;
+    values.forEach((value, index) => {
+      const key = keys[index];
+      if (key !== undefined && matches(value)) {
+        store.delete(key);
+        removed += 1;
+      }
+    });
+    return removed;
+  });
+}
+
 // ── rules ────────────────────────────────────────────────────────────
 
 /** Oldest first, which is the order rules are tried in. */
@@ -272,13 +292,15 @@ export async function saveOpenSegment(open: OpenSegment | null): Promise<void> {
 // ── wiping ───────────────────────────────────────────────────────────
 
 /**
- * Remove every row that does not belong to `keepScope`.
+ * Remove every row whose scope does not start with `keepPrefix`, and the open
+ * segment unless it is `keepScope`'s.
  *
  * Run when the scope changes — a different account signed in on this browser,
  * or the same person switched workspace — so one person's browsing is never
- * sitting in storage under the next one's session.
+ * sitting in storage under the next one's session. `keepPrefix` is the user
+ * part of the scope, so the same person's other workspaces survive a switch.
  */
-export async function deleteOtherScopes(keepScope: string): Promise<void> {
+export async function deleteOtherScopes(keepScope: string, keepPrefix = keepScope): Promise<void> {
   await run([SEGMENTS, RULES, DISMISSALS, META], "readwrite", async (tx) => {
     for (const name of [SEGMENTS, RULES, DISMISSALS]) {
       const store = tx.objectStore(name);
@@ -286,7 +308,8 @@ export async function deleteOtherScopes(keepScope: string): Promise<void> {
       const values = (await requestToPromise(store.getAll())) as { scope: string }[];
       values.forEach((value, index) => {
         const key = keys[index];
-        if (value.scope !== keepScope && key !== undefined) store.delete(key);
+        const kept = value.scope === keepScope || value.scope.startsWith(keepPrefix);
+        if (!kept && key !== undefined) store.delete(key);
       });
     }
     const open = (await requestToPromise(tx.objectStore(META).get("open"))) as

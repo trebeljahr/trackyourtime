@@ -36,6 +36,7 @@ import {
 import {
   appendSegment,
   deleteOtherScopes,
+  deleteSegmentsWhere,
   loadOpenSegment,
   saveOpenSegment,
   wipeAllActivity,
@@ -134,14 +135,23 @@ const captureContext = async (): Promise<CaptureContext | null> => {
 
 // ── the open segment ─────────────────────────────────────────────────
 
+/**
+ * Store the open segment as a closed one, under the settings as they are NOW.
+ *
+ * The segment was opened under earlier settings. Excluding the host on screen,
+ * or switching titles off, closes it — and writing it out as it was opened
+ * would store the very host the person just asked never to be recorded.
+ */
 const closeSegment = async (open: OpenSegment, end: number): Promise<void> => {
+  const settings = await loadActivitySettings();
+  if (hostMatchesAny(settings.excludedHosts, open.key)) return;
   await appendSegment({
     scope: open.scope,
     source: "browser",
     start: open.start,
     end: Math.max(open.start, end),
     key: open.key,
-    ...(open.label !== undefined ? { label: open.label } : {}),
+    ...(open.label !== undefined && settings.storeTitles ? { label: open.label } : {}),
     afk: false,
   });
 };
@@ -306,6 +316,10 @@ export const applyActivitySettings = (
     }
     const settings = await saveActivitySettings(patch);
     await syncAlarms();
+    // "Never record" covers what is already stored, not just what comes next.
+    if (patch.excludedHosts !== undefined && settings.excludedHosts.length > 0) {
+      await deleteSegmentsWhere((segment) => hostMatchesAny(settings.excludedHosts, segment.key));
+    }
     // Re-asked under the new settings: turning capture off, excluding the host
     // on screen or switching titles off all close the open segment here.
     await observe(Date.now());
@@ -316,16 +330,18 @@ export const applyActivitySettings = (
 /**
  * Whose activity is captured from now on.
  *
- * A different scope than before means another account or workspace: the open
- * segment is dropped and every row that is not the new scope's is deleted, so
- * nothing of one person's browsing stays behind for the next.
+ * A different scope than before means another account or workspace. Every row
+ * of another ACCOUNT is deleted, so nothing of one person's browsing stays
+ * behind for the next. The same person's rows in their other workspaces are
+ * kept — switching workspace in the web app and back must not throw away the
+ * rules and dismissals they made there. The open segment is dropped either way.
  */
 export const setActivityScope = (userId: string, workspaceId: string): Promise<void> =>
   serial(async () => {
     const scope = activityScopeOf(userId, workspaceId);
     const previous = await loadActivityScope();
     if (previous === scope) return;
-    await deleteOtherScopes(scope);
+    await deleteOtherScopes(scope, activityScopeOf(userId, ""));
     await saveActivityScope(scope);
   });
 

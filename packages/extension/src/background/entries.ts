@@ -844,11 +844,26 @@ export async function acceptSuggestion(input: AcceptSuggestionInput): Promise<vo
   const start = input.edited ? input.start : Math.max(input.start, best.start);
   const end = input.edited ? input.end : Math.min(input.end, best.end);
 
+  // A rule names catalog ids, and the project or task it names may have been
+  // deleted since. Filing under it would be refused on every accept — or, from
+  // the offline queue, dropped on replay with the time it carried — so an id
+  // the catalog no longer has is left off rather than sent.
+  const projects = getCachedProjects();
+  const tasks = getCachedTasks();
+  const projectId =
+    input.projectId !== null && projects !== null && !projects.some((it) => it.id === input.projectId)
+      ? null
+      : input.projectId;
+  const taskId =
+    input.taskId !== null && tasks !== null && !tasks.some((it) => it.id === input.taskId)
+      ? null
+      : input.taskId;
+
   forgetTracked();
   await createEntry({
     description: input.description,
-    projectId: input.projectId,
-    taskId: input.taskId,
+    projectId,
+    taskId,
     billable: input.billable,
     tagIds: input.tagIds,
     start: new Date(start).toISOString(),
