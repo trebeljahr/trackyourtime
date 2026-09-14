@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -12,6 +12,7 @@ import {
 import { AuthHeader } from "@/components/auth-header";
 import { NativeServerNote } from "@/components/server-picker";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import { authPageHref, safeNextFromSearch } from "@/lib/safe-next";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -22,6 +23,15 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState(false);
+  // `?next=` and `?email=` from an invitation link. Read in an effect: the
+  // page is prerendered in Node, where there is no query string to read.
+  const [next, setNext] = useState<string | null>(null);
+  useEffect(() => {
+    const search = window.location.search;
+    setNext(safeNextFromSearch(search));
+    const prefill = new URLSearchParams(search).get("email");
+    if (prefill) setEmail((current) => (current === "" ? prefill : current));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,7 +50,9 @@ export default function SignupPage() {
         email,
         password,
         // Where the verification link lands, when this server requires one.
-        callbackURL: webCallbackUrl("/login"),
+        // Carries `next`, so an invitee who must verify first still comes
+        // back to the invitation after following the link and signing in.
+        callbackURL: webCallbackUrl(authPageHref("login", { next, email })),
       });
       if (result.error) {
         setError(result.error.message ?? "Signup failed");
@@ -52,7 +64,9 @@ export default function SignupPage() {
         // Populate the session store before navigating, or the protected
         // layout reads an empty session and redirects back to /login.
         await getSession();
-        router.replace(POST_AUTH_REDIRECT);
+        router.replace(
+          safeNextFromSearch(window.location.search) ?? POST_AUTH_REDIRECT,
+        );
       }
     } catch {
       setError("An unexpected error occurred");
@@ -70,7 +84,11 @@ export default function SignupPage() {
             subtitle={`We sent a verification link to ${email}. Open it, then log in.`}
           />
           <div className="text-center text-sm">
-            <Link href="/login" className="text-primary hover:underline">
+            <Link
+              href={authPageHref("login", { next, email })}
+              className="text-primary hover:underline"
+              data-testid="signup-verify-to-login"
+            >
               Go to log in
             </Link>
           </div>
@@ -172,7 +190,11 @@ export default function SignupPage() {
 
         <div className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link href="/login" className="text-primary hover:underline">
+          <Link
+            href={authPageHref("login", { next, email: email || null })}
+            className="text-primary hover:underline"
+            data-testid="signup-to-login"
+          >
             Log in
           </Link>
         </div>

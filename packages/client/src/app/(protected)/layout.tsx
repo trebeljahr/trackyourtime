@@ -10,6 +10,7 @@ import {
   verdictForResult,
 } from "@/lib/session-verdict";
 import { AppShell } from "@/components/app-shell";
+import { loginRedirectHref } from "@/lib/safe-next";
 
 type Verdict = "checking" | "in" | "out";
 
@@ -66,7 +67,7 @@ export default function ProtectedLayout({
   }, [isAuthenticated, isLoading, sessionReady, nativeToken]);
 
   React.useEffect(() => {
-    if (recheck === "out") router.replace("/login");
+    if (recheck === "out") router.replace(loginRedirectHref(window.location));
   }, [recheck, router]);
 
   if (isLoading || !sessionReady || recheck === "checking") {

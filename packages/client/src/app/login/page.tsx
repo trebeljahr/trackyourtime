@@ -25,6 +25,7 @@ import {
   consumeSessionRevokedNotice,
   type SessionRevokedNotice,
 } from "@/lib/session-revoked";
+import { authPageHref, safeNextFromSearch } from "@/lib/safe-next";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,6 +34,16 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<"password" | "two-factor">("password");
+  // `?next=` (validated by lib/safe-next.ts) and `?email=`, both read in an
+  // effect for the same prerender reason as the revoked notice below. The
+  // invite page sends people here with both; the protected layout with next.
+  const [next, setNext] = useState<string | null>(null);
+  useEffect(() => {
+    const search = window.location.search;
+    setNext(safeNextFromSearch(search));
+    const prefill = new URLSearchParams(search).get("email");
+    if (prefill) setEmail((current) => (current === "" ? prefill : current));
+  }, []);
 
   /*
    * "Why am I looking at a login screen?"
@@ -64,7 +75,17 @@ export default function LoginPage() {
       if (result.error?.code === "EMAIL_NOT_VERIFIED") {
         // A fresh link, pointed at the web app rather than the API origin.
         await authClient
-          .sendVerificationEmail({ email, callbackURL: webCallbackUrl("/login") })
+          .sendVerificationEmail({
+            email,
+            // Back to this page with its `next`, so an invitee who has to
+            // verify first still ends up on the invitation.
+            callbackURL: webCallbackUrl(
+              authPageHref("login", {
+                next: safeNextFromSearch(window.location.search),
+                email,
+              }),
+            ),
+          })
           .catch(() => undefined);
         setError(EMAIL_NOT_VERIFIED_MESSAGE);
       } else if (result.error) {
@@ -79,7 +100,11 @@ export default function LoginPage() {
       } else {
         // See the note in signup: refresh the session before navigating.
         await getSession();
-        router.replace(POST_AUTH_REDIRECT);
+        // Re-read at submit time rather than trusting state, so a submit that
+        // beats the effect still honours the link it arrived with.
+        router.replace(
+          safeNextFromSearch(window.location.search) ?? POST_AUTH_REDIRECT,
+        );
       }
     } catch {
       setError("An unexpected error occurred");
@@ -96,7 +121,9 @@ export default function LoginPage() {
       return;
     }
     await getSession();
-    router.replace(POST_AUTH_REDIRECT);
+    router.replace(
+      safeNextFromSearch(window.location.search) ?? POST_AUTH_REDIRECT,
+    );
   }
 
   if (step === "two-factor") {
@@ -206,7 +233,11 @@ export default function LoginPage() {
 
         <div className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-primary hover:underline">
+          <Link
+            href={authPageHref("signup", { next, email: email || null })}
+            className="text-primary hover:underline"
+            data-testid="login-to-signup"
+          >
             Sign up
           </Link>
         </div>
