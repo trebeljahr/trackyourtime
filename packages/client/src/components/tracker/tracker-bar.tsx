@@ -4,6 +4,7 @@ import { PRODUCT_NAME } from "@/lib/site-links";
 import * as React from "react";
 import {
   AlertTriangle,
+  Building2,
   CloudOff,
   Play,
   Plus,
@@ -28,6 +29,8 @@ import { useEntryMutations } from "@/components/tracker/use-entry-mutations";
 import { useIdleGuard } from "@/components/tracker/use-idle-guard";
 import { useRunawayGuard } from "@/components/tracker/use-runaway-guard";
 import { useOfflineQueueState } from "@/providers/offline-queue-provider";
+import { useActiveWorkspace } from "@/components/workspace-switcher";
+import { useT } from "@/i18n/use-t";
 import { useRunningEntry } from "@/hooks/use-sync";
 import { useFormatSettings } from "@/lib/format";
 import { isNative } from "@/mobile/bridge";
@@ -48,6 +51,8 @@ export function TrackerBar(): React.JSX.Element {
   // too — see providers/offline-queue-provider.tsx.
   const { pending, foreign, online, authBlocked } = useOfflineQueueState();
   const projects = trpc.projects.list.useQuery({});
+  const t = useT("tracker");
+  const { activeId, workspaces } = useActiveWorkspace();
 
   const [manualOpen, setManualOpen] = React.useState(false);
   const [description, setDescription] = React.useState("");
@@ -57,6 +62,22 @@ export function TrackerBar(): React.JSX.Element {
   const [tagIds, setTagIds] = React.useState<string[]>([]);
 
   const isRunning = running !== null;
+
+  /*
+   * The timer is per person, not per workspace, so the entry running now can
+   * belong to a workspace other than the one on screen. It can still be
+   * stopped from here (a stop names the person's timer wherever it runs), but
+   * not edited: every edit is addressed to the workspace on screen, where
+   * that entry does not exist, and this workspace's projects and tags would
+   * be the wrong picker for it anyway.
+   */
+  const runningElsewhere =
+    running !== null && activeId !== null && running.workspaceId !== activeId;
+  const runningWorkspaceName = runningElsewhere
+    ? (workspaces?.find((workspace) => workspace.id === running.workspaceId)
+        ?.name ?? null)
+    : null;
+  const editsRunning = isRunning && !runningElsewhere;
 
   // Adopt the running entry's fields whenever the timer identity changes —
   // including a start or stop that happened on another device. Render-time
@@ -136,8 +157,12 @@ export function TrackerBar(): React.JSX.Element {
       setTaskId(next.taskId);
 
       // A running timer is edited in place; the composer is only prepared.
-      if (isRunning && running) {
-        mutations.updateEntry({ id: running.id, ...patch });
+      // One running in another workspace is not edited at all (see
+      // `runningElsewhere`).
+      if (isRunning) {
+        if (editsRunning && running) {
+          mutations.updateEntry({ id: running.id, ...patch });
+        }
         return;
       }
       // Picking a project adopts its billable default — but only for a timer
@@ -146,7 +171,7 @@ export function TrackerBar(): React.JSX.Element {
         setBillable(projectBillableDefault(next.projectId));
       }
     },
-    [isRunning, mutations, projectBillableDefault, running]
+    [editsRunning, isRunning, mutations, projectBillableDefault, running]
   );
 
   const handleTagsChange = React.useCallback(
@@ -154,30 +179,30 @@ export function TrackerBar(): React.JSX.Element {
       setTagIds(next);
       // Labelling a running entry has to stick immediately — the whole point
       // of tagging as you go is that you do it while the timer runs.
-      if (isRunning && running) {
+      if (editsRunning && running) {
         mutations.updateEntry({ id: running.id, tagIds: next });
       }
     },
-    [isRunning, mutations, running]
+    [editsRunning, mutations, running]
   );
 
   const handleBillableToggle = React.useCallback((): void => {
     const next = !billable;
     setBillable(next);
-    if (isRunning && running) {
+    if (editsRunning && running) {
       mutations.updateEntry({ id: running.id, billable: next });
     }
-  }, [billable, isRunning, mutations, running]);
+  }, [billable, editsRunning, mutations, running]);
 
   // Takes the text explicitly: it is called from inside the field's key and
   // blur handlers, where this render's `description` may not have caught up.
   const commitDescription = React.useCallback(
     (next: string): void => {
-      if (!isRunning || running === null) return;
+      if (!editsRunning || running === null) return;
       if (next === running.description) return;
       mutations.updateEntry({ id: running.id, description: next });
     },
-    [isRunning, mutations, running]
+    [editsRunning, mutations, running]
   );
 
   // A suggestion taken with everything it carries. On a running timer that is
@@ -191,7 +216,7 @@ export function TrackerBar(): React.JSX.Element {
       setTaskId(suggestion.taskId);
       setBillable(suggestion.billable);
       setTagIds(suggestion.tagIds);
-      if (isRunning && running) {
+      if (editsRunning && running) {
         mutations.updateEntry({
           id: running.id,
           description: suggestion.description,
@@ -202,7 +227,7 @@ export function TrackerBar(): React.JSX.Element {
         });
       }
     },
-    [isRunning, mutations, running]
+    [editsRunning, mutations, running]
   );
 
   const start = React.useCallback((): void => {
@@ -381,8 +406,25 @@ export function TrackerBar(): React.JSX.Element {
         </div>
       </div>
 
-      {pending > 0 || foreign > 0 || !online || clockSkewed ? (
+      {pending > 0 || foreign > 0 || !online || clockSkewed || runningElsewhere ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
+          {runningElsewhere ? (
+            <Badge
+              variant="outline"
+              className="gap-1.5"
+              title={t("workspace.runningElsewhereHint", {
+                name: runningWorkspaceName ?? "",
+              })}
+              data-testid="tracker-running-elsewhere"
+              data-workspace-id={running?.workspaceId ?? ""}
+            >
+              <Building2 className="size-3" />
+              {t("workspace.runningElsewhere", {
+                name: runningWorkspaceName ?? "…",
+              })}
+            </Badge>
+          ) : null}
+
           {/*
             Nothing was thrown away — the queue stopped rather than replaying
             into a session the server no longer knows. Say so, because the
@@ -440,10 +482,7 @@ export function TrackerBar(): React.JSX.Element {
             to do silently, so the count is on screen with the reason.
           */}
           {foreign > 0 ? (
-            <Link
-              href="/settings?tab=devices"
-              title="Queued by another account on this device. They are kept, and never replayed under yours."
-            >
+            <Link href="/settings?tab=devices" title={t("queue.heldHint")}>
               <Badge
                 variant="outline"
                 className="gap-1.5 hover:bg-accent"
@@ -451,7 +490,7 @@ export function TrackerBar(): React.JSX.Element {
                 data-foreign={foreign}
               >
                 <UserRoundX className="size-3" />
-                {foreign} change{foreign === 1 ? "" : "s"} from another account
+                {t("queue.held", { count: foreign })}
               </Badge>
             </Link>
           ) : null}

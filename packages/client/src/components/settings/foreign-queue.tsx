@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ServerOff, UserRoundX } from "lucide-react";
+import { Building2, ServerOff, UserRoundX } from "lucide-react";
 import { serverLabel } from "@starter/core";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
   type ForeignQueuedRow,
 } from "@/lib/offline";
 import { getAbsoluteApiOrigin } from "@/lib/api-origin";
+import { useT } from "@/i18n/use-t";
 
 /**
  * Unsynced work left on this device by an account that is not signed in.
@@ -48,6 +49,13 @@ import { getAbsoluteApiOrigin } from "@/lib/api-origin";
  * and per "another account", because the way to keep each is different — sign
  * in as that account, or switch back to that server — and one "discard all"
  * would make a person decide about both at once.
+ *
+ * And for rows this account queued in a workspace it no longer belongs to —
+ * removed, or left on another device. Those are held rather than sent
+ * anywhere (`lib/offline.ts`), grouped per workspace, and named: by the
+ * workspace's name while the list still knows it, else as "a workspace you
+ * left". The way to keep them is different again — be added back — so they
+ * get their own group and their own confirmation.
  */
 
 const OP_LABELS: Record<string, string> = {
@@ -90,24 +98,44 @@ const formatRange = (rows: ForeignQueuedRow[]): string | null => {
 };
 
 type Group = {
-  /** The server the rows belong to, or null for another account on this one. */
+  /** The server the rows belong to, or null for rows on this one. */
   server: string | null;
+  /**
+   * Set for this account's rows in a workspace it left: that workspace's id
+   * and, while the list still knows it, its name.
+   */
+  workspace: { id: string; name: string | null } | null;
   rows: ForeignQueuedRow[];
 };
+
+const groupKey = (row: ForeignQueuedRow): string => {
+  if (row.otherServer !== null) return `server:${row.otherServer}`;
+  if (row.leftWorkspace) return `workspace:${row.workspaceId ?? ""}`;
+  return "account";
+};
+
+/** Another account on this server first, then left workspaces, then servers. */
+const groupRank = (group: Group): number =>
+  group.server !== null ? 2 : group.workspace !== null ? 1 : 0;
 
 const groupRows = (rows: ForeignQueuedRow[]): Group[] => {
   const groups = new Map<string, Group>();
   for (const row of rows) {
-    const key = row.otherServer ?? "";
-    const group = groups.get(key) ?? { server: row.otherServer, rows: [] };
+    const key = groupKey(row);
+    const group = groups.get(key) ?? {
+      server: row.otherServer,
+      workspace:
+        row.otherServer === null && row.leftWorkspace
+          ? { id: row.workspaceId ?? "", name: row.workspaceName }
+          : null,
+      rows: [],
+    };
     group.rows.push(row);
     groups.set(key, group);
   }
   // Another account on this server first: it is the one the tracker bar's
   // badge most often means.
-  return [...groups.values()].sort(
-    (a, b) => Number(a.server !== null) - Number(b.server !== null),
-  );
+  return [...groups.values()].sort((a, b) => groupRank(a) - groupRank(b));
 };
 
 const changes = (count: number): string =>
@@ -115,6 +143,7 @@ const changes = (count: number): string =>
 
 export function ForeignQueuePanel(): React.JSX.Element | null {
   const { foreign } = useOfflineQueueState();
+  const t = useT("settings");
   const [rows, setRows] = React.useState<ForeignQueuedRow[]>([]);
   const [confirming, setConfirming] = React.useState<Group | null>(null);
   const [discarding, setDiscarding] = React.useState(false);
@@ -159,6 +188,8 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
   };
 
   const confirmRange = confirming ? formatRange(confirming.rows) : null;
+  const workspaceLabel = (workspace: { name: string | null }): string =>
+    workspace.name ?? t("foreignQueue.leftWorkspace");
 
   return (
     <Card data-testid="foreign-queue-panel">
@@ -178,14 +209,25 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
         const there = group.server === null ? null : serverLabel(group.server);
         return (
           <div
-            key={group.server ?? "account"}
+            key={
+              group.server ??
+              (group.workspace === null ? "account" : `workspace:${group.workspace.id}`)
+            }
             className="border-b last:border-b-0"
             data-testid="foreign-queue-group"
             data-server={group.server ?? ""}
+            data-workspace-id={group.workspace?.id ?? ""}
           >
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                {there === null ? (
+                {group.workspace !== null ? (
+                  <>
+                    <Building2 className="size-4" />
+                    {t("foreignQueue.leftTitle", {
+                      workspace: workspaceLabel(group.workspace),
+                    })}
+                  </>
+                ) : there === null ? (
                   <>
                     <UserRoundX className="size-4" />
                     Unsynced data from another account
@@ -198,7 +240,12 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
                 )}
               </CardTitle>
               <CardDescription>
-                {there === null ? (
+                {group.workspace !== null ? (
+                  t("foreignQueue.leftDescription", {
+                    count,
+                    workspace: workspaceLabel(group.workspace),
+                  })
+                ) : there === null ? (
                   <>
                     {changes(count)} queued on this device by an account that
                     is not signed in{range ? `, from ${range}` : ""}. They were
@@ -269,6 +316,12 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
               {confirming?.rows.length === 1 ? "" : "s"}?
             </DialogTitle>
             <DialogDescription>
+              {confirming?.workspace ? (
+                t("foreignQueue.confirmLeft", {
+                  workspace: workspaceLabel(confirming.workspace),
+                })
+              ) : (
+              <>
               This deletes work tracked{confirmRange ? ` on ${confirmRange}` : ""}{" "}
               that no server has ever received. It cannot be recovered — not by{" "}
               {confirming?.server
@@ -278,6 +331,8 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
               {confirming?.server
                 ? `Switch this device back to ${serverLabel(confirming.server)} instead if it should be kept.`
                 : "Sign in as that account on this device instead if it should be kept."}
+              </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

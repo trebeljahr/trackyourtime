@@ -50,6 +50,10 @@ import {
 import { useT } from "@/i18n/use-t";
 import { LocaleSync } from "@/i18n/locale-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  useActiveWorkspace,
+  WorkspaceSwitcher,
+} from "@/components/workspace-switcher";
 import { useNativeLifecycle } from "@/hooks/use-native-lifecycle";
 import { useRunningEntry, useSync } from "@/hooks/use-sync";
 import { OfflineQueueProvider } from "@/providers/offline-queue-provider";
@@ -126,15 +130,36 @@ function SyncDot({ status }: { status: SyncStatus }): React.JSX.Element {
 function RunningTimerIndicator(): React.JSX.Element | null {
   const { entry, elapsedSec } = useRunningEntry();
   const { durationFormat } = useFormatSettings();
+  const { activeId, workspaces } = useActiveWorkspace();
+  const t = useT("shell");
 
   if (!entry) return null;
+
+  // One running timer per person, across every workspace — so the timer in
+  // the header can belong to a workspace other than the one on screen. Say
+  // which, or the clock reads as time being tracked into this one.
+  const elsewhere =
+    activeId !== null && entry.workspaceId !== activeId
+      ? (workspaces?.find((workspace) => workspace.id === entry.workspaceId)
+          ?.name ?? null)
+      : null;
 
   return (
     <Link
       href="/track"
       className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm hover:bg-accent"
       data-testid="running-timer-indicator"
+      data-workspace-id={entry.workspaceId}
+      title={elsewhere === null ? undefined : t("workspace.runningIn", { name: elsewhere })}
     >
+      {elsewhere === null ? null : (
+        <span
+          className="max-w-16 truncate text-xs text-muted-foreground sm:max-w-28"
+          data-testid="running-timer-workspace"
+        >
+          {elsewhere}
+        </span>
+      )}
       <span
         aria-hidden="true"
         className="size-2 shrink-0 animate-pulse rounded-full bg-destructive"
@@ -464,6 +489,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
                   </kbd>
                 </TooltipContent>
               </Tooltip>
+              <WorkspaceSwitcher />
               <RunningTimerIndicator />
               <SyncDot status={status} />
               <ThemeSync />

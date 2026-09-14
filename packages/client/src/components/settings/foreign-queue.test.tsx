@@ -71,6 +71,9 @@ describe("ForeignQueuePanel", () => {
         at: "2026-08-21T09:00:00.000Z",
         server: null,
         otherServer: null,
+        workspaceId: null,
+        workspaceName: null,
+        leftWorkspace: false,
       },
       {
         queueId: "2",
@@ -79,6 +82,9 @@ describe("ForeignQueuePanel", () => {
         at: "2026-08-21T11:30:00.000Z",
         server: null,
         otherServer: null,
+        workspaceId: null,
+        workspaceName: null,
+        leftWorkspace: false,
       },
     ]);
 
@@ -101,6 +107,9 @@ describe("ForeignQueuePanel", () => {
         at: "2026-08-21T09:00:00.000Z",
         server: null,
         otherServer: null,
+        workspaceId: null,
+        workspaceName: null,
+        leftWorkspace: false,
       },
     ]);
     render(<ForeignQueuePanel />);
@@ -116,6 +125,9 @@ describe("ForeignQueuePanel", () => {
         at: "2026-08-21T09:00:00.000Z",
         server: null,
         otherServer: null,
+        workspaceId: null,
+        workspaceName: null,
+        leftWorkspace: false,
       },
     ]);
 
@@ -147,6 +159,9 @@ describe("ForeignQueuePanel", () => {
         at: "2026-08-21T09:00:00.000Z",
         server: null,
         otherServer: null,
+        workspaceId: null,
+        workspaceName: null,
+        leftWorkspace: false,
       },
       {
         queueId: "s1",
@@ -155,6 +170,9 @@ describe("ForeignQueuePanel", () => {
         at: "2026-08-22T09:00:00.000Z",
         server: "https://track.example.com",
         otherServer: "https://track.example.com",
+        workspaceId: null,
+        workspaceName: null,
+        leftWorkspace: false,
       },
       {
         queueId: "s2",
@@ -163,6 +181,9 @@ describe("ForeignQueuePanel", () => {
         at: "2026-08-22T10:00:00.000Z",
         server: "https://track.example.com",
         otherServer: "https://track.example.com",
+        workspaceId: null,
+        workspaceName: null,
+        leftWorkspace: false,
       },
     ]);
 
@@ -186,6 +207,64 @@ describe("ForeignQueuePanel", () => {
     fireEvent.click(screen.getByTestId("foreign-queue-confirm-discard"));
     await waitFor(() =>
       expect(discardForeignQueued).toHaveBeenCalledWith(["s1", "s2"]),
+    );
+  });
+
+  it("names a left workspace's rows by workspace, and discards only that group", async () => {
+    setRows([
+      {
+        queueId: "w1",
+        op: "entries.start",
+        description: "Retainer call",
+        at: "2026-09-10T09:00:00.000Z",
+        server: null,
+        otherServer: null,
+        workspaceId: "ws-acme",
+        workspaceName: "Acme",
+        leftWorkspace: true,
+      },
+      {
+        queueId: "w2",
+        op: "entries.create",
+        description: "Old work",
+        at: "2026-09-11T09:00:00.000Z",
+        server: null,
+        otherServer: null,
+        workspaceId: "ws-gone",
+        workspaceName: null,
+        leftWorkspace: true,
+      },
+      {
+        queueId: "a1",
+        op: "entries.start",
+        description: "Design review",
+        at: "2026-08-21T09:00:00.000Z",
+        server: null,
+        otherServer: null,
+        workspaceId: null,
+        workspaceName: null,
+        leftWorkspace: false,
+      },
+    ]);
+
+    render(<ForeignQueuePanel />);
+    await screen.findByText(/Retainer call/);
+
+    const groups = screen.getAllByTestId("foreign-queue-group");
+    expect(groups).toHaveLength(3);
+    const acme = groups.find((group) => group.dataset.workspaceId === "ws-acme");
+    const gone = groups.find((group) => group.dataset.workspaceId === "ws-gone");
+    if (!acme || !gone) throw new Error("workspace groups missing");
+    expect(acme).toHaveTextContent("Unsynced data for Acme");
+    expect(acme).toHaveTextContent("not sent to any other workspace");
+    expect(gone).toHaveTextContent("Unsynced data for a workspace you left");
+
+    fireEvent.click(within(acme).getByTestId("foreign-queue-discard"));
+    const confirm = await screen.findByTestId("foreign-queue-confirm");
+    expect(confirm).toHaveTextContent("tracked in Acme");
+    fireEvent.click(screen.getByTestId("foreign-queue-confirm-discard"));
+    await waitFor(() =>
+      expect(discardForeignQueued).toHaveBeenCalledWith(["w1"]),
     );
   });
 });
