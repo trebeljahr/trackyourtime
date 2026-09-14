@@ -693,6 +693,49 @@ the very thing being replaced.
   offers the one deliberate way out. No age-based expiry: deleting somebody's
   tracked time on a timer is still deleting it silently.
 
+### Workspaces in the clients
+
+A person can belong to several workspaces, and every first-party client names
+the one it means on **every request** (`input.workspaceId`). Each keeps its own
+choice — the web app in `lib/active-workspace.ts` (Preferences on the phone),
+the extension in `chrome.storage.local` (`lib/workspace-choice.ts`), Raycast in
+`LocalStorage` (`lib/workspace.ts`) — and none follows the session's
+`activeOrganizationId`. That value is one per session, the extension often
+borrows the web app's session, and a switch in one client must never retarget
+a timer started from another. The extension and Raycast never call
+`workspaces.setActive`. The rules shared by all three (how a stored id
+resolves, which socket events concern the screen, whose entries a total
+counts, the stored record's shape) are `workspace-context.ts` in core.
+
+What fails quietly if it is changed:
+
+- **A queued row is stamped with its workspace, and the replay sends the
+  stamp.** `QueuedMutation.workspaceId` is optional forever (legacy rows are
+  adopted by the first resolved workspace). The api client's `workspaceId`
+  getter and the web tRPC link only fill a gap, so a row queued in A replays
+  into A after a switch to B.
+- **A row for a workspace the person left is held**: never replayed, never
+  dropped, counted with the foreign rows and named with a deliberate discard.
+  Every flush first asks `workspaces.list`, and sends nothing without an
+  answer — the server refuses such a row with NOT_FOUND, which is a permanent
+  rejection the flush would otherwise drop. Held rows are excluded from the
+  "is something ahead of a new mutation" count, or every future start would
+  queue behind a row that never drains.
+- **Only UNAUTHORIZED halts a flush.** FORBIDDEN is a per-row permanent
+  refusal (`PERMANENT_REJECTIONS` includes 403): in a shared workspace it is a
+  role change refusing one row, not a lost session.
+- **Anything cached is keyed by workspace.** The web app clears the React
+  Query cache on a switch; the extension drops its per-workspace caches;
+  Raycast keys its read cache, overlay and every `useApi` slot by workspace and
+  tags loaded data with the workspace it was fetched for, because
+  `useCachedPromise` keeps the previous key's data across a key change.
+- **The running timer is the person's.** Another workspace's timer events
+  still move it (`syncEventReach` → `"timer"`); nothing else of that workspace
+  reaches the screen. A colleague's timer event never becomes the extension
+  badge, and every personal total (extension Today, Raycast menu bar, Continue,
+  Show All Time) counts only the signed-in person's entries — an unknown user
+  owns nothing.
+
 ### Clients without a cookie jar (Raycast, CLI, extensions)
 
 There are no API tokens to mint or paste. Every client signs in normally
