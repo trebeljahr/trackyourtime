@@ -851,8 +851,8 @@ What is deleted:
   they created (with deliveries), imports they ran, invitations they sent, and
   both membership records. The catalog, invoices, invoiced entries,
   workspace settings and the business profile stay with the workspace.
-- **Everywhere**: user preferences, profile, device-flow codes, and pending
-  invitations addressed to the email.
+- **Everywhere**: user preferences, profile, device-flow codes, the two-factor
+  secret and backup codes, and pending invitations addressed to the email.
 
 Five rules, each of which fails quietly if broken:
 

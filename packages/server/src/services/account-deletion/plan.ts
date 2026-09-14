@@ -42,13 +42,15 @@ export type DeletionCollection =
   | "authOrganizations"
   | "authMembers"
   | "authInvitations"
-  | "authDeviceCodes";
+  | "authDeviceCodes"
+  | "authTwoFactors";
 
 export const AUTH_COLLECTIONS: ReadonlySet<DeletionCollection> = new Set([
   "authOrganizations",
   "authMembers",
   "authInvitations",
   "authDeviceCodes",
+  "authTwoFactors",
 ]);
 
 /**
@@ -172,6 +174,10 @@ export function userScopedSteps(user: { id: string; email?: string | null }): De
     { collection: "userPreferences", filter: { userId: user.id } },
     { collection: "profiles", filter: { userId: user.id } },
     { collection: "authDeviceCodes", filter: { userId: user.id } },
+    // The TOTP secret and backup codes. better-auth's `deleteUser` removes
+    // only user, account and session rows, and Mongo has no foreign-key
+    // cascade, so without this step the secret outlives the account.
+    { collection: "authTwoFactors", filter: { userId: user.id } },
     ...(email ? [{ collection: "authInvitations" as const, filter: { email } }] : []),
   ];
 }

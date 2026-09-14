@@ -27,7 +27,11 @@ import {
 
 type AppCollection = Exclude<
   DeletionCollection,
-  "authOrganizations" | "authMembers" | "authInvitations" | "authDeviceCodes"
+  | "authOrganizations"
+  | "authMembers"
+  | "authInvitations"
+  | "authDeviceCodes"
+  | "authTwoFactors"
 >;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,6 +60,7 @@ const AUTH_MODELS: Record<string, string> = {
   authMembers: "member",
   authInvitations: "invitation",
   authDeviceCodes: "deviceCode",
+  authTwoFactors: "twoFactor",
 };
 
 /**

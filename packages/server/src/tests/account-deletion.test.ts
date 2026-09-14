@@ -77,6 +77,10 @@ const seed = (): NonNullable<Parameters<typeof memoryRowStore>[0]> => ({
     { id: "d1", userId: ALICE },
     { id: "d2", userId: BOB },
   ],
+  authTwoFactors: [
+    { id: "tf1", userId: ALICE },
+    { id: "tf2", userId: BOB },
+  ],
   timeEntries: [
     { id: "e1", workspaceId: SOLO, authorId: ALICE, invoiceId: "inv_solo" },
     { id: "e2", workspaceId: SOLO, authorId: ALICE },
@@ -300,6 +304,7 @@ describe("deleteAccountData", () => {
     assert.deepEqual(store.rows.userPreferences, [{ userId: BOB }]);
     assert.deepEqual(store.rows.profiles, [{ userId: BOB }]);
     assert.deepEqual(ids(store, "authDeviceCodes"), ["d2"]);
+    assert.deepEqual(ids(store, "authTwoFactors"), ["tf2"]);
   });
 
   it("does not touch Bob's own workspace at all", async () => {
