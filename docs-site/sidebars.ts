@@ -19,15 +19,12 @@ const sidebars: SidebarsConfig = {
         "api/authentication",
         "api/errors",
         "api/rate-limits",
-        "api/reference",
+        // The generated page opens with an MDX comment, so Docusaurus would take
+        // its sidebar label from the file name ("reference").
+        { type: "doc", id: "api/reference", label: "API reference" },
         "api/webhooks",
       ],
     },
-    // Left over from the starter this repo grew from: they describe the
-    // monorepo, not the product. Kept last, and kept out of llms.txt
-    // (scripts/llms/site.mjs, EXCLUDED_DOC_IDS), until they are rewritten.
-    "getting-started",
-    "architecture",
   ],
 };
 

@@ -27,8 +27,10 @@ import {
  * `scripts/llms/site.mjs`. trackyourtime.dev's own `llms.txt` is rendered from
  * the same module, so the two cannot describe different products.
  *
- * Links in the copies are absolute, built on `siteConfig.url`: a `.md` file
- * fetched on its own has no page around it to resolve a relative link against.
+ * Links in the copies are absolute, built on `siteConfig.url` and
+ * `siteConfig.baseUrl` (the site lives at trackyourtime.dev/docs/): a `.md`
+ * file fetched on its own has no page around it to resolve a relative link
+ * against.
  */
 
 /** The slice of a docs plugin doc this plugin reads. */
@@ -46,9 +48,16 @@ type DocsContent = { loadedVersions: Array<{ docs: DocMetadata[] }> };
 
 type PageLink = { title: string; url: string; description?: string };
 
-/** `/api/overview` → `/api/overview.md`, `/` → `/index.md`. */
-export function markdownPathFor(permalink: string): string {
-  return permalink.endsWith("/") ? `${permalink}index.md` : `${permalink}.md`;
+/**
+ * `/docs/mcp/` → `/docs/mcp.md`, `/docs/` → `/docs/index.md`.
+ *
+ * A page's own address ends in a slash (`trailingSlash: true`), so "add .md"
+ * would give `/docs/mcp/.md`; the copy sits beside the folder instead. Only the
+ * site root, which has no name to put `.md` after, becomes `index.md`.
+ */
+export function markdownPathFor(permalink: string, baseUrl = "/"): string {
+  if (permalink === baseUrl || permalink === "/") return `${permalink}index.md`;
+  return `${permalink.replace(/\/+$/, "")}.md`;
 }
 
 export function llmsMarkdownPlugin(context: LoadContext): Plugin<void> {
@@ -62,6 +71,9 @@ export function llmsMarkdownPlugin(context: LoadContext): Plugin<void> {
     source.startsWith("@site/") ? source.slice("@site/".length) : relative(siteDir, source).split("\\").join("/");
 
   const absolute = (path: string): string => `${origin}${path}`;
+  /** A path written from the site root (`/llms.txt`) → under baseUrl (`/docs/llms.txt`). */
+  const underBase = (path: string): string => `${baseUrl}${path.replace(/^\/+/, "")}`;
+  const mdPath = (permalink: string): string => markdownPathFor(permalink, baseUrl);
 
   function linkRewriter(doc: DocMetadata): (target: string) => string {
     const bySource = new Map(docs.map((d) => [sitePath(d.source), d]));
@@ -69,19 +81,22 @@ export function llmsMarkdownPlugin(context: LoadContext): Plugin<void> {
     const from = posix.dirname(sitePath(doc.source));
 
     return (target) => {
-      if (target.startsWith("pathname://")) return absolute(target.slice("pathname://".length));
+      // Docusaurus prepends baseUrl to `pathname://` links on the HTML page, so
+      // the copy has to as well.
+      if (target.startsWith("pathname://")) return absolute(underBase(target.slice("pathname://".length)));
       if (target.startsWith("#") || isExternal(target)) return target;
 
       const { path, suffix } = splitTarget(target);
       if (path === "") return target;
 
       if (path.startsWith("/")) {
-        const linked = byPermalink.get(path.replace(/\/$/, "") || "/");
-        return linked ? absolute(markdownPathFor(linked.permalink)) + suffix : absolute(path) + suffix;
+        const routed = underBase(path);
+        const linked = byPermalink.get(routed.replace(/\/$/, "") || "/");
+        return linked ? absolute(mdPath(linked.permalink)) + suffix : absolute(routed) + suffix;
       }
 
       const linked = bySource.get(posix.normalize(posix.join(from, path)));
-      return linked ? absolute(markdownPathFor(linked.permalink)) + suffix : target;
+      return linked ? absolute(mdPath(linked.permalink)) + suffix : target;
     };
   }
 
@@ -118,7 +133,7 @@ export function llmsMarkdownPlugin(context: LoadContext): Plugin<void> {
       for (const doc of docs) {
         const text = markdownOf(doc);
         markdown.set(doc.id, text);
-        const file = join(outDir, markdownPathFor(doc.permalink).slice(baseUrl.length));
+        const file = join(outDir, mdPath(doc.permalink).slice(baseUrl.length));
         mkdirSync(dirname(file), { recursive: true });
         writeFileSync(file, text);
       }
@@ -126,7 +141,7 @@ export function llmsMarkdownPlugin(context: LoadContext): Plugin<void> {
       const byId = new Map(docs.map((doc) => [doc.id, doc]));
       const toLink = (doc: DocMetadata): PageLink => ({
         title: titleFor(doc),
-        url: absolute(markdownPathFor(doc.permalink)),
+        url: absolute(mdPath(doc.permalink)),
         description: doc.description || undefined,
       });
       const present = (ids: readonly string[]): DocMetadata[] =>
@@ -147,7 +162,7 @@ export function llmsMarkdownPlugin(context: LoadContext): Plugin<void> {
         .find((section) => section.title === "REST API")
         ?.links.push({
           title: "OpenAPI document",
-          url: absolute(`${baseUrl}openapi.json`),
+          url: absolute(underBase("openapi.json")),
           description: "The machine-readable description of every /api/v1 route.",
         });
       sections.push({ title: "Optional", links: optional.map(toLink) });
@@ -157,7 +172,7 @@ export function llmsMarkdownPlugin(context: LoadContext): Plugin<void> {
       const llmsFull = renderLlmsFull(
         llmsTxt,
         fullTextDocs.map((doc) => ({
-          url: absolute(markdownPathFor(doc.permalink)),
+          url: absolute(mdPath(doc.permalink)),
           markdown: markdown.get(doc.id) ?? "",
         })),
       );

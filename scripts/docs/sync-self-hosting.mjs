@@ -4,8 +4,9 @@
  *
  *   pnpm docs:sync
  *
- * `docs/self-hosting.md` stays the canonical guide: the README and the
- * marketing pages link to it on GitHub. The docs site needs the same text with
+ * `docs/self-hosting.md` stays the canonical guide: the README links to it on
+ * GitHub, and the marketing pages link its docs-site copy at
+ * trackyourtime.dev/docs/self-hosting/. The docs site needs the same text with
  * three changes, and a hand-kept copy would drift the first time the guide is
  * edited:
  *

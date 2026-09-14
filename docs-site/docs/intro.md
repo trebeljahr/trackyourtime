@@ -19,4 +19,4 @@ These docs are for three kinds of reader.
 
 A hosted instance runs at [trackyourtime.dev](https://trackyourtime.dev), and the code is on [GitHub](https://github.com/trebeljahr/trackyourtime) under AGPL-3.0-or-later.
 
-Every page on this site also exists as plain Markdown. Add `.md` to a page's address, or use `/index.md` for this page. [`/llms.txt`](pathname:///llms.txt) lists all of them.
+Every page on this site also exists as plain Markdown. Replace the final `/` of a page's address with `.md`, or use `/docs/index.md` for this page. [`/docs/llms.txt`](pathname:///llms.txt) lists all of them.

@@ -81,7 +81,7 @@ export function ExtensionPage({ locale }: { locale: Locale }): React.ReactElemen
             {t.rich("extension.selfHost.body", {
               guide: (chunks) => (
                 <a
-                  href={`${SELF_HOSTING_URL}#10-the-other-clients`}
+                  href={`${SELF_HOSTING_URL}#the-other-clients`}
                   className="text-foreground underline underline-offset-4"
                 >
                   {chunks}

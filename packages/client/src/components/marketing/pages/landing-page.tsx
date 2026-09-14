@@ -13,7 +13,7 @@ import {
 } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { localizedPath, marketingMetadata, marketingT, type Locale } from "@/i18n/marketing";
-import { DONATE_URL, OPENAPI_URL, REPO_URL, SELF_HOSTING_URL } from "@/lib/site-links";
+import { API_REFERENCE_URL, DONATE_URL, REPO_URL, SELF_HOSTING_URL } from "@/lib/site-links";
 
 /** Metadata for one locale of this page. `path` stays the English path. */
 export const landingMetadata = (locale: Locale): Metadata => {
@@ -187,7 +187,7 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
               q: t("landing.faq.api.q"),
               a: t.rich("landing.faq.api.a", {
                 reference: (chunks) => (
-                  <a href={OPENAPI_URL} className={link}>
+                  <a href={API_REFERENCE_URL} className={link}>
                     {chunks}
                   </a>
                 ),

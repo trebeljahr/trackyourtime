@@ -5,7 +5,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { SignedInRedirect } from "@/components/marketing/signed-in-redirect";
 import { FixedLocale } from "@/i18n/locale-root";
 import { localizedPath, marketingT, MARKETING_LOCALES, type Locale } from "@/i18n/marketing";
-import { OPENAPI_URL, REPO_URL } from "@/lib/site-links";
+import { API_DOCS_URL, DOCS_URL, REPO_URL } from "@/lib/site-links";
 
 const NAV = [
   { href: "/extension/", label: "chrome" },
@@ -14,8 +14,12 @@ const NAV = [
 ] as const;
 
 /**
- * The chrome around every public page: a header with the three client pages,
- * and a footer with the legal and developer links.
+ * The chrome around every public page: a header with the three client pages
+ * and the docs, and a footer with the legal and developer links.
+ *
+ * The docs links are plain `<a>`: /docs/ is a separate Docusaurus build copied
+ * into the export, not a Next route, so `<Link>` would try a client-side
+ * navigation to a page the router does not have. The docs are English only.
  *
  * `data-marketing` is what `styles/native.css` hides inside the Capacitor
  * shell. The native app opens on `/`, and the first frame it paints must not be
@@ -55,6 +59,9 @@ export function MarketingShell({
                 {t(`shell.nav.${item.label}`)}
               </Link>
             ))}
+            <a href={DOCS_URL} hrefLang="en" className="hover:text-foreground" data-testid="marketing-docs">
+              {t("shell.nav.docs")}
+            </a>
           </nav>
           <div className="ml-auto flex items-center gap-4 text-sm">
             <Link href="/login/" className="text-muted-foreground hover:text-foreground">
@@ -85,7 +92,8 @@ export function MarketingShell({
           </ul>
           <ul className="space-y-2">
             <li><a href={REPO_URL} className="hover:text-foreground">{t("shell.footer.sourceCode")}</a></li>
-            <li><a href={OPENAPI_URL} className="hover:text-foreground">{t("shell.footer.apiSpec")}</a></li>
+            <li><a href={DOCS_URL} hrefLang="en" className="hover:text-foreground">{t("shell.footer.docs")}</a></li>
+            <li><a href={API_DOCS_URL} hrefLang="en" className="hover:text-foreground">{t("shell.footer.apiDocs")}</a></li>
             <li><Link href={href("/privacy/")} className="hover:text-foreground">{t("shell.footer.privacy")}</Link></li>
             <li><Link href={href("/support/")} className="hover:text-foreground">{t("shell.footer.support")}</Link></li>
           </ul>

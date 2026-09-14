@@ -11,10 +11,11 @@
  * time any of them is edited. `scripts/lib/llms.test.mjs` fails when the
  * committed files no longer match what this script would write.
  *
- * The docs site is not deployed yet, so every docs link here points at the raw
- * Markdown on GitHub — the one address for those pages that answers today.
- * The docs site writes its own pair of files, with its own links, at build
- * time (`docs-site/plugins/llms-markdown.ts`).
+ * Every docs link here points at the docs site's Markdown copy of that page,
+ * `https://trackyourtime.dev/docs/<page>.md`, which the same client image
+ * serves (`scripts/docs/build-into-client.mjs`). The docs site also writes its
+ * own pair of files at `/docs/llms.txt`, at build time
+ * (`docs-site/plugins/llms-markdown.ts`).
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -24,6 +25,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { isExternal, splitFrontMatter, splitTarget, titleOf, toCleanMarkdown } from "./markdown.mjs";
 import {
   BLOB_URL,
+  DOCS_URL,
   DOC_SECTIONS,
   OPENAPI_URL,
   OPTIONAL_DOC_IDS,
@@ -38,8 +40,9 @@ export const LLMS_TXT_PATH = "packages/client/public/llms.txt";
 export const LLMS_FULL_PATH = "packages/client/public/llms-full.txt";
 
 /**
- * Where a docs id's source lives in the repo. The docs site's self-hosting page
- * is generated from `docs/self-hosting.md`, so the web app links the original.
+ * Where a docs id's text is read from. The docs site's self-hosting page is
+ * generated from `docs/self-hosting.md`, so the original is read instead of
+ * the copy with its links already rewritten for the docs site.
  */
 const SOURCE_OVERRIDES = { "self-hosting": "docs/self-hosting.md" };
 
@@ -94,6 +97,21 @@ function sourcePathOf(id) {
 }
 
 /**
+ * The docs site's Markdown copy of a page: `mcp` → `…/docs/mcp.md`. A `slug`
+ * in the page's front matter moves it, as it moves the page (`api/overview`
+ * has `slug: /api/` → `…/docs/api.md`; the intro's `/` → `…/docs/index.md`).
+ * Mirrors `markdownPathFor` in `docs-site/plugins/llms-markdown.ts`.
+ *
+ * @param {string} root
+ * @param {string} id
+ */
+export function docsMarkdownUrl(root, id) {
+  const slug = splitFrontMatter(readSource(root, `docs-site/docs/${id}.md`)).data.slug;
+  const route = (typeof slug === "string" ? slug : id).replace(/^\/+|\/+$/g, "");
+  return `${DOCS_URL}/${route === "" ? "index" : route}.md`;
+}
+
+/**
  * @param {string} root
  * @param {string} relativePath
  */
@@ -106,9 +124,24 @@ function readSource(root, relativePath) {
 }
 
 /**
+ * The docs id a repo path is published as, or null: `docs-site/docs/mcp.md` →
+ * `mcp`, and the self-hosting guide's source → `self-hosting`.
+ *
+ * @param {string} root
+ * @param {string} repoPath
+ */
+function docsIdOf(root, repoPath) {
+  const override = Object.entries(SOURCE_OVERRIDES).find(([, path]) => path === repoPath);
+  if (override) return override[0];
+  const match = repoPath.match(/^docs-site\/docs\/(.+)\.md$/);
+  return match && existsSync(resolve(root, repoPath)) ? match[1] : null;
+}
+
+/**
  * Point a link found in `sourcePath` at an address that works outside the
- * repo: Markdown files at their raw GitHub URL, other repo files at their
- * GitHub page, the docs site's OpenAPI link at the live API.
+ * repo: docs pages at their Markdown copy on the docs site, other Markdown
+ * files at their raw GitHub URL, other repo files at their GitHub page, the
+ * docs site's OpenAPI link at the live API.
  *
  * @param {string} root
  * @param {string} sourcePath
@@ -133,6 +166,8 @@ export function webLinkRewriter(root, sourcePath) {
       if (repoPath.startsWith("..")) return target;
     }
 
+    const docsId = docsIdOf(root, repoPath);
+    if (docsId) return `${docsMarkdownUrl(root, docsId)}${suffix}`;
     return /\.mdx?$/.test(repoPath) ? `${RAW_URL}/${repoPath}${suffix}` : `${BLOB_URL}/${repoPath}${suffix}`;
   };
 }
@@ -147,7 +182,7 @@ function linkFor(root, id) {
   const override = LINK_OVERRIDES[id] ?? {};
   return {
     title: override.title ?? titleOf(source) ?? id,
-    url: `${RAW_URL}/${sourcePath}`,
+    url: docsMarkdownUrl(root, id),
     description: override.description ?? splitFrontMatter(source).data.description,
   };
 }
@@ -196,7 +231,7 @@ export function buildWebLlmsFiles({ root = REPO_ROOT } = {}) {
     const sourcePath = sourcePathOf(id);
     const source = readSource(root, sourcePath);
     return {
-      url: `${RAW_URL}/${sourcePath}`,
+      url: docsMarkdownUrl(root, id),
       markdown: toCleanMarkdown(source, { rewriteLink: webLinkRewriter(root, sourcePath) }),
     };
   });

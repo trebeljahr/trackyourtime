@@ -54,7 +54,7 @@ browser / extension / Raycast
 | `packages/extension` | Chrome MV3 extension, popup only. `src/background/` (holds the sync client), `src/popup/`, `src/lib/`. `manifest.config.ts` bakes in the DEFAULT API URL; the popup's server picker switches to any server, requesting that one host through `optional_host_permissions` | Extension UI or background behaviour. Its `chrome-extension://` origin must be trusted by the server — `TRUST_STORE_APPS=true` covers the store id |
 | `packages/raycast` | Raycast (macOS) extension: `menu-bar.tsx`, `timer.tsx`, `entries.tsx`, `components/` (incl. catalog forms), `lib/` | Raycast commands and forms only — domain logic belongs in `core`/`shared` |
 | `packages/mcp` | MCP server on stdio over the public REST API (`/api/v1`) with an API token: `api-client`, `tools` (input schemas from `shared`), `server` (scope probe), `index` (the `trackyourtime-mcp` binary) | A new tool, or a REST change a tool depends on. It never calls tRPC |
-| `docs-site` | Docusaurus site, **not deployed**: intro, choosing a tracker, self-hosting (generated from `docs/self-hosting.md` by `pnpm docs:sync`), MCP, REST API. `getting-started` and `architecture` are still starter boilerplate. `plugins/llms-markdown.ts` emits a `.md` copy of every page plus `llms.txt` at build | API or MCP changes, and after editing `docs/self-hosting.md` |
+| `docs-site` | Docusaurus site served at `trackyourtime.dev/docs/` from the client image (`scripts/docs/build-into-client.mjs`): intro, choosing a tracker, self-hosting (generated from `docs/self-hosting.md` by `pnpm docs:sync`), MCP, REST API. `plugins/llms-markdown.ts` emits a `.md` copy of every page plus `llms.txt` at build | API or MCP changes, and after editing `docs/self-hosting.md` |
 
 `shared` vs `core` is the boundary worth internalising: **`shared` is data and
 pure functions** (a type, a zod schema, a rule with no I/O); **`core` is runtime
@@ -471,6 +471,8 @@ Beyond those, four things that fail *quietly*:
   the Raycast conventions, the dev-port rationale. See
   [CONTRIBUTING.md](CONTRIBUTING.md#repository-layout) for what it is and the
   caveats that come with reading it.
-- `docs-site/` — not deployed, and still starter boilerplate that contradicts
-  this file in places; prefer this document. (Described in the repository map
-  above and in [README.md](README.md#project).)
+- `docs-site/` — the user-facing docs at
+  [trackyourtime.dev/docs](https://trackyourtime.dev/docs/): self-hosting, the
+  MCP server and the REST API. It does not describe the code; this document
+  does. (Described in the repository map above and in
+  [README.md](README.md#project).)

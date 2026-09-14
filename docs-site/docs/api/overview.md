@@ -1,5 +1,6 @@
 ---
 sidebar_position: 1
+slug: /api/
 description: The public REST API at /api/v1 — base URL, response envelope, cursor pagination, and what an API token can and cannot reach.
 ---
 

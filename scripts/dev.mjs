@@ -344,7 +344,7 @@ const portMode = fixedMode
 console.log(`  Mode:     ${portMode}`);
 console.log(`  Client:   http://${WEB_HOST}:${clientPort}`);
 if (includeDocs) {
-  console.log(`  Docs:     http://${WEB_HOST}:${docsPort}`);
+  console.log(`  Docs:     http://${WEB_HOST}:${docsPort}/docs/`);
 }
 console.log(`  Server:   http://${WEB_HOST}:${apiPort}`);
 console.log(`  Database: ${mongoUri}`);

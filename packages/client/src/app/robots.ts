@@ -8,9 +8,7 @@ const SITE_URL = "https://trackyourtime.dev";
 /**
  * Crawlers that fetch pages for AI assistants and AI search. A crawler that
  * finds a group naming it ignores the `*` group, so the named group repeats
- * the same rules. `scripts/llms/site.mjs` (`AI_CRAWLERS`) holds the docs
- * site's copy of this list, and `scripts/lib/llms.test.mjs` fails when the two
- * disagree.
+ * the same rules.
  */
 const AI_CRAWLERS = [
   "GPTBot",
@@ -40,6 +38,9 @@ export default function robots(): MetadataRoute.Robots {
       { userAgent: "*", allow: "/", disallow: DISALLOW },
       { userAgent: AI_CRAWLERS, allow: "/", disallow: DISALLOW },
     ],
-    sitemap: `${SITE_URL}/sitemap.xml`,
+    // The docs at /docs/ are a separate Docusaurus build copied into the export
+    // (scripts/docs/build-into-client.mjs) with a sitemap of its own. This is
+    // the domain's only robots.txt, so it names both.
+    sitemap: [`${SITE_URL}/sitemap.xml`, `${SITE_URL}/docs/sitemap.xml`],
   };
 }

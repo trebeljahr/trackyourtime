@@ -33,22 +33,22 @@ Point a domain at a Linux server with Docker, clone the repository, copy `.env.s
 
 ## Start here
 
-- [Choosing a self-hosted time tracker](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/choosing-a-self-hosted-time-tracker.md): Three kinds of self-hosted time tracker, what each one is good at, when to pick it, and what Track Your Time cannot do yet.
-- [Self-hosting guide](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs/self-hosting.md): Run Track Your Time on one server with one domain and Docker Compose: install, first account, email, backups, upgrades and troubleshooting.
+- [Choosing a self-hosted time tracker](https://trackyourtime.dev/docs/choosing-a-self-hosted-time-tracker.md): Three kinds of self-hosted time tracker, what each one is good at, when to pick it, and what Track Your Time cannot do yet.
+- [Self-hosting guide](https://trackyourtime.dev/docs/self-hosting.md): Run Track Your Time on one server with one domain and Docker Compose: install, first account, email, backups, upgrades and troubleshooting.
 
 ## Invoicing
 
-- [E-invoices (XRechnung and ZUGFeRD)](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/e-invoices.md): Send an invoice as XRechnung XML or as a ZUGFeRD PDF with the invoice data inside. Complete your business profile, add your client's billing details and fix what the check reports.
+- [E-invoices (XRechnung and ZUGFeRD)](https://trackyourtime.dev/docs/e-invoices.md): Send an invoice as XRechnung XML or as a ZUGFeRD PDF with the invoice data inside. Complete your business profile, add your client's billing details and fix what the check reports.
 
 ## AI assistants
 
-- [MCP server](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/mcp.md): Start and stop timers, log time, list entries, manage clients, projects, tasks and tags, and summarise hours from Claude or any MCP client, on the hosted service or your own server.
+- [MCP server](https://trackyourtime.dev/docs/mcp.md): Start and stop timers, log time, list entries, manage clients, projects, tasks and tags, and summarise hours from Claude or any MCP client, on the hosted service or your own server.
 
 ## REST API
 
-- [REST API](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/overview.md): The public REST API at /api/v1 — base URL, response envelope, cursor pagination, and what an API token can and cannot reach.
-- [Authentication](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/authentication.md): Minting an API token, the scope table, how a token's visibility is resolved, and what revoking one does.
-- [Errors](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/errors.md): RFC 9457 problem+json error bodies, the full slug table, and what each status means on this API.
+- [REST API](https://trackyourtime.dev/docs/api.md): The public REST API at /api/v1 — base URL, response envelope, cursor pagination, and what an API token can and cannot reach.
+- [Authentication](https://trackyourtime.dev/docs/api/authentication.md): Minting an API token, the scope table, how a token's visibility is resolved, and what revoking one does.
+- [Errors](https://trackyourtime.dev/docs/api/errors.md): RFC 9457 problem+json error bodies, the full slug table, and what each status means on this API.
 - [OpenAPI document](https://api.trackyourtime.dev/api/v1/openapi.json): The machine-readable description of every /api/v1 route, served by the hosted API.
 
 ## Web pages
@@ -60,9 +60,9 @@ Point a domain at a Linux server with Docker, clone the repository, copy `.env.s
 
 ## Optional
 
-- [API reference](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/reference.md): Every REST endpoint under /api/v1, the scope it requires, and where its parameters go.
-- [Webhooks](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/webhooks.md): Webhook event catalogue, the signed request format, a Node verification example, retry and auto-disable behaviour, and the SSRF policy.
-- [Rate limits](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/docs-site/docs/api/rate-limits.md): The per-token and per-workspace request budgets, the RateLimit headers on every response, and how the limit behaves without Redis.
+- [API reference](https://trackyourtime.dev/docs/api/reference.md): Every REST endpoint under /api/v1, the scope it requires, and where its parameters go.
+- [Webhooks](https://trackyourtime.dev/docs/api/webhooks.md): Webhook event catalogue, the signed request format, a Node verification example, retry and auto-disable behaviour, and the SSRF policy.
+- [Rate limits](https://trackyourtime.dev/docs/api/rate-limits.md): The per-token and per-workspace request budgets, the RateLimit headers on every response, and how the limit behaves without Redis.
 - [README](https://raw.githubusercontent.com/trebeljahr/trackyourtime/main/README.md): The full feature list, the repository layout and the development setup.
 - [llms-full.txt](https://trackyourtime.dev/llms-full.txt): This file plus the full text of the self-hosting guide, the MCP page and the main API pages.
 - [Privacy](https://trackyourtime.dev/privacy/): What the hosted service stores, why, who else sees it, and how to get it back or have it deleted.

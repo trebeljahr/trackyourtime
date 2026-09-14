@@ -7,6 +7,7 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
 COPY packages/core/package.json packages/core/
 COPY packages/client/package.json packages/client/
+COPY docs-site/package.json docs-site/
 # Install all workspace deps (build stage is discarded)
 RUN pnpm install --frozen-lockfile
 
@@ -17,6 +18,11 @@ COPY packages/shared packages/shared
 COPY packages/server packages/server
 COPY packages/core packages/core
 COPY packages/client packages/client
+# The docs site is built into out/docs/ below. Its config and llms plugin import
+# from scripts/llms, and scripts/docs holds the copy-and-check step.
+COPY docs-site docs-site
+COPY scripts/llms scripts/llms
+COPY scripts/docs scripts/docs
 
 # Next.js inlines NEXT_PUBLIC_* into the browser bundle at BUILD time —
 # runtime env on the deployed container has no effect on browser code.
@@ -54,6 +60,14 @@ RUN test -n "$NEXT_PUBLIC_API_URL" \
       || (echo "NEXT_PUBLIC_API_URL build arg is empty" >&2; exit 1); \
     grep -rqF "$NEXT_PUBLIC_API_URL" packages/client/out/_next/static \
       || (echo "NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL never made it into the bundle" >&2; exit 1)
+
+# The docs, at https://trackyourtime.dev/docs/. Built here and not in the
+# client's own `build` script, because that script also feeds the Electron,
+# Tauri and E2E builds, none of which should carry them. The script exits
+# non-zero if any page would ship noindex or a canonical link to another host.
+# No git in this stage and no .git in the context: the docs sitemap therefore
+# carries no lastmod (docs-site/docusaurus.config.ts explains).
+RUN node scripts/docs/build-into-client.mjs
 
 # Stamp the commit next to the export so the deployed artefact can be asked
 # what it is. Served as /version.json by serve.mjs like any other static file.

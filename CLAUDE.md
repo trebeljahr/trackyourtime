@@ -1955,6 +1955,39 @@ The client image serves the static export: `output: "export"` leaves no
 The E2E suite runs that same file, so the deployed and tested servers cannot
 drift apart.
 
+**The docs site is served from the client image, at
+`https://trackyourtime.dev/docs/`.** `packages/client/Dockerfile` runs
+`scripts/docs/build-into-client.mjs` after the client build: it builds
+`docs-site` (`url` `https://trackyourtime.dev`, `baseUrl` `/docs/`,
+`trailingSlash: true` like the web app) and copies it to `out/docs/`.
+`pnpm build:web` is the same two steps locally. A folder of the apex rather
+than a `docs.` host keeps one domain for search, and rather than a third
+Coolify app or a proxy path it needs no routing at all — caddy-docker-proxy
+merges same-host `caddy_0` sites and `handle_path` strips its prefix, the two
+reasons above. Four rules that fail quietly if broken:
+
+- **Never add the docs to `@starter/client`'s own `build` script.** `out/` is
+  also written by the Electron/Tauri builds and by Playwright, and the phones
+  use `out-mobile`; only the web image should carry the docs.
+- **The docs address is a literal, and indexing is always on.** The config
+  used to read `DOCS_SITE_URL` and fall back to a placeholder that set
+  `noIndex` — a forgotten variable would ship an unindexable site that looks
+  fine. The copy step fails on any `noindex`, a canonical link or sitemap entry
+  outside `https://trackyourtime.dev/docs/`, or a robots.txt under `/docs/`.
+  CI's `verify` job runs it too, so a broken docs link fails a pull request
+  rather than the image build after merge.
+- **The domain has one robots.txt, the web app's** (`app/robots.ts`), which
+  lists `/docs/sitemap.xml` beside its own sitemap. The docs sitemap has no
+  `lastmod`: Docusaurus reads it from git, and the image's build context has no
+  `.git` (a git binary with no repository fails the build outright).
+- **Marketing pages link the docs absolutely** (`DOCS_URL` in
+  `lib/site-links.ts`), with plain `<a>`: the self-host image renders the same
+  pages on another domain, where no `/docs/` exists, and `/docs/` is not a Next
+  route for `<Link>` to navigate to. `serve.mjs` answers unknown `/docs/*`
+  paths with the docs' own 404 page and caches `/docs/assets/` (hashed) forever.
+  Every docs page also has a Markdown copy beside it (`/docs/mcp.md`,
+  `/docs/index.md`), which the root `llms.txt` links.
+
 ### Web command palette and description autocomplete
 
 Cmd/Ctrl+K opens `components/command-palette/` on every protected screen; the
@@ -2229,6 +2262,8 @@ be unpublishable. Never pass a locale to the shared duration helpers from
   apps treat it as the default and let the person choose another server.
 - No `rewrites()`, no `middleware.ts`, no server components with runtime
   data. Dynamic routes need `generateStaticParams`.
+- `/docs/` belongs to the docs site copied into `out/` after the build. A Next
+  route under `app/docs/` would be overwritten by it in the web image.
 - Next `<Image>` uses the default loader only because `images.unoptimized`
   is set in `next.config.ts`.
 

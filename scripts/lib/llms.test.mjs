@@ -18,7 +18,7 @@ import { resolve } from "node:path";
 
 import { REPO_ROOT, buildWebLlmsFiles, webLinkRewriter } from "../llms/build-llms.mjs";
 import { splitFrontMatter, titleOf, toCleanMarkdown } from "../llms/markdown.mjs";
-import { AI_CRAWLERS, OPENAPI_URL, RAW_URL } from "../llms/site.mjs";
+import { DOCS_URL, OPENAPI_URL, RAW_URL } from "../llms/site.mjs";
 
 describe("splitFrontMatter", () => {
   it("reads flat fields and unquotes values", () => {
@@ -101,8 +101,19 @@ describe("toCleanMarkdown", () => {
 describe("webLinkRewriter", () => {
   const rewrite = webLinkRewriter(REPO_ROOT, "docs-site/docs/api/overview.md");
 
-  it("points repo Markdown at raw GitHub and other files at their GitHub page", () => {
-    assert.equal(rewrite("./errors.md#slugs"), `${RAW_URL}/docs-site/docs/api/errors.md#slugs`);
+  it("points docs pages at their Markdown copy on the docs site", () => {
+    assert.equal(rewrite("./errors.md#slugs"), `${DOCS_URL}/api/errors.md#slugs`);
+    assert.equal(rewrite("./overview.md"), `${DOCS_URL}/api.md`, "a front-matter slug moves the copy");
+    assert.equal(webLinkRewriter(REPO_ROOT, "docs-site/docs/intro.md")("./self-hosting.md"), `${DOCS_URL}/self-hosting.md`);
+    assert.equal(
+      webLinkRewriter(REPO_ROOT, "README.md")("docs/self-hosting.md#backups"),
+      `${DOCS_URL}/self-hosting.md#backups`,
+      "the self-hosting guide's source is published as the docs page",
+    );
+  });
+
+  it("points other repo Markdown at raw GitHub and other files at their GitHub page", () => {
+    assert.equal(webLinkRewriter(REPO_ROOT, "docs/self-hosting.md")("./deploy.md"), `${RAW_URL}/docs/deploy.md`);
     assert.equal(
       webLinkRewriter(REPO_ROOT, "docs/self-hosting.md")("../.github/workflows/release.yml"),
       "https://github.com/trebeljahr/trackyourtime/blob/main/.github/workflows/release.yml",
@@ -131,13 +142,6 @@ describe("trackyourtime.dev llms files", () => {
     assert.match(text, /^# Track Your Time\n\n> /);
     assert.match(text, /\n## Optional\n/);
     assert.doesNotMatch(text, /\]\(\.{0,2}\//, "every link in llms.txt is absolute");
-  });
-});
-
-describe("robots.ts", () => {
-  it("names the same AI crawlers as the docs site's robots.txt", () => {
-    const source = readFileSync(resolve(REPO_ROOT, "packages/client/src/app/robots.ts"), "utf8");
-    const listed = [...source.matchAll(/^\s+"([^"]+)",$/gm)].map((match) => match[1]);
-    assert.deepEqual(listed, AI_CRAWLERS);
+    assert.doesNotMatch(text, /raw\.githubusercontent\.com\/[^)]*docs-site\/docs\//, "docs pages link the docs site, not GitHub");
   });
 });

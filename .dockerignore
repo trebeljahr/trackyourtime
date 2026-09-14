@@ -28,6 +28,9 @@
 # all), and the next package in the chain fails with TS2307 "cannot find
 # module '@starter/shared'" for a package that is plainly right there.
 **/*.tsbuildinfo
+# Docusaurus's cache and output — packages/client/Dockerfile rebuilds the docs.
+docs-site/.docusaurus
+docs-site/build
 **/.turbo
 .pnpm-store
 

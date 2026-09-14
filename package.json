@@ -16,6 +16,8 @@
     "build": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/server run build && pnpm --filter @starter/client run build",
     "build:server": "pnpm --filter @starter/shared run build && pnpm --filter @starter/server run build",
     "build:client": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/client run build",
+    "build:docs": "pnpm --filter docs-site run build",
+    "build:web": "pnpm build:client && node scripts/docs/build-into-client.mjs",
     "build:raycast": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter trackyourtime-raycast run build",
     "build:mcp": "pnpm --filter @starter/shared run build && pnpm --filter @starter/mcp run build",
     "test:mcp:integration": "pnpm --filter @starter/shared run build && pnpm --filter @starter/mcp run test:integration",

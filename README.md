@@ -246,7 +246,7 @@ The E2E suite starts its own Mongo, Redis and S3 containers on separate ports an
 | [`docs/deploy.md`](docs/deploy.md) | The production topology: two Coolify apps on two hosts — the web app on the apex, the API on `api.` — why the domain moved, and the four places that must agree on the API origin. |
 | [`docs/self-hosting.md`](docs/self-hosting.md) | Running your own instance: `docker-compose.selfhost.yml`, one domain behind a reverse proxy, SMTP, backup, restore and upgrades. |
 | [`docs/dev-setup.md`](docs/dev-setup.md) | The maintainer's own Tailscale/Caddy dev-URL setup. Needs a private CLI that is not installable from this repo — skip it. |
-| `docs-site/` | A Docusaurus site: self-hosting, choosing a tracker, the MCP server and the REST API. **Not deployed anywhere**: with `DOCS_SITE_URL` unset it uses a placeholder URL, which switches on `noIndex` and a disallow-all robots.txt. Every build also writes a Markdown copy of each page and an `llms.txt`. `getting-started` and `architecture` are still starter boilerplate. Run it locally with `pnpm run dev:docs`. |
+| `docs-site/` | The Docusaurus site served at [trackyourtime.dev/docs](https://trackyourtime.dev/docs/): self-hosting, choosing a tracker, the MCP server and the REST API. It is built into the web app's image ([`docs/deploy.md`](docs/deploy.md#the-docs-are-part-of-the-client-image)). Every build also writes a Markdown copy of each page and an `llms.txt`. Run it locally with `pnpm run dev:docs`. |
 
 ## Contributing
 

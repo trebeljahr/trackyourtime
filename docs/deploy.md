@@ -329,6 +329,52 @@ it), so the deployed server and the tested one cannot drift apart.
 
 `docker-compose.yml` is the legacy single-app layout, kept for reference.
 
+## The docs are part of the client image
+
+The Docusaurus site in `docs-site/` is served at
+**`https://trackyourtime.dev/docs/`** by the same `trackyourtime-client` app.
+`packages/client/Dockerfile` runs `node scripts/docs/build-into-client.mjs`
+after the client build, which builds the docs with `baseUrl: "/docs/"` and
+copies them to `out/docs/`; `serve.mjs` serves them like any other file. There
+is no DNS record, Coolify app or proxy label for the docs.
+
+Why this shape and not the two obvious others:
+
+- **Not `docs.trackyourtime.dev`.** A subdomain is a separate site to search
+  engines, so the pages that answer "self-hosted time tracker" would build
+  authority for a host the product does not live on. It would also be a third
+  Coolify app to deploy and keep in step with the web app.
+- **Not a proxy path to a separate docs container.** That is the shape that
+  already failed here (section 2 above): caddy-docker-proxy merges two apps'
+  `caddy_0` sites for the same host, and `handle_path=/docs*` strips the prefix
+  a `baseUrl: "/docs/"` build needs.
+
+The costs are small and deliberate: a docs-only change rebuilds and redeploys
+the client image (which never restarts the server or drops a socket), and the
+image build stage installs the docs site's dependencies. The copy step fails
+the build if any page carries `noindex`, a canonical link or sitemap entry
+outside `https://trackyourtime.dev/docs/`, or a robots.txt under `/docs/`. The
+domain's one robots.txt (from `packages/client/src/app/robots.ts`) lists
+`/docs/sitemap.xml` as a second sitemap.
+
+To check a deploy:
+
+```bash
+curl -sI https://trackyourtime.dev/docs/self-hosting/ | head -1   # 200
+curl -s https://trackyourtime.dev/robots.txt | grep Sitemap       # both sitemaps
+curl -s https://trackyourtime.dev/docs/sitemap.xml | head -c 300
+```
+
+To build and serve the same tree locally:
+
+```bash
+NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev pnpm build:web
+PORT=<free port> HOST=127.0.0.1 node packages/client/serve.mjs
+```
+
+`Dockerfile.selfhost` does not include the docs: a self-hosted instance links
+to them on trackyourtime.dev.
+
 ## Android release signing
 
 Play will not accept an unsigned bundle, and `.github/workflows/

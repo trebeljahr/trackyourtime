@@ -4,9 +4,9 @@
  * Two `llms.txt` files are rendered from this module: trackyourtime.dev's
  * (`scripts/llms/build-llms.mjs`, committed under `packages/client/public/`)
  * and the docs site's (the `llms-markdown` plugin, written at build time).
- * They differ only in where their links point — the docs site is not deployed
- * yet, so the web app's copy links raw Markdown on GitHub — and keeping the
- * prose here stops the two from describing different products.
+ * Both link the docs pages' Markdown copies under trackyourtime.dev/docs/;
+ * they differ in which other pages they list. Keeping the prose here stops the
+ * two from describing different products.
  *
  * Every sentence below has to be true of the repo on the day it is committed.
  * Change a limit here when the limit goes away, then run `pnpm llms:emit`.
@@ -14,6 +14,8 @@
 
 export const PRODUCT_NAME = "Track Your Time";
 export const WEB_URL = "https://trackyourtime.dev";
+/** The docs site, served from the web app's image. Must match docs-site/docusaurus.config.ts. */
+export const DOCS_URL = `${WEB_URL}/docs`;
 export const API_URL = "https://api.trackyourtime.dev";
 export const OPENAPI_URL = `${API_URL}/api/v1/openapi.json`;
 export const REPO_URL = "https://github.com/trebeljahr/trackyourtime";
@@ -21,40 +23,12 @@ export const RAW_URL = "https://raw.githubusercontent.com/trebeljahr/trackyourti
 export const BLOB_URL = `${REPO_URL}/blob/main`;
 
 /**
- * Crawlers that fetch pages for AI assistants and AI search, allowed by name
- * in both robots files. A crawler that finds a group naming it ignores the
- * `User-agent: *` group, so the named group repeats the same rules.
- * `packages/client/src/app/robots.ts` keeps its own copy of this list, and
- * `scripts/lib/llms.test.mjs` fails when the two disagree.
- */
-export const AI_CRAWLERS = [
-  "GPTBot",
-  "OAI-SearchBot",
-  "ChatGPT-User",
-  "ClaudeBot",
-  "Claude-User",
-  "Claude-SearchBot",
-  "anthropic-ai",
-  "PerplexityBot",
-  "Perplexity-User",
-  "Google-Extended",
-  "Applebot-Extended",
-  "CCBot",
-  "meta-externalagent",
-  "Amazonbot",
-  "DuckAssistBot",
-  "cohere-ai",
-];
-
-/**
  * Docs pages by where they sit in `llms.txt`, keyed by Docusaurus doc id
  * (the path under `docs-site/docs/` without `.md`).
  *
- * `EXCLUDED_DOC_IDS` are left over from the starter this repo grew from and
- * describe a different product. They still get a `.md` copy on the docs site,
- * because every page does, but no `llms.txt` points an assistant at them.
- * A doc in none of these lists lands under "Optional", so a new page is never
- * silently missing.
+ * `EXCLUDED_DOC_IDS` still get a `.md` copy on the docs site, because every
+ * page does, but no `llms.txt` points an assistant at them. A doc in none of
+ * these lists lands under "Optional", so a new page is never silently missing.
  */
 export const DOC_SECTIONS = [
   {
@@ -66,7 +40,7 @@ export const DOC_SECTIONS = [
   { title: "REST API", ids: ["api/overview", "api/authentication", "api/errors"] },
 ];
 export const OPTIONAL_DOC_IDS = ["api/reference", "api/webhooks", "api/rate-limits"];
-export const EXCLUDED_DOC_IDS = ["getting-started", "architecture"];
+export const EXCLUDED_DOC_IDS = [];
 
 /** The llms.txt header: H1, blockquote summary, and the facts an assistant needs. */
 export function renderHeader() {

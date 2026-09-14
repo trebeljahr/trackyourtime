@@ -210,7 +210,7 @@ packages/
 
 e2e/           Playwright specs and their harness
 docs/          deploy.md, dev-setup.md
-docs-site/     Docusaurus site (not currently deployed)
+docs-site/     Docusaurus site, served at trackyourtime.dev/docs/
 scripts/       dev orchestration, extension id, icon and newsletter scripts
 electron/      Electron main + preload for the desktop wrapper
 ```

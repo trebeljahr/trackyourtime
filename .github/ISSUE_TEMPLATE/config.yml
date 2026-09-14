@@ -12,11 +12,9 @@ blank_issues_enabled: false
 
 contact_links:
   - name: Documentation
-    # docs-site/ exists but is not deployed: with DOCS_SITE_URL unset it builds
-    # against a placeholder host, sets noIndex and writes a disallow-all
-    # robots.txt. Until it is deployed, the README is the documentation.
-    url: https://github.com/trebeljahr/trackyourtime#readme
-    about: Setup, architecture, self-hosting and the deployment topology in docs/deploy.md — read before filing, the answer is often already there.
+    # docs-site/, served from the web app's image (docs/deploy.md).
+    url: https://trackyourtime.dev/docs/
+    about: Self-hosting, the MCP server and the REST API. Setup and architecture for contributors are in the README. Read before filing — the answer is often already there.
 
   - name: Where to ask, and what to expect
     url: https://github.com/trebeljahr/trackyourtime/blob/main/SUPPORT.md

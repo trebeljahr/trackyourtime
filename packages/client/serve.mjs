@@ -48,6 +48,9 @@ const MIME = {
   ".ttf": "font/ttf",
   ".map": "application/json; charset=utf-8",
   ".txt": "text/plain; charset=utf-8",
+  // The docs site writes a Markdown copy of every page (`/docs/mcp.md`) for AI
+  // assistants; octet-stream would make a browser download it instead.
+  ".md": "text/markdown; charset=utf-8",
   ".webmanifest": "application/manifest+json",
   ".xml": "application/xml; charset=utf-8",
 };
@@ -88,11 +91,14 @@ function resolveFile(urlPath) {
  * Cache headers by what the file is, not by how old it is.
  *
  * Everything under `/_next/static` carries a content hash in its name, so it
- * can be cached forever — a new build produces new names. HTML must not be,
- * or a deploy leaves browsers pointing at chunk names that no longer exist.
+ * can be cached forever — a new build produces new names. So does everything
+ * under `/docs/assets/`, where Docusaurus puts its hashed JS, CSS and images
+ * (`/docs/img/` is copied from `static/` unhashed and keeps the hour). HTML
+ * must not be, or a deploy leaves browsers pointing at chunk names that no
+ * longer exist.
  */
 function cacheControl(urlPath, file) {
-  if (urlPath.startsWith("/_next/static/")) {
+  if (urlPath.startsWith("/_next/static/") || urlPath.startsWith("/docs/assets/")) {
     return "public, max-age=31536000, immutable";
   }
   if (extname(file) === ".html") return "no-cache";
@@ -111,7 +117,13 @@ const server = createServer((req, res) => {
   const file = resolveFile(req.url ?? "/");
 
   if (!file) {
-    const notFound = join(ROOT, "404.html");
+    // The docs site (built into out/docs/ by scripts/docs/build-into-client.mjs)
+    // has its own 404 page, with the docs navbar and sidebar around it.
+    const docsNotFound = join(ROOT, "docs", "404.html");
+    const notFound =
+      (urlPath === "/docs" || urlPath.startsWith("/docs/")) && existsSync(docsNotFound)
+        ? docsNotFound
+        : join(ROOT, "404.html");
     const has404 = existsSync(notFound);
     res.writeHead(404, {
       "content-type": has404 ? MIME[".html"] : MIME[".txt"],

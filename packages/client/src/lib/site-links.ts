@@ -8,8 +8,17 @@
  */
 
 export const REPO_URL = "https://github.com/trebeljahr/trackyourtime";
-export const OPENAPI_URL = "https://api.trackyourtime.dev/api/v1/openapi.json";
-export const SELF_HOSTING_URL = `${REPO_URL}/blob/main/docs/self-hosting.md`;
+/**
+ * The docs site, built into the client image and served at /docs/
+ * (scripts/docs/build-into-client.mjs). Absolute, not `/docs/`: the self-host
+ * image renders these same pages on somebody else's domain, where no docs are
+ * served.
+ */
+export const DOCS_URL = "https://trackyourtime.dev/docs/";
+export const SELF_HOSTING_URL = `${DOCS_URL}self-hosting/`;
+export const API_DOCS_URL = `${DOCS_URL}api/`;
+/** Every route, with a link to the OpenAPI document (`/docs/openapi.json`). */
+export const API_REFERENCE_URL = `${DOCS_URL}api/reference/`;
 export const ISSUES_URL = `${REPO_URL}/issues`;
 export const CONTACT_EMAIL = "ricotrebeljahr@gmail.com";
 

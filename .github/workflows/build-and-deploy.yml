@@ -81,6 +81,11 @@ jobs:
           # against a real database; those files skip without this.
           TEST_MONGODB_URI: mongodb://127.0.0.1:27017
       - run: pnpm run test:client
+      # The client image builds the docs into out/docs/ (packages/client/Dockerfile),
+      # but that only runs on a push to main, after merge. Building them here
+      # too puts a broken docs link (`onBrokenLinks: "throw"`) or a noindex
+      # page in front of the pull request instead.
+      - run: node scripts/docs/build-into-client.mjs
 
   # Also runs on both events. Every credential it needs is a literal in the
   # `env:` block below (throwaway values for containers that live for the
