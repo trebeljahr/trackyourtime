@@ -1,0 +1,170 @@
+# Boots the self-host stack from this checkout and proves it works end to end.
+#
+# docker-compose.selfhost.yml, the two Dockerfiles it builds and the Caddyfile
+# are read by nothing else in CI: the E2E suite runs the server and
+# packages/client/serve.mjs directly, and the owner's deploy uses the
+# two-app compose files. A broken self-host stack would otherwise be found by
+# the first person who tries to install it.
+#
+# What a pass means:
+#   - both images build from this commit;
+#   - every service reaches `healthy` with the base file's own healthchecks;
+#   - GET /api/health answers 200 THROUGH Caddy, over TLS, so the routing of
+#     /api/* is exercised and not just the server container;
+#   - the admin CLI's doctor passes inside the server container;
+#   - an account made with the admin CLI signs in through the proxy, and a
+#     password reset signs that session out.
+#
+# Nothing is pushed or published, and no secret is needed: the session
+# secret is generated per run and the stack is torn down at the end.
+
+name: selfhost-smoke
+
+on:
+  pull_request:
+    paths:
+      - docker-compose.selfhost.yml
+      - docker-compose.selfhost.ci.yml
+      - Caddyfile
+      - packages/server/Dockerfile
+      - packages/client/Dockerfile.selfhost
+      - packages/server/src/cli/**
+      - .github/workflows/selfhost-smoke.yml
+  workflow_dispatch:
+
+concurrency:
+  group: selfhost-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  COMPOSE: docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.ci.yml
+  # Caddy serves `localhost` from its internal CA, so no DNS and no ACME.
+  APP_DOMAIN: localhost
+  SMOKE_EMAIL: smoke@example.com
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # `load: true` puts each image in the runner's Docker, under the tag the
+      # CI override names. The gha cache scopes are separate from the release
+      # workflow's, whose multi-arch layers this single-arch build cannot use.
+      - name: Build the server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/server/Dockerfile
+          load: true
+          push: false
+          tags: tracktime-server:selfhost-ci
+          cache-from: type=gha,scope=selfhost-smoke-server
+          cache-to: type=gha,mode=max,scope=selfhost-smoke-server
+
+      - name: Build the self-host client image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/client/Dockerfile.selfhost
+          load: true
+          push: false
+          tags: tracktime-client-selfhost:selfhost-ci
+          # Empty on purpose: the self-host bundle calls its own origin.
+          build-args: |
+            NEXT_PUBLIC_API_URL=
+          cache-from: type=gha,scope=selfhost-smoke-client
+          cache-to: type=gha,mode=max,scope=selfhost-smoke-client
+
+      - name: Generate a session secret
+        run: |
+          secret="$(openssl rand -base64 32)"
+          echo "::add-mask::$secret"
+          echo "BETTER_AUTH_SECRET=$secret" >> "$GITHUB_ENV"
+
+      - name: Validate the merged compose file
+        run: $COMPOSE config --quiet
+
+      - name: Boot the stack and wait for every healthcheck
+        run: $COMPOSE up -d --no-build --wait --wait-timeout 300
+
+      - name: GET /api/health through Caddy
+        run: |
+          set -euo pipefail
+          # -k: the certificate is from Caddy's internal CA, which the runner
+          # does not trust. --resolve is not needed; localhost is localhost.
+          status="$(curl -sk -o health.json -w '%{http_code}' https://localhost/api/health)"
+          cat health.json; echo
+          if [ "$status" != "200" ]; then
+            echo "::error::/api/health answered HTTP $status through Caddy"
+            exit 1
+          fi
+          jq -e '.status == "ok" and .db == true' health.json > /dev/null
+
+      - name: Run doctor inside the server container
+        run: $COMPOSE exec -T server node dist/cli/admin.js doctor
+
+      - name: Create an account with the admin CLI and sign in through the proxy
+        run: |
+          set -euo pipefail
+          # The password arrives on stdin, the path a script uses; -T gives
+          # the command no TTY, so the CLI reads one line instead of prompting.
+          printf '%s\n' 'smoke-test-password-1' \
+            | $COMPOSE exec -T server node dist/cli/admin.js create-user \
+                --email "$SMOKE_EMAIL" --name "Smoke Test"
+
+          $COMPOSE exec -T server node dist/cli/admin.js list-workspaces --json > workspaces.json
+          jq -e --arg email "$SMOKE_EMAIL" \
+            'map(select(.ownerEmail == $email and .memberCount == 1)) | length == 1' \
+            workspaces.json > /dev/null \
+            || { cat workspaces.json; echo "::error::no personal workspace owned by $SMOKE_EMAIL"; exit 1; }
+
+          status="$(curl -sk -D signin.headers -o signin.json -w '%{http_code}' \
+            -H 'Content-Type: application/json' -H 'Origin: https://localhost' \
+            --data "{\"email\":\"$SMOKE_EMAIL\",\"password\":\"smoke-test-password-1\"}" \
+            https://localhost/api/auth/sign-in/email)"
+          if [ "$status" != "200" ]; then
+            cat signin.json; echo
+            echo "::error::sign-in answered HTTP $status"
+            exit 1
+          fi
+          token="$(grep -i '^set-auth-token:' signin.headers | cut -d' ' -f2 | tr -d '\r')"
+          [ -n "$token" ] || { echo "::error::sign-in returned no session token"; exit 1; }
+          echo "::add-mask::$token"
+          echo "SMOKE_TOKEN=$token" >> "$GITHUB_ENV"
+
+          curl -sk -H "Authorization: Bearer $token" https://localhost/api/auth/get-session > session.json
+          jq -e --arg email "$SMOKE_EMAIL" '.user.email == $email' session.json > /dev/null \
+            || { echo "::error::the new session is not recognised"; exit 1; }
+
+      - name: Reset the password and check the session is signed out
+        run: |
+          set -euo pipefail
+          printf '%s\n' 'smoke-test-password-2' \
+            | $COMPOSE exec -T server node dist/cli/admin.js reset-password --email "$SMOKE_EMAIL"
+
+          curl -sk -H "Authorization: Bearer $SMOKE_TOKEN" https://localhost/api/auth/get-session > session.json
+          jq -e '. == null' session.json > /dev/null \
+            || { cat session.json; echo "::error::the session survived a password reset"; exit 1; }
+
+          status="$(curl -sk -o /dev/null -w '%{http_code}' \
+            -H 'Content-Type: application/json' -H 'Origin: https://localhost' \
+            --data "{\"email\":\"$SMOKE_EMAIL\",\"password\":\"smoke-test-password-2\"}" \
+            https://localhost/api/auth/sign-in/email)"
+          [ "$status" = "200" ] || { echo "::error::the new password did not sign in (HTTP $status)"; exit 1; }
+
+      - name: Show service state and logs
+        if: failure()
+        run: |
+          $COMPOSE ps
+          $COMPOSE logs --no-color --tail 200
+
+      - name: Tear down
+        if: always()
+        run: $COMPOSE down -v --remove-orphans

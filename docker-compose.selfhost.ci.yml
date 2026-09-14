@@ -1,0 +1,51 @@
+# CI override for the self-host stack. Used only by
+# .github/workflows/selfhost-smoke.yml:
+#
+#   docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.ci.yml up -d --wait
+#
+# It changes three things about docker-compose.selfhost.yml and nothing else,
+# so a boot that passes here is a boot of the file self-hosters run:
+#
+#   1. The server and client images are the ones the workflow just built from
+#      this checkout, under local tags, and are never pulled. Without this the
+#      `image:` keys in the base file would pull the last published release,
+#      and the smoke test would prove that an old image boots.
+#   2. Healthchecks poll every 5 seconds instead of every 30, so `--wait`
+#      returns in about a minute instead of several. Intervals only; the probes
+#      are the base file's own.
+#   3. Nothing else: the site address comes from APP_DOMAIN=localhost in the
+#      workflow's environment. Caddy never asks an ACME CA for `localhost` and
+#      serves it from its internal CA instead, so the stack runs with TLS and
+#      with no DNS, no public IP and no rate limit to hit.
+#
+# Values the base file requires (APP_DOMAIN, BETTER_AUTH_SECRET) are NOT set
+# here: Compose interpolates `${VAR:?}` from the environment before merging
+# files, so an override cannot provide them. The workflow exports both.
+
+services:
+  server:
+    image: tracktime-server:selfhost-ci
+    pull_policy: never
+    healthcheck:
+      interval: 5s
+      start_period: 60s
+
+  client:
+    image: tracktime-client-selfhost:selfhost-ci
+    pull_policy: never
+    healthcheck:
+      interval: 5s
+      start_period: 30s
+
+  caddy:
+    healthcheck:
+      interval: 5s
+      start_period: 30s
+
+  mongo:
+    healthcheck:
+      interval: 5s
+
+  redis:
+    healthcheck:
+      interval: 5s
