@@ -20,11 +20,20 @@ export class ApiError extends Error {
  * HTTP statuses that mean "this request can never succeed", so a queued
  * mutation carrying one must be dropped rather than retried forever.
  *
- * 401/403 are deliberately absent: a lapsed session is recoverable, and
+ * 401 is deliberately absent: a lapsed session is recoverable, and
  * discarding someone's offline work because their token expired would be a
  * far worse bug than a queue that waits. 5xx are absent for the same reason.
+ *
+ * 403 is present, and used not to be. In a shared workspace FORBIDDEN is a
+ * verdict on ONE row by a session that is perfectly valid — a role change took
+ * away a permission the row needed — so it cannot become valid by waiting or
+ * by signing in again. Treating it as "the session is gone" stopped the flush
+ * at that row, wedged every row behind it, and told the person to sign in to a
+ * session they were already signed in to. A workspace the person has LEFT is
+ * a different case with a different answer: its rows are held by the client
+ * before they are sent (`isReplayableIn`), never refused one at a time here.
  */
-const PERMANENT_REJECTIONS = new Set([400, 404, 409, 410, 422]);
+const PERMANENT_REJECTIONS = new Set([400, 403, 404, 409, 410, 422]);
 
 /**
  * True when the server refused a mutation for good.
@@ -67,6 +76,43 @@ export type ApiClientOptions = {
   /** Names this client in Settings → Devices. Cosmetic, never a permission. */
   clientId?: string;
   fetchImpl?: typeof fetch;
+  /**
+   * The workspace this client is pointed at, read per request.
+   *
+   * Filled into any input that names none — an object without a
+   * `workspaceId`, or no input at all — and never over one that does, so a
+   * replayed offline row addressed to the workspace it was queued in keeps
+   * that address. A getter, because the choice lives in the client's own
+   * storage and can change between two calls. Returning null sends the input
+   * unchanged, and the server resolves the session's default workspace.
+   *
+   * Per client on purpose: the extension and Raycast keep their own choice
+   * and never follow the web app's session `activeOrganizationId`.
+   */
+  workspaceId?: () => string | null;
+};
+
+/**
+ * `input` with `workspaceId` filled in when it names none.
+ *
+ * Only a plain object or `undefined` is addressed: a procedure whose input is
+ * a bare string or an array has nowhere to carry a workspace, and wrapping it
+ * would change what the server parses.
+ */
+export const withWorkspaceId = (
+  input: unknown,
+  workspaceId: string | null
+): unknown => {
+  if (workspaceId === null || workspaceId === "") return input;
+  if (input === undefined) return { workspaceId };
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return input;
+  }
+  const record = input as { workspaceId?: unknown };
+  if (typeof record.workspaceId === "string" && record.workspaceId !== "") {
+    return input;
+  }
+  return { ...record, workspaceId };
 };
 
 export type ApiClient = {
@@ -99,6 +145,7 @@ export const createApiClient = ({
   token,
   clientId,
   fetchImpl,
+  workspaceId,
 }: ApiClientOptions): ApiClient => {
   const doFetch =
     fetchImpl ?? (globalThis as { fetch?: typeof fetch }).fetch?.bind(globalThis);
@@ -116,9 +163,10 @@ export const createApiClient = ({
 
   const call = async <TResult>(
     path: string,
-    input: unknown,
+    raw: unknown,
     method: "GET" | "POST"
   ): Promise<TResult> => {
+    const input = workspaceId ? withWorkspaceId(raw, workspaceId()) : raw;
     const url = new URL(`${baseUrl.replace(/\/$/, "")}/api/trpc/${path}`);
     if (method === "GET" && input !== undefined) {
       url.searchParams.set("input", JSON.stringify(input));

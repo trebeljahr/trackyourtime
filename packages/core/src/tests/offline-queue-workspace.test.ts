@@ -1,0 +1,314 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import {
+  adoptUnstampedWorkspace,
+  createOfflineQueue,
+  isForeignWorkspace,
+  isReplayableIn,
+  type QueuedMutation,
+} from "../offline-queue.js";
+import {
+  decodeOfflineMutation,
+  describeQueuedMutation,
+} from "../offline-ops.js";
+import {
+  replayOfflineMutation,
+  type OfflineReplayMutators,
+} from "../offline-replay.js";
+import {
+  ApiError,
+  createApiClient,
+  isPermanentRejection,
+  withWorkspaceId,
+} from "../api-client.js";
+import { memoryStorage } from "../storage.js";
+
+const A = "ws-a";
+const B = "ws-b";
+
+const startInput = (description: string): Record<string, unknown> => ({
+  description,
+  projectId: null,
+  taskId: null,
+  billable: false,
+  start: "2026-09-14T09:00:00.000Z",
+  source: "web",
+  timeZone: "UTC",
+  originId: "o",
+});
+
+test("enqueue stamps the workspace, and a legacy row stays unstamped", async () => {
+  const queue = createOfflineQueue({ storage: memoryStorage() });
+  const stamped = await queue.enqueue("entries.start", { input: {} }, "u", undefined, A);
+  const legacy = await queue.enqueue("entries.start", { input: {} }, "u");
+
+  assert.equal(stamped.workspaceId, A);
+  assert.equal("workspaceId" in legacy, false);
+  const rows = await queue.list();
+  assert.deepEqual(
+    rows.map((row) => row.workspaceId),
+    [A, undefined],
+  );
+});
+
+test("a malformed workspace stamp reads as none", async () => {
+  const storage = memoryStorage();
+  await storage.setItem(
+    "trackyourtime.offline-queue",
+    JSON.stringify([
+      { id: "a", op: "entries.stop", payload: {}, createdAt: "2026-09-13T00:00:00Z", workspaceId: 7 },
+      { id: "b", op: "entries.stop", payload: {}, createdAt: "2026-09-13T00:00:00Z", workspaceId: "" },
+    ]),
+  );
+  const rows = await createOfflineQueue({ storage }).list();
+  assert.deepEqual(
+    rows.map((row) => "workspaceId" in row),
+    [false, false],
+  );
+});
+
+test("adoptUnstampedWorkspace claims only unstamped rows, and only once", async () => {
+  const queue = createOfflineQueue({ storage: memoryStorage() });
+  await queue.enqueue("entries.start", { input: {} }, "u");
+  await queue.enqueue("entries.start", { input: {} }, "u", undefined, B);
+
+  assert.equal(await queue.adoptUnstampedWorkspace(A), 1);
+  // A later switch must not carry already-adopted rows along.
+  assert.equal(await queue.adoptUnstampedWorkspace(B), 0);
+  const rows = await queue.list();
+  assert.deepEqual(
+    rows.map((row) => row.workspaceId),
+    [A, B],
+  );
+});
+
+test("the pure adoption respects its filter and never moves a stamped row", () => {
+  const rows: QueuedMutation[] = [
+    { id: "1", op: "x", payload: {}, createdAt: "t", server: "s1" },
+    { id: "2", op: "x", payload: {}, createdAt: "t", server: "s2" },
+    { id: "3", op: "x", payload: {}, createdAt: "t", workspaceId: B },
+  ];
+  const next = adoptUnstampedWorkspace(rows, A, (row) => row.server === "s1");
+  assert.deepEqual(
+    next.map((row) => row.workspaceId),
+    [A, undefined, B],
+  );
+  // Untouched rows keep their identity.
+  assert.equal(next[1], rows[1]);
+});
+
+test("isReplayableIn / isForeignWorkspace", () => {
+  const members = new Set([A]);
+  assert.equal(isReplayableIn({ workspaceId: A }, members), true);
+  assert.equal(isReplayableIn({ workspaceId: B }, members), false);
+  assert.equal(isReplayableIn({}, members), true);
+
+  assert.equal(isForeignWorkspace({ workspaceId: A }, members), false);
+  assert.equal(isForeignWorkspace({ workspaceId: B }, members), true);
+  // Unstamped names no workspace to be foreign to.
+  assert.equal(isForeignWorkspace({}, members), false);
+  // No memberships known at all: every stamped row is held.
+  assert.equal(isReplayableIn({ workspaceId: A }, new Set()), false);
+});
+
+test("a flush filtered by membership holds a left workspace's rows in place", async () => {
+  const queue = createOfflineQueue({ storage: memoryStorage() });
+  await queue.enqueue("entries.start", { input: startInput("gone") }, "u", undefined, B);
+  await queue.enqueue("entries.start", { input: startInput("here") }, "u", undefined, A);
+
+  const members = new Set([A]);
+  const ran: string[] = [];
+  const result = await queue.flush(
+    async (row) => {
+      ran.push(row.workspaceId ?? "");
+    },
+    { filter: (row) => isReplayableIn(row, members) },
+  );
+  assert.deepEqual(ran, [A]);
+  assert.equal(result.skipped, 1);
+  const kept = await queue.list();
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0]?.workspaceId, B);
+});
+
+test("decode carries the stamp only when the row has one", async () => {
+  const queue = createOfflineQueue({ storage: memoryStorage() });
+  const stamped = await queue.enqueue("entries.start", { input: startInput("x") }, "u", undefined, A);
+  const legacy = await queue.enqueue("entries.start", { input: startInput("y") }, "u");
+
+  assert.equal(decodeOfflineMutation(stamped)?.workspaceId, A);
+  const decodedLegacy = decodeOfflineMutation(legacy);
+  assert.ok(decodedLegacy);
+  assert.equal("workspaceId" in decodedLegacy, false);
+});
+
+const recordingMutators = (
+  calls: Array<{ op: string; input: Record<string, unknown> }>,
+): OfflineReplayMutators => {
+  const record =
+    (op: string) =>
+    async (input: object): Promise<unknown> => {
+      calls.push({ op, input: input as Record<string, unknown> });
+      return { id: `real-${calls.length}` };
+    };
+  return {
+    "entries.start": record("entries.start"),
+    "entries.stop": record("entries.stop"),
+    "entries.create": record("entries.create"),
+    "entries.update": record("entries.update"),
+    "entries.remove": record("entries.remove"),
+    "entries.discard": record("entries.discard"),
+  };
+};
+
+const watcher = { noteServerId: (): void => undefined };
+
+test("replay sends the stamped workspace on every op, over anything in the payload", async () => {
+  const calls: Array<{ op: string; input: Record<string, unknown> }> = [];
+  const mutators = recordingMutators(calls);
+  const ops: Array<[string, Record<string, unknown>]> = [
+    ["entries.start", startInput("s")],
+    ["entries.stop", { id: "e1", end: "2026-09-14T10:00:00.000Z", originId: "o" }],
+    ["entries.create", { ...startInput("c"), end: "2026-09-14T10:00:00.000Z" }],
+    // A payload that somehow carries a different workspace loses to the stamp.
+    ["entries.update", { id: "e1", description: "u", originId: "o", workspaceId: B }],
+    ["entries.remove", { id: "e1", originId: "o" }],
+    ["entries.discard", { originId: "o" }],
+  ];
+  for (const [op, input] of ops) {
+    const decoded = decodeOfflineMutation({
+      id: op,
+      op,
+      payload: { input },
+      createdAt: new Date().toISOString(),
+      workspaceId: A,
+    });
+    assert.ok(decoded);
+    await replayOfflineMutation(mutators, watcher, decoded);
+  }
+  assert.equal(calls.length, ops.length);
+  for (const call of calls) assert.equal(call.input.workspaceId, A, call.op);
+});
+
+test("replay of an unstamped row sends no workspace, leaving the client's own", async () => {
+  const calls: Array<{ op: string; input: Record<string, unknown> }> = [];
+  const decoded = decodeOfflineMutation({
+    id: "1",
+    op: "entries.start",
+    payload: { input: startInput("legacy") },
+    createdAt: new Date().toISOString(),
+  });
+  assert.ok(decoded);
+  await replayOfflineMutation(recordingMutators(calls), watcher, decoded);
+  assert.equal("workspaceId" in (calls[0]?.input ?? {}), false);
+});
+
+test("a stamped replay through createApiClient is not overridden by the getter", async () => {
+  const bodies: unknown[] = [];
+  const api = createApiClient({
+    baseUrl: "https://api.example",
+    workspaceId: () => B,
+    fetchImpl: (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ result: { data: { id: "e" } } }));
+    }) as unknown as typeof fetch,
+  });
+  const decoded = decodeOfflineMutation({
+    id: "1",
+    op: "entries.start",
+    payload: { input: startInput("queued in A") },
+    createdAt: new Date().toISOString(),
+    workspaceId: A,
+  });
+  assert.ok(decoded);
+  const mutate = (path: string) => (input: object) => api.mutate(path, input);
+  await replayOfflineMutation(
+    {
+      "entries.start": mutate("entries.start"),
+      "entries.stop": mutate("entries.stop"),
+      "entries.create": mutate("entries.create"),
+      "entries.update": mutate("entries.update"),
+      "entries.remove": mutate("entries.remove"),
+      "entries.discard": mutate("entries.discard"),
+    },
+    watcher,
+    decoded,
+  );
+  assert.equal((bodies[0] as { workspaceId?: string }).workspaceId, A);
+});
+
+test("describeQueuedMutation names the workspace through the lookup", async () => {
+  const queue = createOfflineQueue({ storage: memoryStorage() });
+  const inA = await queue.enqueue("entries.start", { input: startInput("Design") }, "u", undefined, A);
+  const left = await queue.enqueue("entries.start", { input: startInput("Old") }, "u", undefined, B);
+  const legacy = await queue.enqueue("entries.start", { input: startInput("Legacy") }, "u");
+  const names = new Map([[A, "Acme"]]);
+  const lookup = (id: string): string | null => names.get(id) ?? null;
+
+  const a = describeQueuedMutation(inA, lookup);
+  assert.equal(a.description, "Design");
+  assert.equal(a.workspaceId, A);
+  assert.equal(a.workspaceName, "Acme");
+
+  const b = describeQueuedMutation(left, lookup);
+  assert.equal(b.workspaceId, B);
+  assert.equal(b.workspaceName, null);
+
+  const l = describeQueuedMutation(legacy);
+  assert.equal(l.workspaceId, null);
+  assert.equal(l.workspaceName, null);
+});
+
+test("withWorkspaceId fills an object or undefined, never overrides, never wraps primitives", () => {
+  assert.deepEqual(withWorkspaceId(undefined, A), { workspaceId: A });
+  assert.deepEqual(withWorkspaceId({ id: "1" }, A), { id: "1", workspaceId: A });
+  assert.deepEqual(withWorkspaceId({ workspaceId: B }, A), { workspaceId: B });
+  assert.equal(withWorkspaceId("x", A), "x");
+  assert.deepEqual(withWorkspaceId(["x"], A), ["x"]);
+  assert.deepEqual(withWorkspaceId({ id: "1" }, null), { id: "1" });
+});
+
+test("createApiClient injects the getter's workspace into queries and mutations", async () => {
+  const seen: Array<{ url: string; body: string | undefined }> = [];
+  let current: string | null = A;
+  const api = createApiClient({
+    baseUrl: "https://api.example",
+    workspaceId: () => current,
+    fetchImpl: (async (url: string, init: RequestInit) => {
+      seen.push({ url, body: init.body === undefined ? undefined : String(init.body) });
+      return new Response(JSON.stringify({ result: { data: null } }));
+    }) as unknown as typeof fetch,
+  });
+
+  await api.query("entries.current");
+  await api.query("entries.list", { limit: 5 });
+  await api.mutate("entries.stop", { end: "x" });
+  current = null;
+  await api.mutate("entries.stop", { end: "y" });
+
+  const input0 = new URL(seen[0]?.url ?? "").searchParams.get("input");
+  assert.deepEqual(JSON.parse(input0 ?? "null"), { workspaceId: A });
+  const input1 = new URL(seen[1]?.url ?? "").searchParams.get("input");
+  assert.deepEqual(JSON.parse(input1 ?? "null"), { limit: 5, workspaceId: A });
+  assert.deepEqual(JSON.parse(seen[2]?.body ?? "null"), { end: "x", workspaceId: A });
+  // Null sends the input unchanged.
+  assert.deepEqual(JSON.parse(seen[3]?.body ?? "null"), { end: "y" });
+});
+
+test("without a getter the request is exactly what it was", async () => {
+  const seen: string[] = [];
+  const api = createApiClient({
+    baseUrl: "https://api.example",
+    fetchImpl: (async (url: string) => {
+      seen.push(url);
+      return new Response(JSON.stringify({ result: { data: null } }));
+    }) as unknown as typeof fetch,
+  });
+  await api.query("entries.current");
+  assert.equal(new URL(seen[0] ?? "").searchParams.get("input"), null);
+});
+
+test("FORBIDDEN is a permanent refusal of the row; UNAUTHORIZED is not", () => {
+  assert.equal(isPermanentRejection(new ApiError("no", "FORBIDDEN", 403)), true);
+  assert.equal(isPermanentRejection(new ApiError("no", "UNAUTHORIZED", 401)), false);
+});

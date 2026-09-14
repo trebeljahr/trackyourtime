@@ -17,10 +17,36 @@ import type {
 } from "./offline-ops.js";
 import type { IdleWatcher } from "./idle.js";
 
+/**
+ * What a replayed call is handed: the queued input, plus the workspace the row
+ * was queued in when it carries one.
+ */
+export type ReplayInput<K extends OfflineOp> = OfflinePayloadMap[K] & {
+  workspaceId?: string;
+};
+
 /** One call per queued op. The caller binds these to its own API. */
 export type OfflineReplayMutators = {
-  [K in OfflineOp]: (input: OfflinePayloadMap[K]) => Promise<unknown>;
+  [K in OfflineOp]: (input: ReplayInput<K>) => Promise<unknown>;
 };
+
+/**
+ * `input` addressed to the workspace the row was queued in.
+ *
+ * Explicit, and set over anything already there, because every client also
+ * injects its CURRENT workspace into requests that name none (the web app's
+ * tRPC link, `createApiClient`'s `workspaceId` getter). Those injections only
+ * fill a gap; a row that says where it was made must never leave one for them
+ * to fill — that gap is exactly how a start queued in workspace A would land
+ * in B after a switch. An unstamped (legacy) row is sent as it always was.
+ */
+const inWorkspace = <K extends OfflineOp>(
+  mutation: { workspaceId?: string },
+  input: OfflinePayloadMap[K]
+): ReplayInput<K> =>
+  mutation.workspaceId === undefined
+    ? input
+    : { ...input, workspaceId: mutation.workspaceId };
 
 /**
  * How old an id-less `entries.stop` may be before it is refused.
@@ -120,7 +146,9 @@ export const replayOfflineMutation = async (
       // real id only exists now. Without the rename the ownership check in
       // `observe` fails against the named entry and idle detection silently
       // never fires again for it.
-      const entry = await mutators["entries.start"](mutation.input);
+      const entry = await mutators["entries.start"](
+        inWorkspace<"entries.start">(mutation, mutation.input)
+      );
       noteReplayedServerId(watcher, mutation, entry);
       const realId = replayedId(entry);
       if (mutation.tempId && realId) context.resolved.set(mutation.tempId, realId);
@@ -128,20 +156,31 @@ export const replayOfflineMutation = async (
     }
     case "entries.stop":
       await mutators["entries.stop"](
-        targetedStopInput(mutation, context.resolved, context.createdAt)
+        inWorkspace<"entries.stop">(
+          mutation,
+          targetedStopInput(mutation, context.resolved, context.createdAt)
+        )
       );
       return;
     case "entries.create":
-      await mutators["entries.create"](mutation.input);
+      await mutators["entries.create"](
+        inWorkspace<"entries.create">(mutation, mutation.input)
+      );
       return;
     case "entries.update":
-      await mutators["entries.update"](mutation.input);
+      await mutators["entries.update"](
+        inWorkspace<"entries.update">(mutation, mutation.input)
+      );
       return;
     case "entries.remove":
-      await mutators["entries.remove"](mutation.input);
+      await mutators["entries.remove"](
+        inWorkspace<"entries.remove">(mutation, mutation.input)
+      );
       return;
     case "entries.discard":
-      await mutators["entries.discard"](mutation.input);
+      await mutators["entries.discard"](
+        inWorkspace<"entries.discard">(mutation, mutation.input)
+      );
       return;
   }
 };

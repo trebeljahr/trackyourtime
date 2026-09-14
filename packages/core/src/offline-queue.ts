@@ -34,6 +34,22 @@ export type QueuedMutation = {
    * were all made against the build's default server — see `isQueuedOn`.
    */
   server?: string;
+  /**
+   * The workspace this row was queued in.
+   *
+   * A person can belong to several workspaces and switch between them while a
+   * row waits, and a replay addresses whichever workspace the client points
+   * at NOW unless the row names one. So a start queued in A and replayed
+   * after a switch to B would be filed in B — time billed to the wrong client
+   * with nothing on screen to say so. The stamp is sent as the request's
+   * explicit `workspaceId` on replay (`replayOfflineMutation`), which the
+   * server resolves before anything else.
+   *
+   * Optional forever, like `owner`: rows from before the stamp decode without
+   * it, and the first workspace a client resolves adopts them
+   * (`adoptUnstampedWorkspace`).
+   */
+  workspaceId?: string;
 };
 
 export type OfflineQueue = {
@@ -41,7 +57,8 @@ export type OfflineQueue = {
     op: string,
     payload: unknown,
     owner?: string,
-    server?: string
+    server?: string,
+    workspaceId?: string
   ): Promise<QueuedMutation>;
   list(): Promise<QueuedMutation[]>;
   size(): Promise<number>;
@@ -67,6 +84,17 @@ export type OfflineQueue = {
    * claims them once, eagerly, before the preference can change.
    */
   adoptUnserved(server: string): Promise<number>;
+  /**
+   * Stamp every row that names no workspace with `workspaceId`, and report how
+   * many. Same semantics as `adoptUnowned`: the first workspace a client
+   * resolves after an upgrade claims the rows the old build left behind,
+   * because that is where they would have replayed anyway — and claiming them
+   * once, eagerly, keeps a later switch from carrying them along.
+   */
+  adoptUnstampedWorkspace(
+    workspaceId: string,
+    where?: (mutation: QueuedMutation) => boolean
+  ): Promise<number>;
   /**
    * Run `runner` over the queue in order, dropping each mutation as it
    * succeeds. Stops at the first failure and leaves that mutation (and
@@ -122,9 +150,23 @@ const normalize = (mutation: QueuedMutation): QueuedMutation => {
     typeof mutation.server === "string" && mutation.server.length > 0
       ? mutation.server
       : undefined;
-  return owner === mutation.owner && server === mutation.server
-    ? mutation
-    : { ...mutation, owner, server };
+  const workspaceId =
+    typeof mutation.workspaceId === "string" && mutation.workspaceId.length > 0
+      ? mutation.workspaceId
+      : undefined;
+  if (
+    owner === mutation.owner &&
+    server === mutation.server &&
+    workspaceId === mutation.workspaceId
+  ) {
+    return mutation;
+  }
+  const normalized: QueuedMutation = { ...mutation, owner, server };
+  // Only written when present, so a row that never had the field reads back
+  // exactly as it was stored.
+  if (workspaceId === undefined) delete normalized.workspaceId;
+  else normalized.workspaceId = workspaceId;
+  return normalized;
 };
 
 /**
@@ -171,6 +213,60 @@ export const isQueuedOn = (
   server: string,
   legacyServer: string
 ): boolean => sameServerOrigin(mutation.server ?? legacyServer, server);
+
+/**
+ * True when a row may be replayed by someone whose memberships are
+ * `memberWorkspaceIds`.
+ *
+ * A stamped row replays only into a workspace the person still belongs to. A
+ * row for a workspace they have left or been removed from must not be sent at
+ * all: the server would refuse it (NOT_FOUND), the flush would drop it as a
+ * permanent refusal, and a day of tracked time would vanish with a toast. It
+ * must not be retargeted either — that is the cross-workspace replay the stamp
+ * exists to prevent. So it is held: kept, counted, and described until the
+ * person discards it deliberately.
+ *
+ * An unstamped row is replayable, the same decision `isReplayableBy` makes for
+ * an unowned one — and the same decision `adoptUnstampedWorkspace` makes
+ * eagerly. Clients adopt before they flush, so in practice only a row that
+ * slipped in between the two reaches this unstamped.
+ */
+export const isReplayableIn = (
+  mutation: Pick<QueuedMutation, "workspaceId">,
+  memberWorkspaceIds: ReadonlySet<string>
+): boolean =>
+  mutation.workspaceId === undefined ||
+  memberWorkspaceIds.has(mutation.workspaceId);
+
+/**
+ * True when a row demonstrably belongs to a workspace the person is not in.
+ *
+ * The negation of `isReplayableIn` for every stamped row; an unstamped row is
+ * never foreign, because it names no workspace to be foreign to.
+ */
+export const isForeignWorkspace = (
+  mutation: Pick<QueuedMutation, "workspaceId">,
+  memberWorkspaceIds: ReadonlySet<string>
+): boolean =>
+  mutation.workspaceId !== undefined &&
+  !memberWorkspaceIds.has(mutation.workspaceId);
+
+/**
+ * The pure half of `OfflineQueue.adoptUnstampedWorkspace`: `rows` with every
+ * unstamped row (that `where` accepts) stamped with `workspaceId`. Rows that
+ * already name a workspace are returned untouched — adoption never moves a
+ * row from one workspace to another.
+ */
+export const adoptUnstampedWorkspace = (
+  rows: readonly QueuedMutation[],
+  workspaceId: string,
+  where?: (mutation: QueuedMutation) => boolean
+): QueuedMutation[] =>
+  rows.map((row) =>
+    row.workspaceId === undefined && (where === undefined || where(row))
+      ? { ...row, workspaceId }
+      : row
+  );
 
 /**
  * Durable FIFO of mutations made while offline or during a failed request.
@@ -221,7 +317,7 @@ export const createOfflineQueue = ({
   };
 
   return {
-    enqueue: (op, payload, owner, server) =>
+    enqueue: (op, payload, owner, server, workspaceId) =>
       serial(async () => {
         const mutation: QueuedMutation = {
           id: createId(),
@@ -230,6 +326,7 @@ export const createOfflineQueue = ({
           createdAt: new Date().toISOString(),
           owner,
           server,
+          ...(workspaceId ? { workspaceId } : {}),
         };
         const mutations = await read();
         mutations.push(mutation);
@@ -271,6 +368,18 @@ export const createOfflineQueue = ({
           mutations.map((m) => (m.server === undefined ? { ...m, server } : m))
         );
         return unserved.length;
+      }),
+
+    adoptUnstampedWorkspace: (workspaceId, where) =>
+      serial(async () => {
+        const mutations = await read();
+        const next = adoptUnstampedWorkspace(mutations, workspaceId, where);
+        const adopted = next.filter(
+          (row, index) => row !== mutations[index]
+        ).length;
+        if (adopted === 0) return 0;
+        await write(next);
+        return adopted;
       }),
 
     flush: (runner, options) =>

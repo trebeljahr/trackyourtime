@@ -10,7 +10,13 @@ export type SyncStatus = "connecting" | "open" | "closed";
 export type SyncClientOptions = {
   /** Full ws:// or wss:// URL, e.g. `wss://example.com/api/ws`. */
   url: string;
-  onEvent: (event: SyncEvent, originId?: string) => void;
+  /**
+   * `workspaceId` is the envelope's: the workspace the event happened in, or
+   * undefined for an event about the person rather than any one workspace. A
+   * socket carries every workspace the person belongs to, so a consumer
+   * showing one workspace needs it to leave the others' events alone.
+   */
+  onEvent: (event: SyncEvent, originId?: string, workspaceId?: string) => void;
   onStatus?: (status: SyncStatus) => void;
   /**
    * better-auth session token, for clients with no cookie (Raycast, the
@@ -147,7 +153,7 @@ export const createSyncClient = ({
     const message = parsed as ServerToClientMessage;
     if (!("type" in message) || !isSyncMessage(message)) return;
     try {
-      onEvent(message.event, message.originId);
+      onEvent(message.event, message.originId, message.workspaceId);
     } catch {
       // A throwing consumer must not kill the socket.
     }

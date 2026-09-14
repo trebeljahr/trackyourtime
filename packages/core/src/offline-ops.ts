@@ -140,6 +140,12 @@ export type OfflineMutation = {
     input: OfflinePayloadMap[K];
     /** Temp id of the entry this mutation invented, when it invented one. */
     tempId?: string;
+    /**
+     * The workspace the row was queued in (`QueuedMutation.workspaceId`).
+     * Present only when the row carries a stamp, so a decoded legacy row has
+     * exactly the shape it always had.
+     */
+    workspaceId?: string;
   };
 }[OfflineOp];
 
@@ -168,10 +174,20 @@ export const decodeOfflineMutation = (
   const stored = readStored(mutation.payload);
   if (stored === null) return null;
 
-  const queueId = mutation.id;
+  const decoded = decodeOp(mutation.id, mutation.op, stored);
+  return mutation.workspaceId === undefined
+    ? decoded
+    : { ...decoded, workspaceId: mutation.workspaceId };
+};
+
+const decodeOp = (
+  queueId: string,
+  op: OfflineOp,
+  stored: StoredOfflinePayload
+): OfflineMutation => {
   const tempId = stored.tempId;
 
-  switch (mutation.op) {
+  switch (op) {
     case "entries.start":
       return {
         queueId,
@@ -287,11 +303,32 @@ export type QueuedMutationSummary = {
   at: string;
   /** The server origin it was queued against, when the row says. */
   server: string | null;
+  /** The workspace it was queued in, when the row says. */
+  workspaceId: string | null;
+  /**
+   * That workspace's name, when the caller's lookup knows it. Null for an
+   * unstamped row, and for a workspace the person has left — which is the
+   * case a client names differently ("a workspace you left"), so the two are
+   * never collapsed into a guessed name.
+   */
+  workspaceName: string | null;
 };
 
+/** Workspace id → name, for the workspaces the caller still knows about. */
+export type WorkspaceNameLookup = (workspaceId: string) => string | null;
+
 export const describeQueuedMutation = (
-  row: QueuedMutation
+  row: QueuedMutation,
+  workspaceName?: WorkspaceNameLookup
 ): QueuedMutationSummary => {
+  const workspaceId = row.workspaceId ?? null;
+  const workspace = {
+    workspaceId,
+    workspaceName:
+      workspaceId === null || workspaceName === undefined
+        ? null
+        : workspaceName(workspaceId),
+  };
   const decoded = decodeOfflineMutation(row);
   if (decoded === null) {
     return {
@@ -300,6 +337,7 @@ export const describeQueuedMutation = (
       description: null,
       at: row.createdAt,
       server: row.server ?? null,
+      ...workspace,
     };
   }
   const input = decoded.input as { description?: string; start?: string };
@@ -309,5 +347,6 @@ export const describeQueuedMutation = (
     description: input.description ?? null,
     at: input.start ?? row.createdAt,
     server: row.server ?? null,
+    ...workspace,
   };
 };
