@@ -1042,6 +1042,39 @@ Every lifecycle write publishes `membership.changed` to the workspace, and to
 the removed, leaving or accepting person directly, since the workspace fan-out
 no longer (or does not yet) reaches them.
 
+### Members screen, invite page and `?next=`
+
+The web half of the above: `/members` (`components/members/`), the public
+`/invite/?id=` page (`components/invite/`) and Settings → Workspace. Four rules
+that fail quietly if broken:
+
+- **`/invite` lives outside `(protected)` and reads a query parameter.** Under
+  the protected layout a signed-out invitee is bounced to /login before the
+  page can say whose workspace it is; a `/invite/[id]` segment 404s under
+  `output: "export"`. `app/invite/route-shape.test.ts` pins both.
+- **`?next=` goes through `lib/safe-next.ts` and nothing else.** Login, signup
+  and the protected layout's redirect all use it. It accepts only a single-`/`
+  path with no backslash, whitespace or control character, still on this
+  origin after URL parsing, under an allowlisted prefix (`/invite`, `/device`,
+  `/track`, `/members`, `/settings`). The login page is the one everybody
+  trusts, which makes an unvalidated `next` a phishing redirect. It is also
+  what keeps `/device/?user_code=` through sign-in. Never put the email in a
+  verification `callbackURL`: the link already knows the address.
+- **Joining or leaving a workspace is a full page load** (`enterWorkspace`):
+  write `ACTIVE_WORKSPACE_STORAGE_KEY`, then `window.location.assign`. A
+  client-side route change keeps every cached query, the socket and the timer
+  mirror built for the previous workspace's permissions.
+- **The tracker, runaway guard and calendar show only the viewer's own
+  entries** (`components/tracker/own-entries.ts`). `entries.list` returns the
+  whole workspace to somebody with time visibility, and those screens would
+  draw edit controls and runaway prompts for colleagues' rows. Colleagues'
+  time belongs in Reports. The nav's `requires` field (Invoices hidden without
+  `permissions.invoices`) is cosmetic; the server refuses either way.
+
+The screens call tRPC only — never `authClient.organization.*`, whose HTTP
+endpoints answer 404. `use-sync.ts` already refetches everything on
+`membership.changed`, so the screens add no subscription of their own.
+
 ### Catalog shape
 
 There is one hierarchy, and it is two levels deep: Client → Project. Tasks and
