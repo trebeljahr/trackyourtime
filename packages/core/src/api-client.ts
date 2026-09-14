@@ -45,7 +45,14 @@ const PERMANENT_REJECTIONS = new Set([400, 403, 404, 409, 410, 422]);
  * it — including the ones that would have replayed fine.
  */
 export const isPermanentRejection = (error: unknown): boolean =>
-  error instanceof ApiError && PERMANENT_REJECTIONS.has(error.httpStatus);
+  error instanceof ApiError &&
+  // A status is only a verdict when the tRPC server gave it. A body that is
+  // not a tRPC envelope (`PARSE_ERROR`) came from something in front of the
+  // API — a WAF's HTML 403, a captive portal, a proxy answering `/api` with
+  // the web app's 404 page mid-deploy — and says nothing about the row.
+  // Dropping on it would delete queued time because a network was in the way.
+  error.code !== "PARSE_ERROR" &&
+  PERMANENT_REJECTIONS.has(error.httpStatus);
 
 /**
  * True when a call never reached the server, so keeping the mutation is safe.

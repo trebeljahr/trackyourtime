@@ -312,3 +312,24 @@ test("FORBIDDEN is a permanent refusal of the row; UNAUTHORIZED is not", () => {
   assert.equal(isPermanentRejection(new ApiError("no", "FORBIDDEN", 403)), true);
   assert.equal(isPermanentRejection(new ApiError("no", "UNAUTHORIZED", 401)), false);
 });
+
+test("a 403 or 404 that is not a tRPC answer never drops a queued row", async () => {
+  // A WAF's HTML block page, or a proxy answering /api with the web app's 404
+  // page mid-deploy: a status with no tRPC envelope is no verdict on the row.
+  for (const status of [403, 404]) {
+    const api = createApiClient({
+      baseUrl: "https://api.example",
+      fetchImpl: (async () =>
+        new Response("<html>blocked</html>", {
+          status,
+          headers: { "content-type": "text/html" },
+        })) as unknown as typeof fetch,
+    });
+    const error = await api.mutate("entries.start", {}).catch((e: unknown) => e);
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.code, "PARSE_ERROR");
+    assert.equal(isPermanentRejection(error), false, `HTML ${status}`);
+  }
+  // The same statuses from the server itself still are.
+  assert.equal(isPermanentRejection(new ApiError("no", "NOT_FOUND", 404)), true);
+});
