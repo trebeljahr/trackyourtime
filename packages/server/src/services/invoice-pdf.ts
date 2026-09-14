@@ -503,16 +503,27 @@ function dueLine(
  * height is measured first and the cursor moved by the real height, and a
  * block that does not fit starts a new page instead of running into the
  * footer band.
+ *
+ * `keepLines` keeps the line breaks the person typed. Payment details are
+ * written as lines (bank, IBAN, BIC) and read wrongly as one run; notes stay
+ * collapsed, because invoices already sent printed them that way.
  */
 function drawParagraph(
   sheet: Sheet,
   columns: SizedColumn[],
   heading: string | null,
   body: string | null,
+  keepLines = false,
 ): void {
   if (body === null || body.trim() === "") return;
   const { doc } = sheet;
-  const text = sanitizePdfText(body);
+  const text = keepLines
+    ? body
+        .split(/\r\n|\r|\n/)
+        .map(sanitizePdfText)
+        .filter((line) => line !== "")
+        .join("\n")
+    : sanitizePdfText(body);
   const height = doc
     .font(FONT)
     .fontSize(BODY_SIZE)
@@ -605,8 +616,9 @@ export async function renderInvoicePdf(
           [dueLine(invoice, issuer, t), issuer.paymentDetails]
             .filter((part): part is string => part !== null)
             .join("\n"),
+          true,
         );
-        drawParagraph(sheet, columns, null, issuer.invoiceFooter);
+        drawParagraph(sheet, columns, null, issuer.invoiceFooter, true);
       }
 
       doc.end();

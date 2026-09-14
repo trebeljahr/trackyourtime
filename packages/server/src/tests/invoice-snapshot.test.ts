@@ -195,6 +195,25 @@ describe("invoice PDF parties", () => {
     }
   });
 
+  it("keeps the line breaks typed into the payment details", async () => {
+    const invoice = withParties();
+    const issuer = invoice.issuer;
+    assert.ok(issuer);
+    const text = pdfText(
+      await renderInvoicePdf(
+        {
+          ...invoice,
+          issuer: { ...issuer, paymentDetails: "Bank A\nIBAN DE00 1234\r\nBIC ABCDDEFF" },
+        },
+        GENERATED,
+      ),
+    );
+    assert.ok(text.includes("IBAN DE00 1234"));
+    assert.ok(text.includes("BIC ABCDDEFF"));
+    // Collapsed into one run, the three lines would read as one sentence.
+    assert.ok(!text.includes("Bank A IBAN"), "payment details were collapsed onto one line");
+  });
+
   it("renders from the invoice alone: the snapshot, not today's profile", async () => {
     const invoice = withParties();
     const before = pdfText(await renderInvoicePdf(invoice, GENERATED));
