@@ -1,11 +1,20 @@
 import type { Metadata } from "next";
+import type { Locale } from "@starter/shared";
 
-export const OG_IMAGE = {
+import { getTranslator } from "@/i18n/translator";
+
+export type OgImage = { url: string; width: number; height: number; alt: string };
+
+/** The link-preview card, with its description in `locale`. */
+export const ogImage = (locale: Locale): OgImage => ({
   url: "/og.png",
   width: 1200,
   height: 630,
-  alt: "Track Your Time — open-source time tracking on your own server",
-} as const;
+  alt: getTranslator(locale, "marketing")("meta.ogImageAlt"),
+});
+
+/** The English card, for the root layout and every page without a language of its own. */
+export const OG_IMAGE: OgImage = ogImage("en");
 
 /**
  * Metadata for a public page.
@@ -20,7 +29,10 @@ export function pageMetadata({
   title,
   description,
   path,
+  locale = "en",
 }: {
+  /** The language of the page, for the preview card's image description. */
+  locale?: Locale;
   /** Shown in the tab as "<title> | Track Your Time"; the landing page passes an absolute title. */
   title: string | { absolute: string };
   description: string;
@@ -37,7 +49,7 @@ export function pageMetadata({
       url: path,
       title: cardTitle,
       description,
-      images: [OG_IMAGE],
+      images: [ogImage(locale)],
     },
     twitter: { card: "summary_large_image", title: cardTitle, description, images: [OG_IMAGE.url] },
   };

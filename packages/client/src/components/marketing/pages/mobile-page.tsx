@@ -2,50 +2,49 @@ import type { Metadata } from "next";
 
 import { Hero, Prose, Section, Shot, StoreLink } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
-import { marketingMetadata, type Locale } from "@/i18n/marketing";
+import { marketingMetadata, marketingT, type Locale } from "@/i18n/marketing";
 
-/**
- * Metadata for one locale of this page. Title and description move to the
- * `marketing` catalog with the rest of the copy; `path` stays the English path.
- */
-export const mobileMetadata = (locale: Locale): Metadata =>
-  marketingMetadata(locale, {
-  title: "iPhone and Android",
-  description:
-    "Track billable time on your iPhone or Android phone, even without signal. Everything syncs with your laptop.",
-  path: "/mobile/",
-});
+/** Metadata for one locale of this page. `path` stays the English path. */
+export const mobileMetadata = (locale: Locale): Metadata => {
+  const t = marketingT(locale);
+  return marketingMetadata(locale, {
+    title: t("mobile.meta.title"),
+    description: t("mobile.meta.description"),
+    path: "/mobile/",
+  });
+};
 
 export function MobilePage({ locale }: { locale: Locale }): React.ReactElement {
+  const t = marketingT(locale);
   return (
     <MarketingShell locale={locale} path="/mobile/">
       <Hero
-        eyebrow="Track Your Time for iPhone and Android"
-        title="Track time wherever the work happens"
+        eyebrow={t("mobile.hero.eyebrow")}
+        title={t("mobile.hero.title")}
         actions={
           <>
-            <StoreLink store="appStore" />
-            <StoreLink store="googlePlay" />
+            <StoreLink store="appStore" locale={locale} />
+            <StoreLink store="googlePlay" locale={locale} />
           </>
         }
         shot={
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:max-w-4xl">
             <Shot
               src="/marketing/phone-track.png"
-              alt="The Track Your Time timer running on a phone"
+              alt={t("mobile.hero.trackShotAlt")}
               width={645}
               height={1436}
               priority
             />
             <Shot
               src="/marketing/phone-reports.png"
-              alt="This week's hours and earnings on a phone"
+              alt={t("mobile.hero.reportsShotAlt")}
               width={645}
               height={1436}
             />
             <Shot
               src="/marketing/phone-more.png"
-              alt="The Track Your Time menu on a phone, with timesheet, calendar and invoices"
+              alt={t("mobile.hero.menuShotAlt")}
               width={645}
               height={1436}
               className="hidden sm:block"
@@ -53,47 +52,30 @@ export function MobilePage({ locale }: { locale: Locale }): React.ReactElement {
           </div>
         }
       >
-        <p>
-          Not every billable hour happens at a desk. Start a timer at a client&rsquo;s office, on a
-          site visit or on the train home. It&rsquo;s waiting on your laptop when you sit down to
-          write the invoice.
-        </p>
+        <p>{t("mobile.hero.body")}</p>
       </Hero>
 
-      <Section title="No signal? Keep tracking.">
+      <Section title={t("mobile.offline.title")}>
         <Prose>
-          <p>
-            The app works in airplane mode and in tunnels. Close it and the timer keeps running.
-            When you&rsquo;re back online, everything you did offline syncs by itself.
-          </p>
+          <p>{t("mobile.offline.body")}</p>
         </Prose>
       </Section>
 
-      <Section title="The whole app, not a cut-down version">
+      <Section title={t("mobile.wholeApp.title")}>
         <Prose>
-          <p>
-            Your timesheet, calendar, reports and invoices are all on your phone. Check this
-            month&rsquo;s hours before a client call, or fix yesterday&rsquo;s entries on the way to
-            work.
-          </p>
+          <p>{t("mobile.wholeApp.body")}</p>
         </Prose>
       </Section>
 
-      <Section title="Lost your phone?">
+      <Section title={t("mobile.lost.title")}>
         <Prose>
-          <p>
-            Open Settings in the web app and sign the phone out. It loses access to your account
-            right away.
-          </p>
+          <p>{t("mobile.lost.body")}</p>
         </Prose>
       </Section>
 
-      <Section title="Using your own server?" className="pb-24">
+      <Section title={t("mobile.selfHost.title")} className="pb-24">
         <Prose>
-          <p>
-            The phone apps connect to trackyourtime.dev for now. On your own server, open the web
-            app in your phone&rsquo;s browser and add it to your home screen.
-          </p>
+          <p>{t("mobile.selfHost.body")}</p>
         </Prose>
       </Section>
     </MarketingShell>

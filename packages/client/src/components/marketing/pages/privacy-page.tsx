@@ -2,23 +2,40 @@ import type { Metadata } from "next";
 
 import { Hero, Section } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
-import { marketingMetadata, type Locale } from "@/i18n/marketing";
+import { DATE_STYLES } from "@/i18n/format";
+import { marketingMetadata, marketingT, type Locale } from "@/i18n/marketing";
 import { CONTACT_EMAIL, REPO_URL } from "@/lib/site-links";
 
-/**
- * Metadata for one locale of this page. Title and description move to the
- * `marketing` catalog with the rest of the copy; `path` stays the English path.
- */
-export const privacyMetadata = (locale: Locale): Metadata =>
-  marketingMetadata(locale, {
-  title: "Privacy policy",
-  description:
-    "What the hosted Track Your Time service stores, why, who else sees it, and how to get it back or have it deleted.",
-  path: "/privacy/",
-});
+/** Metadata for one locale of this page. `path` stays the English path. */
+export const privacyMetadata = (locale: Locale): Metadata => {
+  const t = marketingT(locale);
+  return marketingMetadata(locale, {
+    title: t("privacy.meta.title"),
+    description: t("privacy.meta.description"),
+    path: "/privacy/",
+  });
+};
 
 /** Bump when the policy changes in substance. Store listings link to this page. */
-const LAST_UPDATED = "13 September 2026";
+const LAST_UPDATED = Date.UTC(2026, 8, 13);
+
+/**
+ * The date in the page's language, identical on every build machine.
+ *
+ * Not `formatDate`: that follows the device's region, and at build time the
+ * "device" is whichever machine runs `next build` (Node has a `navigator`), so
+ * the served HTML would change with it. A fixed region per language and UTC on
+ * both sides of the formatter pin it. en-GB keeps the day-month order this
+ * page has always used.
+ */
+const DATE_REGION: Record<Locale, string> = { en: "en-GB", de: "de-DE" };
+
+const lastUpdated = (locale: Locale): string =>
+  new Intl.DateTimeFormat(DATE_REGION[locale], { ...DATE_STYLES.long, timeZone: "UTC" }).format(
+    LAST_UPDATED,
+  );
+
+const link = "text-foreground underline underline-offset-4";
 
 function Block({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
   return (
@@ -31,189 +48,106 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 }
 
 export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement {
+  const t = marketingT(locale);
+  const strong = (chunks: React.ReactNode): React.ReactElement => <strong>{chunks}</strong>;
+  const mail = (chunks: React.ReactNode): React.ReactElement => (
+    <a href={`mailto:${CONTACT_EMAIL}`} className={link}>
+      {chunks}
+    </a>
+  );
   return (
     <MarketingShell locale={locale} path="/privacy/">
-      <Hero eyebrow={`Last updated ${LAST_UPDATED}`} title="Privacy policy">
-        <p>
-          This policy covers the hosted Track Your Time service at trackyourtime.dev and
-          api.trackyourtime.dev, and the Track Your Time apps and extensions when they connect to it. If
-          you run your own Track Your Time server, your data goes to your server, and this policy does
-          not apply to it.
-        </p>
-        <p>
-          Track Your Time is run by Rico Trebeljahr. Write to{" "}
-          <a href={`mailto:${CONTACT_EMAIL}`} className="text-foreground underline underline-offset-4">
-            {CONTACT_EMAIL}
-          </a>{" "}
-          with any question about your data.
-        </p>
+      <Hero
+        // Formatted to a string first: a date inside an ICU argument would be
+        // formatted in the build machine's zone.
+        eyebrow={t("privacy.hero.lastUpdated", { date: lastUpdated(locale) })}
+        title={t("privacy.hero.title")}
+      >
+        <p>{t("privacy.hero.scope")}</p>
+        <p>{t.rich("privacy.hero.contact", { email: CONTACT_EMAIL, mail })}</p>
       </Hero>
 
-      <Block title="The short version">
+      <Block title={t("privacy.summary.title")}>
         <ul>
-          <li>Track Your Time stores your account and the time you track, so that it can show them back to you.</li>
-          <li>It runs no analytics, shows no ads, and sells no data.</li>
-          <li>It does not track what you do in other apps or on other websites.</li>
-          <li>You can export all of your data at any time, and ask for all of it to be deleted.</li>
+          <li>{t("privacy.summary.stores")}</li>
+          <li>{t("privacy.summary.noAnalytics")}</li>
+          <li>{t("privacy.summary.noTracking")}</li>
+          <li>{t("privacy.summary.control")}</li>
         </ul>
       </Block>
 
-      <Block title="What the service stores">
-        <p>
-          <strong>Your account.</strong> Your name, your email address, and a hash of your password.
-          The server never stores the password itself.
-        </p>
-        <p>
-          <strong>What you track.</strong> Time entries and their descriptions, clients, projects,
-          tasks, tags, favorites, hourly rates, budgets, invoices and imported files. You type all of
-          this in yourself.
-        </p>
-        <p>
-          <strong>Your settings.</strong> Currency, week start, clock format, idle handling and
-          similar preferences.
-        </p>
-        <p>
-          <strong>Your sessions.</strong> For each device you sign in on: the IP address and browser
-          or app identifier it signed in from, and the name of the Track Your Time client. This is what
-          Settings → Devices shows you, so you can recognise a device and sign it out.
-        </p>
-        <p>
-          <strong>API tokens and webhooks</strong>, if you create them: a hash of each token, its
-          scopes, and the addresses your webhooks send to, with a record of each delivery.
-        </p>
-        <p>
-          <strong>Request logs.</strong> The server logs each request with the IP address, the time,
-          the address requested and the browser identifier. The logs exist to find and fix faults
-          and are used for nothing else.
-        </p>
+      <Block title={t("privacy.stored.title")}>
+        <p>{t.rich("privacy.stored.account", { strong })}</p>
+        <p>{t.rich("privacy.stored.tracked", { strong })}</p>
+        <p>{t.rich("privacy.stored.settings", { strong })}</p>
+        <p>{t.rich("privacy.stored.sessions", { strong })}</p>
+        <p>{t.rich("privacy.stored.tokens", { strong })}</p>
+        <p>{t.rich("privacy.stored.logs", { strong })}</p>
       </Block>
 
-      <Block title="Why the service stores it">
-        <p>
-          The service needs your account and your tracked time to do what you signed up for. That is
-          the legal basis for storing them: the service you asked for cannot work without them.
-        </p>
-        <p>
-          Session records and request logs keep the service secure and working. That is a legitimate
-          interest of the service and of every person who uses it.
-        </p>
-        <p>
-          The newsletter is the one exception. It sends you nothing unless you subscribe and then
-          confirm the subscription by email. You can unsubscribe from any issue.
-        </p>
+      <Block title={t("privacy.purpose.title")}>
+        <p>{t("privacy.purpose.contract")}</p>
+        <p>{t("privacy.purpose.interest")}</p>
+        <p>{t("privacy.purpose.newsletter")}</p>
       </Block>
 
-      <Block title="Who else processes it">
+      <Block title={t("privacy.processors.title")}>
         <ul>
-          <li>
-            <strong>Cloudflare</strong> answers DNS for trackyourtime.dev and passes every request
-            to the server. It sees your IP address and the request.
-          </li>
-          <li>
-            <strong>Amazon Web Services (SES)</strong> delivers email: password resets and, if you
-            subscribe, the newsletter. It receives your email address and the message.
-          </li>
-          <li>
-            <strong>The server host</strong> rents out the virtual server that runs Track Your Time and its
-            database. Your data is stored on that server.
-          </li>
+          <li>{t.rich("privacy.processors.cloudflare", { strong })}</li>
+          <li>{t.rich("privacy.processors.ses", { strong })}</li>
+          <li>{t.rich("privacy.processors.host", { strong })}</li>
         </ul>
-        <p>No other company receives your data. Track Your Time does not use advertising or analytics services.</p>
+        <p>{t("privacy.processors.nobodyElse")}</p>
       </Block>
 
-      <Block title="The browser extension">
+      <Block title={t("privacy.extension.title")}>
         <ul>
-          <li>
-            The extension stores your session token and any unsent changes in Chrome&rsquo;s
-            extension storage on your computer.
-          </li>
-          <li>
-            The <strong>cookies</strong> permission reads one cookie: the Track Your Time web app&rsquo;s
-            session cookie, so you do not sign in twice. The extension reads no other cookie.
-          </li>
-          <li>
-            The <strong>idle</strong> permission tells the extension that the computer is idle or
-            locked. The extension uses it only to ask what to do with idle time. It does not send
-            idle state anywhere.
-          </li>
-          <li>The extension talks only to api.trackyourtime.dev. It cannot read the pages you visit.</li>
-          <li>
-            The use of information received from Chrome APIs adheres to the Chrome Web Store User Data
-            Policy, including the Limited Use requirements.
-          </li>
+          <li>{t("privacy.extension.storage")}</li>
+          <li>{t.rich("privacy.extension.cookies", { strong })}</li>
+          <li>{t.rich("privacy.extension.idle", { strong })}</li>
+          <li>{t("privacy.extension.network")}</li>
+          <li>{t("privacy.extension.limitedUse")}</li>
         </ul>
       </Block>
 
-      <Block title="The Raycast extension">
-        <p>
-          The Raycast extension stores your session token, a copy of recent data, and any unsent
-          changes in Raycast&rsquo;s encrypted local storage on your Mac. It talks only to the
-          Track Your Time server set in its preferences.
-        </p>
+      <Block title={t("privacy.raycast.title")}>
+        <p>{t("privacy.raycast.body")}</p>
       </Block>
 
-      <Block title="The iPhone and Android apps">
+      <Block title={t("privacy.mobile.title")}>
         <ul>
-          <li>The apps keep your session token in the iOS Keychain or the Android Keystore.</li>
-          <li>
-            Unsent changes and the running timer are stored in the app&rsquo;s own storage on the
-            phone, so that they survive a restart with no signal.
-          </li>
-          <li>
-            The apps read the phone&rsquo;s network state to know if they are online. They do not
-            use your location, contacts, camera, microphone or photos.
-          </li>
-          <li>The apps contain no advertising, analytics or tracking code.</li>
+          <li>{t("privacy.mobile.keychain")}</li>
+          <li>{t("privacy.mobile.storage")}</li>
+          <li>{t("privacy.mobile.permissions")}</li>
+          <li>{t("privacy.mobile.noTracking")}</li>
         </ul>
       </Block>
 
-      <Block title="How long it is kept">
-        <p>
-          Your account and tracked time are kept until you delete them or ask for them to be deleted.
-          A browser session ends 7 days after its last use. A session in an app or extension ends
-          30 days after its last use. Either ends at once when you sign the device out.
-        </p>
+      <Block title={t("privacy.retention.title")}>
+        <p>{t("privacy.retention.body")}</p>
       </Block>
 
-      <Block title="Your rights">
-        <p>
-          <strong>Get a copy.</strong> Settings → Data exports everything as JSON or CSV, at any
-          time, without asking anyone.
-        </p>
-        <p>
-          <strong>Correct it.</strong> You can edit every entry and every setting yourself.
-        </p>
-        <p>
-          <strong>Delete it.</strong> Open Settings → Account → Delete account, in the web app or
-          in the phone apps, and confirm with your password. The account, every session and
-          everything in your workspace are deleted at once. Every signed-in device is signed out.
-        </p>
-        <p>
-          If you cannot sign in, write to{" "}
-          <a href={`mailto:${CONTACT_EMAIL}`} className="text-foreground underline underline-offset-4">
-            {CONTACT_EMAIL}
-          </a>{" "}
-          from the email address on your account. The account is then deleted within 30 days, and
-          you receive a confirmation.
-        </p>
-        <p>
-          If you live in the EU or the UK, you also have the right to object, to restrict processing,
-          and to complain to your data protection authority.
-        </p>
+      <Block title={t("privacy.rights.title")}>
+        <p>{t.rich("privacy.rights.copy", { strong })}</p>
+        <p>{t.rich("privacy.rights.correct", { strong })}</p>
+        <p>{t.rich("privacy.rights.delete", { strong })}</p>
+        <p>{t.rich("privacy.rights.noSignIn", { email: CONTACT_EMAIL, mail })}</p>
+        <p>{t("privacy.rights.eu")}</p>
       </Block>
 
-      <Block title="Children">
-        <p>Track Your Time is a tool for work. It is not directed at children under 16.</p>
+      <Block title={t("privacy.children.title")}>
+        <p>{t("privacy.children.body")}</p>
       </Block>
 
-      <Block title="Changes to this policy">
+      <Block title={t("privacy.changes.title")}>
         <p>
-          The date at the top changes when this policy changes. The full history of this page is
-          public in the{" "}
-          <a href={REPO_URL} className="text-foreground underline underline-offset-4">
-            source repository
-          </a>
-          .
+          {t.rich("privacy.changes.body", {
+            repo: (chunks) => (
+              <a href={REPO_URL} className={link}>
+                {chunks}
+              </a>
+            ),
+          })}
         </p>
       </Block>
       <div className="pb-16" />

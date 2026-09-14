@@ -2,6 +2,7 @@ import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
 
+import { marketingT, type Locale } from "@/i18n/marketing";
 import { STORES, type StoreId } from "@/lib/site-links";
 import { cn } from "@/lib/utils";
 
@@ -151,15 +152,16 @@ export function SecondaryLink({
  * A store button, or — while the listing is not live — a plain statement that
  * it is not in that store yet. Never a link to a listing that does not exist.
  */
-export function StoreLink({ store }: { store: StoreId }): React.ReactElement {
-  const listing = STORES[store];
-  if (listing.url) return <PrimaryLink href={listing.url}>{listing.label}</PrimaryLink>;
+export function StoreLink({ store, locale }: { store: StoreId; locale: Locale }): React.ReactElement {
+  const t = marketingT(locale);
+  const { url } = STORES[store];
+  if (url) return <PrimaryLink href={url}>{t(`stores.${store}.label`)}</PrimaryLink>;
   return (
     <span
       className="inline-flex h-10 items-center rounded-md border border-dashed px-5 text-sm text-muted-foreground"
       data-testid={`store-pending-${store}`}
     >
-      {listing.pending}
+      {t(`stores.${store}.pending`)}
     </span>
   );
 }

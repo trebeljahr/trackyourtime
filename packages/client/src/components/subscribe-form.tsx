@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 
+import { shippedLocale } from "@/i18n/config";
+import { useLocale } from "@/i18n/locale-store";
+import { useT } from "@/i18n/use-t";
+
 // Same regex as the server (services/newsletter/subscribe.ts) so client
 // and server agree on what "looks like an email". The server is still
 // authoritative — this is purely a UX layer that avoids a slow round-trip
@@ -18,30 +22,53 @@ type Status =
   | { kind: "submitting" }
   | { kind: "success" }
   | { kind: "already-subscribed" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; reason: SubscribeFailure };
+
+/**
+ * Why a subscribe failed, from the server's `error` code. The server's own
+ * `message` is English, so the form words each reason itself.
+ */
+type SubscribeFailure = "invalidEmail" | "rateLimited" | "sendFailed" | "generic" | "network";
+
+const failureFromCode = (code: unknown): SubscribeFailure => {
+  switch (code) {
+    case "invalid_email":
+      return "invalidEmail";
+    case "rate_limited":
+      return "rateLimited";
+    case "send_failed":
+      return "sendFailed";
+    default:
+      return "generic";
+  }
+};
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-export function SubscribeForm() {
+export function SubscribeForm(): React.ReactElement {
+  const t = useT("marketing");
+  // The language the confirmation email is written in: the page's own on a
+  // public page (pinned by <FixedLocale>), the reader's everywhere else.
+  const locale = shippedLocale(useLocale());
   const [email, setEmail] = useState("");
   // Honeypot — wired but never shown. Bots that fill every input get
   // filtered server-side before any Listmonk call.
   const [website, setWebsite] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
-  const [formatError, setFormatError] = useState<string | null>(null);
+  const [formatError, setFormatError] = useState(false);
 
   function handleEmailChange(value: string) {
     setEmail(value);
-    if (formatError !== null) setFormatError(null);
+    if (formatError) setFormatError(false);
     if (status.kind === "error") setStatus({ kind: "idle" });
   }
 
   function handleEmailBlur() {
     if (email.trim().length === 0) {
-      setFormatError(null);
+      setFormatError(false);
       return;
     }
-    setFormatError(looksLikeEmail(email) ? null : "That doesn't look like an email address.");
+    setFormatError(!looksLikeEmail(email));
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -49,40 +76,34 @@ export function SubscribeForm() {
     if (status.kind === "submitting") return;
 
     if (!looksLikeEmail(email)) {
-      setFormatError("That doesn't look like an email address.");
+      setFormatError(true);
       return;
     }
-    setFormatError(null);
+    setFormatError(false);
     setStatus({ kind: "submitting" });
     try {
       const res = await fetch(`${API_URL}/api/newsletter/subscribe`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, website }),
+        body: JSON.stringify({ email, website, locale }),
       });
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { message?: string };
-        setStatus({
-          kind: "error",
-          message: data.message ?? "Something went wrong. Please try again.",
-        });
+        const data = (await res.json().catch(() => ({}))) as { error?: unknown };
+        setStatus({ kind: "error", reason: failureFromCode(data.error) });
         return;
       }
       const data = (await res.json().catch(() => ({}))) as { alreadySubscribed?: boolean };
       setStatus({ kind: data.alreadySubscribed ? "already-subscribed" : "success" });
     } catch {
-      setStatus({ kind: "error", message: "Network error. Please try again." });
+      setStatus({ kind: "error", reason: "network" });
     }
   }
 
   if (status.kind === "success") {
     return (
       <div role="status" aria-live="polite" className="rounded-lg border p-5 text-sm">
-        <p className="font-medium">Check your inbox.</p>
-        <p className="mt-1 text-gray-600">
-          Tap the confirmation link to finish. Spam folder is the usual suspect if it does not
-          surface.
-        </p>
+        <p className="font-medium">{t("newsletter.form.successTitle")}</p>
+        <p className="mt-1 text-gray-600">{t("newsletter.form.successBody")}</p>
       </div>
     );
   }
@@ -90,21 +111,23 @@ export function SubscribeForm() {
   if (status.kind === "already-subscribed") {
     return (
       <div role="status" aria-live="polite" className="rounded-lg border p-5 text-sm">
-        <p className="font-medium">You are already on the list.</p>
-        <p className="mt-1 text-gray-600">
-          That address is already a confirmed subscriber. Nothing to do.
-        </p>
+        <p className="font-medium">{t("newsletter.form.alreadyTitle")}</p>
+        <p className="mt-1 text-gray-600">{t("newsletter.form.alreadyBody")}</p>
       </div>
     );
   }
 
   const inlineErrorId = "newsletter-email-error";
-  const visibleError = formatError ?? (status.kind === "error" ? status.message : null);
+  const visibleError = formatError
+    ? t("newsletter.form.invalidEmail")
+    : status.kind === "error"
+      ? t(`newsletter.form.${status.reason}`)
+      : null;
 
   return (
     <form onSubmit={onSubmit} className="space-y-3" noValidate>
       <label htmlFor="newsletter-email" className="sr-only">
-        Email address
+        {t("newsletter.form.emailLabel")}
       </label>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
@@ -113,7 +136,7 @@ export function SubscribeForm() {
           type="email"
           autoComplete="email"
           required
-          placeholder="you@example.com"
+          placeholder={t("newsletter.form.placeholder")}
           value={email}
           onChange={(e) => handleEmailChange(e.target.value)}
           onBlur={handleEmailBlur}
@@ -127,11 +150,12 @@ export function SubscribeForm() {
           disabled={status.kind === "submitting" || email.trim().length === 0}
           className="h-11 rounded-md bg-gray-900 px-5 text-sm font-medium text-white disabled:opacity-50 sm:w-auto"
         >
-          {status.kind === "submitting" ? "Sending…" : "Subscribe"}
+          {status.kind === "submitting" ? t("newsletter.form.submitting") : t("newsletter.form.submit")}
         </button>
       </div>
 
-      {/* Honeypot — visually hidden, aria-hidden, tab-skipped. */}
+      {/* Honeypot — visually hidden, aria-hidden, tab-skipped. Its label stays
+          English on purpose: no person reads it, and bots look for "Website". */}
       <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
         <label htmlFor="newsletter-website">Website</label>
         <input
@@ -152,7 +176,7 @@ export function SubscribeForm() {
       )}
 
       <p className="text-xs text-gray-500">
-        One email at a regular cadence. Unsubscribe link in every issue.
+        {t("newsletter.form.cadence")}
       </p>
     </form>
   );

@@ -74,7 +74,7 @@ export const marketingMetadata = (
     path: string;
   },
 ): Metadata => {
-  const base = pageMetadata({ title, description, path: localizedPath(locale, path) });
+  const base = pageMetadata({ title, description, path: localizedPath(locale, path), locale });
   const languages: Record<string, string> = { "x-default": localizedPath("en", path) };
   for (const each of MARKETING_LOCALES) languages[each] = localizedPath(each, path);
   return {

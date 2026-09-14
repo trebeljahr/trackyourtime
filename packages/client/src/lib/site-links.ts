@@ -26,16 +26,16 @@ export const PRODUCT_NAME = "Track Your Time";
 export type StoreId = "chrome" | "raycast" | "appStore" | "googlePlay";
 
 export type StoreListing = {
-  /** What the page says instead of a button while the listing is not live. */
-  pending: string;
-  /** What the button says once the listing is live. */
-  label: string;
+  /**
+   * The listing's address, or `null` while it is not live. What the button
+   * says either way is in the `marketing` catalog under `stores.<id>`.
+   */
   url: string | null;
 };
 
 export const STORES: Record<StoreId, StoreListing> = {
-  chrome: { pending: "Not in the Chrome Web Store yet", label: "Add to Chrome", url: null },
-  raycast: { pending: "Not in the Raycast Store yet", label: "Install from the Raycast Store", url: null },
-  appStore: { pending: "Not on the App Store yet", label: "Download on the App Store", url: null },
-  googlePlay: { pending: "Not on Google Play yet", label: "Get it on Google Play", url: null },
+  chrome: { url: null },
+  raycast: { url: null },
+  appStore: { url: null },
+  googlePlay: { url: null },
 };

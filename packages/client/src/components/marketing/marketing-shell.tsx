@@ -8,9 +8,9 @@ import { localizedPath, marketingT, MARKETING_LOCALES, type Locale } from "@/i18
 import { OPENAPI_URL, REPO_URL } from "@/lib/site-links";
 
 const NAV = [
-  { href: "/extension/", label: "Chrome" },
-  { href: "/raycast/", label: "Raycast" },
-  { href: "/mobile/", label: "iPhone & Android" },
+  { href: "/extension/", label: "chrome" },
+  { href: "/raycast/", label: "raycast" },
+  { href: "/mobile/", label: "mobile" },
 ] as const;
 
 /**
@@ -35,6 +35,7 @@ export function MarketingShell({
   /** Send a signed-in visitor to /track. Only the landing page does this. */
   redirectSignedIn?: boolean;
 }): React.ReactElement {
+  const t = marketingT(locale);
   const href = (target: string): string => localizedPath(locale, target);
   return (
     <FixedLocale locale={locale}>
@@ -51,19 +52,19 @@ export function MarketingShell({
           <nav className="order-3 flex w-full gap-5 text-sm text-muted-foreground sm:order-none sm:w-auto">
             {NAV.map((item) => (
               <Link key={item.href} href={href(item.href)} className="hover:text-foreground">
-                {item.label}
+                {t(`shell.nav.${item.label}`)}
               </Link>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-4 text-sm">
             <Link href="/login/" className="text-muted-foreground hover:text-foreground">
-              Log in
+              {t("shell.logIn")}
             </Link>
             <Link
               href="/signup/"
               className="rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground hover:bg-primary/90"
             >
-              Create an account
+              {t("shell.createAccount")}
             </Link>
           </div>
         </div>
@@ -75,18 +76,18 @@ export function MarketingShell({
         <div className="mx-auto grid max-w-6xl gap-8 px-6 py-10 sm:grid-cols-3">
           <div className="space-y-2">
             <p className="font-medium text-foreground">Track Your Time</p>
-            <p>Open-source time tracking on your own server.</p>
+            <p>{t("shell.footer.tagline")}</p>
           </div>
           <ul className="space-y-2">
-            <li><Link href={href("/extension/")} className="hover:text-foreground">Chrome extension</Link></li>
-            <li><Link href={href("/raycast/")} className="hover:text-foreground">Raycast extension</Link></li>
-            <li><Link href={href("/mobile/")} className="hover:text-foreground">iPhone and Android</Link></li>
+            <li><Link href={href("/extension/")} className="hover:text-foreground">{t("shell.footer.chromeExtension")}</Link></li>
+            <li><Link href={href("/raycast/")} className="hover:text-foreground">{t("shell.footer.raycastExtension")}</Link></li>
+            <li><Link href={href("/mobile/")} className="hover:text-foreground">{t("shell.footer.mobile")}</Link></li>
           </ul>
           <ul className="space-y-2">
-            <li><a href={REPO_URL} className="hover:text-foreground">Source code</a></li>
-            <li><a href={OPENAPI_URL} className="hover:text-foreground">API specification</a></li>
-            <li><Link href={href("/privacy/")} className="hover:text-foreground">Privacy policy</Link></li>
-            <li><Link href={href("/support/")} className="hover:text-foreground">Support</Link></li>
+            <li><a href={REPO_URL} className="hover:text-foreground">{t("shell.footer.sourceCode")}</a></li>
+            <li><a href={OPENAPI_URL} className="hover:text-foreground">{t("shell.footer.apiSpec")}</a></li>
+            <li><Link href={href("/privacy/")} className="hover:text-foreground">{t("shell.footer.privacy")}</Link></li>
+            <li><Link href={href("/support/")} className="hover:text-foreground">{t("shell.footer.support")}</Link></li>
           </ul>
           <LanguageSwitch locale={locale} path={path} />
         </div>
