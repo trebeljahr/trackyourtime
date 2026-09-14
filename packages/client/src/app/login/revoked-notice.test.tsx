@@ -19,7 +19,14 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/auth-client", () => ({
   signIn: { email: vi.fn() },
   getSession: vi.fn(),
+  isTwoFactorChallenge: () => false,
+  webCallbackUrl: (path: string) => path,
   POST_AUTH_REDIRECT: "/track",
+}));
+
+// Reads the server's auth config over tRPC; covered by its own test.
+vi.mock("@/components/google-sign-in-button", () => ({
+  GoogleSignInButton: () => null,
 }));
 
 const { default: LoginPage } = await import("./page");

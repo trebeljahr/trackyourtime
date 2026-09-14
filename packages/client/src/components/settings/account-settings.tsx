@@ -15,13 +15,18 @@ import {
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
+import {
+  ChangeEmailRow,
+  ChangePasswordRow,
+} from "@/components/settings/account-credentials";
 import { DeleteAccountCard } from "@/components/settings/delete-account";
 import { SettingRow } from "@/components/settings/setting-row";
+import { TwoFactorRow } from "@/components/settings/two-factor";
 import { useAuth } from "@/hooks/use-auth";
-import { signOut } from "@/lib/auth-client";
+import { accountHasPassword, signOut } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 
-/** Identity, email notifications, subscription status, sign-out and deletion. */
+/** Identity, credentials, two-factor, email notifications, subscription status, sign-out and deletion. */
 export function AccountSettings({
   onShowExport,
 }: {
@@ -34,6 +39,26 @@ export function AccountSettings({
   const profileQuery = trpc.profile.get.useQuery();
   const billingStatus = trpc.billing.status.useQuery();
   const [signingOut, setSigningOut] = React.useState(false);
+  const authConfig = trpc.health.check.useQuery(undefined, {
+    staleTime: 5 * 60_000,
+  }).data?.authConfig;
+
+  /**
+   * Password, two-factor and deletion all hinge on whether this account has a
+   * password at all — a Google-only account has none to change or confirm
+   * with. `null` while unknown, which keeps those buttons disabled.
+   */
+  const [hasPassword, setHasPassword] = React.useState<boolean | null>(null);
+  React.useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    void accountHasPassword().then((next) => {
+      if (!cancelled) setHasPassword(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const updateProfile = trpc.profile.update.useMutation({
     onMutate: async (input) => {
@@ -108,6 +133,15 @@ export function AccountSettings({
               </span>
             </div>
           </SettingRow>
+
+          <ChangeEmailRow
+            currentEmail={user?.email ?? ""}
+            mailConfigured={authConfig?.emailVerificationRequired}
+          />
+
+          <ChangePasswordRow hasPassword={hasPassword} />
+
+          <TwoFactorRow hasPassword={hasPassword} />
 
           <SettingRow
             title="Email notifications"
