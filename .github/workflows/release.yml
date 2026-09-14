@@ -117,7 +117,7 @@ jobs:
       latest: ${{ steps.resolve.outputs.latest }}
       minor: ${{ steps.resolve.outputs.minor }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
           # Full history AND tags: the latest/minor decision below compares
@@ -199,7 +199,7 @@ jobs:
             runner: ubuntu-24.04-arm
             arch: arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -297,7 +297,7 @@ jobs:
             runner: ubuntu-24.04-arm
             arch: arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -495,7 +495,7 @@ jobs:
     steps:
       # The compose file, Caddyfile and script from the tagged commit — the
       # ones a self-hoster following that release's docs would use.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
