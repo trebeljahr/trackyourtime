@@ -71,7 +71,7 @@ jobs:
       ITCH_API_KEY: ${{ secrets.ITCH_API_KEY }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No `version:` input. pnpm/action-setup@v4 reads `packageManager` from
       # the root package.json, and an explicit `version: 11` next to
