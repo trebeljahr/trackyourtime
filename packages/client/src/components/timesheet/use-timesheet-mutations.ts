@@ -11,6 +11,7 @@ import {
 
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import { getActiveWorkspaceId } from "@/lib/active-workspace";
 import {
   buildOptimisticEntry,
   decorateEntry,
@@ -175,23 +176,38 @@ export const useTimesheetMutations = (
   const run = React.useCallback(
     async (args: {
       optimistic: (entries: DetailedEntry[]) => DetailedEntry[];
-      perform: () => Promise<void>;
-      queue: () => Promise<void>;
+      /** `stillHere` is false once the user has switched workspace. */
+      perform: (stillHere: () => boolean) => Promise<void>;
+      /** Stamps the queued row with the workspace the edit was made in. */
+      queue: (workspaceId: string | null) => Promise<void>;
       failure: string;
     }): Promise<void> => {
+      /*
+       * The workspace the edit was made in, read before anything awaits.
+       *
+       * The list's query key does not carry the workspace (the tRPC link adds
+       * it below React Query), and a switch resets that key for the new one.
+       * So once the user has switched, this edit's snapshot and its answer are
+       * the OLD workspace's data: restoring the snapshot would paint A's week
+       * into B's grid, and nothing would refetch it away. The queued row is
+       * stamped with it too, not with wherever the device points when the
+       * network error finally arrives.
+       */
+      const workspaceId = getActiveWorkspaceId();
+      const stillHere = (): boolean => getActiveWorkspaceId() === workspaceId;
       const previous = await snapshot();
-      patchList(args.optimistic);
+      if (stillHere()) patchList(args.optimistic);
       setPending((count) => count + 1);
 
       try {
-        await args.perform();
+        await args.perform(stillHere);
         invalidate();
       } catch (error) {
         if (isNetworkError(error)) {
-          await args.queue();
+          await args.queue(workspaceId);
           return;
         }
-        restore(previous);
+        if (stillHere()) restore(previous);
         toast.error(
           error instanceof Error && error.message !== ""
             ? error.message
@@ -242,9 +258,10 @@ export const useTimesheetMutations = (
       let serverId: string | null = null;
       const named = run({
         optimistic: (entries) => [optimistic, ...entries],
-        perform: async () => {
+        perform: async (stillHere) => {
           const created = await createEntry.mutateAsync(input);
           serverId = created.id;
+          if (!stillHere()) return;
           patchList((entries) =>
             entries.map((entry) =>
               entry.id === tempId
@@ -253,7 +270,8 @@ export const useTimesheetMutations = (
             )
           );
         },
-        queue: () => enqueueOffline("entries.create", input, tempId),
+        queue: (workspaceId) =>
+          enqueueOffline("entries.create", input, tempId, workspaceId),
         failure: "Could not add the time",
       }).then((): string | null => serverId);
 
@@ -293,7 +311,8 @@ export const useTimesheetMutations = (
           perform: async () => {
             await updateEntry.mutateAsync(input);
           },
-          queue: () => enqueueOffline("entries.update", input),
+          queue: (workspaceId) =>
+            enqueueOffline("entries.update", input, undefined, workspaceId),
           failure: "Could not save the change",
         });
       });
@@ -342,7 +361,8 @@ export const useTimesheetMutations = (
               });
             }
           },
-          queue: () => enqueueOffline("entries.remove", input),
+          queue: (workspaceId) =>
+            enqueueOffline("entries.remove", input, undefined, workspaceId),
           failure: "Could not remove the time",
         });
       });
