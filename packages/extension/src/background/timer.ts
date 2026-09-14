@@ -20,6 +20,7 @@ import { renderBadge } from "./badge";
 import { BackgroundError } from "./errors";
 import { noteLocalStart, noteLocalStop } from "./idle-state";
 import {
+  addressedWrite,
   ensureReady,
   enqueueOffline,
   flushQueue,
@@ -125,12 +126,17 @@ export async function startTimer(
 
   // Drain first. A live start sent ahead of older queued mutations would be
   // stopped again the moment they replay.
-  if ((await flushQueue()) > 0) {
-    return queueStart(input, current.session.userId ?? "");
+  const stuck = await flushQueue();
+  const write = addressedWrite();
+  if (stuck > 0) {
+    return queueStart(input, current.session.userId ?? "", write.workspaceId);
   }
 
   try {
-    const entry = await current.api.mutate<TimeEntry>("entries.start", input);
+    const entry = await current.api.mutate<TimeEntry>(
+      "entries.start",
+      write.address(input),
+    );
     setCachedRunning(entry);
     // Starting stops whatever was running, so the entry log — and with it the
     // derived recents list — has moved on.
@@ -145,16 +151,17 @@ export async function startTimer(
     // mutation was seen and refused — replaying it would only be refused
     // again, so it goes back to the popup instead of into the queue.
     if (!isTransportFailure(error)) throw error;
-    return queueStart(input, current.session.userId ?? "");
+    return queueStart(input, current.session.userId ?? "", write.workspaceId);
   }
 }
 
 const queueStart = async (
   input: OfflineStartInput,
   authorId: string,
+  workspaceId: string | null,
 ): Promise<TimeEntry> => {
   const tempId = createTempId();
-  await enqueueOffline("entries.start", input, tempId);
+  await enqueueOffline("entries.start", input, tempId, workspaceId);
   const entry = optimisticEntry(input, tempId, authorId);
   setCachedRunning(entry);
   // On disk as well as in memory: the queued row outlives this worker, so the
@@ -187,24 +194,29 @@ export async function stopTimer(
   // releasing there would drop it on the floor.
   if (endIso === undefined) await noteLocalStop(Date.now());
 
-  if ((await flushQueue()) > 0) {
-    await queueStop(input);
+  const stuck = await flushQueue();
+  const write = addressedWrite();
+  if (stuck > 0) {
+    await queueStop(input, write.workspaceId);
     return;
   }
 
   try {
-    await current.api.mutate<TimeEntry>("entries.stop", input);
+    await current.api.mutate<TimeEntry>("entries.stop", write.address(input));
     setCachedRunning(null);
     invalidateRecents();
     await renderBadge(null);
   } catch (error) {
     if (!isTransportFailure(error)) throw error;
-    await queueStop(input);
+    await queueStop(input, write.workspaceId);
   }
 }
 
-const queueStop = async (input: OfflineStopInput): Promise<void> => {
-  await enqueueOffline("entries.stop", input);
+const queueStop = async (
+  input: OfflineStopInput,
+  workspaceId: string | null,
+): Promise<void> => {
+  await enqueueOffline("entries.stop", input, undefined, workspaceId);
   setCachedRunning(null);
   // "A stop is queued" is itself a state worth surviving eviction — without it
   // a revived worker refetches and resurrects the entry this stop closed.
@@ -282,28 +294,34 @@ export async function updateRunning(patch: RunningPatch): Promise<void> {
 
   // Drain first, for the same reason start and stop do: a live edit sent ahead
   // of older queued mutations would be overwritten when they replay.
-  if ((await flushQueue()) > 0) {
-    await queueUpdate(input, optimistic);
+  const stuck = await flushQueue();
+  const write = addressedWrite();
+  if (stuck > 0) {
+    await queueUpdate(input, optimistic, write.workspaceId);
     return;
   }
 
   try {
-    const entry = await current.api.mutate<TimeEntry>("entries.update", input);
+    const entry = await current.api.mutate<TimeEntry>(
+      "entries.update",
+      write.address(input),
+    );
     setCachedRunning(entry);
     // Recents are derived from the entry log, and this edit changed what the
     // most recent combination is labelled with.
     invalidateRecents();
   } catch (error) {
     if (!isTransportFailure(error)) throw error;
-    await queueUpdate(input, optimistic);
+    await queueUpdate(input, optimistic, write.workspaceId);
   }
 }
 
 const queueUpdate = async (
   input: OfflineUpdateInput,
   optimistic: TimeEntry,
+  workspaceId: string | null,
 ): Promise<void> => {
-  await enqueueOffline("entries.update", input);
+  await enqueueOffline("entries.update", input, undefined, workspaceId);
   setCachedRunning(optimistic);
   // On disk as well as in memory: the queued row outlives this worker, so the
   // edited entry it implies has to outlive it too, or a revived worker would

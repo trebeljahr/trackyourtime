@@ -30,6 +30,7 @@ import {
   workspaceChoiceFor,
   workspaceNameIn,
   isOwnActivity,
+  withWorkspaceId,
   type OfflineMutation,
   type QueuedMutation,
   type QueuedMutationSummary,
@@ -428,6 +429,12 @@ export async function enqueueOffline<K extends OfflineOp>(
   op: K,
   input: OfflinePayloadMap[K],
   tempId?: string,
+  /**
+   * The workspace the write was addressed to (`addressedWrite`). Defaults to
+   * the active one now, which differs when a switch landed while the live
+   * attempt hung — and then the row must go where the attempt went.
+   */
+  workspaceId?: string | null,
 ): Promise<void> {
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
   // Stamped with the server it was made against. Switching servers clears the
@@ -443,9 +450,28 @@ export async function enqueueOffline<K extends OfflineOp>(
     payload,
     undefined,
     apiUrl,
-    getActiveWorkspaceId() ?? undefined,
+    (workspaceId === undefined ? getActiveWorkspaceId() : workspaceId) ??
+      undefined,
   );
 }
+
+/**
+ * Pin one write to the workspace active as it begins.
+ *
+ * The api client reads the choice per request and a switch is just another
+ * popup message, handled while an earlier write's request is still in flight.
+ * Reading the choice twice — once for the request, again when a transport
+ * failure queues it — would send the attempt to A and stamp the row with B,
+ * so the replay files the work in a workspace it was never made in. One read:
+ * the request carries it explicitly and the queued row is stamped with it.
+ */
+export const addressedWrite = (): {
+  workspaceId: string | null;
+  address: <T>(input: T) => unknown;
+} => {
+  const workspaceId = getActiveWorkspaceId();
+  return { workspaceId, address: (input) => withWorkspaceId(input, workspaceId) };
+};
 
 // ── the optimistic running entry ─────────────────────────────────────
 

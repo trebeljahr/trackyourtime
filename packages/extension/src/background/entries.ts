@@ -51,6 +51,7 @@ import {
   clearEntriesStale,
   clearOptimisticEntries,
   deleteOptimisticEntry,
+  addressedWrite,
   ensureReady,
   enqueueOffline,
   entriesCacheIsFresh,
@@ -465,13 +466,15 @@ export async function createEntry(input: CreateEntryInput): Promise<void> {
 
   // Drain first, as start and stop do: a live create sent ahead of older queued
   // mutations would land out of the order the user performed it in.
-  if ((await flushQueue()) > 0) {
-    await queueCreate(payload, current.session.userId ?? "");
+  const stuck = await flushQueue();
+  const write = addressedWrite();
+  if (stuck > 0) {
+    await queueCreate(payload, current.session.userId ?? "", write.workspaceId);
     return;
   }
 
   try {
-    await current.api.mutate<TimeEntry>("entries.create", payload);
+    await current.api.mutate<TimeEntry>("entries.create", write.address(payload));
     markEntriesStale();
     // Recents are derived from the entry log, and a logged entry is now the
     // most recent thing that combination was used for.
@@ -480,16 +483,17 @@ export async function createEntry(input: CreateEntryInput): Promise<void> {
     // A server refusal was seen and rejected; replaying it would only be
     // rejected again, so it goes back to the popup instead of into the queue.
     if (!isTransportFailure(error)) throw error;
-    await queueCreate(payload, current.session.userId ?? "");
+    await queueCreate(payload, current.session.userId ?? "", write.workspaceId);
   }
 }
 
 const queueCreate = async (
   input: OfflineCreateInput,
   authorId: string,
+  workspaceId: string | null,
 ): Promise<void> => {
   const tempId = createTempId();
-  await enqueueOffline("entries.create", input, tempId);
+  await enqueueOffline("entries.create", input, tempId, workspaceId);
   await upsertOptimisticEntry(optimisticEntry(input, tempId, authorId));
   markEntriesStale();
 };
@@ -585,18 +589,20 @@ export async function updateEntry(patch: EntryPatch): Promise<void> {
 
   const existing = await rowToPatch(patch.id);
 
-  if ((await flushQueue()) > 0) {
-    await queueUpdate(input, existing, patch);
+  const stuck = await flushQueue();
+  const write = addressedWrite();
+  if (stuck > 0) {
+    await queueUpdate(input, existing, patch, write.workspaceId);
     return;
   }
 
   try {
-    await current.api.mutate<TimeEntry>("entries.update", input);
+    await current.api.mutate<TimeEntry>("entries.update", write.address(input));
     markEntriesStale();
     invalidateRecents();
   } catch (error) {
     if (!isTransportFailure(error)) throw error;
-    await queueUpdate(input, existing, patch);
+    await queueUpdate(input, existing, patch, write.workspaceId);
   }
 }
 
@@ -604,8 +610,9 @@ const queueUpdate = async (
   input: OfflineUpdateInput,
   existing: TimeEntry | null,
   patch: EntryPatch,
+  workspaceId: string | null,
 ): Promise<void> => {
-  await enqueueOffline("entries.update", input);
+  await enqueueOffline("entries.update", input, undefined, workspaceId);
   // Without the pre-edit row there is nothing to patch, so the queued mutation
   // stands alone and the list simply shows the server's version until it
   // replays. Queuing it is what matters; the overlay is a courtesy.
@@ -630,23 +637,28 @@ export async function removeEntry(id: string): Promise<void> {
 
   const input: OfflineIdInput = { id, originId: ORIGIN_ID };
 
-  if ((await flushQueue()) > 0) {
-    await queueRemove(input);
+  const stuck = await flushQueue();
+  const write = addressedWrite();
+  if (stuck > 0) {
+    await queueRemove(input, write.workspaceId);
     return;
   }
 
   try {
-    await current.api.mutate("entries.remove", input);
+    await current.api.mutate("entries.remove", write.address(input));
     markEntriesStale();
     invalidateRecents();
   } catch (error) {
     if (!isTransportFailure(error)) throw error;
-    await queueRemove(input);
+    await queueRemove(input, write.workspaceId);
   }
 }
 
-const queueRemove = async (input: OfflineIdInput): Promise<void> => {
-  await enqueueOffline("entries.remove", input);
+const queueRemove = async (
+  input: OfflineIdInput,
+  workspaceId: string | null,
+): Promise<void> => {
+  await enqueueOffline("entries.remove", input, undefined, workspaceId);
   await deleteOptimisticEntry(input.id);
   markEntriesStale();
 };
