@@ -821,7 +821,27 @@ domain you do not own. The self-host image has the separate name
 
 **Sign-up is open.** The server always enables email-and-password registration.
 There is no allowlist, no invite code and no setup wizard. The first account is
-not special. Email verification is off, so registration needs no mail provider.
+not special. Email verification is on only when a mail transport is
+configured, so registration without a mail provider needs no mail.
+
+**Two-factor authentication** is in the app: **Settings → Account →
+Two-factor authentication**. It uses an authenticator app (TOTP) and ten
+single-use backup codes. After it is on, every web sign-in asks for a code.
+The mobile app and the browser extension cannot sign in to an account with
+two-factor authentication yet; they show an error instead. Devices that are
+already signed in stay signed in. The Raycast client pairs through a browser
+that is already signed in, so it is not affected. Turning it off needs the
+password. If a person loses both the app and the backup codes, nobody on the
+instance can switch it off for them from the web app; the database record is
+the `twoFactor` document with their `userId`, and `twoFactorEnabled` on their
+`user` document.
+
+**Google sign-in** needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The
+redirect URI to register with Google is
+`https://track.example.com/api/auth/callback/google`. Without both variables
+the button on `/login` and `/signup` stays disabled. It is always disabled in
+the mobile and desktop apps, because Google returns to the web address and
+cannot return to the app.
 
 **Administration is a command, not an account.** No account can see other
 people's data or manage the instance. The person who can run commands in the
@@ -1011,8 +1031,9 @@ PASS  clock            this process is 2 ms behind the database server
 
 ### What email is used for
 
-Three things about accounts: password reset, email verification (off by
-default) and workspace invitations (no screen for them today). One thing about
+Four things about accounts: password reset, email verification (on only
+when a transport is configured), the link that confirms a new email address,
+and workspace invitations (no screen for them today). One thing about
 time tracking: a single reminder for a timer left running too long. Reports,
 invoices and exports download in the browser.
 
@@ -1056,8 +1077,10 @@ recovery below keeps working while you fix the relay.
 
 ### When it is not configured
 
-Nothing breaks and nothing is queued. Sign-up needs no verification. A
-password-reset request returns the usual "if this email exists…" response, and
+Nothing breaks and nothing is queued. Sign-up needs no verification. A change
+of email in **Settings → Account** writes its confirmation link to the log as
+`[auth] Verification URL for …`, and the email changes when that link is
+opened. A password-reset request returns the usual "if this email exists…" response, and
 the server prints the reset link to its log. That is how you get back into a
 single-user instance you locked yourself out of:
 
@@ -1071,6 +1094,22 @@ Open that URL in a browser. It carries a `?token=` query parameter and lands on
 
 With shell access to the server, [`reset-password`](#reset-password) is faster.
 It needs no link and no browser.
+
+### Configuring mail on an instance that already has accounts
+
+When a transport is configured, the server requires a verified email address
+before a password sign-in. Accounts created while mail was off are not
+verified, so they would get a verification link instead of a session. Mark
+them verified once, right after you restart with the mail variables set:
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/scripts/backfill-email-verified.js
+```
+
+It prints how many accounts it changed. It marks accounts created before the
+moment it runs. To exclude accounts created after the restart, pass the
+restart time: `--before 2026-09-14T12:00:00Z`. Running it again changes
+nothing and prints 0.
 
 ### Which transport is used
 
@@ -1335,8 +1374,10 @@ usually works too, because old code ignores fields it does not know. "Usually" m
 No tool undoes a change that does rewrite data, which is why the `mongodump`
 above is not optional.
 
-One historical one-off script exists: `migrate:workspaces`, for databases
-older than workspace scoping. Nothing runs it automatically. An instance
+Two one-off scripts exist. `backfill-email-verified` marks existing accounts
+verified when you configure mail; see
+[Configuring mail on an instance that already has accounts](#configuring-mail-on-an-instance-that-already-has-accounts).
+`migrate:workspaces` is for databases older than workspace scoping. Nothing runs it automatically. An instance
 created from the current source or any release image does not need it.
 
 ---

@@ -193,6 +193,32 @@ Reading the failures:
   and the wildcard does not cover it. That is the original bug; do not
   re-create it.
 
+## Email verification and the one-time backfill
+
+The server requires a verified email address before a password sign-in
+whenever a mail transport is configured (`isEmailDeliveryConfigured()` in
+`services/email.ts`). Accounts created before that were never verified, so the
+first deploy that has mail configured AND this code must be followed by one
+run of the backfill, or every existing user gets a verification link instead
+of a session:
+
+```bash
+# in the running server container (Coolify → tracktime-server → Terminal)
+node dist/scripts/backfill-email-verified.js --before <deploy time, ISO 8601>
+# from a checkout, against the production MONGODB_URI
+pnpm --filter @starter/server run backfill:email-verified -- --before <deploy time>
+```
+
+`--before` defaults to now. It only sets `emailVerified: true` on accounts that
+are not verified and were created before the cutoff, so it is idempotent: a
+second run prints 0. It never un-verifies anyone.
+
+Google sign-in is live when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are
+both set on the server app. Register
+`https://api.trackyourtime.dev/api/auth/callback/google` as the redirect URI;
+`health.check` then reports `authConfig.googleEnabled: true` and the button on
+`/login` enables.
+
 ## What has to agree
 
 - **Coolify's env fields on the server app** —

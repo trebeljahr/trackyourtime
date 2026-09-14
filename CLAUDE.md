@@ -777,6 +777,60 @@ count of unsent changes is shown on the login screen rather than left for the
 user to discover, since keeping them silently and dropping them silently look
 identical from the outside.
 
+### Two-factor authentication and account controls
+
+better-auth's `twoFactor` plugin (TOTP + ten encrypted, single-use backup
+codes), change password, change email and the Google button. The server
+pieces live in `auth/account-security.ts` and are run against the real library
+in `tests/two-factor-integration.test.ts`; the web surfaces are the second step
+in `app/login/page.tsx` (`components/two-factor-challenge.tsx`) and the rows in
+Settings → Account (`settings/two-factor.tsx`, `settings/account-credentials.tsx`).
+
+Five rules, each of which fails quietly if broken:
+
+- **`twoFactorPlugin()` is registered before `bearer()`.** After-hooks run in
+  registration order. Password sign-in creates a session that the two-factor
+  hook deletes again; with bearer first, `set-auth-token` is emitted for that
+  deleted session and a token client stores a credential that answers 401
+  everywhere. The integration test reads `auth.ts` to pin the order.
+- **The challenge is a signed cookie, and nothing else completes it.** Spike
+  result for the native follow-up: `/two-factor/verify-*` reads only
+  `better-auth.two_factor`; the sign-in body is `{ twoFactorRedirect,
+  twoFactorMethods }` with no challenge in it. A WKWebView or extension `fetch`
+  can neither read `set-cookie` nor send `Cookie`, so bearer-only completion is
+  impossible with this configuration — forwarding the cookie by hand works
+  (the test does), so the follow-up needs a header carrying the challenge (an
+  after-hook copying it out, a before-hook turning it back into the cookie),
+  not a different flow. Until then `/login` on a native shell shows
+  `NATIVE_TWO_FACTOR_UNSUPPORTED` and `signInWithPassword` in core throws
+  `TWO_FACTOR_UNSUPPORTED`. The device flow is unaffected: its approval happens
+  in a browser that already passed the second factor.
+- **Email verification is required only when `isEmailDeliveryConfigured()`.**
+  A self-host with no transport would otherwise lock every new account out.
+  `sendVerificationEmail` belongs in the `emailVerification` block — under
+  `emailAndPassword` better-auth never calls it. Accounts created before mail
+  was configured are marked verified by `scripts/backfill-email-verified.ts`
+  (idempotent, `--before <cutoff>`); `docs/deploy.md` says when to run it.
+  `autoSignInAfterVerification` stays off: a mailed link is not a second factor.
+- **The Google button renders in every build and decides after mount**
+  (`components/google-sign-in-button.tsx`): disabled in the prerendered HTML,
+  enabled only on the web app when `health.check` reports
+  `authConfig.googleEnabled`, and disabled with a note in Capacitor, Electron
+  and Tauri, where the OAuth redirect cannot return to the shell's origin.
+- **Change password with "sign out other devices" deletes every session and
+  makes a new one for the caller**, so a native shell must keep storing only a
+  truthy `set-auth-token` (it gets a fresh one here). The `hooks.after`
+  `sweepSocketsAfterRevocation` sweeps sockets at once; `ws/session-watch.ts`
+  closing them with 4401 within a minute is the guarantee.
+
+Callback URLs in mail and OAuth are built with `webCallbackUrl()` from
+`lib/auth-client.ts`: the API is a different origin, and a relative
+`callbackURL` would land on the API's 404. **Never pass `callbackURL` to
+`signIn.email`**: the response then carries `{ url, redirect: true }` and
+better-auth's client reloads the browser onto it, so the page never navigates
+to `/track` and the session looks lost. That is why `sendOnSignIn` is off and
+`/login` requests the verification link itself on `EMAIL_NOT_VERIFIED`.
+
 ### Account deletion
 
 Settings → Account → Delete account is better-auth's own `POST
