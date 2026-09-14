@@ -1406,8 +1406,7 @@ expects four services.
 **Object storage (S3).** Not used at all. The API renders invoice and report
 PDFs and returns them directly. It builds CSV and JSON exports in memory, and
 imports arrive in the request body. There is no bucket to provision, so do not
-set up MinIO for this. The `S3_*` and `AWS_*` variables belong to the starter
-this app grew from, and the self-host compose file leaves them out on purpose.
+set up MinIO for this. The server reads no `S3_*` or `AWS_*` variables.
 
 **Sentry.** Set `SENTRY_DSN` to send server errors to any Sentry-protocol
 endpoint, including a self-hosted GlitchTip. Unset, nothing is reported and no

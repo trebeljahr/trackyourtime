@@ -89,8 +89,7 @@ such as `hatchkit destroy <project> --recipe`, `hatchkit gh-pages --undo
 
 ```bash
 pnpm install                          # install all dependencies
-pnpm run dev:infra                    # start MongoDB, Redis, local S3 (Docker, one-time)
-pnpm run seed:assets                  # populate local S3 from seed/assets/ (idempotent)
+pnpm run dev:infra                    # start MongoDB and Redis (Docker, one-time)
 pnpm run dev                          # client 3392, server 5159, docs 4000
 pnpm run dev:auto                     # same, but every port auto-picked
 pnpm run dev:fixed                    # the pinned ports, or fail — never a fallback
@@ -142,11 +141,6 @@ it never kills them. Stop only what you started, or run
 resolved against `packages/server`, so every dependency under the root
 `node_modules/.pnpm` was watched (~3,200 fds per process; 38 with the exclude,
 reload from `packages/shared/src` intact).
-
-Drop fixtures into `seed/assets/` to have them auto-populate the
-local bucket — see `seed/README.md`. To copy a real-prod bucket into
-local for realistic dev data, `hatchkit assets pull` (treat the copy
-as production data — same handling rules apply).
 
 ## How to Test
 
@@ -2348,7 +2342,7 @@ packages/server/src/
   trpc/         — tRPC router, context, procedures
     routers/    — individual tRPC routers (one per domain)
   ws/           — WebSocket handler, room manager, auth
-  services/     — external service integrations (Stripe, email, S3)
+  services/     — external service integrations (Stripe, email)
   middleware/   — Express middleware (error handler, etc.)
   tests/        — server unit tests
 

@@ -65,15 +65,14 @@ build before anything resolves them — hence the ordering in `pnpm run build`.
 
 | Path | What it is |
 |---|---|
-| `e2e/` | Playwright suite: 10 specs, `helpers.ts`, `db-utils.ts`, `serve-static.mjs`, `start-server.sh` (starts its own Mongo/Redis/S3 outside CI) |
+| `e2e/` | Playwright suite: 10 specs, `helpers.ts`, `db-utils.ts`, `serve-static.mjs`, `start-server.sh` (starts its own Mongo/Redis outside CI) |
 | `docs/` | `deploy.md` (the production topology) and `dev-setup.md` (a Tailscale/Caddy dev-URL guide that needs a private CLI) |
 | `scripts/` | Root tooling: `dev.mjs` (port resolution for `dev` / `dev:auto` / `dev:fixed`), `extension-id.mjs` + `lib/`, icon scripts, `newsletter-*.ts`, mobile dev shells |
 | `electron/` | `main.ts`, `preload.ts` and their tsconfig — window lifecycle and the `powerMonitor` idle IPC bridge |
 | `src-tauri/` | Tauri scaffold — `main.rs` is an empty setup plus a Steamworks block. Scaffolding, not a shipping target |
 | `emails/` | `welcome.html` and `digest-sample.html`, used by the `newsletter:*` scripts |
 | `resources/`, `build/` | Source images for mobile asset generation, and electron-builder's `buildResources` (`build/icon.png`) |
-| `seed/` | `README.md` + an empty `assets/`; the `seed:assets` script shells out to a private CLI |
-| `docker-compose.dev.yml` | Local infra only — Mongo 27017, Redis 6379, S3 on 9000. No app containers |
+| `docker-compose.dev.yml` | Local infra only — Mongo 27017, Redis 6379. No app containers |
 | `docker-compose.server.yml` / `.client.yml` | Production. One service each, named `server` and `client` — **the service names are load-bearing** (see `docs/deploy.md`) |
 | `docker-compose.yml` | The legacy single-app layout. Kept for reference; don't build on it |
 | `playwright.config.ts` | Chromium, `workers: 1`, high default ports (49761/49762), builds the static export instead of running `next dev` |

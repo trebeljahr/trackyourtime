@@ -51,7 +51,7 @@
 # --- Deployment topology ----------------------------------------------------
 # The service names `client` and `server` inside these files are load-bearing:
 # Coolify keys docker_compose_domains by them, and a mismatch serves 503.
-# docker-compose.dev.yml is the local Mongo/Redis/S3 stack that dev and E2E
+# docker-compose.dev.yml is the local Mongo/Redis stack that dev and E2E
 # both assume; docker-compose.yml is the legacy single-app layout kept for
 # reference.
 /docker-compose.client.yml          @trebeljahr

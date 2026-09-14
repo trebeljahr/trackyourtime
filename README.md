@@ -101,7 +101,7 @@ Stated plainly, because the code has more scaffolding than product in these area
 - **Time off, PTO, holidays, absence.** No model, no screen, no shared type. There is no non-working-day concept, so nothing computes capacity or utilization.
 - **Notifications of any kind.** No web push, no email digests, no scheduler, no job runner. The runaway guard is lazy on purpose and says so in its own source.
 - **SaaS subscription billing.** There is no Stripe service in the server at all — only a `billing.status` query that reports which `STRIPE_*` env vars are missing so the UI can show a developer notice. (Watch the word: "Billing" in the settings screen means *your clients' billable rates*, not a subscription.)
-- **Avatar upload / object storage.** An S3 service module exists and nothing imports it. `avatarUrl` is a field with no upload path behind it.
+- **Avatar upload / object storage.** The server stores no files. `avatarUrl` is a field with no upload path behind it.
 - **Search, a command palette, and third-party integrations.** No global search, no palette, no calendar sync, no issue-tracker or commit import. Import is file-based only.
 - **Email verification is off.** Password reset, verification and invitation mail goes out over SMTP once `SMTP_HOST` is set, and falls back to logging the URL to the server console when no transport is configured at all — which is the default local setup. `requireEmailVerification` is still `false`.
 - **CI has never gone green.** The build-and-deploy workflow has two runs in its history — one failed at the build/test job, the other at E2E — so the Docker image builds and the deploy path have never actually executed. The self-host images are published by a separate tag-triggered workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)), which has not run either — no `v*` tag has been cut yet, so `docker-compose.selfhost.yml`, which only pulls, has nothing to pull until one is, and running it means the opt-in local build in `docker-compose.selfhost.build.yml`.
@@ -211,8 +211,6 @@ pnpm run extension:id [dev|prod]  # the chrome-extension:// origin to trust
 pnpm run dev:raycast         # ray develop
 pnpm run dev:desktop         # Next dev + an Electron window
 ```
-
-`pnpm run seed:assets`, `assets:push` and `assets:pull` shell out to a private CLI that is not installable from this repo. Nothing about running or testing the app depends on them — skip them.
 
 ## Testing
 

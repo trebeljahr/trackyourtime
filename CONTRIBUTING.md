@@ -104,7 +104,7 @@ thing that keeps four clients able to share code.
 |---|---|---|
 | Node.js | 24 | `.nvmrc`; `engines.node` in `package.json` is `>=24` |
 | pnpm | 11.1.2 | `packageManager` in `package.json` |
-| Docker | any recent | runs MongoDB, Redis and an S3-compatible store for local dev |
+| Docker | any recent | runs MongoDB and Redis for local dev |
 
 If you would rather not install those locally,
 [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) describes
@@ -151,8 +151,7 @@ process environment, which takes precedence over the file.
 
 ```bash
 pnpm run dev:infra    # docker compose -f docker-compose.dev.yml up -d
-                      # mongo:7 on 27017, redis:7-alpine on 6379,
-                      # seaweedfs S3 on 9000 (bucket trackyourtime-dev)
+                      # mongo:7 on 27017, redis:7-alpine on 6379
 pnpm run dev          # client 3392, API 5159
 ```
 
@@ -168,15 +167,11 @@ Variants of the dev command, all in `scripts/dev.mjs`:
 | `pnpm run dev:docs` | as above, plus the Docusaurus site on 4000 |
 | `node scripts/dev.mjs --dry-run` | prints the resolved ports and starts nothing |
 
-Two gotchas worth knowing up front:
-
-- **Inside a git worktree, `pnpm run dev` behaves like `dev:auto`** so several
-  checkouts can run side by side. Anything with a baked-in API URL — the browser
-  extension, the Raycast preference defaults — will not find the server there.
-  Use `pnpm run dev:fixed` in a worktree when that matters.
-- `pnpm run seed:assets`, `assets:push` and `assets:pull` shell out to a private
-  CLI that is not installable from this repository. Nothing about running or
-  testing the app depends on them — skip them.
+One gotcha worth knowing up front: **inside a git worktree, `pnpm run dev`
+behaves like `dev:auto`** so several checkouts can run side by side. Anything
+with a baked-in API URL — the browser extension, the Raycast preference
+defaults — will not find the server there. Use `pnpm run dev:fixed` in a
+worktree when that matters.
 
 Stop the containers with `pnpm run dev:infra:stop`, or wipe their volumes with
 `pnpm run dev:infra:reset`.

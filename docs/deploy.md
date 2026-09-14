@@ -141,8 +141,7 @@ before this change still connects wherever `/ws` is still routed.
    The compose files therefore take every value as a `${VAR}` substitution,
    which Coolify fills from its own env fields. Set at minimum:
    `MONGODB_URI`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `FRONTEND_URL`,
-   `TRUSTED_ORIGINS`, `S3_PUBLIC_URL`, `AWS_ACCESS_KEY_ID`,
-   `AWS_SECRET_ACCESS_KEY`.
+   `TRUSTED_ORIGINS`.
 
    These are now **different** values, which they were not under the
    one-domain layout:

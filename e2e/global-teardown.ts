@@ -4,11 +4,7 @@ export default async function globalTeardown() {
   if (process.env.CI) return;
 
   console.log("[e2e] Cleaning up test containers...");
-  const containers = [
-    "starter-e2e-mongo",
-    "starter-e2e-redis",
-    "starter-e2e-seaweedfs",
-  ];
+  const containers = ["starter-e2e-mongo", "starter-e2e-redis"];
 
   for (const name of containers) {
     try {

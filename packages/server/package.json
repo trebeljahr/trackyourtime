@@ -21,8 +21,6 @@
     "einvoice:samples": "tsx src/scripts/einvoice-samples.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1048.0",
-    "@aws-sdk/s3-request-presigner": "^3.1048.0",
     "@dotenvx/dotenvx": "^1.66.0",
     "@sentry/node": "^10.53.1",
     "@starter/shared": "workspace:*",

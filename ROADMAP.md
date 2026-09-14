@@ -46,21 +46,20 @@ Later), so this is worth doing as the first brick, not as a finished feature.
 
 ### Avatar upload
 
-**Exists.** `packages/server/src/services/storage.ts` exports
-`getPresignedUploadUrl`, `getPublicUrl` and `deleteObject`. `avatarUrl` is a
-field on the `Profile` model, on the shared `User` type, in the profile zod
-schema, and the `profile` tRPC router already reads and writes it as a string.
+**Exists.** `avatarUrl` is a field on the `Profile` model, on the shared
+`User` type, in the profile zod schema, and the `profile` tRPC router already
+reads and writes it as a string.
 
-**Missing.** Nothing in the server imports `services/storage.ts` — a grep for
-it across `packages/server/src` returns no consumers. So the S3 module is
-complete and unreachable, and `avatarUrl` is a URL you can only set by handing
+**Missing.** Any file storage. The server has no object-storage client, no
+S3 dependency and no `S3_*` / `AWS_*` configuration — an unused S3 module from
+the starter was removed. So `avatarUrl` is a URL you can only set by handing
 the API one you hosted yourself.
 
-**Would have to be built.** A tRPC procedure that returns a presigned upload
-URL scoped to the caller, the client-side upload, and a picker in the profile
-screen. The S3 env block (`S3_*` / `AWS_*`) is already optional and already
-documented in the README's self-hosting section, so the feature has to degrade
-cleanly when it is unset.
+**Would have to be built.** A storage module and its optional configuration, a
+tRPC procedure that returns a presigned upload URL scoped to the caller, the
+client-side upload, and a picker in the profile screen. Self-hosted instances
+run without a bucket, so the feature has to degrade cleanly when storage is not
+configured.
 
 ### Per-recipient sync payloads
 

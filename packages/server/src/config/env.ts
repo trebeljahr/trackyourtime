@@ -288,15 +288,6 @@ export const env = {
   // provision is one command away from a real send in your own inbox.
   LISTMONK_TEST_RECIPIENT: getOptional("LISTMONK_TEST_RECIPIENT"),
 
-  // S3
-  S3_ENDPOINT: getOptional("S3_ENDPOINT"),
-  S3_BUCKET_NAME: getOptional("S3_BUCKET_NAME", "tracktime-assets"),
-  S3_PUBLIC_URL: getOptional("S3_PUBLIC_URL"),
-  S3_FORCE_PATH_STYLE: getOptional("S3_FORCE_PATH_STYLE") === "true",
-  AWS_REGION: getOptional("AWS_REGION", "us-east-1"),
-  AWS_ACCESS_KEY_ID: getOptional("AWS_ACCESS_KEY_ID"),
-  AWS_SECRET_ACCESS_KEY: getOptional("AWS_SECRET_ACCESS_KEY"),
-
   // ML services (Modal/RunPod endpoints)
   ML_BACKGROUND_REMOVAL_ENDPOINT: getOptional("ML_BACKGROUND_REMOVAL_ENDPOINT"),
   ML_SUBTITLES_ENDPOINT: getOptional("ML_SUBTITLES_ENDPOINT"),

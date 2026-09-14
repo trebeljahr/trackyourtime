@@ -4,7 +4,7 @@
 // It gives you the toolchain and the backing services, nothing more: after the
 // container is up, follow the Development section of README.md — create
 // packages/server/.env.development from .env.example, run `pnpm run dev:infra`
-// to start MongoDB/Redis/S3, then `pnpm run dev`.
+// to start MongoDB and Redis, then `pnpm run dev`.
 //
 // Caveat worth knowing before you rely on this: the web app works fine here,
 // but the browser extension, the Raycast extension and the desktop/mobile
@@ -41,8 +41,7 @@
     4000,
     // Infrastructure published by docker-compose.dev.yml
     27017,
-    6379,
-    9000
+    6379
   ],
 
   "portsAttributes": {
@@ -64,10 +63,6 @@
     },
     "6379": {
       "label": "Redis (dev:infra)",
-      "onAutoForward": "silent"
-    },
-    "9000": {
-      "label": "S3 / SeaweedFS (dev:infra)",
       "onAutoForward": "silent"
     }
   },
