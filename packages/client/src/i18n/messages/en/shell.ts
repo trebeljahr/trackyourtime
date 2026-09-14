@@ -7,6 +7,22 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const shell = {
+  workspace: {
+    open: "Switch workspace",
+    current: "Workspace: {name}",
+    title: "Workspaces",
+    description: "Choose the workspace this device tracks time into. The browser extension and Raycast keep their own choice.",
+    active: "Current",
+    members: "{count, plural, one {# member} other {# members}}",
+    roles: {
+      owner: "Owner",
+      admin: "Admin",
+      member: "Member",
+    },
+    switched: "Switched to {name}",
+    lost: "You no longer have access to {name}",
+    runningIn: "Running in {name}",
+  },
   theme: {
     change: "Change theme",
     light: "Light",

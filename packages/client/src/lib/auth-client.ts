@@ -16,6 +16,8 @@ import {
 } from "@/lib/offline";
 import { writeRunningMirror } from "@/lib/running-mirror";
 import { rebaseApiUrl, whenApiOriginReady } from "@/lib/api-origin";
+import { clearActiveWorkspace } from "@/lib/active-workspace";
+import { clearAppQueryCache } from "@/lib/query-client";
 
 /**
  * better-auth validates its baseURL with `new URL()`, so a relative
@@ -141,6 +143,44 @@ export const authClient = createAuthClient({
 export const { signIn, signUp, useSession, getSession } = authClient;
 
 /**
+ * Things only a module that is not this one can forget — the timer store in
+ * `hooks/use-sync.ts`, say, which imports this file and so cannot be imported
+ * by it. Each runs once per sign-out, after the account is gone.
+ */
+const signOutCleanups = new Set<() => void | Promise<void>>();
+
+export const onSignOut = (cleanup: () => void | Promise<void>): (() => void) => {
+  signOutCleanups.add(cleanup);
+  return () => {
+    signOutCleanups.delete(cleanup);
+  };
+};
+
+/**
+ * Forget what this tab and device hold about the departing account, apart
+ * from its offline queue (see `sealOfflineQueueOwner` / the deletion path).
+ *
+ * Sign-out does not reload the page. Before this, signing out and signing in
+ * as someone else in the same tab showed the previous account's cached
+ * entries until each query happened to refetch, its running timer until
+ * `entries.current` answered — never, offline — and on a phone seeded that
+ * timer again at the next cold launch from the mirror. The workspace choice
+ * and membership list go too: the next account must neither send the
+ * previous one's workspace id nor be shown its workspace names.
+ *
+ * Every step is settled independently; a cleanup that throws must not keep
+ * the others from running, or leave a sign-out half done.
+ */
+const forgetAccountOnDevice = async (): Promise<void> => {
+  await Promise.allSettled([
+    writeRunningMirror(null),
+    clearActiveWorkspace(),
+    ...[...signOutCleanups].map(async (cleanup) => cleanup()),
+  ]);
+  await clearAppQueryCache().catch(() => undefined);
+};
+
+/**
  * Sign out, and forget the native token with it.
  *
  * Wrapped rather than left to each call site: on native the server-side
@@ -165,6 +205,7 @@ export const signOut: typeof authClient.signOut = async (...args) => {
     // delivered still means this person is done with this device.
     await sealOfflineQueueOwner();
     await clearNativeToken();
+    await forgetAccountOnDevice();
   }
 };
 
@@ -240,6 +281,7 @@ export const deleteAccount = async (args: {
     writeRunningMirror(null),
   ]);
   await clearNativeToken().catch(() => undefined);
+  await forgetAccountOnDevice();
   return { ok: true };
 };
 

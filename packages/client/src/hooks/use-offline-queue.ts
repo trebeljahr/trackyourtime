@@ -1,11 +1,20 @@
 "use client";
 
 import * as React from "react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import type { WorkspaceSummary } from "@starter/core";
 
 import { toast } from "@/components/ui/sonner";
+import { translate } from "@/i18n/use-t";
 import { OFFLINE_QUEUED_MUTATION } from "@/lib/query-client";
 import { trpc } from "@/lib/trpc";
 import {
+  applyWorkspaceList,
+  registerWorkspaceListRefetch,
+  resetWorkspaceCaches,
+} from "@/lib/active-workspace";
+import {
+  adoptUnstampedOfflineRows,
   flushOfflineQueue,
   getForeignCount,
   getPendingCount,
@@ -67,6 +76,36 @@ export type OfflineQueueState = {
 const getOnline = (): boolean => isOnline();
 
 /**
+ * Take a membership list: re-resolve the active workspace, and if it moved
+ * because the one on screen is gone, clear its caches and say so. Then adopt
+ * legacy rows into the active workspace and recount. Returns the membership
+ * set a flush filters by.
+ *
+ * Idempotent — the query effect and a flush both call it with the same list,
+ * and only the first call sees a change.
+ */
+export const takeWorkspaceListFor = async (
+  list: readonly WorkspaceSummary[],
+  forUser: string,
+  queryClient: QueryClient
+): Promise<ReadonlySet<string>> => {
+  const outcome = await applyWorkspaceList(list, forUser);
+  // A first list (requests named no workspace, and the server resolved the
+  // default) changes nothing on screen, so only a real move resets.
+  if (outcome.changed && outcome.previousId !== null) {
+    await resetWorkspaceCaches(queryClient);
+  }
+  if (outcome.lost !== null) {
+    toast.error(translate("shell")("workspace.lost", { name: outcome.lost.name }));
+  }
+  if (outcome.activeId !== null) {
+    await adoptUnstampedOfflineRows(outcome.activeId);
+  }
+  await refreshPendingCount();
+  return new Set(list.map((workspace) => workspace.id));
+};
+
+/**
  * The pending-mutation queue, wired to the things that mean "the network is
  * back": the browser's `online` event and the sync socket reopening. A flush
  * replays in order and stops at the first mutation that still cannot reach the
@@ -74,8 +113,49 @@ const getOnline = (): boolean => isOnline();
  */
 export const useOfflineQueue = (): OfflineQueueState => {
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const syncStatus = useSyncStatus();
   const userId = useAuth().user?.id ?? null;
+  const userIdRef = React.useRef(userId);
+  React.useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
+
+  /*
+   * The workspace list, owned here because the queue is what needs it first:
+   * a flush cannot decide which rows are replayable without it, and this hook
+   * is mounted exactly once per tab. The switcher reads the result from
+   * `lib/active-workspace.ts` rather than running a second copy.
+   */
+  const workspacesQuery = trpc.workspaces.list.useQuery(undefined, {
+    enabled: userId !== null,
+    staleTime: 60_000,
+  });
+  const { refetch: refetchWorkspaces } = workspacesQuery;
+
+  const takeWorkspaceList = React.useCallback(
+    (
+      list: readonly WorkspaceSummary[],
+      forUser: string
+    ): Promise<ReadonlySet<string>> =>
+      takeWorkspaceListFor(list, forUser, queryClient),
+    [queryClient]
+  );
+  const takeWorkspaceListRef = React.useRef(takeWorkspaceList);
+  React.useEffect(() => {
+    takeWorkspaceListRef.current = takeWorkspaceList;
+  }, [takeWorkspaceList]);
+
+  React.useEffect(() => {
+    const list = workspacesQuery.data;
+    if (list === undefined || userId === null) return;
+    void takeWorkspaceList(list, userId);
+  }, [takeWorkspaceList, userId, workspacesQuery.data]);
+
+  React.useEffect(
+    () => registerWorkspaceListRefetch(() => void refetchWorkspaces()),
+    [refetchWorkspaces]
+  );
 
   const pending = React.useSyncExternalStore(
     subscribePending,
@@ -162,9 +242,28 @@ export const useOfflineQueue = (): OfflineQueueState => {
     if (runningRef.current) return;
     if ((await refreshPendingCount()) === 0) return;
     if (!isOnline()) return;
+    const forUser = userIdRef.current;
+    if (forUser === null) return;
 
     runningRef.current = true;
     setIsFlushing(true);
+
+    /*
+     * Ask which workspaces this account is in BEFORE sending anything, and
+     * do not flush without an answer. The last known list could be a day old:
+     * a row for a workspace the person was removed from since would be sent,
+     * refused as NOT_FOUND, and dropped — tracked time deleted by a toast.
+     * Held rows are the ones the answer no longer contains.
+     */
+    let members: ReadonlySet<string>;
+    try {
+      const list = await utilsRef.current.workspaces.list.fetch();
+      members = await takeWorkspaceListRef.current(list, forUser);
+    } catch {
+      runningRef.current = false;
+      setIsFlushing(false);
+      return;
+    }
 
     let applied = 0;
     let rejected = 0;
@@ -195,6 +294,9 @@ export const useOfflineQueue = (): OfflineQueueState => {
             return;
           }
           // The session is gone (expired, or signed out from another device).
+          // UNAUTHORIZED only: a FORBIDDEN is a refusal of this one row by a
+          // valid session (a role change) and falls through to `rejected`
+          // below, so it cannot wedge the rest of the queue behind it.
           // Also a stop, not a drop: the request arrived, but "we do not know
           // who you are" is no verdict on the user's tracked time. Throwing
           // leaves this row and everything behind it in the queue — see
@@ -208,7 +310,7 @@ export const useOfflineQueue = (): OfflineQueueState => {
           // invalidation below pull the authoritative state back.
           rejected += 1;
         }
-      });
+      }, { memberWorkspaceIds: members });
 
       setAuthBlocked(blocked);
 

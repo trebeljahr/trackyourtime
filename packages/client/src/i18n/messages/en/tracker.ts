@@ -7,6 +7,15 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const tracker = {
+  workspace: {
+    replaced: "Stopped your timer in {name}",
+    runningElsewhere: "Running in {name}",
+    runningElsewhereHint: "This timer runs in another workspace. Switch to {name} to edit it, or stop it here.",
+  },
+  queue: {
+    held: "{count, plural, one {# change} other {# changes}} not sent",
+    heldHint: "Queued by another account, for another server, or in a workspace you left. They are kept, and never sent from here.",
+  },
   description: {
     label: "Description",
     placeholder: "What are you working on?",

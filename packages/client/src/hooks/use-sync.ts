@@ -15,6 +15,9 @@ import {
 } from "@starter/core";
 import { useRouter } from "next/navigation";
 import { useNativeSession } from "@/hooks/use-native-session";
+import { useAuth } from "@/hooks/use-auth";
+import { getActiveWorkspaceId } from "@/lib/active-workspace";
+import { onSignOut } from "@/lib/auth-client";
 import { useApiOrigin } from "@/hooks/use-api-origin";
 import { getApiOrigin } from "@/lib/api-origin";
 import { idleWatcher } from "@/lib/idle-watcher";
@@ -92,6 +95,71 @@ export { resolveSyncUrl } from "@starter/core";
 // ── cache invalidation ───────────────────────────────────────────────
 
 type Utils = ReturnType<typeof trpc.useUtils>;
+
+/**
+ * How much of an event concerns the workspace on screen.
+ *
+ * A person's socket carries every workspace they belong to, and the React
+ * Query keys do not include the workspace (the link adds it below them) — so
+ * an `entry.upserted` from workspace A invalidating `entries.list` while B is
+ * on screen would refetch B for nothing at best, and anything that patched
+ * caches from the payload would put A's row into B's list. So:
+ *
+ *  - `"all"`: the event is about this workspace, or about the person
+ *    (no `workspaceId` on the envelope), or no workspace is resolved yet.
+ *  - `"timer"`: another workspace's timer or entry event. The running timer is
+ *    per PERSON — a start in A stops B's — so `entries.current` is refetched,
+ *    and nothing else.
+ *  - `"membership"`: another workspace's membership changed. Only the
+ *    workspace list can be affected (a removal there shows up in the switcher
+ *    and in the queue's held rows).
+ *  - `"ignore"`: anything else from another workspace.
+ */
+export type SyncEventReach = "all" | "timer" | "membership" | "ignore";
+
+export const syncEventReach = (
+  event: SyncEvent,
+  eventWorkspaceId: string | undefined,
+  activeWorkspaceId: string | null
+): SyncEventReach => {
+  if (
+    eventWorkspaceId === undefined ||
+    activeWorkspaceId === null ||
+    eventWorkspaceId === activeWorkspaceId
+  ) {
+    return "all";
+  }
+  switch (event.kind) {
+    case "timer.started":
+    case "timer.stopped":
+    case "entry.upserted":
+    case "entry.deleted":
+      return "timer";
+    case "membership.changed":
+      return "membership";
+    default:
+      return "ignore";
+  }
+};
+
+/**
+ * True when an event is evidence that THIS person was at a keyboard just now.
+ *
+ * In a shared workspace a colleague's entry events reach this socket too, and
+ * a colleague typing is not a reason to believe this person is — counting it
+ * would stop idle detection from ever pausing a laptop left open in an office
+ * of people tracking time. Entry-bearing events count only for their author;
+ * events about the person (no workspace on the envelope) always count; any
+ * other workspace event cannot say who caused it, so it does not.
+ */
+export const isOwnActivity = (
+  event: SyncEvent,
+  eventWorkspaceId: string | undefined,
+  userId: string | null
+): boolean => {
+  if ("entry" in event) return userId !== null && event.entry.authorId === userId;
+  return eventWorkspaceId === undefined;
+};
 
 /**
  * Map a sync event onto the query caches it invalidates. Reports depend on
@@ -174,6 +242,11 @@ const invalidateFor = (utils: Utils, event: SyncEvent): void => {
 export const useSync = (): SyncStatus => {
   const utils = trpc.useUtils();
   const utilsRef = React.useRef(utils);
+  const userId = useAuth().user?.id ?? null;
+  const userIdRef = React.useRef(userId);
+  React.useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
   const router = useRouter();
   const routerRef = React.useRef(router);
   // Keyed on, not merely read: the native token arrives from the Keychain
@@ -225,15 +298,32 @@ export const useSync = (): SyncStatus => {
           () => setEpoch((value) => value + 1),
         );
       },
-      onEvent: (event, originId) => {
+      onEvent: (event, originId, eventWorkspaceId) => {
         // Our own echo — the mutation's optimistic update already landed.
         if (originId !== undefined && originId === ORIGIN_ID) return;
         // Somebody just did something on another device, so the person was at
         // a keyboard at this instant. Idle detection measures from here rather
         // than from the last time *this* tab saw input — that is what stops a
         // laptop left open from pausing work being done elsewhere.
-        idleWatcher.noteRemoteActivity(Date.now());
-        invalidateFor(utilsRef.current, event);
+        if (isOwnActivity(event, eventWorkspaceId, userIdRef.current)) {
+          idleWatcher.noteRemoteActivity(Date.now());
+        }
+        // Read per event, not captured: the socket is per person and is NOT
+        // reopened on a workspace switch, so the active workspace can change
+        // under a live client.
+        switch (syncEventReach(event, eventWorkspaceId, getActiveWorkspaceId())) {
+          case "all":
+            invalidateFor(utilsRef.current, event);
+            return;
+          case "timer":
+            void utilsRef.current.entries.current.invalidate();
+            return;
+          case "membership":
+            void utilsRef.current.workspaces.list.invalidate();
+            return;
+          case "ignore":
+            return;
+        }
       },
     });
 
@@ -259,6 +349,13 @@ export const useSync = (): SyncStatus => {
  * right on the first frame after 90 seconds in the background.
  */
 export const timerStore = createTimerStore();
+
+// The running timer is a person's. Whoever signs in next in this tab must not
+// see the previous account's clock while their own `entries.current` is on its
+// way — or, offline, instead of it.
+onSignOut(() => {
+  timerStore.getState().setRunning(null);
+});
 
 let tickers = 0;
 let stopTicking: (() => void) | null = null;

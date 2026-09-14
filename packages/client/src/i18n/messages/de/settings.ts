@@ -4,6 +4,13 @@ import type { settings as source } from "../en/settings";
 
 /** German `settings`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const settings: Translation<typeof source> = {
+  foreignQueue: {
+    leftTitle: "Nicht synchronisierte Daten für {workspace}",
+    leftWorkspace: "einen verlassenen Arbeitsbereich",
+    leftDescription: "{count, plural, one {# Änderung} other {# Änderungen}} auf diesem Gerät in {workspace} in die Warteschlange gestellt. Dein Konto gehört nicht mehr dazu. Sie werden an keinen anderen Arbeitsbereich gesendet. Bitte einen Inhaber, dich wieder hinzuzufügen, um sie zu synchronisieren, oder verwirf sie hier.",
+    inWorkspace: "in {workspace}",
+    confirmLeft: "Damit löschst du in {workspace} erfasste Arbeit, die kein Server je erhalten hat. Sie lässt sich nicht wiederherstellen. Bitte stattdessen einen Inhaber, dich wieder hinzuzufügen, wenn sie erhalten bleiben soll.",
+  },
   language: {
     title: "Sprache",
     description: "Wird in deinem Konto gespeichert. „System“ folgt der Sprache des jeweiligen Geräts.",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createOfflineQueue, memoryStorage } from "@starter/core";
 
-import { isAuthError, isNetworkError } from "@/lib/offline";
+import { isAuthError, isForbiddenError, isNetworkError } from "@/lib/offline";
 
 /**
  * An expired or revoked session must stop the flush, not empty it.
@@ -17,9 +17,17 @@ const trpcError = (code: string): Error =>
   Object.assign(new Error(code), { data: { code } });
 
 describe("isAuthError", () => {
-  it("recognises the codes an unauthenticated tRPC call returns", () => {
+  it("recognises the code an unauthenticated tRPC call returns", () => {
     expect(isAuthError(trpcError("UNAUTHORIZED"))).toBe(true);
-    expect(isAuthError(trpcError("FORBIDDEN"))).toBe(true);
+  });
+
+  it("does not treat FORBIDDEN as a lapsed session", () => {
+    // In a shared workspace FORBIDDEN is a valid session refused one row — a
+    // role change. Calling it an auth error halted the whole flush behind that
+    // row and told a signed-in person to sign in.
+    expect(isAuthError(trpcError("FORBIDDEN"))).toBe(false);
+    expect(isForbiddenError(trpcError("FORBIDDEN"))).toBe(true);
+    expect(isForbiddenError(trpcError("UNAUTHORIZED"))).toBe(false);
   });
 
   it("leaves every other server refusal alone", () => {

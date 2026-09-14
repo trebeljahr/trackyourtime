@@ -14,6 +14,8 @@ import {
 } from "@starter/shared";
 
 import { toast } from "@/components/ui/sonner";
+import { translate } from "@/i18n/use-t";
+import { getActiveWorkspaceId } from "@/lib/active-workspace";
 import { ORIGIN_ID, timerStore } from "@/hooks/use-sync";
 import {
   buildOptimisticEntry,
@@ -69,6 +71,34 @@ type MutationContext = {
    * is `undefined` on a cold offline launch — see `stopMutation.onMutate`.
    */
   runningAtStop?: TimeEntry | null;
+  /**
+   * The workspace on screen when the user acted. A queued row is stamped with
+   * it, and the cache is only written while it is still the active one — a
+   * switch resets the cache for the new workspace, and an answer for the old
+   * one arriving afterwards must not be patched into it.
+   */
+  workspaceId?: string | null;
+};
+
+/** False once the user has switched away from the workspace this write began in. */
+const stillInWorkspace = (context: MutationContext | undefined): boolean =>
+  context === undefined ||
+  context.workspaceId === undefined ||
+  context.workspaceId === getActiveWorkspaceId();
+
+/**
+ * The toast for a start that ended a timer in another workspace. One running
+ * timer per person is the rule, so the stop is right — but it happened
+ * somewhere the person is not looking, and a timer that silently disappears
+ * from another workspace reads as lost time.
+ */
+export const announceReplacedTimer = (result: unknown): void => {
+  if (typeof result !== "object" || result === null) return;
+  const replaced = (result as { replaced?: unknown }).replaced;
+  if (typeof replaced !== "object" || replaced === null) return;
+  const name = (replaced as { workspaceName?: unknown }).workspaceName;
+  if (typeof name !== "string" || name === "") return;
+  toast.message(translate("tracker")("workspace.replaced", { name }));
 };
 
 // The offline payload types in `@starter/core` now carry `tagIds` themselves,
@@ -240,9 +270,12 @@ export const useEntryMutations = (): EntryMutations => {
   );
 
   const snapshot = React.useCallback(async (): Promise<MutationContext> => {
+    // Read before the awaits below: this is the workspace the user acted in.
+    const workspaceId = getActiveWorkspaceId();
     await utils.entries.current.cancel();
     await utils.entries.list.cancel();
     return {
+      workspaceId,
       previousCurrent: utils.entries.current.getData(),
       previousList: utils.entries.list.getInfiniteData(TRACKER_LIST_INPUT),
     };
@@ -251,6 +284,9 @@ export const useEntryMutations = (): EntryMutations => {
   const rollback = React.useCallback(
     (context: MutationContext | undefined): void => {
       if (context === undefined) return;
+      // The snapshot is of the workspace the write began in; restoring it
+      // into another one would put that workspace's entries on screen.
+      if (!stillInWorkspace(context)) return;
       if (context.previousCurrent !== undefined) {
         utils.entries.current.setData(undefined, context.previousCurrent);
       }
@@ -311,7 +347,7 @@ export const useEntryMutations = (): EntryMutations => {
     async (
       error: unknown,
       context: MutationContext | undefined,
-      enqueue: (tempId?: string) => Promise<void>,
+      enqueue: (tempId: string | undefined, workspaceId: string | null) => Promise<void>,
       fallbackMessage: string
     ): Promise<void> => {
       if (isNetworkError(error)) {
@@ -332,7 +368,7 @@ export const useEntryMutations = (): EntryMutations => {
          */
         if (isDocumentUnloading() && isOnline()) return;
         if (context) context.queued = true;
-        await enqueue(context?.tempId);
+        await enqueue(context?.tempId, context?.workspaceId ?? null);
         return;
       }
       rollback(context);
@@ -376,6 +412,8 @@ export const useEntryMutations = (): EntryMutations => {
       return context;
     },
     onSuccess: (entry, _raw, context) => {
+      announceReplacedTimer(entry);
+      if (!stillInWorkspace(context)) return;
       if (context?.tempId) replaceEntry(context.tempId, toDetailed(entry));
       utils.entries.current.setData(undefined, entry);
       // A rename of the claim, never a fresh one: the detector can fire while
@@ -388,8 +426,13 @@ export const useEntryMutations = (): EntryMutations => {
       handleError(
         error,
         context,
-        (tempId) =>
-          enqueueOffline("entries.start", raw as OfflineStartInput, tempId),
+        (tempId, workspaceId) =>
+          enqueueOffline(
+            "entries.start",
+            raw as OfflineStartInput,
+            tempId,
+            workspaceId
+          ),
         "Could not start the timer"
       ),
     onSettled: async (_data, _error, _raw, context) => {
@@ -438,6 +481,7 @@ export const useEntryMutations = (): EntryMutations => {
       return context;
     },
     onSuccess: (entry, _raw, context) => {
+      if (!stillInWorkspace(context)) return;
       if (context?.tempId) dropEntry(context.tempId);
       const detailed = toDetailed(entry);
       replaceEntry(entry.id, detailed);
@@ -462,7 +506,7 @@ export const useEntryMutations = (): EntryMutations => {
       handleError(
         error,
         context,
-        (tempId) => {
+        (tempId, workspaceId) => {
           /*
            * Name the entry whenever we can.
            *
@@ -486,7 +530,8 @@ export const useEntryMutations = (): EntryMutations => {
               end: (raw as OfflineStopInput).end,
               originId: ORIGIN_ID,
             },
-            tempId
+            tempId,
+            workspaceId
           );
         },
         "Could not stop the timer"
@@ -518,14 +563,20 @@ export const useEntryMutations = (): EntryMutations => {
       return context;
     },
     onSuccess: (entry, _raw, context) => {
+      if (!stillInWorkspace(context)) return;
       if (context?.tempId) replaceEntry(context.tempId, toDetailed(entry));
     },
     onError: (error, raw, context) =>
       handleError(
         error,
         context,
-        (tempId) =>
-          enqueueOffline("entries.create", raw as OfflineCreateInput, tempId),
+        (tempId, workspaceId) =>
+          enqueueOffline(
+            "entries.create",
+            raw as OfflineCreateInput,
+            tempId,
+            workspaceId
+          ),
         "Could not add the entry"
       ),
     onSettled: async (_data, _error, _raw, context) => {
@@ -610,7 +661,8 @@ export const useEntryMutations = (): EntryMutations => {
 
       return context;
     },
-    onSuccess: (entry) => {
+    onSuccess: (entry, _raw, context) => {
+      if (!stillInWorkspace(context)) return;
       replaceEntry(entry.id, toDetailed(entry));
       if (entry.end === null) utils.entries.current.setData(undefined, entry);
     },
@@ -618,7 +670,13 @@ export const useEntryMutations = (): EntryMutations => {
       handleError(
         error,
         context,
-        () => enqueueOffline("entries.update", raw as OfflineUpdateInput),
+        (_tempId, workspaceId) =>
+          enqueueOffline(
+            "entries.update",
+            raw as OfflineUpdateInput,
+            undefined,
+            workspaceId
+          ),
         "Could not save the entry"
       ),
     onSettled: async (_data, _error, _raw, context) => {
@@ -642,7 +700,13 @@ export const useEntryMutations = (): EntryMutations => {
       handleError(
         error,
         context,
-        () => enqueueOffline("entries.remove", raw as OfflineIdInput),
+        (_tempId, workspaceId) =>
+          enqueueOffline(
+            "entries.remove",
+            raw as OfflineIdInput,
+            undefined,
+            workspaceId
+          ),
         "Could not delete the entry"
       ),
     onSettled: async (_data, _error, _raw, context) => {

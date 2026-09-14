@@ -124,3 +124,69 @@ describe("tRPC link on native", () => {
     expect("authorization" in link.headers()).toBe(false);
   });
 });
+
+describe("workspace link", () => {
+  type Op = { input: unknown; path: string };
+  const run = async (input: unknown, active: string | null, ready = true): Promise<Op> => {
+    vi.resetModules();
+    vi.doMock("@/lib/active-workspace", () => ({
+      getActiveWorkspaceId: () => active,
+      isActiveWorkspaceReady: () => ready,
+      whenActiveWorkspaceReady: async () => undefined,
+    }));
+    const { workspaceLink } = await import("@/lib/trpc");
+    let seen: Op | undefined;
+    const link = workspaceLink()({} as never);
+    link({
+      op: { input, path: "entries.list" } as never,
+      next: ((op: Op) => {
+        seen = op;
+        return undefined as never;
+      }) as never,
+    });
+    vi.doUnmock("@/lib/active-workspace");
+    if (!seen) throw new Error("next was never called");
+    return seen;
+  };
+
+  it("adds the active workspace to an input that names none", async () => {
+    expect((await run({ limit: 5 }, "ws-b")).input).toEqual({ limit: 5, workspaceId: "ws-b" });
+    expect((await run(undefined, "ws-b")).input).toEqual({ workspaceId: "ws-b" });
+  });
+
+  it("never overrides an explicit workspace — a replayed row keeps its own", async () => {
+    expect((await run({ workspaceId: "ws-a" }, "ws-b")).input).toEqual({ workspaceId: "ws-a" });
+  });
+
+  it("passes the operation through untouched when no workspace is resolved", async () => {
+    const input = { limit: 5 };
+    expect((await run(input, null)).input).toBe(input);
+  });
+
+  it("marks an operation that got ahead of the stored choice, and the fetch settles it", async () => {
+    const { input } = await run({ limit: 5 }, null, false);
+    const { PENDING_WORKSPACE, settlePendingWorkspace } = await import("@/lib/trpc");
+    expect(input).toEqual({ limit: 5, workspaceId: PENDING_WORKSPACE });
+
+    const body = JSON.stringify({ 0: input, 1: { workspaceId: "ws-a" } });
+    const settled = settlePendingWorkspace("https://api.example/api/trpc/a,b?batch=1", { method: "POST", body }, "ws-b");
+    expect(JSON.parse(String(settled.init?.body))).toEqual({
+      0: { limit: 5, workspaceId: "ws-b" },
+      1: { workspaceId: "ws-a" },
+    });
+
+    const query = encodeURIComponent(JSON.stringify({ 0: input }));
+    const fromUrl = settlePendingWorkspace(`/api/trpc/a?batch=1&input=${query}`, { method: "GET" }, null);
+    const parsed = new URL(fromUrl.url, "http://x.invalid").searchParams.get("input");
+    // Still unresolved: the marker is dropped, never sent.
+    expect(JSON.parse(parsed ?? "null")).toEqual({ 0: { limit: 5 } });
+  });
+
+  it("leaves a request with no marker byte-identical", async () => {
+    const { settlePendingWorkspace } = await import("@/lib/trpc");
+    const init = { method: "POST", body: JSON.stringify({ 0: { id: "1" } }) };
+    const settled = settlePendingWorkspace("https://api.example/api/trpc/a?batch=1", init, "ws-b");
+    expect(settled.init).toBe(init);
+    expect(settled.url).toBe("https://api.example/api/trpc/a?batch=1");
+  });
+});

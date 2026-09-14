@@ -4,6 +4,22 @@ import type { shell as source } from "../en/shell";
 
 /** German `shell`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const shell: Translation<typeof source> = {
+  workspace: {
+    open: "Arbeitsbereich wechseln",
+    current: "Arbeitsbereich: {name}",
+    title: "Arbeitsbereiche",
+    description: "Wähle den Arbeitsbereich, in den dieses Gerät Zeit erfasst. Die Browsererweiterung und Raycast behalten ihre eigene Auswahl.",
+    active: "Aktuell",
+    members: "{count, plural, one {# Mitglied} other {# Mitglieder}}",
+    roles: {
+      owner: "Inhaber",
+      admin: "Admin",
+      member: "Mitglied",
+    },
+    switched: "Zu {name} gewechselt",
+    lost: "Du hast keinen Zugriff mehr auf {name}",
+    runningIn: "Läuft in {name}",
+  },
   theme: {
     change: "Design ändern",
     light: "Hell",

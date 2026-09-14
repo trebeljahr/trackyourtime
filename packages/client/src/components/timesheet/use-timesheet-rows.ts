@@ -3,6 +3,11 @@
 import * as React from "react";
 import { timesheetRowKey } from "@starter/shared";
 
+import {
+  getActiveWorkspaceId,
+  subscribeActiveWorkspace,
+} from "@/lib/active-workspace";
+
 /**
  * Rows the user added to the grid, kept locally.
  *
@@ -17,6 +22,11 @@ import { timesheetRowKey } from "@starter/shared";
  * state: localStorage does not exist during the static export's prerender, so
  * the server snapshot is empty and the store swaps in the real rows after
  * hydration without a cascading render.
+ *
+ * **Per workspace.** A pinned row names a project and task by id, and those
+ * ids belong to one workspace. One list for the whole device showed
+ * workspace A's pinned rows in B as rows for projects B does not have. The
+ * key carries the active workspace, and the store follows a switch.
  */
 
 export type PinnedRow = {
@@ -24,15 +34,31 @@ export type PinnedRow = {
   taskId: string | null;
 };
 
-const STORAGE_KEY = "trackyourtime.timesheet-rows";
+/** The pre-workspace key. Adopted, once, by the first workspace to read. */
+const LEGACY_STORAGE_KEY = "trackyourtime.timesheet-rows";
+
+const storageKey = (workspaceId: string | null): string =>
+  workspaceId === null
+    ? LEGACY_STORAGE_KEY
+    : `${LEGACY_STORAGE_KEY}:${workspaceId}`;
 
 /** Stable identity, so a snapshot that has not changed re-renders nothing. */
 const EMPTY: PinnedRow[] = [];
 
-const readStored = (): PinnedRow[] => {
+const readStored = (workspaceId: string | null): PinnedRow[] => {
   if (typeof window === "undefined") return EMPTY;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const key = storageKey(workspaceId);
+    let raw = window.localStorage.getItem(key);
+    // Rows pinned before the key carried a workspace were all pinned in the
+    // only workspace there was, which is the one resolved first.
+    if (raw === null && key !== LEGACY_STORAGE_KEY) {
+      raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (raw !== null) {
+        window.localStorage.setItem(key, raw);
+        window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+      }
+    }
     if (raw === null) return EMPTY;
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return EMPTY;
@@ -52,10 +78,10 @@ const readStored = (): PinnedRow[] => {
   }
 };
 
-const writeStored = (rows: PinnedRow[]): void => {
+const writeStored = (workspaceId: string | null, rows: PinnedRow[]): void => {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+    window.localStorage.setItem(storageKey(workspaceId), JSON.stringify(rows));
   } catch {
     // Not being able to remember the row is no reason to refuse adding it.
   }
@@ -63,27 +89,40 @@ const writeStored = (rows: PinnedRow[]): void => {
 
 // ── the store ────────────────────────────────────────────────────────
 
-let cached: PinnedRow[] | null = null;
+let cached: { workspaceId: string | null; rows: PinnedRow[] } | null = null;
 const listeners = new Set<() => void>();
 
+/** Re-read whenever the active workspace is not the one the cache is for. */
 const getSnapshot = (): PinnedRow[] => {
-  if (cached === null) cached = readStored();
-  return cached;
+  const workspaceId = getActiveWorkspaceId();
+  if (cached === null || cached.workspaceId !== workspaceId) {
+    cached = { workspaceId, rows: readStored(workspaceId) };
+  }
+  return cached.rows;
 };
 
 const getServerSnapshot = (): PinnedRow[] => EMPTY;
 
 const subscribe = (listener: () => void): (() => void) => {
   listeners.add(listener);
+  // A switch changes which list `getSnapshot` answers with.
+  const unsubscribeWorkspace = subscribeActiveWorkspace(listener);
   return () => {
     listeners.delete(listener);
+    unsubscribeWorkspace();
   };
 };
 
 const commit = (rows: PinnedRow[]): void => {
-  cached = rows;
-  writeStored(rows);
+  const workspaceId = getActiveWorkspaceId();
+  cached = { workspaceId, rows };
+  writeStored(workspaceId, rows);
   for (const listener of listeners) listener();
+};
+
+/** Test seam. */
+export const __resetTimesheetRowsForTests = (): void => {
+  cached = null;
 };
 
 const sameRow = (a: PinnedRow, b: PinnedRow): boolean =>

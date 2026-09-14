@@ -7,6 +7,13 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const settings = {
+  foreignQueue: {
+    leftTitle: "Unsynced data for {workspace}",
+    leftWorkspace: "a workspace you left",
+    leftDescription: "{count, plural, one {# change} other {# changes}} queued on this device in {workspace}, which your account no longer belongs to. They are not sent to any other workspace. Ask an owner to add you back to sync them, or discard them here.",
+    inWorkspace: "in {workspace}",
+    confirmLeft: "This deletes work tracked in {workspace} that no server has ever received. It cannot be recovered. Ask an owner to add you back instead if it should be kept.",
+  },
   language: {
     title: "Language",
     description: "Saved to your account. “System” follows the language of each device.",

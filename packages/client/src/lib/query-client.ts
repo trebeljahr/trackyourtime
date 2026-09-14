@@ -1,8 +1,13 @@
 "use client";
 
-import { QueryClient, onlineManager } from "@tanstack/react-query";
+import { QueryCache, QueryClient, onlineManager } from "@tanstack/react-query";
 
-import { isAuthError } from "@/lib/offline";
+import { noteNotFound } from "@/lib/active-workspace";
+import {
+  isAuthError,
+  isForbiddenError,
+  isNotFoundError,
+} from "@/lib/offline";
 import { isNative } from "@/mobile/bridge";
 import { getNetworkOnline, subscribeNetwork } from "@/mobile/network";
 
@@ -19,22 +24,48 @@ import { getNetworkOnline, subscribeNetwork } from "@/mobile/network";
  *
  * **Retries are bounded on native.** The web defaults (3 attempts, exponential
  * backoff) are fine on a desktop; on a phone they are a battery cost paid per
- * screen per wake. An `UNAUTHORIZED` is never retried on either platform —
- * retrying a session the server has rejected cannot change its mind.
+ * screen per wake. An `UNAUTHORIZED` or `FORBIDDEN` is never retried —
+ * retrying a session or a role the server has rejected cannot change its mind.
+ *
+ * **A NOT_FOUND re-asks for the workspace list.** Removal from a workspace on
+ * another device, with the socket down, shows up here first: every query for
+ * the active workspace starts answering NOT_FOUND. `noteNotFound` refetches
+ * `workspaces.list` (throttled), and the active-workspace sync falls back to
+ * the default and says so — see `lib/active-workspace.ts`.
  *
  * Mutations keep React Query's defaults here, `networkMode: "online"`
  * included. See `OFFLINE_QUEUED_MUTATION` below for the handful that must
  * not.
  */
+/**
+ * The tab's one QueryClient, kept so sign-out can empty it. Sign-out does not
+ * reload the page, so without this the next account to sign in in the same
+ * tab is shown the previous one's cached entries until each query refetches.
+ */
+let appQueryClient: QueryClient | null = null;
+
+/** Drop every cached answer. Called on sign-out and account deletion. */
+export const clearAppQueryCache = async (): Promise<void> => {
+  const client = appQueryClient;
+  if (client === null) return;
+  await client.cancelQueries();
+  client.clear();
+};
+
 export const createAppQueryClient = (): QueryClient => {
   const native = isNative();
 
-  return new QueryClient({
+  appQueryClient = new QueryClient({
+    queryCache: new QueryCache({
+      onError: (error) => {
+        if (isNotFoundError(error)) noteNotFound();
+      },
+    }),
     defaultOptions: {
       queries: native
         ? {
             retry: (failureCount: number, error: unknown) => {
-              if (isAuthError(error)) return false;
+              if (isAuthError(error) || isForbiddenError(error)) return false;
               return failureCount < 2;
             },
             retryDelay: (attempt: number) =>
@@ -43,6 +74,7 @@ export const createAppQueryClient = (): QueryClient => {
         : {},
     },
   });
+  return appQueryClient;
 };
 
 /**

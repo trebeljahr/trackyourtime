@@ -20,8 +20,10 @@ import {
   decodeOfflineMutation,
   describeQueuedMutation,
   isForeignTo,
+  isForeignWorkspace,
   isQueuedOn,
   isReplayableBy,
+  isReplayableIn,
   memoryStorage,
   OFFLINE_QUEUE_OWNER_STORAGE_KEY,
   OFFLINE_QUEUE_STORAGE_KEY,
@@ -71,6 +73,12 @@ import {
   getDefaultAbsoluteApiOrigin,
   whenApiOriginReady,
 } from "@/lib/api-origin";
+import {
+  getActiveWorkspaceId,
+  getKnownWorkspaceIds,
+  whenActiveWorkspaceReady,
+  workspaceNameFor,
+} from "@/lib/active-workspace";
 
 // ── the queue itself ─────────────────────────────────────────────────
 
@@ -159,7 +167,52 @@ const isOnThisServer = (row: Pick<QueuedMutation, "server">): boolean =>
  * session on THIS server could ever send it.
  */
 const isElsewhere = (row: QueuedMutation, against: string | null): boolean =>
-  !isOnThisServer(row) || isForeignTo(row, against);
+  !isOnThisServer(row) || isForeignTo(row, against) || isInLeftWorkspace(row);
+
+// ── which workspace a row belongs to ─────────────────────────────────
+
+/*
+ * A person in several workspaces can switch while a row waits, and a row
+ * replayed with no workspace of its own goes wherever the device points NOW.
+ * So every row is stamped with the workspace it was made in
+ * (`enqueueOffline`), the replay sends that stamp explicitly
+ * (`replayOfflineMutation` in core), and a row for a workspace this account
+ * no longer belongs to is HELD: never replayed — not into the workspace it
+ * was made in, which would refuse it, and not into any other — and never
+ * deleted. It is counted with the foreign rows and described in Settings →
+ * Devices with the workspace named, until the person discards it.
+ *
+ * Memberships come from `lib/active-workspace.ts`: the list the server gave
+ * last, remembered beside the queue. `null` means this device has never seen
+ * one, and then nothing stamped is called foreign — the same "we do not know
+ * yet" rule the owner check follows.
+ */
+const isInLeftWorkspace = (row: QueuedMutation): boolean => {
+  const members = getKnownWorkspaceIds();
+  return members !== null && isForeignWorkspace(row, members);
+};
+
+/**
+ * Stamp this account's unstamped rows on this server with `workspaceId`, the
+ * active workspace the first time one is known. Returns how many.
+ *
+ * Legacy rows, from a build before the stamp, are almost always the default
+ * workspace's — there was no other — and claiming them eagerly is what stops
+ * a later switch from dragging them along.
+ */
+export const adoptUnstampedOfflineRows = async (
+  workspaceId: string
+): Promise<number> => {
+  await hydrateLastOwner();
+  const against = owner ?? lastOwner;
+  if (against === null) return 0;
+  const adopted = await getOfflineQueue().adoptUnstampedWorkspace(
+    workspaceId,
+    (row) => isOnThisServer(row) && !isForeignTo(row, against),
+  );
+  if (adopted > 0) await refreshPendingCount();
+  return adopted;
+};
 
 // ── who queued what ──────────────────────────────────────────────────
 
@@ -376,11 +429,19 @@ export const refreshPendingCount = async (): Promise<number> => {
   return rows.length - theirs;
 };
 
-/** Append a mutation that could not reach the server. */
+/**
+ * Append a mutation that could not reach the server.
+ *
+ * `workspaceId` is the workspace the mutation was MADE in, captured by the
+ * caller when the user acted. It defaults to the active workspace now, which
+ * is the same thing unless a switch landed in between — the reason callers
+ * that can capture it do.
+ */
 export const enqueueOffline = async <K extends OfflineOp>(
   op: K,
   input: OfflinePayloadMap[K],
-  tempId?: string
+  tempId?: string,
+  workspaceId?: string | null
 ): Promise<void> => {
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
   await hydrateLastOwner();
@@ -392,11 +453,16 @@ export const enqueueOffline = async <K extends OfflineOp>(
   // `useSession()` has nothing to say. Only a device that has never had an
   // account writes an unowned row now, and the first account to sign in
   // adopts it.
+  // The stored workspace choice is read asynchronously on a phone, and a row
+  // stamped before it lands would be unstamped — claimable by whichever
+  // workspace resolves first.
+  await whenActiveWorkspaceReady();
   await getOfflineQueue().enqueue(
     op,
     payload,
     owner ?? lastOwner ?? undefined,
     getAbsoluteApiOrigin(),
+    workspaceId ?? getActiveWorkspaceId() ?? undefined,
   );
   await refreshPendingCount();
 };
@@ -441,8 +507,18 @@ export const flushOfflineQueue = async (
   runner: (
     mutation: OfflineMutation,
     meta: { createdAt: string }
-  ) => Promise<void>
+  ) => Promise<void>,
+  options: {
+    /**
+     * The workspaces this account belongs to, as the server said just now.
+     * Defaults to the last known list; with none at all only unstamped rows
+     * replay, because a stamped row cannot be checked against nothing.
+     */
+    memberWorkspaceIds?: ReadonlySet<string>;
+  } = {}
 ): Promise<FlushResult> => {
+  const members =
+    options.memberWorkspaceIds ?? getKnownWorkspaceIds() ?? new Set<string>();
   const result = await getOfflineQueue().flush(
     async (row) => {
       const decoded = decodeOfflineMutation(row);
@@ -450,7 +526,12 @@ export const flushOfflineQueue = async (
       if (decoded === null) return;
       await runner(decoded, { createdAt: row.createdAt });
     },
-    { filter: (row) => isReplayableBy(row, owner) && isOnThisServer(row) }
+    {
+      filter: (row) =>
+        isReplayableBy(row, owner) &&
+        isOnThisServer(row) &&
+        isReplayableIn(row, members),
+    }
   );
   await refreshPendingCount();
   return result;
@@ -478,6 +559,14 @@ export type ForeignQueuedRow = QueuedMutationSummary & {
    * differs: sign in as that account, or switch back to that server.
    */
   otherServer: string | null;
+  /**
+   * True when the row is this account's, on this server, in a workspace the
+   * account no longer belongs to. Its own group on screen: nothing the person
+   * can do on this device sends it, so the honest options are to be added
+   * back to that workspace or to discard it. `workspaceName` is null here
+   * when the list no longer names it ("a workspace you left").
+   */
+  leftWorkspace: boolean;
 };
 
 export const listForeignQueued = async (): Promise<ForeignQueuedRow[]> => {
@@ -487,12 +576,19 @@ export const listForeignQueued = async (): Promise<ForeignQueuedRow[]> => {
   const rows = await getOfflineQueue().list();
   return rows
     .filter((row) => isElsewhere(row, against))
-    .map((row) => ({
-      ...describeQueuedMutation(row),
-      otherServer: isOnThisServer(row)
+    .map((row) => {
+      const otherServer = isOnThisServer(row)
         ? null
-        : (row.server ?? getDefaultAbsoluteApiOrigin()),
-    }));
+        : (row.server ?? getDefaultAbsoluteApiOrigin());
+      return {
+        ...describeQueuedMutation(row, workspaceNameFor),
+        otherServer,
+        leftWorkspace:
+          otherServer === null &&
+          !isForeignTo(row, against) &&
+          isInLeftWorkspace(row),
+      };
+    });
 };
 
 /**
@@ -656,13 +752,33 @@ const messagesOf = (error: unknown): string[] => {
  * error anywhere. The flush stops instead, and everything keeps its place
  * until there is a session to replay it with.
  */
-export const isAuthError = (error: unknown): boolean => {
-  if (typeof error !== "object" || error === null) return false;
+export const isAuthError = (error: unknown): boolean =>
+  serverCode(error) === "UNAUTHORIZED";
+
+/**
+ * FORBIDDEN is NOT an auth error, and used to be.
+ *
+ * In a shared workspace it is a refusal of one row by a session that is fine:
+ * a role change took away something the row needed. Treating it as "signed
+ * out" stopped the flush at that row, held every row behind it hostage, and
+ * put "Signed out — sign in to sync" in front of somebody who was signed in.
+ * It is a refusal on the merits, like a validation error — dropped and said
+ * out loud by the flush.
+ */
+export const isForbiddenError = (error: unknown): boolean =>
+  serverCode(error) === "FORBIDDEN";
+
+const serverCode = (error: unknown): string | null => {
+  if (typeof error !== "object" || error === null) return null;
   const data = (error as { data?: unknown }).data;
-  if (typeof data !== "object" || data === null) return false;
+  if (typeof data !== "object" || data === null) return null;
   const code = (data as { code?: unknown }).code;
-  return code === "UNAUTHORIZED" || code === "FORBIDDEN";
+  return typeof code === "string" ? code : null;
 };
+
+/** True when the server answered NOT_FOUND. */
+export const isNotFoundError = (error: unknown): boolean =>
+  serverCode(error) === "NOT_FOUND";
 
 /**
  * True when the mutation never reached the server, so it is safe to keep the
