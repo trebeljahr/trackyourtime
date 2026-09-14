@@ -499,7 +499,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
                     {typeof navigator !== "undefined" &&
                     /Mac|iPhone|iPad/.test(navigator.platform)
                       ? "⌘K"
-                      : "Ctrl+K"}
+                      : t("palette.ctrlK")}
                   </kbd>
                 </TooltipContent>
               </Tooltip>

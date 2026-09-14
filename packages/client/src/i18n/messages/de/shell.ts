@@ -33,6 +33,7 @@ export const shell: Translation<typeof source> = {
     empty: "Keine Treffer.",
     open: "Suchen",
     openHint: "Befehlspalette öffnen",
+    ctrlK: "Strg+K",
     groups: {
       timer: "Timer",
       navigate: "Gehe zu",
@@ -124,6 +125,35 @@ export const shell: Translation<typeof source> = {
       submitting: "Wird angemeldet …",
       forgotPassword: "Passwort vergessen?",
       noAccount: "Noch kein Konto? <link>Registrieren</link>",
+      challengeExpired: "Die Anmeldung hat zu lange gedauert. Gib dein Passwort noch einmal ein.",
+      emailNotVerified:
+        "Bestätige zuerst deine E-Mail-Adresse. Wir haben dir einen neuen Bestätigungslink geschickt.",
+    },
+    twoFactor: {
+      title: "Zwei-Faktor-Authentifizierung",
+      signingInAs: "Anmeldung als {email}",
+      nativeUnsupported:
+        "Dieses Konto nutzt Zwei-Faktor-Authentifizierung, die die App noch nicht unterstützt. Melde dich stattdessen in der Web-App an.",
+      totpLabel: "Bestätigungscode",
+      backupLabel: "Backup-Code",
+      totpHint: "Gib den 6-stelligen Code aus deiner Authenticator-App ein.",
+      backupHint:
+        "Gib einen der Backup-Codes ein, die du beim Einschalten der Zwei-Faktor-Authentifizierung gespeichert hast. Jeder Code funktioniert nur einmal.",
+      invalidTotp:
+        "Dieser Code ist nicht gültig. Prüfe die Uhrzeit auf deinem Gerät und versuch es mit dem nächsten Code.",
+      invalidBackup: "Dieser Backup-Code ist nicht gültig oder wurde schon verwendet.",
+      unexpected: "Ein unerwarteter Fehler ist aufgetreten",
+      verify: "Bestätigen",
+      verifying: "Wird bestätigt …",
+      useBackup: "Backup-Code verwenden",
+      useTotp: "Code aus der Authenticator-App verwenden",
+    },
+    google: {
+      continue: "Weiter mit Google",
+      shellNote:
+        "Die Anmeldung mit Google funktioniert nur in der Web-App. Melde dich hier mit E-Mail und Passwort an.",
+      unconfiguredNote: "Die Anmeldung mit Google ist auf diesem Server nicht eingerichtet.",
+      couldNotStart: "Die Anmeldung mit Google konnte nicht starten",
     },
     revoked: {
       title: "Du wurdest abgemeldet",
@@ -137,6 +167,9 @@ export const shell: Translation<typeof source> = {
       submit: "Registrieren",
       submitting: "Konto wird erstellt …",
       haveAccount: "Schon ein Konto? <link>Anmelden</link>",
+      verifyTitle: "Schau in dein Postfach",
+      verifySubtitle: "Wir haben einen Bestätigungslink an {email} geschickt. Öffne ihn und melde dich dann an.",
+      goToLogin: "Zur Anmeldung",
     },
     forgot: {
       title: "Passwort vergessen",
@@ -153,6 +186,33 @@ export const shell: Translation<typeof source> = {
       submitting: "Wird zurückgesetzt …",
       failed: "Das Passwort konnte nicht zurückgesetzt werden. Vielleicht ist der Link abgelaufen.",
     },
+  },
+  serverPicker: {
+    current: "Server: <current>{label}</current>",
+    groupLabel: "Server",
+    defaultServer: "Standard ({host})",
+    ownServer: "Mein eigener Server",
+    address: "Serveradresse",
+    pending:
+      "{count, plural, one {# nicht gesendete Änderung bleibt auf diesem Gerät für {server}. Sie wird gesendet, wenn du zurückwechselst, nie an einen anderen Server.} other {# nicht gesendete Änderungen bleiben auf diesem Gerät für {server}. Sie werden gesendet, wenn du zurückwechselst, nie an einen anderen Server.}}",
+    found: "{version} unter {host} gefunden.",
+    checking: "Wird geprüft …",
+    use: "Diesen Server verwenden",
+    untrusted:
+      "{host} ist ein Track-Your-Time-Server, akzeptiert aber noch keine Anmeldungen aus dieser App. Wer den Server betreibt, muss TRUST_STORE_APPS=true setzen oder capacitor://localhost und https://localhost zu TRUSTED_ORIGINS hinzufügen.",
+    creatingOn: "Das Konto wird auf <server>{label}</server> erstellt.",
+    change: "Server wechseln",
+  },
+  serverProblems: {
+    empty: "Gib die Adresse deines Servers ein.",
+    invalidUrl: "„{input}“ ist keine Webadresse. Eine Webadresse sieht so aus: https://track.example.com.",
+    insecure:
+      "Verwende https:// für {host}. Einfaches http:// überträgt dein Passwort unverschlüsselt und wird deshalb nur für localhost akzeptiert.",
+    unreachable: "{host} ist nicht erreichbar. Prüfe die Adresse und ob der Server läuft.",
+    notTrackYourTime:
+      "{host} hat geantwortet, ist aber kein Track-Your-Time-Server. Gib die Adresse ein, unter der du Track Your Time öffnest.",
+    unhealthy:
+      "{host} ist ein Track-Your-Time-Server, erreicht seine Datenbank gerade aber nicht. Versuch es in einer Minute noch einmal.",
   },
   notFound: {
     metaTitle: "Seite nicht gefunden",

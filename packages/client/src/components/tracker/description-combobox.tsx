@@ -203,7 +203,7 @@ export function DescriptionCombobox({
     }
   };
 
-  const shortcut = isMac() ? "⌘⏎" : "Ctrl+Enter";
+  const shortcut = isMac() ? "⌘⏎" : t("description.ctrlEnter");
 
   return (
     <div className={cn("relative", className)} data-testid={`${testId}-field`}>

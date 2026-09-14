@@ -42,9 +42,9 @@ vi.mock("@/lib/auth-client", () => ({
 }));
 
 const { default: LoginPage } = await import("./page");
-const { NATIVE_TWO_FACTOR_UNSUPPORTED, EMAIL_NOT_VERIFIED_MESSAGE } = await import(
-  "@/components/two-factor-challenge"
-);
+const { en } = await import("@/i18n/messages");
+const NATIVE_TWO_FACTOR_UNSUPPORTED = en.shell.auth.twoFactor.nativeUnsupported;
+const EMAIL_NOT_VERIFIED_MESSAGE = en.shell.auth.login.emailNotVerified;
 
 const submitPassword = async (): Promise<void> => {
   render(<LoginPage />);

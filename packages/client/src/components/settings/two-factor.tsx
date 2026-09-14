@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { SettingRow } from "@/components/settings/setting-row";
 import { authClient } from "@/lib/auth-client";
+import { useT } from "@/i18n/use-t";
 
 /** The `secret` of an `otpauth://` URI, for typing into an app by hand. */
 export function totpSecretOf(uri: string): string {
@@ -51,9 +52,6 @@ export function QrCode({ value, label }: { value: string; label: string }): Reac
   );
 }
 
-const INVALID_PASSWORD = "That password is not correct.";
-const GENERIC = "Something went wrong. Try again.";
-
 type EnableStep =
   | { kind: "password" }
   | { kind: "scan"; totpURI: string; backupCodes: string[] }
@@ -76,16 +74,17 @@ export function TwoFactorRow({ hasPassword }: { hasPassword: boolean | null }): 
   const enabled = session.data?.user.twoFactorEnabled === true;
   const [enableOpen, setEnableOpen] = React.useState(false);
   const [disableOpen, setDisableOpen] = React.useState(false);
+  const t = useT("settings");
 
   return (
     <SettingRow
-      title="Two-factor authentication"
+      title={t("twoFactor.title")}
       description={
         hasPassword === false
-          ? "Your account signs in with Google, which has its own two-factor settings."
+          ? t("twoFactor.googleAccount")
           : enabled
-            ? "On. Signing in needs a code from your authenticator app or a backup code."
-            : "Off. Add a code from an authenticator app to every sign-in."
+            ? t("twoFactor.on")
+            : t("twoFactor.off")
       }
       testId="setting-two-factor"
     >
@@ -97,7 +96,7 @@ export function TwoFactorRow({ hasPassword }: { hasPassword: boolean | null }): 
           onClick={() => setDisableOpen(true)}
           data-testid="two-factor-disable"
         >
-          Turn off
+          {t("twoFactor.turnOff")}
         </Button>
       ) : (
         <Button
@@ -109,7 +108,7 @@ export function TwoFactorRow({ hasPassword }: { hasPassword: boolean | null }): 
           data-testid="two-factor-enable"
         >
           <ShieldCheck className="size-4" />
-          Turn on
+          {t("twoFactor.turnOn")}
         </Button>
       )}
       <EnableTwoFactorDialog open={enableOpen} onOpenChange={setEnableOpen} />
@@ -125,6 +124,8 @@ export function EnableTwoFactorDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): React.JSX.Element {
+  const t = useT("settings");
+  const tc = useT("common");
   const [step, setStep] = React.useState<EnableStep>({ kind: "password" });
   const [password, setPassword] = React.useState("");
   const [code, setCode] = React.useState("");
@@ -154,7 +155,9 @@ export function EnableTwoFactorDialog({
       .catch(() => ({ data: null, error: { code: "FAILED" } }));
     setBusy(false);
     if (refusal || !data) {
-      setError(refusal?.code === "INVALID_PASSWORD" ? INVALID_PASSWORD : GENERIC);
+      setError(
+        refusal?.code === "INVALID_PASSWORD" ? t("twoFactor.invalidPassword") : tc("errors.generic"),
+      );
       return;
     }
     setPassword("");
@@ -173,16 +176,12 @@ export function EnableTwoFactorDialog({
       .catch(() => ({ error: { code: "FAILED" } }));
     setBusy(false);
     if (refusal) {
-      setError(
-        refusal.code === "INVALID_CODE"
-          ? "That code is not valid. Check the time on your device and try the next code."
-          : GENERIC,
-      );
+      setError(refusal.code === "INVALID_CODE" ? t("twoFactor.invalidCode") : tc("errors.generic"));
       return;
     }
     setCode("");
     setStep({ kind: "codes", backupCodes: step.backupCodes });
-    toast.success("Two-factor authentication is on");
+    toast.success(t("twoFactor.enabledToast"));
   };
 
   return (
@@ -191,16 +190,11 @@ export function EnableTwoFactorDialog({
         {step.kind === "password" ? (
           <form onSubmit={(event) => void submitPassword(event)} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Turn on two-factor authentication</DialogTitle>
-              <DialogDescription>
-                Every sign-in on the web will ask for a code from an authenticator
-                app. Until the mobile app and the browser extension support it,
-                they cannot sign in to this account; devices that are already
-                signed in stay signed in.
-              </DialogDescription>
+              <DialogTitle>{t("twoFactor.enable.title")}</DialogTitle>
+              <DialogDescription>{t("twoFactor.enable.description")}</DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
-              <Label htmlFor="two-factor-password">Password</Label>
+              <Label htmlFor="two-factor-password">{tc("fields.password")}</Label>
               <Input
                 id="two-factor-password"
                 type="password"
@@ -213,34 +207,31 @@ export function EnableTwoFactorDialog({
             {error ? <ErrorLine message={error} /> : null}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => change(false)}>
-                Cancel
+                {tc("actions.cancel")}
               </Button>
               <Button type="submit" disabled={!password || busy} data-testid="two-factor-password-submit">
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                Continue
+                {tc("actions.continue")}
               </Button>
             </DialogFooter>
           </form>
         ) : step.kind === "scan" ? (
           <form onSubmit={(event) => void submitCode(event)} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Scan the QR code</DialogTitle>
-              <DialogDescription>
-                Scan it with your authenticator app, then enter the 6-digit code
-                the app shows.
-              </DialogDescription>
+              <DialogTitle>{t("twoFactor.scan.title")}</DialogTitle>
+              <DialogDescription>{t("twoFactor.scan.description")}</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col items-center gap-3">
-              <QrCode value={step.totpURI} label="QR code for your authenticator app" />
+              <QrCode value={step.totpURI} label={t("twoFactor.scan.qrLabel")} />
               <p className="text-center text-xs text-muted-foreground">
-                Cannot scan it? Enter this key:{" "}
+                {t("twoFactor.scan.manualKey")}{" "}
                 <code className="break-all rounded bg-muted px-1 py-0.5" data-testid="two-factor-secret">
                   {totpSecretOf(step.totpURI)}
                 </code>
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="two-factor-verify-code">Code</Label>
+              <Label htmlFor="two-factor-verify-code">{t("twoFactor.scan.code")}</Label>
               <Input
                 id="two-factor-verify-code"
                 inputMode="numeric"
@@ -253,22 +244,19 @@ export function EnableTwoFactorDialog({
             {error ? <ErrorLine message={error} /> : null}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => change(false)}>
-                Cancel
+                {tc("actions.cancel")}
               </Button>
               <Button type="submit" disabled={!code || busy} data-testid="two-factor-verify-submit">
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                Verify
+                {t("twoFactor.scan.verify")}
               </Button>
             </DialogFooter>
           </form>
         ) : (
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Save your backup codes</DialogTitle>
-              <DialogDescription>
-                Each code signs you in once if you lose your authenticator app.
-                Store them somewhere safe. They are not shown again.
-              </DialogDescription>
+              <DialogTitle>{t("twoFactor.codes.title")}</DialogTitle>
+              <DialogDescription>{t("twoFactor.codes.description")}</DialogDescription>
             </DialogHeader>
             <ul
               className="grid grid-cols-2 gap-2 rounded-md bg-muted p-3 font-mono text-sm"
@@ -285,14 +273,14 @@ export function EnableTwoFactorDialog({
                 onClick={() => {
                   void navigator.clipboard
                     ?.writeText(step.backupCodes.join("\n"))
-                    .then(() => toast.success("Backup codes copied"))
-                    .catch(() => toast.error("Could not copy. Select the codes instead."));
+                    .then(() => toast.success(t("twoFactor.codes.copied")))
+                    .catch(() => toast.error(t("twoFactor.codes.copyFailed")));
                 }}
               >
-                Copy
+                {tc("actions.copy")}
               </Button>
               <Button type="button" onClick={() => change(false)} data-testid="two-factor-codes-done">
-                I saved them
+                {t("twoFactor.codes.saved")}
               </Button>
             </DialogFooter>
           </div>
@@ -309,6 +297,8 @@ export function DisableTwoFactorDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): React.JSX.Element {
+  const t = useT("settings");
+  const tc = useT("common");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -332,10 +322,12 @@ export function DisableTwoFactorDialog({
       .catch(() => ({ error: { code: "FAILED" } }));
     setBusy(false);
     if (refusal) {
-      setError(refusal.code === "INVALID_PASSWORD" ? INVALID_PASSWORD : GENERIC);
+      setError(
+        refusal.code === "INVALID_PASSWORD" ? t("twoFactor.invalidPassword") : tc("errors.generic"),
+      );
       return;
     }
-    toast.success("Two-factor authentication is off");
+    toast.success(t("twoFactor.disabledToast"));
     change(false);
   };
 
@@ -344,13 +336,11 @@ export function DisableTwoFactorDialog({
       <DialogContent data-testid="two-factor-disable-dialog">
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
           <DialogHeader>
-            <DialogTitle>Turn off two-factor authentication?</DialogTitle>
-            <DialogDescription>
-              Signing in will need only your password. Your backup codes stop working.
-            </DialogDescription>
+            <DialogTitle>{t("twoFactor.disable.title")}</DialogTitle>
+            <DialogDescription>{t("twoFactor.disable.description")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="two-factor-disable-password">Password</Label>
+            <Label htmlFor="two-factor-disable-password">{tc("fields.password")}</Label>
             <Input
               id="two-factor-disable-password"
               type="password"
@@ -363,7 +353,7 @@ export function DisableTwoFactorDialog({
           {error ? <ErrorLine message={error} /> : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => change(false)}>
-              Cancel
+              {tc("actions.cancel")}
             </Button>
             <Button
               type="submit"
@@ -372,7 +362,7 @@ export function DisableTwoFactorDialog({
               data-testid="two-factor-disable-submit"
             >
               {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-              Turn off
+              {t("twoFactor.turnOff")}
             </Button>
           </DialogFooter>
         </form>

@@ -22,6 +22,7 @@ export const tracker = {
     suggestions: "Past descriptions",
     fill: "Use “{description}” with its project, task, tags and billable setting",
     legend: "Tab completes · {shortcut} brings its project, task and tags",
+    ctrlEnter: "Ctrl+Enter",
   },
   /** Field labels the bar, the rows and both entry dialogs share. */
   fields: {

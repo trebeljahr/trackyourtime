@@ -22,6 +22,9 @@ import { useIsNative } from "@/hooks/use-is-native";
 import { getApiOrigin, getDefaultApiOrigin } from "@/lib/api-origin";
 import { refreshPendingCount } from "@/lib/offline";
 import { switchServer } from "@/lib/server-switch";
+import { serverCheckMessage, serverInputMessage } from "@/lib/server-problem-message";
+import { useT } from "@/i18n/use-t";
+import type { Translator } from "@/i18n/translator";
 
 /**
  * Which server the phone app signs in to.
@@ -41,14 +44,14 @@ import { switchServer } from "@/lib/server-switch";
 type Mode = "default" | "own";
 
 /** The build's own server, named — "cloud" only when it really is the cloud. */
-const defaultLabel = (origin: string): string =>
+const defaultLabel = (origin: string, t: Translator<"shell">): string =>
   sameServerOrigin(origin, CLOUD_API_ORIGIN)
     ? CLOUD_SERVER_LABEL
-    : `Default (${serverHost(origin)})`;
+    : t("serverPicker.defaultServer", { host: serverHost(origin) });
 
 /** Why a reachable server still cannot be used from this app. */
-export const untrustedMessage = (server: ServerInfo): string =>
-  `${serverHost(server.origin)} is a Track Your Time server, but it does not accept sign-ins from this app yet. Its administrator needs to set TRUST_STORE_APPS=true, or add capacitor://localhost and https://localhost to TRUSTED_ORIGINS.`;
+export const untrustedMessage = (server: ServerInfo, t: Translator<"shell">): string =>
+  t("serverPicker.untrusted", { host: serverHost(server.origin) });
 
 export function NativeServerPicker(): React.JSX.Element | null {
   const native = useIsNative();
@@ -73,6 +76,8 @@ function ServerPickerBody({
   chosen: string | null;
   ready: boolean;
 }): React.JSX.Element {
+  const t = useT("shell");
+  const tc = useT("common");
   const fallback = getDefaultApiOrigin();
   const current = getApiOrigin();
   const usingDefault = chosen === null || sameServerOrigin(chosen, fallback);
@@ -99,7 +104,7 @@ function ServerPickerBody({
     if (mode === "own") {
       const parsed = normalizeServerInput(address);
       if (!parsed.ok) {
-        setError(parsed.message);
+        setError(serverInputMessage(parsed, address, t));
         return;
       }
       origin = parsed.origin;
@@ -109,11 +114,11 @@ function ServerPickerBody({
     try {
       const result = await checkServer(origin);
       if (!result.ok) {
-        setError(result.message);
+        setError(serverCheckMessage(result, origin, t));
         return;
       }
       if (result.server.originTrusted === false) {
-        setError(untrustedMessage(result.server));
+        setError(untrustedMessage(result.server, t));
         return;
       }
       setFound(result.server);
@@ -140,10 +145,14 @@ function ServerPickerBody({
         <span className="flex min-w-0 items-center gap-2">
           <Server className="size-4 shrink-0 text-muted-foreground" />
           <span className="truncate">
-            Server:{" "}
-            <span className="font-medium" data-testid="server-picker-current">
-              {ready ? serverLabel(current) : "…"}
-            </span>
+            {t.rich("serverPicker.current", {
+              label: ready ? serverLabel(current) : "…",
+              current: (chunks) => (
+                <span className="font-medium" data-testid="server-picker-current">
+                  {chunks}
+                </span>
+              ),
+            })}
           </span>
         </span>
         <Button
@@ -156,13 +165,13 @@ function ServerPickerBody({
           aria-expanded={open}
           data-testid="server-picker-toggle"
         >
-          {open ? "Close" : "Change"}
+          {open ? tc("actions.close") : tc("actions.change")}
         </Button>
       </div>
 
       {open ? (
         <form className="mt-3 space-y-3" onSubmit={(event) => void choose(event)}>
-          <div role="radiogroup" aria-label="Server" className="space-y-2">
+          <div role="radiogroup" aria-label={t("serverPicker.groupLabel")} className="space-y-2">
             <label className="flex items-center gap-2">
               <input
                 type="radio"
@@ -171,7 +180,7 @@ function ServerPickerBody({
                 onChange={() => setMode("default")}
                 data-testid="server-picker-default"
               />
-              {defaultLabel(fallback)}
+              {defaultLabel(fallback, t)}
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -181,7 +190,7 @@ function ServerPickerBody({
                 onChange={() => setMode("own")}
                 data-testid="server-picker-own"
               />
-              My own server
+              {t("serverPicker.ownServer")}
             </label>
           </div>
 
@@ -201,16 +210,14 @@ function ServerPickerBody({
                 setAddress(event.target.value);
                 setError(null);
               }}
-              aria-label="Server address"
+              aria-label={t("serverPicker.address")}
               data-testid="server-picker-address"
             />
           ) : null}
 
           {pending > 0 ? (
             <p className="text-muted-foreground" data-testid="server-picker-pending">
-              {pending} unsent {pending === 1 ? "change stays" : "changes stay"} on
-              this device for {serverLabel(current)}. They are sent when you switch
-              back, never to another server.
+              {t("serverPicker.pending", { count: pending, server: serverLabel(current) })}
             </p>
           ) : null}
 
@@ -221,7 +228,10 @@ function ServerPickerBody({
           ) : null}
           {found ? (
             <p className="text-muted-foreground" role="status" data-testid="server-picker-found">
-              Found {describeServerVersion(found)} at {serverHost(found.origin)}.
+              {t("serverPicker.found", {
+                version: describeServerVersion(found),
+                host: serverHost(found.origin),
+              })}
             </p>
           ) : null}
 
@@ -232,7 +242,7 @@ function ServerPickerBody({
             data-testid="server-picker-save"
           >
             {checking ? <Loader2 className="size-4 animate-spin" /> : null}
-            {checking ? "Checking…" : "Use this server"}
+            {checking ? t("serverPicker.checking") : t("serverPicker.use")}
           </Button>
         </form>
       ) : null}
@@ -248,13 +258,16 @@ function ServerPickerBody({
 export function NativeServerNote(): React.JSX.Element | null {
   const native = useIsNative();
   const { ready } = useApiOrigin();
+  const t = useT("shell");
   if (!native) return null;
   return (
     <p className="text-center text-sm text-muted-foreground" data-testid="server-note">
-      Creating an account on{" "}
-      <span className="font-medium">{ready ? serverLabel(getApiOrigin()) : "…"}</span>.{" "}
+      {t.rich("serverPicker.creatingOn", {
+        label: ready ? serverLabel(getApiOrigin()) : "…",
+        server: (chunks) => <span className="font-medium">{chunks}</span>,
+      })}{" "}
       <Link href="/login" className="text-primary hover:underline">
-        Change server
+        {t("serverPicker.change")}
       </Link>
     </p>
   );

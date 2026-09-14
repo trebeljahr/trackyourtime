@@ -746,4 +746,167 @@ export const settings: Translation<typeof source> = {
     invalidTerms: "Gib eine ganze Zahl von 0 bis 365 Tagen ein.",
     invalidCountry: "Gib einen zweistelligen Ländercode ein.",
   },
+  twoFactor: {
+    title: "Zwei-Faktor-Authentifizierung",
+    googleAccount:
+      "Du meldest dich mit Google an. Die Zwei-Faktor-Einstellungen dafür verwaltest du bei Google.",
+    on: "An. Zum Anmelden brauchst du einen Code aus deiner Authenticator-App oder einen Backup-Code.",
+    off: "Aus. Verlange bei jeder Anmeldung zusätzlich einen Code aus einer Authenticator-App.",
+    turnOn: "Einschalten",
+    turnOff: "Ausschalten",
+    invalidPassword: "Dieses Passwort ist nicht richtig.",
+    invalidCode:
+      "Dieser Code ist nicht gültig. Prüfe die Uhrzeit auf deinem Gerät und versuch es mit dem nächsten Code.",
+    enabledToast: "Zwei-Faktor-Authentifizierung ist eingeschaltet",
+    disabledToast: "Zwei-Faktor-Authentifizierung ist ausgeschaltet",
+    enable: {
+      title: "Zwei-Faktor-Authentifizierung einschalten",
+      description:
+        "Jede Anmeldung im Web fragt dann nach einem Code aus einer Authenticator-App. Bis die Mobil-App und die Browsererweiterung das unterstützen, können sie sich nicht mit diesem Konto anmelden; Geräte, die schon angemeldet sind, bleiben angemeldet.",
+    },
+    scan: {
+      title: "QR-Code scannen",
+      description:
+        "Scanne ihn mit deiner Authenticator-App und gib dann den 6-stelligen Code ein, den die App anzeigt.",
+      qrLabel: "QR-Code für deine Authenticator-App",
+      manualKey: "Scannen klappt nicht? Gib diesen Schlüssel ein:",
+      code: "Code",
+      verify: "Bestätigen",
+    },
+    codes: {
+      title: "Backup-Codes speichern",
+      description:
+        "Mit jedem Code kannst du dich einmal anmelden, falls du deine Authenticator-App verlierst. Bewahre die Codes sicher auf. Sie werden nicht noch einmal angezeigt.",
+      copied: "Backup-Codes kopiert",
+      copyFailed: "Kopieren fehlgeschlagen. Markiere die Codes stattdessen.",
+      saved: "Ich habe sie gespeichert",
+    },
+    disable: {
+      title: "Zwei-Faktor-Authentifizierung ausschalten?",
+      description: "Zum Anmelden brauchst du dann nur noch dein Passwort. Deine Backup-Codes funktionieren nicht mehr.",
+    },
+  },
+  password: {
+    title: "Passwort",
+    googleAccount: "Du meldest dich mit Google an, deshalb hat dein Konto kein Passwort, das du ändern könntest.",
+    description: "Ändere das Passwort, mit dem du dich anmeldest.",
+    change: "Passwort ändern",
+    minLength: "Verwende mindestens {min, number} Zeichen.",
+    current: "Aktuelles Passwort",
+    new: "Neues Passwort",
+    confirm: "Neues Passwort bestätigen",
+    revokeOthers: "Alle anderen Geräte abmelden, auch die Mobil-App, die Browsererweiterung und Raycast",
+    problems: {
+      currentMissing: "Gib dein aktuelles Passwort ein.",
+      tooShort: "Das neue Passwort braucht mindestens {min, number} Zeichen.",
+      mismatch: "Die neuen Passwörter stimmen nicht überein.",
+      unchanged: "Das neue Passwort ist dasselbe wie das aktuelle.",
+      wrongCurrent: "Das aktuelle Passwort ist nicht richtig. Es wurde nichts geändert.",
+      tooLong: "Das neue Passwort ist zu lang.",
+      failed: "Dein Passwort konnte nicht geändert werden. Versuch es noch einmal.",
+    },
+    toasts: {
+      othersStillSignedIn: "Passwort geändert, aber andere Geräte sind noch angemeldet",
+      othersStillSignedInHint: "Melde sie unter Einstellungen → Geräte ab.",
+      changedOthersSignedOut: "Passwort geändert. Andere Geräte sind abgemeldet.",
+      changed: "Passwort geändert",
+    },
+  },
+  email: {
+    title: "E-Mail-Adresse",
+    description: "Hierhin gehen Anmeldelinks und E-Mails zu deinem Konto.",
+    change: "E-Mail ändern",
+    dialogTitle: "E-Mail-Adresse ändern",
+    current:
+      "Aktuell {email}. Die neue Adresse bekommt einen Link, und die Änderung gilt, sobald du ihn öffnest.",
+    newAddress: "Neue E-Mail-Adresse",
+    sendLink: "Link senden",
+    sentTitle: "Neue Adresse bestätigen",
+    sent: "Wir haben einen Link an {email} geschickt. Deine E-Mail-Adresse ändert sich, sobald du ihn öffnest.",
+    sentToLog:
+      "Dieser Server verschickt keine E-Mails, deshalb steht der Bestätigungslink für {email} im Server-Log. Deine E-Mail-Adresse ändert sich, sobald der Link geöffnet wird.",
+    invalid: "Gib eine gültige E-Mail-Adresse ein.",
+    same: "Das ist bereits deine E-Mail-Adresse.",
+    failed: "Deine E-Mail-Adresse konnte nicht geändert werden. Versuch es noch einmal.",
+  },
+  moveServer: {
+    title: "Auf einen anderen Server umziehen",
+    description:
+      "Kopiere diesen Arbeitsbereich von {here} auf einen anderen Track-Your-Time-Server – deinen eigenen oder {cloud}. Einträge, Kunden, Projekte, Tätigkeiten, Schlagwörter, die Arbeitsbereichseinstellungen und deine angehefteten Schnellstarts kommen mit; hier wird nichts geändert oder gelöscht.",
+    open: "Meine Daten umziehen …",
+    from: "Von {here}.",
+    fromTo: "Von {here} nach {there}.",
+    targetLabel: "Umziehen nach",
+    ownServer: "Mein eigener Server",
+    address: "Serveradresse",
+    check: "Server prüfen",
+    sameServer: "Das ist {here}, der Server, auf dem dieser Arbeitsbereich schon liegt.",
+    untrustedApp:
+      "{host} akzeptiert noch keine Anmeldungen aus dieser App. Wer den Server betreibt, muss TRUST_STORE_APPS=true setzen oder capacitor://localhost und https://localhost zu TRUSTED_ORIGINS hinzufügen.",
+    signInHint:
+      "Melde dich mit deinem Konto auf {server} an. Die Daten werden in den Arbeitsbereich dieses Kontos kopiert.",
+    signUpHint: "Erstelle ein Konto auf {server}, in das die Daten kopiert werden.",
+    toSignUp: "Dort noch kein Konto? Konto erstellen",
+    toSignIn: "Dort schon ein Konto? Anmelden",
+    createAccount: "Konto erstellen",
+    signInFailed: "Die Anmeldung bei {host} ist fehlgeschlagen.",
+    counting: "Die zu kopierenden Einträge werden gezählt …",
+    willCopy:
+      "{count, plural, one {# abgeschlossener Eintrag wird von {here} kopiert.} other {# abgeschlossene Einträge werden von {here} kopiert.}}",
+    targetHasEntries:
+      "{count, plural, one {Der Arbeitsbereich auf {server} hat schon # Eintrag. Einträge, die schon dort sind, werden übersprungen, und die Arbeitsbereichseinstellungen bleiben, wie sie sind.} other {Der Arbeitsbereich auf {server} hat schon # Einträge. Einträge, die schon dort sind, werden übersprungen, und die Arbeitsbereichseinstellungen bleiben, wie sie sind.}}",
+    settingsComeAlong:
+      "Die Arbeitsbereichseinstellungen – Währung, Sätze, Wochenbeginn – kommen ebenfalls mit.",
+    catalogComesAlong:
+      "Kunden, Projekte, Tätigkeiten und Schlagwörter kommen mit den Einträgen, die sie verwenden. Ausgestellte Rechnungen werden nicht neu erstellt.",
+    running: "Ein Timer läuft. Er wird erst kopiert, wenn er gestoppt ist.",
+    redacted:
+      "Deine Rolle umfasst nicht die Beträge anderer Mitglieder, deshalb werden keine Sätze mitkopiert.",
+    copyTo: "Nach {server} kopieren",
+    stopped: "Der Umzug wurde abgebrochen.",
+    preparing: "Wird vorbereitet …",
+    exporting: "Wird von {here} exportiert (Teil {done, number} von {total, number}) …",
+    importing: "Wird auf {server} importiert (Teil {done, number} von {total, number}) …",
+    fileUntrusted:
+      "{server} akzeptiert keine Anfragen von der Adresse dieser Seite ({origin}), deshalb gehen die Daten als Datei hinüber.",
+    fileBlocked:
+      "Dein Browser konnte sich von dieser Seite aus nicht bei {server} anmelden, deshalb gehen die Daten als Datei hinüber.",
+    download: "Umzugsdatei herunterladen",
+    savedFiles:
+      "{count, plural, one {# Datei gespeichert.} other {# Dateien gespeichert – importiere alle.}}",
+    openTarget: "Öffne <target></target> und melde dich an oder erstelle ein Konto.",
+    importStep:
+      "Wähle unter Einstellungen → Daten → Bisherige Zeiten importieren die Datei aus und importiere sie. Die Vorschau zeigt die Einträge, bevor etwas geschrieben wird.",
+    trustHint: "Um nächstes Mal direkt zu kopieren, füge {origin} zu TRUSTED_ORIGINS dieses Servers hinzu.",
+    cannotSaveFiles:
+      "Diese App kann keine Dateien speichern. Öffne Track Your Time im Browser, um mit einer Datei umzuziehen.",
+    exportFailed: "Dieser Arbeitsbereich konnte nicht exportiert werden.",
+    tooLargeDay:
+      "Die Einträge vom {day} sind für einen Import zu groß. Exportiere diesen Tag separat.",
+    nothingToMove: "In diesem Arbeitsbereich gibt es keine abgeschlossenen Einträge zum Umziehen.",
+    found: "{version} unter {host} gefunden.",
+    done: {
+      complete:
+        "{count, plural, one {Der Eintrag ist jetzt auf {server}.} other {Alle # Einträge sind jetzt auf {server}.}}",
+      completeWithTime:
+        "{count, plural, one {Der Eintrag ist jetzt auf {server} – {time} erfasste Zeit kopiert.} other {Alle # Einträge sind jetzt auf {server} – {time} erfasste Zeit kopiert.}}",
+      incomplete:
+        "{missing, plural, one {# Eintrag} other {# Einträge}} von {total, number} {missing, plural, one {ist} other {sind}} nicht angekommen. Starte den Umzug noch einmal – Einträge, die schon dort sind, werden übersprungen.",
+      entries: "Kopierte Einträge",
+      skipped: "Schon vorhandene Einträge",
+      clients: "Kunden",
+      projects: "Projekte",
+      tasks: "Tätigkeiten",
+      tags: "Schlagwörter",
+      favorites: "Angeheftete Schnellstarts",
+      settings: "Arbeitsbereichseinstellungen",
+      restored: "Wiederhergestellt",
+      leftAsTheyWere: "Unverändert",
+      nothingChanged:
+        "Auf {here} wurde nichts geändert. Lösche die Daten dort, sobald du sie auf {there} geprüft hast.",
+      stay: "Auf {here} bleiben",
+      switch: "Dieses Gerät auf {there} umstellen",
+      openTarget: "{host} öffnen",
+    },
+  },
 };

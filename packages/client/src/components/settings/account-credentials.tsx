@@ -19,6 +19,8 @@ import { toast } from "@/components/ui/sonner";
 import { ErrorLine } from "@/components/settings/two-factor";
 import { SettingRow } from "@/components/settings/setting-row";
 import { authClient, webCallbackUrl } from "@/lib/auth-client";
+import { useT } from "@/i18n/use-t";
+import { translate } from "@/i18n/translate";
 
 /** better-auth's minimum, repeated so the form can say it before the server does. */
 export const MIN_PASSWORD_LENGTH = 8;
@@ -28,19 +30,29 @@ export function passwordChangeProblem(input: {
   next: string;
   confirm: string;
 }): string | null {
-  if (!input.current) return "Enter your current password.";
+  const t = translate("settings");
+  if (!input.current) return t("password.problems.currentMissing");
   if (input.next.length < MIN_PASSWORD_LENGTH) {
-    return `The new password needs at least ${MIN_PASSWORD_LENGTH} characters.`;
+    return t("password.problems.tooShort", { min: MIN_PASSWORD_LENGTH });
   }
-  if (input.next !== input.confirm) return "The new passwords do not match.";
-  if (input.next === input.current) return "The new password is the same as the current one.";
+  if (input.next !== input.confirm) return t("password.problems.mismatch");
+  if (input.next === input.current) return t("password.problems.unchanged");
   return null;
 }
 
-const PASSWORD_REFUSALS: Record<string, string> = {
-  INVALID_PASSWORD: "That current password is not correct. Nothing changed.",
-  PASSWORD_TOO_SHORT: `The new password needs at least ${MIN_PASSWORD_LENGTH} characters.`,
-  PASSWORD_TOO_LONG: "The new password is too long.",
+/** The server's refusal of a password change, in the reader's language. */
+const passwordRefusal = (code: string | undefined): string => {
+  const t = translate("settings");
+  switch (code) {
+    case "INVALID_PASSWORD":
+      return t("password.problems.wrongCurrent");
+    case "PASSWORD_TOO_SHORT":
+      return t("password.problems.tooShort", { min: MIN_PASSWORD_LENGTH });
+    case "PASSWORD_TOO_LONG":
+      return t("password.problems.tooLong");
+    default:
+      return t("password.problems.failed");
+  }
 };
 
 /**
@@ -58,6 +70,8 @@ const PASSWORD_REFUSALS: Record<string, string> = {
  * current session, so nothing here changes credential at all.
  */
 export function ChangePasswordRow({ hasPassword }: { hasPassword: boolean | null }): React.JSX.Element {
+  const t = useT("settings");
+  const tc = useT("common");
   const [open, setOpen] = React.useState(false);
   const [current, setCurrent] = React.useState("");
   const [next, setNext] = React.useState("");
@@ -97,7 +111,7 @@ export function ChangePasswordRow({ hasPassword }: { hasPassword: boolean | null
       .catch(() => ({ error: { code: "FAILED" } }));
     if (refusal) {
       setBusy(false);
-      setError(PASSWORD_REFUSALS[refusal.code ?? ""] ?? "Your password could not be changed. Try again.");
+      setError(passwordRefusal(refusal.code));
       return;
     }
     if (revokeOthers) {
@@ -106,26 +120,24 @@ export function ChangePasswordRow({ hasPassword }: { hasPassword: boolean | null
         .catch(() => ({ error: { code: "FAILED" } }));
       setBusy(false);
       if (revokeRefusal) {
-        toast.error("Password changed, but other devices are still signed in", {
-          description: "Sign them out in Settings → Devices.",
+        toast.error(t("password.toasts.othersStillSignedIn"), {
+          description: t("password.toasts.othersStillSignedInHint"),
         });
       } else {
-        toast.success("Password changed. Other devices are signed out.");
+        toast.success(t("password.toasts.changedOthersSignedOut"));
       }
     } else {
       setBusy(false);
-      toast.success("Password changed");
+      toast.success(t("password.toasts.changed"));
     }
     change(false);
   };
 
   return (
     <SettingRow
-      title="Password"
+      title={t("password.title")}
       description={
-        hasPassword === false
-          ? "Your account signs in with Google, so it has no password to change."
-          : "Change the password you sign in with."
+        hasPassword === false ? t("password.googleAccount") : t("password.description")
       }
       testId="setting-password"
     >
@@ -137,19 +149,19 @@ export function ChangePasswordRow({ hasPassword }: { hasPassword: boolean | null
         onClick={() => setOpen(true)}
         data-testid="change-password"
       >
-        Change password
+        {t("password.change")}
       </Button>
       <Dialog open={open} onOpenChange={change}>
         <DialogContent data-testid="change-password-dialog">
           <form onSubmit={(event) => void submit(event)} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Change password</DialogTitle>
+              <DialogTitle>{t("password.change")}</DialogTitle>
               <DialogDescription>
-                Use at least {MIN_PASSWORD_LENGTH} characters.
+                {t("password.minLength", { min: MIN_PASSWORD_LENGTH })}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
-              <Label htmlFor="current-password">Current password</Label>
+              <Label htmlFor="current-password">{t("password.current")}</Label>
               <Input
                 id="current-password"
                 type="password"
@@ -160,7 +172,7 @@ export function ChangePasswordRow({ hasPassword }: { hasPassword: boolean | null
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-password">New password</Label>
+              <Label htmlFor="new-password">{t("password.new")}</Label>
               <Input
                 id="new-password"
                 type="password"
@@ -171,7 +183,7 @@ export function ChangePasswordRow({ hasPassword }: { hasPassword: boolean | null
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm new password</Label>
+              <Label htmlFor="confirm-password">{t("password.confirm")}</Label>
               <Input
                 id="confirm-password"
                 type="password"
@@ -189,18 +201,17 @@ export function ChangePasswordRow({ hasPassword }: { hasPassword: boolean | null
                 data-testid="change-password-revoke"
               />
               <Label htmlFor="revoke-other-sessions" className="font-normal leading-snug">
-                Sign out every other device, including the mobile app, the browser
-                extension and Raycast
+                {t("password.revokeOthers")}
               </Label>
             </div>
             {error ? <ErrorLine message={error} /> : null}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => change(false)}>
-                Cancel
+                {tc("actions.cancel")}
               </Button>
               <Button type="submit" disabled={busy} data-testid="change-password-submit">
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                Change password
+                {t("password.change")}
               </Button>
             </DialogFooter>
           </form>
@@ -228,6 +239,8 @@ export function ChangeEmailRow({
   /** `health.check`'s `authConfig.emailVerificationRequired`; undefined while loading. */
   mailConfigured: boolean | undefined;
 }): React.JSX.Element {
+  const t = useT("settings");
+  const tc = useT("common");
   const [open, setOpen] = React.useState(false);
   const [email, setEmail] = React.useState("");
   const [sentTo, setSentTo] = React.useState<string | null>(null);
@@ -249,11 +262,11 @@ export function ChangeEmailRow({
     if (busy) return;
     const newEmail = email.trim();
     if (!EMAIL_PATTERN.test(newEmail)) {
-      setError("Enter a valid email address.");
+      setError(t("email.invalid"));
       return;
     }
     if (newEmail.toLowerCase() === currentEmail.toLowerCase()) {
-      setError("That is already your email address.");
+      setError(t("email.same"));
       return;
     }
     setBusy(true);
@@ -263,7 +276,7 @@ export function ChangeEmailRow({
       .catch(() => ({ error: { code: "FAILED" } }));
     setBusy(false);
     if (refusal) {
-      setError("Your email could not be changed. Try again.");
+      setError(t("email.failed"));
       return;
     }
     setSentTo(newEmail);
@@ -271,8 +284,8 @@ export function ChangeEmailRow({
 
   return (
     <SettingRow
-      title="Email address"
-      description="Where sign-in links and account emails go."
+      title={t("email.title")}
+      description={t("email.description")}
       testId="setting-email"
     >
       <Button
@@ -283,37 +296,34 @@ export function ChangeEmailRow({
         onClick={() => setOpen(true)}
         data-testid="change-email"
       >
-        Change email
+        {t("email.change")}
       </Button>
       <Dialog open={open} onOpenChange={change}>
         <DialogContent data-testid="change-email-dialog">
           {sentTo ? (
             <div className="space-y-4">
               <DialogHeader>
-                <DialogTitle>Confirm the new address</DialogTitle>
+                <DialogTitle>{t("email.sentTitle")}</DialogTitle>
                 <DialogDescription data-testid="change-email-sent">
                   {mailConfigured === false
-                    ? `This server sends no email, so the confirmation link for ${sentTo} was written to the server log. Your email changes when the link is opened.`
-                    : `We sent a link to ${sentTo}. Your email changes when you open it.`}
+                    ? t("email.sentToLog", { email: sentTo })
+                    : t("email.sent", { email: sentTo })}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <Button type="button" onClick={() => change(false)}>
-                  Done
+                  {tc("actions.done")}
                 </Button>
               </DialogFooter>
             </div>
           ) : (
             <form onSubmit={(event) => void submit(event)} className="space-y-4">
               <DialogHeader>
-                <DialogTitle>Change email address</DialogTitle>
-                <DialogDescription>
-                  Currently {currentEmail}. The new address gets a link, and the
-                  change happens when you open it.
-                </DialogDescription>
+                <DialogTitle>{t("email.dialogTitle")}</DialogTitle>
+                <DialogDescription>{t("email.current", { email: currentEmail })}</DialogDescription>
               </DialogHeader>
               <div className="space-y-2">
-                <Label htmlFor="new-email">New email address</Label>
+                <Label htmlFor="new-email">{t("email.newAddress")}</Label>
                 <Input
                   id="new-email"
                   type="email"
@@ -326,11 +336,11 @@ export function ChangeEmailRow({
               {error ? <ErrorLine message={error} /> : null}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => change(false)}>
-                  Cancel
+                  {tc("actions.cancel")}
                 </Button>
                 <Button type="submit" disabled={busy} data-testid="change-email-submit">
                   {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                  Send link
+                  {t("email.sendLink")}
                 </Button>
               </DialogFooter>
             </form>

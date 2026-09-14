@@ -19,6 +19,7 @@ export const tracker: Translation<typeof source> = {
     suggestions: "Frühere Beschreibungen",
     fill: "„{description}“ mit Projekt, Tätigkeit, Schlagwörtern und Abrechenbarkeit übernehmen",
     legend: "Tab vervollständigt · {shortcut} übernimmt Projekt, Tätigkeit und Schlagwörter",
+    ctrlEnter: "Strg+Enter",
   },
   fields: {
     startTime: "Uhrzeit (Beginn)",

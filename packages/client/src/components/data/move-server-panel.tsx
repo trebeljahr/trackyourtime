@@ -20,7 +20,6 @@ import {
   type ServerInfo,
 } from "@starter/core";
 import {
-  formatDurationShort,
   type ImportInput,
   type ImportResult,
   type WorkspaceExportInfo,
@@ -59,6 +58,9 @@ import {
 } from "@/lib/server-move";
 import { switchServer } from "@/lib/server-switch";
 import { trpc } from "@/lib/trpc";
+import { serverCheckMessage, serverInputMessage } from "@/lib/server-problem-message";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 
 /**
  * Settings → Data → "Move to another server".
@@ -94,13 +96,6 @@ type FileReason = "untrusted" | "blocked";
 
 type TargetInfo = { entries: number };
 
-const MOVE_ACCOUNT_LABEL = "Move to another server";
-
-const count = (value: number): string => value.toLocaleString("en-US");
-
-const plural = (value: number, one: string, many: string): string =>
-  `${count(value)} ${value === 1 ? one : many}`;
-
 const errorText = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message ? error.message : fallback;
 
@@ -111,6 +106,7 @@ const isTransportError = (error: unknown): boolean =>
 
 export function MoveServerPanel(): React.JSX.Element {
   const [open, setOpen] = React.useState(false);
+  const t = useT("settings");
   const here = serverLabel(getAbsoluteApiOrigin());
 
   return (
@@ -118,13 +114,10 @@ export function MoveServerPanel(): React.JSX.Element {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ArrowRightLeft className="size-4" />
-          Move to another server
+          {t("moveServer.title")}
         </CardTitle>
         <CardDescription>
-          Copy this workspace from {here} to another Track Your Time server —
-          your own, or {CLOUD_SERVER_LABEL}. Entries, clients, projects, tasks,
-          tags, workspace settings and your pinned quick starts arrive; nothing
-          here is changed or deleted.
+          {t("moveServer.description", { here, cloud: CLOUD_SERVER_LABEL })}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -135,7 +128,7 @@ export function MoveServerPanel(): React.JSX.Element {
           data-testid="move-server-open"
         >
           <ArrowRightLeft className="size-4" />
-          Move my data…
+          {t("moveServer.open")}
         </Button>
       </CardContent>
       {open ? <MoveServerDialog onClose={() => setOpen(false)} /> : null}
@@ -145,6 +138,9 @@ export function MoveServerPanel(): React.JSX.Element {
 
 function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
   const native = useIsNative();
+  const t = useT("settings");
+  const ts = useT("shell");
+  const tc = useT("common");
   const utils = trpc.useUtils();
   const currentOrigin = getAbsoluteApiOrigin();
   const here = serverLabel(currentOrigin);
@@ -210,13 +206,13 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
     if (mode === "own") {
       const parsed = normalizeServerInput(address);
       if (!parsed.ok) {
-        setError(parsed.message);
+        setError(serverInputMessage(parsed, address, ts));
         return;
       }
       origin = parsed.origin;
     }
     if (sameServerOrigin(origin, currentOrigin)) {
-      setError(`That is ${here}, the server this workspace is already on.`);
+      setError(t("moveServer.sameServer", { here }));
       return;
     }
 
@@ -224,14 +220,12 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
     try {
       const result = await checkServer(origin);
       if (!result.ok) {
-        setError(result.message);
+        setError(serverCheckMessage(result, origin, ts));
         return;
       }
       if (result.server.originTrusted === false) {
         if (native) {
-          setError(
-            `${serverHost(origin)} does not accept sign-ins from this app yet. Its administrator needs to set TRUST_STORE_APPS=true, or add capacitor://localhost and https://localhost to TRUSTED_ORIGINS.`,
-          );
+          setError(t("moveServer.untrustedApp", { host: serverHost(origin) }));
           return;
         }
         setStep({ kind: "file", server: result.server, reason: "untrusted" });
@@ -273,7 +267,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
       setError(
         caught instanceof AuthError
           ? caught.message
-          : errorText(caught, `Could not sign in to ${serverHost(server.origin)}.`),
+          : errorText(caught, t("moveServer.signInFailed", { host: serverHost(server.origin) })),
       );
     } finally {
       setBusy(false);
@@ -296,7 +290,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
       });
       setStep({ kind: "done", server, token, report });
     } catch (caught) {
-      setError(errorText(caught, "The move stopped."));
+      setError(errorText(caught, t("moveServer.stopped")));
       const entries = await targetClient(server, token)
         .countEntries()
         .catch(() => 0);
@@ -312,7 +306,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
 
   const downloadParts = async (): Promise<void> => {
     if (!canDownloadFiles()) {
-      setError("This app cannot save files. Open Track Your Time in a browser to move through a file.");
+      setError(t("moveServer.cannotSaveFiles"));
       return;
     }
     setError(null);
@@ -328,7 +322,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
       }
       setSaved(parts.length);
     } catch (caught) {
-      setError(errorText(caught, "Could not export this workspace."));
+      setError(errorText(caught, t("moveServer.exportFailed")));
     } finally {
       setBusy(false);
     }
@@ -347,16 +341,17 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
     >
       <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="move-server-dialog">
         <DialogHeader>
-          <DialogTitle>{MOVE_ACCOUNT_LABEL}</DialogTitle>
+          <DialogTitle>{t("moveServer.title")}</DialogTitle>
           <DialogDescription>
-            From {here}
-            {"server" in step ? ` to ${serverLabel(step.server.origin)}` : ""}.
+            {"server" in step
+              ? t("moveServer.fromTo", { here, there: serverLabel(step.server.origin) })
+              : t("moveServer.from", { here })}
           </DialogDescription>
         </DialogHeader>
 
         {step.kind === "target" ? (
           <form className="space-y-4" onSubmit={(event) => void checkTarget(event)}>
-            <div role="radiogroup" aria-label="Move to" className="space-y-2 text-sm">
+            <div role="radiogroup" aria-label={t("moveServer.targetLabel")} className="space-y-2 text-sm">
               {sameServerOrigin(currentOrigin, CLOUD_API_ORIGIN) ? null : (
                 <label className="flex items-center gap-2">
                   <input
@@ -377,12 +372,12 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
                   onChange={() => setMode("own")}
                   data-testid="move-target-own"
                 />
-                My own server
+                {t("moveServer.ownServer")}
               </label>
             </div>
             {mode === "own" ? (
               <div className="space-y-2">
-                <Label htmlFor="move-target-address">Server address</Label>
+                <Label htmlFor="move-target-address">{t("moveServer.address")}</Label>
                 <Input
                   id="move-target-address"
                   type="text"
@@ -400,7 +395,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
             <MoveError message={error} />
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={close}>
-                Cancel
+                {tc("actions.cancel")}
               </Button>
               <Button
                 type="submit"
@@ -408,7 +403,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
                 data-testid="move-target-check"
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                Check server
+                {t("moveServer.check")}
               </Button>
             </DialogFooter>
           </form>
@@ -422,12 +417,12 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
             <ServerFound server={step.server} />
             <p className="text-sm text-muted-foreground">
               {authMode === "sign-in"
-                ? `Sign in to your account on ${serverLabel(step.server.origin)}. The data is copied into that account's workspace.`
-                : `Create an account on ${serverLabel(step.server.origin)} to copy the data into.`}
+                ? t("moveServer.signInHint", { server: serverLabel(step.server.origin) })
+                : t("moveServer.signUpHint", { server: serverLabel(step.server.origin) })}
             </p>
             {authMode === "sign-up" ? (
               <div className="space-y-2">
-                <Label htmlFor="move-name">Name</Label>
+                <Label htmlFor="move-name">{tc("fields.name")}</Label>
                 <Input
                   id="move-name"
                   value={name}
@@ -438,7 +433,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
               </div>
             ) : null}
             <div className="space-y-2">
-              <Label htmlFor="move-email">Email</Label>
+              <Label htmlFor="move-email">{tc("fields.email")}</Label>
               <Input
                 id="move-email"
                 type="email"
@@ -450,7 +445,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="move-password">Password</Label>
+              <Label htmlFor="move-password">{tc("fields.password")}</Label>
               <Input
                 id="move-password"
                 type="password"
@@ -470,9 +465,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
               }}
               data-testid="move-account-toggle"
             >
-              {authMode === "sign-in"
-                ? "No account there yet? Create one"
-                : "Already have an account there? Sign in"}
+              {authMode === "sign-in" ? t("moveServer.toSignUp") : t("moveServer.toSignIn")}
             </button>
             <MoveError message={error} />
             <DialogFooter>
@@ -484,11 +477,11 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
                   setError(null);
                 }}
               >
-                Back
+                {tc("actions.back")}
               </Button>
               <Button type="submit" disabled={busy} data-testid="move-account-submit">
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                {authMode === "sign-in" ? "Sign in" : "Create account"}
+                {authMode === "sign-in" ? tc("actions.signIn") : t("moveServer.createAccount")}
               </Button>
             </DialogFooter>
           </form>
@@ -500,42 +493,35 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
             <ul className="list-disc space-y-1 pl-5">
               <li data-testid="move-ready-count">
                 {exportable === null
-                  ? "Counting the entries to copy…"
-                  : `${plural(exportable, "finished entry", "finished entries")} will be copied from ${here}.`}
+                  ? t("moveServer.counting")
+                  : t("moveServer.willCopy", { count: exportable, here })}
               </li>
               {step.info.entries > 0 ? (
                 <li data-testid="move-ready-target-busy">
-                  The workspace on {serverLabel(step.server.origin)} already
-                  has {plural(step.info.entries, "entry", "entries")}. Entries
-                  already there are skipped, and its workspace settings are
-                  left as they are.
+                  {t("moveServer.targetHasEntries", {
+                    count: step.info.entries,
+                    server: serverLabel(step.server.origin),
+                  })}
                 </li>
               ) : (
-                <li>
-                  Workspace settings — currency, rates, week start — come
-                  along too.
-                </li>
+                <li>{t("moveServer.settingsComeAlong")}</li>
               )}
-              <li>
-                Clients, projects, tasks and tags arrive with the entries that
-                use them. Issued invoices are not re-created.
-              </li>
+              <li>{t("moveServer.catalogComesAlong")}</li>
               {running.data ? (
                 <li className="text-destructive" data-testid="move-ready-running">
-                  A timer is running. It is not copied until it is stopped.
+                  {t("moveServer.running")}
                 </li>
               ) : null}
               {sourceInfo.data?.moneyRedacted ? (
                 <li className="text-destructive" data-testid="move-ready-redacted">
-                  Your role does not include other members&rsquo; money, so
-                  every rate is left out of the copy.
+                  {t("moveServer.redacted")}
                 </li>
               ) : null}
             </ul>
             <MoveError message={error} />
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={close}>
-                Cancel
+                {tc("actions.cancel")}
               </Button>
               <Button
                 type="button"
@@ -543,7 +529,7 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
                 onClick={() => void copy(step.server, step.token)}
                 data-testid="move-copy"
               >
-                Copy to {serverLabel(step.server.origin)}
+                {t("moveServer.copyTo", { server: serverLabel(step.server.origin) })}
               </Button>
             </DialogFooter>
           </div>
@@ -553,10 +539,18 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
           <p className="flex items-center gap-2 text-sm" role="status" data-testid="move-copying">
             <Loader2 className="size-4 animate-spin" />
             {step.progress === null
-              ? "Getting ready…"
+              ? t("moveServer.preparing")
               : step.progress.phase === "exporting"
-                ? `Exporting from ${here} (part ${step.progress.done} of ${step.progress.total})…`
-                : `Importing on ${serverLabel(step.server.origin)} (part ${Math.min(step.progress.done + 1, step.progress.total)} of ${step.progress.total})…`}
+                ? t("moveServer.exporting", {
+                    here,
+                    done: step.progress.done,
+                    total: step.progress.total,
+                  })
+                : t("moveServer.importing", {
+                    server: serverLabel(step.server.origin),
+                    done: Math.min(step.progress.done + 1, step.progress.total),
+                    total: step.progress.total,
+                  })}
           </p>
         ) : null}
 
@@ -587,8 +581,11 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
             <ServerFound server={step.server} />
             <p>
               {step.reason === "untrusted"
-                ? `${serverLabel(step.server.origin)} does not accept requests from this page's address (${window.location.origin}), so the data goes across in a file.`
-                : `Your browser could not sign in to ${serverLabel(step.server.origin)} from this page, so the data goes across in a file.`}
+                ? t("moveServer.fileUntrusted", {
+                    server: serverLabel(step.server.origin),
+                    origin: window.location.origin,
+                  })
+                : t("moveServer.fileBlocked", { server: serverLabel(step.server.origin) })}
             </p>
             <ol className="list-decimal space-y-2 pl-5">
               <li>
@@ -601,45 +598,43 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
                   data-testid="move-file-download"
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                  Download the move file
+                  {t("moveServer.download")}
                 </Button>
                 {saved !== null ? (
                   <span className="ml-2 text-muted-foreground" data-testid="move-file-saved">
-                    {saved === 1 ? "Saved 1 file." : `Saved ${saved} files — import all of them.`}
+                    {t("moveServer.savedFiles", { count: saved })}
                   </span>
                 ) : null}
               </li>
               <li>
-                Open{" "}
-                {step.server.webUrl ? (
-                  <a
-                    href={`${step.server.webUrl.replace(/\/+$/, "")}/settings/?tab=data`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary hover:underline"
-                    data-testid="move-file-target-link"
-                  >
-                    {serverHost(step.server.webUrl)}
-                  </a>
-                ) : (
-                  serverLabel(step.server.origin)
-                )}{" "}
-                and sign in, or create an account.
+                {t.rich("moveServer.openTarget", {
+                  target: () => {
+                    const { webUrl } = step.server;
+                    return webUrl ? (
+                      <a
+                        href={`${webUrl.replace(/\/+$/, "")}/settings/?tab=data`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline"
+                        data-testid="move-file-target-link"
+                      >
+                        {serverHost(webUrl)}
+                      </a>
+                    ) : (
+                      serverLabel(step.server.origin)
+                    );
+                  },
+                })}
               </li>
-              <li>
-                In Settings → Data → Import your history, choose the file and
-                import it. The preview shows the entries before anything is
-                written.
-              </li>
+              <li>{t("moveServer.importStep")}</li>
             </ol>
             <p className="text-muted-foreground">
-              To copy directly next time, add {window.location.origin} to that
-              server&apos;s TRUSTED_ORIGINS.
+              {t("moveServer.trustHint", { origin: window.location.origin })}
             </p>
             <MoveError message={error} />
             <DialogFooter>
               <Button type="button" onClick={close}>
-                Done
+                {tc("actions.done")}
               </Button>
             </DialogFooter>
           </div>
@@ -650,9 +645,13 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
 }
 
 function ServerFound({ server }: { server: ServerInfo }): React.JSX.Element {
+  const t = useT("settings");
   return (
     <p className="text-sm text-muted-foreground" data-testid="move-server-found">
-      Found {describeServerVersion(server)} at {serverHost(server.origin)}.
+      {t("moveServer.found", {
+        version: describeServerVersion(server),
+        host: serverHost(server.origin),
+      })}
     </p>
   );
 }
@@ -683,17 +682,25 @@ function MoveDone({
   onClose: () => void;
   busy: boolean;
 }): React.JSX.Element {
+  const t = useT("settings");
+  const tc = useT("common");
+  const f = useFormat();
+  const count = (value: number): string => f.number(value);
   const there = serverLabel(server.origin);
   const missing = report.entriesExported - report.entriesCreated - report.entriesSkipped;
   const rows: Array<[string, string, string]> = [
-    ["Entries copied", count(report.entriesCreated), "move-done-entries"],
-    ["Entries already there", count(report.entriesSkipped), "move-done-skipped"],
-    ["Clients", count(report.clientsCreated), "move-done-clients"],
-    ["Projects", count(report.projectsCreated), "move-done-projects"],
-    ["Tasks", count(report.tasksCreated), "move-done-tasks"],
-    ["Tags", count(report.tagsCreated), "move-done-tags"],
-    ["Pinned quick starts", count(report.favoritesCreated), "move-done-favorites"],
-    ["Workspace settings", report.settingsRestored ? "Restored" : "Left as they were", "move-done-settings"],
+    [t("moveServer.done.entries"), count(report.entriesCreated), "move-done-entries"],
+    [t("moveServer.done.skipped"), count(report.entriesSkipped), "move-done-skipped"],
+    [t("moveServer.done.clients"), count(report.clientsCreated), "move-done-clients"],
+    [t("moveServer.done.projects"), count(report.projectsCreated), "move-done-projects"],
+    [t("moveServer.done.tasks"), count(report.tasksCreated), "move-done-tasks"],
+    [t("moveServer.done.tags"), count(report.tagsCreated), "move-done-tags"],
+    [t("moveServer.done.favorites"), count(report.favoritesCreated), "move-done-favorites"],
+    [
+      t("moveServer.done.settings"),
+      report.settingsRestored ? t("moveServer.done.restored") : t("moveServer.done.leftAsTheyWere"),
+      "move-done-settings",
+    ],
   ];
 
   return (
@@ -701,14 +708,21 @@ function MoveDone({
       {report.complete ? (
         <p className="flex items-center gap-2 font-medium" data-testid="move-done-complete">
           <CheckCircle2 className="size-4 text-primary" />
-          All {plural(report.entriesExported, "entry is", "entries are")} on {there}
-          {report.totalSec > 0 ? ` — ${formatDurationShort(report.totalSec)} of tracked time copied` : ""}.
+          {report.totalSec > 0
+            ? t("moveServer.done.completeWithTime", {
+                count: report.entriesExported,
+                server: there,
+                time: f.durationShort(report.totalSec),
+              })
+            : t("moveServer.done.complete", { count: report.entriesExported, server: there })}
         </p>
       ) : (
         <p className="flex items-center gap-2 font-medium text-destructive" data-testid="move-done-incomplete">
           <TriangleAlert className="size-4" />
-          {plural(missing, "entry", "entries")} of {count(report.entriesExported)} did not
-          arrive. Run the move again — entries already there are skipped.
+          {t("moveServer.done.incomplete", {
+            missing,
+            total: report.entriesExported,
+          })}
         </p>
       )}
       <table className="w-full text-left">
@@ -726,14 +740,13 @@ function MoveDone({
         </tbody>
       </table>
       <p className="text-muted-foreground">
-        Nothing on {here} was changed. Delete it there once you have checked
-        the data on {there}.
+        {t("moveServer.done.nothingChanged", { here, there })}
       </p>
       <DialogFooter className="flex-wrap gap-2">
         {native ? (
           <>
             <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
-              Stay on {here}
+              {t("moveServer.done.stay", { here })}
             </Button>
             <Button
               type="button"
@@ -741,13 +754,13 @@ function MoveDone({
               disabled={busy}
               data-testid="move-done-switch"
             >
-              Switch this device to {there}
+              {t("moveServer.done.switch", { there })}
             </Button>
           </>
         ) : (
           <>
             <Button type="button" variant="ghost" onClick={onClose}>
-              Done
+              {tc("actions.done")}
             </Button>
             {server.webUrl ? (
               <Button asChild>
@@ -757,7 +770,7 @@ function MoveDone({
                   rel="noreferrer"
                   data-testid="move-done-open"
                 >
-                  Open {serverHost(server.webUrl)}
+                  {t("moveServer.done.openTarget", { host: serverHost(server.webUrl) })}
                 </a>
               </Button>
             ) : null}

@@ -3,20 +3,9 @@
 import * as React from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { useT } from "@/i18n/use-t";
 
 type Method = "totp" | "backup";
-
-/**
- * Shown by /login instead of the second step on a native shell. The challenge
- * is a cookie a WKWebView cannot send to the API, so the step could never
- * succeed there; saying so beats a code field that always answers "invalid".
- * The native-clients follow-up replaces this with a real step.
- */
-export const NATIVE_TWO_FACTOR_UNSUPPORTED =
-  "This account uses two-factor authentication, which the app does not support yet. Sign in on the web app instead.";
-
-export const EMAIL_NOT_VERIFIED_MESSAGE =
-  "Verify your email address first. We sent a new verification link to your inbox.";
 
 /** What the challenge screen tells the page once it is done. */
 export type ChallengeOutcome = "verified" | "expired";
@@ -46,6 +35,8 @@ export function TwoFactorChallenge({
   const [code, setCode] = React.useState("");
   const [error, setError] = React.useState("");
   const [verifying, setVerifying] = React.useState(false);
+  const t = useT("shell");
+  const tc = useT("common");
 
   const submit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
@@ -64,16 +55,14 @@ export function TwoFactorChallenge({
           return;
         }
         setError(
-          method === "totp"
-            ? "That code is not valid. Check the time on your device and try the next code."
-            : "That backup code is not valid or has already been used.",
+          method === "totp" ? t("auth.twoFactor.invalidTotp") : t("auth.twoFactor.invalidBackup"),
         );
         setVerifying(false);
         return;
       }
       await onDone("verified");
     } catch {
-      setError("An unexpected error occurred");
+      setError(t("auth.twoFactor.unexpected"));
       setVerifying(false);
     }
   };
@@ -94,12 +83,10 @@ export function TwoFactorChallenge({
 
       <div className="space-y-2">
         <label htmlFor="two-factor-code" className="text-sm font-medium">
-          {method === "totp" ? "Authentication code" : "Backup code"}
+          {method === "totp" ? t("auth.twoFactor.totpLabel") : t("auth.twoFactor.backupLabel")}
         </label>
         <p className="text-sm text-muted-foreground">
-          {method === "totp"
-            ? "Enter the 6-digit code from your authenticator app."
-            : "Enter one of the backup codes you saved when you turned on two-factor authentication. Each code works once."}
+          {method === "totp" ? t("auth.twoFactor.totpHint") : t("auth.twoFactor.backupHint")}
         </p>
         <input
           id="two-factor-code"
@@ -120,7 +107,7 @@ export function TwoFactorChallenge({
         className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         data-testid="two-factor-submit"
       >
-        {verifying ? "Verifying..." : "Verify"}
+        {verifying ? t("auth.twoFactor.verifying") : t("auth.twoFactor.verify")}
       </button>
 
       <div className="flex items-center justify-between text-sm">
@@ -130,10 +117,10 @@ export function TwoFactorChallenge({
           className="text-primary hover:underline"
           data-testid="two-factor-switch"
         >
-          {method === "totp" ? "Use a backup code" : "Use an authenticator code"}
+          {method === "totp" ? t("auth.twoFactor.useBackup") : t("auth.twoFactor.useTotp")}
         </button>
         <button type="button" onClick={onCancel} className="text-muted-foreground hover:underline">
-          Back
+          {tc("actions.back")}
         </button>
       </div>
     </form>

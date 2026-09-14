@@ -15,8 +15,6 @@ import { AuthHeader } from "@/components/auth-header";
 import { NativeServerPicker } from "@/components/server-picker";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import {
-  EMAIL_NOT_VERIFIED_MESSAGE,
-  NATIVE_TWO_FACTOR_UNSUPPORTED,
   TwoFactorChallenge,
   type ChallengeOutcome,
 } from "@/components/two-factor-challenge";
@@ -91,13 +89,16 @@ export default function LoginPage() {
             ),
           })
           .catch(() => undefined);
-        setError(EMAIL_NOT_VERIFIED_MESSAGE);
+        setError(translate("shell")("auth.login.emailNotVerified"));
       } else if (result.error) {
         setError(authErrorMessage(result.error, "login"));
       } else if (isTwoFactorChallenge(result.data)) {
         // No session exists yet, and no token was issued.
         if (isNative()) {
-          setError(NATIVE_TWO_FACTOR_UNSUPPORTED);
+          // The challenge is a cookie a WKWebView cannot send to the API, so
+          // the step could never succeed there; saying so beats a code field
+          // that always answers "invalid".
+          setError(translate("shell")("auth.twoFactor.nativeUnsupported"));
         } else {
           setStep("two-factor");
         }
@@ -121,7 +122,7 @@ export default function LoginPage() {
     if (outcome === "expired") {
       setStep("password");
       setPassword("");
-      setError("The sign-in took too long. Enter your password again.");
+      setError(translate("shell")("auth.login.challengeExpired"));
       return;
     }
     await getSession();
@@ -135,8 +136,8 @@ export default function LoginPage() {
       <div className="flex min-h-screen items-center justify-center p-8">
         <div className="mx-auto w-full max-w-sm space-y-6">
           <AuthHeader
-            title="Two-factor authentication"
-            subtitle={`Signing in as ${email}`}
+            title={t("auth.twoFactor.title")}
+            subtitle={t("auth.twoFactor.signingInAs", { email })}
           />
           <TwoFactorChallenge
             onDone={handleChallenge}

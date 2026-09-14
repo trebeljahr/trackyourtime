@@ -772,4 +772,161 @@ export const settings = {
     invalidTerms: "Enter a whole number of days from 0 to 365.",
     invalidCountry: "Enter a two-letter country code.",
   },
+  /** Settings → Account → Two-factor authentication. */
+  twoFactor: {
+    title: "Two-factor authentication",
+    googleAccount: "Your account signs in with Google, which has its own two-factor settings.",
+    on: "On. Signing in needs a code from your authenticator app or a backup code.",
+    off: "Off. Add a code from an authenticator app to every sign-in.",
+    turnOn: "Turn on",
+    turnOff: "Turn off",
+    invalidPassword: "That password is not correct.",
+    invalidCode: "That code is not valid. Check the time on your device and try the next code.",
+    enabledToast: "Two-factor authentication is on",
+    disabledToast: "Two-factor authentication is off",
+    enable: {
+      title: "Turn on two-factor authentication",
+      description:
+        "Every sign-in on the web will ask for a code from an authenticator app. Until the mobile app and the browser extension support it, they cannot sign in to this account; devices that are already signed in stay signed in.",
+    },
+    scan: {
+      title: "Scan the QR code",
+      description: "Scan it with your authenticator app, then enter the 6-digit code the app shows.",
+      qrLabel: "QR code for your authenticator app",
+      manualKey: "Cannot scan it? Enter this key:",
+      code: "Code",
+      verify: "Verify",
+    },
+    codes: {
+      title: "Save your backup codes",
+      description:
+        "Each code signs you in once if you lose your authenticator app. Store them somewhere safe. They are not shown again.",
+      copied: "Backup codes copied",
+      copyFailed: "Could not copy. Select the codes instead.",
+      saved: "I saved them",
+    },
+    disable: {
+      title: "Turn off two-factor authentication?",
+      description: "Signing in will need only your password. Your backup codes stop working.",
+    },
+  },
+  /** Settings → Account → Password. */
+  password: {
+    title: "Password",
+    googleAccount: "Your account signs in with Google, so it has no password to change.",
+    description: "Change the password you sign in with.",
+    change: "Change password",
+    minLength: "Use at least {min, number} characters.",
+    current: "Current password",
+    new: "New password",
+    confirm: "Confirm new password",
+    revokeOthers: "Sign out every other device, including the mobile app, the browser extension and Raycast",
+    problems: {
+      currentMissing: "Enter your current password.",
+      tooShort: "The new password needs at least {min, number} characters.",
+      mismatch: "The new passwords do not match.",
+      unchanged: "The new password is the same as the current one.",
+      wrongCurrent: "That current password is not correct. Nothing changed.",
+      tooLong: "The new password is too long.",
+      failed: "Your password could not be changed. Try again.",
+    },
+    toasts: {
+      othersStillSignedIn: "Password changed, but other devices are still signed in",
+      othersStillSignedInHint: "Sign them out in Settings → Devices.",
+      changedOthersSignedOut: "Password changed. Other devices are signed out.",
+      changed: "Password changed",
+    },
+  },
+  /** Settings → Account → Email address. */
+  email: {
+    title: "Email address",
+    description: "Where sign-in links and account emails go.",
+    change: "Change email",
+    dialogTitle: "Change email address",
+    current: "Currently {email}. The new address gets a link, and the change happens when you open it.",
+    newAddress: "New email address",
+    sendLink: "Send link",
+    sentTitle: "Confirm the new address",
+    sent: "We sent a link to {email}. Your email changes when you open it.",
+    sentToLog:
+      "This server sends no email, so the confirmation link for {email} was written to the server log. Your email changes when the link is opened.",
+    invalid: "Enter a valid email address.",
+    same: "That is already your email address.",
+    failed: "Your email could not be changed. Try again.",
+  },
+  /** Settings → Data → Move to another server. */
+  moveServer: {
+    title: "Move to another server",
+    description:
+      "Copy this workspace from {here} to another Track Your Time server — your own, or {cloud}. Entries, clients, projects, tasks, tags, workspace settings and your pinned quick starts arrive; nothing here is changed or deleted.",
+    open: "Move my data…",
+    from: "From {here}.",
+    fromTo: "From {here} to {there}.",
+    targetLabel: "Move to",
+    ownServer: "My own server",
+    address: "Server address",
+    check: "Check server",
+    sameServer: "That is {here}, the server this workspace is already on.",
+    untrustedApp:
+      "{host} does not accept sign-ins from this app yet. Its administrator needs to set TRUST_STORE_APPS=true, or add capacitor://localhost and https://localhost to TRUSTED_ORIGINS.",
+    signInHint: "Sign in to your account on {server}. The data is copied into that account's workspace.",
+    signUpHint: "Create an account on {server} to copy the data into.",
+    toSignUp: "No account there yet? Create one",
+    toSignIn: "Already have an account there? Sign in",
+    createAccount: "Create account",
+    signInFailed: "Could not sign in to {host}.",
+    counting: "Counting the entries to copy…",
+    willCopy:
+      "{count, plural, one {# finished entry will be copied from {here}.} other {# finished entries will be copied from {here}.}}",
+    targetHasEntries:
+      "{count, plural, one {The workspace on {server} already has # entry. Entries already there are skipped, and its workspace settings are left as they are.} other {The workspace on {server} already has # entries. Entries already there are skipped, and its workspace settings are left as they are.}}",
+    settingsComeAlong: "Workspace settings — currency, rates, week start — come along too.",
+    catalogComesAlong:
+      "Clients, projects, tasks and tags arrive with the entries that use them. Issued invoices are not re-created.",
+    running: "A timer is running. It is not copied until it is stopped.",
+    redacted: "Your role does not include other members’ money, so every rate is left out of the copy.",
+    copyTo: "Copy to {server}",
+    stopped: "The move stopped.",
+    preparing: "Getting ready…",
+    exporting: "Exporting from {here} (part {done, number} of {total, number})…",
+    importing: "Importing on {server} (part {done, number} of {total, number})…",
+    fileUntrusted:
+      "{server} does not accept requests from this page's address ({origin}), so the data goes across in a file.",
+    fileBlocked:
+      "Your browser could not sign in to {server} from this page, so the data goes across in a file.",
+    download: "Download the move file",
+    savedFiles:
+      "{count, plural, one {Saved # file.} other {Saved # files — import all of them.}}",
+    openTarget: "Open <target></target> and sign in, or create an account.",
+    importStep:
+      "In Settings → Data → Import your history, choose the file and import it. The preview shows the entries before anything is written.",
+    trustHint: "To copy directly next time, add {origin} to that server's TRUSTED_ORIGINS.",
+    cannotSaveFiles: "This app cannot save files. Open Track Your Time in a browser to move through a file.",
+    exportFailed: "Could not export this workspace.",
+    tooLargeDay: "The entries on {day} are too large for one import. Export that day separately.",
+    nothingToMove: "There are no finished entries in this workspace to move.",
+    found: "Found {version} at {host}.",
+    done: {
+      complete:
+        "{count, plural, one {All # entry is on {server}.} other {All # entries are on {server}.}}",
+      completeWithTime:
+        "{count, plural, one {All # entry is on {server} — {time} of tracked time copied.} other {All # entries are on {server} — {time} of tracked time copied.}}",
+      incomplete:
+        "{missing, plural, one {# entry} other {# entries}} of {total, number} did not arrive. Run the move again — entries already there are skipped.",
+      entries: "Entries copied",
+      skipped: "Entries already there",
+      clients: "Clients",
+      projects: "Projects",
+      tasks: "Tasks",
+      tags: "Tags",
+      favorites: "Pinned quick starts",
+      settings: "Workspace settings",
+      restored: "Restored",
+      leftAsTheyWere: "Left as they were",
+      nothingChanged: "Nothing on {here} was changed. Delete it there once you have checked the data on {there}.",
+      stay: "Stay on {here}",
+      switch: "Switch this device to {there}",
+      openTarget: "Open {host}",
+    },
+  },
 } as const;

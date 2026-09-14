@@ -29,6 +29,8 @@ import {
   type WorkspaceExport,
 } from "@starter/shared";
 
+import { translate } from "@/i18n/translate";
+
 /** An export range — both ends inclusive, by the entry's start date (UTC). */
 export type MoveRange = { from?: string; to?: string };
 
@@ -158,9 +160,7 @@ async function exportRange(
     to: range.to ?? MOVE_EPOCH.to,
   };
   if (isSingleDay(bounded)) {
-    throw new MoveError(
-      `The entries on ${bounded.from} are too large for one import. Export that day separately.`,
-    );
+    throw new MoveError(translate("settings")("moveServer.tooLargeDay", { day: bounded.from }));
   }
   const [early, late] = splitRange(bounded);
   return [
@@ -293,7 +293,7 @@ export async function moveWorkspace(args: {
     onPart: (done, total) => onProgress?.({ phase: "exporting", done, total }),
   });
   if (parts.length === 1 && parts[0]?.entries === 0) {
-    throw new MoveError("There are no finished entries in this workspace to move.");
+    throw new MoveError(translate("settings")("moveServer.nothingToMove"));
   }
 
   const results: Array<{ entries: number; result: ImportResult | null }> = [];

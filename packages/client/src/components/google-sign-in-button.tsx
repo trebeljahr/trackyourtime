@@ -5,6 +5,7 @@ import * as React from "react";
 import { isNative } from "@/mobile/bridge";
 import { POST_AUTH_REDIRECT, signIn, webCallbackUrl } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
+import { useT } from "@/i18n/use-t";
 
 /**
  * Why the Google button is or is not live.
@@ -38,10 +39,10 @@ export function isAppShell(): boolean {
   return !/^https?:$/.test(window.location.protocol);
 }
 
-const NOTES: Partial<Record<GoogleAvailability, string>> = {
-  shell: "Google sign-in works on the web app only. Use your email and password here.",
-  unconfigured: "Google sign-in is not set up on this server.",
-};
+const NOTES = {
+  shell: "auth.google.shellNote",
+  unconfigured: "auth.google.unconfiguredNote",
+} as const satisfies Partial<Record<GoogleAvailability, string>>;
 
 /**
  * "Continue with Google", on /login and /signup.
@@ -56,6 +57,7 @@ export function GoogleSignInButton(): React.JSX.Element {
   const [shell, setShell] = React.useState(false);
   const [starting, setStarting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const t = useT("shell");
 
   React.useEffect(() => {
     setShell(isAppShell());
@@ -73,7 +75,9 @@ export function GoogleSignInButton(): React.JSX.Element {
     shell,
     googleEnabled: health.data?.authConfig.googleEnabled,
   });
-  const note = NOTES[availability];
+  const noteKey =
+    availability === "shell" || availability === "unconfigured" ? NOTES[availability] : null;
+  const note = noteKey ? t(noteKey) : null;
 
   const start = async (): Promise<void> => {
     setStarting(true);
@@ -85,12 +89,12 @@ export function GoogleSignInButton(): React.JSX.Element {
         errorCallbackURL: webCallbackUrl("/login"),
       });
       if (result.error) {
-        setError(result.error.message ?? "Google sign-in could not start");
+        setError(result.error.message ?? t("auth.google.couldNotStart"));
         setStarting(false);
       }
       // On success the browser is already navigating to Google.
     } catch {
-      setError("Google sign-in could not start");
+      setError(t("auth.google.couldNotStart"));
       setStarting(false);
     }
   };
@@ -110,7 +114,7 @@ export function GoogleSignInButton(): React.JSX.Element {
             d="M21.35 11.1H12v2.9h5.35c-.25 1.45-1.7 4.25-5.35 4.25-3.2 0-5.8-2.65-5.8-5.9s2.6-5.9 5.8-5.9c1.8 0 3.05.8 3.75 1.45l2.55-2.45C16.7 3.95 14.55 3 12 3 6.95 3 2.9 7.05 2.9 12s4.05 9 9.1 9c5.25 0 8.7-3.7 8.7-8.9 0-.6-.05-1.05-.15-1.5z"
           />
         </svg>
-        Continue with Google
+        {t("auth.google.continue")}
       </button>
       {note ? (
         <p className="text-center text-xs text-muted-foreground" data-testid="google-sign-in-note">

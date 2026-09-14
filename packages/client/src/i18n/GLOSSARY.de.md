@@ -129,6 +129,13 @@ terms; it is the reference when in doubt.
 | invoice PDF labels | Rechnungsempfänger, Rechnungsdatum, Fälligkeitsdatum, Leistungszeitraum, Zwischensumme, USt., Gesamtbetrag | no legal fields beyond what the English invoice prints |
 | popup (extension) | Pop-up | Duden spelling, in the app, the marketing pages and the store listing |
 | idle span („no input for 12 min“) | „{span} lang keine Eingabe“, „Bildschirm war {span} lang gesperrt“ | not „seit“, which says it is still going on |
+| two-factor authentication, authenticator app, backup code | Zwei-Faktor-Authentifizierung, Authenticator-App, Backup-Code | the code on /login is „Bestätigungscode“; turn on / off = einschalten / ausschalten |
+| verification link | Bestätigungslink | „E-Mail-Adresse bestätigen“ for verify your email |
+| server, server address, my own server | Server, Serveradresse, Mein eigener Server | the build's own server is „Standard ({host})“; „Track Your Time cloud“ is a name and stays as it is |
+| move (a workspace to another server) | umziehen, Umzug | „Auf einen anderen Server umziehen“; never „verschieben“, which reads as moving entries in time |
+| activity capture (extension) | Aktivitätserfassung | „Aktivität wird erfasst“ for the running state |
+| suggestion, accept, dismiss (activity) | Vorschlag, übernehmen, ausblenden | „ausblenden“ as in `common`; a dismissed suggestion is „ausgeblendet“, never „verworfen“ |
+| rule (file a site under a project) | Regel | „{site} immer ablegen unter“ |
 
 ### Decisions worth arguing about
 

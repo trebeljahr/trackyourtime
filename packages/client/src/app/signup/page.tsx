@@ -85,8 +85,8 @@ export default function SignupPage() {
       <div className="flex min-h-screen items-center justify-center p-8">
         <div className="mx-auto w-full max-w-sm space-y-6" data-testid="signup-verify-email">
           <AuthHeader
-            title="Check your inbox"
-            subtitle={`We sent a verification link to ${email}. Open it, then log in.`}
+            title={t("auth.signup.verifyTitle")}
+            subtitle={t("auth.signup.verifySubtitle", { email })}
           />
           <div className="text-center text-sm">
             <Link
@@ -94,7 +94,7 @@ export default function SignupPage() {
               className="text-primary hover:underline"
               data-testid="signup-verify-to-login"
             >
-              Go to log in
+              {t("auth.signup.goToLogin")}
             </Link>
           </div>
         </div>
