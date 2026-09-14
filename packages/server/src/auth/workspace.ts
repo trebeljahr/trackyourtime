@@ -56,34 +56,73 @@ export function workspaceIdFromInput(raw: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/** The lookups `resolveWorkspace` needs, injectable so the rule is unit-tested. */
+export type WorkspaceLookups = {
+  membership: (
+    workspaceId: string,
+    userId: string,
+  ) => Promise<WorkspaceMemberDocLike | null>;
+  /** The oldest workspace the person is in, creating a personal one if none. */
+  fallbackWorkspace: (user: WorkspaceOwner) => Promise<string | null>;
+};
+
+const mongooseLookups: WorkspaceLookups = {
+  membership: async (workspaceId, userId) =>
+    WorkspaceMember.findOne({ workspaceId, userId }).lean(),
+  fallbackWorkspace: ensurePersonalWorkspace,
+};
+
 /**
  * Resolve the workspace for one request: explicit input, else the session's
- * active organization, else the caller's personal workspace.
+ * active organization, else the caller's oldest membership (created on
+ * demand).
  *
- * Returns null when the caller is not a member of the resolved workspace, so
- * the middleware can answer NOT_FOUND. A workspace somebody else owns must be
- * indistinguishable from one that does not exist.
+ * The two non-member cases are answered DIFFERENTLY, on purpose:
+ *
+ *  - An EXPLICIT `workspaceId` the caller is not a member of resolves to
+ *    null, which the middleware answers NOT_FOUND. No fallback: a request
+ *    that named a workspace must never run in a different one. The offline
+ *    queue depends on exactly this — a row queued in a workspace the person
+ *    has since been removed from is refused on replay, rather than quietly
+ *    written into whichever workspace they happen to have left.
+ *  - A STALE session default (the session still points at a workspace the
+ *    person left, or was removed from, or that another device switched away
+ *    from) falls back to the oldest membership. Nobody named that workspace in
+ *    this request; answering NOT_FOUND would lock a cookie client out of every
+ *    workspace-scoped call until the session expired.
+ *
+ * A workspace somebody else owns stays indistinguishable from one that does
+ * not exist either way.
  */
-export async function resolveWorkspace(args: {
-  user: WorkspaceOwner;
-  requested: string | null;
-  activeWorkspaceId: string | null;
-}): Promise<ResolvedWorkspace | null> {
-  const workspaceId =
-    args.requested ??
-    args.activeWorkspaceId ??
-    (await ensurePersonalWorkspace(args.user));
-  if (!workspaceId) return null;
-
-  const membership = await WorkspaceMember.findOne({
-    workspaceId,
-    userId: args.user.id,
-  }).lean();
-  if (!membership) return null;
-
-  return {
+export async function resolveWorkspace(
+  args: {
+    user: WorkspaceOwner;
+    requested: string | null;
+    activeWorkspaceId: string | null;
+  },
+  lookups: WorkspaceLookups = mongooseLookups,
+): Promise<ResolvedWorkspace | null> {
+  const resolved = (
+    workspaceId: string,
+    membership: WorkspaceMemberDocLike,
+  ): ResolvedWorkspace => ({
     workspaceId,
     membership,
     visibility: visibilityOf(membership),
-  };
+  });
+
+  if (args.requested) {
+    const membership = await lookups.membership(args.requested, args.user.id);
+    return membership ? resolved(args.requested, membership) : null;
+  }
+
+  if (args.activeWorkspaceId) {
+    const membership = await lookups.membership(args.activeWorkspaceId, args.user.id);
+    if (membership) return resolved(args.activeWorkspaceId, membership);
+  }
+
+  const fallback = await lookups.fallbackWorkspace(args.user);
+  if (!fallback) return null;
+  const membership = await lookups.membership(fallback, args.user.id);
+  return membership ? resolved(fallback, membership) : null;
 }

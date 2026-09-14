@@ -7,4 +7,12 @@
  * preference), never by the request that happens to trigger it.
  */
 export const email = {
+  invitation: {
+    subject: "{inviter} invited you to {workspace} on Track Your Time",
+    intro: "{inviter} invited you to join {workspace} on Track Your Time.",
+    action: "Accept the invitation",
+    expiry: "The link works for {hours} hours. If you did not expect this email, ignore it.",
+    someone: "Someone",
+    aWorkspace: "a workspace",
+  },
 } as const;

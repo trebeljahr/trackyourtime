@@ -5,8 +5,8 @@
 // solo-vs-team branch. A solo user simply has a workspace of one.
 //
 // The workspace IS a better-auth organization — the same id from the very
-// first migration, so adopting the plugin's invite/role endpoints in a later
-// stage never reissues workspace ids.
+// first migration, so inviting people into it later never reissues workspace
+// ids.
 import type { WorkspaceRole } from "@starter/shared";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 
@@ -55,27 +55,41 @@ export function personalWorkspaceName(user: WorkspaceOwner): string {
  * record that carries the things the plugin does not model — the billing rate
  * and the two visibility flags.
  *
- * An owner sees everything: they are alone in a personal workspace, and in a
- * shared one they are the person who invited everybody else.
+ * The flag rule is the one every membership write follows
+ * (`services/membership/lifecycle.ts`): an owner sees everything, always —
+ * forced on, on insert AND on update — while anybody else opens CLOSED. An
+ * admin used to open with both flags on; being able to manage people is not
+ * the same grant as reading their rates, so no role but owner is ever given a
+ * flag by a role write.
  */
 export async function upsertWorkspaceMember(args: {
   workspaceId: string;
   user: WorkspaceOwner;
   role: WorkspaceRole;
 }): Promise<void> {
-  const sees = args.role === "owner" || args.role === "admin";
+  const owner = args.role === "owner";
+  const name = args.user.name ?? args.user.email ?? "";
   await WorkspaceMember.updateOne(
     { workspaceId: args.workspaceId, userId: args.user.id },
-    {
-      $set: { role: args.role, name: args.user.name ?? args.user.email ?? "" },
-      $setOnInsert: {
-        workspaceId: args.workspaceId,
-        userId: args.user.id,
-        hourlyRate: null,
-        canViewOthersTime: sees,
-        canViewOthersMoney: sees,
-      },
-    },
+    owner
+      ? {
+          $set: { role: args.role, name, canViewOthersTime: true, canViewOthersMoney: true },
+          $setOnInsert: {
+            workspaceId: args.workspaceId,
+            userId: args.user.id,
+            hourlyRate: null,
+          },
+        }
+      : {
+          $set: { role: args.role, name },
+          $setOnInsert: {
+            workspaceId: args.workspaceId,
+            userId: args.user.id,
+            hourlyRate: null,
+            canViewOthersTime: false,
+            canViewOthersMoney: false,
+          },
+        },
     { upsert: true },
   );
 }

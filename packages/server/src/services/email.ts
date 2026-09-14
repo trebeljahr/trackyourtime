@@ -1,7 +1,9 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import type { Locale } from "@starter/shared";
 import { env } from "../config/env.js";
+import { serverT } from "../i18n/index.js";
 
-interface EmailParams {
+export interface EmailParams {
   to: string;
   subject: string;
   text: string;
@@ -198,7 +200,76 @@ async function sendViaListmonk(params: EmailParams): Promise<void> {
   }
 }
 
-function escapeHtml(s: string): string {
+/**
+ * A user-supplied string made safe for an email header.
+ *
+ * Nodemailer already encodes headers, so this is not the only defence against
+ * header injection — it is the one that does not depend on the transport:
+ * Listmonk receives the subject as template data. Control characters (CR/LF
+ * above all) go, whitespace runs collapse, and the result is capped so a
+ * 200-character workspace name cannot push the actual subject off screen.
+ */
+export function headerSafe(value: string, max = 120): string {
+  const flat = value
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
+}
+
+export type WorkspaceInvitationEmail = {
+  to: string;
+  workspaceName: string;
+  inviterName: string;
+  url: string;
+  /** The recipient's language, decided by the caller. English when unknown. */
+  locale?: Locale | null;
+  /** How long the link works, stated in the email. */
+  expiresInHours: number;
+};
+
+/**
+ * The invitation email, as data — separate from sending it so the escaping is
+ * unit-tested without a transport.
+ *
+ * Both names are chosen by other users (anybody can name a workspace, and
+ * anybody can call themselves anything), so they are flattened for the
+ * subject and every HTML text node is escaped AFTER translation — escaping the
+ * finished sentence covers the names wherever a translation puts them, which
+ * escaping the values going in would not guarantee. The URL is built by the
+ * server from an id it generated, and is escaped for the attribute anyway.
+ */
+export function buildWorkspaceInvitationEmail(
+  params: WorkspaceInvitationEmail,
+): EmailParams {
+  const t = serverT(params.locale, "email");
+  const values = {
+    inviter: headerSafe(params.inviterName) || t("invitation.someone"),
+    workspace: headerSafe(params.workspaceName) || t("invitation.aWorkspace"),
+  };
+  const intro = t("invitation.intro", values);
+  const action = t("invitation.action");
+  const expiry = t("invitation.expiry", { hours: String(params.expiresInHours) });
+  return {
+    to: params.to,
+    subject: headerSafe(t("invitation.subject", values), 200),
+    text: `${intro}\n\n${action}: ${params.url}\n\n${expiry}`,
+    html:
+      `<p>${escapeHtml(intro)}</p>` +
+      `<p><a href="${escapeHtml(params.url)}">${escapeHtml(action)}</a></p>` +
+      `<p>${escapeHtml(expiry)}</p>`,
+  };
+}
+
+/** Send the invitation email. Throws on a delivery failure, like `sendEmail`. */
+export async function sendWorkspaceInvitationEmail(
+  params: WorkspaceInvitationEmail,
+): Promise<void> {
+  await sendEmail(buildWorkspaceInvitationEmail(params));
+}
+
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

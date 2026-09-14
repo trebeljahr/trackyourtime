@@ -5,9 +5,13 @@
 // collections across upgrades; a billing rate and a money-visibility flag are
 // business data and must not depend on that.
 //
-// better-auth's `member` remains the source of truth for `role` (it is what
-// the plugin's own invite/remove endpoints write). This record mirrors the
-// role for convenience and owns everything the plugin does not model.
+// This record is what the app AUTHORIZES from — the workspace middleware, API
+// tokens, webhook deliveries and the sync fan-out all read it, never
+// better-auth's `member`. The two are kept in step by
+// `services/membership/lifecycle.ts`, the only code that writes membership
+// (the plugin's own endpoints answer 404 over HTTP): access is granted here
+// LAST and revoked here FIRST, so a crash between the two writes always
+// leaves the person with less access, never more.
 import mongoose, { Schema, type Document } from "mongoose";
 import type {
   Visibility,
