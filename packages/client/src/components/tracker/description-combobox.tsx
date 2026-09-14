@@ -230,6 +230,12 @@ export function DescriptionCombobox({
         // worked on. Not on focus: the field is focused on mount, and a list
         // over the page on every visit to /track is in the way.
         onMouseDown={() => setOpen(true)}
+        // The dedupe is for one visit to the field. A commit the bar ignored
+        // (typed with nothing running) must not suppress the same text on a
+        // later visit, after a timer started with `committed` unchanged.
+        onFocus={() => {
+          lastCommitted.current = committed;
+        }}
         onBlur={() => {
           close();
           if (reverting.current) {

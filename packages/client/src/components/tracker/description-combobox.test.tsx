@@ -231,6 +231,22 @@ describe("DescriptionCombobox", () => {
     expect(handlers.onCommit).toHaveBeenCalledWith("New text");
   });
 
+  it("a commit the parent ignored does not suppress the same text on a later visit", () => {
+    const { input, handlers } = setup("");
+    rows = [];
+    type(input, "Design");
+    input.blur();
+    expect(handlers.onCommit).toHaveBeenCalledTimes(1);
+
+    // `committed` never moved (nothing was running), so the next visit must
+    // still hand the same text over.
+    type(input, "");
+    fireEvent.change(input, { target: { value: "Design" } });
+    input.blur();
+    expect(handlers.onCommit).toHaveBeenCalledTimes(2);
+    expect(handlers.onCommit).toHaveBeenLastCalledWith("Design");
+  });
+
   it("does not commit an untouched field on blur", () => {
     const { input, handlers } = setup("Old text");
     input.focus();
