@@ -20,17 +20,19 @@
  */
 
 import { toast } from "@/components/ui/sonner";
+import { translate } from "@/i18n/translate";
 import { authClient, signOut } from "@/lib/auth-client";
 import { clearNativeToken } from "@/lib/native-session";
 import { refreshPendingCount } from "@/lib/offline";
 import { handleSessionRevoked } from "@/lib/session-revoked";
 
-const description = (pending: number): string =>
-  pending > 0
-    ? `This device's access was revoked from another device. ${pending} unsent ${
-        pending === 1 ? "change is" : "changes are"
-      } still saved here and will be sent when you sign in again.`
-    : "This device's access was revoked from another device. Sign in again to continue.";
+/** The same words the login screen shows on arrival, in the rendered language. */
+const description = (pending: number): string => {
+  const t = translate("shell");
+  return pending > 0
+    ? t("auth.revoked.pending", { count: pending })
+    : t("auth.revoked.none");
+};
 
 /** Sign this device out because the server says its session is gone. */
 export const revokeThisDevice = (
@@ -50,6 +52,8 @@ export const revokeThisDevice = (
     signOut: () => signOut(),
     clearToken: clearNativeToken,
     notify: ({ pending }) =>
-      toast.error("You were signed out", { description: description(pending) }),
+      toast.error(translate("shell")("auth.revoked.title"), {
+        description: description(pending),
+      }),
     redirect,
   });

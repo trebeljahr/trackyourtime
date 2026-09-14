@@ -22,7 +22,6 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { formatDuration } from "@starter/shared";
 import type { SyncStatus } from "@starter/core";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -73,8 +72,12 @@ import { useVisibleNavSections } from "@/components/members/nav-visibility";
 // itself now sits in lib/nav.ts so the tab bar can share it without a cycle.
 export { isActiveRoute, type NavItem };
 
+/**
+ * Headings and labels are message keys, resolved with `t` at render time: this
+ * list is evaluated once at import, before the locale is known.
+ */
 type NavSection = {
-  heading: string | null;
+  heading: "manage" | null;
   items: NavItem[];
 };
 
@@ -82,59 +85,62 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     heading: null,
     items: [
-      { href: "/track", label: "Track", icon: Timer },
-      { href: "/timesheet", label: "Timesheet", icon: Grid3x3 },
-      { href: "/calendar", label: "Calendar", icon: CalendarDays },
-      { href: "/reports", label: "Reports", icon: BarChart3 },
+      { href: "/track", id: "track", icon: Timer },
+      { href: "/timesheet", id: "timesheet", icon: Grid3x3 },
+      { href: "/calendar", id: "calendar", icon: CalendarDays },
+      { href: "/reports", id: "reports", icon: BarChart3 },
     ],
   },
   {
-    heading: "Manage",
+    heading: "manage",
     items: [
-      { href: "/clients", label: "Clients", icon: Users },
-      { href: "/projects", label: "Projects", icon: FolderKanban },
-      { href: "/tasks", label: "Tasks", icon: ListChecks },
-      { href: "/tags", label: "Tags", icon: TagsIcon },
-      { href: "/invoices", label: "Invoices", icon: Receipt, requires: "invoices" },
-      { href: "/members", label: "Members", icon: UserCog },
-      { href: "/settings", label: "Settings", icon: SettingsIcon },
+      { href: "/clients", id: "clients", icon: Users },
+      { href: "/projects", id: "projects", icon: FolderKanban },
+      { href: "/tasks", id: "tasks", icon: ListChecks },
+      { href: "/tags", id: "tags", icon: TagsIcon },
+      { href: "/invoices", id: "invoices", icon: Receipt, requires: "invoices" },
+      { href: "/members", id: "members", icon: UserCog },
+      { href: "/settings", id: "settings", icon: SettingsIcon },
     ],
   },
 ];
 
-const STATUS_COPY: Record<SyncStatus, { label: string; dot: string }> = {
-  open: { label: "Live — changes sync across your devices", dot: "bg-primary" },
-  connecting: { label: "Connecting…", dot: "bg-muted-foreground animate-pulse" },
-  closed: { label: "Offline — reconnecting", dot: "bg-destructive" },
+/** The label is `shell.sync.<status>`, resolved at render time. */
+const STATUS_DOT: Record<SyncStatus, string> = {
+  open: "bg-primary",
+  connecting: "bg-muted-foreground animate-pulse",
+  closed: "bg-destructive",
 };
 
 function SyncDot({ status }: { status: SyncStatus }): React.JSX.Element {
-  const copy = STATUS_COPY[status];
+  const t = useT("shell");
+  const label = t(`sync.${status}`);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span
           className="flex size-6 items-center justify-center"
-          aria-label={copy.label}
+          aria-label={label}
           data-testid="sync-status"
           data-status={status}
         >
           <span
             aria-hidden="true"
-            className={cn("size-2 rounded-full", copy.dot)}
+            className={cn("size-2 rounded-full", STATUS_DOT[status])}
           />
         </span>
       </TooltipTrigger>
-      <TooltipContent>{copy.label}</TooltipContent>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
 }
 
 function RunningTimerIndicator(): React.JSX.Element | null {
   const { entry, elapsedSec } = useRunningEntry();
-  const { durationFormat } = useFormatSettings();
+  const { duration } = useFormatSettings();
   const { activeId, workspaces } = useActiveWorkspace();
   const t = useT("shell");
+  const tc = useT("common");
 
   if (!entry) return null;
 
@@ -169,14 +175,14 @@ function RunningTimerIndicator(): React.JSX.Element | null {
       />
       <span className="hidden max-w-40 truncate text-muted-foreground sm:inline">
         {entry.description.trim() === ""
-          ? "No description"
+          ? tc("empty.noDescription")
           : entry.description}
       </span>
       <span
         className="font-mono tabular-nums"
         data-testid="running-timer-elapsed"
       >
-        {formatDuration(elapsedSec, durationFormat)}
+        {duration(elapsedSec)}
       </span>
     </Link>
   );
@@ -190,13 +196,14 @@ function SidebarNav({
   onNavigate?: () => void;
 }): React.JSX.Element {
   const sections = useVisibleNavSections(NAV_SECTIONS);
+  const t = useT("shell");
   return (
     <nav className="flex flex-col gap-4 px-3 py-4" data-testid="sidebar-nav">
       {sections.map((section, index) => (
         <div key={section.heading ?? `section-${index}`} className="grid gap-1">
           {section.heading ? (
             <p className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {section.heading}
+              {t(`nav.sections.${section.heading}`)}
             </p>
           ) : null}
           {section.items.map((item) => {
@@ -214,10 +221,10 @@ function SidebarNav({
                     ? "bg-accent font-medium text-accent-foreground"
                     : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                 )}
-                data-testid={`nav-${item.label.toLowerCase()}`}
+                data-testid={`nav-${item.id}`}
               >
                 <Icon className="size-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate">{t(`nav.items.${item.id}`)}</span>
                 {active ? (
                   <ChevronRight className="ml-auto size-3.5 opacity-60" />
                 ) : null}
@@ -233,6 +240,8 @@ function SidebarNav({
 function UserMenu(): React.JSX.Element {
   const router = useRouter();
   const { user } = useAuth();
+  const t = useT("shell");
+  const tc = useT("common");
 
   const initials = (user?.name ?? user?.email ?? "?")
     .trim()
@@ -251,7 +260,7 @@ function UserMenu(): React.JSX.Element {
           variant="ghost"
           size="icon"
           className="rounded-full"
-          aria-label="Account menu"
+          aria-label={t("userMenu.label")}
           data-testid="user-menu"
         >
           <Avatar className="size-7">
@@ -263,7 +272,7 @@ function UserMenu(): React.JSX.Element {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="grid gap-0.5">
           <span className="truncate text-sm font-medium">
-            {user?.name ?? "Signed in"}
+            {user?.name ?? t("userMenu.signedIn")}
           </span>
           <span className="truncate text-xs font-normal text-muted-foreground">
             {user?.email ?? ""}
@@ -273,13 +282,13 @@ function UserMenu(): React.JSX.Element {
         <DropdownMenuItem asChild data-testid="user-menu-profile">
           <Link href="/profile">
             <UserIcon className="size-4" />
-            Profile
+            {t("userMenu.profile")}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild data-testid="user-menu-settings">
           <Link href="/settings">
             <SettingsIcon className="size-4" />
-            Settings
+            {t("userMenu.settings")}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -291,7 +300,7 @@ function UserMenu(): React.JSX.Element {
           data-testid="sign-out"
         >
           <LogOut className="size-4" />
-          Sign out
+          {tc("actions.signOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -326,6 +335,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
   const status = useSync();
+  const t = useT("shell");
   // Resume/pause for the native shells. A no-op on web, where nothing ever
   // calls the handlers it registers.
   useNativeLifecycle();
@@ -342,7 +352,6 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
   const openMobile = React.useCallback((): void => setMobileOpen(true), []);
 
   // Mounted here so Cmd/Ctrl+K works on every protected screen.
-  const t = useT("shell");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const togglePalette = React.useCallback(
     (): void => setPaletteOpen((current) => !current),
@@ -409,7 +418,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
           <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
             <button
               type="button"
-              aria-label="Close navigation"
+              aria-label={t("nav.close")}
               className="absolute inset-0 bg-black/50"
               onClick={closeMobile}
               data-testid="sidebar-backdrop"
@@ -427,7 +436,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
                   variant="ghost"
                   size="icon"
                   onClick={closeMobile}
-                  aria-label="Close navigation"
+                  aria-label={t("nav.close")}
                   data-testid="sidebar-close"
                 >
                   <X className="size-4" />
@@ -462,7 +471,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
               size="icon"
               className="md:hidden"
               onClick={openMobile}
-              aria-label="Open navigation"
+              aria-label={t("nav.open")}
               data-testid="sidebar-toggle"
             >
               <Menu className="size-4" />

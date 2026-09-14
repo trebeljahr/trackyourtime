@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
 
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -121,15 +122,15 @@ const Combobox = React.forwardRef<HTMLButtonElement, ComboboxProps>(
       options,
       value,
       onChange,
-      placeholder = "Select...",
-      emptyText = "No results.",
+      placeholder,
+      emptyText,
       onCreate,
       createLabel,
       createHint,
       footerActions,
-      searchPlaceholder = "Search...",
+      searchPlaceholder,
       allowClear = false,
-      clearLabel = "Clear selection",
+      clearLabel: clearLabelProp,
       className,
       contentClassName,
       align = "start",
@@ -141,6 +142,9 @@ const Combobox = React.forwardRef<HTMLButtonElement, ComboboxProps>(
     },
     ref,
   ) => {
+    const t = useT("shell");
+    const tc = useT("common");
+    const clearLabel = clearLabelProp ?? t("ui.combobox.clear");
     const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
     const [query, setQuery] = React.useState("");
 
@@ -211,7 +215,7 @@ const Combobox = React.forwardRef<HTMLButtonElement, ComboboxProps>(
                   selected === null && "text-muted-foreground",
                 )}
               >
-                {selected?.label ?? placeholder}
+                {selected?.label ?? placeholder ?? t("ui.combobox.placeholder")}
               </span>
             </span>
             <ChevronsUpDown className="ml-2 shrink-0 opacity-50" />
@@ -228,11 +232,11 @@ const Combobox = React.forwardRef<HTMLButtonElement, ComboboxProps>(
             <CommandInput
               value={query}
               onValueChange={setQuery}
-              placeholder={searchPlaceholder}
+              placeholder={searchPlaceholder ?? t("ui.combobox.search")}
               data-testid="combobox-search"
             />
             <CommandList>
-              {showCreate ? null : <CommandEmpty>{emptyText}</CommandEmpty>}
+              {showCreate ? null : <CommandEmpty>{emptyText ?? tc("status.noResults")}</CommandEmpty>}
 
               {allowClear && (
                 // forceMount on the GROUP, not just the item: cmdk hides a
@@ -304,7 +308,7 @@ const Combobox = React.forwardRef<HTMLButtonElement, ComboboxProps>(
                       <span className="truncate">
                         {createLabel
                           ? createLabel(trimmedQuery)
-                          : `Create "${trimmedQuery}"`}
+                          : t("ui.combobox.create", { query: trimmedQuery })}
                       </span>
                     </CommandItem>
                   </CommandGroup>

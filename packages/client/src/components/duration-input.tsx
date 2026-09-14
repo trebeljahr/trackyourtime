@@ -1,13 +1,11 @@
 "use client";
 
 import * as React from "react";
-import {
-  formatDuration,
-  parseDurationInput,
-  type DurationFormat,
-} from "@starter/shared";
+import { parseDurationInput, type DurationFormat } from "@starter/shared";
 
 import { Input } from "@/components/ui/input";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 export type DurationInputProps = {
@@ -35,12 +33,16 @@ export function DurationInput({
   format = "hms",
   disabled = false,
   className,
-  "aria-label": ariaLabel = "Duration",
+  "aria-label": ariaLabel,
   testId = "duration-input",
 }: DurationInputProps): React.JSX.Element {
+  const tc = useT("common");
+  const localeFormat = useFormat();
+  // Every form this prints parses back through `parseDurationInput`, which
+  // takes a decimal comma as readily as a dot.
   const display = React.useMemo(
-    () => formatDuration(value, format),
-    [value, format]
+    () => localeFormat.duration(value, format),
+    [localeFormat, value, format]
   );
 
   const [draft, setDraft] = React.useState(display);
@@ -63,9 +65,9 @@ export function DurationInput({
       return;
     }
     setInvalid(false);
-    setDraft(formatDuration(parsed, format));
+    setDraft(localeFormat.duration(parsed, format));
     if (parsed !== value) onCommit(parsed);
-  }, [draft, display, format, onCommit, value]);
+  }, [draft, display, format, localeFormat, onCommit, value]);
 
   return (
     <Input
@@ -73,7 +75,7 @@ export function DurationInput({
       disabled={disabled}
       spellCheck={false}
       inputMode="text"
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? tc("fields.duration")}
       aria-invalid={invalid || undefined}
       className={cn("w-24 text-center font-mono tabular-nums", className)}
       onFocus={(event) => {

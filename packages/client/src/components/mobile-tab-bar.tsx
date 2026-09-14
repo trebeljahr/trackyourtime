@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { BarChart3, Menu, Timer, type LucideIcon } from "lucide-react";
 
+import { useT } from "@/i18n/use-t";
 import { isActiveRoute } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
@@ -24,8 +25,8 @@ import { cn } from "@/lib/utils";
  */
 
 type Tab = {
-  key: string;
-  label: string;
+  /** Test id suffix and message key under `shell.tabBar`, resolved at render. */
+  key: "track" | "reports" | "more";
   icon: LucideIcon;
   /** Where the tab goes, or `null` for the one that opens the drawer. */
   href: string | null;
@@ -34,17 +35,16 @@ type Tab = {
 };
 
 const TABS: Tab[] = [
-  { key: "track", label: "Track", icon: Timer, href: "/track" },
+  { key: "track", icon: Timer, href: "/track" },
   {
     key: "reports",
-    label: "Reports",
     icon: BarChart3,
     // `isActiveRoute` lights child paths too, so the retired /reports/summary,
     // /detailed and /weekly redirects keep this tab lit for the frame before
     // they land — no `match` needed.
     href: "/reports",
   },
-  { key: "more", label: "More", icon: Menu, href: null },
+  { key: "more", icon: Menu, href: null },
 ];
 
 const isTabActive = (pathname: string, tab: Tab): boolean =>
@@ -67,6 +67,7 @@ export function MobileTabBar({
   // More is lit whenever the drawer is open, and also whenever the route is
   // one only the drawer can reach — otherwise a phone on /settings shows no
   // active tab at all and the bar looks broken.
+  const t = useT("shell");
   const onATab = TABS.some((tab) => isTabActive(pathname, tab));
 
   const isActive = (tab: Tab): boolean => {
@@ -84,7 +85,7 @@ export function MobileTabBar({
       // by `html.cap [data-testid="mobile-tab-bar"]` in styles/native.css.
       className="hidden fixed inset-x-0 bottom-0 z-40 items-stretch border-t border-border bg-background/95 backdrop-blur"
       data-testid="mobile-tab-bar"
-      aria-label="Primary"
+      aria-label={t("tabBar.label")}
     >
       {TABS.map((tab) => {
         const Icon = tab.icon;
@@ -92,7 +93,7 @@ export function MobileTabBar({
         const content = (
           <>
             <Icon className="size-5 shrink-0" aria-hidden="true" />
-            <span className="text-[0.6875rem] leading-none">{tab.label}</span>
+            <span className="text-[0.6875rem] leading-none">{t(`tabBar.${tab.key}`)}</span>
           </>
         );
         const className = cn(

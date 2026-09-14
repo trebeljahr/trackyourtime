@@ -3,9 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { AuthHeader } from "@/components/auth-header";
+import { useT } from "@/i18n/use-t";
+import { translate } from "@/i18n/translate";
 import { requestPasswordReset } from "@/lib/password-reset";
 
 export default function ForgotPasswordPage() {
+  const t = useT("shell");
+  const tc = useT("common");
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -20,7 +24,7 @@ export default function ForgotPasswordPage() {
       await requestPasswordReset(email);
       setSent(true);
     } catch {
-      setError("An unexpected error occurred");
+      setError(translate("common")("errors.generic"));
     } finally {
       setLoading(false);
     }
@@ -29,15 +33,11 @@ export default function ForgotPasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center p-8">
       <div className="mx-auto w-full max-w-sm space-y-6">
-        <AuthHeader
-          title="Forgot password"
-          subtitle="Enter your email and we'll send you a reset link"
-        />
+        <AuthHeader title={t("auth.forgot.title")} subtitle={t("auth.forgot.subtitle")} />
 
         {sent ? (
           <div className="rounded-md bg-green-50 p-4 text-sm text-green-800 dark:bg-green-900/20 dark:text-green-400" data-testid="reset-sent">
-            If an account exists for {email}, you will receive a password
-            reset link shortly.
+            {t("auth.forgot.sent", { email })}
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -49,7 +49,7 @@ export default function ForgotPasswordPage() {
 
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium">
-                Email
+                {tc("fields.email")}
               </label>
               <input
                 id="email"
@@ -68,14 +68,14 @@ export default function ForgotPasswordPage() {
               className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               data-testid="forgot-submit"
             >
-              {loading ? "Sending..." : "Send reset link"}
+              {loading ? t("auth.forgot.submitting") : t("auth.forgot.submit")}
             </button>
           </form>
         )}
 
         <div className="text-center text-sm text-muted-foreground">
           <Link href="/login" className="text-primary hover:underline">
-            Back to login
+            {t("auth.forgot.backToLogin")}
           </Link>
         </div>
       </div>

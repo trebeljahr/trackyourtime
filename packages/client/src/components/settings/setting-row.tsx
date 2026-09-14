@@ -85,7 +85,7 @@ export function SettingRow({
       )}
       data-testid={testId}
     >
-      <div className="space-y-1">
+      <div className="min-w-0 space-y-1">
         {htmlFor ? (
           <label
             htmlFor={htmlFor}
@@ -102,7 +102,7 @@ export function SettingRow({
           </p>
         ) : null}
       </div>
-      <div className="shrink-0 sm:min-w-56 sm:text-right">{children}</div>
+      <div className="min-w-0 max-w-full shrink-0 sm:min-w-56 sm:text-right">{children}</div>
     </div>
   );
 }

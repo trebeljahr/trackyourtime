@@ -4,6 +4,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
+import { useT } from "@/i18n/use-t";
 import { useOverlay } from "@/mobile/overlay-stack";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +64,12 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+/** The close button's screen-reader text, in the rendered language. */
+function DialogCloseLabel(): React.JSX.Element {
+  const tc = useT("common");
+  return <span className="sr-only">{tc("a11y.close")}</span>;
+}
+
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
@@ -106,7 +113,7 @@ const DialogContent = React.forwardRef<
       {showCloseButton && (
         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
           <X className="size-4" />
-          <span className="sr-only">Close</span>
+          <DialogCloseLabel />
         </DialogPrimitive.Close>
       )}
     </DialogPrimitive.Content>

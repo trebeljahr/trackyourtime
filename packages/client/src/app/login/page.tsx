@@ -21,6 +21,9 @@ import {
   type ChallengeOutcome,
 } from "@/components/two-factor-challenge";
 import { isNative } from "@/mobile/bridge";
+import { useT } from "@/i18n/use-t";
+import { translate } from "@/i18n/translate";
+import { authErrorMessage } from "@/lib/auth-error-message";
 import {
   consumeSessionRevokedNotice,
   type SessionRevokedNotice,
@@ -29,6 +32,8 @@ import { authPageHref, safeNextFromSearch } from "@/lib/safe-next";
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useT("shell");
+  const tc = useT("common");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -88,7 +93,7 @@ export default function LoginPage() {
           .catch(() => undefined);
         setError(EMAIL_NOT_VERIFIED_MESSAGE);
       } else if (result.error) {
-        setError(result.error.message ?? "Login failed");
+        setError(authErrorMessage(result.error, "login"));
       } else if (isTwoFactorChallenge(result.data)) {
         // No session exists yet, and no token was issued.
         if (isNative()) {
@@ -106,7 +111,7 @@ export default function LoginPage() {
         );
       }
     } catch {
-      setError("An unexpected error occurred");
+      setError(translate("common")("errors.generic"));
     } finally {
       setLoading(false);
     }
@@ -148,10 +153,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center p-8">
       <div className="mx-auto w-full max-w-sm space-y-6">
-        <AuthHeader
-          title="Log in"
-          subtitle="Enter your credentials to access your account"
-        />
+        <AuthHeader title={t("auth.login.title")} subtitle={t("auth.login.subtitle")} />
 
         {/* Renders nothing on web — the web app has no server to choose. */}
         <NativeServerPicker />
@@ -162,15 +164,11 @@ export default function LoginPage() {
             data-testid="login-revoked"
             role="status"
           >
-            <p className="font-medium">You were signed out</p>
+            <p className="font-medium">{t("auth.revoked.title")}</p>
             <p className="text-muted-foreground">
               {revoked.pending > 0
-                ? `This device's access was revoked from another device. ${
-                    revoked.pending
-                  } unsent ${
-                    revoked.pending === 1 ? "change is" : "changes are"
-                  } still saved here and will be sent once you sign in again.`
-                : "This device's access was revoked from another device. Sign in again to continue."}
+                ? t("auth.revoked.pending", { count: revoked.pending })
+                : t("auth.revoked.none")}
             </p>
           </div>
         )}
@@ -184,7 +182,7 @@ export default function LoginPage() {
 
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium">
-              Email
+              {tc("fields.email")}
             </label>
             <input
               id="email"
@@ -199,7 +197,7 @@ export default function LoginPage() {
 
           <div className="space-y-2">
             <label htmlFor="password" className="text-sm font-medium">
-              Password
+              {tc("fields.password")}
             </label>
             <input
               id="password"
@@ -218,7 +216,7 @@ export default function LoginPage() {
             className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             data-testid="login-submit"
           >
-            {loading ? "Logging in..." : "Log in"}
+            {loading ? t("auth.login.submitting") : t("auth.login.submit")}
           </button>
         </form>
 
@@ -226,19 +224,22 @@ export default function LoginPage() {
 
         <div className="text-center text-sm">
           <Link href="/forgot-password" className="text-primary hover:underline">
-            Forgot your password?
+            {t("auth.login.forgotPassword")}
           </Link>
         </div>
 
         <div className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link
-            href={authPageHref("signup", { next, email: email || null })}
-            className="text-primary hover:underline"
-            data-testid="login-to-signup"
-          >
-            Sign up
-          </Link>
+          {t.rich("auth.login.noAccount", {
+            link: (chunks) => (
+              <Link
+                href={authPageHref("signup", { next, email: email || null })}
+                className="text-primary hover:underline"
+                data-testid="login-to-signup"
+              >
+                {chunks}
+              </Link>
+            ),
+          })}
         </div>
       </div>
     </div>

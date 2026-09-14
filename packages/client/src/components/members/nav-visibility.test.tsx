@@ -27,7 +27,7 @@ const hrefs = (sections: ReturnType<typeof visibleNavSections>): string[] =>
 
 describe("nav visibility", () => {
   it("lists Members in the Manage group for everyone", () => {
-    const manage = NAV_SECTIONS.find((section) => section.heading === "Manage");
+    const manage = NAV_SECTIONS.find((section) => section.heading === "manage");
     expect(manage?.items.map((item) => item.href)).toContain("/members");
     for (const role of ["owner", "admin", "member"] as const) {
       const permissions = permissionsFor(role, { canViewOthersTime: false, canViewOthersMoney: false });

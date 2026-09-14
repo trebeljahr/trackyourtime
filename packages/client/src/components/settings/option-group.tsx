@@ -39,7 +39,9 @@ export function OptionGroup<T extends string>({
       role="radiogroup"
       aria-label={label}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 p-1",
+        // Wraps inside its border rather than pushing the page sideways when
+        // the labels run long (German, the pseudo-locale) on a phone.
+        "inline-flex max-w-full flex-wrap items-center gap-1 rounded-md border border-border bg-muted/40 p-1",
         className
       )}
     >

@@ -66,7 +66,7 @@ describe("ProtectedLayout on web", () => {
 
     renderLayout();
 
-    expect(screen.getByText("Loading...")).toBeTruthy();
+    expect(screen.getByText("Loading…")).toBeTruthy();
     expect(replace).not.toHaveBeenCalled();
   });
 

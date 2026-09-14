@@ -13,9 +13,14 @@ import { AuthHeader } from "@/components/auth-header";
 import { NativeServerNote } from "@/components/server-picker";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { authPageHref, safeNextFromSearch } from "@/lib/safe-next";
+import { useT } from "@/i18n/use-t";
+import { translate } from "@/i18n/translate";
+import { authErrorMessage } from "@/lib/auth-error-message";
 
 export default function SignupPage() {
   const router = useRouter();
+  const t = useT("shell");
+  const tc = useT("common");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,7 +43,7 @@ export default function SignupPage() {
     setError("");
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(translate("shell")("auth.passwordsDoNotMatch"));
       return;
     }
 
@@ -55,7 +60,7 @@ export default function SignupPage() {
         callbackURL: webCallbackUrl(authPageHref("login", { next })),
       });
       if (result.error) {
-        setError(result.error.message ?? "Signup failed");
+        setError(authErrorMessage(result.error, "signup"));
       } else if (result.data && result.data.token === null) {
         // The server requires email verification: the account exists, but no
         // session was created until the link is followed.
@@ -69,7 +74,7 @@ export default function SignupPage() {
         );
       }
     } catch {
-      setError("An unexpected error occurred");
+      setError(translate("common")("errors.generic"));
     } finally {
       setLoading(false);
     }
@@ -100,10 +105,7 @@ export default function SignupPage() {
   return (
     <div className="flex min-h-screen items-center justify-center p-8">
       <div className="mx-auto w-full max-w-sm space-y-6">
-        <AuthHeader
-          title="Create an account"
-          subtitle="Enter your details to get started"
-        />
+        <AuthHeader title={t("auth.signup.title")} subtitle={t("auth.signup.subtitle")} />
 
         {/* Renders nothing on web. */}
         <NativeServerNote />
@@ -117,7 +119,7 @@ export default function SignupPage() {
 
           <div className="space-y-2">
             <label htmlFor="name" className="text-sm font-medium">
-              Name
+              {tc("fields.name")}
             </label>
             <input
               id="name"
@@ -132,7 +134,7 @@ export default function SignupPage() {
 
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium">
-              Email
+              {tc("fields.email")}
             </label>
             <input
               id="email"
@@ -147,7 +149,7 @@ export default function SignupPage() {
 
           <div className="space-y-2">
             <label htmlFor="password" className="text-sm font-medium">
-              Password
+              {tc("fields.password")}
             </label>
             <input
               id="password"
@@ -163,7 +165,7 @@ export default function SignupPage() {
 
           <div className="space-y-2">
             <label htmlFor="confirmPassword" className="text-sm font-medium">
-              Confirm Password
+              {t("auth.confirmPassword")}
             </label>
             <input
               id="confirmPassword"
@@ -182,21 +184,24 @@ export default function SignupPage() {
             className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             data-testid="signup-submit"
           >
-            {loading ? "Creating account..." : "Sign up"}
+            {loading ? t("auth.signup.submitting") : t("auth.signup.submit")}
           </button>
         </form>
 
         <GoogleSignInButton />
 
         <div className="text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <Link
-            href={authPageHref("login", { next, email: email || null })}
-            className="text-primary hover:underline"
-            data-testid="signup-to-login"
-          >
-            Log in
-          </Link>
+          {t.rich("auth.signup.haveAccount", {
+            link: (chunks) => (
+              <Link
+                href={authPageHref("login", { next, email: email || null })}
+                className="text-primary hover:underline"
+                data-testid="signup-to-login"
+              >
+                {chunks}
+              </Link>
+            ),
+          })}
         </div>
       </div>
     </div>

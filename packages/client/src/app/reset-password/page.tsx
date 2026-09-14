@@ -4,11 +4,14 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { AuthHeader } from "@/components/auth-header";
+import { useT } from "@/i18n/use-t";
+import { translate } from "@/i18n/translate";
 
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
+  const t = useT("shell");
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -20,7 +23,7 @@ function ResetPasswordForm() {
     setError("");
 
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(translate("shell")("auth.passwordsDoNotMatch"));
       return;
     }
 
@@ -30,7 +33,7 @@ function ResetPasswordForm() {
       await authClient.resetPassword({ newPassword, token });
       router.push("/login");
     } catch {
-      setError("Failed to reset password. The link may have expired.");
+      setError(translate("shell")("auth.reset.failed"));
     } finally {
       setLoading(false);
     }
@@ -46,7 +49,7 @@ function ResetPasswordForm() {
 
       <div className="space-y-2">
         <label htmlFor="newPassword" className="text-sm font-medium">
-          New Password
+          {t("auth.newPassword")}
         </label>
         <input
           id="newPassword"
@@ -62,7 +65,7 @@ function ResetPasswordForm() {
 
       <div className="space-y-2">
         <label htmlFor="confirmPassword" className="text-sm font-medium">
-          Confirm Password
+          {t("auth.confirmPassword")}
         </label>
         <input
           id="confirmPassword"
@@ -81,21 +84,24 @@ function ResetPasswordForm() {
         className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         data-testid="reset-submit"
       >
-        {loading ? "Resetting..." : "Reset password"}
+        {loading ? t("auth.reset.submitting") : t("auth.reset.submit")}
       </button>
     </form>
   );
 }
 
+function LoadingFallback() {
+  const tc = useT("common");
+  return <p className="text-muted-foreground">{tc("status.loading")}</p>;
+}
+
 export default function ResetPasswordPage() {
+  const t = useT("shell");
   return (
     <div className="flex min-h-screen items-center justify-center p-8">
       <div className="mx-auto w-full max-w-sm space-y-6">
-        <AuthHeader
-          title="Reset password"
-          subtitle="Enter your new password"
-        />
-        <Suspense fallback={<p className="text-muted-foreground">Loading...</p>}>
+        <AuthHeader title={t("auth.reset.title")} subtitle={t("auth.reset.subtitle")} />
+        <Suspense fallback={<LoadingFallback />}>
           <ResetPasswordForm />
         </Suspense>
       </div>

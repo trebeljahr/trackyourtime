@@ -11,6 +11,7 @@ import {
 } from "@/lib/session-verdict";
 import { AppShell } from "@/components/app-shell";
 import { loginRedirectHref } from "@/lib/safe-next";
+import { useT } from "@/i18n/use-t";
 
 type Verdict = "checking" | "in" | "out";
 
@@ -21,6 +22,7 @@ export default function ProtectedLayout({
 }) {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
+  const tc = useT("common");
   // On native the bearer token comes out of the Keychain asynchronously, so
   // the very first `useSession()` at the root fires without it and resolves
   // null. Deciding on that would bounce a signed-in phone to /login on every
@@ -73,7 +75,7 @@ export default function ProtectedLayout({
   if (isLoading || !sessionReady || recheck === "checking") {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+        <p className="text-muted-foreground">{tc("status.loading")}</p>
       </div>
     );
   }

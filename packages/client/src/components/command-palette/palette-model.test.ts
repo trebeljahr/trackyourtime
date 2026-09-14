@@ -42,10 +42,10 @@ const input = (overrides: Partial<PaletteInput> = {}): PaletteInput => ({
   running: null,
   quickStarts: [],
   sections: [
-    { heading: null, items: [{ href: "/track", label: "Track", icon: Timer }] },
+    { heading: null, items: [{ href: "/track", id: "track", icon: Timer }] },
     {
-      heading: "Manage",
-      items: [{ href: "/clients", label: "Clients", icon: Users }],
+      heading: "manage",
+      items: [{ href: "/clients", id: "clients", icon: Users }],
     },
   ],
   projects: [

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultWeekStart,
   formatDate,
+  formatDecimal,
   formatDurationFor,
   formatDurationShortFor,
   formatHours,
@@ -29,6 +30,13 @@ describe("numbers and money", () => {
     expect(formatMoney(1234.5, "EUR", "de")).toBe(`1.234,50${NBSP}€`);
   });
 
+  it("leaves English money and numbers unchanged", () => {
+    expect(formatNumber(1234.5, "en")).toBe("1,234.5");
+    expect(formatMoney(1234.5, "EUR", "en")).toBe("€1,234.50");
+    expect(formatDecimal(12.5, "en")).toBe("12.50");
+    expect(formatDecimal(12.5, "de")).toBe("12,50");
+  });
+
   it("falls back for a currency Intl rejects", () => {
     expect(formatMoney(12, "EURO", "de")).toBe("12,00 EURO");
   });
@@ -48,6 +56,13 @@ describe("durations", () => {
     expect(short).toBe(`1${NBSP}h 30${NBSP}min`);
     expect(parseDurationInput(short)).toBe(5400);
     expect(formatHours(27_000, "de")).toBe("7,50");
+    expect(formatHours(27_000, "en")).toBe("7.50");
+  });
+
+  it("parses comma and dot decimals alike", () => {
+    expect(parseDurationInput("1,5h")).toBe(5400);
+    expect(parseDurationInput("1.5h")).toBe(5400);
+    expect(parseDurationInput("1,5")).toBe(parseDurationInput("1.5"));
   });
 });
 
@@ -58,6 +73,13 @@ describe("dates and times", () => {
     expect(formatDate(friday, "de", "dayLabel")).toBe("Fr., 21. Aug.");
     expect(formatDate("2026-08-21", "de", "numeric")).toBe("21.08.2026");
     expect(formatTime(friday, "de", "24h")).toBe("14:05");
+  });
+
+  it("keeps 24h clocks two-digit in both languages", () => {
+    const morning = new Date(2026, 7, 21, 9, 5);
+    expect(formatTime(morning, "de")).toBe("09:05");
+    expect(formatTime(morning, "en", "24h")).toBe("09:05");
+    expect(formatTime(friday, "en", "12h")).toMatch(/^2:05\s?PM$/);
   });
 
   it("lets the 12h preference win over the locale", () => {
@@ -82,5 +104,10 @@ describe("dates and times", () => {
   it("defaults the week start from the locale", () => {
     expect(defaultWeekStart("de")).toBe(1);
     expect(defaultWeekStart("en")).toBe(0);
+  });
+
+  it("starts the German week on Monday (weekday index 1)", () => {
+    const start = defaultWeekStart("de");
+    expect(formatWeekday(start, "de", "long")).toBe("Montag");
   });
 });

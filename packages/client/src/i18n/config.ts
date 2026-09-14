@@ -30,3 +30,10 @@ export const PSEUDO_LOCALE_ENABLED = process.env.NODE_ENV !== "production";
 
 /** The `lang` attribute for a client locale. "en-XA" is the conventional pseudo tag. */
 export const htmlLang = (locale: ClientLocale): string => (locale === "pseudo" ? "en-XA" : locale);
+
+/**
+ * The shipped locale to send to the server for a client locale. The
+ * pseudo-locale is derived from English and never leaves the device.
+ */
+export const shippedLocale = (locale: ClientLocale): Locale =>
+  locale === "pseudo" ? DEFAULT_LOCALE : locale;

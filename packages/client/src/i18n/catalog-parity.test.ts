@@ -76,6 +76,15 @@ describe("pseudo-locale", () => {
     expect(t("counts.entries", { count: 2 })).toContain("2");
   });
 
+  it("pads in word-sized runs, so a long sentence can still wrap", () => {
+    const sentence =
+      "Preferences apply to every client signed in as you. Changes save as you make them.";
+    const pseudo = pseudoLocalize(sentence);
+    const padding = pseudo.slice(pseudo.lastIndexOf("]") - 40);
+    expect(pseudo.match(/~+/g)?.join("").length).toBeGreaterThan(20);
+    expect(Math.max(...(padding.match(/~+/g) ?? []).map((run) => run.length))).toBeLessThanOrEqual(8);
+  });
+
   it("is derived from English, so it can never miss a key", () => {
     expect(Object.keys(getMessages("pseudo"))).toEqual(Object.keys(en));
   });

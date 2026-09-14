@@ -79,8 +79,9 @@ export type PaletteGroup = {
   items: PaletteItem[];
 };
 
+/** The shell's NAV_SECTIONS: a heading and each label are `shell.nav` keys. */
 export type PaletteSection = {
-  heading: string | null;
+  heading: "manage" | null;
   items: NavItem[];
 };
 
@@ -258,21 +259,22 @@ const timerGroup = (input: PaletteInput): PaletteGroup => {
 const navigateGroup = (input: PaletteInput): PaletteGroup => ({
   id: "navigate",
   heading: input.t("palette.groups.navigate"),
-  items: input.sections.flatMap((section) =>
-    section.items.map((item) =>
+  items: input.sections.flatMap((section) => {
+    const heading = section.heading ? input.t(`nav.sections.${section.heading}`) : null;
+    return section.items.map((item) =>
       row({
         id: `nav-${item.href.replace(/^\/+/, "").replace(/\//g, "-")}`,
-        label: item.label,
-        hint: section.heading,
+        label: input.t(`nav.items.${item.id}`),
+        hint: heading,
         icon: item.icon,
         keywords: [
-          section.heading,
+          heading,
           ...words(input.t("palette.keywords.navigate")),
         ],
         action: { kind: "navigate", href: item.href },
       }),
-    ),
-  ),
+    );
+  }),
 });
 
 const catalogGroups = (input: PaletteInput): PaletteGroup[] => {

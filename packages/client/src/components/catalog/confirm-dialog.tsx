@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/i18n/use-t";
 
 export type ConfirmDialogProps = {
   open: boolean;
@@ -30,11 +31,12 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = "Delete",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   onConfirm,
   testId = "confirm-dialog",
 }: ConfirmDialogProps): React.JSX.Element {
+  const tc = useT("common");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md" data-testid={testId}>
@@ -52,7 +54,7 @@ export function ConfirmDialog({
             onClick={() => onOpenChange(false)}
             data-testid="confirm-cancel"
           >
-            {cancelLabel}
+            {cancelLabel ?? tc("actions.cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -62,7 +64,7 @@ export function ConfirmDialog({
             }}
             data-testid="confirm-accept"
           >
-            {confirmLabel}
+            {confirmLabel ?? tc("actions.delete")}
           </Button>
         </DialogFooter>
       </DialogContent>

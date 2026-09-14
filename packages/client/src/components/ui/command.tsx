@@ -4,6 +4,7 @@ import * as React from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -46,8 +47,8 @@ interface CommandDialogProps
 }
 
 function CommandDialog({
-  title = "Command palette",
-  description = "Search for a command to run.",
+  title,
+  description,
   children,
   commandProps,
   contentClassName,
@@ -55,6 +56,7 @@ function CommandDialog({
 }: CommandDialogProps): React.JSX.Element {
   const { className: commandClassName, ...restCommandProps } =
     commandProps ?? {};
+  const t = useT("shell");
   return (
     <Dialog {...props}>
       {/* No close button: the X sat on top of the search field, and Escape,
@@ -64,8 +66,8 @@ function CommandDialog({
         showCloseButton={false}
       >
         <DialogHeader className="sr-only">
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogTitle>{title ?? t("ui.command.title")}</DialogTitle>
+          <DialogDescription>{description ?? t("ui.command.description")}</DialogDescription>
         </DialogHeader>
         <Command
           className={cn(
