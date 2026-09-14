@@ -24,6 +24,7 @@ import {
   type ResolveRunawayInput,
   type RunawayMark,
   type StartTimerInput,
+  type StartTimerReplaced,
   type StopTimerInput,
   type TimeEntry as TimeEntryWire,
 } from "@starter/shared";
@@ -171,13 +172,13 @@ export const stopRunningEntry = async (
   at: Date,
   reach: TimerReach,
   originId?: string,
-): Promise<void> => {
+): Promise<TimeEntryWire | null> => {
   const running = await TimeEntry.findOne({
     authorId,
     end: null,
     ...reachFilter(reach),
   }).lean();
-  if (!running) return;
+  if (!running) return null;
 
   const endMs = Math.max(at.getTime(), running.start.getTime());
   const stopped = await finalizeStop(running, new Date(endMs));
@@ -192,6 +193,7 @@ export const stopRunningEntry = async (
       entry: stopped,
     });
   }
+  return stopped;
 };
 
 export type StartArgs = {
@@ -225,7 +227,13 @@ export type StartArgs = {
  * elsewhere is left alone, and the insert below then fails on the running-entry
  * unique index rather than the foreign entry being closed.
  */
-export const startNewEntry = async (args: StartArgs): Promise<TimeEntryWire> => {
+export type StartedEntry = {
+  entry: TimeEntryWire;
+  /** The running entry this start closed, in whichever workspace it ran. */
+  stopped: TimeEntryWire | null;
+};
+
+export const startNewEntry = async (args: StartArgs): Promise<StartedEntry> => {
   const refs = await resolveRefs(args.workspaceId, args.projectId, args.taskId);
   const tagIds = (await resolveTagIds(args.workspaceId, args.tagIds)) ?? [];
   const billable = args.billable ?? refs.project?.billableDefault ?? false;
@@ -256,19 +264,29 @@ export const startNewEntry = async (args: StartArgs): Promise<TimeEntryWire> => 
     return toClientTimeEntry(created);
   };
 
-  await stopRunningEntry(args.authorId, args.start, args.reach, args.originId);
+  const stopped = await stopRunningEntry(
+    args.authorId,
+    args.start,
+    args.reach,
+    args.originId,
+  );
 
   try {
-    return await insert();
+    return { entry: await insert(), stopped };
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
     // A concurrent start slipped in between our stop and our insert — or, for
     // a confined caller, the running entry is one this reach may not stop and
     // the retry will lose to the index again. Either way the second failure
     // below is a CONFLICT and nothing foreign was touched.
-    await stopRunningEntry(args.authorId, args.start, args.reach, args.originId);
+    const late = await stopRunningEntry(
+      args.authorId,
+      args.start,
+      args.reach,
+      args.originId,
+    );
     try {
-      return await insert();
+      return { entry: await insert(), stopped: stopped ?? late };
     } catch (retryError) {
       if (!isDuplicateKeyError(retryError)) throw retryError;
       throw new TRPCError({
@@ -348,6 +366,22 @@ export async function startTimer(
   input: StartTimerInput,
   reach: TimerReach,
 ): Promise<TimeEntryWire> {
+  return (await startTimerDetailed(scope, input, reach)).entry;
+}
+
+/**
+ * {@link startTimer}, also reporting the running entry the start closed.
+ *
+ * The tRPC path uses this to tell the person "your timer in Acme stopped"
+ * (see {@link replacedByStart}). REST keeps `startTimer`: a token's start is
+ * confined to its own workspace, so there is never anything to report, and
+ * its wire shape does not change.
+ */
+export async function startTimerDetailed(
+  scope: WorkspaceScope,
+  input: StartTimerInput,
+  reach: TimerReach,
+): Promise<StartedEntry> {
   const start = input.start ? new Date(input.start) : new Date();
   if (Number.isNaN(start.getTime())) throw badRequest("Invalid start");
 
@@ -387,7 +421,7 @@ export async function startTimer(
   // arriving through the back door.
   await enforceMaxEntryDuration(scope.userId, reachWorkspaceId(reach), start);
 
-  const entry = await startNewEntry({
+  const started = await startNewEntry({
     workspaceId: scope.workspaceId,
     authorId: scope.userId,
     reach,
@@ -402,6 +436,7 @@ export async function startTimer(
     originId: input.originId,
   });
 
+  const { entry } = started;
   void publishSync(
     scope.workspaceId,
     { kind: "timer.started", entry },
@@ -411,7 +446,7 @@ export async function startTimer(
     kind: "entry",
     entry,
   });
-  return entry;
+  return started;
 }
 
 export async function stopTimer(
@@ -641,6 +676,14 @@ export async function continueEntry(
   scope: WorkspaceScope,
   input: ContinueEntryInput,
 ): Promise<TimeEntryWire> {
+  return (await continueEntryDetailed(scope, input)).entry;
+}
+
+/** {@link continueEntry}, also reporting the running entry it closed. */
+export async function continueEntryDetailed(
+  scope: WorkspaceScope,
+  input: ContinueEntryInput,
+): Promise<StartedEntry> {
   const workspaceId = scope.workspaceId;
   const source = await TimeEntry.findOne({
     _id: requireObjectId(input.id, "Entry not found"),
@@ -649,7 +692,7 @@ export async function continueEntry(
   }).lean();
   if (!source) throw notFound();
 
-  const entry = await startNewEntry({
+  const started = await startNewEntry({
     workspaceId,
     authorId: scope.userId,
     // `continue` has no REST route — it is reachable only through tRPC, whose
@@ -676,11 +719,42 @@ export async function continueEntry(
     originId: input.originId,
   });
 
+  const { entry } = started;
   void publishSync(
     workspaceId,
     { kind: "timer.started", entry },
     input.originId,
   );
   emitWebhookEvent(workspaceId, "entry.started", { kind: "entry", entry });
-  return entry;
+  return started;
+}
+
+/**
+ * What a start has to tell the person about the timer it closed.
+ *
+ * One running timer per person, across every workspace, is this file's
+ * invariant — so starting in B ends the timer running in A. From B that is
+ * invisible: the colleagues in A see it stop, the person pressing Start does
+ * not. So the start answers with it, and the client says so.
+ *
+ * `null` when nothing was running, and when what was running was in the SAME
+ * workspace: replacing your own timer where you are looking is the ordinary
+ * meaning of Start and needs no announcement. The name comes from `nameOf`,
+ * which the router supplies — the person is a member of A (they had a timer
+ * running there), so naming it discloses nothing they cannot already see.
+ */
+export async function replacedByStart(
+  stopped: TimeEntryWire | null,
+  workspaceId: string,
+  nameOf: (workspaceId: string) => Promise<string>,
+): Promise<StartTimerReplaced | null> {
+  if (!stopped || stopped.workspaceId === workspaceId || stopped.end === null) {
+    return null;
+  }
+  return {
+    entryId: stopped.id,
+    workspaceId: stopped.workspaceId,
+    workspaceName: await nameOf(stopped.workspaceId),
+    end: stopped.end,
+  };
 }

@@ -27,8 +27,10 @@ import {
   updateEntrySchema,
   type DetailedEntry,
   type RecentEntry,
+  type StartTimerReplaced,
   type TimeEntry as TimeEntryWire,
   type DescriptionSuggestion,
+  workspaceScopeSchema,
 } from "@starter/shared";
 import { scopeFromContext } from "../../services/scope.js";
 import {
@@ -43,15 +45,19 @@ import {
   recentEntries,
 } from "../../services/entries/list.js";
 import {
-  continueEntry,
+  continueEntryDetailed,
   currentEntry,
   discardTimer,
   discardTimerSchema,
   personReach,
+  replacedByStart,
   resolveRunawayEntry,
-  startTimer,
+  startTimerDetailed,
   stopTimer,
+  type StartedEntry,
 } from "../../services/entries/timer.js";
+import { productionMembershipStore } from "../../services/membership/stores.js";
+import { workspaceName } from "../../services/membership/workspaces.js";
 import { router, workspaceProcedure } from "../trpc.js";
 
 // Re-exported from their new homes so the existing unit tests and the sibling
@@ -62,6 +68,26 @@ export {
   MAX_ENTRY_TAGS,
   normalizeTagIds,
 } from "../../services/entries/tags.js";
+
+/** What `start` and `continue` answer: the new entry, and what it replaced. */
+export type StartedTimerWire = TimeEntryWire & { replaced: StartTimerReplaced | null };
+
+/**
+ * Attach the cross-workspace timer a start closed, if any. See
+ * `replacedByStart` — the client has to say "your timer in Acme stopped",
+ * because nothing in the workspace being looked at shows it.
+ */
+async function withReplaced(
+  started: StartedEntry,
+  workspaceId: string,
+): Promise<StartedTimerWire> {
+  const replaced = await replacedByStart(
+    started.stopped,
+    workspaceId,
+    async (id) => workspaceName(await productionMembershipStore(), id),
+  );
+  return { ...started.entry, replaced };
+}
 
 export const entriesRouter = router({
   list: workspaceProcedure
@@ -101,7 +127,7 @@ export const entriesRouter = router({
       getEntry(scopeFromContext(ctx), input.id),
     ),
 
-  current: workspaceProcedure.query(
+  current: workspaceProcedure.input(workspaceScopeSchema).query(
     async ({ ctx }): Promise<TimeEntryWire | null> =>
       // `personReach`: a tRPC caller is authenticated as the PERSON, so the
       // running timer is theirs to see wherever it runs. A workspace-bound API
@@ -112,12 +138,16 @@ export const entriesRouter = router({
 
   start: workspaceProcedure
     .input(startTimerSchema)
-    .mutation(async ({ ctx, input }): Promise<TimeEntryWire> =>
+    .mutation(async ({ ctx, input }): Promise<StartedTimerWire> =>
       // `personReach` — see `current` above. Starting here stops whatever the
       // person had running, in whichever workspace it ran: that is the intent
       // of a session principal pressing Start, and it is what keeps them from
-      // ending up with two running timers.
-      startTimer(scopeFromContext(ctx), input, personReach),
+      // ending up with two running timers. `replaced` names it when it ran in
+      // another workspace.
+      withReplaced(
+        await startTimerDetailed(scopeFromContext(ctx), input, personReach),
+        ctx.workspaceId,
+      ),
     ),
 
   stop: workspaceProcedure
@@ -142,8 +172,11 @@ export const entriesRouter = router({
 
   continue: workspaceProcedure
     .input(continueEntrySchema)
-    .mutation(async ({ ctx, input }): Promise<TimeEntryWire> =>
-      continueEntry(scopeFromContext(ctx), input),
+    .mutation(async ({ ctx, input }): Promise<StartedTimerWire> =>
+      withReplaced(
+        await continueEntryDetailed(scopeFromContext(ctx), input),
+        ctx.workspaceId,
+      ),
     ),
 
   create: workspaceProcedure
