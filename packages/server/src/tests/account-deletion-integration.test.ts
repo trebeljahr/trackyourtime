@@ -28,10 +28,8 @@ import { deviceAuthorization } from "better-auth/plugins/device-authorization";
 import { organization } from "better-auth/plugins/organization";
 import { ACCOUNT_DELETION_PASSWORD_REQUIRED } from "@starter/shared";
 
-import {
-  accountDeletionOptions,
-  recordDeletionPassword,
-} from "../auth/account-deletion.js";
+import { accountDeletionOptions } from "../auth/account-deletion.js";
+import { authBeforeHook } from "../services/membership/organization-lockdown.js";
 import type { DeletionRowStore } from "../services/account-deletion/delete-account.js";
 import { memoryRowStore, type MemoryRowStore } from "./support/memory-row-store.js";
 
@@ -104,7 +102,9 @@ beforeEach(() => {
         log: () => undefined,
       }),
     },
-    hooks: { before: recordDeletionPassword },
+    // The composite hook `auth/auth.ts` wires in, not the password step
+    // alone: the organization lockdown runs first and must not swallow it.
+    hooks: { before: authBeforeHook },
     // The same plugin set as production: the cascade writes to the tables of
     // both the organization and the device-authorization plugins.
     plugins: [
