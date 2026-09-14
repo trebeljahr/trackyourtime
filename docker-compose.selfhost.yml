@@ -123,10 +123,21 @@ services:
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/tracktime}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
 
-      # Extra origins allowed to sign in, comma-separated. Empty is right for
-      # a browser-only self-host — the web app's own origin is already
-      # trusted via APP_URL. Add the browser extension's chrome-extension://
-      # id here if you build one, or capacitor://localhost for a mobile shell.
+      # Accept sign-ins from the store-installed clients with no extra step:
+      # the iOS and Android apps (capacitor://localhost, https://localhost)
+      # and the Chrome Web Store extension (its pinned chrome-extension://
+      # id). Each of them lets a person type in this server's address, and
+      # without their origins in the trust list every sign-in from them is
+      # refused with 403 INVALID_ORIGIN before the password is checked. Set
+      # it to false to accept the web app only.
+      TRUST_STORE_APPS: ${TRUST_STORE_APPS:-true}
+
+      # Extra origins allowed to sign in, comma-separated, on top of the web
+      # app's own (APP_URL) and the store clients above. Empty is right for
+      # almost everyone. Add a chrome-extension://<id> here only for an
+      # extension you built and loaded yourself, whose id differs from the
+      # store one, or another web app's origin that should be allowed to move
+      # data into this server directly (see docs/self-hosting.md).
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
 
       # ── Email (optional) ─────────────────────────────────────────────

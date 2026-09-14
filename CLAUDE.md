@@ -271,8 +271,11 @@ exist. Run `pnpm build:mobile ios` after any `pnpm install` and before opening
 `ios/App` in Xcode directly, or SPM resolution fails on a checkout that has
 never built.
 
-**`NEXT_PUBLIC_API_URL` is required and baked in at build time.**
-`scripts/build-mobile.mjs` refuses to run without it, and afterwards asserts the
+**`NEXT_PUBLIC_API_URL` is required and baked in at build time — as the
+DEFAULT server.** A person can point the store app at any other Track Your
+Time server from the login screen (see "Choosing a server on the phone"
+below); the baked value is where a fresh install starts. `scripts/build-mobile.mjs`
+refuses to run without it, and afterwards asserts the
 literal is really in an emitted chunk — an unset value otherwise ships an app
 that resolves every request against `capacitor://localhost`, fails on device and
 builds green. It also preflights the toolchain (Xcode selected, a simulator
@@ -537,6 +540,14 @@ Set `TRUSTED_ORIGINS` on the server (comma-separated):
 TRUSTED_ORIGINS=capacitor://localhost,https://localhost
 ```
 
+or `TRUST_STORE_APPS=true`, which adds both of those plus the Chrome Web Store
+extension's pinned `chrome-extension://` id from
+`packages/shared/src/store-clients.ts` — the self-host compose file defaults it
+on, so the store clients can sign in to a fresh self-hosted server with no
+manual step. Off unless set, so the hosted deploy's list stays what Coolify
+says. `STORE_EXTENSION_ID` is recomputed from `STORE_EXTENSION_KEY` in
+`tests/env.test.ts`; rotate both or neither.
+
 Electron `file://` sends `Origin: null` and can't be trusted with
 credentials. Register a custom protocol in `electron/main.ts` and add
 it (e.g. `app://-`) instead.
@@ -544,6 +555,48 @@ it (e.g. `app://-`) instead.
 Tauri serves the bundled frontend from `tauri://localhost` (macOS/Linux)
 and `http://tauri.localhost` (Windows) — both must be in
 `TRUSTED_ORIGINS` for cookie auth to work.
+
+### Choosing a server on the phone
+
+The store app is one build for everybody, so `NEXT_PUBLIC_API_URL` is only its
+default. The login screen's picker (`components/server-picker.tsx`, native
+only) stores another origin in Capacitor Preferences, and `lib/api-origin.ts`
+is the one place that answers "which server". Rules that fail quietly if
+broken:
+
+- **The web app never has a choice.** Every export of `lib/api-origin.ts`
+  returns the build's origin on web; nothing reads storage, awaits or rewrites a
+  URL there. The picker renders nothing on web and nothing on the first client
+  render anywhere (`hooks/use-is-native.ts` hydrates as `false`), so the
+  prerendered login page is identical on both — `server-picker.test.tsx`
+  compares the two `renderToString`s.
+- **Module-scope clients keep their build-time URL, and each request is
+  rebased at send time.** The tRPC link's `fetch` and better-auth's
+  `customFetchImpl` both `await whenApiOriginReady()` and `rebaseApiUrl()` on
+  native. A client built per server would have to be rebuilt mid-session; a
+  request that left before the stored choice was read would go to the wrong
+  server with this server's token.
+- **The choice is part of the native readiness gate.** `hydrateNativeSession`
+  waits for it beside the Keychain token, and `useSync` keys its socket on it.
+- **Switching is `lib/server-switch.ts`, in order:** sign out of the OLD server
+  while requests still go there, clear the running-timer mirror, keep the
+  offline queue, save, reload. Signing out after saving would send the old
+  token to the new server and leave the old session alive.
+- **Every queued row carries the server it was queued against** (`server` on
+  `QueuedMutation`, beside `owner`). The flush, the pending count, adoption,
+  `cancelQueuedForTemp` and `discardDeletedAccountQueue` all stay on the current
+  server; a row with no stamp belongs to the build's default server, where every
+  such row was made. Rows for another server are listed in Settings → Devices,
+  grouped per server beside another account's rows, never replayed and never
+  deleted without a confirmation. Raycast stamps the same field (claiming
+  unstamped rows for its current API URL on first run) and binds its stored
+  token to the server that issued it.
+- **Validate before saving.** `normalizeServerInput` (sync: a URL, and http
+  only on loopback) and `checkServer` (`/api/health` answers, as Track Your
+  Time, database up) in `@starter/core/server-origin.ts`. `/api/health` answers
+  any origin with `Access-Control-Allow-Origin: *` and reports `originTrusted`,
+  so the picker refuses a server that would 403 the sign-in and names the
+  setting to change.
 
 ### The Capacitor shells do not use cookies
 
@@ -880,6 +933,26 @@ Files with a date and a number of hours but no clock time (`date-duration`)
 get their entries stacked back-to-back from `IMPORT_DAY_START_HOUR`, in file
 order, per day. The times of day are invented — the day totals are not — and
 the preview says so rather than letting it pass for recorded fact.
+
+**Moving between servers** (Settings → Data → Move to another server,
+`components/data/move-server-panel.tsx` over `lib/server-move.ts`) is this same
+export and import, driven from one device holding a session on both servers —
+no new server capability, so it works hosted → self-hosted and back. Four
+rules:
+
+- **Direct only when the target trusts the caller's origin** (`originTrusted`
+  from its `/api/health`). A web app on another domain is refused by the
+  browser, so the dialog falls back to downloading the parts and importing them
+  on the target's own Settings → Data, where `Restore workspace settings` and
+  `Restore pinned quick starts` default on for an empty workspace.
+- **Parts, never truncation.** One import takes `MAX_IMPORT_ROWS` rows in
+  `MAX_IMPORT_BYTES`; `planMoveParts` splits the history by start date until
+  each part fits both, and refuses a single day that cannot.
+- **Settings are restored only with the first part and only into an empty
+  workspace**; pins only with the first part.
+- **"Complete" is arithmetic, not optimism**: created + already-there must equal
+  exported. A part the target answers "Nothing to import" for counts as already
+  there, which is what makes re-running a stopped move finish it.
 
 The CSV export is written in the exact column shape the importer recognises,
 so a spreadsheet round trip is supported rather than lucky. The JSON export is
@@ -1237,7 +1310,8 @@ doubled-looking `api.trackyourtime.dev/api/...`. That is the mount, not a
 mistake in the value. Stripping the mount would touch server, core, extension
 and Raycast; it buys cosmetics only.
 
-Four places must agree on the API origin: the server's `BETTER_AUTH_URL`
+Four places must agree on the DEFAULT API origin (every store client can be
+pointed elsewhere at runtime): the server's `BETTER_AUTH_URL`
 (set in Coolify's env fields — `packages/server/.env.production` is NOT tracked
 in this repo, a global gitignore rule excludes it), the client image's
 `NEXT_PUBLIC_API_URL` build arg in `.github/workflows/build-and-deploy.yml`
@@ -1288,8 +1362,8 @@ Five things the 380px popup does that are easy to break:
 
 ### Browser extension build modes
 
-`packages/extension` bakes its API URL in at build time, so a build is a
-target. Both are declared in `packages/extension/manifest.config.ts` — not in
+`packages/extension` bakes its DEFAULT API URL in at build time, so a build is
+a target. Both are declared in `packages/extension/manifest.config.ts` — not in
 `.env.*`, which is gitignored and would yield a URL-less bundle silently.
 
 ```bash
@@ -1299,14 +1373,28 @@ pnpm run extension:id [dev|prod]  # the chrome-extension:// origin to trust
 ```
 
 Each target carries its own name and `host_permissions`, so both can be
-installed at once and a production build cannot be pointed at localhost. As
-unpacked extensions the two have different ids, and **each id's origin must be
-in that server's `TRUSTED_ORIGINS`**. The dev id is derived and trusted by
-`pnpm run dev` (`scripts/lib/extension-id.mjs`, shared with `extension:id` so
-the two can never disagree). The production id has to be pinned with
-`EXTENSION_KEY` and added to the server app's `TRUSTED_ORIGINS` in Coolify by
-hand — deliberately: a production trust list that a script can extend is a
-trust list nobody reviews.
+installed at once. The required `host_permissions` are only the build's default
+server; any other server is reached through `optional_host_permissions`
+(`https://*/*`, plus `http://localhost/*` and `http://127.0.0.1/*` in
+production), requested for the ONE host a person picks in the popup's server
+picker (`src/lib/server-access.ts`, `src/popup/switch-server.ts`).
+`chrome.permissions.request` must be called before any `await` in the click
+that chose the server — the user gesture does not survive one, and
+`switch-server.test.ts` pins that. The worker re-validates with `checkServer`,
+refuses to switch past unsent queue rows without a confirmation
+(`UNSENT_CHANGES`), signs out of the old server (only its own password
+session, never a borrowed web-app cookie) and clears its queue, per the
+extension's existing sign-out rule. `serverAccess` in the snapshot reports a
+revoked grant, and the popup offers "Allow access".
+
+As unpacked extensions the two have different ids, and **each id's origin must
+be trusted by that server**. The dev id is derived and trusted by `pnpm run
+dev` (`scripts/lib/extension-id.mjs`, shared with `extension:id` so the two
+can never disagree). The production build pins `STORE_EXTENSION_KEY` from
+`@starter/shared` unless `EXTENSION_KEY` overrides it, so its id is the store
+id that `TRUST_STORE_APPS=true` trusts. On the hosted deploy that switch (or the
+id in `TRUSTED_ORIGINS`) is set in Coolify by hand — deliberately: a production
+trust list that a script can extend is a trust list nobody reviews.
 
 ### Internationalisation (i18n)
 
@@ -1431,9 +1519,9 @@ be unpublishable. Never pass a locale to the shared duration helpers from
 
 ### Static export caveats
 
-- `NEXT_PUBLIC_API_URL` is baked at build time — desktop/mobile binaries
-  are locked to whichever API URL they were built against. Rebuild to
-  retarget.
+- `NEXT_PUBLIC_API_URL` is baked at build time — desktop binaries are locked
+  to whichever API URL they were built against; rebuild to retarget. The phone
+  apps treat it as the default and let the person choose another server.
 - No `rewrites()`, no `middleware.ts`, no server components with runtime
   data. Dynamic routes need `generateStaticParams`.
 - Next `<Image>` uses the default loader only because `images.unoptimized`

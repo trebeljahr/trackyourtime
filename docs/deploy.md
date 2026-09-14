@@ -207,13 +207,15 @@ Reading the failures:
   `NEXT_PUBLIC_WS_URL` are baked into the browser bundle at image build time.
   Runtime env cannot change them; rebuilding the image is the only way. Both
   are **origins**, with no `/api` on the end — the client appends the path.
-- `packages/extension/manifest.config.ts` — the extension's production target
-  and its `host_permissions`.
+- `packages/extension/manifest.config.ts` — the extension's DEFAULT production
+  server and its required `host_permissions`. A person can pick another server
+  in the popup, so this is where a fresh install starts, not the only host.
 - `packages/raycast/src/lib/preferences.ts` — the Raycast extension's
   `apiUrl` / `webUrl` defaults (and the placeholders in its `package.json`).
 - `.github/workflows/mobile-release.yml` — `NEXT_PUBLIC_API_URL` is baked into
-  a store binary, so retargeting the mobile app means a new build and a new
-  review. That file also carries the Android signing secrets; see
+  a store binary as the DEFAULT server. Moving the default means a new build
+  and a new review; a person can still choose another server on the login
+  screen of the build they have. That file also carries the Android signing secrets; see
   [Android release signing](#android-release-signing).
 
 ## TRUSTED_ORIGINS
@@ -225,18 +227,28 @@ is not `FRONTEND_URL` needs to be in `TRUSTED_ORIGINS` or sign-in returns
 
 The web app is **not** same-origin with the API any more, so `FRONTEND_URL`
 carrying `https://trackyourtime.dev` is what admits it. The browser extension
-needs its own entry on top. That id is derived from the directory the
-unpacked build is loaded from, so it is only right for a `dist-prod/` at this
-checkout's path. Before publishing, pin `EXTENSION_KEY` (see
-`packages/extension/manifest.config.ts`) so the id stops moving, then:
+and the phone apps need entries on top.
+
+The production extension build pins the store key by default
+(`STORE_EXTENSION_KEY` in `packages/shared/src/store-clients.ts`), so its id is
+`opibnndhibnigcfgfbgbipakadhnbjfi` wherever it is loaded from — unpacked or
+from the Web Store — provided the first Web Store upload preserves that key.
+Confirm with:
 
 ```bash
 pnpm run extension:id prod
 ```
 
-Paste the `chrome-extension://<id>` it prints into the **server app's
-`TRUSTED_ORIGINS` field in Coolify**, comma-separated if there is already
-something there. Not into `packages/server/.env.production` — that file is
+Two ways to trust the store clients on this deployment, in the **server app's
+env fields in Coolify**:
+
+- `TRUST_STORE_APPS=true` — trusts `capacitor://localhost`, `https://localhost`
+  and `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` together, from
+  code. The self-host compose file sets this by default.
+- or list them in `TRUSTED_ORIGINS`, comma-separated, if this deployment's
+  trust list should stay spelled out by hand.
+
+Either way, the variable goes into Coolify. Not into `packages/server/.env.production` — that file is
 untracked here and never reaches the image (step 3), so a value written there
 changes nothing in production.
 

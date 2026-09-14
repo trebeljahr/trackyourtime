@@ -51,7 +51,7 @@ browser / extension / Raycast
 | `packages/client` | Next.js App Router web app, **static export** (`output: "export"`, `trailingSlash: true`). `src/app/` (routes), `src/components/` (`ui/` is shadcn), `src/hooks/`, `src/lib/`, `src/providers/` | Web UI, a new route, a react-query cache rule, the client half of offline/sync |
 | `packages/shared` | Types, zod schemas, and pure domain rules that both sides need: `types.ts`, `schemas.ts`, `protocol.ts`, plus `rates`, `budgets`, `duration`, `idle`, `import`, `quick-start`, `reports`, `runaway`, `timesheet`, `timezone`, `catalog-colors` | Whenever a type or rule must be identical on client and server, or is pure enough to unit-test without a database |
 | `packages/core` | Framework-free runtime shared by web, extension and Raycast — no React, no DOM, no tRPC of its own: `api-client`, `session-auth` (password + RFC 8628 device flow), `sync-client`, `sync-url`, `offline-queue`, `offline-ops`, `entry-fields`, `timer-store`, `idle`, `ids`, `storage` | Behaviour more than one client needs. Putting it in a client package instead is how the surfaces drift |
-| `packages/extension` | Chrome MV3 extension, popup only. `src/background/` (holds the sync client), `src/popup/`, `src/lib/`. API URL baked in at build time by `manifest.config.ts` | Extension UI or background behaviour. Its `chrome-extension://` origin must be in the server's `TRUSTED_ORIGINS` |
+| `packages/extension` | Chrome MV3 extension, popup only. `src/background/` (holds the sync client), `src/popup/`, `src/lib/`. `manifest.config.ts` bakes in the DEFAULT API URL; the popup's server picker switches to any server, requesting that one host through `optional_host_permissions` | Extension UI or background behaviour. Its `chrome-extension://` origin must be trusted by the server — `TRUST_STORE_APPS=true` covers the store id |
 | `packages/raycast` | Raycast (macOS) extension: `menu-bar.tsx`, `timer.tsx`, `entries.tsx`, `components/` (incl. catalog forms), `lib/` | Raycast commands and forms only — domain logic belongs in `core`/`shared` |
 | `packages/mcp` | MCP server on stdio over the public REST API (`/api/v1`) with an API token: `api-client`, `tools` (input schemas from `shared`), `server` (scope probe), `index` (the `trackyourtime-mcp` binary) | A new tool, or a REST change a tool depends on. It never calls tRPC |
 | `docs-site` | Docusaurus site, **not deployed**: intro, choosing a tracker, self-hosting (generated from `docs/self-hosting.md` by `pnpm docs:sync`), MCP, REST API. `getting-started` and `architecture` are still starter boilerplate. `plugins/llms-markdown.ts` emits a `.md` copy of every page plus `llms.txt` at build | API or MCP changes, and after editing `docs/self-hosting.md` |
@@ -95,7 +95,9 @@ Those call `trpc.<router>.<procedure>.useQuery()` / `.useMutation()`.
 `credentials: "include"` and an `x-tracktime-client: web` header (that header is
 what names the session in Settings → Devices). Mounted by
 `packages/client/src/providers/trpc-provider.tsx`. `NEXT_PUBLIC_API_URL` is
-inlined at build time — a static export cannot follow a moved origin.
+inlined at build time — a static export cannot follow a moved origin. On the
+phone apps it is only the default: `lib/api-origin.ts` holds the server chosen
+on the login screen, and the link's `fetch` rebases each request onto it.
 
 **3. Express middleware.** `packages/server/src/app.ts`, `createApp()`. **The
 order is load-bearing** — the file documents each step in place; do not
@@ -249,7 +251,8 @@ branch on it for authorization.
 
 **`TRUSTED_ORIGINS`.** `getTrustedOrigins()` in
 `packages/server/src/config/env.ts` returns `FRONTEND_URL` plus the
-comma-separated `TRUSTED_ORIGINS`, adding localhost aliases outside production.
+comma-separated `TRUSTED_ORIGINS` (plus the store clients' origins when
+`TRUST_STORE_APPS=true`), adding localhost aliases outside production.
 That one list feeds three things: the CORS middleware, better-auth's own
 `trustedOrigins`, and the WebSocket origin check. A client that runs **in a
 browser** must have its origin in it or sign-in answers `403 INVALID_ORIGIN`

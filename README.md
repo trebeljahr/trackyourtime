@@ -142,8 +142,10 @@ A single-domain self-host does not need this at all: the browser's origin *is* `
 
 better-auth validates the `Origin` header on sign-in whenever the request carries `Sec-Fetch-*` headers, which every real browser fetch does. A browser origin that is not `FRONTEND_URL` gets `403 INVALID_ORIGIN` **before the password is checked**. Add, comma-separated, whichever apply:
 
-- `chrome-extension://<id>` — the browser extension (`pnpm run extension:id prod` prints it)
+- `chrome-extension://<id>` — a browser extension you built yourself (`pnpm run extension:id prod` prints it)
 - `capacitor://localhost,https://localhost` — Capacitor
+
+Or set `TRUST_STORE_APPS=true`, which trusts the iOS and Android apps and the Chrome Web Store extension (its id is pinned in `packages/shared/src/store-clients.ts`) in one switch. `docker-compose.selfhost.yml` defaults it to `true`, so the store-installed clients can sign in to a self-hosted server with nothing to configure.
 - `app://-` — Electron via a custom protocol (`file://` sends `Origin: null` and cannot be trusted with credentials)
 - `tauri://localhost` and `http://tauri.localhost` — Tauri on macOS/Linux and Windows
 
