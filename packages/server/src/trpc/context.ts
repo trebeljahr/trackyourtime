@@ -30,6 +30,12 @@ function readActiveWorkspaceId(session: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/** The session row's id — what `workspaces.setActive` writes through. */
+function readSessionId(session: unknown): string | null {
+  const value = (session as { session?: { id?: unknown } })?.session?.id;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
 export async function createContext({ req, res }: CreateExpressContextOptions) {
   const auth = getAuth();
   const session = await auth.api.getSession({
@@ -45,13 +51,16 @@ export async function createContext({ req, res }: CreateExpressContextOptions) {
       user: session.user,
       authMethod: (usedBearer ? "bearer" : "cookie") satisfies AuthMethod,
       /**
-       * The workspace this session last switched to, written by the
-       * organization plugin. It is only ever a DEFAULT — an explicit
-       * `workspaceId` on a procedure's input wins, because a long-lived
-       * client (Raycast, the extension) cannot be relied on to have re-read
-       * this. See auth/workspace.ts.
+       * The workspace this session last switched to, written by
+       * `workspaces.setActive` (the plugin's own set-active is closed). It
+       * is only ever a DEFAULT — an explicit `workspaceId` on a procedure's
+       * input wins, because a long-lived client (Raycast, the extension)
+       * cannot be relied on to have re-read this. A stale value, pointing at
+       * a workspace the person has since left, falls back to their oldest
+       * membership. See auth/workspace.ts.
        */
       activeWorkspaceId: readActiveWorkspaceId(session),
+      sessionId: readSessionId(session),
     };
   }
 
@@ -62,6 +71,7 @@ export async function createContext({ req, res }: CreateExpressContextOptions) {
     user: null,
     authMethod: null satisfies AuthMethod,
     activeWorkspaceId: null,
+    sessionId: null,
   };
 }
 

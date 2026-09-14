@@ -33,6 +33,7 @@ import {
   revokeApiTokenSchema,
   type ApiTokenSummary,
   type CreatedApiToken,
+  workspaceScopeSchema,
 } from "@starter/shared";
 import { ApiToken, toClientApiToken } from "../../models/ApiToken.js";
 import { mintApiToken } from "../../auth/api-token.js";
@@ -118,7 +119,7 @@ function requireTokenId(id: string): string {
 }
 
 export const apiTokensRouter = router({
-  list: workspaceProcedure.query(
+  list: workspaceProcedure.input(workspaceScopeSchema).query(
     async ({ ctx }): Promise<ApiTokenSummary[]> => {
       const docs = await ApiToken.find(
         ownTokenFilter(ctx.workspaceId, ctx.user.id),

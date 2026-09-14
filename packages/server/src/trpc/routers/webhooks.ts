@@ -44,6 +44,7 @@ import {
   type CreatedWebhookSubscription,
   type WebhookDeliveryWire,
   type WebhookSubscriptionWire,
+  workspaceScopeSchema,
 } from "@starter/shared";
 import {
   WebhookDelivery,
@@ -115,7 +116,7 @@ export function ownWebhookByIdFilter(
 }
 
 export const webhooksRouter = router({
-  list: workspaceProcedure.query(
+  list: workspaceProcedure.input(workspaceScopeSchema).query(
     async ({ ctx }): Promise<WebhookSubscriptionWire[]> => {
       const docs = await WebhookSubscription.find(
         ownWebhookFilter(ctx.workspaceId, ctx.user.id),

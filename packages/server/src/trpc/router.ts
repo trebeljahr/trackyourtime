@@ -15,6 +15,9 @@ import { invoicesRouter } from "./routers/invoices.js";
 import { dataRouter } from "./routers/data.js";
 import { apiTokensRouter } from "./routers/api-tokens.js";
 import { webhooksRouter } from "./routers/webhooks.js";
+import { workspacesRouter } from "./routers/workspaces.js";
+import { membersRouter } from "./routers/members.js";
+import { invitationsRouter } from "./routers/invitations.js";
 
 export const appRouter = router({
   health: healthRouter,
@@ -37,6 +40,11 @@ export const appRouter = router({
   // these routers do, never tRPC.
   apiTokens: apiTokensRouter,
   webhooks: webhooksRouter,
+  // Membership. The ONLY way to change who is in a workspace: better-auth's
+  // own /organization/* endpoints answer 404 over HTTP (auth/auth.ts).
+  workspaces: workspacesRouter,
+  members: membersRouter,
+  invitations: invitationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

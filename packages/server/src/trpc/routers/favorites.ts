@@ -28,6 +28,7 @@ import {
   quickStartKey,
   reorderFavoritesSchema,
   type DetailedFavorite,
+  workspaceScopeSchema,
 } from "@starter/shared";
 import { Favorite, toClientFavorite } from "../../models/Favorite.js";
 import { Project } from "../../models/Project.js";
@@ -104,7 +105,7 @@ const writeOrder = async (
 };
 
 export const favoritesRouter = router({
-  list: workspaceProcedure.query(
+  list: workspaceProcedure.input(workspaceScopeSchema).query(
     async ({ ctx }): Promise<DetailedFavorite[]> =>
       listFavorites(favoriteScope(ctx)),
   ),

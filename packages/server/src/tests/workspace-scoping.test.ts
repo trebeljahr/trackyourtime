@@ -33,7 +33,27 @@ const NOT_WORKSPACE_SCOPED: Record<string, string> = {
   "profile.ts": "a profile belongs to the person, across every workspace",
   "devices.ts": "sessions belong to the person, not to a workspace",
   "billing.ts": "billing is per account, not per workspace",
+  "workspaces.ts":
+    "lists the person's workspaces and sets the session default — it is the question asked BEFORE a workspace is chosen",
 };
+
+/**
+ * Routers that are workspace-scoped but also carry named procedures outside
+ * any workspace, each for a stated reason. The file must still use
+ * workspaceProcedure for everything else; only the procedures listed may use
+ * protectedProcedure or publicProcedure.
+ */
+const MIXED_SCOPE: Record<string, { procedures: readonly string[]; reason: string }> = {
+  "invitations.ts": {
+    procedures: ["preview", "accept", "decline"],
+    reason:
+      "the invitee is not a member yet — accept/decline are authorized by the invitation id and the account's email, preview by the id alone",
+  },
+};
+
+/** The procedure names in a router source that use `kind`. */
+const proceduresUsing = (source: string, kind: string): string[] =>
+  [...source.matchAll(new RegExp(`^\\s*(\\w+):\\s*${kind}\\b`, "gm"))].map((m) => m[1] ?? "");
 
 /** Files that hold helpers rather than procedures. */
 const NOT_A_ROUTER = new Set([
@@ -71,6 +91,20 @@ test("no domain router falls back to the unscoped protectedProcedure", () => {
   for (const file of routerFiles) {
     if (file in NOT_WORKSPACE_SCOPED || NOT_A_ROUTER.has(file)) continue;
     const source = read(file);
+    const mixed = MIXED_SCOPE[file];
+    if (mixed) {
+      const unscoped = [
+        ...proceduresUsing(source, "protectedProcedure"),
+        ...proceduresUsing(source, "publicProcedure"),
+      ].sort();
+      assert.deepEqual(
+        unscoped,
+        [...mixed.procedures].sort(),
+        `${file}: only ${mixed.procedures.join(", ")} may run outside a workspace`,
+      );
+      assert.ok(mixed.reason.length > 10);
+      continue;
+    }
 
     assert.ok(
       !source.includes("protectedProcedure"),

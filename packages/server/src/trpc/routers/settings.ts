@@ -12,6 +12,7 @@ import {
   type IdleSettings,
   type MaxDurationSettings,
   type ResolvedSettings,
+  workspaceScopeSchema,
 } from "@starter/shared";
 import {
   UserPreferencesModel,
@@ -55,7 +56,7 @@ function assertMayReadBusinessProfile(ctx: RoleGateContext): void {
 
 export const settingsRouter = router({
   /** The caller's workspace settings merged with their own preferences. */
-  get: workspaceProcedure.query(async ({ ctx }): Promise<ResolvedSettings> => {
+  get: workspaceProcedure.input(workspaceScopeSchema).query(async ({ ctx }): Promise<ResolvedSettings> => {
     return getResolvedSettings(ctx.workspaceId, ctx.user.id);
   }),
 
