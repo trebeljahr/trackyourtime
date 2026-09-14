@@ -7,6 +7,7 @@ import { AccountSettings } from "@/components/settings/account-settings";
 import { ExportPanel } from "@/components/data/export-panel";
 import { ImportHistory } from "@/components/data/import-history";
 import { ImportPanel } from "@/components/data/import-panel";
+import { MoveServerPanel } from "@/components/data/move-server-panel";
 import { ApiTokensPanel } from "@/components/settings/api-tokens";
 import { DevicesPanel } from "@/components/settings/devices";
 import { ForeignQueuePanel } from "@/components/settings/foreign-queue";
@@ -91,6 +92,7 @@ export default function SettingsPage() {
           <ImportPanel />
           <ImportHistory />
           <ExportPanel />
+          <MoveServerPanel />
         </TabsContent>
         <TabsContent
           value="devices"

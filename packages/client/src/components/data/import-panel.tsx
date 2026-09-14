@@ -26,6 +26,38 @@ import { ORIGIN_ID } from "@/hooks/use-sync";
 import { trpc } from "@/lib/trpc";
 import { ImportPreviewView, pluralEntries } from "./import-preview";
 
+/**
+ * What else an import wrote, beside the entries — so a move through a file
+ * ends with the same counts the direct move shows.
+ */
+const importReceipt = (result: {
+  entriesSkipped: number;
+  clientsCreated: number;
+  projectsCreated: number;
+  tasksCreated: number;
+  tagsCreated: number;
+  favoritesCreated: number;
+  settingsRestored: boolean;
+}): string | undefined => {
+  const parts = [
+    [result.clientsCreated, "client", "clients"],
+    [result.projectsCreated, "project", "projects"],
+    [result.tasksCreated, "task", "tasks"],
+    [result.tagsCreated, "tag", "tags"],
+    [result.favoritesCreated, "pinned quick start", "pinned quick starts"],
+  ]
+    .filter(([value]) => (value as number) > 0)
+    .map(([value, one, many]) => `${value} ${value === 1 ? one : many}`);
+  if (result.settingsRestored) parts.push("workspace settings");
+  const created = parts.length > 0 ? `Also created: ${parts.join(", ")}.` : "";
+  const skipped =
+    result.entriesSkipped > 0
+      ? ` ${result.entriesSkipped} ${result.entriesSkipped === 1 ? "entry was" : "entries were"} already here.`
+      : "";
+  const text = `${created}${skipped}`.trim();
+  return text === "" ? undefined : text;
+};
+
 /** File types the picker offers. Anything text-shaped is attempted anyway. */
 const ACCEPT = ".csv,.tsv,.txt,.json,text/csv,text/plain,application/json";
 
@@ -38,6 +70,9 @@ type Options = {
   skipDuplicates: boolean;
   createMissing: boolean;
   defaultBillable: boolean;
+  /** Null until the person touches the switch — then it follows the workspace. */
+  restoreSettings: boolean | null;
+  restoreFavorites: boolean | null;
 };
 
 const defaultOptions = (): Options => ({
@@ -48,6 +83,15 @@ const defaultOptions = (): Options => ({
   skipDuplicates: true,
   createMissing: true,
   defaultBillable: false,
+  // A Track Your Time export dropped into a workspace with nothing in it is a
+  // restore or a move to this server, and a restore wants the settings and
+  // pins back. Into a workspace already in use it is a backfill, where
+  // rewriting everybody's currency because somebody imported a file would be
+  // a surprise. Only offered when the file carries them.
+  // Decided at render rather than here, because whether the workspace is
+  // empty is a query that may still be loading when the file is dropped.
+  restoreSettings: null,
+  restoreFavorites: null,
 });
 
 /**
@@ -70,7 +114,11 @@ export function ImportPanel(): React.JSX.Element {
   const [options, setOptions] = React.useState<Options>(defaultOptions);
   const [dragging, setDragging] = React.useState(false);
 
+  const workspaceInfo = trpc.data.exportInfo.useQuery({});
+  const emptyWorkspace = workspaceInfo.data?.entries === 0;
   const analyze = trpc.data.analyze.useMutation();
+  const restoreSettings = options.restoreSettings ?? emptyWorkspace;
+  const restoreFavorites = options.restoreFavorites ?? emptyWorkspace;
   const commit = trpc.data.commit.useMutation();
 
   const reset = React.useCallback((): void => {
@@ -180,10 +228,18 @@ export function ImportPanel(): React.JSX.Element {
           skipDuplicates: options.skipDuplicates,
           createMissing: options.createMissing,
           defaultBillable: options.defaultBillable,
+          restoreSettings: preview?.sections.settings
+            ? restoreSettings
+            : undefined,
+          restoreFavorites:
+            (preview?.sections.favorites ?? 0) > 0 ? restoreFavorites : undefined,
           originId: ORIGIN_ID,
         });
         toast.success(
           `Imported ${result.entriesCreated} ${result.entriesCreated === 1 ? "entry" : "entries"} — ${formatDurationShort(result.totalSec)} of tracked time.`,
+          {
+            description: importReceipt(result),
+          },
         );
         reset();
         await Promise.all([
@@ -201,7 +257,18 @@ export function ImportPanel(): React.JSX.Element {
         );
       }
     })();
-  }, [commit, filename, options, overrides, reset, text, utils]);
+  }, [
+    commit,
+    filename,
+    options,
+    overrides,
+    preview,
+    reset,
+    restoreFavorites,
+    restoreSettings,
+    text,
+    utils,
+  ]);
 
   const busy = analyze.isPending || commit.isPending;
 
@@ -307,6 +374,44 @@ export function ImportPanel(): React.JSX.Element {
                   data-testid="import-create-missing"
                 />
               </label>
+              {preview.sections.settings ? (
+                <label className="flex items-center justify-between gap-4 text-sm">
+                  <span>
+                    Restore workspace settings
+                    <span className="block text-xs text-muted-foreground">
+                      Currency, rates and week start from the file replace
+                      this workspace&apos;s.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={restoreSettings}
+                    onCheckedChange={(value) =>
+                      setOption("restoreSettings", value)
+                    }
+                    disabled={busy}
+                    data-testid="import-restore-settings"
+                  />
+                </label>
+              ) : null}
+              {preview.sections.favorites > 0 ? (
+                <label className="flex items-center justify-between gap-4 text-sm">
+                  <span>
+                    Restore {preview.sections.favorites} pinned quick start
+                    {preview.sections.favorites === 1 ? "" : "s"}
+                    <span className="block text-xs text-muted-foreground">
+                      Pinned to your tracker, not to anyone else&apos;s.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={restoreFavorites}
+                    onCheckedChange={(value) =>
+                      setOption("restoreFavorites", value)
+                    }
+                    disabled={busy}
+                    data-testid="import-restore-favorites"
+                  />
+                </label>
+              ) : null}
               <label className="flex items-center justify-between gap-4 text-sm">
                 <span>
                   Treat unmarked entries as billable
