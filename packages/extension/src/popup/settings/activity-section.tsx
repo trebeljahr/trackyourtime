@@ -4,6 +4,7 @@ import { SettingRow } from "../accordion";
 import { ConfirmPanel } from "../confirm-panel";
 import { NumberField } from "../number-field";
 import { Switch } from "../switch";
+import { useT, type PopupT } from "../../i18n/use-t";
 
 /**
  * Settings → Activity: whether this browser watches which sites you use.
@@ -27,8 +28,8 @@ export type ActivitySectionProps = {
 export const MIN_RETENTION_DAYS = 1;
 export const MAX_RETENTION_DAYS = 90;
 
-export function activityHint(activity: ActivitySnapshot): string {
-  return activity.settings.enabled && activity.permitted ? "On" : "Off";
+export function activityHint(activity: ActivitySnapshot, t: PopupT): string {
+  return activity.settings.enabled && activity.permitted ? t("settings.on") : t("settings.off");
 }
 
 export function ActivitySection({
@@ -37,6 +38,7 @@ export function ActivitySection({
   onRequestPermission,
   onWipe,
 }: ActivitySectionProps): JSX.Element {
+  const t = useT("popup");
   const { settings } = activity;
   const [host, setHost] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -54,7 +56,7 @@ export function ActivitySection({
   return (
     <>
       <SettingRow
-        note="Records the site in front of you, on this device only. Nothing is sent until you accept a suggestion."
+        note={t("activity.enabledNote")}
         testId="setting-activity-enabled"
       >
         <Switch
@@ -70,13 +72,13 @@ export function ActivitySection({
               if (granted) void onSave({ enabled: true });
             });
           }}
-          label={on ? "Capturing activity" : "Activity capture off"}
+          label={on ? t("activity.on") : t("activity.off")}
           testId="activity-enabled"
         />
       </SettingRow>
 
       <SettingRow
-        note="Page titles say more about you than site names. Off keeps only the hostname."
+        note={t("activity.titlesNote")}
         testId="setting-activity-titles"
       >
         <Switch
@@ -84,16 +86,16 @@ export function ActivitySection({
           onChange={(storeTitles) => {
             void onSave({ storeTitles });
           }}
-          label={settings.storeTitles ? "Storing page titles" : "Hostnames only"}
+          label={settings.storeTitles ? t("activity.storingTitles") : t("activity.hostnamesOnly")}
           disabled={!on}
           testId="activity-titles"
         />
       </SettingRow>
 
       <SettingRow
-        label="Never record"
+        label={t("activity.exclude")}
         htmlFor="setting-activity-exclude"
-        note="Sites on this list are never stored. Use *.example.com for a whole domain. Incognito tabs are never recorded."
+        note={t("activity.excludeNote")}
         testId="setting-activity-excluded"
       >
         {settings.excludedHosts.map((pattern) => (
@@ -111,7 +113,7 @@ export function ActivitySection({
               }}
               data-testid={`activity-excluded-remove-${pattern}`}
             >
-              Remove
+              {t("activity.remove")}
             </button>
           </div>
         ))}
@@ -137,15 +139,15 @@ export function ActivitySection({
             onClick={addHost}
             data-testid="activity-exclude-add"
           >
-            Add
+            {t("activity.add")}
           </button>
         </div>
       </SettingRow>
 
       <SettingRow
-        label="Keep activity for"
+        label={t("activity.retention")}
         htmlFor="setting-activity-retention"
-        note="Older activity is deleted every day. Rules are kept."
+        note={t("activity.retentionNote")}
         testId="setting-activity-retention"
       >
         <NumberField
@@ -156,8 +158,8 @@ export function ActivitySection({
           }}
           min={MIN_RETENTION_DAYS}
           max={MAX_RETENTION_DAYS}
-          suffix="days"
-          ariaLabel="Activity retention in days"
+          suffix={t("activity.retentionSuffix")}
+          ariaLabel={t("activity.retentionLabel")}
           testId="activity-retention"
         />
       </SettingRow>
@@ -165,8 +167,8 @@ export function ActivitySection({
       <SettingRow
         note={
           activity.storedSegments === null
-            ? "Removes captured activity, rules and dismissed suggestions from this device."
-            : `${activity.storedSegments} stored ${activity.storedSegments === 1 ? "stretch" : "stretches"} of activity. Removes them, your rules and dismissed suggestions from this device.`
+            ? t("activity.wipeNote")
+            : t("activity.wipeNoteCount", { count: activity.storedSegments })
         }
         testId="setting-activity-wipe"
       >
@@ -177,13 +179,13 @@ export function ActivitySection({
           onClick={() => setConfirming(true)}
           data-testid="activity-wipe"
         >
-          Delete all activity now
+          {t("activity.wipe")}
         </button>
         {confirming ? (
           <ConfirmPanel
-            title="Delete all captured activity?"
-            hint="Entries you already accepted are not touched. This cannot be undone."
-            confirmLabel="Delete"
+            title={t("activity.wipeTitle")}
+            hint={t("activity.wipeHint")}
+            confirmLabel={t("actions.delete")}
             danger
             busy={busy}
             onCancel={() => setConfirming(false)}

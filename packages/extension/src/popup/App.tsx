@@ -345,9 +345,10 @@ export function App(): JSX.Element {
    *
    * Not through `send`: a refused server is the picker's own sentence, shown
    * under the address that was refused, and `send` would also raise it in the
-   * screen's banner — one failure announced twice. The worker's message is
-   * already written for a person (core's `checkServer`), so it is passed on
-   * as it is; only transport failures go through `describeError`.
+   * screen's banner — one failure announced twice. The worker's codes are
+   * translated by `describeError` against the server that was asked for; its
+   * English sentence (core's `checkServer`) is only the fallback for a code
+   * errors.ts does not know.
    */
   const setServer = useCallback(
     async (origin: string, discardUnsent: boolean): Promise<SetServerOutcome> => {
@@ -362,14 +363,13 @@ export function App(): JSX.Element {
         setError(null);
         return { ok: true };
       }
-      const worker =
-        response.code === "NO_RESPONSE" || response.code === "PORT_CLOSED";
+      // Every refusal is described against the server that was asked for,
+      // in the popup's language; a code errors.ts does not know keeps the
+      // worker's own sentence.
       return {
         ok: false,
         code: response.code,
-        message: worker
-          ? describeError(response.code, response.message, origin, tRef.current)
-          : response.message,
+        message: describeError(response.code, response.message, origin, tRef.current),
       };
     },
     [],
@@ -546,7 +546,7 @@ export function App(): JSX.Element {
         edited: false,
         ...fields,
       });
-      if (ok) setNote("Entry added.");
+      if (ok) setNote(tRef.current("app.notes.entryAdded"));
       return ok;
     },
     [send],
@@ -565,7 +565,7 @@ export function App(): JSX.Element {
         billable: draft.billable,
         tagIds: draft.tagIds,
       });
-      if (ok) goBackWith("Entry added.");
+      if (ok) goBackWith(tRef.current("app.notes.entryAdded"));
       return ok;
     },
     [send, goBackWith],
@@ -602,11 +602,13 @@ export function App(): JSX.Element {
     try {
       const granted = await chrome.permissions.request({ permissions: ["tabs"] });
       if (!granted) {
-        setError("Chrome did not grant access to tabs, so activity capture stays off.");
+        setError(tRef.current("errors.activityPermission"));
       }
       return granted;
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Could not ask Chrome for access to tabs.");
+      setError(
+        failure instanceof Error ? failure.message : tRef.current("errors.activityPermissionFailed"),
+      );
       return false;
     }
   }, []);
@@ -614,7 +616,7 @@ export function App(): JSX.Element {
   const wipeActivity = useCallback(
     async (): Promise<boolean> => {
       const ok = await send({ type: "activity:wipe" });
-      if (ok) setNote("All captured activity was deleted from this device.");
+      if (ok) setNote(tRef.current("app.notes.activityWiped"));
       return ok;
     },
     [send],

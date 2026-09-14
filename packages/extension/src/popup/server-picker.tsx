@@ -3,6 +3,8 @@ import { sameServerOrigin } from "@starter/core";
 import { DEFAULT_API_URL } from "../lib/config";
 import { defaultServerLabel, describeServer } from "../lib/server-label";
 import { ConfirmPanel } from "./confirm-panel";
+import { describeError, describeServerInput } from "./errors";
+import { useT, type PopupT } from "../i18n/use-t";
 import {
   planServerSwitch,
   switchServer,
@@ -29,8 +31,8 @@ type Choice = "default" | "custom";
 /** A switch waiting on "yes, discard them". */
 type PendingConfirm = { origin: string; hint: string };
 
-const unsentHint = (pending: number, apiUrl: string): string =>
-  `${pending} change${pending === 1 ? " has" : "s have"} not reached ${describeServer(apiUrl, DEFAULT_API_URL)} yet. Switching servers signs you out, and the extension discards ${pending === 1 ? "it" : "them"}.`;
+const unsentHint = (pending: number, apiUrl: string, t: PopupT): string =>
+  t("server.unsentHint", { count: pending, server: describeServer(apiUrl, DEFAULT_API_URL, t) });
 
 /**
  * Choose which Track Your Time server the extension talks to.
@@ -54,6 +56,7 @@ export function ServerPicker({
   onSetServer,
   onSwitched,
 }: ServerPickerProps): JSX.Element {
+  const t = useT("popup");
   const usingDefault = sameServerOrigin(apiUrl, DEFAULT_API_URL);
   const [choice, setChoice] = useState<Choice>(
     usingDefault ? "default" : "custom",
@@ -90,7 +93,13 @@ export function ServerPicker({
         return;
       }
       setConfirm(null);
-      setProblem(result.message);
+      setProblem(
+        result.stage === "input" && result.problem !== undefined
+          ? describeServerInput(result.problem, origin, t)
+          : result.stage === "access"
+            ? describeError(result.code, result.message, origin, t)
+            : result.message,
+      );
     });
   };
 
@@ -100,12 +109,12 @@ export function ServerPicker({
     const input = choice === "default" ? DEFAULT_API_URL : draft;
     const plan = planServerSwitch(input, apiUrl, pendingSync);
     if (plan.kind === "invalid") {
-      setProblem(plan.message);
+      setProblem(describeServerInput(plan.problem, input, t));
       return;
     }
     if (plan.kind === "confirm") {
       setProblem(null);
-      setConfirm({ origin: plan.origin, hint: unsentHint(plan.pending, apiUrl) });
+      setConfirm({ origin: plan.origin, hint: unsentHint(plan.pending, apiUrl, t) });
       return;
     }
     run(plan.origin, false);
@@ -114,9 +123,11 @@ export function ServerPicker({
   if (confirm !== null) {
     return (
       <ConfirmPanel
-        title={`Switch to ${describeServer(confirm.origin, DEFAULT_API_URL)}?`}
+        title={t("server.switchTitle", {
+          server: describeServer(confirm.origin, DEFAULT_API_URL, t),
+        })}
         hint={confirm.hint}
-        confirmLabel="Discard and switch"
+        confirmLabel={t("server.discardAndSwitch")}
         danger
         busy={busy}
         onCancel={() => setConfirm(null)}
@@ -132,7 +143,7 @@ export function ServerPicker({
   return (
     <form className="form" onSubmit={submit} data-testid="server-picker">
       <fieldset className="choices">
-        <legend className="field__label">Server</legend>
+        <legend className="field__label">{t("server.label")}</legend>
 
         <label className="choice">
           <input
@@ -145,7 +156,7 @@ export function ServerPicker({
             }}
             data-testid="server-choice-default"
           />
-          <span>{defaultServerLabel(DEFAULT_API_URL)}</span>
+          <span>{defaultServerLabel(DEFAULT_API_URL, t)}</span>
         </label>
 
         <label className="choice">
@@ -159,7 +170,7 @@ export function ServerPicker({
             }}
             data-testid="server-choice-custom"
           />
-          <span>My own server</span>
+          <span>{t("server.ownServer")}</span>
         </label>
       </fieldset>
 
@@ -168,7 +179,7 @@ export function ServerPicker({
           unlocked by the radio above. */}
       <div className="field">
         <label className="field__label" htmlFor="server-url">
-          Server address
+          {t("server.address")}
         </label>
         <input
           id="server-url"
@@ -194,7 +205,7 @@ export function ServerPicker({
         disabled={busy || (choice === "custom" && draft.trim() === "")}
         data-testid="api-url-save"
       >
-        {busy ? "Checking server…" : "Use this server"}
+        {busy ? t("server.checking") : t("server.use")}
       </button>
 
       <p className="notice" role="alert" aria-live="assertive" data-testid="server-picker-error">

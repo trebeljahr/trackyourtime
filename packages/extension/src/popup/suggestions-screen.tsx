@@ -3,7 +3,6 @@ import {
   dayKeyInZone,
   deviceTimeZone,
   formatClockInZone,
-  formatDuration,
   zonedDayStartMs,
   type DurationFormat,
   type TimeFormat,
@@ -19,7 +18,8 @@ import { Header } from "./header";
 import { ProjectPicker } from "./project-picker";
 import type { EntryDraft } from "./route";
 import { describeSync } from "./sync-label";
-import { useT } from "../i18n/use-t";
+import { formatDurationFor, formatIdleSpanFor, intlLocale } from "../i18n/format";
+import { usePopupLocale, useT } from "../i18n/use-t";
 
 /**
  * Time this browser saw you working that no entry covers yet, one day at a time.
@@ -77,7 +77,9 @@ export const draftOf = (
   };
 };
 
-const percent = (share: number): string => `${Math.round(share * 100)}%`;
+/** "42%", "42 %" — whatever the popup's language writes. */
+const percent = (share: number, locale: string): string =>
+  new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(share);
 
 type RowProps = {
   suggestion: ActivitySuggestion;
@@ -100,6 +102,8 @@ function SuggestionRow({
   onRun,
   props,
 }: RowProps): JSX.Element {
+  const t = useT("popup");
+  const locale = usePopupLocale();
   const [filing, setFiling] = useState(false);
   const [ruleProject, setRuleProject] = useState<string | null>(
     suggestion.proposed.projectId ?? null,
@@ -121,22 +125,24 @@ function SuggestionRow({
         <span className="activity__range" data-testid="suggestion-range">
           {range}
         </span>
-        <span className="activity__duration">{formatDuration(seconds, durationFormat)}</span>
+        <span className="activity__duration">
+          {formatDurationFor(seconds, locale, durationFormat)}
+        </span>
       </div>
 
       <p className="activity__keys" data-testid="suggestion-hosts">
         {suggestion.topKeys
           .slice(0, 3)
-          .map((key) => `${key.key} ${percent(key.share)}`)
+          .map((key) => `${key.key} ${percent(key.share, intlLocale(locale))}`)
           .join(" · ")}
       </p>
 
       <p className="activity__proposal" data-testid="suggestion-proposal">
         {project !== null
-          ? `Files under ${project.name}`
+          ? t("suggestions.filesUnder", { project: project.name })
           : suggestion.ruleId !== undefined
-            ? "Filed by a rule, no project"
-            : "No project"}
+            ? t("suggestions.filedByRule")
+            : t("fields.noProject")}
         {suggestion.proposed.description ? ` · “${suggestion.proposed.description}”` : ""}
       </p>
 
@@ -150,7 +156,7 @@ function SuggestionRow({
           }}
           data-testid="suggestion-accept"
         >
-          Accept
+          {t("suggestions.accept")}
         </button>
         <button
           type="button"
@@ -159,7 +165,7 @@ function SuggestionRow({
           onClick={() => props.onEdit(draftOf(suggestion, billableDefault))}
           data-testid="suggestion-edit"
         >
-          Edit
+          {t("suggestions.edit")}
         </button>
         <button
           type="button"
@@ -170,14 +176,14 @@ function SuggestionRow({
           }}
           data-testid="suggestion-dismiss"
         >
-          Dismiss
+          {t("suggestions.dismiss")}
         </button>
       </div>
 
       {topKey !== "" ? (
         filing ? (
           <div className="panel" data-testid="suggestion-rule-panel">
-            <p className="panel__title">Always file {topKey} under</p>
+            <p className="panel__title">{t("suggestions.alwaysFile", { site: topKey })}</p>
             <ProjectPicker
               projects={state.projects}
               clients={state.clients}
@@ -196,7 +202,7 @@ function SuggestionRow({
                 disabled={busy}
                 onClick={() => setFiling(false)}
               >
-                Cancel
+                {t("actions.cancel")}
               </button>
               <button
                 type="button"
@@ -209,7 +215,7 @@ function SuggestionRow({
                 }}
                 data-testid="suggestion-rule-save"
               >
-                Save rule
+                {t("suggestions.saveRule")}
               </button>
             </div>
           </div>
@@ -221,7 +227,7 @@ function SuggestionRow({
             onClick={() => setFiling(true)}
             data-testid="suggestion-rule-open"
           >
-            Always file {topKey} under…
+            {t("suggestions.alwaysFileOpen", { site: topKey })}
           </button>
         )
       ) : null}
@@ -242,10 +248,11 @@ function RuleList({
   onRun: (action: () => Promise<boolean>) => Promise<boolean>;
   onRemoveRule: (id: string) => Promise<boolean>;
 }): JSX.Element | null {
+  const t = useT("popup");
   if (rules.length === 0) return null;
   return (
     <section className="activity__rules" data-testid="activity-rules">
-      <p className="field__label">Rules on this device</p>
+      <p className="field__label">{t("suggestions.rules")}</p>
       {rules.map((rule) => {
         const project =
           rule.projectId === undefined || rule.projectId === null
@@ -255,7 +262,7 @@ function RuleList({
           <div className="device" key={rule.id} data-testid="activity-rule">
             <div className="device__text">
               <span className="device__name">{rule.pattern}</span>
-              <span className="device__hint">{project?.name ?? "No project"}</span>
+              <span className="device__hint">{project?.name ?? t("fields.noProject")}</span>
             </div>
             <button
               type="button"
@@ -266,7 +273,7 @@ function RuleList({
               }}
               data-testid={`activity-rule-remove-${rule.id}`}
             >
-              Remove
+              {t("suggestions.remove")}
             </button>
           </div>
         );
@@ -279,6 +286,7 @@ export function SuggestionsScreen(props: SuggestionsScreenProps): JSX.Element {
   const { state, error, note = null, day, onBack, onGoTracker, onOpenActivitySettings, onChangeDay } =
     props;
   const t = useT("popup");
+  const locale = usePopupLocale();
   const [busy, setBusy] = useState(false);
   const alertRef = useRef<HTMLParagraphElement>(null);
 
@@ -322,7 +330,7 @@ export function SuggestionsScreen(props: SuggestionsScreenProps): JSX.Element {
 
   return (
     <div className="screen" onKeyDown={onKeyDown} data-testid="suggestions-screen">
-      <Header title="Suggestions" onBack={onBack} sync={sync} />
+      <Header title={t("suggestions.title")} onBack={onBack} sync={sync} />
 
       <div className="popup__body">
         <p
@@ -348,24 +356,20 @@ export function SuggestionsScreen(props: SuggestionsScreenProps): JSX.Element {
             onClick={onGoTracker}
             data-testid="idle-alert"
           >
-            Away for {Math.round(state.pendingIdle.idleSec / 60)} min — resolve
+            {t("idle.alert", { span: formatIdleSpanFor(state.pendingIdle.idleSec, locale) })}
           </button>
         ) : null}
 
         {!activity.settings.enabled || !activity.permitted ? (
           <div className="activity__off" data-testid="suggestions-off">
-            <p>
-              Activity capture is off. When it is on, this browser records which sites
-              you spend time on — on this device only — and suggests entries for time
-              you did not track.
-            </p>
+            <p>{t("suggestions.off")}</p>
             <button
               type="button"
               className="button button--primary button--block"
               onClick={onOpenActivitySettings}
               data-testid="suggestions-open-settings"
             >
-              Open activity settings
+              {t("suggestions.openSettings")}
             </button>
           </div>
         ) : null}
@@ -380,11 +384,11 @@ export function SuggestionsScreen(props: SuggestionsScreenProps): JSX.Element {
 
         {current === null ? (
           <p className="loading" data-testid="suggestions-loading">
-            Loading…
+            {t("app.loading")}
           </p>
         ) : current.length === 0 ? (
           <p className="entries__empty" data-testid="suggestions-empty">
-            No untracked activity on this day.
+            {t("suggestions.empty")}
           </p>
         ) : (
           <ul className="activity" data-testid="suggestions-list">

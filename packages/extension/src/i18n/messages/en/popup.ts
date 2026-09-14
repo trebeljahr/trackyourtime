@@ -66,6 +66,7 @@ export const popup = {
       entryDeleted: "Entry deleted.",
       entryAdded: "Entry added.",
       entryGone: "That entry is gone.",
+      activityWiped: "All captured activity was deleted from this device.",
     },
   },
   errors: {
@@ -91,6 +92,24 @@ export const popup = {
     notFound: "This could not be found. It may have been deleted.",
     tooManyRequests: "Too many requests. Wait a moment and try again.",
     generic: "Something went wrong. Try again.",
+    activityPermission: "Chrome did not grant access to tabs, so activity capture stays off.",
+    activityPermissionFailed: "Could not ask Chrome for access to tabs.",
+    activityUnavailable: "Activity capture has no account to file under yet. Try again in a moment.",
+    suggestionTracked: "That time is already tracked or dismissed.",
+    /** `server` is the host the extension was trying to reach. */
+    serverAccessMissing: "Chrome has not given the extension access to {server}, so it cannot reach that server.",
+    serverAccessRefused: "Chrome did not give the extension access to {server}, so it cannot reach that server.",
+    serverUnreachable: "Could not reach {server}. Check the address, and that the server is running.",
+    notTrackYourTime:
+      "{server} answered, but it is not a Track Your Time server. Enter the address you open Track Your Time at.",
+    serverUnhealthy:
+      "{server} is a Track Your Time server, but it cannot reach its database right now. Try again in a minute.",
+    unsentChanges:
+      "Some changes have not reached the server in use yet. Switching servers signs you out, and the extension discards them.",
+    serverEmpty: "Enter your server's address.",
+    serverInvalid: "“{input}” is not a web address. It looks like https://track.example.com.",
+    serverInsecure:
+      "Use https:// for {host}. Plain http:// sends your password unencrypted, so it is only accepted for localhost.",
   },
   sync: {
     offline: "Offline",
@@ -114,6 +133,68 @@ export const popup = {
     newEntry: "New entry",
     entries: "Entries",
     settings: "Settings",
+    suggestions: "Suggestions",
+    suggestionsTitle: "Suggestions from activity",
+  },
+  /** The server choice, on the sign-in screen and in Settings → Account. */
+  server: {
+    label: "Server",
+    defaultServer: "Default ({host})",
+    ownServer: "My own server",
+    address: "Server address",
+    checking: "Checking server…",
+    use: "Use this server",
+    switchTitle: "Switch to {server}?",
+    discardAndSwitch: "Discard and switch",
+    unsentHint:
+      "{count, plural, one {# change has not reached {server} yet. Switching servers signs you out, and the extension discards it.} other {# changes have not reached {server} yet. Switching servers signs you out, and the extension discards them.}}",
+    accessLost: "Chrome no longer lets the extension reach {host}.",
+    accessLostRefused:
+      "Chrome no longer lets the extension reach {host}. Access was not given, so the extension still cannot reach it.",
+    allowAccess: "Allow access",
+  },
+  suggestions: {
+    title: "Suggestions",
+    filesUnder: "Files under {project}",
+    filedByRule: "Filed by a rule, no project",
+    accept: "Accept",
+    edit: "Edit",
+    dismiss: "Dismiss",
+    alwaysFile: "Always file {site} under",
+    alwaysFileOpen: "Always file {site} under…",
+    saveRule: "Save rule",
+    rules: "Rules on this device",
+    remove: "Remove",
+    off: "Activity capture is off. When it is on, this browser records which sites you spend time on — on this device only — and suggests entries for time you did not track.",
+    openSettings: "Open activity settings",
+    empty: "No untracked activity on this day.",
+    acceptTitle: "Accept suggestion",
+    acceptSubmit: "Accept as entry",
+    accepting: "Accepting…",
+  },
+  activity: {
+    enabledNote:
+      "Records the site in front of you, on this device only. Nothing is sent until you accept a suggestion.",
+    on: "Capturing activity",
+    off: "Activity capture off",
+    titlesNote: "Page titles say more about you than site names. Off keeps only the hostname.",
+    storingTitles: "Storing page titles",
+    hostnamesOnly: "Hostnames only",
+    exclude: "Never record",
+    excludeNote:
+      "Sites on this list are never stored. Use *.example.com for a whole domain. Incognito tabs are never recorded.",
+    add: "Add",
+    remove: "Remove",
+    retention: "Keep activity for",
+    retentionNote: "Older activity is deleted every day. Rules are kept.",
+    retentionSuffix: "days",
+    retentionLabel: "Activity retention in days",
+    wipeNote: "Removes captured activity, rules and dismissed suggestions from this device.",
+    wipeNoteCount:
+      "{count, plural, one {# stored stretch of activity. Removes it, your rules and dismissed suggestions from this device.} other {# stored stretches of activity. Removes them, your rules and dismissed suggestions from this device.}}",
+    wipe: "Delete all activity now",
+    wipeTitle: "Delete all captured activity?",
+    wipeHint: "Entries you already accepted are not touched. This cannot be undone.",
   },
   menu: {
     more: "More",
@@ -226,6 +307,7 @@ export const popup = {
   settings: {
     title: "Settings",
     loading: "Loading settings…",
+    on: "On",
     off: "Off",
     sections: {
       general: "General",

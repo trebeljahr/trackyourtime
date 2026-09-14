@@ -119,3 +119,20 @@ test("the email reads sensibly with no description, no limit and no link", () =>
   assert.doesNotMatch(email.text, /Open the tracker/);
   assert.doesNotMatch(email.html, /href=/);
 });
+
+test("the email is written in the recipient's language, with the name still escaped", () => {
+  const email = buildRunawayReminderEmail({
+    to: "alice@example.com",
+    description: "Design <review>",
+    start: new Date("2026-09-13T23:48:00.000Z"),
+    now: new Date(NOW),
+    limitSec: 8 * 3600,
+    trackUrl: "https://app.example.com/track",
+    locale: "de",
+  });
+  assert.equal(email.subject, "Dein Timer läuft seit 9 h 12 min");
+  assert.match(email.text, /„Design <review>“ wurde um 2026-09-13 23:48 UTC gestartet/);
+  assert.match(email.text, /maximale Eintragsdauer von 8\u00a0h/);
+  assert.match(email.html, /<strong>Design &lt;review&gt;<\/strong>/);
+  assert.match(email.html, />Timer öffnen</);
+});

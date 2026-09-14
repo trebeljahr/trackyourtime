@@ -60,6 +60,7 @@ export const popup: Translation<typeof source> = {
       entryDeleted: "Eintrag gelöscht.",
       entryAdded: "Eintrag hinzugefügt.",
       entryGone: "Diesen Eintrag gibt es nicht mehr.",
+      activityWiped: "Alle erfassten Aktivitäten wurden von diesem Gerät gelöscht.",
     },
   },
   errors: {
@@ -85,6 +86,27 @@ export const popup: Translation<typeof source> = {
     notFound: "Das wurde nicht gefunden. Vielleicht wurde es gelöscht.",
     tooManyRequests: "Zu viele Anfragen. Warte kurz und versuch es noch einmal.",
     generic: "Etwas ist schiefgelaufen. Versuch es noch einmal.",
+    activityPermission:
+      "Chrome hat keinen Zugriff auf die Tabs erlaubt, deshalb bleibt die Aktivitätserfassung aus.",
+    activityPermissionFailed: "Chrome konnte nicht nach dem Zugriff auf die Tabs gefragt werden.",
+    activityUnavailable:
+      "Die Aktivitätserfassung hat noch kein Konto, dem sie etwas zuordnen kann. Versuch es gleich noch einmal.",
+    suggestionTracked: "Diese Zeit ist schon erfasst oder ausgeblendet.",
+    serverAccessMissing:
+      "Chrome hat der Erweiterung keinen Zugriff auf {server} gegeben, deshalb kann sie diesen Server nicht erreichen.",
+    serverAccessRefused:
+      "Chrome hat der Erweiterung keinen Zugriff auf {server} gegeben, deshalb kann sie diesen Server nicht erreichen.",
+    serverUnreachable: "{server} ist nicht erreichbar. Prüfe die Adresse und ob der Server läuft.",
+    notTrackYourTime:
+      "{server} hat geantwortet, ist aber kein Track-Your-Time-Server. Gib die Adresse ein, unter der du Track Your Time öffnest.",
+    serverUnhealthy:
+      "{server} ist ein Track-Your-Time-Server, erreicht seine Datenbank gerade aber nicht. Versuch es in einer Minute noch einmal.",
+    unsentChanges:
+      "Einige Änderungen haben den aktuellen Server noch nicht erreicht. Ein Serverwechsel meldet dich ab, und die Erweiterung verwirft diese Änderungen.",
+    serverEmpty: "Gib die Adresse deines Servers ein.",
+    serverInvalid: "„{input}“ ist keine Webadresse. Eine Webadresse sieht so aus: https://track.example.com.",
+    serverInsecure:
+      "Verwende https:// für {host}. Einfaches http:// überträgt dein Passwort unverschlüsselt und wird deshalb nur für localhost akzeptiert.",
   },
   sync: {
     offline: "Offline",
@@ -108,6 +130,68 @@ export const popup: Translation<typeof source> = {
     newEntry: "Neuer Eintrag",
     entries: "Einträge",
     settings: "Einstellungen",
+    suggestions: "Vorschläge",
+    suggestionsTitle: "Vorschläge aus deiner Aktivität",
+  },
+  server: {
+    label: "Server",
+    defaultServer: "Standard ({host})",
+    ownServer: "Mein eigener Server",
+    address: "Serveradresse",
+    checking: "Server wird geprüft …",
+    use: "Diesen Server verwenden",
+    switchTitle: "Zu {server} wechseln?",
+    discardAndSwitch: "Verwerfen und wechseln",
+    unsentHint:
+      "{count, plural, one {# Änderung hat {server} noch nicht erreicht. Ein Serverwechsel meldet dich ab, und die Erweiterung verwirft diese Änderung.} other {# Änderungen haben {server} noch nicht erreicht. Ein Serverwechsel meldet dich ab, und die Erweiterung verwirft diese Änderungen.}}",
+    accessLost: "Chrome lässt die Erweiterung {host} nicht mehr erreichen.",
+    accessLostRefused:
+      "Chrome lässt die Erweiterung {host} nicht mehr erreichen. Der Zugriff wurde nicht erlaubt, deshalb kann die Erweiterung den Server weiterhin nicht erreichen.",
+    allowAccess: "Zugriff erlauben",
+  },
+  suggestions: {
+    title: "Vorschläge",
+    filesUnder: "Wird unter {project} abgelegt",
+    filedByRule: "Von einer Regel abgelegt, ohne Projekt",
+    accept: "Übernehmen",
+    edit: "Bearbeiten",
+    dismiss: "Ausblenden",
+    alwaysFile: "{site} immer ablegen unter",
+    alwaysFileOpen: "{site} immer ablegen unter …",
+    saveRule: "Regel speichern",
+    rules: "Regeln auf diesem Gerät",
+    remove: "Entfernen",
+    off: "Die Aktivitätserfassung ist aus. Wenn sie an ist, merkt sich dieser Browser, auf welchen Websites du Zeit verbringst – nur auf diesem Gerät – und schlägt Einträge für Zeit vor, die du nicht erfasst hast.",
+    openSettings: "Aktivitätseinstellungen öffnen",
+    empty: "An diesem Tag gibt es keine nicht erfasste Aktivität.",
+    acceptTitle: "Vorschlag übernehmen",
+    acceptSubmit: "Als Eintrag übernehmen",
+    accepting: "Wird übernommen …",
+  },
+  activity: {
+    enabledNote:
+      "Merkt sich die Website, die du gerade vor dir hast, nur auf diesem Gerät. Es wird nichts gesendet, bis du einen Vorschlag übernimmst.",
+    on: "Aktivität wird erfasst",
+    off: "Aktivitätserfassung aus",
+    titlesNote:
+      "Seitentitel verraten mehr über dich als Websitenamen. Wenn das aus ist, wird nur der Hostname gespeichert.",
+    storingTitles: "Seitentitel werden gespeichert",
+    hostnamesOnly: "Nur Hostnamen",
+    exclude: "Nie erfassen",
+    excludeNote:
+      "Websites auf dieser Liste werden nie gespeichert. Mit *.example.com schließt du eine ganze Domain aus. Inkognito-Tabs werden nie erfasst.",
+    add: "Hinzufügen",
+    remove: "Entfernen",
+    retention: "Aktivität aufbewahren für",
+    retentionNote: "Ältere Aktivität wird jeden Tag gelöscht. Regeln bleiben erhalten.",
+    retentionSuffix: "Tage",
+    retentionLabel: "Aufbewahrung der Aktivität in Tagen",
+    wipeNote: "Entfernt erfasste Aktivität, Regeln und ausgeblendete Vorschläge von diesem Gerät.",
+    wipeNoteCount:
+      "{count, plural, one {# gespeicherter Aktivitätsabschnitt. Entfernt ihn, deine Regeln und ausgeblendete Vorschläge von diesem Gerät.} other {# gespeicherte Aktivitätsabschnitte. Entfernt sie, deine Regeln und ausgeblendete Vorschläge von diesem Gerät.}}",
+    wipe: "Alle Aktivität jetzt löschen",
+    wipeTitle: "Alle erfasste Aktivität löschen?",
+    wipeHint: "Einträge, die du schon übernommen hast, bleiben unberührt. Das lässt sich nicht rückgängig machen.",
   },
   menu: {
     more: "Mehr",
@@ -219,6 +303,7 @@ export const popup: Translation<typeof source> = {
   settings: {
     title: "Einstellungen",
     loading: "Einstellungen werden geladen …",
+    on: "An",
     off: "Aus",
     sections: {
       general: "Allgemein",

@@ -88,8 +88,8 @@ export function Header({
           <button
             type="button"
             className="icon-button"
-            aria-label="Suggestions"
-            title="Suggestions from activity"
+            aria-label={t("header.suggestions")}
+            title={t("header.suggestionsTitle")}
             onClick={onOpenSuggestions}
             data-testid="header-suggestions"
           >

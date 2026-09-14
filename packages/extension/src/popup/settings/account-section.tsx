@@ -87,9 +87,9 @@ export function AccountSection({
       ) : null}
 
       <div className="setting" data-testid="setting-account-server">
-        <span className="setting__label">Server</span>
+        <span className="setting__label">{t("server.label")}</span>
         <span className="footer__email" title={apiUrl}>
-          {describeServer(apiUrl, DEFAULT_API_URL)}
+          {describeServer(apiUrl, DEFAULT_API_URL, t)}
         </span>
         {serverVersion !== null ? (
           <span className="setting__note" data-testid="account-server-version">

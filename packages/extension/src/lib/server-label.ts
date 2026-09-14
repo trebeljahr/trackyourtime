@@ -12,17 +12,19 @@
  */
 import { sameServerOrigin, serverHost, serverLabel } from "@starter/core";
 
+import type { PopupT } from "../i18n/use-t";
+
 /** The first option in the picker: the server this build was made for. */
-export function defaultServerLabel(defaultApiUrl: string): string {
+export function defaultServerLabel(defaultApiUrl: string, t: PopupT): string {
   const label = serverLabel(defaultApiUrl);
   return label === serverHost(defaultApiUrl)
-    ? `Default (${serverHost(defaultApiUrl)})`
+    ? t("server.defaultServer", { host: serverHost(defaultApiUrl) })
     : label;
 }
 
 /** Any server, the way the popup says it in a sentence. */
-export function describeServer(apiUrl: string, defaultApiUrl: string): string {
+export function describeServer(apiUrl: string, defaultApiUrl: string, t: PopupT): string {
   return sameServerOrigin(apiUrl, defaultApiUrl)
-    ? defaultServerLabel(defaultApiUrl)
+    ? defaultServerLabel(defaultApiUrl, t)
     : serverLabel(apiUrl);
 }

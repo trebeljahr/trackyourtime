@@ -22,6 +22,7 @@ import {
   normalizeServerInput,
   sameServerOrigin,
   serverHost,
+  type ServerInputProblem,
 } from "@starter/core";
 import {
   requestServerAccess,
@@ -63,6 +64,8 @@ export type SwitchServerResult =
       stage: "input" | "access" | "server";
       code: string;
       message: string;
+      /** What was wrong with the address, when `stage` is "input". */
+      problem?: ServerInputProblem;
     };
 
 /**
@@ -85,6 +88,7 @@ export async function switchServer({
       stage: "input",
       code: "INVALID_SERVER",
       message: parsed.message,
+      problem: parsed.problem,
     };
   }
   const { origin } = parsed;
@@ -132,7 +136,7 @@ export async function switchServer({
  * after — still inside the gesture.
  */
 export type SwitchPlan =
-  | { kind: "invalid"; message: string }
+  | { kind: "invalid"; message: string; problem: ServerInputProblem }
   /** Queued changes would be discarded. Ask first; the confirm click switches. */
   | { kind: "confirm"; origin: string; pending: number }
   | { kind: "switch"; origin: string };
@@ -143,7 +147,7 @@ export function planServerSwitch(
   pendingSync: number,
 ): SwitchPlan {
   const parsed = normalizeServerInput(input);
-  if (!parsed.ok) return { kind: "invalid", message: parsed.message };
+  if (!parsed.ok) return { kind: "invalid", message: parsed.message, problem: parsed.problem };
   if (pendingSync > 0 && !sameServerOrigin(parsed.origin, currentApiUrl)) {
     return { kind: "confirm", origin: parsed.origin, pending: pendingSync };
   }

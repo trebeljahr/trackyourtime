@@ -43,4 +43,17 @@ export const email = {
     /** Stands in for `siteName` when the instance has not named its newsletter. */
     defaultSiteName: "this newsletter",
   },
+  /** The once-per-timer reminder from services/scheduler/runaway-reminder.ts. */
+  runawayReminder: {
+    /** `elapsed` and `limit` are durations already formatted, e.g. "9 h 12 min". */
+    subject: "Your timer has been running for {elapsed}",
+    startedText: "Your timer \"{name}\" started at {started} and has run for {elapsed}.",
+    /** The HTML body sets `name` in bold, so it carries no quotes of its own. */
+    startedHtml: "Your timer {name} started at {started} and has run for {elapsed}.",
+    untitled: "Untitled",
+    forgot: "If you forgot to stop it, stop it now or correct its end time.",
+    pastLimit: "That is past your {limit} limit. Stop it, keep it running, or correct its end time.",
+    open: "Open the tracker",
+    footer: "You get this email once per timer. To stop these emails, turn off Email notifications in Settings, Account.",
+  },
 } as const;

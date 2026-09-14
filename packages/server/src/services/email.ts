@@ -294,16 +294,26 @@ export type RunawayReminderEmailInput = {
   limitSec: number | null;
   /** Absolute link to the tracker, or null when no frontend URL is set. */
   trackUrl: string | null;
+  /** The recipient's language (`preferredLocale`). English when unknown. */
+  locale?: Locale | null;
 };
 
-/** "9 h 12 min", "45 min". Hours and minutes only: this is an email. */
-function formatReminderDuration(totalSec: number): string {
+/**
+ * "9 h 12 min", "45 min". Hours and minutes only: this is an email. German
+ * joins number and unit with a no-break space, as the glossary asks; English
+ * keeps the plain space it always had.
+ */
+function formatReminderDuration(totalSec: number, locale: Locale | null | undefined): string {
+  const space = locale === "de" ? "\u00a0" : " ";
   const minutes = Math.max(0, Math.floor(totalSec / 60));
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  if (hours === 0) return `${rest} min`;
-  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+  if (hours === 0) return `${rest}${space}min`;
+  return rest === 0 ? `${hours}${space}h` : `${hours}${space}h ${rest}${space}min`;
 }
+
+/** Stands in for the entry name while a sentence is escaped, then becomes `<strong>`. */
+const NAME_SLOT = "\u0000name\u0000";
 
 /**
  * The reminder sent once per entry by the runaway-reminder job
@@ -316,35 +326,42 @@ function formatReminderDuration(totalSec: number): string {
 export function buildRunawayReminderEmail(
   input: RunawayReminderEmailInput,
 ): EmailParams & { html: string } {
+  const t = serverT(input.locale, "email");
   const elapsed = formatReminderDuration(
     (input.now.getTime() - input.start.getTime()) / 1000,
+    input.locale,
   );
-  const name = input.description.trim() || "Untitled";
+  const name = input.description.trim() || t("runawayReminder.untitled");
   const started = `${input.start.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 
   const why =
     input.limitSec === null
-      ? "If you forgot to stop it, stop it now or correct its end time."
-      : `That is past your ${formatReminderDuration(input.limitSec)} limit. Stop it, keep it running, or correct its end time.`;
-  const footer =
-    "You get this email once per timer. To stop these emails, turn off " +
-    "Email notifications in Settings, Account.";
+      ? t("runawayReminder.forgot")
+      : t("runawayReminder.pastLimit", {
+          limit: formatReminderDuration(input.limitSec, input.locale),
+        });
+  const footer = t("runawayReminder.footer");
+  const open = t("runawayReminder.open");
 
-  const subject = `Your timer has been running for ${elapsed}`;
+  const subject = headerSafe(t("runawayReminder.subject", { elapsed }), 200);
   const text = [
-    `Your timer "${name}" started at ${started} and has run for ${elapsed}.`,
+    t("runawayReminder.startedText", { name, started, elapsed }),
     why,
-    ...(input.trackUrl ? [`Open the tracker: ${input.trackUrl}`] : []),
+    ...(input.trackUrl ? [`${open}: ${input.trackUrl}`] : []),
     "",
     footer,
   ].join("\n");
 
+  // Escaped after translation, like the invitation: the name is user input,
+  // and escaping the finished sentence covers it wherever a language puts it.
+  const startedHtml = escapeHtml(
+    t("runawayReminder.startedHtml", { name: NAME_SLOT, started, elapsed }),
+  ).replace(NAME_SLOT, `<strong>${escapeHtml(name)}</strong>`);
   const link = input.trackUrl
-    ? `<p><a href="${escapeHtml(input.trackUrl)}">Open the tracker</a></p>`
+    ? `<p><a href="${escapeHtml(input.trackUrl)}">${escapeHtml(open)}</a></p>`
     : "";
   const html =
-    `<p>Your timer <strong>${escapeHtml(name)}</strong> started at ` +
-    `${escapeHtml(started)} and has run for ${escapeHtml(elapsed)}.</p>` +
+    `<p>${startedHtml}</p>` +
     `<p>${escapeHtml(why)}</p>${link}` +
     `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
 

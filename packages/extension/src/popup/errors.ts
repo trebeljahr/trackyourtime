@@ -20,7 +20,7 @@
  */
 import type { PopupT } from "../i18n/use-t";
 
-import { serverHost } from "@starter/core";
+import { serverHost, type ServerInputProblem } from "@starter/core";
 
 const CREDENTIAL_CODES: ReadonlySet<string> = new Set([
   "INVALID_EMAIL_OR_PASSWORD",
@@ -59,8 +59,26 @@ const looksLikeNetworkFailure = (message: string): boolean =>
  * CONFLICT) are deliberately absent: a generic line would say less than the
  * server did.
  */
-const fixedMessage = (code: string, t: PopupT): string | null => {
+const fixedMessage = (code: string, t: PopupT, server: string): string | null => {
   switch (code) {
+    case "ACTIVITY_UNAVAILABLE":
+      return t("errors.activityUnavailable");
+    case "ACTIVITY_PERMISSION_REQUIRED":
+      return t("errors.activityPermission");
+    case "SUGGESTION_ALREADY_TRACKED":
+      return t("errors.suggestionTracked");
+    case "SERVER_ACCESS_MISSING":
+      return t("errors.serverAccessMissing", { server });
+    case "SERVER_ACCESS_REFUSED":
+      return t("errors.serverAccessRefused", { server });
+    case "SERVER_UNREACHABLE":
+      return t("errors.serverUnreachable", { server });
+    case "NOT_TRACKYOURTIME":
+      return t("errors.notTrackYourTime", { server });
+    case "SERVER_UNHEALTHY":
+      return t("errors.serverUnhealthy", { server });
+    case "UNSENT_CHANGES":
+      return t("errors.unsentChanges");
     case "INVALID_EMAIL":
       return t("errors.invalidEmail");
     case "EMAIL_NOT_VERIFIED":
@@ -115,5 +133,35 @@ export function describeError(
     return t("errors.serverFailed", { status: code.slice(5) });
   }
 
-  return fixedMessage(code, t) ?? (message.trim() === "" ? t("errors.generic") : message);
+  return (
+    fixedMessage(code, t, serverHost(apiUrl)) ??
+    (message.trim() === "" ? t("errors.generic") : message)
+  );
+}
+
+/**
+ * A typed server address the popup refused before asking anyone, in the
+ * popup's language. Core's own `message` is English, for Raycast and logs.
+ */
+export function describeServerInput(
+  problem: ServerInputProblem,
+  input: string,
+  t: PopupT,
+): string {
+  const trimmed = input.trim();
+  switch (problem) {
+    case "empty":
+      return t("errors.serverEmpty");
+    case "invalid-url":
+      return t("errors.serverInvalid", { input: trimmed });
+    case "insecure": {
+      let host = trimmed;
+      try {
+        host = new URL(trimmed).host;
+      } catch {
+        /* the typed text is still the best name for it */
+      }
+      return t("errors.serverInsecure", { host });
+    }
+  }
 }

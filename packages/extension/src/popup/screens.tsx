@@ -15,6 +15,7 @@ import {
   type SuggestionsScreenProps,
 } from "./suggestions-screen";
 import { TrackerScreen, type TrackerScreenProps } from "./tracker-screen";
+import { useT } from "../i18n/use-t";
 
 /**
  * The one place a {@link Route} becomes a screen.
@@ -63,6 +64,7 @@ export function Screens({
   suggestions,
   suggestionEdit,
 }: ScreensProps): JSX.Element {
+  const t = useT("popup");
   switch (route.name) {
     case "tracker":
       return <TrackerScreen {...tracker} />;
@@ -85,9 +87,9 @@ export function Screens({
           onDraftChange={(draft) => onDraftChange(route.day, draft)}
           onCreateEntry={onAccept}
           labels={{
-            title: "Accept suggestion",
-            submit: "Accept as entry",
-            busy: "Accepting…",
+            title: t("suggestions.acceptTitle"),
+            submit: t("suggestions.acceptSubmit"),
+            busy: t("suggestions.accepting"),
             testId: "suggestion-edit",
           }}
         />

@@ -34,4 +34,16 @@ export const email: Translation<typeof source> = {
     ignore: "Wenn du nichts abonniert hast, ignoriere diese E-Mail – ohne Klick wirst du nicht eingetragen. Der Link läuft nach {days, plural, one {# Tag} other {# Tagen}} ab.",
     defaultSiteName: "diesen Newsletter",
   },
+  runawayReminder: {
+    subject: "Dein Timer läuft seit {elapsed}",
+    startedText: "Dein Timer „{name}“ wurde um {started} gestartet und läuft seit {elapsed}.",
+    startedHtml: "Dein Timer {name} wurde um {started} gestartet und läuft seit {elapsed}.",
+    untitled: "Ohne Titel",
+    forgot: "Falls du vergessen hast, ihn zu stoppen, stoppe ihn jetzt oder korrigiere sein Ende.",
+    pastLimit:
+      "Damit ist deine maximale Eintragsdauer von {limit} überschritten. Stoppe ihn, lass ihn weiterlaufen oder korrigiere sein Ende.",
+    open: "Timer öffnen",
+    footer:
+      "Du bekommst diese E-Mail einmal pro Timer. Wenn du diese E-Mails nicht mehr möchtest, schalte unter Einstellungen → Konto die E-Mail-Benachrichtigungen aus.",
+  },
 };

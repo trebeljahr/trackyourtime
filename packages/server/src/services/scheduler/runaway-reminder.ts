@@ -33,6 +33,7 @@ import {
   runawayReminderClaimFilter,
   runawayReminderDue,
 } from "../runaway.js";
+import { preferredLocale } from "../user-locale.js";
 import { jobRegistry, type JobRegistry } from "./registry.js";
 
 export const RUNAWAY_REMINDER_JOB = "runaway-reminder";
@@ -205,6 +206,7 @@ async function remindOne(
         now,
         limitSec: due.kind === "limit" ? due.limitSec : null,
         trackUrl: deps.trackUrl,
+        locale: await preferredLocale([authorId]),
       }),
     );
     summary.emailed += 1;

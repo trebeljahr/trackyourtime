@@ -59,7 +59,7 @@ export function SignInScreen({
       <div className="server" data-testid="sign-in-server">
         <p className="server__text">
           {t("signIn.signingInTo")}{" "}
-          <strong title={apiUrl}>{describeServer(apiUrl, DEFAULT_API_URL)}</strong>
+          <strong title={apiUrl}>{describeServer(apiUrl, DEFAULT_API_URL, t)}</strong>
           {serverVersion !== null ? (
             <span className="server__version"> · {serverVersion}</span>
           ) : null}

@@ -1,6 +1,7 @@
 import { useState, type JSX } from "react";
 import { serverHost } from "@starter/core";
 import { requestServerAccess } from "../lib/server-access";
+import { useT } from "../i18n/use-t";
 
 export type ServerAccessNoticeProps = {
   apiUrl: string;
@@ -24,14 +25,14 @@ export function ServerAccessNotice({
   apiUrl,
   onAnswered,
 }: ServerAccessNoticeProps): JSX.Element {
+  const t = useT("popup");
   const [refused, setRefused] = useState(false);
   const host = serverHost(apiUrl);
 
   return (
     <div className="notice access" role="alert" data-testid="server-access-notice">
       <p className="access__text">
-        Chrome no longer lets the extension reach {host}.
-        {refused ? " Access was not given, so the extension still cannot reach it." : ""}
+        {refused ? t("server.accessLostRefused", { host }) : t("server.accessLost", { host })}
       </p>
       <button
         type="button"
@@ -44,7 +45,7 @@ export function ServerAccessNotice({
         }}
         data-testid="server-access-allow"
       >
-        Allow access
+        {t("server.allowAccess")}
       </button>
     </div>
   );

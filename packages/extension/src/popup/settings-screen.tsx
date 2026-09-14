@@ -262,7 +262,7 @@ export function SettingsScreen({
 
         <Section
           title={t("settings.sections.activity")}
-          hint={activityHint(state.activity)}
+          hint={activityHint(state.activity, t)}
           open={section === "activity"}
           onToggle={() => toggle("activity")}
           saved={saved === "activity"}
