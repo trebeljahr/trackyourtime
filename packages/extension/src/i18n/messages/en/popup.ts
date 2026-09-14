@@ -79,6 +79,8 @@ export const popup = {
     serverFailed: "The server failed with {status}. Try again in a moment.",
     invalidEmail: "That does not look like an email address.",
     emailNotVerified: "Verify your email address before signing in.",
+    twoFactorUnsupported:
+      "This account uses two-factor authentication, which the extension cannot complete. Sign in to the web app in this browser first — the extension then uses that session.",
     noFetch: "This browser could not make the request.",
     notSignedIn: "Sign in first.",
     stillSyncing: "That entry has not reached the server yet. Try again in a moment.",

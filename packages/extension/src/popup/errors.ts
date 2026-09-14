@@ -20,7 +20,7 @@
  */
 import type { PopupT } from "../i18n/use-t";
 
-import { serverHost, type ServerInputProblem } from "@starter/core";
+import { serverHost, TWO_FACTOR_UNSUPPORTED, type ServerInputProblem } from "@starter/core";
 
 const CREDENTIAL_CODES: ReadonlySet<string> = new Set([
   "INVALID_EMAIL_OR_PASSWORD",
@@ -83,6 +83,8 @@ const fixedMessage = (code: string, t: PopupT, server: string): string | null =>
       return t("errors.invalidEmail");
     case "EMAIL_NOT_VERIFIED":
       return t("errors.emailNotVerified");
+    case TWO_FACTOR_UNSUPPORTED:
+      return t("errors.twoFactorUnsupported");
     case "NO_FETCH":
       return t("errors.noFetch");
     case "NOT_SIGNED_IN":

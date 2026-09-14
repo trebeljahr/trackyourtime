@@ -73,6 +73,8 @@ export const popup: Translation<typeof source> = {
     serverFailed: "Der Server hat mit {status} geantwortet. Versuch es gleich noch einmal.",
     invalidEmail: "Das sieht nicht nach einer E-Mail-Adresse aus.",
     emailNotVerified: "Bestätige deine E-Mail-Adresse, bevor du dich anmeldest.",
+    twoFactorUnsupported:
+      "Dieses Konto nutzt Zwei-Faktor-Authentifizierung, und die kann die Erweiterung nicht abschließen. Melde dich zuerst in diesem Browser in der Web-App an – die Erweiterung nutzt dann diese Sitzung.",
     noFetch: "Dieser Browser konnte die Anfrage nicht senden.",
     notSignedIn: "Melde dich zuerst an.",
     stillSyncing: "Dieser Eintrag ist noch nicht beim Server angekommen. Versuch es gleich noch einmal.",
