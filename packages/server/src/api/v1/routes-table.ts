@@ -145,6 +145,19 @@ export const detailedEntrySchema: z.ZodType<DetailedEntry> = z.object({
   amount: z.number(),
 });
 
+/** What an invoice prints under "Billed to". Blank fields are `null`. */
+const clientBillingResponseSchema = z.object({
+  legalName: z.string().nullable(),
+  addressLines: z.array(z.string()),
+  postalCode: z.string().nullable(),
+  city: z.string().nullable(),
+  /** ISO 3166-1 alpha-2, upper case. */
+  country: z.string().nullable(),
+  taxId: z.string().nullable(),
+  email: z.string().nullable(),
+  reference: z.string().nullable(),
+});
+
 const clientShape = {
   id: z.string(),
   workspaceId: z.string(),
@@ -152,6 +165,8 @@ const clientShape = {
   name: z.string(),
   color: z.string(),
   archived: z.boolean(),
+  /** `null` when the client has no billing details. */
+  billing: clientBillingResponseSchema.nullable(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 };

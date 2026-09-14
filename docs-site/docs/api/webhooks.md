@@ -80,6 +80,16 @@ The body is one envelope:
 | `invoice` | `invoice.created` | `{ invoice }` |
 | `invoice-status` | `invoice.status_changed` | `{ invoice, from, to }` |
 
+An `invoice` carries the two parties as they stood when it was created:
+`issuer` (the workspace's business profile: `legalName`, `addressLines`,
+`postalCode`, `city`, `country`, `taxId`, `email`, `phone`, `website`,
+`paymentDetails`, `paymentTermsDays`, `invoiceFooter`) and `recipient` (the
+client's `name` plus `legalName`, `addressLines`, `postalCode`, `city`,
+`country`, `taxId`, `email`, `reference`). Blank fields are `null`. Either is
+`null` when there was nothing to copy, and on invoices created before these
+fields existed. They never change after creation, so the payload of
+`invoice.status_changed` shows the same parties as `invoice.created`.
+
 `entry.deleted` carries `authorId` explicitly rather than the id alone, because who
 authored it is what decides whether you are allowed to be told about it at all.
 
