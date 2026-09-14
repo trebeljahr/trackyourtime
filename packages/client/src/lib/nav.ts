@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { WorkspacePermissions } from "@starter/shared";
 
 /**
  * The shape of one destination and the rule for when it is the current one.
@@ -14,6 +15,11 @@ export type NavItem = {
   icon: LucideIcon;
   /** Extra path prefixes that should light this item up. */
   match?: string[];
+  /**
+   * Hidden unless the active workspace grants this permission. Cosmetic only:
+   * the screen behind it is refused on the server either way.
+   */
+  requires?: keyof WorkspacePermissions;
 };
 
 /** Active when the path is the item's route or a child of it. */

@@ -18,6 +18,7 @@ import {
   Tags as TagsIcon,
   Timer,
   User as UserIcon,
+  UserCog,
   Users,
   X,
 } from "lucide-react";
@@ -66,6 +67,7 @@ import { useOverlay } from "@/mobile/overlay-stack";
 import { handleBackPress } from "@/mobile/back-button";
 import { setMobileHandlers } from "@/mobile/bridge";
 import { cn } from "@/lib/utils";
+import { useVisibleNavSections } from "@/components/members/nav-visibility";
 
 // Re-exported because this module has always been where they lived; the rule
 // itself now sits in lib/nav.ts so the tab bar can share it without a cycle.
@@ -93,7 +95,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/projects", label: "Projects", icon: FolderKanban },
       { href: "/tasks", label: "Tasks", icon: ListChecks },
       { href: "/tags", label: "Tags", icon: TagsIcon },
-      { href: "/invoices", label: "Invoices", icon: Receipt },
+      { href: "/invoices", label: "Invoices", icon: Receipt, requires: "invoices" },
+      { href: "/members", label: "Members", icon: UserCog },
       { href: "/settings", label: "Settings", icon: SettingsIcon },
     ],
   },
@@ -186,9 +189,10 @@ function SidebarNav({
   pathname: string;
   onNavigate?: () => void;
 }): React.JSX.Element {
+  const sections = useVisibleNavSections(NAV_SECTIONS);
   return (
     <nav className="flex flex-col gap-4 px-3 py-4" data-testid="sidebar-nav">
-      {NAV_SECTIONS.map((section, index) => (
+      {sections.map((section, index) => (
         <div key={section.heading ?? `section-${index}`} className="grid gap-1">
           {section.heading ? (
             <p className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -345,6 +349,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
     [],
   );
   useCommandPaletteShortcut(togglePalette);
+  const paletteSections = useVisibleNavSections(NAV_SECTIONS);
   const openPaletteFromDrawer = React.useCallback((): void => {
     // The drawer goes first, so the two overlays never stack and back closes
     // the palette alone.
@@ -521,7 +526,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
         <CommandPalette
           open={paletteOpen}
           onOpenChange={setPaletteOpen}
-          sections={NAV_SECTIONS}
+          sections={paletteSections}
         />
       </div>
     </TooltipProvider>

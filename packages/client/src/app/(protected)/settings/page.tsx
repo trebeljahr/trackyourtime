@@ -17,9 +17,13 @@ import { GeneralSettings } from "@/components/settings/general-settings";
 import { IdleSettingsPanel } from "@/components/settings/idle-settings";
 import { MaxDurationSettingsPanel } from "@/components/settings/max-duration-settings";
 import { useWorkspaceSettings } from "@/components/settings/use-workspace-settings";
+import { WorkspaceTab } from "@/components/settings/workspace-tab";
+import { useT } from "@/i18n/use-t";
 
-const TABS = [
+// `label: null` is translated at render; the other labels predate the catalog.
+const TABS: { value: string; label: string | null }[] = [
   { value: "general", label: "General" },
+  { value: "workspace", label: null },
   { value: "billing", label: "Billing" },
   { value: "idle", label: "Idle" },
   { value: "limits", label: "Limits" },
@@ -35,6 +39,7 @@ export default function SettingsPage() {
   // One controller for the whole screen: General, Billing, Idle and Limits
   // all write through the same optimistic `settings.update` path.
   const controller = useWorkspaceSettings();
+  const tc = useT("common");
   const [tab, setTab] = React.useState("general");
 
   // `?tab=data` so anything that wants to send somebody here — the empty
@@ -67,13 +72,16 @@ export default function SettingsPage() {
               value={tab.value}
               data-testid={`settings-tab-${tab.value}`}
             >
-              {tab.label}
+              {tab.label ?? tc("fields.workspace")}
             </TabsTrigger>
           ))}
         </TabsList>
 
         <TabsContent value="general" data-testid="settings-panel-general">
           <GeneralSettings controller={controller} />
+        </TabsContent>
+        <TabsContent value="workspace" data-testid="settings-panel-workspace">
+          <WorkspaceTab />
         </TabsContent>
         <TabsContent value="billing" data-testid="settings-panel-billing">
           <BillingSettings controller={controller} />
