@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQueryClient, type Mutation } from "@tanstack/react-query";
 import { buildQuickStartInput, deviceTimeZone } from "@starter/core";
 import {
   entryAmount,
@@ -81,6 +82,25 @@ type MutationContext = {
    */
   workspaceId?: string | null;
 };
+
+/**
+ * Marks the writes that refetch the entry list when they settle. React Query
+ * holds it on the mutation from the moment `mutate` is called, before
+ * `onMutate` has produced a context, which is what lets a settling write see a
+ * start that is still busy inserting its temp row.
+ */
+const TRACKER_WRITE_META = { trackerWrite: true } as const;
+
+/**
+ * A tracker write still in flight that will refetch when it settles itself.
+ * A write parked in the offline queue does not (its replay does), so it is
+ * nothing to wait for.
+ */
+const isRefetchingWrite = (
+  mutation: Mutation<unknown, Error, unknown, unknown>
+): boolean =>
+  mutation.options.meta?.trackerWrite === true &&
+  (mutation.state.context as MutationContext | undefined)?.queued !== true;
 
 /** False once the user has switched away from the workspace this write began in. */
 const stillInWorkspace = (context: MutationContext | undefined): boolean =>
@@ -211,6 +231,7 @@ export type EntryMutations = {
  */
 export const useEntryMutations = (): EntryMutations => {
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
 
   // `removeEntry` is declared below the mutations that need to call it, so the
   // toast action reaches it through a ref rather than reordering the file.
@@ -307,6 +328,34 @@ export const useEntryMutations = (): EntryMutations => {
     await utils.reports.invalidate();
   }, [utils]);
 
+  /*
+   * Refetch after a write — but only once no other tracker write is in flight.
+   *
+   * A stop is optimistic, so Start can be clicked before the stop has an
+   * answer. If the stop's refetch then goes out, it can reach the server
+   * before the start is committed, and its answer replaces the cache: the
+   * start's temp row is gone, `replaceEntry` in the start's `onSuccess` finds
+   * nothing to replace, and the list shows no running timer until the start's
+   * own refetch lands — seconds, on a loaded machine. Any write racing any
+   * other write takes the same path.
+   *
+   * So the last write to settle is the one that refetches; everything before
+   * it has already patched its answer into the cache. The check runs on a
+   * macrotask because React Query marks this mutation settled only after
+   * `onSettled` returns — checking inside it would count the write itself, and
+   * two writes settling together would each wait for the other and neither
+   * would refetch.
+   */
+  const refetchWhenQuiet = React.useCallback((): void => {
+    setTimeout(() => {
+      const busy = queryClient
+        .getMutationCache()
+        .findAll({ status: "pending", predicate: isRefetchingWrite });
+      if (busy.length > 0) return;
+      void invalidate();
+    }, 0);
+  }, [invalidate, queryClient]);
+
   // ── optimistic entry construction ──────────────────────────────────
   //
   // The shapes themselves live in `lib/entry-shape.ts` so the timesheet grid
@@ -385,6 +434,7 @@ export const useEntryMutations = (): EntryMutations => {
 
   const startMutation = trpc.entries.start.useMutation({
     ...OFFLINE_QUEUED_MUTATION,
+    meta: TRACKER_WRITE_META,
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as StartInput;
       const context = await snapshot();
@@ -435,14 +485,15 @@ export const useEntryMutations = (): EntryMutations => {
           ),
         translate("tracker")("mutations.startFailed")
       ),
-    onSettled: async (_data, _error, _raw, context) => {
+    onSettled: (_data, _error, _raw, context) => {
       if (context?.queued) return;
-      await invalidate();
+      refetchWhenQuiet();
     },
   });
 
   const stopMutation = trpc.entries.stop.useMutation({
     ...OFFLINE_QUEUED_MUTATION,
+    meta: TRACKER_WRITE_META,
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as OfflineStopInput;
       const context = await snapshot();
@@ -542,14 +593,15 @@ export const useEntryMutations = (): EntryMutations => {
         },
         translate("tracker")("mutations.stopFailed")
       ),
-    onSettled: async (_data, _error, _raw, context) => {
+    onSettled: (_data, _error, _raw, context) => {
       if (context?.queued) return;
-      await invalidate();
+      refetchWhenQuiet();
     },
   });
 
   const createMutation = trpc.entries.create.useMutation({
     ...OFFLINE_QUEUED_MUTATION,
+    meta: TRACKER_WRITE_META,
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as CreateInput;
       const context = await snapshot();
@@ -585,14 +637,15 @@ export const useEntryMutations = (): EntryMutations => {
           ),
         translate("tracker")("mutations.addFailed")
       ),
-    onSettled: async (_data, _error, _raw, context) => {
+    onSettled: (_data, _error, _raw, context) => {
       if (context?.queued) return;
-      await invalidate();
+      refetchWhenQuiet();
     },
   });
 
   const updateMutation = trpc.entries.update.useMutation({
     ...OFFLINE_QUEUED_MUTATION,
+    meta: TRACKER_WRITE_META,
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as UpdateInput;
       const context = await snapshot();
@@ -685,14 +738,15 @@ export const useEntryMutations = (): EntryMutations => {
           ),
         translate("tracker")("mutations.saveFailed")
       ),
-    onSettled: async (_data, _error, _raw, context) => {
+    onSettled: (_data, _error, _raw, context) => {
       if (context?.queued) return;
-      await invalidate();
+      refetchWhenQuiet();
     },
   });
 
   const removeMutation = trpc.entries.remove.useMutation({
     ...OFFLINE_QUEUED_MUTATION,
+    meta: TRACKER_WRITE_META,
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as OfflineIdInput;
       const context = await snapshot();
@@ -715,9 +769,9 @@ export const useEntryMutations = (): EntryMutations => {
           ),
         translate("tracker")("mutations.deleteFailed")
       ),
-    onSettled: async (_data, _error, _raw, context) => {
+    onSettled: (_data, _error, _raw, context) => {
       if (context?.queued) return;
-      await invalidate();
+      refetchWhenQuiet();
     },
   });
 
@@ -907,6 +961,7 @@ export const useEntryMutations = (): EntryMutations => {
    * failing at the user.
    */
   const resolveRunawayMutation = trpc.entries.resolveRunaway.useMutation({
+    meta: TRACKER_WRITE_META,
     onSuccess: (entry) => {
       replaceEntry(entry.id, toDetailed(entry));
       utils.entries.current.setData(undefined, entry.end === null ? entry : null);
@@ -916,8 +971,8 @@ export const useEntryMutations = (): EntryMutations => {
         userErrorMessage(error, translate("tracker")("mutations.updateFailed"))
       );
     },
-    onSettled: async () => {
-      await invalidate();
+    onSettled: () => {
+      refetchWhenQuiet();
     },
   });
 

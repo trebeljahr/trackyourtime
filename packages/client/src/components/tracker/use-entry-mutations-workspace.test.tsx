@@ -102,7 +102,7 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { QueryClient } = await import("@tanstack/react-query");
+const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
 const { useEntryMutations } = await import("@/components/tracker/use-entry-mutations");
 const activeWorkspace = await import("@/lib/active-workspace");
 
@@ -180,7 +180,11 @@ beforeEach(async () => {
   activeWorkspace.__resetActiveWorkspaceForTests();
   await activeWorkspace.applyWorkspaceList([A, B], "u1");
   await activeWorkspace.switchWorkspace(B.id, { queryClient: new QueryClient() });
-  render(<Probe />);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <Probe />
+    </QueryClientProvider>,
+  );
 });
 
 afterEach(cleanup);

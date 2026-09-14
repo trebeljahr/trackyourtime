@@ -141,6 +141,7 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
+const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
 const { timerStore } = await import("@/hooks/use-sync");
 const { useEntryMutations } = await import(
   "@/components/tracker/use-entry-mutations"
@@ -175,7 +176,11 @@ function Probe(): null {
 }
 
 const mountHook = (): void => {
-  render(<Probe />);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <Probe />
+    </QueryClientProvider>,
+  );
 };
 
 const optionsFor = (path: string): MutationOptions => {
