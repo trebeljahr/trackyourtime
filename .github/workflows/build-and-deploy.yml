@@ -38,6 +38,16 @@ jobs:
   # block below — so it is equally safe from a fork.
   verify:
     runs-on: ubuntu-latest
+    services:
+      mongo-unit:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     # The workflow-level block grants `packages: write` for the two image
     # pushes. This job pins `contents: read` instead, so PR code never runs
     # with a token that can publish a package. (A fork PR gets a read-only
@@ -59,6 +69,10 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run build
       - run: pnpm run test:unit
+        env:
+          # The scheduler's lease and the runaway-reminder job are tested
+          # against a real database; those files skip without this.
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27017
       - run: pnpm run test:client
 
   # Also runs on both events. Every credential it needs is a literal in the
