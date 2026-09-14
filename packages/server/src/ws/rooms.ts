@@ -1,189 +1,82 @@
 import type { WebSocket } from "ws";
-import type { RoomMember, ClientToServerMessage, ServerToClientMessage } from "@starter/shared";
-
-interface MemberInfo {
-  userId: string;
-  displayName: string;
-  joinedAt: Date;
-}
-
-interface Room {
-  id: string;
-  members: Map<WebSocket, MemberInfo>;
-  createdAt: Date;
-}
+import type { ServerToClientMessage } from "@starter/shared";
+import { userRoomId } from "@starter/shared";
 
 /**
- * Manages WebSocket rooms — join, leave, broadcast, message handling.
- * Generic enough for chat rooms, game lobbies, or turn-based multiplayer.
+ * The live sockets of each person, one room per user (`user:<userId>`).
+ *
+ * This used to be the starter's general room manager — any room id, chosen by
+ * the client, with chat and presence on top. That is exactly the shape that
+ * let a signed-in user subscribe to somebody else's sync events: a join named
+ * its room in client input, and a room is nothing but "everyone here receives
+ * the same bytes". So `join` takes no room id at all. It takes the user a
+ * socket AUTHENTICATED as, which the upgrade handler reads off the session,
+ * and derives the room from it; there is no way to ask this class to put a
+ * socket anywhere else.
+ *
+ * Holds no visibility logic. Who receives an event is decided in `ws/sync.ts`
+ * before anything reaches a room; this class only delivers.
  */
 export class RoomManager {
-  private rooms = new Map<string, Room>();
-  private socketToRoom = new Map<WebSocket, string>();
+  private readonly rooms = new Map<string, Set<WebSocket>>();
+  private readonly socketToRoom = new Map<WebSocket, string>();
 
-  join(
-    roomId: string,
-    userId: string,
-    displayName: string,
-    socket: WebSocket,
-  ): void {
-    // Leave current room if in one
+  /**
+   * Put an authenticated socket in its own user's room.
+   *
+   * Joining again leaves the previous room first, so a socket is only ever in
+   * one.
+   */
+  join(userId: string, socket: WebSocket): void {
     this.leave(socket);
-
+    const roomId = userRoomId(userId);
     let room = this.rooms.get(roomId);
     if (!room) {
-      room = { id: roomId, members: new Map(), createdAt: new Date() };
+      room = new Set();
       this.rooms.set(roomId, room);
     }
-
-    const memberInfo: MemberInfo = {
-      userId,
-      displayName,
-      joinedAt: new Date(),
-    };
-    room.members.set(socket, memberInfo);
+    room.add(socket);
     this.socketToRoom.set(socket, roomId);
-
-    // Notify existing members
-    this.broadcast(roomId, {
-      type: "member-joined",
-      member: {
-        userId,
-        displayName,
-        joinedAt: memberInfo.joinedAt.toISOString(),
-      },
-    }, socket);
-
-    // Send room state to the joining member
-    this.send(socket, {
-      type: "room-state",
-      roomId,
-      members: this.getMembers(roomId),
-    });
   }
 
+  /** Take a socket out of its room. Harmless for a socket in none. */
   leave(socket: WebSocket): void {
     const roomId = this.socketToRoom.get(socket);
-    if (!roomId) return;
-
-    const room = this.rooms.get(roomId);
-    if (!room) return;
-
-    const memberInfo = room.members.get(socket);
-    room.members.delete(socket);
+    if (roomId === undefined) return;
     this.socketToRoom.delete(socket);
-
-    if (room.members.size === 0) {
-      this.rooms.delete(roomId);
-    } else if (memberInfo) {
-      this.broadcast(roomId, {
-        type: "member-left",
-        userId: memberInfo.userId,
-      });
-    }
-  }
-
-  handleMessage(socket: WebSocket, message: ClientToServerMessage): void {
-    const roomId = this.socketToRoom.get(socket);
-
-    switch (message.type) {
-      case "join-room":
-        // Auth info should already be set; this is handled in the connection handler
-        break;
-
-      case "leave-room":
-        this.leave(socket);
-        break;
-
-      case "chat": {
-        if (!roomId) {
-          this.send(socket, {
-            type: "error",
-            code: "NOT_IN_ROOM",
-            message: "You must join a room first",
-          });
-          return;
-        }
-        const room = this.rooms.get(roomId);
-        const member = room?.members.get(socket);
-        if (member) {
-          this.broadcast(roomId, {
-            type: "chat",
-            userId: member.userId,
-            displayName: member.displayName,
-            text: message.text,
-          });
-        }
-        break;
-      }
-
-      case "action": {
-        if (!roomId) {
-          this.send(socket, {
-            type: "error",
-            code: "NOT_IN_ROOM",
-            message: "You must join a room first",
-          });
-          return;
-        }
-        // Broadcast the action as a state update — override this for game-specific logic
-        this.broadcast(roomId, {
-          type: "state-update",
-          payload: message.payload,
-        });
-        break;
-      }
-    }
-  }
-
-  broadcast(
-    roomId: string,
-    message: ServerToClientMessage,
-    exclude?: WebSocket,
-  ): void {
     const room = this.rooms.get(roomId);
     if (!room) return;
-
-    const data = JSON.stringify(message);
-    for (const [socket] of room.members) {
-      if (socket !== exclude && socket.readyState === 1) {
-        socket.send(data);
-      }
-    }
+    room.delete(socket);
+    if (room.size === 0) this.rooms.delete(roomId);
   }
 
-  send(socket: WebSocket, message: ServerToClientMessage): void {
-    if (socket.readyState === 1) {
-      socket.send(JSON.stringify(message));
-    }
-  }
-
-  getMembers(roomId: string): RoomMember[] {
+  /** Send one message to every open socket in a room. */
+  broadcast(roomId: string, message: ServerToClientMessage): void {
     const room = this.rooms.get(roomId);
-    if (!room) return [];
-
-    return Array.from(room.members.values()).map((m) => ({
-      userId: m.userId,
-      displayName: m.displayName,
-      joinedAt: m.joinedAt.toISOString(),
-    }));
+    if (!room) return;
+    const data = JSON.stringify(message);
+    for (const socket of room) {
+      if (socket.readyState === 1) socket.send(data);
+    }
   }
 
+  /** The sockets currently in a room. */
+  socketsIn(roomId: string): WebSocket[] {
+    return [...(this.rooms.get(roomId) ?? [])];
+  }
+
+  /** The room a socket was placed in, if any. */
+  roomOf(socket: WebSocket): string | undefined {
+    return this.socketToRoom.get(socket);
+  }
+
+  /** How many rooms have at least one live socket. */
   getRoomCount(): number {
     return this.rooms.size;
   }
 
+  /** How many sockets are in a room. */
   getConnectionCount(): number {
     return this.socketToRoom.size;
-  }
-
-  /** Remove empty rooms older than maxAgeMs. */
-  pruneEmpty(maxAgeMs = 24 * 60 * 60 * 1000): void {
-    const now = Date.now();
-    for (const [id, room] of this.rooms) {
-      if (room.members.size === 0 && now - room.createdAt.getTime() > maxAgeMs) {
-        this.rooms.delete(id);
-      }
-    }
   }
 }

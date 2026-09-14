@@ -732,6 +732,16 @@ the Raycast password store), never a plain config file. Clients send
 any of them can be signed out. Device-flow client ids are allowlisted in
 `auth/client-label.ts`.
 
+**A socket's room comes from its session and nothing else.** `ws/handler.ts`
+places every socket in `user:<its authenticated user id>` at the upgrade, and
+`RoomManager.join` takes a user id rather than a room name, so there is no API
+through which client input could choose a room. The starter's `?roomId=` and
+`join-room` message let any signed-in user subscribe to anybody's sync events;
+both are gone, along with the rest of the room/chat protocol. The socket is a
+one-way feed: every client frame is ignored, and never answered with a close,
+because a close would put an older build into a reconnect loop.
+`ws-room-authorization.test.ts` pins both spoofs over a real handshake.
+
 Revocation has to reach the socket, not just HTTP. `ws/handler.ts`
 authenticates at the upgrade, and a phone then holds that socket open for
 days — so the session behind every live socket is re-checked once a minute

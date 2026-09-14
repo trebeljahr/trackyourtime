@@ -1,12 +1,5 @@
 import type { Locale, LocalePreference } from "./locale.js";
 
-/** Metadata about a room member. */
-export type RoomMember = {
-  userId: string;
-  displayName: string;
-  joinedAt: string;
-};
-
 /** User theme preference. */
 export type ThemePreference = "light" | "dark" | "system";
 

@@ -3,9 +3,7 @@ import test from "node:test";
 import type { WebSocket } from "ws";
 import type { ServerToClientMessage } from "@starter/shared";
 // Subpath import: a bare named import from "@starter/shared" throws under tsx
-// (see the note in duration.test.ts) — which is also why `publishSync` itself
-// cannot be exercised here: `src/ws/sync.ts` uses the bare specifier and the
-// module fails to load. Add those tests once that bug is fixed.
+// (see the note in duration.test.ts).
 import { userRoomId } from "@starter/shared/protocol";
 import { RoomManager } from "../ws/rooms.js";
 
@@ -24,14 +22,10 @@ const fakeSocket = (readyState = 1): FakeSocket => {
   return socket as unknown as FakeSocket;
 };
 
-const messagesOfType = <T extends ServerToClientMessage["type"]>(
-  socket: FakeSocket,
-  type: T
-): Extract<ServerToClientMessage, { type: T }>[] =>
-  socket.sent.filter(
-    (message): message is Extract<ServerToClientMessage, { type: T }> =>
-      message.type === type
-  );
+const settingsChanged = (): ServerToClientMessage => ({
+  type: "tt:sync",
+  event: { kind: "settings.changed" },
+});
 
 // ── room names ───────────────────────────────────────────────────────
 
@@ -42,101 +36,116 @@ test("userRoomId namespaces a user's own room", () => {
 
 // ── RoomManager ──────────────────────────────────────────────────────
 
-test("joining sends room state to the joiner and announces them to the rest", () => {
+const U1 = userRoomId("u1");
+const U2 = userRoomId("u2");
+
+test("joining puts the socket in its user's room and sends it nothing", () => {
   const rooms = new RoomManager();
-  const first = fakeSocket();
-  const second = fakeSocket();
+  const laptop = fakeSocket();
+  const phone = fakeSocket();
 
-  rooms.join("user:u1", "u1", "Rico", first);
-  assert.deepEqual(
-    messagesOfType(first, "room-state").map((message) => message.roomId),
-    ["user:u1"]
-  );
+  rooms.join("u1", laptop);
+  rooms.join("u1", phone);
 
-  rooms.join("user:u1", "u1", "Rico (phone)", second);
-  assert.equal(messagesOfType(first, "member-joined").length, 1);
-  assert.equal(
-    messagesOfType(second, "member-joined").length,
-    0,
-    "the joiner does not announce itself to itself"
-  );
-  assert.equal(rooms.getMembers("user:u1").length, 2);
+  // The starter announced presence on every join. A sync feed has no use
+  // for it, and a frame per join is a frame a client must ignore.
+  assert.deepEqual(laptop.sent, []);
+  assert.deepEqual(phone.sent, []);
+  assert.deepEqual(rooms.socketsIn(U1), [laptop, phone]);
+  assert.equal(rooms.roomOf(phone), U1);
+  assert.equal(rooms.getRoomCount(), 1);
+  assert.equal(rooms.getConnectionCount(), 2);
 });
 
-test("broadcast reaches every member of the room except the excluded socket", () => {
+test("broadcast reaches every device of that user and no other user", () => {
   const rooms = new RoomManager();
-  const first = fakeSocket();
-  const second = fakeSocket();
-  const outsider = fakeSocket();
+  const laptop = fakeSocket();
+  const phone = fakeSocket();
+  const colleague = fakeSocket();
 
-  rooms.join("user:u1", "u1", "Rico", first);
-  rooms.join("user:u1", "u1", "Rico (phone)", second);
-  rooms.join("user:u2", "u2", "Someone else", outsider);
+  rooms.join("u1", laptop);
+  rooms.join("u1", phone);
+  rooms.join("u2", colleague);
 
-  rooms.broadcast("user:u1", { type: "state-update", payload: { a: 1 } }, first);
+  rooms.broadcast(U1, settingsChanged());
 
-  assert.equal(messagesOfType(first, "state-update").length, 0, "sender excluded");
-  assert.deepEqual(messagesOfType(second, "state-update"), [
-    { type: "state-update", payload: { a: 1 } },
-  ]);
-  assert.equal(
-    messagesOfType(outsider, "state-update").length,
-    0,
-    "another user's room never sees the broadcast"
+  assert.deepEqual(laptop.sent, [settingsChanged()]);
+  assert.deepEqual(phone.sent, [settingsChanged()]);
+  assert.deepEqual(
+    colleague.sent,
+    [],
+    "another user's room never sees the broadcast",
   );
+});
+
+test("a user id that looks like a room name is still only that user's room", () => {
+  // `join` derives the room; it never takes one. A user id spelled like
+  // somebody else's room lands in its own, differently named, room.
+  const rooms = new RoomManager();
+  const victim = fakeSocket();
+  const attacker = fakeSocket();
+
+  rooms.join("u1", victim);
+  rooms.join(U1, attacker);
+
+  rooms.broadcast(U1, settingsChanged());
+  assert.deepEqual(victim.sent, [settingsChanged()]);
+  assert.deepEqual(attacker.sent, []);
+  assert.equal(rooms.roomOf(attacker), userRoomId(U1));
 });
 
 test("broadcast skips sockets that are not open", () => {
   const rooms = new RoomManager();
   const closing = fakeSocket(2);
-  rooms.join("user:u1", "u1", "Rico", closing);
-  const before = closing.sent.length;
+  rooms.join("u1", closing);
 
-  rooms.broadcast("user:u1", { type: "state-update", payload: {} });
-  assert.equal(closing.sent.length, before);
+  rooms.broadcast(U1, settingsChanged());
+  assert.deepEqual(closing.sent, []);
 });
 
-test("leaving removes the member and drops the room once it is empty", () => {
+test("leaving removes the socket and drops the room once it is empty", () => {
   const rooms = new RoomManager();
-  const first = fakeSocket();
-  const second = fakeSocket();
+  const laptop = fakeSocket();
+  const phone = fakeSocket();
 
-  rooms.join("user:u1", "u1", "Rico", first);
-  rooms.join("user:u1", "u1", "Rico (phone)", second);
+  rooms.join("u1", laptop);
+  rooms.join("u1", phone);
 
-  rooms.leave(second);
-  assert.equal(rooms.getMembers("user:u1").length, 1);
-  assert.equal(messagesOfType(first, "member-left").length, 1);
+  rooms.leave(phone);
+  assert.deepEqual(rooms.socketsIn(U1), [laptop]);
+  rooms.broadcast(U1, settingsChanged());
+  assert.deepEqual(phone.sent, [], "a socket that left receives nothing");
 
-  rooms.leave(first);
+  rooms.leave(laptop);
   assert.equal(rooms.getRoomCount(), 0);
   assert.equal(rooms.getConnectionCount(), 0);
-  assert.deepEqual(rooms.getMembers("user:u1"), []);
+  assert.deepEqual(rooms.socketsIn(U1), []);
+  assert.equal(rooms.roomOf(laptop), undefined);
 });
 
 test("leaving twice is harmless", () => {
   const rooms = new RoomManager();
   const socket = fakeSocket();
-  rooms.join("user:u1", "u1", "Rico", socket);
+  rooms.join("u1", socket);
   rooms.leave(socket);
   rooms.leave(socket);
   assert.equal(rooms.getRoomCount(), 0);
 });
 
-test("joining a second room leaves the first", () => {
+test("a socket is only ever in one room", () => {
   const rooms = new RoomManager();
   const socket = fakeSocket();
 
-  rooms.join("user:u1", "u1", "Rico", socket);
-  rooms.join("user:u2", "u2", "Rico", socket);
+  rooms.join("u1", socket);
+  rooms.join("u2", socket);
 
-  assert.deepEqual(rooms.getMembers("user:u1"), []);
-  assert.equal(rooms.getMembers("user:u2").length, 1);
+  assert.deepEqual(rooms.socketsIn(U1), []);
+  assert.deepEqual(rooms.socketsIn(U2), [socket]);
   assert.equal(rooms.getConnectionCount(), 1);
 });
 
-test("broadcasting to an unknown room is a no-op", () => {
+test("broadcasting to a room with no sockets is a no-op", () => {
   const rooms = new RoomManager();
-  rooms.broadcast("user:nobody", { type: "state-update", payload: {} });
+  rooms.broadcast(userRoomId("nobody"), settingsChanged());
   assert.equal(rooms.getRoomCount(), 0);
 });

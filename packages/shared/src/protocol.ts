@@ -1,23 +1,19 @@
-import type { RoomMember, TimeEntry } from "./types.js";
+import type { TimeEntry } from "./types.js";
 
 // ── Client → Server ──────────────────────────────────────────────────
-
-export type ClientToServerMessage =
-  | { type: "join-room"; roomId: string }
-  | { type: "leave-room" }
-  | { type: "chat"; text: string }
-  | { type: "action"; payload: Record<string, unknown> };
+//
+// There is no client → server message. A socket is a one-way feed of the
+// sync events for the person it authenticated as: the server places it in
+// that person's own room at the upgrade and nowhere else, so there is nothing
+// for a client to ask for. The starter's room-join, chat and action messages
+// were removed because a join named its room in client input — any signed-in
+// user could subscribe to anybody else's events. The server ignores any frame
+// a client sends, an old client's join included, and keeps the socket open.
 
 // ── Server → Client ──────────────────────────────────────────────────
 
 export type ServerToClientMessage =
-  | { type: "room-state"; roomId: string; members: RoomMember[] }
-  | { type: "member-joined"; member: RoomMember }
-  | { type: "member-left"; userId: string }
-  | { type: "chat"; userId: string; displayName: string; text: string }
-  | { type: "state-update"; payload: Record<string, unknown> }
-  | { type: "tt:sync"; event: SyncEvent; originId?: string }
-  | { type: "error"; code: string; message: string };
+  | { type: "tt:sync"; event: SyncEvent; originId?: string };
 
 // ── tracktime realtime sync ──────────────────────────────────────────
 //

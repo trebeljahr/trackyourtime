@@ -51,7 +51,13 @@ const fakeSocket = (): FakeSocket => {
 };
 
 const syncEvents = (socket: FakeSocket): ServerToClientMessage[] =>
-  socket.sent.filter((message) => message.type === "state-update");
+  socket.sent.filter((message) => message.type === "tt:sync");
+
+/** Any sync frame will do: these tests are about who receives it. */
+const syncFrame = (): ServerToClientMessage => ({
+  type: "tt:sync",
+  event: { kind: "settings.changed" },
+});
 
 /** The revoke action `ws/handler.ts` hands to the sweep. */
 const dropFrom =
@@ -71,8 +77,8 @@ test("a socket whose session was deleted stops receiving that user's events", as
   const phone = fakeSocket();
   const room = userRoomId("u1");
 
-  rooms.join(room, "u1", "Laptop", laptop);
-  rooms.join(room, "u1", "Phone", phone);
+  rooms.join("u1", laptop);
+  rooms.join("u1", phone);
 
   // Both devices are live, so both see the user's sync events.
   let phoneSessionExists = true;
@@ -81,7 +87,7 @@ test("a socket whose session was deleted stops receiving that user's events", as
     phoneSessionExists ? "live" : ("revoked" as SessionVerdict),
   );
 
-  rooms.broadcast(room, { type: "state-update", payload: { n: 1 } });
+  rooms.broadcast(room, syncFrame());
   assert.equal(syncEvents(phone).length, 1);
 
   // The phone's session row is deleted — the exact thing "sign this device
@@ -96,7 +102,7 @@ test("a socket whose session was deleted stops receiving that user's events", as
 
   // The whole point: the next event for this user does not reach the revoked
   // device, and does still reach the one that is still signed in.
-  rooms.broadcast(room, { type: "state-update", payload: { n: 2 } });
+  rooms.broadcast(room, syncFrame());
   assert.equal(
     syncEvents(phone).length,
     1,
@@ -112,14 +118,14 @@ test("a revoked socket is removed from the room, not merely closed", async () =>
   const phone = fakeSocket();
   const room = userRoomId("u1");
 
-  rooms.join(room, "u1", "Phone", phone);
+  rooms.join("u1", phone);
   watch.watch(phone, async () => "revoked");
 
   await watch.sweep(dropFrom(rooms));
 
   // `close()` is asynchronous on a real socket; leaving the room is what
   // makes the very next broadcast miss it rather than racing it.
-  assert.deepEqual(rooms.getMembers(room), []);
+  assert.deepEqual(rooms.socketsIn(room), []);
   assert.equal(rooms.getConnectionCount(), 0);
 });
 
@@ -161,7 +167,7 @@ test("a revoked socket is unwatched, so it is not closed twice", async () => {
   const watch = new SessionWatch();
   const phone = fakeSocket();
 
-  rooms.join(userRoomId("u1"), "u1", "Phone", phone);
+  rooms.join("u1", phone);
   watch.watch(phone, async () => "revoked");
 
   assert.equal(await watch.sweep(dropFrom(rooms)), 1);

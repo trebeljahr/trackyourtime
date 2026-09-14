@@ -33,7 +33,6 @@ type FakeSocket = WebSocket & {
   closes: { code: number; reason: string }[];
   probeSession?: () => Promise<"live" | "revoked" | "unknown">;
   userId?: string;
-  displayName?: string;
 };
 
 /**
@@ -64,59 +63,65 @@ const fakeSocket = (): FakeSocket => {
   return socket as unknown as FakeSocket;
 };
 
-/**
- * A `roomId` is passed on purpose: it takes the connection handler's explicit
- * -room branch, which skips the runaway-guard call that would need a database.
- */
-const upgradeRequest = (roomId: string): IncomingMessage =>
-  ({
-    url: `/api/ws?roomId=${encodeURIComponent(roomId)}`,
-    headers: { host: "localhost" },
-  }) as unknown as IncomingMessage;
+const upgradeRequest = (): IncomingMessage =>
+  ({ url: "/api/ws", headers: { host: "localhost" } }) as unknown as IncomingMessage;
 
 const syncEvents = (socket: FakeSocket): ServerToClientMessage[] =>
-  socket.sent.filter((message) => message.type === "state-update");
+  socket.sent.filter((message) => message.type === "tt:sync");
 
-const wss = setupWebSocket(createServer());
+/** Any sync frame will do: these tests are about who receives it. */
+const syncFrame = (): ServerToClientMessage => ({
+  type: "tt:sync",
+  event: { kind: "settings.changed" },
+});
+
+// The auth lookups are never reached (connections are emitted directly), and
+// the runaway guard is stubbed because the real one needs a database.
+const wss = setupWebSocket(createServer(), {
+  authenticate: async () => null,
+  probe: async () => "unknown",
+  enforceRunaway: async () => undefined,
+});
 
 /**
  * `roomManager` and `sessionWatch` are module singletons shared by every test
- * in this file, so each connection gets its own room and is cleaned up after.
+ * in this file, so each test connects as its own user — the handler places a
+ * socket in that user's room and nowhere else — and cleans up after.
  */
 const connect = (
-  room: string,
-  displayName: string,
+  userId: string,
   probe: () => Promise<"live" | "revoked" | "unknown">,
 ): FakeSocket => {
   const socket = fakeSocket();
-  socket.userId = "u1";
-  socket.displayName = displayName;
+  socket.userId = userId;
   socket.probeSession = probe;
-  wss.emit("connection", socket, upgradeRequest(room));
+  wss.emit("connection", socket, upgradeRequest());
   return socket;
 };
 
 test("a connection is put under session watch", () => {
-  const room = userRoomId("watch-registers");
+  const user = "watch-registers";
+  const room = userRoomId(user);
   const before = sessionWatch.size;
-  const socket = connect(room, "Phone", async () => "live");
+  const socket = connect(user, async () => "live");
 
   assert.equal(sessionWatch.size, before + 1);
-  assert.equal(roomManager.getMembers(room).length, 1);
+  assert.equal(roomManager.socketsIn(room).length, 1);
 
   socket.close(1000, "done");
 });
 
 test("the sweep the interval runs drops a revoked socket out of its room", async () => {
-  const room = userRoomId("revocation");
+  const user = "revocation";
+  const room = userRoomId(user);
 
   let phoneSessionExists = true;
-  const laptop = connect(room, "Laptop", async () => "live");
-  const phone = connect(room, "Phone", async () =>
+  const laptop = connect(user, async () => "live");
+  const phone = connect(user, async () =>
     phoneSessionExists ? "live" : "revoked",
   );
 
-  roomManager.broadcast(room, { type: "state-update", payload: { n: 1 } });
+  roomManager.broadcast(room, syncFrame());
   assert.equal(syncEvents(phone).length, 1, "a live device receives events");
 
   // "Sign this device out" — the session document is gone. HTTP already
@@ -128,7 +133,7 @@ test("the sweep the interval runs drops a revoked socket out of its room", async
     { code: SESSION_REVOKED_CLOSE_CODE, reason: "session revoked" },
   ]);
 
-  roomManager.broadcast(room, { type: "state-update", payload: { n: 2 } });
+  roomManager.broadcast(room, syncFrame());
   assert.equal(
     syncEvents(phone).length,
     1,
@@ -141,9 +146,10 @@ test("the sweep the interval runs drops a revoked socket out of its room", async
 });
 
 test("a closed socket stops being probed", async () => {
-  const room = userRoomId("close-unwatches");
+  const user = "close-unwatches";
+  const room = userRoomId(user);
   let probes = 0;
-  const socket = connect(room, "Phone", async () => {
+  const socket = connect(user, async () => {
     probes += 1;
     return "live";
   });
@@ -157,18 +163,19 @@ test("a closed socket stops being probed", async () => {
   assert.equal(sessionWatch.size, before - 1);
   await revokeStaleSockets();
   assert.equal(probes, 0);
-  assert.equal(roomManager.getMembers(room).length, 0);
+  assert.equal(roomManager.socketsIn(room).length, 0);
 });
 
 test("an unreadable session does not close anybody's socket", async () => {
-  const room = userRoomId("unknown-verdict");
-  const socket = connect(room, "Phone", async () => {
+  const user = "unknown-verdict";
+  const room = userRoomId(user);
+  const socket = connect(user, async () => {
     throw new Error("mongo went away");
   });
 
   assert.equal(await revokeStaleSockets(), 0);
   assert.deepEqual(socket.closes, []);
-  assert.equal(roomManager.getMembers(room).length, 1);
+  assert.equal(roomManager.socketsIn(room).length, 1);
 
   socket.close(1000, "done");
 });
