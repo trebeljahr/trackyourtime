@@ -112,7 +112,7 @@ export const marketing = {
     },
     audience: {
       title: "Who it’s for",
-      body: "Freelancers, consultants and small studios who bill by the hour and want to own their data. There’s no screenshot or keystroke monitoring, and nobody approves your timesheet. The app can’t invite team members yet, so larger teams may want to wait.",
+      body: "Freelancers, consultants and small studios who bill by the hour and want to own their data. There’s no screenshot or keystroke monitoring, and nobody approves your timesheet. Invite colleagues by email. Each one sees only their own time until you let them see colleagues’ time or money. You set hourly rates per project, so everyone on a project bills at the same rate.",
     },
     faq: {
       title: "Questions",

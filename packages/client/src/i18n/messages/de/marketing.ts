@@ -110,7 +110,7 @@ export const marketing: Translation<typeof source> = {
     },
     audience: {
       title: "Für wen es gedacht ist",
-      body: "Für Freelancer, Berater und kleine Studios, die nach Stunden abrechnen und ihre Daten selbst in der Hand haben wollen. Es gibt keine Überwachung per Screenshot oder Tastenanschlag, und niemand muss deinen Stundenzettel freigeben. Teammitglieder einladen kann die App noch nicht. Größere Teams warten also besser noch.",
+      body: "Für Freelancer, Berater und kleine Studios, die nach Stunden abrechnen und ihre Daten selbst in der Hand haben wollen. Es gibt keine Überwachung per Screenshot oder Tastenanschlag, und niemand muss deinen Stundenzettel freigeben. Lade Kolleginnen und Kollegen per E-Mail ein. Jede Person sieht nur ihre eigene Zeit, bis du ihr die Zeit oder die Beträge der anderen freigibst. Stundensätze legst du pro Projekt fest, also rechnen alle in einem Projekt zum selben Satz ab.",
     },
     faq: {
       title: "Fragen",

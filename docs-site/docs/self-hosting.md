@@ -856,10 +856,11 @@ people's data or manage the instance. The person who can run commands in the
 server container is the administrator, through
 [the admin CLI](#the-admin-cli). Every account gets its own personal workspace
 when it is created. All data (clients, projects, tasks, entries, tags and
-invoices) belongs to a workspace. The data model supports several members and
-roles per workspace, but the web app has no screen to invite or manage
-members. In practice, one account is one private workspace. You cannot invite
-a team through the web app yet.
+invoices) belongs to a workspace. An owner or admin invites people from the
+Members screen, and each member sees only their own time until an owner or admin
+opens up colleagues' time. Only an owner can open up colleagues' money. If the
+server has no email settings, the Members screen shows the invitation link to
+copy and send by hand.
 
 **The application cannot close registration.** There is no setting for it.
 Anyone who can reach your domain can create an account. Three workarounds, from
@@ -1041,9 +1042,9 @@ PASS  clock            this process is 2 ms behind the database server
 
 Four things about accounts: password reset, email verification (on only
 when a transport is configured), the link that confirms a new email address,
-and workspace invitations (no screen for them today). One thing about
-time tracking: a single reminder for a timer left running too long. Reports,
-invoices and exports download in the browser.
+and workspace invitations (without email, the Members screen shows the link
+to copy). One thing about time tracking: a single reminder for a timer left
+running too long. Reports, invoices and exports download in the browser.
 
 The reminder goes out once per timer. It is sent when the runaway guard flags
 a timer (behaviour "Ask me"), or when a timer passes 8 hours with the guard
