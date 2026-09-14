@@ -1,8 +1,10 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { authErrorMessage } from "@/lib/auth-error-message";
 import { AuthHeader } from "@/components/auth-header";
 import { useT } from "@/i18n/use-t";
 import { translate } from "@/i18n/translate";
@@ -13,14 +15,23 @@ function ResetPasswordForm() {
   const token = searchParams.get("token") ?? "";
   const t = useT("shell");
 
+  // better-auth checks the emailed link before it sends the user here, and
+  // lands an expired or used one on `?error=INVALID_TOKEN` with no token.
+  // Saying so up front beats a form that can only ever be refused.
+  const landedExpired = searchParams.get("error") === "INVALID_TOKEN";
+
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() =>
+    landedExpired ? translate("shell")("auth.reset.expired") : "",
+  );
+  const [expired, setExpired] = useState(landedExpired);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setExpired(false);
 
     if (newPassword !== confirmPassword) {
       setError(translate("shell")("auth.passwordsDoNotMatch"));
@@ -30,7 +41,15 @@ function ResetPasswordForm() {
     setLoading(true);
 
     try {
-      await authClient.resetPassword({ newPassword, token });
+      // better-auth's client resolves a refusal as `{ error }` rather than
+      // throwing, so an expired token has to be read off the result — the
+      // catch below only ever sees a request that never got an answer.
+      const result = await authClient.resetPassword({ newPassword, token });
+      if (result.error) {
+        setError(authErrorMessage(result.error, "reset"));
+        setExpired(result.error.code === "INVALID_TOKEN");
+        return;
+      }
       router.push("/login");
     } catch {
       setError(translate("shell")("auth.reset.failed"));
@@ -42,8 +61,24 @@ function ResetPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+        <div
+          className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+          role="alert"
+          data-testid="reset-error"
+        >
           {error}
+          {expired && (
+            <>
+              {" "}
+              <Link
+                href="/forgot-password"
+                className="font-medium underline"
+                data-testid="reset-request-new"
+              >
+                {t("auth.reset.requestNew")}
+              </Link>
+            </>
+          )}
         </div>
       )}
 

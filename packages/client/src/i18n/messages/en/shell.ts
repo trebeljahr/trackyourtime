@@ -189,6 +189,9 @@ export const shell = {
       submit: "Reset password",
       submitting: "Resetting…",
       failed: "Failed to reset password. The link may have expired.",
+      /** better-auth's INVALID_TOKEN: the link expired or was already used. */
+      expired: "This reset link has expired or was already used. Request a new one.",
+      requestNew: "Request a new link",
     },
   },
   /** The phone app's server choice on /login and /signup. */

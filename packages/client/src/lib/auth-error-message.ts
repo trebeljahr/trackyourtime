@@ -7,8 +7,8 @@ export type AuthErrorLike = {
 };
 
 /**
- * The message a login or signup form shows for a refusal, in the rendered
- * language.
+ * The message a login, signup or password-reset form shows for a refusal, in
+ * the rendered language.
  *
  * Mapped from better-auth's error CODE, never its `message`: the message is
  * English text written by the library, and would be the one English sentence
@@ -20,7 +20,7 @@ export type AuthErrorLike = {
  */
 export const authErrorMessage = (
   error: AuthErrorLike,
-  form: "login" | "signup",
+  form: "login" | "signup" | "reset",
 ): string => {
   const t = translate("shell");
   switch (error.code) {
@@ -37,9 +37,15 @@ export const authErrorMessage = (
       return t("auth.errors.passwordTooShort");
     case "PASSWORD_TOO_LONG":
       return t("auth.errors.passwordTooLong");
+    case "INVALID_TOKEN":
+      // The only token any of these forms sends is a reset link's; better-auth
+      // answers the same code for one that expired and one already used.
+      if (form === "reset") return t("auth.reset.expired");
+      break;
     default:
       break;
   }
   if (error.status === 429) return t("auth.errors.tooManyRequests");
+  if (form === "reset") return t("auth.reset.failed");
   return form === "login" ? t("auth.errors.loginFailed") : t("auth.errors.signupFailed");
 };

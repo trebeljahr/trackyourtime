@@ -185,6 +185,8 @@ export const shell: Translation<typeof source> = {
       submit: "Passwort zurücksetzen",
       submitting: "Wird zurückgesetzt …",
       failed: "Das Passwort konnte nicht zurückgesetzt werden. Vielleicht ist der Link abgelaufen.",
+      expired: "Dieser Link zum Zurücksetzen ist abgelaufen oder wurde schon benutzt. Fordere einen neuen an.",
+      requestNew: "Neuen Link anfordern",
     },
   },
   serverPicker: {
