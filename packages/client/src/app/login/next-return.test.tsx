@@ -28,8 +28,13 @@ vi.mock("@/lib/auth-client", () => ({
   signIn: { email: (...args: unknown[]) => signInEmail(...(args as [])) },
   signUp: { email: (...args: unknown[]) => signUpEmail(...(args as [])) },
   getSession: vi.fn(async () => ({ data: null })),
+  authClient: { sendVerificationEmail: vi.fn(async () => ({ data: null, error: null })) },
+  isTwoFactorChallenge: () => false,
+  webCallbackUrl: (path: string) => `http://localhost${path}`,
   POST_AUTH_REDIRECT: "/track",
 }));
+vi.mock("@/components/google-sign-in-button", () => ({ GoogleSignInButton: () => null }));
+vi.mock("@/mobile/bridge", () => ({ isNative: () => false }));
 
 const { default: LoginPage } = await import("./page");
 const { default: SignupPage } = await import("../signup/page");

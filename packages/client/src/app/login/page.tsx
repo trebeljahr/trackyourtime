@@ -82,7 +82,6 @@ export default function LoginPage() {
             callbackURL: webCallbackUrl(
               authPageHref("login", {
                 next: safeNextFromSearch(window.location.search),
-                email,
               }),
             ),
           })

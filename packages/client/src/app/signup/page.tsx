@@ -52,7 +52,7 @@ export default function SignupPage() {
         // Where the verification link lands, when this server requires one.
         // Carries `next`, so an invitee who must verify first still comes
         // back to the invitation after following the link and signing in.
-        callbackURL: webCallbackUrl(authPageHref("login", { next, email })),
+        callbackURL: webCallbackUrl(authPageHref("login", { next })),
       });
       if (result.error) {
         setError(result.error.message ?? "Signup failed");
