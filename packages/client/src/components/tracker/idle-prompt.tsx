@@ -5,6 +5,21 @@ import { Coffee } from "lucide-react";
 import { formatIdleSpan, type IdleAnswer, type PendingIdle } from "@starter/core";
 
 import { Button } from "@/components/ui/button";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
+
+/**
+ * How the idle span reads: whole minutes, never seconds. English keeps
+ * `formatIdleSpan`'s "1h" for a round hour; other languages print the rounded
+ * minutes through the locale's compact duration.
+ */
+const useIdleSpan = (idleSec: number): string => {
+  const format = useFormat();
+  if (format.locale === "en" || format.locale === "pseudo") {
+    return formatIdleSpan(idleSec);
+  }
+  return format.durationShort(Math.max(0, Math.round(idleSec / 60)) * 60);
+};
 
 export type IdlePromptProps = {
   pending: PendingIdle;
@@ -30,7 +45,8 @@ export function IdlePrompt({
   since,
   onAnswer,
 }: IdlePromptProps): React.JSX.Element {
-  const span = formatIdleSpan(pending.idleSec);
+  const t = useT("tracker");
+  const span = useIdleSpan(pending.idleSec);
 
   return (
     <div
@@ -43,12 +59,11 @@ export function IdlePrompt({
         <div className="space-y-1">
           <p className="text-sm font-medium leading-none">
             {pending.signal === "locked"
-              ? `Screen locked for ${span}`
-              : `No input for ${span}`}
+              ? t("idle.screenLocked", { span })
+              : t("idle.noInput", { span })}
           </p>
           <p className="text-sm text-muted-foreground">
-            The timer has been running since {since}. Keep that time if you
-            were reading, in a meeting or on a call.
+            {t("idle.body", { since })}
           </p>
         </div>
       </div>
@@ -61,7 +76,7 @@ export function IdlePrompt({
           onClick={() => onAnswer("keep")}
           data-testid="idle-keep"
         >
-          I was working
+          {t("idle.keep")}
         </Button>
         <Button
           type="button"
@@ -70,7 +85,7 @@ export function IdlePrompt({
           onClick={() => onAnswer("discard")}
           data-testid="idle-discard"
         >
-          Discard {span}
+          {t("idle.discard", { span })}
         </Button>
         <Button
           type="button"
@@ -78,7 +93,7 @@ export function IdlePrompt({
           onClick={() => onAnswer("discard-and-resume")}
           data-testid="idle-discard-resume"
         >
-          Discard and resume
+          {t("idle.discardAndResume")}
         </Button>
       </div>
     </div>

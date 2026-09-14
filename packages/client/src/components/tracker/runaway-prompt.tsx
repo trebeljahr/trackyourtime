@@ -3,8 +3,6 @@
 import * as React from "react";
 import { AlarmClockOff } from "lucide-react";
 import {
-  formatDurationShort,
-  runawayActionSummary,
   type RunawayMark,
   type RunawayResolution,
   type TimeEntry,
@@ -12,6 +10,15 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
+
+/** Past-tense sentence per mark action — the localised `runawayActionSummary`. */
+const ACTION_SUMMARY_KEYS = {
+  flagged: "runaway.actionFlagged",
+  capped: "runaway.actionCapped",
+  stopped: "runaway.actionStopped",
+} as const satisfies Record<RunawayMark["action"], string>;
 
 export type RunawayAnswer = {
   resolution: RunawayResolution;
@@ -52,6 +59,9 @@ export function RunawayPrompt({
   mark,
   onAnswer,
 }: RunawayPromptProps): React.JSX.Element {
+  const t = useT("tracker");
+  const tc = useT("common");
+  const format = useFormat();
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(() =>
     toLocalInputValue(
@@ -61,8 +71,8 @@ export function RunawayPrompt({
     ),
   );
 
-  const ran = formatDurationShort(mark.elapsedSec);
-  const limit = formatDurationShort(mark.limitSec);
+  const ran = format.durationShort(mark.elapsedSec);
+  const limit = format.durationShort(mark.limitSec);
   const capped = mark.action === "capped";
   const stillRunning = entry.end === null;
 
@@ -83,11 +93,13 @@ export function RunawayPrompt({
         <AlarmClockOff className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="space-y-1">
           <p className="text-sm font-medium leading-none">
-            This timer ran for {ran}
+            {t("runaway.title", { ran })}
           </p>
           <p className="text-sm text-muted-foreground">
-            {runawayActionSummary(mark)} Your maximum is {limit}. Keep it if you
-            really did work that long.
+            {t("runaway.body", {
+              action: t(ACTION_SUMMARY_KEYS[mark.action]),
+              limit,
+            })}
           </p>
         </div>
       </div>
@@ -98,7 +110,7 @@ export function RunawayPrompt({
             type="datetime-local"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            aria-label="Real end time"
+            aria-label={t("runaway.realEnd")}
             className="h-8 w-auto flex-1 basis-52"
             data-testid="runaway-end-at"
           />
@@ -109,7 +121,7 @@ export function RunawayPrompt({
             onClick={() => setEditing(false)}
             data-testid="runaway-end-at-cancel"
           >
-            Cancel
+            {tc("actions.cancel")}
           </Button>
           <Button
             type="button"
@@ -117,7 +129,7 @@ export function RunawayPrompt({
             onClick={submitEndAt}
             data-testid="runaway-end-at-save"
           >
-            Save
+            {tc("actions.save")}
           </Button>
         </div>
       ) : (
@@ -129,7 +141,7 @@ export function RunawayPrompt({
             onClick={() => onAnswer({ resolution: "keep" })}
             data-testid="runaway-keep"
           >
-            {capped ? "Keep the cap" : "I worked that long"}
+            {capped ? t("runaway.keepCap") : t("runaway.keepLong")}
           </Button>
 
           {capped ? (
@@ -140,7 +152,7 @@ export function RunawayPrompt({
               onClick={() => onAnswer({ resolution: "restore" })}
               data-testid="runaway-restore"
             >
-              Put back {ran}
+              {t("runaway.restore", { ran })}
             </Button>
           ) : (
             <Button
@@ -150,7 +162,9 @@ export function RunawayPrompt({
               onClick={() => onAnswer({ resolution: "cap" })}
               data-testid="runaway-cap"
             >
-              {stillRunning ? `Cap at ${limit}` : `Cut back to ${limit}`}
+              {stillRunning
+                ? t("runaway.cap", { limit })
+                : t("runaway.cutBack", { limit })}
             </Button>
           )}
 
@@ -160,7 +174,7 @@ export function RunawayPrompt({
             onClick={() => setEditing(true)}
             data-testid="runaway-end-at-open"
           >
-            Set the end…
+            {t("runaway.setEnd")}
           </Button>
         </div>
       )}

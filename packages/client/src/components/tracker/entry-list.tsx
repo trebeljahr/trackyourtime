@@ -22,8 +22,10 @@ import {
   useEntryMutations,
 } from "@/components/tracker/use-entry-mutations";
 import { useQuickStarts } from "@/hooks/use-favorites";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
+import { userErrorMessage } from "@/lib/error-message";
 
 /**
  * Where a day heading comes to rest when it sticks.
@@ -84,6 +86,7 @@ function DayHeader({
   live: boolean;
 }): React.JSX.Element {
   const format = useFormatSettings();
+  const tc = useT("common");
 
   return (
     <div
@@ -92,11 +95,11 @@ function DayHeader({
       data-testid="day-header"
     >
       <span className="text-sm font-medium" data-testid="day-label">
-        {dayHeadingLabel(group.date)}
+        {dayHeadingLabel(group.date, format.locale)}
       </span>
       <span className="flex items-center gap-4 text-sm">
         <span className="text-muted-foreground" data-testid="day-count">
-          {group.entryCount} {group.entryCount === 1 ? "entry" : "entries"}
+          {tc("counts.entries", { count: group.entryCount })}
         </span>
         {group.amount > 0 ? (
           <span className="text-muted-foreground" data-testid="day-amount">
@@ -104,7 +107,7 @@ function DayHeader({
           </span>
         ) : null}
         <span className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Total</span>
+          <span className="text-muted-foreground">{tc("fields.total")}</span>
           {live ? (
             <LiveDuration
               baseSec={group.totalSec}
@@ -144,6 +147,8 @@ function DayHeader({
  *  - only the day the timer is running in subscribes to that clock at all.
  */
 export function EntryList(): React.JSX.Element {
+  const t = useT("tracker");
+  const tc = useT("common");
   const mutations = useEntryMutations();
   const quickStarts = useQuickStarts();
   // The query, not `useRunningEntry` — this only needs to know WHICH day is
@@ -227,8 +232,8 @@ export function EntryList(): React.JSX.Element {
     return (
       <EmptyState
         icon={Timer}
-        title="Could not load your entries"
-        description={query.error.message}
+        title={t("list.loadError")}
+        description={userErrorMessage(query.error, undefined, tc)}
         action={
           <Button
             type="button"
@@ -236,7 +241,7 @@ export function EntryList(): React.JSX.Element {
             onClick={() => void query.refetch()}
             data-testid="entries-retry"
           >
-            Try again
+            {t("list.retry")}
           </Button>
         }
         testId="entries-error"
@@ -250,8 +255,8 @@ export function EntryList(): React.JSX.Element {
     return (
       <EmptyState
         icon={Timer}
-        title="No time tracked yet"
-        description="Type what you are working on above and hit Start — or press + to log time you already spent."
+        title={t("list.emptyTitle")}
+        description={t("list.emptyDescription")}
         action={
           // Somebody arriving from another tracker has years of history sitting
           // in a file, and this screen is where they find out it can come with
@@ -259,7 +264,7 @@ export function EntryList(): React.JSX.Element {
           <Button type="button" variant="outline" asChild>
             <Link href="/settings?tab=data" data-testid="entries-empty-import">
               <Upload className="size-4" />
-              Import your history
+              {t("list.importHistory")}
             </Link>
           </Button>
         }
@@ -304,7 +309,7 @@ export function EntryList(): React.JSX.Element {
           data-testid="entries-loading-more"
         >
           <Loader2 className="size-4 animate-spin" />
-          Loading earlier days…
+          {t("list.loadingMore")}
         </div>
       ) : null}
 
@@ -319,7 +324,7 @@ export function EntryList(): React.JSX.Element {
             onClick={() => void fetchNextPage()}
             data-testid="entries-load-more"
           >
-            Load earlier days
+            {t("list.loadMore")}
           </Button>
         </div>
       ) : null}
@@ -329,7 +334,7 @@ export function EntryList(): React.JSX.Element {
           className="py-2 text-center text-xs text-muted-foreground"
           data-testid="entries-end"
         >
-          That is everything you have tracked.
+          {t("list.end")}
         </p>
       ) : null}
 

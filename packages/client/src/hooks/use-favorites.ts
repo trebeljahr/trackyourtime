@@ -10,8 +10,10 @@ import {
 } from "@starter/core";
 
 import { toast } from "@/components/ui/sonner";
+import { translate } from "@/i18n/translate";
 import { ORIGIN_ID } from "@/hooks/use-sync";
 import { trpc } from "@/lib/trpc";
+import { userErrorMessage } from "@/lib/error-message";
 
 /** How many chips the tracker's quick-start row shows across both tiers. */
 export const QUICK_START_LIMIT = 6;
@@ -59,9 +61,7 @@ export const useQuickStarts = (): QuickStarts => {
     (error: unknown, fallback: string): void => {
       invalidate();
       toast.error(
-        error instanceof Error && error.message !== ""
-          ? error.message
-          : fallback
+        userErrorMessage(error, fallback)
       );
     },
     [invalidate]
@@ -69,10 +69,10 @@ export const useQuickStarts = (): QuickStarts => {
 
   const createMutation = trpc.favorites.create.useMutation({
     onSuccess: () => {
-      toast.success("Pinned to favorites");
+      toast.success(translate("tracker")("favorites.pinned"));
       invalidate();
     },
-    onError: (error) => onError(error, "Could not pin this"),
+    onError: (error) => onError(error, translate("tracker")("favorites.pinFailed")),
   });
 
   const removeMutation = trpc.favorites.remove.useMutation({
@@ -88,7 +88,7 @@ export const useQuickStarts = (): QuickStarts => {
       if (context?.previous) {
         utils.favorites.list.setData(undefined, context.previous);
       }
-      onError(error, "Could not unpin this");
+      onError(error, translate("tracker")("favorites.unpinFailed"));
     },
     onSettled: invalidate,
   });
@@ -118,7 +118,7 @@ export const useQuickStarts = (): QuickStarts => {
       if (context?.previous) {
         utils.favorites.list.setData(undefined, context.previous);
       }
-      onError(error, "Could not reorder your favorites");
+      onError(error, translate("tracker")("favorites.reorderFailed"));
     },
   });
 

@@ -1,5 +1,9 @@
 import { sumAmounts, toLocalDateKey, type DetailedEntry } from "@starter/shared";
 
+import type { ClientLocale } from "@/i18n/config";
+import { formatDate } from "@/i18n/format";
+import { getTranslator } from "@/i18n/translator";
+
 export type DayGroup = {
   /** Local "YYYY-MM-DD". */
   date: string;
@@ -58,21 +62,26 @@ export const groupEntriesByDay = (entries: DetailedEntry[]): DayGroup[] => {
   return days;
 };
 
-/** "Today" / "Yesterday" / "Fri, 21 Aug" for a local date key. */
+/**
+ * "Today" / "Yesterday" / "Fri, 21 Aug" for a local date key, in `locale`.
+ * The year is added only for a day in another year.
+ */
 export const dayHeadingLabel = (
   dateKey: string,
+  locale: ClientLocale,
   now: Date = new Date()
 ): string => {
+  const tc = getTranslator(locale, "common");
   const today = toLocalDateKey(now);
-  if (dateKey === today) return "Today";
+  if (dateKey === today) return tc("time.today");
 
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (dateKey === toLocalDateKey(yesterday)) return "Yesterday";
+  if (dateKey === toLocalDateKey(yesterday)) return tc("time.yesterday");
 
   const parsed = new Date(`${dateKey}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return dateKey;
-  return parsed.toLocaleDateString(undefined, {
+  return formatDate(parsed, locale, {
     weekday: "short",
     day: "numeric",
     month: "short",

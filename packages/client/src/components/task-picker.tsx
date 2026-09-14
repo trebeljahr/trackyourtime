@@ -6,8 +6,11 @@ import { TaskFormDialog } from "@/components/catalog/task-form-dialog";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import { translate } from "@/i18n/translate";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
+import { userErrorMessage } from "@/lib/error-message";
 
 export type TaskPickerProps = {
   value: string | null;
@@ -42,6 +45,8 @@ export function TaskPicker({
   size = "default",
   testId = "task-picker",
 }: TaskPickerProps): React.JSX.Element {
+  const t = useT("tracker");
+  const tc = useT("common");
   const utils = trpc.useUtils();
   const [dialogOpen, setDialogOpen] = React.useState(false);
 
@@ -50,11 +55,13 @@ export function TaskPicker({
   const createTask = trpc.tasks.create.useMutation({
     onSuccess: async (task) => {
       onChange(task.id);
-      toast.success(`Task "${task.name}" created`);
+      toast.success(
+        translate("tracker")("taskPicker.created", { name: task.name })
+      );
       await utils.tasks.invalidate();
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(userErrorMessage(error));
     },
   });
 
@@ -86,13 +93,13 @@ export function TaskPicker({
         options={options}
         value={value}
         onChange={onChange}
-        placeholder="No task"
-        searchPlaceholder="Search or create a task..."
-        emptyText="No tasks yet."
+        placeholder={tc("empty.noTask")}
+        searchPlaceholder={t("taskPicker.searchPlaceholder")}
+        emptyText={t("taskPicker.empty")}
         allowClear
-        clearLabel="No task"
+        clearLabel={tc("empty.noTask")}
         onCreate={allowCreate ? handleCreate : undefined}
-        createLabel={(query) => `Create task "${query}"`}
+        createLabel={(query) => t("taskPicker.createTask", { name: query })}
         disabled={disabled || createTask.isPending}
         size={size}
         className={cn("min-w-40", className)}
@@ -101,7 +108,7 @@ export function TaskPicker({
           allowCreate
             ? [
                 {
-                  label: "New task…",
+                  label: t("taskPicker.newTask"),
                   onSelect: () => setDialogOpen(true),
                   testId: "task-picker-new-task",
                 },

@@ -160,29 +160,36 @@ describe("dayHeadingLabel", () => {
   const now = new Date(2026, 7, 21, 12, 0, 0);
 
   it("names today and yesterday", () => {
-    expect(dayHeadingLabel("2026-08-21", now)).toBe("Today");
-    expect(dayHeadingLabel("2026-08-20", now)).toBe("Yesterday");
+    expect(dayHeadingLabel("2026-08-21", "en", now)).toBe("Today");
+    expect(dayHeadingLabel("2026-08-20", "en", now)).toBe("Yesterday");
   });
 
   it("handles yesterday across a month boundary", () => {
-    expect(dayHeadingLabel("2026-07-31", new Date(2026, 7, 1, 12, 0))).toBe(
+    expect(dayHeadingLabel("2026-07-31", "en", new Date(2026, 7, 1, 12, 0))).toBe(
       "Yesterday"
     );
   });
 
   it("falls back to a formatted date for older days", () => {
-    const label = dayHeadingLabel("2026-08-14", now);
+    const label = dayHeadingLabel("2026-08-14", "en", now);
     expect(label).not.toBe("Today");
     expect(label).not.toBe("Yesterday");
     expect(label).toContain("14");
   });
 
   it("shows the year only for another year", () => {
-    expect(dayHeadingLabel("2025-08-14", now)).toContain("2025");
-    expect(dayHeadingLabel("2026-08-14", now)).not.toContain("2026");
+    expect(dayHeadingLabel("2025-08-14", "en", now)).toContain("2025");
+    expect(dayHeadingLabel("2026-08-14", "en", now)).not.toContain("2026");
+  });
+
+  it("names the day in the rendered language", () => {
+    expect(dayHeadingLabel("2026-08-21", "de", now)).toBe("Heute");
+    expect(dayHeadingLabel("2026-08-20", "de", now)).toBe("Gestern");
+    // German puts the day before the month, with a period: "Fr., 14. Aug."
+    expect(dayHeadingLabel("2026-08-14", "de", now)).toMatch(/14\./);
   });
 
   it("returns the key unchanged when it cannot be parsed", () => {
-    expect(dayHeadingLabel("not-a-day", now)).toBe("not-a-day");
+    expect(dayHeadingLabel("not-a-day", "en", now)).toBe("not-a-day");
   });
 });

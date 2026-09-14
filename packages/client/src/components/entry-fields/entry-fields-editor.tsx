@@ -8,6 +8,7 @@ import { TagPicker } from "@/components/tags/tag-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,13 +76,15 @@ export function EntryFieldsEditor({
   fields = ALL_FIELDS,
   disabled = false,
   autoFocus = false,
-  descriptionPlaceholder = "What did you work on?",
+  descriptionPlaceholder,
   onDescriptionCommit,
   onSubmit,
   idPrefix,
   testIdPrefix,
   className,
 }: EntryFieldsEditorProps): React.JSX.Element {
+  const t = useT("tracker");
+  const tc = useT("common");
   const shows = (field: EntryFieldName): boolean => fields.includes(field);
 
   return (
@@ -91,13 +94,15 @@ export function EntryFieldsEditor({
     >
       {shows("description") ? (
         <div className="space-y-2">
-          <Label htmlFor={`${idPrefix}-description`}>Description</Label>
+          <Label htmlFor={`${idPrefix}-description`}>{tc("fields.description")}</Label>
           <Input
             id={`${idPrefix}-description`}
             value={value.description}
             autoFocus={autoFocus}
             disabled={disabled}
-            placeholder={descriptionPlaceholder}
+            placeholder={
+              descriptionPlaceholder ?? t("entryFields.descriptionPlaceholder")
+            }
             onChange={(event) => {
               const description = event.target.value;
               onChange({ ...value, description }, { description });
@@ -126,7 +131,7 @@ export function EntryFieldsEditor({
 
       {shows("tags") ? (
         <div className="space-y-2">
-          <Label>Tags</Label>
+          <Label>{tc("fields.tags")}</Label>
           <TagPicker
             value={value.tagIds}
             onChange={(tagIds) => onChange(withTags(value, tagIds), { tagIds })}
@@ -141,7 +146,7 @@ export function EntryFieldsEditor({
 
       {shows("billable") ? (
         <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-          <Label htmlFor={`${idPrefix}-billable`}>Billable</Label>
+          <Label htmlFor={`${idPrefix}-billable`}>{tc("fields.billable")}</Label>
           <Switch
             id={`${idPrefix}-billable`}
             checked={value.billable}

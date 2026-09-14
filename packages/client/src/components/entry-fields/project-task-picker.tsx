@@ -7,6 +7,7 @@ import { withProject, withTask, type EntryFields } from "@starter/core";
 import { ProjectPicker } from "@/components/project-picker";
 import { Label } from "@/components/ui/label";
 import { TaskPicker } from "@/components/task-picker";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -75,6 +76,8 @@ export function ProjectTaskPicker({
   testIdPrefix,
   className,
 }: ProjectTaskPickerProps): React.JSX.Element {
+  const t = useT("tracker");
+  const tc = useT("common");
   const clientName = useProjectClientName(value.projectId);
 
   const handleProject = React.useCallback(
@@ -124,11 +127,15 @@ export function ProjectTaskPicker({
               ? "flex"
               : "hidden max-w-32 shrink lg:inline-flex"
         )}
-        title={clientName === null ? "No client" : `Client: ${clientName}`}
+        title={
+          clientName === null
+            ? tc("empty.noClient")
+            : t("entryFields.clientTitle", { name: clientName })
+        }
         data-testid={`${testIdPrefix}-client`}
       >
         <Building2 className="size-3 shrink-0" aria-hidden />
-        <span className="truncate">{clientName ?? "No client"}</span>
+        <span className="truncate">{clientName ?? tc("empty.noClient")}</span>
       </span>
     );
 
@@ -174,12 +181,12 @@ export function ProjectTaskPicker({
     return (
       <div className={cn("flex flex-wrap gap-3", className)}>
         <div className="min-w-48 flex-1 space-y-2">
-          <Label>Project</Label>
+          <Label>{tc("fields.project")}</Label>
           {project}
           {client}
         </div>
         <div className="min-w-48 flex-1 space-y-2">
-          <Label>Task</Label>
+          <Label>{tc("fields.task")}</Label>
           {task}
         </div>
       </div>

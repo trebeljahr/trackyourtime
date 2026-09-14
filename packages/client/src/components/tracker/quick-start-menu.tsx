@@ -4,8 +4,6 @@ import * as React from "react";
 import { ChevronDown, ChevronUp, Pin, PinOff, Play, Zap } from "lucide-react";
 import {
   isBrokenQuickStart,
-  quickStartHint,
-  quickStartLabel,
   repairQuickStart,
   type QuickStartItem,
 } from "@starter/core";
@@ -22,7 +20,44 @@ import {
 import { BillableGlyph } from "@/components/tracker/billable-glyph";
 import type { EntryMutations } from "@/components/tracker/use-entry-mutations";
 import { useQuickStarts } from "@/hooks/use-favorites";
+import { useT } from "@/i18n/use-t";
+import type { Translator } from "@/i18n/translator";
 import { cn } from "@/lib/utils";
+
+/**
+ * `quickStartLabel` from `@starter/shared`, with its one fallback word
+ * translated: the description, else the project, else the task.
+ */
+const quickStartLabelFor = (
+  item: QuickStartItem,
+  t: Translator<"tracker">
+): string => {
+  const description = item.description.trim();
+  if (description !== "") return description;
+  if (item.projectName) return item.projectName;
+  if (item.taskName) return item.taskName;
+  return t("quickStart.noDescription");
+};
+
+/**
+ * `quickStartHint` from `@starter/shared`, translated: project and its client,
+ * or null when that would only repeat the label.
+ */
+const quickStartHintFor = (
+  item: QuickStartItem,
+  t: Translator<"tracker">
+): string | null => {
+  if (item.projectMissing === true) return t("quickStart.projectDeleted");
+  if (!item.projectName) return item.taskName ?? null;
+  if (item.description.trim() === "") return item.clientName ?? null;
+
+  const project = item.projectArchived
+    ? t("quickStart.projectArchived", { project: item.projectName })
+    : item.projectName;
+  return item.clientName
+    ? t("quickStart.clientProject", { client: item.clientName, project })
+    : project;
+};
 
 /**
  * One row of the quick-start menu. Selecting it starts a timer; the trailing
@@ -50,9 +85,11 @@ function QuickStartMenuItem({
   onUnpin: (id: string) => void;
   onMove: (id: string, delta: number) => void;
 }): React.JSX.Element {
+  const t = useT("tracker");
+  const tc = useT("common");
   const pinned = item.kind === "favorite";
-  const label = quickStartLabel(item);
-  const hint = quickStartHint(item);
+  const label = quickStartLabelFor(item, t);
+  const hint = quickStartHintFor(item, t);
   const broken = isBrokenQuickStart(item);
 
   // Radix selects an item on click; a click that never reaches it neither
@@ -103,7 +140,7 @@ function QuickStartMenuItem({
         {item.billable ? (
           <span
             className="mr-1 shrink-0 text-muted-foreground [&_svg]:size-3"
-            title="Billable"
+            title={tc("fields.billable")}
             data-testid="quick-start-billable"
           >
             <BillableGlyph billable />
@@ -116,7 +153,7 @@ function QuickStartMenuItem({
               type="button"
               disabled={index === 0}
               className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-0 group-hover:opacity-100 group-data-[highlighted]:opacity-100 focus-visible:opacity-100"
-              aria-label={`Move ${label} up`}
+              aria-label={t("quickStart.moveUp", { label })}
               onClick={(event) => {
                 swallow(event);
                 onMove(item.id, -1);
@@ -129,7 +166,7 @@ function QuickStartMenuItem({
               type="button"
               disabled={index >= favoriteCount - 1}
               className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-0 group-hover:opacity-100 group-data-[highlighted]:opacity-100 focus-visible:opacity-100"
-              aria-label={`Move ${label} down`}
+              aria-label={t("quickStart.moveDown", { label })}
               onClick={(event) => {
                 swallow(event);
                 onMove(item.id, 1);
@@ -141,8 +178,8 @@ function QuickStartMenuItem({
             <button
               type="button"
               className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label={`Unpin ${label}`}
-              title="Unpin"
+              aria-label={t("quickStart.unpinLabel", { label })}
+              title={t("quickStart.unpin")}
               onClick={(event) => {
                 swallow(event);
                 onUnpin(item.id);
@@ -156,8 +193,8 @@ function QuickStartMenuItem({
           <button
             type="button"
             className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100 group-data-[highlighted]:opacity-100 focus-visible:opacity-100"
-            aria-label={`Pin ${label}`}
-            title="Pin to the top of this menu"
+            aria-label={t("quickStart.pinLabel", { label })}
+            title={t("quickStart.pinTitle")}
             onClick={(event) => {
               swallow(event);
               onPin(item);
@@ -188,6 +225,7 @@ export function QuickStartMenu({
 }: {
   mutations: EntryMutations;
 }): React.JSX.Element | null {
+  const t = useT("tracker");
   const quickStarts = useQuickStarts();
 
   const start = React.useCallback(
@@ -224,15 +262,15 @@ export function QuickStartMenu({
           type="button"
           variant="ghost"
           className="h-8 shrink-0 gap-1.5 px-2 text-muted-foreground"
-          aria-label="Quick start"
-          title="Start something you tracked before"
+          aria-label={t("quickStart.trigger")}
+          title={t("quickStart.triggerTitle")}
           data-testid="quick-start-trigger"
         >
           <Zap className="size-4" />
           {/* On its own line the label is never the thing competing for room,
               so it stays even on a phone, where an unlabelled bolt was the
               least guessable control on the bar. */}
-          <span>Quick start</span>
+          <span>{t("quickStart.trigger")}</span>
         </Button>
       </DropdownMenuTrigger>
 
@@ -243,7 +281,7 @@ export function QuickStartMenu({
       >
         {favorites.length > 0 ? (
           <>
-            <DropdownMenuLabel>Favorites</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("quickStart.favorites")}</DropdownMenuLabel>
             {favorites.map((item, index) => (
               <QuickStartMenuItem
                 key={item.id}
@@ -265,7 +303,7 @@ export function QuickStartMenu({
 
         {recents.length > 0 ? (
           <>
-            <DropdownMenuLabel>Recently tracked</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("quickStart.recents")}</DropdownMenuLabel>
             {recents.map((item) => (
               <QuickStartMenuItem
                 key={item.key}

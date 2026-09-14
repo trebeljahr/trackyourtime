@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { DescriptionSuggestion, EntryFields } from "@starter/core";
-import { formatDuration } from "@starter/shared";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,8 +29,9 @@ import { useIdleGuard } from "@/components/tracker/use-idle-guard";
 import { useRunawayGuard } from "@/components/tracker/use-runaway-guard";
 import { useOfflineQueueState } from "@/providers/offline-queue-provider";
 import { useActiveWorkspace } from "@/components/workspace-switcher";
-import { useT } from "@/i18n/use-t";
 import { useRunningEntry } from "@/hooks/use-sync";
+import { formatDurationFor } from "@/i18n/format";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { isNative } from "@/mobile/bridge";
 import { trpc } from "@/lib/trpc";
@@ -45,13 +45,15 @@ import { cn } from "@/lib/utils";
 export function TrackerBar(): React.JSX.Element {
   const { entry: running, elapsedSec, clockSkewed } = useRunningEntry();
   const format = useFormatSettings();
+  const t = useT("tracker");
+  const tc = useT("common");
+  const { locale } = format;
   const mutations = useEntryMutations();
   useRunawayGuard(mutations);
   // The shell owns the queue, so it keeps draining on Reports and Settings
   // too — see providers/offline-queue-provider.tsx.
   const { pending, foreign, online, authBlocked } = useOfflineQueueState();
   const projects = trpc.projects.list.useQuery({});
-  const t = useT("tracker");
   const { activeId, workspaces } = useActiveWorkspace();
 
   const [manualOpen, setManualOpen] = React.useState(false);
@@ -125,11 +127,14 @@ export function TrackerBar(): React.JSX.Element {
       return;
     }
     const label = running.description.trim();
-    document.title = `${formatDuration(elapsedSec, "hms")}${label === "" ? "" : ` · ${label}`}`;
+    // Always h:mm:ss, whatever the duration preference: a decimal "1.40 h"
+    // does not visibly tick in a tab title.
+    const clock = formatDurationFor(elapsedSec, locale, "hms");
+    document.title = `${clock}${label === "" ? "" : ` · ${label}`}`;
     return () => {
       document.title = PRODUCT_NAME;
     };
-  }, [running, elapsedSec]);
+  }, [running, elapsedSec, locale]);
 
   const projectBillableDefault = React.useCallback(
     (nextProjectId: string | null): boolean => {
@@ -306,7 +311,7 @@ export function TrackerBar(): React.JSX.Element {
              — it focuses imperatively on mount — so the native value is the
              one that decides. */
           autoFocus={!isNative()}
-          className="min-w-0 flex-1 basis-64"
+          className="min-w-0 flex-1 basis-48"
           inputClassName="h-10 border-0 bg-transparent px-2 text-base shadow-none focus-visible:ring-0"
           testId="tracker-description"
         />
@@ -335,9 +340,9 @@ export function TrackerBar(): React.JSX.Element {
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={billable ? "Billable" : "Not billable"}
+          aria-label={billable ? tc("fields.billable") : t("fields.notBillable")}
           aria-pressed={billable}
-          title={billable ? "Billable" : "Not billable"}
+          title={billable ? tc("fields.billable") : t("fields.notBillable")}
           className="cap-touch"
           onClick={handleBillableToggle}
           data-testid="tracker-billable"
@@ -373,11 +378,11 @@ export function TrackerBar(): React.JSX.Element {
           >
             {isRunning ? (
               <>
-                <Square /> Stop
+                <Square /> {tc("actions.stop")}
               </>
             ) : (
               <>
-                <Play /> Start
+                <Play /> {tc("actions.start")}
               </>
             )}
           </Button>
@@ -395,8 +400,8 @@ export function TrackerBar(): React.JSX.Element {
               variant="outline"
               size="icon"
               className="cap-touch shrink-0"
-              aria-label="Add time entry"
-              title="Add time entry"
+              aria-label={t("bar.addEntry")}
+              title={t("bar.addEntry")}
               onClick={() => setManualOpen(true)}
               data-testid="tracker-manual-open"
             >
@@ -436,7 +441,7 @@ export function TrackerBar(): React.JSX.Element {
               className="gap-1.5 border-destructive/50 text-destructive"
               data-testid="offline-auth-blocked"
             >
-              <CloudOff className="size-3" /> Signed out — sign in to sync
+              <CloudOff className="size-3" /> {t("bar.authBlocked")}
             </Badge>
           ) : null}
 
@@ -453,13 +458,13 @@ export function TrackerBar(): React.JSX.Element {
               className="gap-1.5 border-destructive/50 text-destructive"
               data-testid="clock-skew-warning"
             >
-              <AlertTriangle className="size-3" /> Device clock looks wrong
+              <AlertTriangle className="size-3" /> {t("bar.clockSkewed")}
             </Badge>
           ) : null}
 
           {!online ? (
             <Badge variant="outline" className="gap-1.5" data-testid="offline-indicator">
-              <WifiOff className="size-3" /> Offline
+              <WifiOff className="size-3" /> {tc("status.offline")}
             </Badge>
           ) : null}
 
@@ -471,7 +476,7 @@ export function TrackerBar(): React.JSX.Element {
               data-pending={pending}
             >
               <CloudOff className="size-3" />
-              {pending} change{pending === 1 ? "" : "s"} pending
+              {t("bar.pending", { count: pending })}
             </Badge>
           ) : null}
 

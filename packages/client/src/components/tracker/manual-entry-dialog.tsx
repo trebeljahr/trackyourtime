@@ -24,6 +24,7 @@ import { EntryFieldsEditor } from "@/components/entry-fields/entry-fields-editor
 import { useEntryFields } from "@/components/entry-fields/use-entry-fields";
 import { TimeField } from "@/components/tracker/time-field";
 import type { EntryMutations } from "@/components/tracker/use-entry-mutations";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 
 const clampEnd = (start: string, end: string): string =>
@@ -64,6 +65,8 @@ export function ManualEntryDialog({
   mutations,
 }: ManualEntryDialogProps): React.JSX.Element {
   const format = useFormatSettings();
+  const t = useT("tracker");
+  const tc = useT("common");
   const zone = deviceTimeZone();
 
   // Reseed on each open rather than in an effect, so the very first paint
@@ -102,10 +105,8 @@ export function ManualEntryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="manual-entry-dialog">
         <DialogHeader>
-          <DialogTitle>Add time entry</DialogTitle>
-          <DialogDescription>
-            Log a block of work that was not timed.
-          </DialogDescription>
+          <DialogTitle>{t("manualDialog.title")}</DialogTitle>
+          <DialogDescription>{t("manualDialog.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -119,7 +120,7 @@ export function ManualEntryDialog({
           />
 
           <div className="space-y-2">
-            <Label htmlFor="manual-entry-date">Date</Label>
+            <Label htmlFor="manual-entry-date">{tc("fields.date")}</Label>
             <Input
               id="manual-entry-date"
               type="date"
@@ -146,11 +147,11 @@ export function ManualEntryDialog({
 
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-2">
-              <Label>Start</Label>
+              <Label>{tc("fields.start")}</Label>
               <TimeField
                 value={range.start}
                 timeFormat={format.timeFormat}
-                aria-label="Start time"
+                aria-label={t("fields.startTime")}
                 testId="manual-entry-start"
                 onCommit={(iso) =>
                   setRange((current) => ({
@@ -161,11 +162,11 @@ export function ManualEntryDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>End</Label>
+              <Label>{tc("fields.end")}</Label>
               <TimeField
                 value={range.end}
                 timeFormat={format.timeFormat}
-                aria-label="End time"
+                aria-label={t("fields.endTime")}
                 testId="manual-entry-end"
                 onCommit={(iso) =>
                   setRange((current) => ({
@@ -176,11 +177,11 @@ export function ManualEntryDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Duration</Label>
+              <Label>{tc("fields.duration")}</Label>
               <DurationInput
                 value={seconds}
                 format={format.durationFormat}
-                aria-label="Duration"
+                aria-label={tc("fields.duration")}
                 testId="manual-entry-duration"
                 className="w-28"
                 onCommit={(next) =>
@@ -203,10 +204,10 @@ export function ManualEntryDialog({
             onClick={() => onOpenChange(false)}
             data-testid="manual-entry-cancel"
           >
-            Cancel
+            {tc("actions.cancel")}
           </Button>
           <Button type="button" onClick={add} data-testid="manual-entry-add">
-            Add
+            {tc("actions.add")}
           </Button>
         </DialogFooter>
       </DialogContent>

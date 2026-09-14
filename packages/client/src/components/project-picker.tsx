@@ -6,8 +6,11 @@ import { ProjectFormDialog } from "@/components/catalog/project-form-dialog";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import { translate } from "@/i18n/translate";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
+import { userErrorMessage } from "@/lib/error-message";
 
 /** The minimum a picker row needs — matches `projects.list` output. */
 export type PickableProject = {
@@ -16,8 +19,6 @@ export type PickableProject = {
   color: string;
   clientName?: string | null;
 };
-
-const UNGROUPED = "No client";
 
 /**
  * Split a create query written as "Client / Project".
@@ -41,16 +42,20 @@ export const splitClientAndProject = (
   return { clientName, projectName };
 };
 
-/** Group by client so the list reads the way the sidebar does. */
+/**
+ * Group by client so the list reads the way the sidebar does. `ungrouped` is
+ * the heading, in the rendered language, for projects without a client.
+ */
 export const toProjectOptions = (
-  projects: PickableProject[]
+  projects: PickableProject[],
+  ungrouped: string
 ): ComboboxOption[] =>
   projects.map((project) => ({
     value: project.id,
     label: project.name,
     color: project.color,
-    group: project.clientName ?? UNGROUPED,
-    keywords: [project.name, project.clientName ?? UNGROUPED],
+    group: project.clientName ?? ungrouped,
+    keywords: [project.name, project.clientName ?? ungrouped],
   }));
 
 export type ProjectPickerProps = {
@@ -74,12 +79,14 @@ export function ProjectPicker({
   value,
   onChange,
   allowCreate = true,
-  placeholder = "No project",
+  placeholder,
   disabled = false,
   className,
   size = "default",
   testId = "project-picker",
 }: ProjectPickerProps): React.JSX.Element {
+  const t = useT("tracker");
+  const tc = useT("common");
   const utils = trpc.useUtils();
   const projects = trpc.projects.list.useQuery({});
   const clients = trpc.clients.list.useQuery({});
@@ -87,17 +94,19 @@ export function ProjectPicker({
   const createProject = trpc.projects.create.useMutation({
     onSuccess: async (project) => {
       onChange(project.id);
-      toast.success(`Project "${project.name}" created`);
+      toast.success(
+        translate("tracker")("projectPicker.created", { name: project.name })
+      );
       await utils.projects.invalidate();
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(userErrorMessage(error));
     },
   });
 
   const createClient = trpc.clients.create.useMutation({
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(userErrorMessage(error));
     },
   });
 
@@ -109,9 +118,10 @@ export function ProjectPicker({
   // picker that is about choosing a project.
   const [projectDialogOpen, setProjectDialogOpen] = React.useState(false);
 
+  const ungrouped = tc("empty.noClient");
   const options = React.useMemo(
-    () => toProjectOptions(projects.data ?? []),
-    [projects.data]
+    () => toProjectOptions(projects.data ?? [], ungrouped),
+    [projects.data, ungrouped]
   );
 
   /**
@@ -165,19 +175,22 @@ export function ProjectPicker({
         options={options}
         value={value}
         onChange={onChange}
-        placeholder={placeholder}
-        searchPlaceholder="Search projects..."
-        emptyText="No projects found."
+        placeholder={placeholder ?? tc("empty.noProject")}
+        searchPlaceholder={t("projectPicker.searchPlaceholder")}
+        emptyText={t("projectPicker.empty")}
         allowClear
-        clearLabel="No project"
+        clearLabel={tc("empty.noProject")}
         onCreate={allowCreate ? handleCreate : undefined}
         createLabel={(query) => {
           const { clientName, projectName } = splitClientAndProject(query);
           return clientName
-            ? `Create project "${projectName}" for client "${clientName}"`
-            : `Create project "${projectName}"`;
+            ? t("projectPicker.createProjectForClient", {
+                project: projectName,
+                client: clientName,
+              })
+            : t("projectPicker.createProject", { project: projectName });
         }}
-        createHint={'Tip: type "Client / Project" to create both at once'}
+        createHint={t("projectPicker.createHint")}
         disabled={disabled || createProject.isPending || createClient.isPending}
         size={size}
         className={cn("min-w-48", className)}
@@ -186,7 +199,7 @@ export function ProjectPicker({
           allowCreate
             ? [
                 {
-                  label: "New project…",
+                  label: t("projectPicker.newProject"),
                   onSelect: () => setProjectDialogOpen(true),
                   testId: "project-picker-new-project",
                 },

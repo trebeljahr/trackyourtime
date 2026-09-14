@@ -42,6 +42,7 @@ import { LiveDuration } from "@/components/tracker/live-duration";
 import { TimeField } from "@/components/tracker/time-field";
 import type { EntryMutations } from "@/components/tracker/use-entry-mutations";
 import type { QuickStarts } from "@/hooks/use-favorites";
+import { useT } from "@/i18n/use-t";
 import { isTempId } from "@/lib/offline";
 import { useFormatSettings } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,8 @@ function EntryRowImpl({
   nested = false,
 }: EntryRowProps): React.JSX.Element {
   const format = useFormatSettings();
+  const t = useT("tracker");
+  const tc = useT("common");
   const running = entry.end === null;
   // A locally-invented entry has no server id yet; editing it would be lost
   // when the queued create replays.
@@ -214,7 +217,7 @@ function EntryRowImpl({
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-75" />
               <span className="relative inline-flex size-1.5 rounded-full bg-destructive" />
             </span>
-            Running
+            {t("row.running")}
           </span>
         ) : null}
 
@@ -222,7 +225,7 @@ function EntryRowImpl({
           <Input
             value={draft}
             autoFocus
-            aria-label="Description"
+            aria-label={tc("fields.description")}
             className="h-8 min-w-0 flex-1"
             onChange={(event) => setDraft(event.target.value)}
             onBlur={commitDescription}
@@ -255,7 +258,7 @@ function EntryRowImpl({
             data-testid="entry-description"
           >
             {entry.description.trim() === ""
-              ? "Add description"
+              ? t("row.addDescription")
               : entry.description}
           </button>
         )}
@@ -297,7 +300,9 @@ function EntryRowImpl({
         size="icon"
         className="size-8 cap-touch"
         disabled={syncing}
-        aria-label={entry.billable ? "Billable" : "Not billable"}
+        aria-label={
+          entry.billable ? tc("fields.billable") : t("fields.notBillable")
+        }
         aria-pressed={entry.billable}
         onClick={() =>
           mutations.updateEntry({ id: entry.id, billable: !entry.billable })
@@ -314,7 +319,7 @@ function EntryRowImpl({
           timeFormat={format.timeFormat}
           timeZone={entryZone}
           disabled={syncing}
-          aria-label="Start time"
+          aria-label={t("fields.startTime")}
           testId="entry-start"
           onCommit={handleStartCommit}
         />
@@ -324,7 +329,7 @@ function EntryRowImpl({
             className="w-[4.5rem] text-center font-mono text-sm text-muted-foreground tabular-nums"
             data-testid="entry-end"
           >
-            now
+            {t("row.now")}
           </span>
         ) : (
           <TimeField
@@ -332,7 +337,7 @@ function EntryRowImpl({
             timeFormat={format.timeFormat}
             timeZone={entryZone}
             disabled={syncing}
-            aria-label="End time"
+            aria-label={t("fields.endTime")}
             testId="entry-end"
             onCommit={handleEndCommit}
           />
@@ -342,10 +347,10 @@ function EntryRowImpl({
         {spansDayBoundaryInZone(entry.start, entry.end, entryZone) ? (
           <span
             className="ml-1 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground"
-            title="Ends on the next day"
+            title={t("row.nextDayTitle")}
             data-testid="entry-next-day"
           >
-            +1d
+            {t("row.nextDay")}
           </span>
         ) : null}
         {/* Only shown when the entry was recorded somewhere else — otherwise
@@ -353,7 +358,7 @@ function EntryRowImpl({
         {foreignZone ? (
           <span
             className="ml-1 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground"
-            title={`Recorded in ${entryZone}`}
+            title={t("row.recordedIn", { zone: entryZone })}
             data-testid="entry-zone"
           >
             {zoneLabel(entryZone)}
@@ -373,7 +378,7 @@ function EntryRowImpl({
           value={entry.durationSec}
           format={format.durationFormat}
           disabled={syncing}
-          aria-label="Duration"
+          aria-label={tc("fields.duration")}
           testId="entry-duration"
           className="h-8 w-24 min-[1140px]:w-full"
           onCommit={handleDurationCommit}
@@ -398,7 +403,7 @@ function EntryRowImpl({
           variant="ghost"
           size="icon"
           className="size-8 cap-touch bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
-          aria-label="Stop this entry"
+          aria-label={t("row.stop")}
           onClick={() => mutations.stopTimer()}
           data-testid="entry-stop"
         >
@@ -410,7 +415,7 @@ function EntryRowImpl({
           variant="ghost"
           size="icon"
           className="size-8 cap-touch text-primary"
-          aria-label="Continue this entry"
+          aria-label={t("row.continue")}
           onClick={() => mutations.continueEntry(entry)}
           data-testid="entry-continue"
         >
@@ -425,7 +430,7 @@ function EntryRowImpl({
             variant="ghost"
             size="icon"
             className="size-8 cap-touch"
-            aria-label="Entry actions"
+            aria-label={t("row.actions")}
             data-testid="entry-menu"
           >
             <Ellipsis />
@@ -444,7 +449,7 @@ function EntryRowImpl({
               }}
               data-testid="entry-menu-unpin"
             >
-              <PinOff /> Remove from favorites
+              <PinOff /> {t("row.unpin")}
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem
@@ -452,28 +457,28 @@ function EntryRowImpl({
               onSelect={() => quickStarts.pin(quick)}
               data-testid="entry-menu-pin"
             >
-              <Pin /> Add to favorites
+              <Pin /> {t("row.pin")}
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
             onSelect={() => mutations.duplicateEntry(entry)}
             data-testid="entry-menu-duplicate"
           >
-            <Copy /> Duplicate
+            <Copy /> {tc("actions.duplicate")}
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={syncing}
             onSelect={() => onEdit(entry)}
             data-testid="entry-menu-edit"
           >
-            <Pencil /> Edit
+            <Pencil /> {tc("actions.edit")}
           </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
             onSelect={() => mutations.removeEntry(entry)}
             data-testid="entry-menu-delete"
           >
-            <Trash2 /> Delete
+            <Trash2 /> {tc("actions.delete")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

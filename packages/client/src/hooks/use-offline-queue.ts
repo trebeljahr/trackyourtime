@@ -5,7 +5,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { WorkspaceSummary } from "@starter/core";
 
 import { toast } from "@/components/ui/sonner";
-import { translate } from "@/i18n/use-t";
+import { translate } from "@/i18n/translate";
 import { OFFLINE_QUEUED_MUTATION } from "@/lib/query-client";
 import { trpc } from "@/lib/trpc";
 import {
@@ -343,24 +343,16 @@ export const useOfflineQueue = (): OfflineQueueState => {
        * caches so the day looks emptier than they remember is the worst
        * possible way to handle it.
        */
+      const t = translate("tracker");
       if (rejected > 0) {
-        toast.error(
-          rejected === 1
-            ? "One offline change could not be saved"
-            : `${rejected} offline changes could not be saved`,
-          { description: "The server refused them, so they were discarded." }
-        );
+        toast.error(t("offlineQueue.rejected", { count: rejected }), {
+          description: t("offlineQueue.rejectedDescription"),
+        });
       }
       if (stale > 0) {
-        toast.error(
-          stale === 1
-            ? "An old entry could not be closed"
-            : `${stale} old entries could not be closed`,
-          {
-            description:
-              "A stop queued more than a day ago no longer names an entry we can safely end. Check the timer and stop it by hand.",
-          }
-        );
+        toast.error(t("offlineQueue.stale", { count: stale }), {
+          description: t("offlineQueue.staleDescription"),
+        });
       }
 
       if (applied > 0 || rejected > 0 || stale > 0 || result.flushed > 0) {

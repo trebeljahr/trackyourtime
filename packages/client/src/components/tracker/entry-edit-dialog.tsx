@@ -19,6 +19,7 @@ import { EntryFieldsEditor } from "@/components/entry-fields/entry-fields-editor
 import { TimeField } from "@/components/tracker/time-field";
 import { useEntryEditor } from "@/components/tracker/use-entry-editor";
 import type { EntryMutations } from "@/components/tracker/use-entry-mutations";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 
 export type EntryEditDialogProps = {
@@ -42,6 +43,8 @@ export function EntryEditDialog({
   mutations,
 }: EntryEditDialogProps): React.JSX.Element {
   const format = useFormatSettings();
+  const t = useT("tracker");
+  const tc = useT("common");
   const editor = useEntryEditor(entry, {
     onSave: mutations.updateEntry,
     onDone: onClose,
@@ -56,10 +59,8 @@ export function EntryEditDialog({
     >
       <DialogContent data-testid="entry-edit-dialog">
         <DialogHeader>
-          <DialogTitle>Edit entry</DialogTitle>
-          <DialogDescription>
-            Change what was tracked, where it was tracked, and when.
-          </DialogDescription>
+          <DialogTitle>{t("editDialog.title")}</DialogTitle>
+          <DialogDescription>{t("editDialog.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -75,15 +76,16 @@ export function EntryEditDialog({
               className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
               data-testid="entry-edit-zone-note"
             >
-              Recorded in {zoneLabel(editor.entryZone)} ({editor.entryZone}).
-              Times below are shown and saved in that zone, so they stay as they
-              were written.
+              {t("editDialog.zoneNote", {
+                zoneLabel: zoneLabel(editor.entryZone),
+                zone: editor.entryZone,
+              })}
             </p>
           ) : null}
 
           <div className="flex flex-wrap gap-3">
             <div className="flex-1 space-y-2">
-              <Label htmlFor="entry-edit-date">Start date</Label>
+              <Label htmlFor="entry-edit-date">{t("fields.startDate")}</Label>
               <Input
                 id="entry-edit-date"
                 type="date"
@@ -96,7 +98,7 @@ export function EntryEditDialog({
             {/* An entry that ran past midnight ends on a different day, and
                 there was no way to see or set that. */}
             <div className="flex-1 space-y-2">
-              <Label htmlFor="entry-edit-end-date">End date</Label>
+              <Label htmlFor="entry-edit-end-date">{t("fields.endDate")}</Label>
               <Input
                 id="entry-edit-end-date"
                 type="date"
@@ -110,35 +112,35 @@ export function EntryEditDialog({
 
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-2">
-              <Label>Start</Label>
+              <Label>{tc("fields.start")}</Label>
               <TimeField
                 value={editor.start}
                 timeFormat={format.timeFormat}
                 timeZone={editor.entryZone}
-                aria-label="Start time"
+                aria-label={t("fields.startTime")}
                 testId="entry-edit-start"
                 onCommit={editor.setStart}
               />
             </div>
             <div className="space-y-2">
-              <Label>End</Label>
+              <Label>{tc("fields.end")}</Label>
               <TimeField
                 value={editor.end}
                 timeFormat={format.timeFormat}
                 timeZone={editor.entryZone}
                 disabled={editor.isRunning}
-                aria-label="End time"
+                aria-label={t("fields.endTime")}
                 testId="entry-edit-end"
                 onCommit={editor.setEnd}
               />
             </div>
             <div className="space-y-2">
-              <Label>Duration</Label>
+              <Label>{tc("fields.duration")}</Label>
               <DurationInput
                 value={editor.seconds}
                 format={format.durationFormat}
                 disabled={editor.isRunning}
-                aria-label="Duration"
+                aria-label={tc("fields.duration")}
                 testId="entry-edit-duration"
                 onCommit={editor.setDurationSeconds}
               />
@@ -153,14 +155,14 @@ export function EntryEditDialog({
             onClick={onClose}
             data-testid="entry-edit-cancel"
           >
-            Cancel
+            {tc("actions.cancel")}
           </Button>
           <Button
             type="button"
             onClick={editor.save}
             data-testid="entry-edit-save"
           >
-            Save
+            {tc("actions.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

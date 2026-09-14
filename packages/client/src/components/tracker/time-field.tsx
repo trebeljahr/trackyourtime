@@ -9,7 +9,8 @@ import {
 } from "@starter/shared";
 
 import { Input } from "@/components/ui/input";
-import { formatClock } from "@/lib/format";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 export type TimeFieldProps = {
@@ -43,15 +44,17 @@ export function TimeField({
   timeFormat = "24h",
   disabled = false,
   className,
-  "aria-label": ariaLabel = "Time",
+  "aria-label": ariaLabel,
   testId = "time-field",
 }: TimeFieldProps): React.JSX.Element {
+  const tc = useT("common");
+  const format = useFormat();
   const display = React.useMemo(
     () =>
       timeZone
         ? formatClockInZone(value, timeZone, timeFormat)
-        : formatClock(value, timeFormat),
-    [value, timeZone, timeFormat]
+        : format.time(value, timeFormat),
+    [format, value, timeZone, timeFormat]
   );
 
   const [draft, setDraft] = React.useState(display);
@@ -75,16 +78,16 @@ export function TimeField({
       return;
     }
     setInvalid(false);
-    setDraft(formatClock(parsed, timeFormat));
+    setDraft(format.time(parsed, timeFormat));
     if (parsed !== value) onCommit(parsed);
-  }, [draft, display, onCommit, timeFormat, timeZone, value]);
+  }, [draft, display, format, onCommit, timeFormat, timeZone, value]);
 
   return (
     <Input
       value={draft}
       disabled={disabled}
       spellCheck={false}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? tc("fields.time")}
       aria-invalid={invalid || undefined}
       className={cn(
         "h-8 w-[4.5rem] px-1 text-center font-mono text-sm tabular-nums",

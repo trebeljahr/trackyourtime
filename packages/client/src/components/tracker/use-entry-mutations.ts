@@ -4,7 +4,6 @@ import * as React from "react";
 import { buildQuickStartInput, deviceTimeZone } from "@starter/core";
 import {
   entryAmount,
-  formatDurationShort,
   resolveHourlyRate,
   toQuickStart,
   type DetailedEntry,
@@ -14,9 +13,11 @@ import {
 } from "@starter/shared";
 
 import { toast } from "@/components/ui/sonner";
-import { translate } from "@/i18n/use-t";
 import { getActiveWorkspaceId } from "@/lib/active-workspace";
 import { ORIGIN_ID, timerStore } from "@/hooks/use-sync";
+import { formatDurationShortFor } from "@/i18n/format";
+import { getActiveLocale } from "@/i18n/locale-store";
+import { translate } from "@/i18n/translate";
 import {
   buildOptimisticEntry,
   decorateEntry,
@@ -43,6 +44,7 @@ import {
   type OfflineUpdateInput,
 } from "@/lib/offline";
 import { entrySource } from "@/lib/entry-source";
+import { userErrorMessage } from "@/lib/error-message";
 
 /**
  * The entry list covers all of history and is paged with the server cursor, so
@@ -373,9 +375,7 @@ export const useEntryMutations = (): EntryMutations => {
       }
       rollback(context);
       const message =
-        error instanceof Error && error.message !== ""
-          ? error.message
-          : fallbackMessage;
+        userErrorMessage(error, fallbackMessage);
       toast.error(message);
     },
     [rollback]
@@ -433,7 +433,7 @@ export const useEntryMutations = (): EntryMutations => {
             tempId,
             workspaceId
           ),
-        "Could not start the timer"
+        translate("tracker")("mutations.startFailed")
       ),
     onSettled: async (_data, _error, _raw, context) => {
       if (context?.queued) return;
@@ -490,12 +490,18 @@ export const useEntryMutations = (): EntryMutations => {
       // Includes a zero-second entry: an immediate start-then-stop is the
       // most obvious misfire there is, and used to get no offer at all.
       if (entry.durationSec < SHORT_ENTRY_SEC) {
+        const t = translate("tracker");
         toast.message(
-          `Stopped after ${formatDurationShort(entry.durationSec)}`,
+          t("mutations.stoppedAfter", {
+            duration: formatDurationShortFor(
+              entry.durationSec,
+              getActiveLocale()
+            ),
+          }),
           {
-            description: "Short entries are kept unless you discard them.",
+            description: t("mutations.shortEntryKept"),
             action: {
-              label: "Discard",
+              label: translate("common")("actions.discard"),
               onClick: () => removeEntryRef.current?.(detailed),
             },
           }
@@ -534,7 +540,7 @@ export const useEntryMutations = (): EntryMutations => {
             workspaceId
           );
         },
-        "Could not stop the timer"
+        translate("tracker")("mutations.stopFailed")
       ),
     onSettled: async (_data, _error, _raw, context) => {
       if (context?.queued) return;
@@ -577,7 +583,7 @@ export const useEntryMutations = (): EntryMutations => {
             tempId,
             workspaceId
           ),
-        "Could not add the entry"
+        translate("tracker")("mutations.addFailed")
       ),
     onSettled: async (_data, _error, _raw, context) => {
       if (context?.queued) return;
@@ -677,7 +683,7 @@ export const useEntryMutations = (): EntryMutations => {
             undefined,
             workspaceId
           ),
-        "Could not save the entry"
+        translate("tracker")("mutations.saveFailed")
       ),
     onSettled: async (_data, _error, _raw, context) => {
       if (context?.queued) return;
@@ -707,7 +713,7 @@ export const useEntryMutations = (): EntryMutations => {
             undefined,
             workspaceId
           ),
-        "Could not delete the entry"
+        translate("tracker")("mutations.deleteFailed")
       ),
     onSettled: async (_data, _error, _raw, context) => {
       if (context?.queued) return;
@@ -853,7 +859,7 @@ export const useEntryMutations = (): EntryMutations => {
         // The server has never seen this entry, so an edit would be lost the
         // moment the queued create replays. Rows disable their editors while
         // this is true; this guard is the backstop.
-        toast.info("Still syncing — try again in a moment.");
+        toast.info(translate("tracker")("mutations.stillSyncing"));
         return;
       }
       const input: UpdateInput = { ...args, originId: ORIGIN_ID };
@@ -906,7 +912,9 @@ export const useEntryMutations = (): EntryMutations => {
       utils.entries.current.setData(undefined, entry.end === null ? entry : null);
     },
     onError: (error) => {
-      toast.error(error.message || "Could not update that entry");
+      toast.error(
+        userErrorMessage(error, translate("tracker")("mutations.updateFailed"))
+      );
     },
     onSettled: async () => {
       await invalidate();

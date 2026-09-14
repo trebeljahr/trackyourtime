@@ -153,7 +153,9 @@ test.describe("web app at phone width", () => {
   test("keeps the web tracker composer flex basis", async ({ page }) => {
     // native.css gives the description `flex-basis: 100%` under `html.cap`,
     // so it takes the whole first line and the controls wrap under it. On web
-    // the `basis-64` utility (16rem) has to be what applies.
+    // the `basis-48` utility (12rem) has to be what applies. (12rem, not the
+    // old 16rem: German labels are wider, and at 16rem the Start button
+    // wrapped to a second line at 1440px.)
     //
     // Asserted on the computed flex-basis rather than on rendered widths: at
     // 393pt the description happens to fill the row under BOTH rules, so a
@@ -165,7 +167,7 @@ test.describe("web app at phone width", () => {
     const basis = await description.evaluate(
       (el) => getComputedStyle(el).flexBasis,
     );
-    expect(basis).toBe("256px");
+    expect(basis).toBe("192px");
   });
 
   test("keeps dialogs centred — no top anchoring", async ({ page }) => {
