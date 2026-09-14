@@ -4,6 +4,7 @@
 // is indistinguishable from a missing one (NOT_FOUND, never FORBIDDEN).
 import { TRPCError } from "@trpc/server";
 import {
+  normalizeClientBilling,
   pickCatalogColor,
   type Client as ClientWire,
   type ClientListInput,
@@ -73,12 +74,16 @@ export async function createClient(
   const existing = await Client.countDocuments({
     workspaceId: scope.workspaceId,
   });
+  // Written only when there is something to write, so a client created
+  // without billing details looks exactly like one created before they existed.
+  const billing = normalizeClientBilling(input.billing);
   const created = await Client.create({
     workspaceId: scope.workspaceId,
     createdBy: scope.userId,
     name,
     color: input.color ?? pickCatalogColor(existing),
     archived: false,
+    ...(billing ? { billing } : {}),
   });
 
   void publishSync(
@@ -105,6 +110,10 @@ export async function updateClient(
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
         ...(input.color !== undefined ? { color: input.color } : {}),
         ...(input.archived !== undefined ? { archived: input.archived } : {}),
+        // Replaces the subdocument whole; an all-blank one clears it to null.
+        ...(input.billing !== undefined
+          ? { billing: normalizeClientBilling(input.billing) }
+          : {}),
       },
     },
     { returnDocument: "after" },

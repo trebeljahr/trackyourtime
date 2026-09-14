@@ -1,8 +1,12 @@
 import mongoose, { Schema, type Document } from "mongoose";
 import {
   SUPPORTED_LOCALES,
+  normalizeBusinessProfile,
+  normalizeRecipient,
   type Invoice as InvoiceWire,
+  type InvoiceIssuer,
   type InvoiceLineItem,
+  type InvoiceRecipient,
   type InvoiceStatus,
   type Locale,
 } from "@starter/shared";
@@ -38,6 +42,10 @@ export interface IInvoice extends Document {
   notes: string | null;
   /** Snapshotted at creation; absent on invoices issued before localisation (English). */
   locale?: Locale | null;
+  /** Snapshotted at creation; absent on invoices issued before issuer profiles. */
+  issuer?: InvoiceIssuer | null;
+  /** Snapshotted at creation; absent when the client had no billing details. */
+  recipient?: InvoiceRecipient | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +76,10 @@ export type InvoiceDocLike = {
   entryIds: string[];
   notes: string | null;
   locale?: Locale | null;
+  /** Snapshotted at creation; absent on invoices issued before issuer profiles. */
+  issuer?: InvoiceIssuer | null;
+  /** Snapshotted at creation; absent when the client had no billing details. */
+  recipient?: InvoiceRecipient | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -83,6 +95,42 @@ const lineItemSchema = new Schema<InvoiceLineItem>(
     hourlyRate: { type: Number, required: true, min: 0 },
     currency: { type: String, required: true },
     amount: { type: Number, required: true },
+  },
+  { _id: false },
+);
+
+// Snapshot subdocuments. Every field optional; the subdocuments themselves
+// have no default, for the same reason `locale` has none: a default applied
+// to an old invoice on read would invent an issuer it was never sent with.
+const issuerSchema = new Schema<InvoiceIssuer>(
+  {
+    legalName: { type: String, default: null },
+    addressLines: { type: [String], default: [] },
+    postalCode: { type: String, default: null },
+    city: { type: String, default: null },
+    country: { type: String, default: null },
+    taxId: { type: String, default: null },
+    email: { type: String, default: null },
+    phone: { type: String, default: null },
+    website: { type: String, default: null },
+    paymentDetails: { type: String, default: null },
+    paymentTermsDays: { type: Number, default: null },
+    invoiceFooter: { type: String, default: null },
+  },
+  { _id: false },
+);
+
+const recipientSchema = new Schema<InvoiceRecipient>(
+  {
+    name: { type: String, required: true },
+    legalName: { type: String, default: null },
+    addressLines: { type: [String], default: [] },
+    postalCode: { type: String, default: null },
+    city: { type: String, default: null },
+    country: { type: String, default: null },
+    taxId: { type: String, default: null },
+    email: { type: String, default: null },
+    reference: { type: String, default: null },
   },
   { _id: false },
 );
@@ -126,6 +174,8 @@ const invoiceSchema = new Schema<IInvoice>(
     // applied on read to invoices that predate localisation and could later be
     // changed, re-languaging documents already sent. Absent reads as English.
     locale: { type: String, enum: [...SUPPORTED_LOCALES] },
+    issuer: { type: issuerSchema, default: undefined },
+    recipient: { type: recipientSchema, default: undefined },
   },
   { timestamps: true },
 );
@@ -179,6 +229,8 @@ export function toClientInvoice(doc: InvoiceDocLike): InvoiceWire {
     entryIds: doc.entryIds ?? [],
     notes: doc.notes ?? null,
     ...(doc.locale ? { locale: doc.locale } : {}),
+    issuer: doc.issuer ? normalizeBusinessProfile(doc.issuer) : null,
+    recipient: doc.recipient ? normalizeRecipient(doc.recipient) : null,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };

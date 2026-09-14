@@ -6,7 +6,9 @@
 // shape stays merged so no client has to change for the storage split.
 import { TRPCError } from "@trpc/server";
 import {
+  updateBusinessProfileSchema,
   updateSettingsSchema,
+  type BusinessProfile,
   type IdleSettings,
   type MaxDurationSettings,
   type ResolvedSettings,
@@ -16,6 +18,10 @@ import {
   WorkspaceSettingsModel,
   getResolvedSettings,
 } from "../../models/Settings.js";
+import {
+  getBusinessProfile,
+  saveBusinessProfile,
+} from "../../models/BusinessProfile.js";
 import { publishSync, publishToUser } from "../../ws/sync.js";
 import { router, workspaceProcedure } from "../trpc.js";
 
@@ -25,6 +31,27 @@ const WORKSPACE_FIELDS = [
   "currency",
   "weekStartsOn",
 ] as const;
+
+/**
+ * The business profile sits with invoices, not with display settings: it is
+ * printed on every invoice and carries payment details, so reading it takes
+ * what reading an invoice takes — owner/admin, or a member trusted with the
+ * workspace's money — and changing it is an owner's or admin's job.
+ */
+type RoleGateContext = {
+  membership: { role: string };
+  visibility: { canViewOthersMoney: boolean };
+};
+
+function assertMayReadBusinessProfile(ctx: RoleGateContext): void {
+  if (ctx.membership.role !== "member" || ctx.visibility.canViewOthersMoney) {
+    return;
+  }
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message: "Your workspace role cannot see the business profile",
+  });
+}
 
 export const settingsRouter = router({
   /** The caller's workspace settings merged with their own preferences. */
@@ -128,5 +155,32 @@ export const settingsRouter = router({
       }
 
       return settings;
+    }),
+
+  /** The workspace's issuer profile; the empty profile before the first save. */
+  businessProfile: workspaceProcedure.query(
+    async ({ ctx }): Promise<BusinessProfile> => {
+      assertMayReadBusinessProfile(ctx);
+      return getBusinessProfile(ctx.workspaceId);
+    },
+  ),
+
+  /**
+   * Replace the business profile as a whole. Existing invoices keep the
+   * issuer they were created with; only the next `invoices.create` sees this.
+   */
+  updateBusinessProfile: workspaceProcedure
+    .input(updateBusinessProfileSchema)
+    .mutation(async ({ ctx, input }): Promise<BusinessProfile> => {
+      if (ctx.membership.role === "member") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only an owner or admin can change the business profile",
+        });
+      }
+      const { originId, ...fields } = input;
+      const profile = await saveBusinessProfile(ctx.workspaceId, fields);
+      void publishSync(ctx.workspaceId, { kind: "settings.changed" }, originId);
+      return profile;
     }),
 });

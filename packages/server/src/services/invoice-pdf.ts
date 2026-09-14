@@ -16,10 +16,23 @@
  *
  * Everything here renders from the PERSISTED `Invoice` wire object. Nothing is
  * looked up, nothing is re-derived — a document already sent to a customer has
- * to keep printing exactly the same page a year later.
+ * to keep printing exactly the same page a year later. That includes the two
+ * parties: `invoice.issuer` and `invoice.recipient` are snapshots taken at
+ * creation, and an invoice from before they existed carries neither and
+ * prints the client name alone, exactly as it always did.
+ *
+ * Every word on the page comes from the `invoice` server catalog, in the
+ * language snapshotted on the invoice (`invoice.locale`, English when absent).
  */
 import PDFDocument from "pdfkit";
-import type { Invoice, InvoiceLineItem } from "@starter/shared";
+import {
+  formatPostalAddress,
+  type Invoice,
+  type InvoiceIssuer,
+  type InvoiceLineItem,
+  type InvoiceRecipient,
+} from "@starter/shared";
+import { serverT, type ServerTranslator } from "../i18n/index.js";
 import { formatPdfAmount, sanitizePdfText } from "./pdf.js";
 
 /** The only thing not already on the invoice: when this copy was printed. */
@@ -109,6 +122,7 @@ type Sheet = {
   doc: PDFKit.PDFDocument;
   invoice: Invoice;
   meta: InvoicePdfMeta;
+  t: ServerTranslator<"invoice">;
   left: number;
   width: number;
   top: number;
@@ -120,14 +134,16 @@ type Sheet = {
 /** "2026-08-31T22:00:00.000Z" → "2026-08-31". Dates on an invoice are dates. */
 const isoDate = (value: string): string => sanitizePdfText(value).slice(0, 10);
 
-const columnsFor = (doc: PDFKit.PDFDocument, width: number): SizedColumn[] => {
+const columnsFor = (
+  t: ServerTranslator<"invoice">,
+  width: number,
+): SizedColumn[] => {
   const definition: Column[] = [
-    { key: "label", header: "Description", width: null, align: "left" },
-    { key: "hours", header: "Hours", width: 60, align: "right" },
-    { key: "rate", header: "Rate", width: 70, align: "right" },
-    { key: "amount", header: "Amount", width: 80, align: "right" },
+    { key: "label", header: t("columns.description"), width: null, align: "left" },
+    { key: "hours", header: t("columns.hours"), width: 60, align: "right" },
+    { key: "rate", header: t("columns.rate"), width: 70, align: "right" },
+    { key: "amount", header: t("columns.amount"), width: 80, align: "right" },
   ];
-  void doc;
   const fixed = definition.reduce((total, column) => total + (column.width ?? 0), 0);
   return definition.map((column) => ({
     ...column,
@@ -136,19 +152,21 @@ const columnsFor = (doc: PDFKit.PDFDocument, width: number): SizedColumn[] => {
 };
 
 function drawFooter(sheet: Sheet): void {
-  const { doc, invoice } = sheet;
+  const { doc, invoice, t } = sheet;
   const y = doc.page.height - MARGINS.bottom - 12;
   doc
     .font(FONT)
     .fontSize(META_SIZE)
     .fillColor(MUTED)
     .text(
-      `Invoice ${sanitizePdfText(invoice.number)} · ${sanitizePdfText(invoice.clientName)}`,
+      sanitizePdfText(
+        t("footer", { number: invoice.number, client: invoice.clientName }),
+      ),
       sheet.left,
       y,
       { width: sheet.width, align: "left", lineBreak: false },
     )
-    .text(`Page ${sheet.page}`, sheet.left, y, {
+    .text(t("page", { page: String(sheet.page) }), sheet.left, y, {
       width: sheet.width,
       align: "right",
       lineBreak: false,
@@ -156,31 +174,132 @@ function drawFooter(sheet: Sheet): void {
   doc.fillColor(INK);
 }
 
-/** Two-column key/value block — the parties-and-dates masthead. */
+/** The issuer's lines, in print order: name, address, tax id, contact. */
+function issuerLines(
+  issuer: InvoiceIssuer,
+  t: ServerTranslator<"invoice">,
+): PartyLine[] {
+  const contact = [issuer.email, issuer.phone, issuer.website]
+    .filter((part): part is string => part !== null)
+    .join(" · ");
+  return [
+    ...(issuer.legalName ? [{ text: issuer.legalName, bold: true }] : []),
+    ...formatPostalAddress(issuer).map((text) => ({ text, bold: false })),
+    ...(issuer.taxId
+      ? [{ text: t("taxId", { taxId: issuer.taxId }), bold: false }]
+      : []),
+    ...(contact ? [{ text: contact, bold: false }] : []),
+  ];
+}
+
+/**
+ * "Billed to", from the recipient snapshot. Without one — every invoice
+ * created before billing details existed — the client name is the whole
+ * block, which is what the document always printed.
+ */
+function recipientLines(
+  invoice: Invoice,
+  recipient: InvoiceRecipient | null,
+  t: ServerTranslator<"invoice">,
+): PartyLine[] {
+  if (!recipient) return [{ text: invoice.clientName, bold: true }];
+  const legalName =
+    recipient.legalName && recipient.legalName !== recipient.name
+      ? recipient.legalName
+      : null;
+  return [
+    { text: recipient.name, bold: true },
+    ...(legalName ? [{ text: legalName, bold: false }] : []),
+    ...formatPostalAddress(recipient).map((text) => ({ text, bold: false })),
+    ...(recipient.taxId
+      ? [{ text: t("taxId", { taxId: recipient.taxId }), bold: false }]
+      : []),
+    ...(recipient.email ? [{ text: recipient.email, bold: false }] : []),
+    ...(recipient.reference
+      ? [{ text: t("reference", { reference: recipient.reference }), bold: false }]
+      : []),
+  ];
+}
+
+type PartyLine = { text: string; bold: boolean };
+
+/** One party block: a muted label, then one truncated line per entry. */
+function drawParty(
+  sheet: Sheet,
+  x: number,
+  y: number,
+  width: number,
+  label: string,
+  lines: PartyLine[],
+): number {
+  const { doc } = sheet;
+  doc
+    .font(FONT)
+    .fontSize(META_SIZE)
+    .fillColor(MUTED)
+    .text(label, x, y, { width, lineBreak: false });
+  let cursor = y + META_SIZE + 5;
+  for (const line of lines) {
+    doc
+      .font(line.bold ? FONT_BOLD : FONT)
+      .fontSize(BODY_SIZE)
+      .fillColor(INK);
+    doc.text(fitText(doc, line.text, width), x, cursor, {
+      width,
+      lineBreak: false,
+    });
+    cursor += BODY_SIZE + 4;
+  }
+  return cursor;
+}
+
+/** The masthead: title, the two parties side by side, then the dates. */
 function drawHeaderBlock(sheet: Sheet): void {
-  const { doc, invoice } = sheet;
+  const { doc, invoice, t } = sheet;
 
   doc
     .font(FONT_BOLD)
     .fontSize(TITLE_SIZE)
     .fillColor(INK)
-    .text(`Invoice ${sanitizePdfText(invoice.number)}`, sheet.left, sheet.y, {
-      width: sheet.width,
-      lineBreak: false,
-    });
+    .text(
+      fitText(doc, t("title", { number: invoice.number }), sheet.width),
+      sheet.left,
+      sheet.y,
+      { width: sheet.width, lineBreak: false },
+    );
   sheet.y += TITLE_SIZE + 10;
 
   const half = sheet.width / 2;
+  const issuer = invoice.issuer ?? null;
+  const recipientBottom = drawParty(
+    sheet,
+    sheet.left,
+    sheet.y,
+    half - 8,
+    t("billedTo"),
+    recipientLines(invoice, invoice.recipient ?? null, t),
+  );
+  const issuerBottom = issuer
+    ? drawParty(
+        sheet,
+        sheet.left + half,
+        sheet.y,
+        half,
+        t("from"),
+        issuerLines(issuer, t),
+      )
+    : sheet.y;
+  sheet.y = Math.max(recipientBottom, issuerBottom) + 8;
+
   const rows: [string, string][] = [
-    ["Billed to", sanitizePdfText(invoice.clientName)],
-    ["Status", invoice.status],
-    ["Issue date", isoDate(invoice.issueDate)],
-    ["Due date", isoDate(invoice.dueDate)],
+    [t("status"), t("statusValue", { status: invoice.status })],
+    [t("issueDate"), isoDate(invoice.issueDate)],
+    [t("dueDate"), isoDate(invoice.dueDate)],
     [
-      "Period",
-      `${isoDate(invoice.from)} to ${isoDate(invoice.to)}`,
+      t("period"),
+      t("periodRange", { from: isoDate(invoice.from), to: isoDate(invoice.to) }),
     ],
-    ["Grouped by", invoice.groupBy],
+    [t("groupedBy"), t("groupByValue", { groupBy: invoice.groupBy })],
   ];
 
   for (const [label, value] of rows) {
@@ -206,9 +325,12 @@ function drawHeaderBlock(sheet: Sheet): void {
     .fontSize(META_SIZE)
     .fillColor(MUTED)
     .text(
-      `Amounts in ${sanitizePdfText(invoice.currency)} · generated ${sanitizePdfText(
-        sheet.meta.generatedAt,
-      )}`,
+      sanitizePdfText(
+        t("amountsIn", {
+          currency: invoice.currency,
+          generatedAt: sheet.meta.generatedAt,
+        }),
+      ),
       sheet.left,
       sheet.y,
       { width: sheet.width, lineBreak: false },
@@ -273,7 +395,7 @@ function ensureSpace(sheet: Sheet, columns: SizedColumn[], needed: number): void
     .fontSize(HEADING_SIZE)
     .fillColor(INK)
     .text(
-      `Invoice ${sanitizePdfText(sheet.invoice.number)} · continued`,
+      sanitizePdfText(sheet.t("continued", { number: sheet.invoice.number })),
       sheet.left,
       sheet.y,
       { width: sheet.width, lineBreak: false },
@@ -301,7 +423,7 @@ const lineCells = (line: InvoiceLineItem): Cells => ({
 
 /** The subtotal / tax / total stack, right-aligned under the amount column. */
 function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
-  const { doc, invoice } = sheet;
+  const { doc, invoice, t } = sheet;
   const amountColumn = columns[columns.length - 1];
   if (amountColumn === undefined) return;
 
@@ -312,7 +434,7 @@ function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
 
   const rows: { label: string; value: string; strong: boolean }[] = [
     {
-      label: `Subtotal (${sanitizePdfText(invoice.currency)})`,
+      label: t("subtotal", { currency: invoice.currency }),
       value: formatPdfAmount(invoice.subtotal),
       strong: false,
     },
@@ -322,13 +444,13 @@ function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
   // may need to see.
   if (invoice.taxRate !== null) {
     rows.push({
-      label: `Tax (${invoice.taxRate}%)`,
+      label: t("tax", { rate: invoice.taxRate }),
       value: formatPdfAmount(invoice.taxAmount),
       strong: false,
     });
   }
   rows.push({
-    label: `Total (${sanitizePdfText(invoice.currency)})`,
+    label: t("total", { currency: invoice.currency }),
     value: formatPdfAmount(invoice.total),
     strong: true,
   });
@@ -360,6 +482,65 @@ function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
 }
 
 /**
+ * When payment is due, in words. Terms print only when the issuer had terms
+ * at creation; the due date itself is always the invoice's own field, which
+ * the person may have moved off the suggestion.
+ */
+function dueLine(
+  invoice: Invoice,
+  issuer: InvoiceIssuer,
+  t: ServerTranslator<"invoice">,
+): string {
+  const date = isoDate(invoice.dueDate);
+  return issuer.paymentTermsDays === null
+    ? t("dueBy", { date })
+    : t("dueWithinTerms", { days: issuer.paymentTermsDays, date });
+}
+
+/**
+ * A wrapped block of free text under an optional heading — notes, payment
+ * details, the footer line. These are the only runs that may flow, so the
+ * height is measured first and the cursor moved by the real height, and a
+ * block that does not fit starts a new page instead of running into the
+ * footer band.
+ */
+function drawParagraph(
+  sheet: Sheet,
+  columns: SizedColumn[],
+  heading: string | null,
+  body: string | null,
+): void {
+  if (body === null || body.trim() === "") return;
+  const { doc } = sheet;
+  const text = sanitizePdfText(body);
+  const height = doc
+    .font(FONT)
+    .fontSize(BODY_SIZE)
+    .heightOfString(text, { width: sheet.width });
+  const headingHeight = heading ? META_SIZE + 4 : 0;
+  ensureSpace(
+    sheet,
+    columns,
+    Math.min(8 + headingHeight + height, sheet.bottom - sheet.top - ROW_HEIGHT * 2),
+  );
+  sheet.y += 8;
+  if (heading) {
+    doc
+      .font(FONT_BOLD)
+      .fontSize(META_SIZE)
+      .fillColor(MUTED)
+      .text(heading, sheet.left, sheet.y, { width: sheet.width, lineBreak: false });
+    sheet.y += headingHeight;
+  }
+  doc.font(FONT).fontSize(BODY_SIZE).fillColor(INK);
+  doc.text(text, sheet.left, sheet.y, {
+    width: sheet.width,
+    height: Math.min(height, sheet.bottom - sheet.y),
+  });
+  sheet.y += height;
+}
+
+/**
  * Render one persisted invoice.
  *
  * pdfkit is a Node stream, so this is where callback-land is bridged back
@@ -371,7 +552,8 @@ export async function renderInvoicePdf(
   meta: InvoicePdfMeta,
 ): Promise<Buffer> {
   const doc = new PDFDocument(pageOptions());
-  doc.info.Title = sanitizePdfText(`Invoice ${invoice.number}`);
+  const t = serverT(invoice.locale, "invoice");
+  doc.info.Title = sanitizePdfText(t("title", { number: invoice.number }));
   doc.info.Creator = "Track Your Time";
   const chunks: Buffer[] = [];
 
@@ -385,6 +567,7 @@ export async function renderInvoicePdf(
         doc,
         invoice,
         meta,
+        t,
         left: MARGINS.left,
         width: doc.page.width - MARGINS.left - MARGINS.right,
         top: MARGINS.top,
@@ -396,11 +579,11 @@ export async function renderInvoicePdf(
       drawFooter(sheet);
       drawHeaderBlock(sheet);
 
-      const columns = columnsFor(doc, sheet.width);
+      const columns = columnsFor(t, sheet.width);
       drawRow(sheet, columns, headerCells(columns), "header");
 
       if (invoice.lineItems.length === 0) {
-        drawRow(sheet, columns, { label: "No billable time in this range." }, "body");
+        drawRow(sheet, columns, { label: t("noLines") }, "body");
       } else {
         for (const line of invoice.lineItems) {
           ensureSpace(sheet, columns, ROW_HEIGHT);
@@ -411,32 +594,19 @@ export async function renderInvoicePdf(
       drawRule(sheet, false);
       drawTotals(sheet, columns);
 
-      if (invoice.notes && invoice.notes.trim() !== "") {
-        ensureSpace(sheet, columns, ROW_HEIGHT * 3);
-        sheet.y += 8;
-        doc
-          .font(FONT_BOLD)
-          .fontSize(META_SIZE)
-          .fillColor(MUTED)
-          .text("Notes", sheet.left, sheet.y, {
-            width: sheet.width,
-            lineBreak: false,
-          });
-        sheet.y += META_SIZE + 4;
-        // Notes are the one place a wrap is wanted, so this is the only text
-        // run that may flow — height is measured first and the y cursor moved
-        // by the real height so nothing lands on top of it.
-        const text = sanitizePdfText(invoice.notes);
-        const height = doc
-          .font(FONT)
-          .fontSize(BODY_SIZE)
-          .fillColor(INK)
-          .heightOfString(text, { width: sheet.width });
-        doc.text(text, sheet.left, sheet.y, {
-          width: sheet.width,
-          height: Math.min(height, sheet.bottom - sheet.y),
-        });
-        sheet.y += height;
+      drawParagraph(sheet, columns, t("notes"), invoice.notes);
+
+      const issuer = invoice.issuer ?? null;
+      if (issuer) {
+        drawParagraph(
+          sheet,
+          columns,
+          t("paymentDetails"),
+          [dueLine(invoice, issuer, t), issuer.paymentDetails]
+            .filter((part): part is string => part !== null)
+            .join("\n"),
+        );
+        drawParagraph(sheet, columns, null, issuer.invoiceFooter);
       }
 
       doc.end();

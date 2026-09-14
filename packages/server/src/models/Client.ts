@@ -1,5 +1,11 @@
 import mongoose, { Schema, type Document } from "mongoose";
-import { SUPPORTED_LOCALES, type Client as ClientWire, type Locale } from "@starter/shared";
+import {
+  SUPPORTED_LOCALES,
+  normalizeClientBilling,
+  type Client as ClientWire,
+  type ClientBilling,
+  type Locale,
+} from "@starter/shared";
 
 export const DEFAULT_CLIENT_COLOR = "#64748b";
 
@@ -11,6 +17,8 @@ export interface IClient extends Document {
   archived: boolean;
   /** Absent on clients written before invoices were localised. */
   invoiceLocale?: Locale | null;
+  /** Absent on clients written before billing details existed. */
+  billing?: ClientBilling | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,9 +35,30 @@ export type ClientDocLike = {
   color: string;
   archived: boolean;
   invoiceLocale?: Locale | null;
+  /** Absent on clients written before billing details existed. */
+  billing?: ClientBilling | null;
   createdAt: Date;
   updatedAt: Date;
 };
+
+/**
+ * Billing details, every field optional. The subdocument itself is NEVER
+ * `required` and has no default, so a client row written before it existed
+ * validates, saves and exports untouched.
+ */
+const clientBillingSchema = new Schema<ClientBilling>(
+  {
+    legalName: { type: String, default: null, maxlength: 200 },
+    addressLines: { type: [String], default: [] },
+    postalCode: { type: String, default: null, maxlength: 20 },
+    city: { type: String, default: null, maxlength: 120 },
+    country: { type: String, default: null, maxlength: 2 },
+    taxId: { type: String, default: null, maxlength: 60 },
+    email: { type: String, default: null, maxlength: 254 },
+    reference: { type: String, default: null, maxlength: 120 },
+  },
+  { _id: false },
+);
 
 const clientSchema = new Schema<IClient>(
   {
@@ -46,6 +75,7 @@ const clientSchema = new Schema<IClient>(
     // Optional and never `required`: null/absent means "the issuer's
     // language", and every client written before this field existed has none.
     invoiceLocale: { type: String, enum: [...SUPPORTED_LOCALES, null], default: null },
+    billing: { type: clientBillingSchema, default: undefined },
   },
   { timestamps: true },
 );
@@ -64,6 +94,7 @@ export function toClientClient(doc: ClientDocLike): ClientWire {
     color: doc.color,
     archived: doc.archived,
     invoiceLocale: doc.invoiceLocale ?? null,
+    billing: normalizeClientBilling(doc.billing),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };

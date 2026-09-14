@@ -7,4 +7,36 @@
  * preference), never by the request that happens to trigger it.
  */
 export const invoice = {
+  title: "Invoice {number}",
+  continued: "Invoice {number} · continued",
+  footer: "Invoice {number} · {client}",
+  page: "Page {page}",
+  from: "From",
+  billedTo: "Billed to",
+  taxId: "Tax ID: {taxId}",
+  reference: "Your reference: {reference}",
+  status: "Status",
+  statusValue: "{status, select, draft {Draft} sent {Sent} paid {Paid} other {{status}}}",
+  issueDate: "Issue date",
+  dueDate: "Due date",
+  period: "Period",
+  periodRange: "{from} to {to}",
+  groupedBy: "Grouped by",
+  groupByValue: "{groupBy, select, project {Project} task {Task} other {{groupBy}}}",
+  amountsIn: "Amounts in {currency} · generated {generatedAt}",
+  columns: {
+    description: "Description",
+    hours: "Hours",
+    rate: "Rate",
+    amount: "Amount",
+  },
+  noLines: "No billable time in this range.",
+  subtotal: "Subtotal ({currency})",
+  tax: "Tax ({rate, number}%)",
+  total: "Total ({currency})",
+  notes: "Notes",
+  paymentDetails: "Payment details",
+  dueBy: "Payable by {date}.",
+  dueWithinTerms:
+    "{days, plural, =0 {Payable on receipt, by {date}.} one {Payable within # day, by {date}.} other {Payable within # days, by {date}.}}",
 } as const;

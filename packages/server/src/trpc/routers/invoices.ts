@@ -24,14 +24,18 @@ import {
   invoiceListSchema,
   invoicePdfSchema,
   invoicePreviewSchema,
+  issuerSnapshot,
+  recipientSnapshot,
   sumAmounts,
   updateInvoiceStatusSchema,
   type Invoice as InvoiceWire,
   type InvoiceLineItem,
+  type InvoiceRecipient,
   type InvoiceStatus,
   type PdfExportResult,
 } from "@starter/shared";
 import mongoose, { Types } from "mongoose";
+import { BusinessProfileModel } from "../../models/BusinessProfile.js";
 import { Client } from "../../models/Client.js";
 import { Invoice, toClientInvoice, type IInvoice } from "../../models/Invoice.js";
 import { Project } from "../../models/Project.js";
@@ -436,6 +440,8 @@ export type InvoicePreview = {
 /** Everything a preview or a create needs, gathered in one place. */
 type Gathered = {
   clientName: string;
+  /** The client's billing details as they stand now, for `create` to freeze. */
+  recipient: InvoiceRecipient | null;
   selection: BillableSelection;
   lineItems: InvoiceLineItem[];
   totals: InvoiceTotals;
@@ -477,7 +483,7 @@ const gather = async (
     _id: requireObjectId(input.clientId, "Client not found"),
     workspaceId,
   })
-    .select("name")
+    .select("name billing")
     .lean();
   if (!client) throw notFound("Client not found");
 
@@ -561,6 +567,7 @@ const gather = async (
 
   return {
     clientName: client.name,
+    recipient: recipientSnapshot(client.name, client.billing),
     selection,
     lineItems,
     totals,
@@ -691,6 +698,10 @@ export const invoicesRouter = router({
             nextInvoiceNumber(await recentNumbers(workspaceId), issueYear),
           );
 
+      const issuer = issuerSnapshot(
+        await BusinessProfileModel.findOne({ workspaceId }).lean(),
+      );
+
       const draft = {
         workspaceId,
         createdBy: ctx.user.id,
@@ -710,6 +721,12 @@ export const invoicesRouter = router({
         currency: gathered.currency,
         entryIds,
         notes: input.notes ?? null,
+        // Both parties are frozen here and never re-read: correcting the
+        // profile or the client's address afterwards must not rewrite an
+        // invoice the customer already holds. Omitted rather than null when
+        // there is nothing to freeze, so the document matches the old shape.
+        ...(issuer ? { issuer } : {}),
+        ...(gathered.recipient ? { recipient: gathered.recipient } : {}),
       };
 
       // Numbering is settled by the unique index on { workspaceId, number }, not
