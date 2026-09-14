@@ -12,6 +12,7 @@ import {
   type BudgetEntry,
   type BudgetProgress,
   type ProjectBudget,
+  type Visibility,
 } from "@starter/shared";
 import { TimeEntry } from "../../models/TimeEntry.js";
 
@@ -19,17 +20,31 @@ import { TimeEntry } from "../../models/TimeEntry.js";
 export type BudgetedProject = ProjectBudget & { id: string };
 
 /**
+ * May this caller be handed budget progress at all?
+ *
+ * The same conjunction `projectProjectForVisibility` withholds on, asked
+ * BEFORE the roll-up rather than after it, so a caller who would receive
+ * `progress: null` never costs the whole-workspace entry read either. Any
+ * future surface that reports progress — an over-budget alert, a digest —
+ * must ask this per RECIPIENT, not per author of the change that tipped it:
+ * `spentAmount` is colleagues' earnings in aggregate, and a notification
+ * saying "92% of the budget is spent" discloses exactly that number.
+ */
+export function canSeeBudgetProgress(visibility: Visibility): boolean {
+  return visibility.canViewOthersTime && visibility.canViewOthersMoney;
+}
+
+/**
  * Progress for every project that actually has a target, keyed by project id.
  *
  * Projects with no estimate and no budget are skipped entirely, so a workspace
  * that never sets one pays nothing: no entries are read at all.
- */
-/*
+ *
  * Deliberately spans every member's entries: a project budget is the
- * project's, not one person's. That makes it a money-visibility surface —
- * Stage 5 must decide whether a member without `canViewOthersMoney` sees
- * budget progress at all, since a spent-amount total discloses colleagues'
- * earnings in aggregate even though no individual entry is exposed.
+ * project's, not one person's. That is what makes the result a disclosure,
+ * and why every caller gates it through {@link canSeeBudgetProgress} and
+ * `projectProjectForVisibility` — this function itself answers for the
+ * workspace and must never be handed to a caller unprojected.
  */
 export async function loadBudgetProgress(
   workspaceId: string,

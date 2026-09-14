@@ -1,18 +1,19 @@
 // Money on the way out of the workspace.
 //
 // An export is a BULK door onto the same rows a report serves a page at a
-// time, and it is the only door that currently answers the money question at
-// all. `buildMatchConditions` in reports.ts decides WHICH entries a member
-// sees (`canViewOthersTime`) and deliberately leaves the amounts on them
-// alone — see the comment there: zeroing those is Stage 5. `settings.get`,
-// `projects.list` and `invoices.list` are open the same way.
+// time. WHICH entries leave is the author scope (`authorScopeFilter`, the same
+// one `buildMatchConditions` in reports.ts and `listEntries` use); whether
+// invoices leave at all is `canUseInvoices`, decided in the export builder.
+// This module answers the remaining question: which money survives on what
+// does leave.
 //
-// So this closes ONE door, and a reader must not take it for the whole
-// building: while those siblings are open, a member refused rates here can
-// still read them from an ordinary query. What this module buys today is that
-// the BULK path — one click, every row, a file that leaves the machine — is
-// not the easy one, and that the guarantee is written once so the two export
-// formats cannot come to disagree about it.
+// The page-at-a-time siblings answer it too — `entries.list`/`entries.get`
+// project colleagues' rows through `projectDetailedEntry`, reports withhold
+// every amount when `reportMoneyVisible` is false, `projects.list` nulls
+// budget progress and `invoices.*` refuse. The export rule is STRICTER than
+// theirs on purpose (see `exportKeepsMoney`): a file re-imports, and the rate
+// on one's own row is the project's rate card. `settings.get` still hands the
+// workspace default rate to every member.
 //
 // Pure on purpose — no database, no request. The export builder assembles the
 // document, this decides what of it the caller may keep, and the CSV door is

@@ -82,8 +82,8 @@ Where a response can honestly be narrowed, it is:
 
 - `GET /entries` and `GET /entries/:id` set `hourlyRate: null` on any row whose author
   is not you when `canViewOthersMoney` is off. When the rate is withheld, `amount` is
-  `0` — **do not read that as "earned nothing"**. `hourlyRate === null` means
-  *withheld*; branch on it before showing any figure.
+  `null` too — never `0`, which is what unbillable time earns. Branch on `null` before
+  showing any figure.
 - `GET /projects` and `GET /projects/:id` set `progress` to `null`. Budget progress
   spans every member's entries, so `spentAmount` is aggregate colleague earnings.
 

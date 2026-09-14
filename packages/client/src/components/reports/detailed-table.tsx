@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import type { DetailedEntry } from "@starter/shared";
+import { formatReportMoney } from "@/components/reports/report-money";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -254,7 +255,7 @@ export function DetailedTable({
                 {duration(entry.durationSec)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {money(entry.amount)}
+                {formatReportMoney(entry.amount, money)}
               </TableCell>
             </TableRow>
           );

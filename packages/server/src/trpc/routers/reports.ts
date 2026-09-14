@@ -16,6 +16,13 @@
 //    a midnight-crossing entry is split across the days it touches — its day
 //    slices always re-sum to exactly its own total, so the timeline can never
 //    disagree with `totalSec`.
+//  - WHICH rows a report covers is decided in `buildMatchConditions` (the
+//    author scope, intersected with any `memberIds`); WHETHER it carries money
+//    is decided by `reportMoneyVisible`. A report spanning colleagues' time
+//    for a caller who may not see their money has every total and group
+//    amount withheld as `null` — never a partial own-only sum, never zero —
+//    and `moneyVisible: false` says so. Projected where honest, refused where
+//    not; an amount is never recomputed at read time to fill the gap.
 import { TRPCError } from "@trpc/server";
 import mongoose, { Types, type PipelineStage } from "mongoose";
 import {
@@ -32,6 +39,8 @@ import {
   dayKeyInZone,
   dayKeysBetween,
   monthKeyOf,
+  projectDetailedEntry,
+  reportMoneyVisible,
   resolveTimeZone,
   splitIntervalByZonedDay,
   weekStartKey,
@@ -63,7 +72,10 @@ import {
   type TimeEntryDocLike,
 } from "../../models/TimeEntry.js";
 import { getOrCreateWorkspaceSettings } from "../../models/Settings.js";
-import { authorScopeFilter } from "../../models/WorkspaceMember.js";
+import {
+  WorkspaceMember,
+  authorScopeFilter,
+} from "../../models/WorkspaceMember.js";
 // The escaper is imported, never re-implemented: a second copy is one that
 // eventually misses a metacharacter, and the failure is silent — a search
 // pattern built from caller input reaches Mongo as a live regex, so an
@@ -192,6 +204,36 @@ type JoinedEntry = TimeEntryDocLike & {
 };
 
 /**
+ * Add the author conditions — who wrote the entries a report may cover — to a
+ * `$match` under construction.
+ *
+ * TWO conditions, each pushed on its own into the same `$and`, and never
+ * merged into one. The author scope says what the caller may see; `memberIds`
+ * says what they asked for. `$and` makes the result their INTERSECTION
+ * structurally: a member restricted to their own rows who names a colleague
+ * matches `authorId = me AND authorId IN [colleague]`, which is nothing — an
+ * empty report, not an error that would confirm the colleague tracks time
+ * here. Folding the two into one `$in` is how a filter comes to widen a scope.
+ *
+ * An empty `memberIds` is "no member filter", exactly like `tagIds`: it is
+ * what an untouched multi-select sends.
+ *
+ * Exported for the unit tests, which evaluate the conditions against rows
+ * without a database.
+ */
+export const pushAuthorConditions = (
+  conditions: Record<string, unknown>[],
+  visibility: Visibility,
+  memberIds: readonly string[] | undefined,
+): void => {
+  const authorScope = authorScopeFilter(visibility);
+  if (authorScope) conditions.push(authorScope);
+  if (memberIds && memberIds.length > 0) {
+    conditions.push({ authorId: { $in: [...memberIds] } });
+  }
+};
+
+/**
  * Build the `$match` conditions for a report. Mirrors `entries.list`:
  * overlap semantics (the entry starts before the window ends and either is
  * still running or ended after the window began) and `clientIds` resolved to
@@ -217,12 +259,11 @@ const buildMatchConditions = async (
   // through, so summary, detailed, weekly and the CSV export cannot disagree
   // about it.
   //
-  // NOT the whole story: a member WITH `canViewOthersTime` but WITHOUT
-  // `canViewOthersMoney` still receives amounts here. Zeroing those is Stage
-  // 5, and it has to happen in the result projection rather than the match,
-  // because the rows themselves are legitimately visible.
-  const authorScope = authorScopeFilter(scope.visibility);
-  if (authorScope) conditions.push(authorScope);
+  // The money half — a member WITH `canViewOthersTime` but WITHOUT
+  // `canViewOthersMoney` — is decided in the result projection
+  // (`reportMoneyVisible`), not here, because those rows are legitimately
+  // visible; it is their worth that is not.
+  pushAuthorConditions(conditions, scope.visibility, filters.memberIds);
 
   let projectIds: string[] | null = filters.projectIds ?? null;
   if (filters.clientIds && filters.clientIds.length > 0) {
@@ -518,6 +559,98 @@ export const tagGroupIdentities = (
   return identities.length > 0 ? identities : [NO_TAG];
 };
 
+/** The label an author with no membership in the workspace is grouped under. */
+export const FORMER_MEMBER_LABEL = "Former member";
+
+/** The label a current member with no name anywhere is grouped under. */
+export const UNNAMED_MEMBER_LABEL = "Unnamed member";
+
+/**
+ * Display names for a member-grouped report, keyed by author id.
+ *
+ * Resolution order, per author:
+ *
+ *  1. the LIVE `user` record's name — a rename shows up in the next report
+ *     rather than waiting for a denormalized copy to be refreshed;
+ *  2. the name mirrored onto `WorkspaceMember`, for a user record that is
+ *     missing or nameless;
+ *  3. {@link FORMER_MEMBER_LABEL} for an author with no membership at all —
+ *     somebody who left or was removed. Their history still counts, but a
+ *     report is not where a departed person's name keeps being published.
+ *
+ * Pure so the fallback chain is testable without either collection. Only
+ * ever called with authors of rows the caller may already see, because the
+ * ids come off the matched documents — so it cannot name a colleague to a
+ * member restricted to their own time.
+ */
+export const resolveMemberLabels = (
+  authorIds: Iterable<string>,
+  memberships: ReadonlyMap<string, { name: string }>,
+  userNames: ReadonlyMap<string, string>,
+): Map<string, string> => {
+  const labels = new Map<string, string>();
+  for (const authorId of authorIds) {
+    const membership = memberships.get(authorId);
+    if (!membership) {
+      labels.set(authorId, FORMER_MEMBER_LABEL);
+      continue;
+    }
+    const live = userNames.get(authorId)?.trim() ?? "";
+    const mirrored = membership.name.trim();
+    labels.set(authorId, live || mirrored || UNNAMED_MEMBER_LABEL);
+  }
+  return labels;
+};
+
+/**
+ * Read the two sources {@link resolveMemberLabels} decides between.
+ *
+ * The `user` collection belongs to better-auth, which keys it by ObjectId
+ * while every app collection stores the id as a string; ids that are not
+ * ObjectIds (none today) simply resolve through the membership name. A user
+ * read that fails is not fatal — a report is still right without names —
+ * so it degrades to the membership mirror.
+ */
+const loadMemberLabels = async (
+  workspaceId: string,
+  authorIds: readonly string[],
+): Promise<Map<string, string>> => {
+  if (authorIds.length === 0) return new Map();
+
+  const members = await WorkspaceMember.find({
+    workspaceId,
+    userId: { $in: [...authorIds] },
+  })
+    .select({ userId: 1, name: 1 })
+    .lean();
+  const memberships = new Map(
+    members.map((member) => [member.userId, { name: member.name ?? "" }]),
+  );
+
+  const userNames = new Map<string, string>();
+  const objectIds = authorIds
+    .filter((id) => mongoose.isValidObjectId(id) && /^[0-9a-f]{24}$/i.test(id))
+    .map((id) => new Types.ObjectId(id));
+  const db = mongoose.connection.db;
+  if (db && objectIds.length > 0) {
+    try {
+      const users = await db
+        .collection<{ _id: Types.ObjectId; name?: unknown }>("user")
+        .find({ _id: { $in: objectIds } }, { projection: { name: 1 } })
+        .toArray();
+      for (const user of users) {
+        if (typeof user.name === "string") {
+          userNames.set(String(user._id), user.name);
+        }
+      }
+    } catch {
+      // Names are presentation; the membership mirror still labels the group.
+    }
+  }
+
+  return resolveMemberLabels(authorIds, memberships, userNames);
+};
+
 const groupIdentity = (
   measured: MeasuredEntry,
   // "tag" is excluded on purpose: it is the one grouping that cannot produce
@@ -527,6 +660,7 @@ const groupIdentity = (
   groupBy: Exclude<ReportGroupBy, "tag">,
   workspaceId: string,
   calendar: Calendar,
+  memberLabels: ReadonlyMap<string, string>,
 ): GroupIdentity => {
   const { doc } = measured;
   const project = inWorkspace(doc.project, workspaceId);
@@ -534,6 +668,13 @@ const groupIdentity = (
   const task = inWorkspace(doc.task, workspaceId);
 
   switch (groupBy) {
+    case "member":
+      return {
+        key: doc.authorId,
+        label: memberLabels.get(doc.authorId) ?? FORMER_MEMBER_LABEL,
+        color: null,
+      };
+
     case "project":
       return project
         ? { key: String(project._id), label: project.name, color: project.color }
@@ -634,10 +775,15 @@ export const sortGroups = (
 
 // ── report bodies (shared by the queries and by exportCsv) ───────────
 
-const emptySummary = (currency: string, range: Range, timeZone: string): SummaryReportResult => ({
+const emptySummary = (
+  currency: string,
+  range: Range,
+  timeZone: string,
+  moneyVisible: boolean,
+): SummaryReportResult => ({
   totalSec: 0,
   billableSec: 0,
-  totalAmount: 0,
+  totalAmount: moneyVisible ? 0 : null,
   currency,
   groups: [],
   timeline: dayKeysInRange(range.fromMs, range.toMs, timeZone).map((date) => ({
@@ -645,7 +791,61 @@ const emptySummary = (currency: string, range: Range, timeZone: string): Summary
     seconds: 0,
     billableSec: 0,
   })),
+  moneyVisible,
 });
+
+/**
+ * A summary as a caller whose report money is withheld may receive it.
+ *
+ * EVERY amount goes, including a group that happens to hold only the caller's
+ * own entries (their own member group, a project nobody else booked): which
+ * groups are "safe" is itself a statement about colleagues' work, and a
+ * report where some amounts are real and some are dashes invites exactly the
+ * subtraction the dashes exist to prevent. Seconds stay — time is what this
+ * caller may see.
+ *
+ * Exported for the unit tests.
+ */
+export const withholdSummaryMoney = (
+  result: SummaryReportResult,
+): SummaryReportResult => ({
+  ...result,
+  totalAmount: null,
+  groups: result.groups.map((group) => ({ ...group, amount: null })),
+  moneyVisible: false,
+});
+
+/**
+ * A detailed page as a caller may receive it. Every row goes through
+ * `projectDetailedEntry` — the same projection `entries.list` and REST apply.
+ *
+ * When the report's money is withheld, the caller's OWN rows lose their rate
+ * and amount too, for the reason `withholdSummaryMoney` gives: a report is
+ * one document with one answer to "does this carry money", and a page where
+ * some amounts are real and some are dashes is a page of subtraction
+ * exercises. The CSV and PDF exports drop the money columns for the same
+ * caller, so the three renderings of one report cannot disagree. (The entry
+ * list is a different document and keeps the caller's own rates.)
+ *
+ * Exported for the unit tests.
+ */
+export const projectDetailedReport = (
+  result: DetailedReportResult,
+  visibility: Visibility,
+): DetailedReportResult => {
+  const entries = result.entries
+    .map((entry) => projectDetailedEntry(entry, visibility))
+    .filter((entry): entry is DetailedEntry => entry !== null);
+  if (reportMoneyVisible(visibility)) {
+    return { ...result, entries, moneyVisible: true };
+  }
+  return {
+    ...result,
+    entries: entries.map((entry) => ({ ...entry, hourlyRate: null, amount: null })),
+    totalAmount: null,
+    moneyVisible: false,
+  };
+};
 
 /**
  * Exported for the public REST API, which calls these directly rather than
@@ -668,11 +868,22 @@ export const buildSummary = async (
     weekStartsOn: settings.weekStartsOn,
   };
 
+  const moneyVisible = reportMoneyVisible(scope.visibility);
   const conditions = await buildMatchConditions(scope, filters, range);
   if (conditions === null)
-    return emptySummary(settings.currency, range, calendar.timeZone);
+    return emptySummary(settings.currency, range, calendar.timeZone, moneyVisible);
 
   const docs = await runJoinedQuery(workspaceId, conditions);
+
+  // Names for a member grouping come from the authors of the MATCHED rows,
+  // never from the workspace's member list: a caller who may see only their
+  // own time learns their own name and nothing else.
+  const memberLabels =
+    groupBy === "member"
+      ? await loadMemberLabels(workspaceId, [
+          ...new Set(docs.map((doc) => doc.authorId)),
+        ])
+      : new Map<string, string>();
 
   // Tag labels come from ONE query, not from a join per entry: the tag list is
   // small, bounded by the workspace's own catalog, and every entry in the report
@@ -712,7 +923,15 @@ export const buildSummary = async (
     const identities =
       groupBy === "tag"
         ? tagGroupIdentities(measured.doc.tagIds, tagIndex)
-        : [groupIdentity(measured, groupBy, workspaceId, calendar)];
+        : [
+            groupIdentity(
+              measured,
+              groupBy,
+              workspaceId,
+              calendar,
+              memberLabels,
+            ),
+          ];
 
     accumulateGroups(groups, identities, {
       seconds: measured.seconds,
@@ -732,14 +951,16 @@ export const buildSummary = async (
 
   const sortedGroups: SummaryGroup[] = sortGroups(groups.values());
 
-  return {
+  const result: SummaryReportResult = {
     totalSec,
     billableSec,
     totalAmount: sumAmounts(amounts),
     currency: settings.currency,
     groups: sortedGroups,
     timeline: [...timeline.values()],
+    moneyVisible: true,
   };
+  return moneyVisible ? result : withholdSummaryMoney(result);
 };
 
 const encodeCursor = (start: Date, id: string): string =>
@@ -794,12 +1015,16 @@ export const buildDetailed = async (
 
   const conditions = await buildMatchConditions(scope, filters, range);
   if (conditions === null) {
-    return {
-      entries: [],
-      totalSec: 0,
-      totalAmount: 0,
-      currency: settings.currency,
-    };
+    return projectDetailedReport(
+      {
+        entries: [],
+        totalSec: 0,
+        totalAmount: 0,
+        currency: settings.currency,
+        moneyVisible: true,
+      },
+      scope.visibility,
+    );
   }
 
   // Range totals cover the WHOLE filtered set, not the current page — a
@@ -867,13 +1092,17 @@ export const buildDetailed = async (
       ? encodeCursor(lastDoc.start, String(lastDoc._id))
       : undefined;
 
-  return {
-    entries,
-    ...(nextCursor ? { nextCursor } : {}),
-    totalSec,
-    totalAmount: sumAmounts(amounts),
-    currency: settings.currency,
-  };
+  return projectDetailedReport(
+    {
+      entries,
+      ...(nextCursor ? { nextCursor } : {}),
+      totalSec,
+      totalAmount: sumAmounts(amounts),
+      currency: settings.currency,
+      moneyVisible: true,
+    },
+    scope.visibility,
+  );
 };
 
 export const buildWeekly = async (
@@ -917,9 +1146,10 @@ export const buildWeekly = async (
   const dayIndex = new Map(days.map((day, index) => [day, index]));
   const dayTotals = days.map(() => 0);
 
+  const moneyVisible = reportMoneyVisible(scope.visibility);
   const conditions = await buildMatchConditions(scope, filters, range);
   if (conditions === null) {
-    return { days, rows: [], dayTotals, totalSec: 0 };
+    return { days, rows: [], dayTotals, totalSec: 0, moneyVisible };
   }
 
   const docs = await runJoinedQuery(workspaceId, conditions);
@@ -963,7 +1193,7 @@ export const buildWeekly = async (
     .filter((row) => row.totalSec > 0)
     .sort((a, b) => b.totalSec - a.totalSec || a.label.localeCompare(b.label));
 
-  return { days, rows: sortedRows, dayTotals, totalSec };
+  return { days, rows: sortedRows, dayTotals, totalSec, moneyVisible };
 };
 
 // ── CSV serialization ────────────────────────────────────────────────
@@ -972,7 +1202,24 @@ export const buildWeekly = async (
 const decimalHours = (seconds: number): number =>
   Math.round((seconds / 3600) * 100) / 100;
 
-const SUMMARY_COLUMNS: CsvColumn[] = [
+/**
+ * The money columns of the report CSVs. A file is not a page: once it has
+ * left the machine there is no dash to explain a blank, and a blank Amount
+ * column sums to zero in every spreadsheet. So when a report's money is
+ * withheld the COLUMNS go, not merely the values — the header set itself says
+ * "this export carries no money".
+ */
+const MONEY_CSV_KEYS: ReadonlySet<string> = new Set(["rate", "amount", "currency"]);
+
+const withoutMoneyColumns = (
+  columns: readonly CsvColumn[],
+  moneyVisible: boolean,
+): CsvColumn[] =>
+  moneyVisible
+    ? [...columns]
+    : columns.filter((column) => !MONEY_CSV_KEYS.has(column.key));
+
+const ALL_SUMMARY_COLUMNS: readonly CsvColumn[] = [
   { key: "label", header: "Group" },
   { key: "duration", header: "Duration" },
   { key: "hours", header: "Hours" },
@@ -983,7 +1230,12 @@ const SUMMARY_COLUMNS: CsvColumn[] = [
   { key: "currency", header: "Currency" },
 ];
 
-const summaryCsvRows = (result: SummaryReportResult): CsvRow[] =>
+/** The summary CSV header set for a report whose money is or is not visible. */
+export const summaryCsvColumns = (moneyVisible: boolean): CsvColumn[] =>
+  withoutMoneyColumns(ALL_SUMMARY_COLUMNS, moneyVisible);
+
+/** Exported for the unit tests. */
+export const summaryCsvRows = (result: SummaryReportResult): CsvRow[] =>
   result.groups.map((group) => ({
     label: group.label,
     duration: formatDuration(group.seconds, "hms"),
@@ -991,11 +1243,14 @@ const summaryCsvRows = (result: SummaryReportResult): CsvRow[] =>
     seconds: group.seconds,
     billableHours: decimalHours(group.billableSec),
     billableSeconds: group.billableSec,
-    amount: group.amount,
-    currency: result.currency,
+    // Not written at all when withheld. The column is dropped too, but a row
+    // that never held the value cannot leak it through a later column change.
+    ...(result.moneyVisible
+      ? { amount: group.amount, currency: result.currency }
+      : {}),
   }));
 
-const DETAILED_COLUMNS: CsvColumn[] = [
+const ALL_DETAILED_COLUMNS: readonly CsvColumn[] = [
   { key: "date", header: "Date" },
   { key: "start", header: "Start" },
   { key: "end", header: "End" },
@@ -1014,14 +1269,23 @@ const DETAILED_COLUMNS: CsvColumn[] = [
   { key: "id", header: "Id" },
 ];
 
-const detailedCsvRows = (
+/** The detailed CSV header set for a report whose money is or is not visible. */
+export const detailedCsvColumns = (moneyVisible: boolean): CsvColumn[] =>
+  withoutMoneyColumns(ALL_DETAILED_COLUMNS, moneyVisible);
+
+/** Exported for the unit tests. */
+export const detailedCsvRows = (
   result: DetailedReportResult,
   timeZone: string,
 ): CsvRow[] => {
   const nowMs = Date.now();
   return result.entries.map((entry) => {
     const seconds = entryDurationSec(entry, nowMs);
+    const money: CsvRow = result.moneyVisible
+      ? { rate: entry.hourlyRate, amount: entry.amount, currency: entry.currency }
+      : {};
     return {
+      ...money,
       date: dayKeyInZone(Date.parse(entry.start), timeZone),
       start: entry.start,
       end: entry.end,
@@ -1033,9 +1297,6 @@ const detailedCsvRows = (
       client: entry.clientName,
       task: entry.taskName,
       billable: entry.billable ? "yes" : "no",
-      rate: entry.hourlyRate,
-      amount: entry.amount,
-      currency: entry.currency,
       source: entry.source,
       id: entry.id,
     };
@@ -1098,12 +1359,15 @@ type CsvExport = CsvExportResult & { mimeType: "text/csv" };
 const buildTrackedSpan = async (
   scope: ReportScope,
   timeZone: string,
+  memberIds: readonly string[] | undefined,
 ): Promise<TrackedSpan> => {
   const conditions: Record<string, unknown>[] = [
     { workspaceId: scope.workspaceId },
   ];
-  const authorScope = authorScopeFilter(scope.visibility);
-  if (authorScope) conditions.push(authorScope);
+  // The same author conditions as every report, so "all time" for a member
+  // filter spans that member's history and never a colleague's the caller
+  // may not see.
+  pushAuthorConditions(conditions, scope.visibility, memberIds);
 
   const [span] = await TimeEntry.aggregate<{
     first: Date | null;
@@ -1165,7 +1429,11 @@ export const reportsRouter = router({
   trackedSpan: workspaceProcedure
     .input(trackedSpanSchema)
     .query(async ({ ctx, input }): Promise<TrackedSpan> => {
-      return buildTrackedSpan(reportScope(ctx), resolveTimeZone(input.timeZone));
+      return buildTrackedSpan(
+        reportScope(ctx),
+        resolveTimeZone(input.timeZone),
+        input.memberIds,
+      );
     }),
 
   /** Flat, paginated entry log; totals always span the full filtered range. */
@@ -1190,6 +1458,9 @@ export const reportsRouter = router({
     .input(exportCsvSchema)
     .query(async ({ ctx, input }): Promise<CsvExport> => {
       const scope = reportScope(ctx);
+      // Decided once, from the scope, for every branch — the header set of a
+      // file must not depend on which report happened to be asked for.
+      const moneyVisible = reportMoneyVisible(scope.visibility);
       const range = parseRange(input);
       const exportZone = resolveTimeZone(input.timeZone);
 
@@ -1201,7 +1472,10 @@ export const reportsRouter = router({
         );
         return {
           filename: exportFilename("summary", range, exportZone),
-          csv: toCsv(summaryCsvRows(result), SUMMARY_COLUMNS),
+          csv: toCsv(
+            summaryCsvRows(result),
+            summaryCsvColumns(result.moneyVisible),
+          ),
           mimeType: "text/csv",
         };
       }
@@ -1241,10 +1515,10 @@ export const reportsRouter = router({
         filename: exportFilename("detailed", range, exportZone),
         csv: toCsv(
           detailedCsvRows(
-            { entries, totalSec: 0, totalAmount: 0, currency },
+            { entries, totalSec: 0, totalAmount: null, currency, moneyVisible },
             exportZone,
           ),
-          DETAILED_COLUMNS,
+          detailedCsvColumns(moneyVisible),
         ),
         mimeType: "text/csv",
       };
@@ -1266,6 +1540,7 @@ export const reportsRouter = router({
     .input(exportPdfSchema)
     .query(async ({ ctx, input }): Promise<PdfExportResult> => {
       const scope = reportScope(ctx);
+      const moneyVisible = reportMoneyVisible(scope.visibility);
       const range = parseRange(input);
       const exportZone = resolveTimeZone(input.timeZone);
       const generatedAt = new Date().toISOString();
@@ -1277,6 +1552,7 @@ export const reportsRouter = router({
         timeZone: exportZone,
         currency,
         generatedAt,
+        moneyVisible,
       });
 
       const encode = (
@@ -1331,7 +1607,7 @@ export const reportsRouter = router({
       } while (cursor && guard < MAX_EXPORT_PAGES);
 
       const bytes = await renderDetailedPdf(
-        { entries, totalSec: 0, totalAmount: 0, currency },
+        { entries, totalSec: 0, totalAmount: null, currency, moneyVisible },
         meta("Detailed report", currency),
       );
       return encode("detailed", bytes);

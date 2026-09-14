@@ -65,6 +65,13 @@ export type PdfReportMeta = {
   currency: string;
   /** ISO datetime the document was rendered at. */
   generatedAt: string;
+  /**
+   * False when the report's money is withheld from the caller. Absent means
+   * visible, so a caller that predates the flag renders what it always did.
+   * The masthead then drops its "Amounts in" line: a document with no amounts
+   * naming a currency reads as one whose amounts went missing.
+   */
+  moneyVisible?: boolean;
 };
 
 // ── page geometry ────────────────────────────────────────────────────
@@ -294,7 +301,9 @@ function drawTitleBlock(sheet: Sheet): void {
     .fontSize(META_SIZE)
     .fillColor(MUTED)
     .text(
-      `Amounts in ${sanitizePdfText(meta.currency)} · generated ${meta.generatedAt}`,
+      meta.moneyVisible === false
+        ? `generated ${meta.generatedAt}`
+        : `Amounts in ${sanitizePdfText(meta.currency)} · generated ${meta.generatedAt}`,
       sheet.left,
       sheet.y,
       { width: sheet.width, lineBreak: false },
@@ -507,27 +516,40 @@ export async function renderSummaryPdf(
   meta: PdfReportMeta,
 ): Promise<Buffer> {
   const currency = sanitizePdfText(result.currency || meta.currency);
+  // Money is decided by the RESULT, which the report builder already
+  // projected — the renderer never re-derives it from a visibility. With it
+  // withheld the stat, the column and the total go entirely: a PDF has no
+  // dash to explain, and an "Amount" column of blanks reads as zero.
+  const money = result.moneyVisible !== false && result.totalAmount !== null;
 
   return bufferDocument(meta, "portrait", (sheet) => {
     drawStats(sheet, [
       { label: "Total tracked", value: formatDuration(result.totalSec, "hms") },
       { label: "Billable", value: formatDuration(result.billableSec, "hms") },
-      {
-        label: `Amount (${currency})`,
-        value: formatPdfAmount(result.totalAmount),
-      },
+      ...(money
+        ? [
+            {
+              label: `Amount (${currency})`,
+              value: formatPdfAmount(result.totalAmount ?? 0),
+            },
+          ]
+        : []),
     ]);
 
     const table = createTable(sheet, [
       { key: "label", header: "Group", width: null },
       { key: "duration", header: "Duration", width: 78, align: "right" },
       { key: "billable", header: "Billable", width: 78, align: "right" },
-      {
-        key: "amount",
-        header: `Amount (${currency})`,
-        width: 90,
-        align: "right",
-      },
+      ...(money
+        ? [
+            {
+              key: "amount",
+              header: `Amount (${currency})`,
+              width: 90,
+              align: "right" as const,
+            },
+          ]
+        : []),
     ]);
 
     if (result.groups.length === 0) {
@@ -538,7 +560,7 @@ export async function renderSummaryPdf(
           label: group.label,
           duration: formatDuration(group.seconds, "hms"),
           billable: formatDuration(group.billableSec, "hms"),
-          amount: formatPdfAmount(group.amount),
+          ...(money ? { amount: formatPdfAmount(group.amount ?? 0) } : {}),
         });
       }
     }
@@ -547,7 +569,7 @@ export async function renderSummaryPdf(
       label: "Total",
       duration: formatDuration(result.totalSec, "hms"),
       billable: formatDuration(result.billableSec, "hms"),
-      amount: formatPdfAmount(result.totalAmount),
+      ...(money ? { amount: formatPdfAmount(result.totalAmount ?? 0) } : {}),
     });
   });
 }
@@ -580,13 +602,20 @@ export async function renderDetailedPdf(
     (total, entry) => total + entryDurationSec(entry, nowMs),
     0,
   );
-  const totalAmount = sumAmounts(result.entries.map((entry) => entry.amount));
+  // See `renderSummaryPdf`: withheld money removes the columns, not the
+  // values. The total is summed only when every row may carry money.
+  const money = result.moneyVisible !== false;
+  const totalAmount = money
+    ? sumAmounts(result.entries.map((entry) => entry.amount ?? 0))
+    : 0;
 
   return bufferDocument(meta, "portrait", (sheet) => {
     drawStats(sheet, [
       { label: "Entries", value: String(result.entries.length) },
       { label: "Total tracked", value: formatDuration(totalSec, "hms") },
-      { label: `Amount (${currency})`, value: formatPdfAmount(totalAmount) },
+      ...(money
+        ? [{ label: `Amount (${currency})`, value: formatPdfAmount(totalAmount) }]
+        : []),
     ]);
 
     const table = createTable(sheet, [
@@ -598,12 +627,16 @@ export async function renderDetailedPdf(
       // A one-letter header is legible only because the column is a tick box:
       // "Y" or nothing. Anything wider would come out of the description.
       { key: "billable", header: "B", width: 16 },
-      {
-        key: "amount",
-        header: `Amount (${currency})`,
-        width: 74,
-        align: "right",
-      },
+      ...(money
+        ? [
+            {
+              key: "amount",
+              header: `Amount (${currency})`,
+              width: 74,
+              align: "right" as const,
+            },
+          ]
+        : []),
     ]);
 
     if (result.entries.length === 0) {
@@ -619,7 +652,7 @@ export async function renderDetailedPdf(
           project:
             entry.taskName === null ? project : `${project} / ${entry.taskName}`,
           billable: entry.billable ? "Y" : "",
-          amount: formatPdfAmount(entry.amount),
+          ...(money ? { amount: formatPdfAmount(entry.amount ?? 0) } : {}),
         });
       }
     }
@@ -627,7 +660,7 @@ export async function renderDetailedPdf(
     table.total({
       date: "Total",
       duration: formatDuration(totalSec, "hms"),
-      amount: formatPdfAmount(totalAmount),
+      ...(money ? { amount: formatPdfAmount(totalAmount) } : {}),
     });
   });
 }

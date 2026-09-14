@@ -141,8 +141,8 @@ export const detailedEntrySchema: z.ZodType<DetailedEntry> = z.object({
   projectColor: z.string().nullable(),
   clientName: z.string().nullable(),
   taskName: z.string().nullable(),
-  /** 0 whenever `hourlyRate` was withheld — never read it as "earned nothing". */
-  amount: z.number(),
+  /** `null` whenever `hourlyRate` was withheld — never `0`, which is unbilled time. */
+  amount: z.number().nullable(),
 });
 
 /** What an invoice prints under "Billed to". Blank fields are `null`. */
@@ -289,7 +289,9 @@ export const tagRemoveResultSchema: z.ZodType<TagRemoveResult> = z.object({
 export const summaryReportSchemaOut: z.ZodType<SummaryReportResult> = z.object({
   totalSec: z.number(),
   billableSec: z.number(),
-  totalAmount: z.number(),
+  // Nullable for the shape's sake: REST refuses (403) the one visibility that
+  // withholds report money, so a served report always carries numbers here.
+  totalAmount: z.number().nullable(),
   currency: z.string(),
   groups: z.array(
     z.object({
@@ -298,7 +300,7 @@ export const summaryReportSchemaOut: z.ZodType<SummaryReportResult> = z.object({
       color: z.string().nullable(),
       seconds: z.number(),
       billableSec: z.number(),
-      amount: z.number(),
+      amount: z.number().nullable(),
     }),
   ),
   timeline: z.array(
@@ -308,6 +310,8 @@ export const summaryReportSchemaOut: z.ZodType<SummaryReportResult> = z.object({
       billableSec: z.number(),
     }),
   ),
+  /** False when every amount above is withheld as `null`. */
+  moneyVisible: z.boolean(),
 });
 
 export const weeklyReportSchemaOut: z.ZodType<WeeklyReportResult> = z.object({
@@ -324,6 +328,7 @@ export const weeklyReportSchemaOut: z.ZodType<WeeklyReportResult> = z.object({
   ),
   dayTotals: z.array(z.number()),
   totalSec: z.number(),
+  moneyVisible: z.boolean(),
 });
 
 /** What `GET /me` answers: the token, its workspace, and what it may see. */
@@ -688,7 +693,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
     input: { source: "query", schema: detailedReportSchema },
     output: listOf(detailedEntrySchema, {
       totalSec: z.number(),
-      totalAmount: z.number(),
+      totalAmount: z.number().nullable(),
       currency: z.string(),
     }),
   },

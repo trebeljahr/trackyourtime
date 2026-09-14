@@ -47,7 +47,12 @@ export const groupEntriesByDay = (entries: DetailedEntry[]): DayGroup[] => {
   }
 
   for (const day of days) {
-    day.amount = sumAmounts(day.entries.map((entry) => entry.amount));
+    // A colleague's row whose money is withheld arrives with `amount: null`;
+    // it contributes nothing to the day's own-visible total rather than
+    // failing the sum.
+    day.amount = sumAmounts(
+      day.entries.flatMap((entry) => (entry.amount === null ? [] : [entry.amount]))
+    );
   }
 
   return days;

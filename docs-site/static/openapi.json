@@ -449,7 +449,14 @@
                             ]
                           },
                           "amount": {
-                            "type": "number"
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -9292,6 +9299,21 @@
             }
           },
           {
+            "name": "memberIds",
+            "in": "query",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          {
             "name": "billable",
             "in": "query",
             "required": false,
@@ -9328,6 +9350,7 @@
                 "client",
                 "task",
                 "tag",
+                "member",
                 "day",
                 "week",
                 "month"
@@ -9373,7 +9396,14 @@
                           "type": "number"
                         },
                         "totalAmount": {
-                          "type": "number"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "currency": {
                           "type": "string"
@@ -9406,7 +9436,14 @@
                                 "type": "number"
                               },
                               "amount": {
-                                "type": "number"
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -9443,6 +9480,9 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "moneyVisible": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -9451,7 +9491,8 @@
                         "totalAmount",
                         "currency",
                         "groups",
-                        "timeline"
+                        "timeline",
+                        "moneyVisible"
                       ],
                       "additionalProperties": false
                     }
@@ -9640,6 +9681,21 @@
             "explode": true,
             "schema": {
               "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          {
+            "name": "memberIds",
+            "in": "query",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "maxItems": 100,
               "type": "array",
               "items": {
                 "type": "string",
@@ -9942,7 +9998,14 @@
                             ]
                           },
                           "amount": {
-                            "type": "number"
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -9989,7 +10052,14 @@
                       "type": "number"
                     },
                     "totalAmount": {
-                      "type": "number"
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "currency": {
                       "type": "string"
@@ -10191,6 +10261,21 @@
             }
           },
           {
+            "name": "memberIds",
+            "in": "query",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          {
             "name": "billable",
             "in": "query",
             "required": false,
@@ -10341,13 +10426,17 @@
                         },
                         "totalSec": {
                           "type": "number"
+                        },
+                        "moneyVisible": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
                         "days",
                         "rows",
                         "dayTotals",
-                        "totalSec"
+                        "totalSec",
+                        "moneyVisible"
                       ],
                       "additionalProperties": false
                     }

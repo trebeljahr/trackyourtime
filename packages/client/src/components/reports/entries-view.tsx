@@ -32,6 +32,7 @@ import {
   type SortDirection,
 } from "@/components/reports/detailed-table";
 import { KpiRow, type KpiItem } from "@/components/reports/kpi-row";
+import { MONEY_WITHHELD } from "@/components/reports/report-money";
 import {
   KpiRowSkeleton,
   TableSkeleton,
@@ -215,17 +216,21 @@ export function EntriesView({
                 const patched = patch(entry);
                 if (patched === null) {
                   secondsDelta += entry.durationSec;
-                  amountDelta += entry.amount;
+                  amountDelta += entry.amount ?? 0;
                   continue;
                 }
                 next.push(patched);
-                amountDelta += entry.amount - patched.amount;
+                amountDelta += (entry.amount ?? 0) - (patched.amount ?? 0);
               }
               return {
                 ...page,
                 entries: next,
                 totalSec: Math.max(0, page.totalSec - secondsDelta),
-                totalAmount: round2(page.totalAmount - amountDelta),
+                // A withheld total stays withheld; there is nothing to adjust.
+                totalAmount:
+                  page.totalAmount === null
+                    ? null
+                    : round2(page.totalAmount - amountDelta),
               };
             }),
           };
@@ -333,7 +338,10 @@ export function EntriesView({
       },
       {
         label: "Amount earned",
-        value: fmt.money(totals?.totalAmount ?? 0),
+        value:
+          totals && totals.totalAmount === null
+            ? MONEY_WITHHELD
+            : fmt.money(totals?.totalAmount ?? 0),
         hint: totals?.currency ?? fmt.currency,
         icon:
           currencyIcon(totals?.currency ?? fmt.currency) ??

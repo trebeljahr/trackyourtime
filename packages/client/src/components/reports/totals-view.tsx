@@ -22,6 +22,7 @@ import {
   parseGroupBy,
 } from "@/components/reports/group-by";
 import { KpiRow, type KpiItem } from "@/components/reports/kpi-row";
+import { MONEY_WITHHELD } from "@/components/reports/report-money";
 import {
   ChartSkeleton,
   KpiRowSkeleton,
@@ -145,7 +146,10 @@ export function TotalsView({
       },
       {
         label: "Amount earned",
-        value: fmt.money(result?.totalAmount ?? 0),
+        value:
+          result && result.totalAmount === null
+            ? MONEY_WITHHELD
+            : fmt.money(result?.totalAmount ?? 0),
         hint: result?.currency ?? fmt.currency,
         icon:
           currencyIcon(result?.currency ?? fmt.currency) ??

@@ -98,6 +98,7 @@ const emptySummary: SummaryReportResult = {
   currency: "EUR",
   groups: [],
   timeline: [],
+  moneyVisible: true,
 };
 
 const entry = (overrides: Partial<DetailedEntry> = {}): DetailedEntry => ({
@@ -136,6 +137,7 @@ const detailed = (entries: DetailedEntry[]): DetailedReportResult => ({
   totalSec: 0,
   totalAmount: 0,
   currency: "EUR",
+  moneyVisible: true,
 });
 
 const weekly = (rows: WeeklyReportResult["rows"]): WeeklyReportResult => {
@@ -156,6 +158,7 @@ const weekly = (rows: WeeklyReportResult["rows"]): WeeklyReportResult => {
     rows,
     dayTotals,
     totalSec: dayTotals.reduce((total, value) => total + value, 0),
+    moneyVisible: true,
   };
 };
 
@@ -191,6 +194,7 @@ test("renderSummaryPdf produces a real PDF", async () => {
       billableSec: 9000,
       totalAmount: 225,
       currency: "EUR",
+      moneyVisible: true,
       groups: [
         {
           key: "project-1",
@@ -247,6 +251,7 @@ test("renderSummaryPdf renders a TAG-grouped summary, over-adding groups and all
       billableSec: 9000,
       totalAmount: 225,
       currency: "EUR",
+      moneyVisible: true,
       groups: [
         {
           key: "tag-1",

@@ -16,12 +16,14 @@ import {
 } from "@/components/ui/table";
 import { colorForGroup } from "@/components/reports/summary-charts";
 import type { BudgetView } from "@/lib/budget-view";
+import { formatReportMoney } from "@/components/reports/report-money";
 
 export type SummaryTableProps = {
   groups: SummaryGroup[];
   totalSec: number;
   billableSec: number;
-  totalAmount: number;
+  /** `null` when the report's money is withheld from the caller. */
+  totalAmount: number | null;
   duration: (seconds: number) => string;
   money: (amount: number) => string;
   /** Column heading for the group key, e.g. "Project". */
@@ -161,7 +163,7 @@ export function SummaryTable({
                 {duration(group.seconds)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {money(group.amount)}
+                {formatReportMoney(group.amount, money)}
               </TableCell>
               {budgetFor ? (
                 <TableCell data-testid={`summary-budget-${group.key}`}>
@@ -199,7 +201,7 @@ export function SummaryTable({
             className="text-right tabular-nums"
             data-testid="summary-total-amount"
           >
-            {money(totalAmount)}
+            {formatReportMoney(totalAmount, money)}
           </TableCell>
           {budgetFor ? <TableCell /> : null}
         </TableRow>

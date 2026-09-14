@@ -3,6 +3,8 @@
 import mongoose, { Types, type PipelineStage } from "mongoose";
 import {
   entryAmount,
+  projectDetailedEntry,
+  projectEntryForVisibility,
   type DetailedEntry,
   type EntryListInput,
   type RecentEntriesInput,
@@ -273,9 +275,19 @@ export async function listEntries(
   const page = rows.slice(0, limit).map(toDetailedEntry);
   const last = page[page.length - 1];
 
+  // The value-level half of the author scope above: a colleague's row reaches
+  // a member without `canViewOthersMoney` with `hourlyRate` and `amount` both
+  // null. Applied in the service, not per surface, so the tracker, calendar,
+  // timesheet and every REST caller receive the same projection. A row the
+  // projection would drop is one the `$match` already excluded, so the page
+  // size and the cursor (taken from the unprojected last row) are unchanged.
+  const entries = page
+    .map((entry) => projectDetailedEntry(entry, scope.visibility))
+    .filter((entry): entry is DetailedEntry => entry !== null);
+
   return rows.length > limit && last
-    ? { entries: page, nextCursor: encodeEntryCursor(last) }
-    : { entries: page };
+    ? { entries, nextCursor: encodeEntryCursor(last) }
+    : { entries };
 }
 
 /**
@@ -342,7 +354,16 @@ export async function getEntry(
     ...(authorScopeFilter(scope.visibility) ?? {}),
   }).lean();
   if (!entry) throw notFound();
-  return toClientTimeEntry(entry);
+  // Found by the author scope, projected by the money flag: a colleague's
+  // entry comes back with its rate withheld. `null` from the projection is
+  // unreachable after that filter, and answers NOT_FOUND regardless — never
+  // FORBIDDEN, which would confirm the id exists.
+  const visible = projectEntryForVisibility(
+    toClientTimeEntry(entry),
+    scope.visibility,
+  );
+  if (!visible) throw notFound();
+  return visible;
 }
 
 /**

@@ -23,6 +23,10 @@ import type {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import {
+  MONEY_WITHHELD,
+  sumReportMoney,
+} from "@/components/reports/report-money";
+import {
   bucketTimeline,
   formatBucketLabel,
   type TimelineGranularity,
@@ -167,7 +171,13 @@ function BreakdownTooltip({
   const asMoney = formatMoneyValue ?? ((amount: number) => String(amount));
   const slice = payload[0]?.payload;
   const seconds = readNumber(slice, "seconds");
-  const amount = readNumber(slice, "amount");
+  // Read raw rather than through `readNumber`, which would turn a withheld
+  // `null` into a confident 0.
+  const rawAmount = slice?.["amount"];
+  const amountLabel =
+    typeof rawAmount === "number" && Number.isFinite(rawAmount)
+      ? asMoney(rawAmount)
+      : MONEY_WITHHELD;
   const share = readNumber(slice, "share");
 
   return (
@@ -184,10 +194,10 @@ function BreakdownTooltip({
       </p>
       <p className="flex items-center gap-4">
         <span className="text-muted-foreground">Amount</span>
-        <span className="ml-auto tabular-nums">{asMoney(amount)}</span>
+        <span className="ml-auto tabular-nums">{amountLabel}</span>
       </p>
       <p className="sr-only">
-        {readString(slice, "label")}: {asDuration(seconds)}, {asMoney(amount)}
+        {readString(slice, "label")}: {asDuration(seconds)}, {amountLabel}
       </p>
     </TooltipShell>
   );
@@ -333,7 +343,8 @@ type Slice = {
   key: string;
   label: string;
   seconds: number;
-  amount: number;
+  /** `null` when the report's money is withheld. */
+  amount: number | null;
   share: number;
   fill: string;
 };
@@ -376,7 +387,7 @@ export function GroupBreakdownChart({
         key: "__other",
         label: `${tail.length} more`,
         seconds,
-        amount: tail.reduce((sum, group) => sum + group.amount, 0),
+        amount: sumReportMoney(tail.map((group) => group.amount)),
         share: (seconds / total) * 100,
         fill: "hsl(var(--muted-foreground))",
       });

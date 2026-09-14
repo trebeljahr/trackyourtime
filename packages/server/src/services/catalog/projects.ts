@@ -14,6 +14,7 @@ import {
   projectRemoveResult,
   rollupVisibility,
   type OwnCollateralCounts,
+  projectProjectForVisibility,
   type ProjectListInput,
   type ProjectUpdateResult,
   type UpdateProjectInput,
@@ -33,6 +34,7 @@ import type { CatalogRemoveResult } from "../../trpc/routers/catalog-cascade.js"
 import { cascadeDeleteProject } from "../../trpc/routers/catalog-cascade.js";
 import {
   budgetWrite,
+  canSeeBudgetProgress,
   loadBudgetProgress,
   needsCurrency,
   touchesBudget,
@@ -66,9 +68,10 @@ export type ProjectWithStats = ProjectWire & {
    *
    * Unlike the two counts above this is NOT author-scoped: a budget is the
    * project's, not one person's, so it deliberately spans every member. That
-   * is exactly what makes it a disclosure, and why the REST layer withholds it
-   * from a caller who may not see others' time or money
-   * (`projectProjectForVisibility` in @starter/shared).
+   * is exactly what makes it a disclosure, and why it is withheld as `null` —
+   * for tRPC and REST alike, in `aggregateProjects` — from a caller who may
+   * not see others' time or money (`projectProjectForVisibility` in
+   * @starter/shared). `null` then reads as "no target", never as "0% spent".
    */
   progress: BudgetProgress | null;
 };
@@ -151,12 +154,25 @@ async function aggregateProjects(
   // Costs nothing until a project actually carries a target, and archived
   // projects keep reporting: their history is still the answer to
   // "did that job come in under budget?".
-  const progress = await loadBudgetProgress(workspaceId, projects);
+  //
+  // Withheld HERE, in the one pipeline every read of a project goes through,
+  // rather than at each surface that serves one: `progress` spans every
+  // member's entries, so a caller who may not see both others' time and
+  // others' money gets `null` from tRPC exactly as from REST — and the
+  // whole-workspace entry read behind it is never even made for them.
+  // `projectProjectForVisibility` stays the rule; this only avoids computing
+  // the value it would discard.
+  const withheld = !canSeeBudgetProgress(scope.visibility);
+  const progress = withheld
+    ? new Map<string, BudgetProgress>()
+    : await loadBudgetProgress(workspaceId, projects);
 
-  return projects.map((project) => ({
-    ...project,
-    progress: progress.get(project.id) ?? null,
-  }));
+  return projects.map((project) =>
+    projectProjectForVisibility(
+      { ...project, progress: progress.get(project.id) ?? null },
+      scope.visibility,
+    ),
+  );
 }
 
 export async function listProjects(

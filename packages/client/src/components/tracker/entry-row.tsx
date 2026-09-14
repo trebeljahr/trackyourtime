@@ -384,7 +384,9 @@ function EntryRowImpl({
         className="hidden w-20 overflow-hidden text-right text-sm text-muted-foreground tabular-nums sm:inline min-[1140px]:block min-[1140px]:w-full"
         data-testid="entry-amount"
       >
-        {entry.hourlyRate === null ? "" : format.money(entry.amount)}
+        {entry.hourlyRate === null || entry.amount === null
+          ? ""
+          : format.money(entry.amount)}
       </span>
 
       {/* The running entry gets Stop, not Continue. "Continuing" something
