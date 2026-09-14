@@ -68,6 +68,7 @@ export type AdminAuthContext = {
     deleteVerificationByIdentifier: (identifier: string) => Promise<unknown>;
     listSessions: (userId: string) => Promise<unknown[]>;
     deleteSessions: (userId: string) => Promise<unknown>;
+    updateUser: (userId: string, data: Record<string, unknown>) => Promise<unknown>;
   };
 };
 
@@ -150,6 +151,11 @@ export async function createUser(
   }
 
   await context.internalAdapter.deleteSessions(user.id);
+
+  // The operator vouches for the address. With mail configured the server
+  // requires a verified email before a password sign-in, and the account
+  // would otherwise wait on a link the operator may never see.
+  await context.internalAdapter.updateUser(user.id, { emailVerified: true });
 
   const owner = { id: user.id, email: user.email, name: user.name ?? input.name };
   const memberships = await findAll(context, "member", [

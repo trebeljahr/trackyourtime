@@ -157,7 +157,9 @@ describe("auth.ts email guards", () => {
   );
 
   it("branches on the transport-agnostic predicate", () => {
-    const guards = source.match(/isEmailDeliveryConfigured\(\)/g) ?? [];
+    // The guard shape, not every mention: `requireEmailVerification` reads
+    // the same predicate to decide policy, and sends nothing.
+    const guards = source.match(/if \(!isEmailDeliveryConfigured\(\)\)/g) ?? [];
     const sends = source.match(/await sendEmail\(/g) ?? [];
     // The floor first: comparing two counts alone passes on an auth.ts with
     // no sends left in it at all, which is the state where auth mail is most

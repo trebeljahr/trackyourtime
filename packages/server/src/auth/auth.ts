@@ -12,6 +12,12 @@ import {
   organizationPluginOptions,
 } from "../services/membership/organization-lockdown.js";
 import { accountDeletionOptions } from "./account-deletion.js";
+import {
+  emailVerificationOptions,
+  sweepSocketsAfterRevocation,
+  twoFactorPlugin,
+  type AuthMail,
+} from "./account-security.js";
 import { DEVICE_FLOW_CLIENT_IDS } from "./client-label.js";
 import { createPersonalWorkspace } from "./personal-workspace.js";
 import {
@@ -40,6 +46,13 @@ function logAuthUrl(label: string, recipient: string, url: string): void {
   console.log(`[auth] ${label} URL for ${recipient}: ${url}`);
 }
 
+/** Sweep sockets whose session is gone, without a static import cycle. */
+function sweepRevokedSockets(): void {
+  void import("../ws/handler.js")
+    .then(({ revokeStaleSockets }) => revokeStaleSockets())
+    .catch(() => undefined);
+}
+
 /**
  * better-auth instance. Must be initialized AFTER mongoose.connect() because
  * it uses the same MongoDB URI.
@@ -64,7 +77,14 @@ export async function initAuth(): Promise<void> {
 
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: false, // Set to true once a mail transport is configured
+      /**
+       * Only when mail can actually be delivered: a self-host with no
+       * transport would otherwise lock every new account out behind a link
+       * that only reaches the server log. Accounts made before this was on
+       * are marked verified by `scripts/backfill-email-verified.ts` — run it
+       * once after the deploy that configures mail (docs/deploy.md).
+       */
+      requireEmailVerification: isEmailDeliveryConfigured(),
       async sendResetPassword({ user, url }: { user: { email: string }; url: string }) {
         // Branch on whether *any* transport is configured, never on one
         // provider's variables: a Listmonk-shaped check would log the reset
@@ -88,26 +108,33 @@ export async function initAuth(): Promise<void> {
           throw error;
         }
       },
-      async sendVerificationEmail({ user, url }: { user: { email: string }; url: string }) {
-        if (!isEmailDeliveryConfigured()) {
-          logAuthUrl("Verification", user.email, url);
-          return;
-        }
-        try {
-          await sendEmail({
-            to: user.email,
-            subject: "Verify your email",
-            text: `Click this link to verify your email: ${url}`,
-            html: `<p>Click <a href="${url}">here</a> to verify your email.</p>`,
-          });
-        } catch (error) {
-          logAuthUrl("Verification", user.email, url);
-          throw error;
-        }
-      },
     },
 
+    /**
+     * Sign-up, sign-in-while-unverified and change-email links. better-auth
+     * reads `sendVerificationEmail` from THIS block only; under
+     * `emailAndPassword` it was never called. See `auth/account-security.ts`.
+     */
+    emailVerification: emailVerificationOptions(async (url: string, mail: AuthMail) => {
+      if (!isEmailDeliveryConfigured()) {
+        logAuthUrl("Verification", mail.to, url);
+        return;
+      }
+      try {
+        await sendEmail(mail);
+      } catch (error) {
+        logAuthUrl("Verification", mail.to, url);
+        throw error;
+      }
+    }),
+
     user: {
+      /**
+       * Settings → Account → Change email. The new address gets a
+       * verification link and the email changes only when it is followed.
+       */
+      changeEmail: { enabled: true },
+
       /**
        * Settings → Delete account, as `POST /api/auth/delete-user`. Everything
        * tracktime owns is removed in `beforeDelete`, before better-auth removes
@@ -143,6 +170,8 @@ export async function initAuth(): Promise<void> {
        *  2. `/delete-user` remembers whether a password was sent.
        */
       before: authBeforeHook,
+      /** "Sign out other devices" closes their sockets now, not in a minute. */
+      after: sweepSocketsAfterRevocation(sweepRevokedSockets),
     },
 
     socialProviders: {
@@ -190,6 +219,15 @@ export async function initAuth(): Promise<void> {
     },
 
     plugins: [
+      /**
+       * TOTP + backup codes. MUST stay ahead of `bearer()`: after-hooks run in
+       * registration order, and the bearer hook running first would hand out
+       * `set-auth-token` for the password session two-factor then deletes.
+       * `auth/account-security.ts` has the rest, and
+       * `tests/two-factor-integration.test.ts` pins the order.
+       */
+      twoFactorPlugin(),
+
       /**
        * Lets any non-browser client (Raycast, the extensions, the desktop and
        * mobile shells) sign in normally and then carry its session as

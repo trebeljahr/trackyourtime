@@ -236,6 +236,12 @@ describe("create-user", () => {
     }
 
     assert.equal(db.session.length, 0, "the sign-up session is handed to nobody and revoked");
+    assert.equal(
+      (db.user.find((row) => row.id === created.userId) as { emailVerified?: boolean } | undefined)
+        ?.emailVerified,
+      true,
+      "an operator-created account needs no verification link",
+    );
     assert.ok(await signIn("ada@example.com", PASSWORD), "the new account signs in");
   });
 
