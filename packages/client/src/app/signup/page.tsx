@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signUp, getSession, POST_AUTH_REDIRECT } from "@/lib/auth-client";
 import { AuthHeader } from "@/components/auth-header";
+import { NativeServerNote } from "@/components/server-picker";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -50,6 +51,9 @@ export default function SignupPage() {
           title="Create an account"
           subtitle="Enter your details to get started"
         />
+
+        {/* Renders nothing on web. */}
+        <NativeServerNote />
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (

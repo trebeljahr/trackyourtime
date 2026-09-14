@@ -15,6 +15,8 @@ import {
 } from "@starter/core";
 import { useRouter } from "next/navigation";
 import { useNativeSession } from "@/hooks/use-native-session";
+import { useApiOrigin } from "@/hooks/use-api-origin";
+import { getApiOrigin } from "@/lib/api-origin";
 import { idleWatcher } from "@/lib/idle-watcher";
 import { getNativeToken } from "@/lib/native-session";
 import { revokeThisDevice } from "@/lib/revoke-this-device";
@@ -175,6 +177,10 @@ export const useSync = (): SyncStatus => {
   // never gets its flush trigger. `ready` is in the key too, so the socket is
   // not opened before we know whether there is a token at all.
   const { token: nativeToken, ready: sessionReady } = useNativeSession();
+  // Keyed on too: on the phone apps the server is a choice read from storage,
+  // and a socket opened before (or across) a change of server would be talking
+  // to one the person has left. Always null on web.
+  const serverOrigin = useApiOrigin().choice?.origin ?? null;
 
   React.useEffect(() => {
     utilsRef.current = utils;
@@ -187,10 +193,7 @@ export const useSync = (): SyncStatus => {
   React.useEffect(() => {
     if (!sessionReady) return;
 
-    const url = resolveSyncUrl(
-      process.env.NEXT_PUBLIC_API_URL ?? "",
-      window.location.origin
-    );
+    const url = resolveSyncUrl(getApiOrigin(), window.location.origin);
     if (url === "") return;
 
     const client = createSyncClient({
@@ -227,7 +230,7 @@ export const useSync = (): SyncStatus => {
       if (activeClient === client) activeClient = null;
       client.close();
     };
-  }, [sessionReady, nativeToken]);
+  }, [sessionReady, nativeToken, serverOrigin]);
 
   return useSyncStatus();
 };

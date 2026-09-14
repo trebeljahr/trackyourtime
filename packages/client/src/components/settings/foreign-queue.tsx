@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { UserRoundX } from "lucide-react";
+import { ServerOff, UserRoundX } from "lucide-react";
+import { serverLabel } from "@starter/core";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,7 @@ import {
   listForeignQueued,
   type ForeignQueuedRow,
 } from "@/lib/offline";
+import { getAbsoluteApiOrigin } from "@/lib/api-origin";
 
 /**
  * Unsynced work left on this device by an account that is not signed in.
@@ -40,6 +42,12 @@ import {
  * So: a place to look at them, and one deliberate way out. No age-based
  * expiry — deleting somebody's tracked time on a timer is still deleting it
  * silently, which is the thing this whole mechanism exists to avoid.
+ *
+ * The same holds for rows queued against another SERVER, which the phone apps
+ * keep when the person points them somewhere else. They are grouped per server
+ * and per "another account", because the way to keep each is different — sign
+ * in as that account, or switch back to that server — and one "discard all"
+ * would make a person decide about both at once.
  */
 
 const OP_LABELS: Record<string, string> = {
@@ -81,10 +89,34 @@ const formatRange = (rows: ForeignQueuedRow[]): string | null => {
   return first === last ? first : `${first} – ${last}`;
 };
 
+type Group = {
+  /** The server the rows belong to, or null for another account on this one. */
+  server: string | null;
+  rows: ForeignQueuedRow[];
+};
+
+const groupRows = (rows: ForeignQueuedRow[]): Group[] => {
+  const groups = new Map<string, Group>();
+  for (const row of rows) {
+    const key = row.otherServer ?? "";
+    const group = groups.get(key) ?? { server: row.otherServer, rows: [] };
+    group.rows.push(row);
+    groups.set(key, group);
+  }
+  // Another account on this server first: it is the one the tracker bar's
+  // badge most often means.
+  return [...groups.values()].sort(
+    (a, b) => Number(a.server !== null) - Number(b.server !== null),
+  );
+};
+
+const changes = (count: number): string =>
+  `${count} change${count === 1 ? "" : "s"}`;
+
 export function ForeignQueuePanel(): React.JSX.Element | null {
   const { foreign } = useOfflineQueueState();
   const [rows, setRows] = React.useState<ForeignQueuedRow[]>([]);
-  const [confirming, setConfirming] = React.useState(false);
+  const [confirming, setConfirming] = React.useState<Group | null>(null);
   const [discarding, setDiscarding] = React.useState(false);
 
   // Keyed on the count rather than read once: a flush, a sign-in or a discard
@@ -104,13 +136,16 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
   // lot of it.
   if (foreign === 0) return null;
 
-  const range = formatRange(rows);
+  const groups = groupRows(rows);
+  const here = serverLabel(getAbsoluteApiOrigin());
 
-  const discard = async (): Promise<void> => {
+  const discard = async (group: Group): Promise<void> => {
     setDiscarding(true);
     try {
-      const removed = await discardForeignQueued();
-      setConfirming(false);
+      const removed = await discardForeignQueued(
+        group.rows.map((row) => row.queueId),
+      );
+      setConfirming(null);
       toast.success(
         removed === 1
           ? "Discarded 1 unsynced change"
@@ -123,73 +158,133 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
     }
   };
 
+  const confirmRange = confirming ? formatRange(confirming.rows) : null;
+
   return (
     <Card data-testid="foreign-queue-panel">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <UserRoundX className="size-4" />
-          Unsynced data from another account
-        </CardTitle>
-        <CardDescription>
-          {foreign} change{foreign === 1 ? "" : "s"} queued on this device by an
-          account that is not signed in
-          {range ? `, from ${range}` : ""}. They were never sent to a server,
-          and they are not replayed under your account — that would file
-          somebody else&apos;s work into your workspace. Sign in as that account
-          on this device to sync them, or discard them here.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <ul className="space-y-1 text-sm" data-testid="foreign-queue-rows">
-          {rows.map((row) => (
-            <li
-              key={row.queueId}
-              className="flex flex-wrap items-baseline justify-between gap-x-3 border-b py-1 last:border-b-0"
-            >
-              <span>
-                {label(row)}
-                {row.description ? (
-                  <span className="text-muted-foreground">
-                    {" — "}
-                    {row.description}
-                  </span>
-                ) : null}
-              </span>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {formatAt(row.at)}
-              </span>
-            </li>
-          ))}
-        </ul>
+      {groups.length === 0 ? (
+        // The count arrived before the rows did.
+        <CardHeader>
+          <CardTitle>Unsynced data on this device</CardTitle>
+          <CardDescription>
+            {changes(foreign)} queued on this device cannot be sent from here.
+          </CardDescription>
+        </CardHeader>
+      ) : null}
 
-        <Button
-          type="button"
-          variant="destructive"
-          onClick={() => setConfirming(true)}
-          data-testid="foreign-queue-discard"
-        >
-          Discard {foreign} change{foreign === 1 ? "" : "s"}
-        </Button>
-      </CardContent>
+      {groups.map((group) => {
+        const range = formatRange(group.rows);
+        const count = group.rows.length;
+        const there = group.server === null ? null : serverLabel(group.server);
+        return (
+          <div
+            key={group.server ?? "account"}
+            className="border-b last:border-b-0"
+            data-testid="foreign-queue-group"
+            data-server={group.server ?? ""}
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {there === null ? (
+                  <>
+                    <UserRoundX className="size-4" />
+                    Unsynced data from another account
+                  </>
+                ) : (
+                  <>
+                    <ServerOff className="size-4" />
+                    Unsynced data for {there}
+                  </>
+                )}
+              </CardTitle>
+              <CardDescription>
+                {there === null ? (
+                  <>
+                    {changes(count)} queued on this device by an account that
+                    is not signed in{range ? `, from ${range}` : ""}. They were
+                    never sent to a server, and they are not replayed under your
+                    account — that would file somebody else&apos;s work into
+                    your workspace. Sign in as that account on this device to
+                    sync them, or discard them here.
+                  </>
+                ) : (
+                  <>
+                    {changes(count)} queued on this device while it used{" "}
+                    {there}
+                    {range ? `, from ${range}` : ""}. They were never sent, and
+                    they are not sent to {here} — that would file them on a
+                    server they were not made for. Switch this device back to{" "}
+                    {there} on the sign-in screen to sync them, or discard them
+                    here.
+                  </>
+                )}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pb-6">
+              <ul className="space-y-1 text-sm" data-testid="foreign-queue-rows">
+                {group.rows.map((row) => (
+                  <li
+                    key={row.queueId}
+                    className="flex flex-wrap items-baseline justify-between gap-x-3 border-b py-1 last:border-b-0"
+                  >
+                    <span>
+                      {label(row)}
+                      {row.description ? (
+                        <span className="text-muted-foreground">
+                          {" — "}
+                          {row.description}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {formatAt(row.at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
 
-      <Dialog open={confirming} onOpenChange={setConfirming}>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => setConfirming(group)}
+                data-testid="foreign-queue-discard"
+              >
+                Discard {changes(count)}
+              </Button>
+            </CardContent>
+          </div>
+        );
+      })}
+
+      <Dialog
+        open={confirming !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(null);
+        }}
+      >
         <DialogContent data-testid="foreign-queue-confirm">
           <DialogHeader>
             <DialogTitle>
-              Discard {foreign} unsynced change{foreign === 1 ? "" : "s"}?
+              Discard {confirming ? confirming.rows.length : 0} unsynced change
+              {confirming?.rows.length === 1 ? "" : "s"}?
             </DialogTitle>
             <DialogDescription>
-              This deletes work tracked{range ? ` on ${range}` : ""} that no
-              server has ever received. It cannot be recovered — not by that
-              account signing in here, and not from a backup. Sign in as that
-              account on this device instead if it should be kept.
+              This deletes work tracked{confirmRange ? ` on ${confirmRange}` : ""}{" "}
+              that no server has ever received. It cannot be recovered — not by{" "}
+              {confirming?.server
+                ? `switching back to ${serverLabel(confirming.server)}`
+                : "that account signing in here"}
+              , and not from a backup.{" "}
+              {confirming?.server
+                ? `Switch this device back to ${serverLabel(confirming.server)} instead if it should be kept.`
+                : "Sign in as that account on this device instead if it should be kept."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               type="button"
               variant="ghost"
-              onClick={() => setConfirming(false)}
+              onClick={() => setConfirming(null)}
               data-testid="foreign-queue-cancel"
             >
               Cancel
@@ -198,7 +293,9 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
               type="button"
               variant="destructive"
               disabled={discarding}
-              onClick={() => void discard()}
+              onClick={() => {
+                if (confirming) void discard(confirming);
+              }}
               data-testid="foreign-queue-confirm-discard"
             >
               Delete permanently

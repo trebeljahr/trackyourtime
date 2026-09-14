@@ -3,6 +3,7 @@ import { httpBatchLink } from "@trpc/client";
 import type { AppRouter } from "@starter/server/trpc";
 import { isNative } from "@/mobile/bridge";
 import { getNativeToken } from "@/lib/native-session";
+import { rebaseApiUrl, whenApiOriginReady } from "@/lib/api-origin";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -19,10 +20,23 @@ export function getTRPCClient() {
          * `src/lib/trpc.test.ts` asserts rather than assumes.
          */
         fetch(url, options) {
-          const token = getNativeToken();
-          return fetch(url, {
-            ...options,
-            credentials: token ? "omit" : "include",
+          if (!isNative()) {
+            const token = getNativeToken();
+            return fetch(url, {
+              ...options,
+              credentials: token ? "omit" : "include",
+            });
+          }
+          // The phone apps choose their server at runtime (`lib/api-origin.ts`).
+          // The link above keeps the build-time URL; the request is rebased
+          // here, and only once the stored choice has been read, so nothing
+          // can leave for a server the person has already moved away from.
+          return whenApiOriginReady().then(() => {
+            const token = getNativeToken();
+            return fetch(rebaseApiUrl(String(url)), {
+              ...options,
+              credentials: token ? "omit" : "include",
+            });
           });
         },
         headers: () => {

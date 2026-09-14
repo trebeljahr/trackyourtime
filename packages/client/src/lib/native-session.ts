@@ -39,6 +39,7 @@
  */
 
 import { isNative } from "@/mobile/bridge";
+import { hydrateApiOrigin } from "@/lib/api-origin";
 
 /** Keychain item holding the better-auth session token. */
 const TOKEN_KEY = "tracktime.session-token";
@@ -210,7 +211,11 @@ const runHydration = async (): Promise<void> => {
 
   // The read keeps going after the deadline; if it eventually answers with a
   // token, `publish()` hands it to consumers that key on it.
-  const read = readStoredToken().then(() => {
+  //
+  // The server choice is read in the same gate. Everything that waits on
+  // `ready` — the protected layout's session check, the sync socket — is about
+  // to talk to a server, and must know WHICH one before it does.
+  const read = Promise.all([readStoredToken(), hydrateApiOrigin()]).then(() => {
     if (ready) publish();
   });
 

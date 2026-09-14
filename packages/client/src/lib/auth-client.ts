@@ -12,6 +12,7 @@ import {
   sealOfflineQueueOwner,
 } from "@/lib/offline";
 import { writeRunningMirror } from "@/lib/running-mirror";
+import { rebaseApiUrl, whenApiOriginReady } from "@/lib/api-origin";
 
 /**
  * better-auth validates its baseURL with `new URL()`, so a relative
@@ -59,6 +60,22 @@ function resolveAuthBaseUrl(): string {
  */
 const clientHeader = (): string => (isNative() ? "tracktime-mobile" : "web");
 
+/**
+ * The fetch every auth call goes through.
+ *
+ * On web it is the global `fetch`, called exactly as better-fetch would have
+ * called it. On the phone apps `baseURL` above is only the build's default
+ * server, so the request waits for the stored server choice and is rebased
+ * onto it (`lib/api-origin.ts`) — the auth client is built once at module
+ * scope, long before the choice is read, and cannot be rebuilt per server.
+ */
+const authFetch: typeof fetch = (input, init) => {
+  if (!isNative() || input instanceof Request) return fetch(input, init);
+  return whenApiOriginReady().then(() =>
+    fetch(rebaseApiUrl(String(input)), init),
+  );
+};
+
 export const authClient = createAuthClient({
   baseURL: resolveAuthBaseUrl(),
   /**
@@ -68,6 +85,7 @@ export const authClient = createAuthClient({
    */
   plugins: [deviceAuthorizationClient()],
   fetchOptions: {
+    customFetchImpl: authFetch,
     /**
      * Names this client on every session it creates, so Settings → Devices can
      * show "Chrome on macOS" instead of an unlabelled row.

@@ -20,6 +20,7 @@ import {
   decodeOfflineMutation,
   describeQueuedMutation,
   isForeignTo,
+  isQueuedOn,
   isReplayableBy,
   memoryStorage,
   OFFLINE_QUEUE_OWNER_STORAGE_KEY,
@@ -31,6 +32,7 @@ import {
   type OfflineOp,
   type OfflinePayloadMap,
   type OfflineQueue,
+  type QueuedMutation,
   type QueuedMutationSummary,
   type StoredOfflinePayload,
 } from "@starter/core";
@@ -64,6 +66,11 @@ import {
 } from "@/mobile/preferences-storage";
 import { getNetworkOnline } from "@/mobile/network";
 import { isNative } from "@/mobile/bridge";
+import {
+  getAbsoluteApiOrigin,
+  getDefaultAbsoluteApiOrigin,
+  whenApiOriginReady,
+} from "@/lib/api-origin";
 
 // ── the queue itself ─────────────────────────────────────────────────
 
@@ -127,6 +134,32 @@ export const __resetOfflineQueueForTests = (): void => {
   queue = null;
   storage = null;
 };
+
+// ── which server a row belongs to ─────────────────────────────────────
+
+/*
+ * The phone apps can be pointed at a different server (`lib/api-origin.ts`),
+ * and the queue outlives that switch for the same reason it outlives a
+ * sign-out: the rows are time no server has ever seen. So every row is stamped
+ * with the server it was queued against, and only rows for the server this
+ * device uses NOW are replayed, counted as pending or adopted. The rest wait
+ * — shown in Settings → Devices beside another account's rows — for the
+ * person to switch back, or to discard them deliberately.
+ *
+ * A row from before the stamp belongs to the build's default server, where
+ * every such row was made. On web both of these are the same origin, always.
+ */
+const isOnThisServer = (row: Pick<QueuedMutation, "server">): boolean =>
+  isQueuedOn(row, getAbsoluteApiOrigin(), getDefaultAbsoluteApiOrigin());
+
+/**
+ * Rows this device may not send right now: another server's, or — once an
+ * account is known — another account's. A row for another server is
+ * somebody-else's work whether or not the session has resolved, because no
+ * session on THIS server could ever send it.
+ */
+const isElsewhere = (row: QueuedMutation, against: string | null): boolean =>
+  !isOnThisServer(row) || isForeignTo(row, against);
 
 // ── who queued what ──────────────────────────────────────────────────
 
@@ -211,7 +244,9 @@ export const setOfflineQueueOwner = async (
       lastOwner = next;
       await getStorage().setItem(OFFLINE_QUEUE_OWNER_STORAGE_KEY, next);
     }
-    adopted = await getOfflineQueue().adoptUnowned(next);
+    // Only this server's rows: an account here could not have made a row
+    // queued against another server.
+    adopted = await getOfflineQueue().adoptUnowned(next, isOnThisServer);
   }
 
   await refreshPendingCount();
@@ -236,7 +271,9 @@ export const sealOfflineQueueOwner = async (): Promise<number> => {
   await hydrateLastOwner();
   const departing = owner ?? lastOwner;
   const adopted =
-    departing === null ? 0 : await getOfflineQueue().adoptUnowned(departing);
+    departing === null
+      ? 0
+      : await getOfflineQueue().adoptUnowned(departing, isOnThisServer);
 
   owner = null;
   lastOwner = null;
@@ -265,7 +302,10 @@ export const discardDeletedAccountQueue = async (
   await hydrateLastOwner();
   const offlineQueue = getOfflineQueue();
   const rows = await offlineQueue.list();
-  const theirs = rows.filter((row) => !isForeignTo(row, deletedUserId));
+  // User ids are per server, and the account was deleted on THIS one.
+  const theirs = rows.filter(
+    (row) => isOnThisServer(row) && !isForeignTo(row, deletedUserId),
+  );
 
   for (const row of theirs) await offlineQueue.remove(row.id);
 
@@ -329,11 +369,9 @@ export const getServerForeignCount = (): number => 0;
 export const refreshPendingCount = async (): Promise<number> => {
   const rows = await getOfflineQueue().list();
   const against = owner ?? lastOwner;
-  if (against === null) {
-    setCounts(rows.length, 0);
-    return rows.length;
-  }
-  const theirs = rows.filter((row) => isForeignTo(row, against)).length;
+  const theirs = rows.filter((row) =>
+    against === null ? !isOnThisServer(row) : isElsewhere(row, against),
+  ).length;
   setCounts(rows.length - theirs, theirs);
   return rows.length - theirs;
 };
@@ -346,12 +384,20 @@ export const enqueueOffline = async <K extends OfflineOp>(
 ): Promise<void> => {
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
   await hydrateLastOwner();
+  // The stamp has to name the server the person actually chose, which on a
+  // cold native launch may not have been read yet.
+  await whenApiOriginReady();
   // `lastOwner` is the fallback for a mutation made before the session
   // resolved — routine on a cold offline launch, where the app is usable and
   // `useSession()` has nothing to say. Only a device that has never had an
   // account writes an unowned row now, and the first account to sign in
   // adopts it.
-  await getOfflineQueue().enqueue(op, payload, owner ?? lastOwner ?? undefined);
+  await getOfflineQueue().enqueue(
+    op,
+    payload,
+    owner ?? lastOwner ?? undefined,
+    getAbsoluteApiOrigin(),
+  );
   await refreshPendingCount();
 };
 
@@ -369,7 +415,7 @@ export const cancelQueuedForTemp = async (tempId: string): Promise<boolean> => {
     // being deleted belongs to an entry in THIS session's cache. An unowned
     // row is fair game — it is one this session queued before the account
     // resolved, or one waiting to be adopted.
-    if (isForeignTo(row, owner ?? lastOwner)) continue;
+    if (isElsewhere(row, owner ?? lastOwner)) continue;
     const decoded = decodeOfflineMutation(row);
     if (decoded?.tempId !== tempId) continue;
     await offlineQueue.remove(row.id);
@@ -404,7 +450,7 @@ export const flushOfflineQueue = async (
       if (decoded === null) return;
       await runner(decoded, { createdAt: row.createdAt });
     },
-    { filter: (row) => isReplayableBy(row, owner) }
+    { filter: (row) => isReplayableBy(row, owner) && isOnThisServer(row) }
   );
   await refreshPendingCount();
   return result;
@@ -424,13 +470,29 @@ export const flushOfflineQueue = async (
  * summarising the same row differently would be two clients asking a person
  * to approve two different deletions.
  */
-export type ForeignQueuedRow = QueuedMutationSummary;
+export type ForeignQueuedRow = QueuedMutationSummary & {
+  /**
+   * The server the row was queued against when that is not this device's
+   * server now, else null — in which case it is another ACCOUNT's row on this
+   * server. The two are told apart on screen because the way to keep them
+   * differs: sign in as that account, or switch back to that server.
+   */
+  otherServer: string | null;
+};
 
 export const listForeignQueued = async (): Promise<ForeignQueuedRow[]> => {
   await hydrateLastOwner();
+  await whenApiOriginReady();
   const against = owner ?? lastOwner;
   const rows = await getOfflineQueue().list();
-  return rows.filter((row) => isForeignTo(row, against)).map(describeQueuedMutation);
+  return rows
+    .filter((row) => isElsewhere(row, against))
+    .map((row) => ({
+      ...describeQueuedMutation(row),
+      otherServer: isOnThisServer(row)
+        ? null
+        : (row.server ?? getDefaultAbsoluteApiOrigin()),
+    }));
 };
 
 /**
@@ -443,12 +505,23 @@ export const listForeignQueued = async (): Promise<ForeignQueuedRow[]> => {
  * mechanism was built to avoid, and putting one behind a clock does not make
  * it less silent.
  */
-export const discardForeignQueued = async (): Promise<number> => {
+export const discardForeignQueued = async (
+  /** Limit the discard to these rows — one group on screen. All when omitted. */
+  queueIds?: readonly string[],
+): Promise<number> => {
   await hydrateLastOwner();
+  await whenApiOriginReady();
   const against = owner ?? lastOwner;
   const offlineQueue = getOfflineQueue();
   const rows = await offlineQueue.list();
-  const theirs = rows.filter((row) => isForeignTo(row, against));
+  // Re-checked here rather than trusted from the list the panel rendered: a
+  // row that became replayable since (the person switched back) is no longer
+  // anybody else's to delete.
+  const theirs = rows.filter(
+    (row) =>
+      isElsewhere(row, against) &&
+      (queueIds === undefined || queueIds.includes(row.id)),
+  );
 
   for (const row of theirs) await offlineQueue.remove(row.id);
 

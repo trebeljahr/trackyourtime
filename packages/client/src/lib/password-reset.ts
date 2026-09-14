@@ -1,3 +1,5 @@
+import { getApiOrigin, whenApiOriginReady } from "@/lib/api-origin";
+
 /**
  * Ask the API to email a password-reset link.
  *
@@ -23,7 +25,10 @@
  * real failure and worth showing.
  */
 export async function requestPasswordReset(email: string): Promise<void> {
-  const apiOrigin = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
+  // The server this device signs in to — on the phone apps, the one picked on
+  // the login screen rather than the one the build was made for.
+  await whenApiOriginReady();
+  const apiOrigin = getApiOrigin() || window.location.origin;
 
   const res = await fetch(`${apiOrigin}/api/auth/request-password-reset`, {
     method: "POST",

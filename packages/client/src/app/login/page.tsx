@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn, getSession, POST_AUTH_REDIRECT } from "@/lib/auth-client";
 import { AuthHeader } from "@/components/auth-header";
+import { NativeServerPicker } from "@/components/server-picker";
 import {
   consumeSessionRevokedNotice,
   type SessionRevokedNotice,
@@ -62,6 +63,9 @@ export default function LoginPage() {
           title="Log in"
           subtitle="Enter your credentials to access your account"
         />
+
+        {/* Renders nothing on web — the web app has no server to choose. */}
+        <NativeServerPicker />
 
         {revoked && (
           <div
