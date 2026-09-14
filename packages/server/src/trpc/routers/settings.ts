@@ -159,7 +159,7 @@ export const settingsRouter = router({
     }),
 
   /** The workspace's issuer profile; the empty profile before the first save. */
-  businessProfile: workspaceProcedure.query(
+  businessProfile: workspaceProcedure.input(workspaceScopeSchema).query(
     async ({ ctx }): Promise<BusinessProfile> => {
       assertMayReadBusinessProfile(ctx);
       return getBusinessProfile(ctx.workspaceId);
