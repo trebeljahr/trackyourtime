@@ -8,6 +8,8 @@ import type { MaxDurationSettings } from "@starter/shared/types";
 import { UserPreferencesModel } from "../models/Settings.js";
 import { Profile } from "../models/Profile.js";
 import { TimeEntry } from "../models/TimeEntry.js";
+import { WebhookDelivery } from "../models/WebhookDelivery.js";
+import { WebhookSubscription } from "../models/WebhookSubscription.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { currentEntry, personReach } from "../services/entries/timer.js";
 import { enforceMaxEntryDuration } from "../services/runaway.js";
@@ -141,6 +143,30 @@ describe("runaway-reminder job", { skip: skipWithoutDatabase }, () => {
     assert.equal(entry?.end?.toISOString(), NOW.toISOString());
     assert.equal(entry?.runaway?.action, "stopped");
     assert.equal(broadcasts.length, 1);
+  });
+
+  it("cap: enqueues entry.stopped for the workspace's webhooks", async () => {
+    await givenSettings({ maxHours: 8, behavior: "cap" });
+    const id = await givenRunning(10);
+    await WebhookSubscription.create({
+      workspaceId: WORKSPACE,
+      createdBy: ALICE,
+      url: "https://hooks.example.com/tracktime",
+      secret: "whsec_test",
+      events: ["entry.stopped"],
+    });
+
+    await runRunawayReminders(NOW, fakes().deps);
+    await settle();
+
+    const deliveries = await WebhookDelivery.find({ workspaceId: WORKSPACE }).lean();
+    assert.deepEqual(
+      deliveries.map((d) => [
+        d.event,
+        d.envelope.data.kind === "entry" ? d.envelope.data.entry.id : null,
+      ]),
+      [["entry.stopped", id]],
+    );
   });
 
   it("does nothing to a timer under its limit", async () => {

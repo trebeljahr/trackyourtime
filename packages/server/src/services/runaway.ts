@@ -78,6 +78,7 @@ import {
 } from "../models/TimeEntry.js";
 import { publishSync } from "../ws/sync.js";
 import { finalizeStop } from "./entry-stop.js";
+import { emitWebhookEvent } from "./webhooks/emit.js";
 
 export type GuardOutcome =
   | { kind: "none" }
@@ -182,6 +183,10 @@ const run = async (
 
     const entry = toClientTimeEntry(flagged);
     publish(running.workspaceId, { kind: "entry.upserted", entry });
+    emitWebhookEvent(running.workspaceId, "entry.updated", {
+      kind: "entry",
+      entry,
+    });
     return { kind: "flagged", entry };
   }
 
@@ -191,6 +196,13 @@ const run = async (
   if (!stopped) return { kind: "none" };
 
   publish(running.workspaceId, { kind: "timer.stopped", entry: stopped });
+  // Every other stop tells integrations; a cap made by the scheduler, with
+  // nobody at a client, is the stop they are least likely to learn of
+  // otherwise.
+  emitWebhookEvent(running.workspaceId, "entry.stopped", {
+    kind: "entry",
+    entry: stopped,
+  });
   return { kind: "ended", entry: stopped };
 };
 
