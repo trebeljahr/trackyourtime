@@ -161,10 +161,13 @@ describe("auth.ts email guards", () => {
     const sends = source.match(/await sendEmail\(/g) ?? [];
     // The floor first: comparing two counts alone passes on an auth.ts with
     // no sends left in it at all, which is the state where auth mail is most
-    // broken. Three is what exists today — reset, verification, invitation.
+    // broken. Two is what exists today — reset and verification. The
+    // invitation email moved to services/membership/invitations.ts, which
+    // takes the same predicate as a dependency (`emailConfigured`) and is
+    // pinned in invitations.test.ts.
     assert.ok(
-      sends.length >= 3,
-      `auth.ts should send reset, verification and invitation mail; found ${sends.length} sendEmail calls`,
+      sends.length >= 2,
+      `auth.ts should send reset and verification mail; found ${sends.length} sendEmail calls`,
     );
     assert.equal(
       guards.length,

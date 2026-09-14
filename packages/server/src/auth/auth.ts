@@ -8,9 +8,10 @@ import { env, getTrustedOrigins } from "../config/env.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { isEmailDeliveryConfigured, sendEmail } from "../services/email.js";
 import {
-  accountDeletionOptions,
-  recordDeletionPassword,
-} from "./account-deletion.js";
+  authBeforeHook,
+  organizationPluginOptions,
+} from "../services/membership/organization-lockdown.js";
+import { accountDeletionOptions } from "./account-deletion.js";
 import { DEVICE_FLOW_CLIENT_IDS } from "./client-label.js";
 import { createPersonalWorkspace } from "./personal-workspace.js";
 import {
@@ -131,7 +132,17 @@ export async function initAuth(): Promise<void> {
     },
 
     hooks: {
-      before: recordDeletionPassword,
+      /**
+       * One `before` hook for the whole instance, so each step is a plain
+       * call in a fixed order:
+       *
+       *  1. `/organization/*` over HTTP answers 404. The plugin's endpoints
+       *     write only its own tables, never `WorkspaceMember`, and accept
+       *     roles like "admin,owner"; membership is driven through tRPC.
+       *     See `services/membership/organization-lockdown.ts`.
+       *  2. `/delete-user` remembers whether a password was sent.
+       */
+      before: authBeforeHook,
     },
 
     socialProviders: {
@@ -195,14 +206,16 @@ export async function initAuth(): Promise<void> {
       bearer(),
 
       /**
-       * RFC 8628 device flow, for clients where typing a password is wrong:
-       * Raycast and the CLI show a short code, the user approves it at
-       * /device in an already-signed-in browser.
-       */
-      /**
        * Workspaces. One organization IS one tracktime workspace — the plugin
-       * owns identity, membership, invitations and roles, while `workspaceId`
-       * on the domain collections is what actually scopes data.
+       * owns identity, membership, invitations and roles as TABLES, while
+       * `workspaceId` on the domain collections is what actually scopes data.
+       *
+       * Its HTTP endpoints are closed (the `before` hook above answers 404 to
+       * every `/organization/*` request). Invitations, role changes, removal,
+       * leaving and ownership transfer go through the tRPC routers, which
+       * write this plugin's `member`/`invitation` rows AND the app's
+       * `WorkspaceMember` — see `services/membership/`. So there is no
+       * `sendInvitationEmail` here: the plugin never sends one.
        *
        * `teams` stays OFF deliberately. The plugin's teams are a SECOND
        * nesting level inside an organization; tracktime's ownership scope is
@@ -210,41 +223,16 @@ export async function initAuth(): Promise<void> {
        * two pickers in every UI — including a 360px extension popup — for a
        * grouping nobody has asked for. `teamId` is additive if that changes.
        */
-      organization({
-        // Personal workspaces are created for their owner by the signup hook
-        // below, so the creator is always "owner".
-        creatorRole: "owner",
-        async sendInvitationEmail({
-          email,
-          invitation,
-          organization: org,
-          inviter,
-        }: {
-          email: string;
-          invitation: { id: string };
-          organization: { name: string };
-          inviter: { user: { name?: string; email: string } };
-        }) {
-          const url = `${env.FRONTEND_URL.replace(/\/$/, "")}/invite/${invitation.id}`;
-          const who = inviter.user.name || inviter.user.email;
-          if (!isEmailDeliveryConfigured()) {
-            logAuthUrl("Invitation", email, url);
-            return;
-          }
-          try {
-            await sendEmail({
-              to: email,
-              subject: `${who} invited you to ${org.name}`,
-              text: `${who} invited you to join ${org.name} on Track Your Time: ${url}`,
-              html: `<p>${who} invited you to join <strong>${org.name}</strong> on Track Your Time.</p><p><a href="${url}">Accept the invitation</a></p>`,
-            });
-          } catch (error) {
-            logAuthUrl("Invitation", email, url);
-            throw error;
-          }
-        },
-      }),
+      // Options (creator role, no organization deletion, invitation
+      // lifetime) live beside the lockdown, so the integration test runs the
+      // same ones.
+      organization(organizationPluginOptions),
 
+      /**
+       * RFC 8628 device flow, for clients where typing a password is wrong:
+       * Raycast and the CLI show a short code, the user approves it at
+       * /device in an already-signed-in browser.
+       */
       deviceAuthorization({
         expiresIn: "10m",
         interval: "5s",
