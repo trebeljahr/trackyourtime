@@ -4,7 +4,6 @@ import * as React from "react";
 import { FileUp, Loader2, Upload } from "lucide-react";
 import {
   MAX_IMPORT_BYTES,
-  formatDurationShort,
   type ImportColumnOverride,
   type ImportColumnRole,
   type ImportDateOrder,
@@ -23,8 +22,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import { formatDecimal, formatDurationShortFor } from "@/i18n/format";
+import { getActiveLocale } from "@/i18n/locale-store";
+import { translate } from "@/i18n/translate";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
-import { ImportPreviewView, pluralEntries } from "./import-preview";
+import { ImportPreviewView } from "./import-preview";
+import { userErrorMessage } from "@/lib/error-message";
 
 /**
  * What else an import wrote, beside the entries — so a move through a file
@@ -39,30 +43,36 @@ const importReceipt = (result: {
   favoritesCreated: number;
   settingsRestored: boolean;
 }): string | undefined => {
-  const parts = [
-    [result.clientsCreated, "client", "clients"],
-    [result.projectsCreated, "project", "projects"],
-    [result.tasksCreated, "task", "tasks"],
-    [result.tagsCreated, "tag", "tags"],
-    [result.favoritesCreated, "pinned quick start", "pinned quick starts"],
-  ]
-    .filter(([value]) => (value as number) > 0)
-    .map(([value, one, many]) => `${value} ${value === 1 ? one : many}`);
-  if (result.settingsRestored) parts.push("workspace settings");
-  const created = parts.length > 0 ? `Also created: ${parts.join(", ")}.` : "";
+  const t = translate("settings");
+  const counts = [
+    ["clients", result.clientsCreated],
+    ["projects", result.projectsCreated],
+    ["tasks", result.tasksCreated],
+    ["tags", result.tagsCreated],
+    ["favorites", result.favoritesCreated],
+  ] as const;
+  const parts = counts
+    .filter(([, count]) => count > 0)
+    .map(([kind, count]) => t(`data.import.receipt.${kind}`, { count }));
+  if (result.settingsRestored) parts.push(t("data.import.receipt.settings"));
+  const created =
+    parts.length > 0 ? t("data.import.receipt.created", { items: parts.join(", ") }) : "";
   const skipped =
     result.entriesSkipped > 0
-      ? ` ${result.entriesSkipped} ${result.entriesSkipped === 1 ? "entry was" : "entries were"} already here.`
+      ? t("data.import.receipt.skipped", { count: result.entriesSkipped })
       : "";
-  const text = `${created}${skipped}`.trim();
+  const text = `${created} ${skipped}`.trim();
   return text === "" ? undefined : text;
 };
 
 /** File types the picker offers. Anything text-shaped is attempted anyway. */
 const ACCEPT = ".csv,.tsv,.txt,.json,text/csv,text/plain,application/json";
 
+/** "2.5 MB" / "2,5 MB", for a toast produced at call time. */
 const megabytes = (bytes: number): string =>
-  `${(bytes / 1_000_000).toFixed(1)} MB`;
+  translate("settings")("data.import.megabytes", {
+    size: formatDecimal(bytes / 1_000_000, getActiveLocale(), 1),
+  });
 
 type Options = {
   timeZone: string;
@@ -105,6 +115,8 @@ const defaultOptions = (): Options => ({
  */
 export function ImportPanel(): React.JSX.Element {
   const utils = trpc.useUtils();
+  const t = useT("settings");
+  const tc = useT("common");
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const [filename, setFilename] = React.useState<string | null>(null);
@@ -153,7 +165,7 @@ export function ImportPanel(): React.JSX.Element {
       } catch (error) {
         setPreview(null);
         toast.error(
-          error instanceof Error ? error.message : "Could not read that file",
+          userErrorMessage(error, translate("settings")("data.import.toasts.readFailed")),
         );
       }
     },
@@ -164,7 +176,10 @@ export function ImportPanel(): React.JSX.Element {
     async (file: File): Promise<void> => {
       if (file.size > MAX_IMPORT_BYTES) {
         toast.error(
-          `That file is ${megabytes(file.size)}; the limit is ${megabytes(MAX_IMPORT_BYTES)}. Export it in date ranges and import the parts.`,
+          translate("settings")("data.import.toasts.tooLarge", {
+            size: megabytes(file.size),
+            limit: megabytes(MAX_IMPORT_BYTES),
+          }),
         );
         return;
       }
@@ -236,7 +251,10 @@ export function ImportPanel(): React.JSX.Element {
           originId: ORIGIN_ID,
         });
         toast.success(
-          `Imported ${result.entriesCreated} ${result.entriesCreated === 1 ? "entry" : "entries"} — ${formatDurationShort(result.totalSec)} of tracked time.`,
+          translate("settings")("data.import.toasts.imported", {
+            count: result.entriesCreated,
+            duration: formatDurationShortFor(result.totalSec, getActiveLocale()),
+          }),
           {
             description: importReceipt(result),
           },
@@ -253,7 +271,7 @@ export function ImportPanel(): React.JSX.Element {
         ]);
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Could not import that file",
+          userErrorMessage(error, translate("settings")("data.import.toasts.importFailed")),
         );
       }
     })();
@@ -275,13 +293,8 @@ export function ImportPanel(): React.JSX.Element {
   return (
     <Card data-testid="import-panel">
       <CardHeader>
-        <CardTitle>Import your history</CardTitle>
-        <CardDescription>
-          Bring in the time you tracked somewhere else. Export it from the
-          other tool as CSV, drop the file here, and check what it would create
-          before anything is written. A Track Your Time export (CSV or JSON) works
-          too.
-        </CardDescription>
+        <CardTitle>{t("data.import.title")}</CardTitle>
+        <CardDescription>{t("data.import.description")}</CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
@@ -309,7 +322,7 @@ export function ImportPanel(): React.JSX.Element {
             {filename ? (
               <span className="font-medium">{filename}</span>
             ) : (
-              "Drop a CSV or JSON export here"
+              t("data.import.dropzone")
             )}
           </p>
           <Button
@@ -325,7 +338,9 @@ export function ImportPanel(): React.JSX.Element {
             ) : (
               <Upload className="size-4" />
             )}
-            {filename ? "Choose a different file" : "Choose a file"}
+            {filename
+              ? t("data.import.chooseDifferent")
+              : t("data.import.choose")}
           </Button>
           <input
             ref={inputRef}
@@ -345,10 +360,9 @@ export function ImportPanel(): React.JSX.Element {
             <div className="space-y-3 rounded-md border p-3">
               <label className="flex items-center justify-between gap-4 text-sm">
                 <span>
-                  Skip entries already here
+                  {t("data.import.options.skipDuplicates.title")}
                   <span className="block text-xs text-muted-foreground">
-                    Lets you re-import an overlapping export without doubling
-                    anything.
+                    {t("data.import.options.skipDuplicates.description")}
                   </span>
                 </span>
                 <Switch
@@ -362,9 +376,9 @@ export function ImportPanel(): React.JSX.Element {
               </label>
               <label className="flex items-center justify-between gap-4 text-sm">
                 <span>
-                  Create missing projects, clients, tasks and tags
+                  {t("data.import.options.createMissing.title")}
                   <span className="block text-xs text-muted-foreground">
-                    Off, entries land with only the catalog you already have.
+                    {t("data.import.options.createMissing.description")}
                   </span>
                 </span>
                 <Switch
@@ -377,10 +391,9 @@ export function ImportPanel(): React.JSX.Element {
               {preview.sections.settings ? (
                 <label className="flex items-center justify-between gap-4 text-sm">
                   <span>
-                    Restore workspace settings
+                    {t("data.import.options.restoreSettings.title")}
                     <span className="block text-xs text-muted-foreground">
-                      Currency, rates and week start from the file replace
-                      this workspace&apos;s.
+                      {t("data.import.options.restoreSettings.description")}
                     </span>
                   </span>
                   <Switch
@@ -396,10 +409,11 @@ export function ImportPanel(): React.JSX.Element {
               {preview.sections.favorites > 0 ? (
                 <label className="flex items-center justify-between gap-4 text-sm">
                   <span>
-                    Restore {preview.sections.favorites} pinned quick start
-                    {preview.sections.favorites === 1 ? "" : "s"}
+                    {t("data.import.options.restoreFavorites.title", {
+                      count: preview.sections.favorites,
+                    })}
                     <span className="block text-xs text-muted-foreground">
-                      Pinned to your tracker, not to anyone else&apos;s.
+                      {t("data.import.options.restoreFavorites.description")}
                     </span>
                   </span>
                   <Switch
@@ -414,9 +428,9 @@ export function ImportPanel(): React.JSX.Element {
               ) : null}
               <label className="flex items-center justify-between gap-4 text-sm">
                 <span>
-                  Treat unmarked entries as billable
+                  {t("data.import.options.defaultBillable.title")}
                   <span className="block text-xs text-muted-foreground">
-                    Only used for rows whose file says nothing either way.
+                    {t("data.import.options.defaultBillable.description")}
                   </span>
                 </span>
                 <Switch
@@ -443,7 +457,7 @@ export function ImportPanel(): React.JSX.Element {
       {preview ? (
         <CardFooter className="justify-end gap-2">
           <Button type="button" variant="ghost" onClick={reset} disabled={busy}>
-            Cancel
+            {tc("actions.cancel")}
           </Button>
           <Button
             type="button"
@@ -454,7 +468,7 @@ export function ImportPanel(): React.JSX.Element {
             {commit.isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : null}
-            Import {preview.readyRows} {pluralEntries(preview.readyRows)}
+            {t("data.import.commit", { count: preview.readyRows })}
           </Button>
         </CardFooter>
       ) : null}

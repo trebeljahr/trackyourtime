@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { translate } from "@/i18n/translate";
+import { useT } from "@/i18n/use-t";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 
@@ -35,17 +37,22 @@ type AuthResult = {
   error?: { error?: string; error_description?: string; message?: string } | null;
 };
 
-const ERROR_COPY: Record<string, string> = {
-  invalid_request: "That code is not valid or has already been used.",
-  expired_token: "That code has expired. Start the connection again on your device.",
-  access_denied: "That code was already declined.",
-  device_code_already_processed: "That code has already been used.",
-  unauthorized: "Sign in again, then re-enter the code.",
-};
+/** RFC 8628 error code → catalog key. */
+const ERROR_KEYS = {
+  invalid_request: "device.errors.invalidRequest",
+  expired_token: "device.errors.expiredToken",
+  access_denied: "device.errors.accessDenied",
+  device_code_already_processed: "device.errors.alreadyProcessed",
+  unauthorized: "device.errors.unauthorized",
+} as const;
 
+const isKnownError = (code: string): code is keyof typeof ERROR_KEYS =>
+  Object.hasOwn(ERROR_KEYS, code);
+
+/** Called when the error happens, so it reads the language active right then. */
 const readError = (result: AuthResult, fallback: string): string => {
   const code = result.error?.error;
-  if (code && ERROR_COPY[code]) return ERROR_COPY[code];
+  if (code && isKnownError(code)) return translate("settings")(ERROR_KEYS[code]);
   return result.error?.error_description ?? result.error?.message ?? fallback;
 };
 
@@ -56,6 +63,7 @@ const readError = (result: AuthResult, fallback: string): string => {
  */
 export function DeviceApproval(): React.JSX.Element {
   const utils = trpc.useUtils();
+  const t = useT("settings");
   const prefill = useSearchParams().get("user_code") ?? "";
   const [code, setCode] = React.useState(prefill);
   const [outcome, setOutcome] = React.useState<Outcome>({ kind: "idle" });
@@ -85,7 +93,7 @@ export function DeviceApproval(): React.JSX.Element {
       if (claim.error) {
         setOutcome({
           kind: "error",
-          message: readError(claim, "That code is not valid or has expired."),
+          message: readError(claim, translate("settings")("device.errors.claimFailed")),
         });
         return;
       }
@@ -101,9 +109,11 @@ export function DeviceApproval(): React.JSX.Element {
           kind: "error",
           message: readError(
             result,
-            action === "approve"
-              ? "Could not approve that code."
-              : "Could not decline that code.",
+            translate("settings")(
+              action === "approve"
+                ? "device.errors.approveFailed"
+                : "device.errors.denyFailed",
+            ),
           ),
         });
         return;
@@ -115,7 +125,7 @@ export function DeviceApproval(): React.JSX.Element {
     } catch {
       setOutcome({
         kind: "error",
-        message: "Could not reach the server. Check your connection.",
+        message: translate("settings")("device.errors.network"),
       });
     }
   };
@@ -139,11 +149,8 @@ export function DeviceApproval(): React.JSX.Element {
           <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <MonitorSmartphone className="size-5" />
           </span>
-          <CardTitle>Connect a device</CardTitle>
-          <CardDescription>
-            Enter the code shown by Raycast, the CLI or whichever app is waiting
-            to connect. Approving signs it in as you.
-          </CardDescription>
+          <CardTitle>{t("device.title")}</CardTitle>
+          <CardDescription>{t("device.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -154,7 +161,7 @@ export function DeviceApproval(): React.JSX.Element {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="device-user-code">Code</Label>
+              <Label htmlFor="device-user-code">{t("device.code")}</Label>
               <Input
                 id="device-user-code"
                 value={code}
@@ -167,8 +174,7 @@ export function DeviceApproval(): React.JSX.Element {
                 data-testid="device-code-input"
               />
               <p className="text-xs text-muted-foreground">
-                Only approve a code you are looking at right now, on a device you
-                control.
+                {t("device.codeHint")}
               </p>
             </div>
 
@@ -190,7 +196,7 @@ export function DeviceApproval(): React.JSX.Element {
                 data-testid="device-approve"
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                Approve
+                {t("device.approve")}
               </Button>
               <Button
                 type="button"
@@ -199,7 +205,7 @@ export function DeviceApproval(): React.JSX.Element {
                 onClick={() => void run("deny")}
                 data-testid="device-deny"
               >
-                Decline
+                {t("device.decline")}
               </Button>
             </div>
           </form>
@@ -213,6 +219,7 @@ type ResultCardProps = { approved: boolean; onReset: () => void };
 
 function ResultCard({ approved, onReset }: ResultCardProps): React.JSX.Element {
   const Icon = approved ? CheckCircle2 : XCircle;
+  const t = useT("settings");
   return (
     <div className="mx-auto w-full max-w-md" data-testid="device-approval-result">
       <Card>
@@ -226,19 +233,21 @@ function ResultCard({ approved, onReset }: ResultCardProps): React.JSX.Element {
           >
             <Icon className="size-5" />
           </span>
-          <CardTitle>{approved ? "Device connected" : "Code declined"}</CardTitle>
+          <CardTitle>
+            {approved ? t("device.result.approvedTitle") : t("device.result.deniedTitle")}
+          </CardTitle>
           <CardDescription>
             {approved
-              ? "You can go back to that app — it is signed in and syncing. It now appears under Settings → Devices, where you can sign it out any time."
-              : "Nothing was connected. If you did not start this, no action is needed."}
+              ? t("device.result.approvedDescription")
+              : t("device.result.deniedDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex gap-2">
           <Button asChild data-testid="device-result-settings">
-            <Link href="/settings">Open settings</Link>
+            <Link href="/settings">{t("device.result.openSettings")}</Link>
           </Button>
           <Button variant="ghost" onClick={onReset} data-testid="device-result-again">
-            Enter another code
+            {t("device.result.again")}
           </Button>
         </CardContent>
       </Card>

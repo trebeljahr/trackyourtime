@@ -9,8 +9,8 @@ import type {
 
 import { Dialog } from "@/components/ui/dialog";
 import {
-  DELIVERY_STATUS_LABELS,
   deliveryDetail,
+  deliveryStatusBadge,
   webhookHealth,
 } from "./webhooks";
 import {
@@ -145,7 +145,7 @@ describe("deliveryDetail", () => {
     expect(
       deliveryDetail(delivery({ status: "skipped_visibility", responseStatus: null })),
     ).toMatch(/cannot see/i);
-    expect(DELIVERY_STATUS_LABELS.skipped_visibility.label).toBe("Not sent");
+    expect(deliveryStatusBadge("skipped_visibility").label).toBe("Not sent");
   });
 
   it("prefers the error over the response code", () => {

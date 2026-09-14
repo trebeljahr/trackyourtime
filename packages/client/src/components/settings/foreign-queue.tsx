@@ -21,14 +21,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
+import { translate } from "@/i18n/translate";
+import { useFormat, type LocaleFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { useOfflineQueueState } from "@/providers/offline-queue-provider";
 import {
   discardForeignQueued,
   listForeignQueued,
   type ForeignQueuedRow,
+  type OfflineOp,
 } from "@/lib/offline";
 import { getAbsoluteApiOrigin } from "@/lib/api-origin";
-import { useT } from "@/i18n/use-t";
 
 /**
  * Unsynced work left on this device by an account that is not signed in.
@@ -58,42 +61,30 @@ import { useT } from "@/i18n/use-t";
  * get their own group and their own confirmation.
  */
 
-const OP_LABELS: Record<string, string> = {
-  "entries.start": "Started a timer",
-  "entries.stop": "Stopped a timer",
-  "entries.create": "Logged time",
-  "entries.update": "Edited an entry",
-  "entries.remove": "Deleted an entry",
-  "entries.discard": "Discarded a timer",
-};
+/**
+ * Catalog key per op. The ops themselves are dotted tRPC paths, which cannot
+ * be message keys; `describeQueuedMutation` in core stays structured, so the
+ * words are chosen here and Raycast keeps its own.
+ */
+const OP_KEYS = {
+  "entries.start": "foreignQueue.ops.start",
+  "entries.stop": "foreignQueue.ops.stop",
+  "entries.create": "foreignQueue.ops.create",
+  "entries.update": "foreignQueue.ops.update",
+  "entries.remove": "foreignQueue.ops.remove",
+  "entries.discard": "foreignQueue.ops.discard",
+} as const satisfies Record<OfflineOp, string>;
 
-const label = (row: ForeignQueuedRow): string =>
-  row.op === null ? "Unrecognised change" : (OP_LABELS[row.op] ?? row.op);
-
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
-const formatAt = (iso: string): string => {
-  const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? "Unknown time" : dateFormatter.format(at);
-};
-
-/** "21 Aug" or "21–22 Aug" — enough to recognise, short enough for a sentence. */
-const formatRange = (rows: ForeignQueuedRow[]): string | null => {
+/** "21 Aug" or "21 Aug – 22 Aug" — enough to recognise, short enough for a sentence. */
+const formatRange = (rows: ForeignQueuedRow[], f: LocaleFormat): string | null => {
   const times = rows
     .map((row) => new Date(row.at).getTime())
     .filter((time) => !Number.isNaN(time))
     .sort((a, b) => a - b);
   if (times.length === 0) return null;
 
-  const short = new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-  });
-  const first = short.format(new Date(times[0]));
-  const last = short.format(new Date(times[times.length - 1]));
+  const first = f.date(times[0], "dayMonth");
+  const last = f.date(times[times.length - 1], "dayMonth");
   return first === last ? first : `${first} – ${last}`;
 };
 
@@ -138,12 +129,11 @@ const groupRows = (rows: ForeignQueuedRow[]): Group[] => {
   return [...groups.values()].sort((a, b) => groupRank(a) - groupRank(b));
 };
 
-const changes = (count: number): string =>
-  `${count} change${count === 1 ? "" : "s"}`;
-
 export function ForeignQueuePanel(): React.JSX.Element | null {
   const { foreign } = useOfflineQueueState();
   const t = useT("settings");
+  const tc = useT("common");
+  const f = useFormat();
   const [rows, setRows] = React.useState<ForeignQueuedRow[]>([]);
   const [confirming, setConfirming] = React.useState<Group | null>(null);
   const [discarding, setDiscarding] = React.useState(false);
@@ -168,6 +158,13 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
   const groups = groupRows(rows);
   const here = serverLabel(getAbsoluteApiOrigin());
 
+  const label = (row: ForeignQueuedRow): string =>
+    row.op === null ? t("foreignQueue.ops.unknown") : t(OP_KEYS[row.op]);
+
+  const formatAt = (iso: string): string =>
+    f.date(iso, { dateStyle: "medium", timeStyle: "short" }) ||
+    t("foreignQueue.unknownTime");
+
   const discard = async (group: Group): Promise<void> => {
     setDiscarding(true);
     try {
@@ -176,18 +173,18 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
       );
       setConfirming(null);
       toast.success(
-        removed === 1
-          ? "Discarded 1 unsynced change"
-          : `Discarded ${removed} unsynced changes`,
+        translate("settings")("foreignQueue.toasts.discarded", { count: removed }),
       );
     } catch {
-      toast.error("Could not discard those changes");
+      toast.error(translate("settings")("foreignQueue.toasts.discardFailed"));
     } finally {
       setDiscarding(false);
     }
   };
 
-  const confirmRange = confirming ? formatRange(confirming.rows) : null;
+  const confirmRange = confirming ? formatRange(confirming.rows, f) : null;
+  const confirmServer =
+    confirming?.server ? serverLabel(confirming.server) : null;
   const workspaceLabel = (workspace: { name: string | null }): string =>
     workspace.name ?? t("foreignQueue.leftWorkspace");
 
@@ -196,15 +193,15 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
       {groups.length === 0 ? (
         // The count arrived before the rows did.
         <CardHeader>
-          <CardTitle>Unsynced data on this device</CardTitle>
+          <CardTitle>{t("foreignQueue.titleDevice")}</CardTitle>
           <CardDescription>
-            {changes(foreign)} queued on this device cannot be sent from here.
+            {t("foreignQueue.pendingRows", { count: foreign })}
           </CardDescription>
         </CardHeader>
       ) : null}
 
       {groups.map((group) => {
-        const range = formatRange(group.rows);
+        const range = formatRange(group.rows, f);
         const count = group.rows.length;
         const there = group.server === null ? null : serverLabel(group.server);
         return (
@@ -230,12 +227,12 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
                 ) : there === null ? (
                   <>
                     <UserRoundX className="size-4" />
-                    Unsynced data from another account
+                    {t("foreignQueue.title")}
                   </>
                 ) : (
                   <>
                     <ServerOff className="size-4" />
-                    Unsynced data for {there}
+                    {t("foreignQueue.titleServer", { server: there })}
                   </>
                 )}
               </CardTitle>
@@ -247,22 +244,21 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
                   })
                 ) : there === null ? (
                   <>
-                    {changes(count)} queued on this device by an account that
-                    is not signed in{range ? `, from ${range}` : ""}. They were
-                    never sent to a server, and they are not replayed under your
-                    account — that would file somebody else&apos;s work into
-                    your workspace. Sign in as that account on this device to
-                    sync them, or discard them here.
+                    {range
+                      ? t("foreignQueue.summaryWithRange", { count, range })
+                      : t("foreignQueue.summary", { count })}{" "}
+                    {t("foreignQueue.explanation")}
                   </>
                 ) : (
                   <>
-                    {changes(count)} queued on this device while it used{" "}
-                    {there}
-                    {range ? `, from ${range}` : ""}. They were never sent, and
-                    they are not sent to {here} — that would file them on a
-                    server they were not made for. Switch this device back to{" "}
-                    {there} on the sign-in screen to sync them, or discard them
-                    here.
+                    {range
+                      ? t("foreignQueue.serverSummaryWithRange", {
+                          count,
+                          server: there,
+                          range,
+                        })
+                      : t("foreignQueue.serverSummary", { count, server: there })}{" "}
+                    {t("foreignQueue.serverExplanation", { server: there, here })}
                   </>
                 )}
               </CardDescription>
@@ -296,7 +292,7 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
                 onClick={() => setConfirming(group)}
                 data-testid="foreign-queue-discard"
               >
-                Discard {changes(count)}
+                {t("foreignQueue.discard", { count })}
               </Button>
             </CardContent>
           </div>
@@ -312,27 +308,25 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
         <DialogContent data-testid="foreign-queue-confirm">
           <DialogHeader>
             <DialogTitle>
-              Discard {confirming ? confirming.rows.length : 0} unsynced change
-              {confirming?.rows.length === 1 ? "" : "s"}?
+              {t("foreignQueue.confirm.title", {
+                count: confirming ? confirming.rows.length : 0,
+              })}
             </DialogTitle>
             <DialogDescription>
-              {confirming?.workspace ? (
-                t("foreignQueue.confirmLeft", {
-                  workspace: workspaceLabel(confirming.workspace),
-                })
-              ) : (
-              <>
-              This deletes work tracked{confirmRange ? ` on ${confirmRange}` : ""}{" "}
-              that no server has ever received. It cannot be recovered — not by{" "}
-              {confirming?.server
-                ? `switching back to ${serverLabel(confirming.server)}`
-                : "that account signing in here"}
-              , and not from a backup.{" "}
-              {confirming?.server
-                ? `Switch this device back to ${serverLabel(confirming.server)} instead if it should be kept.`
-                : "Sign in as that account on this device instead if it should be kept."}
-              </>
-              )}
+              {confirming?.workspace
+                ? t("foreignQueue.confirmLeft", {
+                    workspace: workspaceLabel(confirming.workspace),
+                  })
+                : confirmServer
+                  ? confirmRange
+                    ? t("foreignQueue.confirm.serverDescriptionWithRange", {
+                        range: confirmRange,
+                        server: confirmServer,
+                      })
+                    : t("foreignQueue.confirm.serverDescription", { server: confirmServer })
+                  : confirmRange
+                    ? t("foreignQueue.confirm.descriptionWithRange", { range: confirmRange })
+                    : t("foreignQueue.confirm.description")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -342,7 +336,7 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
               onClick={() => setConfirming(null)}
               data-testid="foreign-queue-cancel"
             >
-              Cancel
+              {tc("actions.cancel")}
             </Button>
             <Button
               type="button"
@@ -353,7 +347,7 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
               }}
               data-testid="foreign-queue-confirm-discard"
             >
-              Delete permanently
+              {t("foreignQueue.confirm.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

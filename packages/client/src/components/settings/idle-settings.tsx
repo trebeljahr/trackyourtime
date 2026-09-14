@@ -5,8 +5,6 @@ import {
   IDLE_BEHAVIORS,
   MAX_IDLE_THRESHOLD_MINUTES,
   MIN_IDLE_THRESHOLD_MINUTES,
-  idleBehaviorDescription,
-  idleBehaviorLabel,
   type IdleBehavior,
 } from "@starter/shared";
 
@@ -22,16 +20,11 @@ import { NumberField } from "@/components/settings/number-field";
 import { OptionGroup } from "@/components/settings/option-group";
 import { SaveIndicator, SettingRow } from "@/components/settings/setting-row";
 import type { WorkspaceSettingsController } from "@/components/settings/use-workspace-settings";
+import { useT } from "@/i18n/use-t";
 
 export type IdleSettingsPanelProps = {
   controller: WorkspaceSettingsController;
 };
-
-const BEHAVIOR_OPTIONS = IDLE_BEHAVIORS.map((behavior) => ({
-  value: behavior,
-  label: idleBehaviorLabel(behavior),
-  testId: `idle-behavior-${behavior}`,
-}));
 
 /**
  * What happens when a device notices nobody is at it.
@@ -46,37 +39,44 @@ export function IdleSettingsPanel({
 }: IdleSettingsPanelProps): React.JSX.Element {
   const { settings, saveState, save } = controller;
   const idle = settings.idle;
+  const t = useT("settings");
+  const tc = useT("common");
+
+  // Labels live in the settings catalog rather than @starter/shared's English
+  // `idleBehaviorLabel`, which Raycast keeps using.
+  const behaviorOptions = IDLE_BEHAVIORS.map((behavior) => ({
+    value: behavior,
+    label: t(`idle.behaviors.${behavior}.label`),
+    testId: `idle-behavior-${behavior}`,
+  }));
 
   return (
     <Card data-testid="settings-idle">
       <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1.5">
-          <CardTitle>Idle detection</CardTitle>
-          <CardDescription>
-            Notice when you have stopped working and decide what the running
-            timer should do about it.
-          </CardDescription>
+          <CardTitle>{t("idle.title")}</CardTitle>
+          <CardDescription>{t("idle.description")}</CardDescription>
         </div>
         <SaveIndicator state={saveState} testId="idle-save-indicator" />
       </CardHeader>
       <CardContent className="divide-y divide-border py-0">
         <SettingRow
-          title="Detect idle time"
-          description="Each device watches its own input. A device that did not start the timer never touches it, so a sleeping laptop cannot pause work you are doing somewhere else."
+          title={t("idle.enabled.title")}
+          description={t("idle.enabled.description")}
           testId="setting-idle-enabled"
         >
           <Switch
             checked={idle.enabled}
             onCheckedChange={(enabled) => save({ idle: { enabled } })}
-            aria-label="Detect idle time"
+            aria-label={t("idle.enabled.title")}
             data-testid="idle-enabled"
           />
         </SettingRow>
 
         <SettingRow
-          title="Idle after"
+          title={t("idle.threshold.title")}
           htmlFor="idle-threshold"
-          description="How long with no input before you count as away."
+          description={t("idle.threshold.description")}
           testId="setting-idle-threshold"
         >
           <NumberField
@@ -85,31 +85,31 @@ export function IdleSettingsPanel({
             onCommit={(thresholdMinutes) => save({ idle: { thresholdMinutes } })}
             min={MIN_IDLE_THRESHOLD_MINUTES}
             max={MAX_IDLE_THRESHOLD_MINUTES}
-            suffix="min"
+            suffix={tc("units.minute")}
             disabled={!idle.enabled}
             testId="idle-threshold"
-            aria-label="Idle threshold in minutes"
+            aria-label={t("idle.threshold.ariaLabel")}
           />
         </SettingRow>
 
         <SettingRow
-          title="When you go idle"
-          description={idleBehaviorDescription(idle.behavior)}
+          title={t("idle.behavior.title")}
+          description={t(`idle.behaviors.${idle.behavior}.description`)}
           testId="setting-idle-behavior"
         >
           <OptionGroup
-            label="When you go idle"
+            label={t("idle.behavior.title")}
             className="flex-wrap"
             value={idle.behavior}
-            options={BEHAVIOR_OPTIONS}
+            options={behaviorOptions}
             disabled={!idle.enabled}
             onChange={(behavior: IdleBehavior) => save({ idle: { behavior } })}
           />
         </SettingRow>
 
         <SettingRow
-          title="Treat a locked screen as away"
-          description="Locking is deliberate, so it does not have to wait out the threshold first."
+          title={t("idle.lock.title")}
+          description={t("idle.lock.description")}
           testId="setting-idle-lock"
         >
           <Switch
@@ -118,18 +118,18 @@ export function IdleSettingsPanel({
               save({ idle: { lockIsImmediate } })
             }
             disabled={!idle.enabled}
-            aria-label="Treat a locked screen as away"
+            aria-label={t("idle.lock.title")}
             data-testid="idle-lock-immediate"
           />
         </SettingRow>
 
         <SettingRow
-          title="Per-project override"
-          description="Projects can pick their own behaviour in the project dialog — set “Keep running” on the ones where no typing is normal, like meetings or reading."
+          title={t("idle.projects.title")}
+          description={t("idle.projects.description")}
           testId="setting-idle-projects"
         >
           <span className="text-sm text-muted-foreground">
-            Catalog → Projects
+            {t("idle.projects.location")}
           </span>
         </SettingRow>
       </CardContent>

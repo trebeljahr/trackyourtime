@@ -23,8 +23,11 @@ import { DeleteAccountCard } from "@/components/settings/delete-account";
 import { SettingRow } from "@/components/settings/setting-row";
 import { TwoFactorRow } from "@/components/settings/two-factor";
 import { useAuth } from "@/hooks/use-auth";
+import { useT } from "@/i18n/use-t";
+import { translate } from "@/i18n/translate";
 import { accountHasPassword, signOut } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
+import { userErrorMessage } from "@/lib/error-message";
 
 /** Identity, credentials, two-factor, email notifications, subscription status, sign-out and deletion. */
 export function AccountSettings({
@@ -34,6 +37,8 @@ export function AccountSettings({
   onShowExport?: () => void;
 } = {}): React.JSX.Element {
   const router = useRouter();
+  const t = useT("settings");
+  const tc = useT("common");
   const { user } = useAuth();
   const utils = trpc.useUtils();
   const profileQuery = trpc.profile.get.useQuery();
@@ -77,7 +82,7 @@ export function AccountSettings({
       if (context?.previous) {
         utils.profile.get.setData(undefined, context.previous);
       }
-      toast.error(error.message || "Could not update your profile");
+      toast.error(userErrorMessage(error, translate("settings")("account.toasts.profileFailed")));
     },
     onSettled: () => {
       void utils.profile.get.invalidate();
@@ -98,7 +103,7 @@ export function AccountSettings({
         router.replace("/login");
       })
       .catch(() => {
-        toast.error("Could not sign out. Try again.");
+        toast.error(translate("settings")("account.toasts.signOutFailed"));
         setSigningOut(false);
       });
   };
@@ -109,15 +114,13 @@ export function AccountSettings({
     <div className="space-y-6">
       <Card data-testid="settings-account">
         <CardHeader>
-          <CardTitle>Account</CardTitle>
-          <CardDescription>
-            The identity every client, project and time entry is scoped to.
-          </CardDescription>
+          <CardTitle>{t("account.title")}</CardTitle>
+          <CardDescription>{t("account.description")}</CardDescription>
         </CardHeader>
         <CardContent className="divide-y divide-border py-0">
           <SettingRow
-            title="Signed in as"
-            description={user?.email ?? "Loading…"}
+            title={t("account.signedInAs")}
+            description={user?.email ?? tc("status.loading")}
             testId="setting-identity"
           >
             <div className="flex items-center gap-3 sm:justify-end">
@@ -144,8 +147,8 @@ export function AccountSettings({
           <TwoFactorRow hasPassword={hasPassword} />
 
           <SettingRow
-            title="Email notifications"
-            description="Account emails, including one reminder for a timer left running too long."
+            title={t("account.notifications.title")}
+            description={t("account.notifications.description")}
             testId="setting-notifications"
           >
             <Switch
@@ -153,14 +156,14 @@ export function AccountSettings({
               onCheckedChange={(notifications) =>
                 updateProfile.mutate({ preferences: { notifications } })
               }
-              aria-label="Email notifications"
+              aria-label={t("account.notifications.title")}
               data-testid="notifications-toggle"
             />
           </SettingRow>
 
           <SettingRow
-            title="Sign out"
-            description="Ends this session on this device only."
+            title={tc("actions.signOut")}
+            description={t("account.signOut.description")}
             testId="setting-sign-out"
           >
             <Button
@@ -172,7 +175,7 @@ export function AccountSettings({
               data-testid="account-sign-out"
             >
               <LogOut className="size-4" />
-              Sign out
+              {tc("actions.signOut")}
             </Button>
           </SettingRow>
         </CardContent>
@@ -181,9 +184,9 @@ export function AccountSettings({
       {status?.enabled ? (
         <Card data-testid="settings-subscription">
           <CardHeader>
-            <CardTitle>Subscription</CardTitle>
+            <CardTitle>{t("account.subscription.title")}</CardTitle>
             <CardDescription>
-              Manage your subscription and payment methods.
+              {t("account.subscription.description")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -193,7 +196,7 @@ export function AccountSettings({
                 variant="outline"
                 data-testid="manage-billing"
               >
-                Manage billing
+                {t("account.subscription.manage")}
               </Button>
             ) : (
               // Hatchkit scaffolds Stripe before the keys exist; this notice
@@ -204,16 +207,19 @@ export function AccountSettings({
                 data-testid="stripe-unconfigured-notice"
               >
                 <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-                  Stripe is not fully configured
-                  {status.mode ? ` (mode: ${status.mode})` : ""}.
+                  {status.mode
+                    ? t("account.subscription.unconfiguredWithMode", {
+                        mode: status.mode,
+                      })
+                    : t("account.subscription.unconfigured")}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Billing endpoints (checkout, billing portal, webhooks) will
-                  return errors until every Stripe secret has a real value. The
-                  rest of the app is unaffected.
+                  {t("account.subscription.unconfiguredDetail")}
                 </p>
                 <div className="space-y-1 text-sm">
-                  <p className="font-medium">Missing env vars:</p>
+                  <p className="font-medium">
+                    {t("account.subscription.missingKeys")}
+                  </p>
                   <ul className="ml-4 list-disc text-muted-foreground">
                     {status.missingKeys.map((key) => (
                       <li key={key}>
@@ -238,7 +244,7 @@ export function AccountSettings({
                   disabled
                   data-testid="manage-billing-disabled"
                 >
-                  Manage billing (unavailable)
+                  {t("account.subscription.manageUnavailable")}
                 </Button>
               </div>
             )}

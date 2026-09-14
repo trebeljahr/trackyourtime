@@ -24,6 +24,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { translate } from "@/i18n/translate";
+import { useT } from "@/i18n/use-t";
 import {
   accountHasPassword,
   deleteAccount,
@@ -31,13 +33,13 @@ import {
 } from "@/lib/auth-client";
 import { useOfflineQueueState } from "@/providers/offline-queue-provider";
 
-const REFUSALS: Record<AccountDeletionRefusal, string> = {
-  "password-required": "Enter your password to delete your account.",
-  "invalid-password": "That password is not correct. Nothing was deleted.",
-  "session-expired":
-    "For an account without a password, deleting needs a recent sign-in. Sign out, sign in again, then delete within 24 hours.",
-  failed: "Your account could not be deleted, and it still exists. Try again.",
-};
+/** Catalog key per refusal, read when the refusal is shown. */
+const REFUSALS = {
+  "password-required": "deleteAccount.refusals.passwordRequired",
+  "invalid-password": "deleteAccount.refusals.invalidPassword",
+  "session-expired": "deleteAccount.refusals.sessionExpired",
+  failed: "deleteAccount.refusals.failed",
+} as const satisfies Record<AccountDeletionRefusal, string>;
 
 /**
  * Settings → Account → Delete account.
@@ -59,12 +61,14 @@ export function DeleteAccountCard({
   onShowExport?: () => void;
 }): React.JSX.Element {
   const router = useRouter();
+  const t = useT("settings");
+  const tc = useT("common");
   const { user } = useAuth();
   const { pending } = useOfflineQueueState();
   const [open, setOpen] = React.useState(false);
   const [hasPassword, setHasPassword] = React.useState<boolean | null>(null);
   const [answer, setAnswer] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<AccountDeletionRefusal | null>(null);
   const [deleting, setDeleting] = React.useState(false);
 
   React.useEffect(() => {
@@ -107,21 +111,18 @@ export function DeleteAccountCard({
     if (!result.ok) {
       setDeleting(false);
       if (result.reason === "password-required") setHasPassword(true);
-      setError(REFUSALS[result.reason]);
+      setError(result.reason);
       return;
     }
-    toast.success("Your account has been deleted");
+    toast.success(translate("settings")("deleteAccount.toasts.deleted"));
     router.replace("/login");
   };
 
   return (
     <Card className="border-destructive/30" data-testid="settings-danger-zone">
       <CardHeader>
-        <CardTitle className="text-destructive">Delete account</CardTitle>
-        <CardDescription>
-          Deletes your account, signs out every device, and deletes the data
-          you own. This cannot be undone.
-        </CardDescription>
+        <CardTitle className="text-destructive">{t("deleteAccount.title")}</CardTitle>
+        <CardDescription>{t("deleteAccount.description")}</CardDescription>
       </CardHeader>
       <CardContent>
         <Button
@@ -132,7 +133,7 @@ export function DeleteAccountCard({
           data-testid="delete-account"
         >
           <Trash2 className="size-4" />
-          Delete account
+          {t("deleteAccount.title")}
         </Button>
       </CardContent>
 
@@ -140,60 +141,52 @@ export function DeleteAccountCard({
         <DialogContent data-testid="delete-account-dialog">
           <form onSubmit={(event) => void submit(event)} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Delete your account?</DialogTitle>
+              <DialogTitle>{t("deleteAccount.dialog.title")}</DialogTitle>
               <DialogDescription>
-                This permanently deletes {email || "your account"} and signs
-                out every device, including the browser extension, Raycast and
-                the mobile app. It cannot be undone.
+                {email
+                  ? t("deleteAccount.dialog.descriptionWithEmail", { email })
+                  : t("deleteAccount.dialog.description")}
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-3 text-sm" data-testid="delete-account-scope">
               <div>
-                <p className="font-medium">In workspaces only you use, everything is deleted:</p>
+                <p className="font-medium">{t("deleteAccount.dialog.soloTitle")}</p>
                 <p className="text-muted-foreground">
-                  time entries, clients, projects, tasks, tags, pinned quick
-                  starts, invoices, import history, API tokens, webhooks and
-                  workspace settings.
+                  {t("deleteAccount.dialog.soloDetail")}
                 </p>
               </div>
               <div>
-                <p className="font-medium">In workspaces you share, only your own data is deleted:</p>
+                <p className="font-medium">{t("deleteAccount.dialog.sharedTitle")}</p>
                 <p className="text-muted-foreground">
-                  your time entries, pins, API tokens, webhooks and imports.
-                  The workspace, its clients, projects, tasks, tags and invoices
-                  stay, and so do entries already on an invoice. If you are its
-                  last owner, ownership passes to an admin, or else to the
-                  longest-standing member.
+                  {t("deleteAccount.dialog.sharedDetail")}
                 </p>
               </div>
               <p className="text-muted-foreground">
-                Want a copy first?{" "}
-                {onShowExport ? (
-                  <button
-                    type="button"
-                    className="font-medium text-foreground underline underline-offset-4"
-                    onClick={() => {
-                      openChange(false);
-                      onShowExport();
-                    }}
-                    data-testid="delete-account-export"
-                  >
-                    Export your data as JSON
-                  </button>
-                ) : (
-                  "Export your data as JSON from Settings → Data"
-                )}{" "}
-                before you continue.
+                {onShowExport
+                  ? t.rich("deleteAccount.dialog.exportHint", {
+                      link: (chunks) => (
+                        <button
+                          type="button"
+                          className="font-medium text-foreground underline underline-offset-4"
+                          onClick={() => {
+                            openChange(false);
+                            onShowExport();
+                          }}
+                          data-testid="delete-account-export"
+                        >
+                          {chunks}
+                        </button>
+                      ),
+                    })
+                  : t("deleteAccount.dialog.exportHintPlain")}
               </p>
               {pending > 0 ? (
                 <p
                   className="font-medium text-destructive"
                   data-testid="delete-account-unsynced"
                 >
-                  {pending} change{pending === 1 ? "" : "s"} on this device{" "}
-                  {pending === 1 ? "has" : "have"} not synced yet and will be
-                  discarded.
+                  {t("deleteAccount.dialog.unsynced", { count: pending })}
                 </p>
               ) : null}
             </div>
@@ -201,11 +194,13 @@ export function DeleteAccountCard({
             {hasPassword === null ? (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
-                Checking how to confirm…
+                {t("deleteAccount.dialog.checking")}
               </p>
             ) : hasPassword ? (
               <div className="space-y-1.5">
-                <Label htmlFor="delete-account-password">Your password</Label>
+                <Label htmlFor="delete-account-password">
+                  {t("deleteAccount.dialog.password")}
+                </Label>
                 <Input
                   id="delete-account-password"
                   type="password"
@@ -219,7 +214,10 @@ export function DeleteAccountCard({
             ) : (
               <div className="space-y-1.5">
                 <Label htmlFor="delete-account-email">
-                  Type <span className="font-mono">{email}</span> to confirm
+                  {t.rich("deleteAccount.dialog.typeEmail", {
+                    email,
+                    mono: (chunks) => <span className="font-mono">{chunks}</span>,
+                  })}
                 </Label>
                 <Input
                   id="delete-account-email"
@@ -239,7 +237,7 @@ export function DeleteAccountCard({
                 className="text-sm text-destructive"
                 data-testid="delete-account-error"
               >
-                {error}
+                {t(REFUSALS[error])}
               </p>
             ) : null}
 
@@ -251,7 +249,7 @@ export function DeleteAccountCard({
                 disabled={deleting}
                 data-testid="delete-account-cancel"
               >
-                Cancel
+                {tc("actions.cancel")}
               </Button>
               <Button
                 type="submit"
@@ -260,7 +258,7 @@ export function DeleteAccountCard({
                 data-testid="delete-account-confirm"
               >
                 {deleting ? <Loader2 className="size-4 animate-spin" /> : null}
-                Delete account permanently
+                {t("deleteAccount.dialog.confirm")}
               </Button>
             </DialogFooter>
           </form>

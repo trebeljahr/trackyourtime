@@ -18,28 +18,28 @@ import { IdleSettingsPanel } from "@/components/settings/idle-settings";
 import { MaxDurationSettingsPanel } from "@/components/settings/max-duration-settings";
 import { useWorkspaceSettings } from "@/components/settings/use-workspace-settings";
 import { WorkspaceTab } from "@/components/settings/workspace-tab";
+import { useLocale } from "@/i18n/locale-store";
 import { useT } from "@/i18n/use-t";
 
-// `label: null` is translated at render; the other labels predate the catalog.
-const TABS: { value: string; label: string | null }[] = [
-  { value: "general", label: "General" },
-  { value: "workspace", label: null },
-  { value: "billing", label: "Billing" },
-  { value: "idle", label: "Idle" },
-  { value: "limits", label: "Limits" },
-  { value: "data", label: "Data" },
-  { value: "devices", label: "Devices" },
-  { value: "integrations", label: "Integrations" },
-  { value: "account", label: "Account" },
-];
+const TABS = [
+  "general",
+  "workspace",
+  "billing",
+  "idle",
+  "limits",
+  "data",
+  "devices",
+  "integrations",
+  "account",
+] as const;
 
-const TAB_VALUES = new Set(TABS.map((tab) => tab.value));
+const TAB_VALUES = new Set<string>(TABS);
 
 export default function SettingsPage() {
   // One controller for the whole screen: General, Billing, Idle and Limits
   // all write through the same optimistic `settings.update` path.
+  const t = useT("settings");
   const controller = useWorkspaceSettings();
-  const tc = useT("common");
   const [tab, setTab] = React.useState("general");
 
   // `?tab=data` so anything that wants to send somebody here — the empty
@@ -51,28 +51,45 @@ export default function SettingsPage() {
     if (requested && TAB_VALUES.has(requested)) setTab(requested);
   }, []);
 
+  // The tab list scrolls sideways on a phone, and a longer language pushes a
+  // tab opened by `?tab=` past the edge — so bring the active one into view,
+  // again once the language switch has changed every tab's width.
+  const locale = useLocale();
+  const tabsRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const list = tabsRef.current;
+    const active = list?.querySelector<HTMLElement>(`[data-testid="settings-tab-${tab}"]`);
+    if (!list || !active) return;
+    // Positions inside the scrolled content, independent of offsetParent.
+    const left =
+      active.getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft;
+    const right = left + active.offsetWidth;
+    if (left < list.scrollLeft) list.scrollLeft = left;
+    else if (right > list.scrollLeft + list.clientWidth) {
+      list.scrollLeft = right - list.clientWidth;
+    }
+  }, [tab, locale]);
+
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6" data-testid="settings-page">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Preferences apply to every Track Your Time client signed in as you. Changes
-          save as you make them.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("page.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("page.description")}</p>
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-6">
         <TabsList
+          ref={tabsRef}
           className="w-full justify-start overflow-x-auto"
           data-testid="settings-tabs"
         >
-          {TABS.map((tab) => (
+          {TABS.map((value) => (
             <TabsTrigger
-              key={tab.value}
-              value={tab.value}
-              data-testid={`settings-tab-${tab.value}`}
+              key={value}
+              value={value}
+              data-testid={`settings-tab-${value}`}
             >
-              {tab.label ?? tc("fields.workspace")}
+              {t(`page.tabs.${value}`)}
             </TabsTrigger>
           ))}
         </TabsList>

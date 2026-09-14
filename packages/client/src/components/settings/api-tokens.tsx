@@ -33,8 +33,15 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import type { ClientLocale } from "@/i18n/config";
+import { formatDate } from "@/i18n/format";
+import { getActiveLocale } from "@/i18n/locale-store";
+import { translate } from "@/i18n/translate";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { CreateApiTokenDialog } from "./create-api-token-dialog";
+import { userErrorMessage } from "@/lib/error-message";
 
 /**
  * Absolute dates, not "3 days ago".
@@ -43,15 +50,11 @@ import { CreateApiTokenDialog } from "./create-api-token-dialog";
  * and the question people actually ask of it is "which day does this stop
  * working", which a relative string cannot answer.
  */
-export const formatDay = (iso: string): string => {
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return "Unknown";
-  return parsed.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-};
+export const formatDay = (
+  iso: string,
+  locale: ClientLocale = getActiveLocale(),
+): string =>
+  formatDate(iso, locale, "medium") || translate("common")("status.unknown");
 
 export type ApiTokenState = "active" | "expired" | "revoked";
 
@@ -72,6 +75,9 @@ export function apiTokenState(
   return "active";
 }
 
+/** A literal the reader types into their own tool — never translated. */
+const AUTHORIZATION_HEADER = "Authorization: Bearer <token>";
+
 // ── revoke dialog ────────────────────────────────────────────────────
 
 type RevokeApiTokenDialogProps = {
@@ -84,6 +90,8 @@ function RevokeApiTokenDialog({
   onOpenChange,
 }: RevokeApiTokenDialogProps): React.JSX.Element {
   const utils = trpc.useUtils();
+  const t = useT("settings");
+  const tc = useT("common");
 
   const revoke = trpc.apiTokens.revoke.useMutation({
     onMutate: async ({ id }) => {
@@ -104,10 +112,12 @@ function RevokeApiTokenDialog({
       if (context?.previous) {
         utils.apiTokens.list.setData(undefined, context.previous);
       }
-      toast.error(error.message || "Could not revoke that token");
+      toast.error(
+        userErrorMessage(error, translate("settings")("apiTokens.toasts.revokeFailed")),
+      );
     },
     onSuccess: () => {
-      toast.success("Token revoked.");
+      toast.success(translate("settings")("apiTokens.toasts.revoked"));
     },
     onSettled: () => {
       void utils.apiTokens.list.invalidate();
@@ -118,12 +128,12 @@ function RevokeApiTokenDialog({
     <Dialog open={token !== null} onOpenChange={onOpenChange}>
       <DialogContent data-testid="revoke-api-token-dialog">
         <DialogHeader>
-          <DialogTitle>Revoke {token?.name ?? "this token"}?</DialogTitle>
-          <DialogDescription>
-            Anything still using it starts getting refused on its next request.
-            Nothing it already recorded is lost, and the row stays here so you
-            can see it was turned off.
-          </DialogDescription>
+          <DialogTitle>
+            {token?.name
+              ? t("apiTokens.revoke.title", { name: token.name })
+              : t("apiTokens.revoke.titleThisToken")}
+          </DialogTitle>
+          <DialogDescription>{t("apiTokens.revoke.description")}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button
@@ -132,7 +142,7 @@ function RevokeApiTokenDialog({
             onClick={() => onOpenChange(false)}
             data-testid="revoke-api-token-cancel"
           >
-            Cancel
+            {tc("actions.cancel")}
           </Button>
           <Button
             type="button"
@@ -145,7 +155,7 @@ function RevokeApiTokenDialog({
             }}
             data-testid="revoke-api-token-confirm"
           >
-            Revoke
+            {t("apiTokens.revoke.action")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -163,6 +173,8 @@ function RevokeApiTokenDialog({
  */
 export function ApiTokensPanel(): React.JSX.Element {
   const tokensQuery = trpc.apiTokens.list.useQuery();
+  const t = useT("settings");
+  const f = useFormat();
   const [creating, setCreating] = React.useState(false);
   const [revoking, setRevoking] = React.useState<ApiTokenSummary | null>(null);
 
@@ -172,13 +184,8 @@ export function ApiTokensPanel(): React.JSX.Element {
     <Card data-testid="settings-api-tokens">
       <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1.5">
-          <CardTitle>API tokens</CardTitle>
-          <CardDescription>
-            Keys for scripts, CI jobs and other tools that talk to the REST API
-            instead of signing in. Each one is bound to this workspace and can
-            never see more than you can. This list is yours alone — colleagues
-            neither see nor can revoke the tokens you create here.
-          </CardDescription>
+          <CardTitle>{t("apiTokens.title")}</CardTitle>
+          <CardDescription>{t("apiTokens.description")}</CardDescription>
         </div>
         <Button
           type="button"
@@ -188,7 +195,7 @@ export function ApiTokensPanel(): React.JSX.Element {
           data-testid="create-api-token"
         >
           <Plus className="size-4" />
-          New token
+          {t("apiTokens.create")}
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -200,8 +207,8 @@ export function ApiTokensPanel(): React.JSX.Element {
         ) : tokens.length === 0 ? (
           <EmptyState
             icon={KeyRound}
-            title="No API tokens"
-            description="Create one when something needs to read or write your time without a browser."
+            title={t("apiTokens.empty.title")}
+            description={t("apiTokens.empty.description")}
             testId="api-tokens-empty"
           />
         ) : (
@@ -209,12 +216,14 @@ export function ApiTokensPanel(): React.JSX.Element {
             <Table data-testid="api-tokens-table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Token</TableHead>
-                  <TableHead>Can do</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last used</TableHead>
-                  <TableHead>Expires</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("apiTokens.columns.token")}</TableHead>
+                  <TableHead>{t("apiTokens.columns.scopes")}</TableHead>
+                  <TableHead>{t("apiTokens.columns.created")}</TableHead>
+                  <TableHead>{t("apiTokens.columns.lastUsed")}</TableHead>
+                  <TableHead>{t("apiTokens.columns.expires")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("apiTokens.columns.actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -235,7 +244,7 @@ export function ApiTokensPanel(): React.JSX.Element {
                               variant="secondary"
                               data-testid={`api-token-revoked-${token.id}`}
                             >
-                              Revoked
+                              {t("apiTokens.states.revoked")}
                             </Badge>
                           ) : null}
                           {state === "expired" ? (
@@ -243,7 +252,7 @@ export function ApiTokensPanel(): React.JSX.Element {
                               variant="secondary"
                               data-testid={`api-token-expired-${token.id}`}
                             >
-                              Expired
+                              {t("apiTokens.states.expired")}
                             </Badge>
                           ) : null}
                         </span>
@@ -257,7 +266,7 @@ export function ApiTokensPanel(): React.JSX.Element {
                             variant="outline"
                             data-testid={`api-token-no-access-${token.id}`}
                           >
-                            Nothing
+                            {t("apiTokens.noScopes")}
                           </Badge>
                         ) : (
                           <span className="flex flex-wrap gap-1">
@@ -274,13 +283,17 @@ export function ApiTokensPanel(): React.JSX.Element {
                         )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {formatDay(token.createdAt)}
+                        {formatDay(token.createdAt, f.locale)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {token.lastUsedAt ? formatDay(token.lastUsedAt) : "Never"}
+                        {token.lastUsedAt
+                          ? formatDay(token.lastUsedAt, f.locale)
+                          : t("apiTokens.never")}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {token.expiresAt ? formatDay(token.expiresAt) : "Never"}
+                        {token.expiresAt
+                          ? formatDay(token.expiresAt, f.locale)
+                          : t("apiTokens.never")}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -291,7 +304,7 @@ export function ApiTokensPanel(): React.JSX.Element {
                           onClick={() => setRevoking(token)}
                           data-testid={`revoke-api-token-${token.id}`}
                         >
-                          Revoke
+                          {t("apiTokens.revoke.action")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -318,19 +331,20 @@ export function ApiTokensPanel(): React.JSX.Element {
 
 /** The half nobody can guess: how the token is actually presented. */
 function UsingATokenHint(): React.JSX.Element {
+  const t = useT("settings");
   return (
     <div
       className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground"
       data-testid="api-token-hint"
     >
-      <p className="font-medium text-foreground">Using a token</p>
+      <p className="font-medium text-foreground">{t("apiTokens.hint.title")}</p>
       <p className="mt-1">
-        Send it as{" "}
-        <code className="font-mono text-foreground">
-          Authorization: Bearer &lt;token&gt;
-        </code>{" "}
-        on requests to the REST API. Keep it in a secret store — anything
-        holding it can act with the permissions ticked above.
+        {t.rich("apiTokens.hint.body", {
+          header: AUTHORIZATION_HEADER,
+          code: (chunks) => (
+            <code className="font-mono text-foreground">{chunks}</code>
+          ),
+        })}
       </p>
     </div>
   );

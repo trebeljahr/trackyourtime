@@ -21,19 +21,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import { translate } from "@/i18n/translate";
+import type { Translator } from "@/i18n/translator";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { OneTimeSecret } from "./create-api-token-dialog";
+import { userErrorMessage } from "@/lib/error-message";
 
-/** What each event means, in the words the app itself uses. */
-export const EVENT_LABELS: Record<WebhookEvent, string> = {
-  "entry.started": "A timer started",
-  "entry.stopped": "A running timer stopped",
-  "entry.created": "An entry was added",
-  "entry.updated": "An entry changed",
-  "entry.deleted": "An entry was deleted",
-  "invoice.created": "An invoice was created",
-  "invoice.status_changed": "An invoice changed status",
-};
+/**
+ * What each event means, in the words the app itself uses. Event names are
+ * dotted wire names, so each maps to a key under `settings.webhooks.events`.
+ */
+const EVENT_KEYS = {
+  "entry.started": "entryStarted",
+  "entry.stopped": "entryStopped",
+  "entry.created": "entryCreated",
+  "entry.updated": "entryUpdated",
+  "entry.deleted": "entryDeleted",
+  "invoice.created": "invoiceCreated",
+  "invoice.status_changed": "invoiceStatusChanged",
+} as const satisfies Record<WebhookEvent, string>;
+
+/** A header name a receiver reads — never translated. */
+const SIGNATURE_HEADER = "X-TrackYourTime-Signature";
 
 export type WebhookFormValues = {
   url: string;
@@ -47,17 +57,20 @@ export type WebhookFormValues = {
  * own network, which is the check that actually matters and which no browser
  * can make. Catching the typo here just saves a round trip.
  */
-export function webhookUrlError(raw: string): string | null {
+export function webhookUrlError(
+  raw: string,
+  t: Translator<"settings"> = translate("settings"),
+): string | null {
   const trimmed = raw.trim();
-  if (trimmed === "") return "Endpoint URL is required";
+  if (trimmed === "") return t("webhooks.form.urlRequired");
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
   } catch {
-    return "Enter a full URL, starting with https://";
+    return t("webhooks.form.urlInvalid");
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    return "Only http and https endpoints can be called";
+    return t("webhooks.form.urlScheme");
   }
   return null;
 }
@@ -73,10 +86,12 @@ export function WebhookForm({
   onCancel,
   isPending,
 }: WebhookFormProps): React.JSX.Element {
+  const t = useT("settings");
+  const tc = useT("common");
   const [url, setUrl] = React.useState("");
   const [events, setEvents] = React.useState<WebhookEvent[]>([]);
   const [urlError, setUrlError] = React.useState<string | null>(null);
-  const [eventsError, setEventsError] = React.useState<string | null>(null);
+  const [eventsError, setEventsError] = React.useState(false);
 
   const toggleEvent = (event: WebhookEvent): void => {
     setEvents((current) =>
@@ -84,19 +99,19 @@ export function WebhookForm({
         ? current.filter((item) => item !== event)
         : [...current, event],
     );
-    if (eventsError) setEventsError(null);
+    if (eventsError) setEventsError(false);
   };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
 
-    const problem = webhookUrlError(url);
+    const problem = webhookUrlError(url, t);
     setUrlError(problem);
     // Unlike a token's scopes, an empty list here is not a closed position —
     // it is a subscription that exists to do nothing, which nobody means.
-    const missingEvents = events.length === 0 ? "Pick at least one event" : null;
+    const missingEvents = events.length === 0;
     setEventsError(missingEvents);
-    if (problem !== null || missingEvents !== null) return;
+    if (problem !== null || missingEvents) return;
 
     onCreate({ url: url.trim(), events });
   };
@@ -104,15 +119,12 @@ export function WebhookForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <DialogHeader>
-        <DialogTitle>New webhook</DialogTitle>
-        <DialogDescription>
-          We POST a signed JSON payload to your endpoint whenever one of the
-          events below happens in this workspace.
-        </DialogDescription>
+        <DialogTitle>{t("webhooks.form.title")}</DialogTitle>
+        <DialogDescription>{t("webhooks.form.description")}</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">
-        <Label htmlFor="webhook-url">Endpoint URL</Label>
+        <Label htmlFor="webhook-url">{t("webhooks.form.url")}</Label>
         <Input
           id="webhook-url"
           value={url}
@@ -133,14 +145,13 @@ export function WebhookForm({
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Must be reachable from the internet over https. Addresses inside the
-            server&apos;s own network are refused.
+            {t("webhooks.form.urlHint")}
           </p>
         )}
       </div>
 
       <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">When to call it</legend>
+        <legend className="text-sm font-medium">{t("webhooks.form.events")}</legend>
         <div className="space-y-2 rounded-md border border-border p-3">
           {WEBHOOK_EVENTS.map((event) => (
             <label
@@ -154,7 +165,9 @@ export function WebhookForm({
                 data-testid={`webhook-event-${event}`}
               />
               <span>
-                <span className="font-medium">{EVENT_LABELS[event]}</span>
+                <span className="font-medium">
+                  {t(`webhooks.events.${EVENT_KEYS[event]}`)}
+                </span>
                 <span className="block font-mono text-xs text-muted-foreground">
                   {event}
                 </span>
@@ -167,7 +180,7 @@ export function WebhookForm({
             className="text-sm text-destructive"
             data-testid="webhook-events-error"
           >
-            {eventsError}
+            {t("webhooks.form.eventsRequired")}
           </p>
         ) : null}
       </fieldset>
@@ -179,10 +192,10 @@ export function WebhookForm({
           onClick={onCancel}
           data-testid="webhook-cancel"
         >
-          Cancel
+          {tc("actions.cancel")}
         </Button>
         <Button type="submit" disabled={isPending} data-testid="webhook-submit">
-          Create webhook
+          {t("webhooks.form.submit")}
         </Button>
       </DialogFooter>
     </form>
@@ -201,13 +214,16 @@ export function CreateWebhookDialog({
   onOpenChange,
 }: CreateWebhookDialogProps): React.JSX.Element {
   const utils = trpc.useUtils();
+  const t = useT("settings");
   /** Same rule as the token: the secret is state here, and nowhere else. */
   const [created, setCreated] =
     React.useState<CreatedWebhookSubscription | null>(null);
 
   const create = trpc.webhooks.create.useMutation({
     onError: (error) => {
-      toast.error(error.message || "Could not create that webhook");
+      toast.error(
+        userErrorMessage(error, translate("settings")("webhooks.toasts.createFailed")),
+      );
     },
     onSettled: () => {
       void utils.webhooks.list.invalidate();
@@ -226,7 +242,7 @@ export function CreateWebhookDialog({
         // Drop react-query's copy of the secret; the reveal below owns the
         // only one, and it dies with the dialog.
         create.reset();
-        toast.success("Webhook created.");
+        toast.success(translate("settings")("webhooks.toasts.created"));
       })
       .catch(() => {
         // Reported by onError. Keeping the dialog open leaves the typed URL in
@@ -245,18 +261,19 @@ export function CreateWebhookDialog({
         {!open ? null : created ? (
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Webhook created</DialogTitle>
+              <DialogTitle>{t("webhooks.reveal.title")}</DialogTitle>
               <DialogDescription>
-                Every delivery carries an{" "}
-                <code>X-TrackYourTime-Signature</code> header. Verify it with this
-                secret before trusting the payload.
+                {t.rich("webhooks.reveal.description", {
+                  header: SIGNATURE_HEADER,
+                  code: (chunks) => <code>{chunks}</code>,
+                })}
               </DialogDescription>
             </DialogHeader>
 
             <OneTimeSecret
               value={created.secret}
-              label="Signing secret"
-              hint="The server never reads it back out, so nothing can show it again. If you lose it, delete this webhook and create another."
+              label={t("webhooks.reveal.label")}
+              hint={t("webhooks.reveal.hint")}
               testId="webhook-reveal"
             />
 
@@ -266,7 +283,7 @@ export function CreateWebhookDialog({
                 onClick={() => handleOpenChange(false)}
                 data-testid="webhook-reveal-done"
               >
-                I have stored it
+                {t("secret.stored")}
               </Button>
             </DialogFooter>
           </div>

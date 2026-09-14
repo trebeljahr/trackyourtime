@@ -15,12 +15,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { canDownloadFiles } from "@/components/reports/export-menu";
+import { translate } from "@/i18n/translate";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { downloadBlob } from "@/lib/download";
 import { trpc } from "@/lib/trpc";
 
 const stamp = (): string => new Date().toISOString().slice(0, 10);
-
-const count = (value: number): string => value.toLocaleString("en-US");
 
 /**
  * Everything out, in one click.
@@ -41,6 +42,8 @@ const count = (value: number): string => value.toLocaleString("en-US");
  * complete one until the day it is restored.
  */
 export function ExportPanel(): React.JSX.Element {
+  const t = useT("settings");
+  const f = useFormat();
   const [pending, setPending] = React.useState<"json" | "csv" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [from, setFrom] = React.useState("");
@@ -66,9 +69,7 @@ export function ExportPanel(): React.JSX.Element {
   const run = React.useCallback(
     (kind: "json" | "csv", task: () => Promise<void>): void => {
       if (!canDownloadFiles()) {
-        toast.error(
-          "This app can't save files yet — open Track Your Time in a browser to export.",
-        );
+        toast.error(translate("settings")("data.export.toasts.cannotSave"));
         return;
       }
       setPending(kind);
@@ -78,7 +79,9 @@ export function ExportPanel(): React.JSX.Element {
           await task();
         } catch (caught) {
           const message =
-            caught instanceof Error ? caught.message : "Could not export";
+            caught instanceof Error
+              ? caught.message
+              : translate("settings")("data.export.toasts.failed");
           // Both, deliberately. The toast is what the user sees at the moment
           // of the click; the inline region is what is still on screen when
           // they look back at the panel wondering where their file went — a
@@ -104,7 +107,11 @@ export function ExportPanel(): React.JSX.Element {
           type: "application/json",
         }),
       );
-      toast.success(`Exported ${count(data.entries.length)} entries.`);
+      toast.success(
+        translate("settings")("data.export.toasts.exportedEntries", {
+          count: data.entries.length,
+        }),
+      );
     });
   }, [buildJson, range, run]);
 
@@ -116,26 +123,24 @@ export function ExportPanel(): React.JSX.Element {
         // The server already writes the BOM Excel needs.
         new Blob([result.csv], { type: "text/csv;charset=utf-8;" }),
       );
-      toast.success(`Exported ${result.filename}`);
+      toast.success(
+        translate("settings")("data.export.toasts.exportedFile", {
+          filename: result.filename,
+        }),
+      );
     });
   }, [buildCsv, range, run]);
 
   return (
     <Card data-testid="export-panel">
       <CardHeader>
-        <CardTitle>Export everything</CardTitle>
-        <CardDescription>
-          Your whole workspace, in a file you keep. The JSON holds entries,
-          clients, projects, tasks, tags, workspace settings and your pinned
-          quick starts, and imports back; issued invoices ride along as a
-          record and are not re-created on import. The CSV holds the entries,
-          in a shape any spreadsheet opens and this importer reads back.
-        </CardDescription>
+        <CardTitle>{t("data.export.title")}</CardTitle>
+        <CardDescription>{t("data.export.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-2">
-            <Label htmlFor="export-from">From</Label>
+            <Label htmlFor="export-from">{t("data.export.from")}</Label>
             <Input
               id="export-from"
               type="date"
@@ -145,7 +150,7 @@ export function ExportPanel(): React.JSX.Element {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="export-to">To</Label>
+            <Label htmlFor="export-to">{t("data.export.to")}</Label>
             <Input
               id="export-to"
               type="date"
@@ -156,16 +161,14 @@ export function ExportPanel(): React.JSX.Element {
           </div>
           <p className="text-xs text-muted-foreground" data-testid="export-count">
             {info.data
-              ? `${count(info.data.entries)} ${info.data.entries === 1 ? "entry" : "entries"} in this range.`
-              : "Leave both dates empty to export everything ever tracked."}
+              ? t("data.export.count", { count: info.data.entries })
+              : t("data.export.emptyRangeHint")}
           </p>
         </div>
 
         {overCap && info.data ? (
           <p className="text-sm text-destructive" data-testid="export-too-large">
-            That is more than {count(info.data.maxEntries)} entries — more than
-            one file carries. Narrow the dates and export it in parts, so no
-            part is quietly missing.
+            {t("data.export.tooLarge", { max: f.number(info.data.maxEntries) })}
           </p>
         ) : null}
 
@@ -174,11 +177,7 @@ export function ExportPanel(): React.JSX.Element {
             className="text-sm text-muted-foreground"
             data-testid="export-redacted"
           >
-            Every rate is left out of your download — the rate on each entry
-            as well as project rates, budgets and invoice amounts, because an
-            entry&rsquo;s rate is a copy of the project&rsquo;s. Your role does
-            not include other members&rsquo; money. Times, catalog and
-            everything else are complete.
+            {t("data.export.redacted")}
           </p>
         ) : null}
 
@@ -195,7 +194,7 @@ export function ExportPanel(): React.JSX.Element {
             ) : (
               <FileJson className="size-4" />
             )}
-            Download JSON backup
+            {t("data.export.downloadJson")}
           </Button>
           <Button
             type="button"
@@ -209,7 +208,7 @@ export function ExportPanel(): React.JSX.Element {
             ) : (
               <FileSpreadsheet className="size-4" />
             )}
-            Download CSV
+            {t("data.export.downloadCsv")}
           </Button>
         </div>
 

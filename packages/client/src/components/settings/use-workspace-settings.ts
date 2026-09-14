@@ -6,7 +6,9 @@ import type { UpdateSettingsInput, ResolvedSettings } from "@starter/shared";
 import { FALLBACK_SETTINGS } from "@/lib/format";
 import { ORIGIN_ID } from "@/hooks/use-sync";
 import { toast } from "@/components/ui/sonner";
+import { translate } from "@/i18n/translate";
 import { trpc } from "@/lib/trpc";
+import { userErrorMessage } from "@/lib/error-message";
 
 /** Everything `settings.update` accepts, minus the tab-identity plumbing. */
 export type SettingsPatch = Omit<UpdateSettingsInput, "originId">;
@@ -112,7 +114,7 @@ export const useWorkspaceSettings = (): WorkspaceSettingsController => {
         utils.settings.get.setData(undefined, context.previous);
       }
       setSaveState("error");
-      toast.error(error.message || "Could not save your settings");
+      toast.error(userErrorMessage(error, translate("settings")("toasts.saveFailed")));
     },
     onSuccess: (updated) => {
       utils.settings.get.setData(undefined, updated);

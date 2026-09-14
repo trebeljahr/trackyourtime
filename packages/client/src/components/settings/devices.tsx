@@ -41,7 +41,11 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import { translate } from "@/i18n/translate";
+import { useFormat, type LocaleFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
+import { userErrorMessage } from "@/lib/error-message";
 
 const CLIENT_ICONS: Record<ClientKind, typeof Laptop> = {
   web: Globe,
@@ -54,12 +58,16 @@ const CLIENT_ICONS: Record<ClientKind, typeof Laptop> = {
 };
 
 /** "3 minutes ago" — sessions are short-lived enough that relative reads best. */
-const formatRelative = (iso: string): string => {
+const formatRelative = (
+  iso: string,
+  f: LocaleFormat,
+  words: { justNow: string; unknown: string },
+): string => {
   const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "Unknown";
+  if (Number.isNaN(then)) return words.unknown;
 
   const seconds = Math.round((Date.now() - then) / 1000);
-  if (seconds < 60) return "Just now";
+  if (seconds < 60) return words.justNow;
 
   const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
     ["minute", 60],
@@ -79,7 +87,7 @@ const formatRelative = (iso: string): string => {
     }
   }
 
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const formatter = new Intl.RelativeTimeFormat(f.intlLocale, { numeric: "auto" });
   return formatter.format(-Math.round(seconds / divisor), unit);
 };
 
@@ -95,6 +103,8 @@ function RevokeDeviceDialog({
   onOpenChange,
 }: RevokeDeviceDialogProps): React.JSX.Element {
   const utils = trpc.useUtils();
+  const t = useT("settings");
+  const tc = useT("common");
 
   const revokeMutation = trpc.devices.revoke.useMutation({
     onMutate: async ({ id }) => {
@@ -109,10 +119,12 @@ function RevokeDeviceDialog({
       if (context?.previous) {
         utils.devices.list.setData(undefined, context.previous);
       }
-      toast.error(error.message || "Could not sign that device out");
+      toast.error(
+        userErrorMessage(error, translate("settings")("devices.toasts.revokeFailed")),
+      );
     },
     onSuccess: () => {
-      toast.success("Device signed out.");
+      toast.success(translate("settings")("devices.toasts.revoked"));
     },
     onSettled: () => {
       void utils.devices.list.invalidate();
@@ -123,11 +135,12 @@ function RevokeDeviceDialog({
     <Dialog open={device !== null} onOpenChange={onOpenChange}>
       <DialogContent data-testid="revoke-device-dialog">
         <DialogHeader>
-          <DialogTitle>Sign out {device?.name ?? "this device"}?</DialogTitle>
-          <DialogDescription>
-            That client stops syncing immediately and has to sign in again.
-            Nothing it already tracked is lost.
-          </DialogDescription>
+          <DialogTitle>
+            {device?.name
+              ? t("devices.revoke.title", { name: device.name })
+              : t("devices.revoke.titleThisDevice")}
+          </DialogTitle>
+          <DialogDescription>{t("devices.revoke.description")}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button
@@ -136,7 +149,7 @@ function RevokeDeviceDialog({
             onClick={() => onOpenChange(false)}
             data-testid="revoke-device-cancel"
           >
-            Cancel
+            {tc("actions.cancel")}
           </Button>
           <Button
             type="button"
@@ -149,7 +162,7 @@ function RevokeDeviceDialog({
             }}
             data-testid="revoke-device-confirm"
           >
-            Sign out
+            {tc("actions.signOut")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -166,6 +179,13 @@ function RevokeDeviceDialog({
 export function DevicesPanel(): React.JSX.Element {
   const devicesQuery = trpc.devices.list.useQuery();
   const utils = trpc.useUtils();
+  const t = useT("settings");
+  const tc = useT("common");
+  const f = useFormat();
+  const relativeWords = {
+    justNow: t("devices.justNow"),
+    unknown: tc("status.unknown"),
+  };
   const [revoking, setRevoking] = React.useState<DeviceSession | null>(null);
 
   const devices = devicesQuery.data ?? [];
@@ -173,11 +193,13 @@ export function DevicesPanel(): React.JSX.Element {
 
   const revokeOthers = trpc.devices.revokeOthers.useMutation({
     onError: (error) => {
-      toast.error(error.message || "Could not sign the other devices out");
+      toast.error(
+        userErrorMessage(error, translate("settings")("devices.toasts.revokeOthersFailed")),
+      );
     },
     onSuccess: ({ revoked }) => {
       toast.success(
-        revoked === 1 ? "1 device signed out." : `${revoked} devices signed out.`,
+        translate("settings")("devices.toasts.revokedOthers", { count: revoked }),
       );
     },
     onSettled: () => {
@@ -189,12 +211,8 @@ export function DevicesPanel(): React.JSX.Element {
     <Card data-testid="settings-devices">
       <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1.5">
-          <CardTitle>Devices &amp; apps</CardTitle>
-          <CardDescription>
-            Everything signed in as you. Sign in from the desktop app, the
-            mobile app, Raycast or a browser extension and it appears here —
-            there is nothing to copy or paste.
-          </CardDescription>
+          <CardTitle>{t("devices.title")}</CardTitle>
+          <CardDescription>{t("devices.description")}</CardDescription>
         </div>
         <Button
           type="button"
@@ -204,7 +222,7 @@ export function DevicesPanel(): React.JSX.Element {
           onClick={() => revokeOthers.mutate({ originId: ORIGIN_ID })}
           data-testid="revoke-other-devices"
         >
-          Sign out others
+          {t("devices.revokeOthers")}
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -216,8 +234,8 @@ export function DevicesPanel(): React.JSX.Element {
         ) : devices.length === 0 ? (
           <EmptyState
             icon={MonitorSmartphone}
-            title="No other devices"
-            description="Sign in from another app and it will show up here."
+            title={t("devices.empty.title")}
+            description={t("devices.empty.description")}
             testId="devices-empty"
           />
         ) : (
@@ -225,10 +243,12 @@ export function DevicesPanel(): React.JSX.Element {
             <Table data-testid="devices-table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Device</TableHead>
-                  <TableHead>Signed in</TableHead>
-                  <TableHead>Last active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("devices.columns.device")}</TableHead>
+                  <TableHead>{t("devices.columns.signedIn")}</TableHead>
+                  <TableHead>{t("devices.columns.lastActive")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("devices.columns.actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -246,9 +266,10 @@ export function DevicesPanel(): React.JSX.Element {
                           {device.current ? (
                             <Badge
                               variant="secondary"
+                              className="whitespace-nowrap"
                               data-testid="device-current-badge"
                             >
-                              This device
+                              {t("devices.current")}
                             </Badge>
                           ) : null}
                         </span>
@@ -258,11 +279,11 @@ export function DevicesPanel(): React.JSX.Element {
                           </span>
                         ) : null}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatRelative(device.createdAt)}
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                        {formatRelative(device.createdAt, f, relativeWords)}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatRelative(device.updatedAt)}
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                        {formatRelative(device.updatedAt, f, relativeWords)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -273,7 +294,7 @@ export function DevicesPanel(): React.JSX.Element {
                           onClick={() => setRevoking(device)}
                           data-testid={`revoke-device-${device.id}`}
                         >
-                          Sign out
+                          {tc("actions.signOut")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -299,23 +320,24 @@ export function DevicesPanel(): React.JSX.Element {
 
 /** Points at the pairing page, which is the non-obvious half of the flow. */
 function ConnectAnAppHint(): React.JSX.Element {
+  const t = useT("settings");
   return (
     <div
       className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground"
       data-testid="connect-app-hint"
     >
-      <p className="font-medium text-foreground">Connecting Raycast or a CLI</p>
+      <p className="font-medium text-foreground">{t("devices.connectHint.title")}</p>
       <p className="mt-1">
-        Apps that cannot show a sign-in form give you a short code instead.
-        Open{" "}
-        <a
-          className="font-medium text-foreground underline underline-offset-4"
-          href="/device"
-        >
-          /device
-        </a>{" "}
-        while signed in here and enter it — the app is then signed in as you and
-        appears in the list above.
+        {t.rich("devices.connectHint.body", {
+          link: (chunks) => (
+            <a
+              className="font-medium text-foreground underline underline-offset-4"
+              href="/device"
+            >
+              {chunks}
+            </a>
+          ),
+        })}
       </p>
     </div>
   );

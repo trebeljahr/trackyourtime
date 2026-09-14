@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/hooks/use-auth";
+import { useT } from "@/i18n/use-t";
 
 export default function ProfilePage() {
+  const t = useT("settings");
+  const tc = useT("common");
   const { user } = useAuth();
   const profileQuery = trpc.profile.get.useQuery();
   const updateMutation = trpc.profile.update.useMutation({
@@ -30,8 +33,8 @@ export default function ProfilePage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Profile</h1>
-        <p className="text-muted-foreground">Manage your profile information</p>
+        <h1 className="text-2xl font-bold">{t("profile.title")}</h1>
+        <p className="text-muted-foreground">{t("profile.description")}</p>
       </div>
 
       <div className="max-w-md space-y-6">
@@ -48,12 +51,12 @@ export default function ProfilePage() {
 
         {/* Bio */}
         {profileQuery.isLoading ? (
-          <p className="text-muted-foreground">Loading profile...</p>
+          <p className="text-muted-foreground">{t("profile.loading")}</p>
         ) : isEditing ? (
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="bio" className="text-sm font-medium">
-                Bio
+                {t("profile.bio")}
               </label>
               <textarea
                 id="bio"
@@ -71,29 +74,29 @@ export default function ProfilePage() {
                 className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
                 data-testid="profile-save"
               >
-                Save
+                {tc("actions.save")}
               </button>
               <button
                 type="button"
                 onClick={() => setIsEditing(false)}
                 className="inline-flex h-10 items-center justify-center rounded-md border border-input px-4 text-sm font-medium"
               >
-                Cancel
+                {tc("actions.cancel")}
               </button>
             </div>
           </form>
         ) : (
           <div className="space-y-2">
-            <p className="text-sm font-medium">Bio</p>
+            <p className="text-sm font-medium">{t("profile.bio")}</p>
             <p className="text-sm text-muted-foreground" data-testid="profile-bio">
-              {profileQuery.data?.bio || "No bio set"}
+              {profileQuery.data?.bio || t("profile.noBio")}
             </p>
             <button
               onClick={handleStartEdit}
               className="text-sm text-primary hover:underline"
               data-testid="profile-edit"
             >
-              Edit profile
+              {t("profile.edit")}
             </button>
           </div>
         )}

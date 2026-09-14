@@ -6,8 +6,6 @@ import {
   MAX_MAX_DURATION_HOURS,
   MIN_MAX_DURATION_HOURS,
   RUNAWAY_BEHAVIORS,
-  runawayBehaviorDescription,
-  runawayBehaviorLabel,
   type RunawayBehavior,
 } from "@starter/shared";
 
@@ -23,16 +21,11 @@ import { NumberField } from "@/components/settings/number-field";
 import { OptionGroup } from "@/components/settings/option-group";
 import { SaveIndicator, SettingRow } from "@/components/settings/setting-row";
 import type { WorkspaceSettingsController } from "@/components/settings/use-workspace-settings";
+import { useT } from "@/i18n/use-t";
 
 export type MaxDurationSettingsPanelProps = {
   controller: WorkspaceSettingsController;
 };
-
-const BEHAVIOR_OPTIONS = RUNAWAY_BEHAVIORS.map((behavior) => ({
-  value: behavior,
-  label: runawayBehaviorLabel(behavior),
-  testId: `runaway-behavior-${behavior}`,
-}));
 
 /**
  * The runaway-timer guard.
@@ -48,6 +41,16 @@ export function MaxDurationSettingsPanel({
   const { settings, saveState, save } = controller;
   const maxDuration = settings.maxDuration;
   const enabled = maxDuration.maxHours > 0;
+  const t = useT("settings");
+  const tc = useT("common");
+
+  // Labels live in the settings catalog rather than @starter/shared's English
+  // `runawayBehaviorLabel`, which Raycast keeps using.
+  const behaviorOptions = RUNAWAY_BEHAVIORS.map((behavior) => ({
+    value: behavior,
+    label: t(`maxDuration.behaviors.${behavior}.label`),
+    testId: `runaway-behavior-${behavior}`,
+  }));
 
   // The switch and the field are two views of one number: 0 is off. Turning it
   // back on restores the shipped default rather than the last value, because
@@ -63,32 +66,29 @@ export function MaxDurationSettingsPanel({
     <Card data-testid="settings-max-duration">
       <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1.5">
-          <CardTitle>Maximum entry length</CardTitle>
-          <CardDescription>
-            Catch the timer you started on Friday evening and found still
-            running on Monday morning.
-          </CardDescription>
+          <CardTitle>{t("maxDuration.title")}</CardTitle>
+          <CardDescription>{t("maxDuration.description")}</CardDescription>
         </div>
         <SaveIndicator state={saveState} testId="max-duration-save-indicator" />
       </CardHeader>
       <CardContent className="divide-y divide-border py-0">
         <SettingRow
-          title="Guard against runaway timers"
-          description="Worked out on the server, not on your devices — the whole point is the case where none of them were running."
+          title={t("maxDuration.enabled.title")}
+          description={t("maxDuration.enabled.description")}
           testId="setting-max-duration-enabled"
         >
           <Switch
             checked={enabled}
             onCheckedChange={toggle}
-            aria-label="Guard against runaway timers"
+            aria-label={t("maxDuration.enabled.title")}
             data-testid="max-duration-enabled"
           />
         </SettingRow>
 
         <SettingRow
-          title="Longer than"
+          title={t("maxDuration.hours.title")}
           htmlFor="max-duration-hours"
-          description="Pick something above any believable single sitting and below an overnight."
+          description={t("maxDuration.hours.description")}
           testId="setting-max-duration-hours"
         >
           <NumberField
@@ -101,23 +101,23 @@ export function MaxDurationSettingsPanel({
             onCommit={(maxHours) => save({ maxDuration: { maxHours } })}
             min={MIN_MAX_DURATION_HOURS}
             max={MAX_MAX_DURATION_HOURS}
-            suffix="h"
+            suffix={tc("units.hour")}
             disabled={!enabled}
             testId="max-duration-hours"
-            aria-label="Maximum entry length in hours"
+            aria-label={t("maxDuration.hours.ariaLabel")}
           />
         </SettingRow>
 
         <SettingRow
-          title="When one runs that long"
-          description={runawayBehaviorDescription(maxDuration.behavior)}
+          title={t("maxDuration.behavior.title")}
+          description={t(`maxDuration.behaviors.${maxDuration.behavior}.description`)}
           testId="setting-max-duration-behavior"
         >
           <OptionGroup
-            label="When one runs that long"
+            label={t("maxDuration.behavior.title")}
             className="flex-wrap"
             value={maxDuration.behavior}
-            options={BEHAVIOR_OPTIONS}
+            options={behaviorOptions}
             disabled={!enabled}
             onChange={(behavior: RunawayBehavior) =>
               save({ maxDuration: { behavior } })
@@ -126,11 +126,13 @@ export function MaxDurationSettingsPanel({
         </SettingRow>
 
         <SettingRow
-          title="Nothing is deleted for good"
-          description="A capped entry keeps the span it actually ran, so “put it back” is always one click away in the prompt."
+          title={t("maxDuration.undo.title")}
+          description={t("maxDuration.undo.description")}
           testId="setting-max-duration-undo"
         >
-          <span className="text-sm text-muted-foreground">Always</span>
+          <span className="text-sm text-muted-foreground">
+            {t("maxDuration.undo.always")}
+          </span>
         </SettingRow>
       </CardContent>
     </Card>

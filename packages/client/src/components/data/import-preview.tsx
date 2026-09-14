@@ -3,7 +3,6 @@
 import * as React from "react";
 import { AlertTriangle, Info } from "lucide-react";
 import {
-  formatDurationShort,
   IMPORT_DAY_START_HOUR,
   type ImportColumnRole,
   type ImportDateOrder,
@@ -26,7 +25,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { isImportColumnRole, ROLE_LABELS, ROLE_OPTIONS } from "./roles";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
+import { isImportColumnRole, ROLE_OPTIONS } from "./roles";
 
 export type ImportPreviewViewProps = {
   preview: ImportPreview;
@@ -36,28 +37,16 @@ export type ImportPreviewViewProps = {
   busy: boolean;
 };
 
-const DATE_ORDER_LABELS: Record<ImportDateOrder, string> = {
-  dmy: "Day first (31/12/2026)",
-  mdy: "Month first (12/31/2026)",
-  ymd: "Year first (2026-12-31)",
-};
+/** A sample row's start: a moment, not a day. */
+const SHORT_MOMENT = {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+} as const satisfies Intl.DateTimeFormatOptions;
 
-const shortDate = (iso: string | null): string =>
-  iso === null
-    ? "—"
-    : new Date(iso).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-
-const shortTime = (iso: string): string =>
-  new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+/** How many new catalog names are listed before the rest become a count. */
+const NAME_LIST_LIMIT = 8;
 
 /** One number and what it counts. */
 function Stat(props: {
@@ -102,18 +91,6 @@ function Note(props: {
   );
 }
 
-/** "1 entry" / "3 entries" — a stat that reads as a sentence, not a template. */
-export const pluralEntries = (count: number): string =>
-  count === 1 ? "entry" : "entries";
-
-/** A list of names, truncated with a count once it stops being readable. */
-const nameList = (names: readonly string[], limit = 8): string => {
-  if (names.length === 0) return "none";
-  const shown = names.slice(0, limit).join(", ");
-  return names.length > limit
-    ? `${shown} and ${names.length - limit} more`
-    : shown;
-};
 
 /**
  * What the file would do, before it does it.
@@ -128,72 +105,93 @@ export function ImportPreviewView({
   onDateOrderChange,
   busy,
 }: ImportPreviewViewProps): React.JSX.Element {
+  const t = useT("settings");
+  const tc = useT("common");
+  const f = useFormat();
   const unreadable = preview.totalRows - preview.readyRows - preview.duplicateRows;
+
+  const shortDate = (iso: string | null): string =>
+    iso === null ? "—" : f.date(iso, "medium") || "—";
+
+  /** A list of names, truncated with a count once it stops being readable. */
+  const nameList = (names: readonly string[]): string => {
+    if (names.length === 0) return tc("status.none");
+    if (names.length <= NAME_LIST_LIMIT) return f.list(names);
+    return t("data.preview.namesAndMore", {
+      names: names.slice(0, NAME_LIST_LIMIT).join(", "),
+      count: names.length - NAME_LIST_LIMIT,
+    });
+  };
+
+  const dayStart = new Date(2000, 0, 1, IMPORT_DAY_START_HOUR, 0);
 
   return (
     <div className="space-y-4" data-testid="import-preview">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat
-          label={`${pluralEntries(preview.readyRows)} to import`}
-          value={String(preview.readyRows)}
+          label={t("data.preview.stats.ready", { count: preview.readyRows })}
+          value={f.number(preview.readyRows)}
         />
-        <Stat label="already here" value={String(preview.duplicateRows)} tone="muted" />
         <Stat
-          label={`row${unreadable === 1 ? "" : "s"} not readable`}
-          value={String(Math.max(0, unreadable))}
+          label={t("data.preview.stats.duplicates")}
+          value={f.number(preview.duplicateRows)}
           tone="muted"
         />
-        <Stat label="tracked time" value={formatDurationShort(preview.totalSec)} />
+        <Stat
+          label={t("data.preview.stats.unreadable", { count: Math.max(0, unreadable) })}
+          value={f.number(Math.max(0, unreadable))}
+          tone="muted"
+        />
+        <Stat
+          label={t("data.preview.stats.trackedTime")}
+          value={f.durationShort(preview.totalSec)}
+        />
       </div>
 
       <p className="text-sm text-muted-foreground" data-testid="import-range">
         {preview.readyRows === 0
-          ? "Nothing new in this file."
-          : `${shortDate(preview.firstStart)} to ${shortDate(preview.lastStart)}, read as ${preview.timeZone} time.`}
+          ? t("data.preview.nothingNew")
+          : t("data.preview.range", {
+              from: shortDate(preview.firstStart),
+              to: shortDate(preview.lastStart),
+              timeZone: preview.timeZone,
+            })}
       </p>
 
       {preview.dateOrderAmbiguous ? (
         <Note tone="warning">
-          Every date in this file could be read either way round —{" "}
-          <strong>03/04</strong> is the 3rd of April or the 4th of March. Pick
-          the one your file means before importing.
+          {t.rich("data.preview.ambiguousDates", {
+            strong: (chunks) => <strong>{chunks}</strong>,
+          })}
         </Note>
       ) : null}
 
       {preview.sections.moneyRedacted ? (
         <Note tone="warning" testId="import-money-redacted">
-          <strong>This file&rsquo;s money was blanked when it was exported.</strong>{" "}
-          Entries, catalog and times import in full, but every rate in it is
-          empty, so the imported history is priced by this workspace&rsquo;s
-          own rates rather than the ones it was tracked at.
+          {t.rich("data.preview.moneyRedacted", {
+            strong: (chunks) => <strong>{chunks}</strong>,
+          })}
         </Note>
       ) : null}
 
       {preview.sections.invoices > 0 ? (
         <Note tone="info" testId="import-invoices-dropped">
-          {preview.sections.invoices} invoice
-          {preview.sections.invoices === 1 ? "" : "s"} in this file{" "}
-          {preview.sections.invoices === 1 ? "is" : "are"} not imported — an
-          issued invoice records something that happened, and re-creating it
-          here would either bill nothing or bill the wrong hours twice.
+          {t("data.preview.invoicesDropped", { count: preview.sections.invoices })}
         </Note>
       ) : null}
 
       {preview.shape === "date-duration" ? (
         <Note tone="info">
-          This file records a day and a length, but no clock time. Entries are
-          laid out back-to-back from {IMPORT_DAY_START_HOUR}:00 in file order,
-          so each day adds up correctly even though the times of day are
-          invented.
+          {t("data.preview.dateDuration", { time: f.time(dayStart) })}
         </Note>
       ) : null}
 
       {preview.columns.length > 0 ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-sm font-medium">Columns</h4>
+            <h4 className="text-sm font-medium">{t("data.preview.columns.title")}</h4>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Dates
+              {t("data.preview.dateOrder.label")}
               <Select
                 value={preview.dateOrder}
                 onValueChange={(value) => {
@@ -205,7 +203,7 @@ export function ImportPreviewView({
               >
                 <SelectTrigger
                   className="h-8 w-56"
-                  aria-label="How dates are written"
+                  aria-label={t("data.preview.dateOrder.ariaLabel")}
                   data-testid="import-date-order"
                 >
                   <SelectValue />
@@ -213,7 +211,7 @@ export function ImportPreviewView({
                 <SelectContent>
                   {(["dmy", "mdy", "ymd"] as const).map((order) => (
                     <SelectItem key={order} value={order}>
-                      {DATE_ORDER_LABELS[order]}
+                      {t(`data.preview.dateOrder.${order}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -225,16 +223,19 @@ export function ImportPreviewView({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Column</TableHead>
-                  <TableHead>First value</TableHead>
-                  <TableHead className="w-56">Imported as</TableHead>
+                  <TableHead>{t("data.preview.columns.column")}</TableHead>
+                  <TableHead>{t("data.preview.columns.firstValue")}</TableHead>
+                  <TableHead className="w-56">
+                    {t("data.preview.columns.importedAs")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {preview.columns.map((column) => (
                   <TableRow key={column.index}>
                     <TableCell className="font-medium">
-                      {column.header || `Column ${column.index + 1}`}
+                      {column.header ||
+                        t("data.preview.columns.unnamed", { number: String(column.index + 1) })}
                     </TableCell>
                     <TableCell className="max-w-48 truncate text-muted-foreground">
                       {column.sample ?? "—"}
@@ -251,7 +252,13 @@ export function ImportPreviewView({
                       >
                         <SelectTrigger
                           className="h-8"
-                          aria-label={`Role for ${column.header}`}
+                          aria-label={t("data.preview.columns.roleFor", {
+                            column:
+                              column.header ||
+                              t("data.preview.columns.unnamed", {
+                                number: String(column.index + 1),
+                              }),
+                          })}
                           data-testid={`import-column-${column.index}`}
                         >
                           <SelectValue />
@@ -259,7 +266,7 @@ export function ImportPreviewView({
                         <SelectContent>
                           {ROLE_OPTIONS.map((role) => (
                             <SelectItem key={role} value={role}>
-                              {ROLE_LABELS[role]}
+                              {t(`data.roles.${role}`)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -274,45 +281,51 @@ export function ImportPreviewView({
       ) : null}
 
       <div className="space-y-1 text-sm">
-        <h4 className="font-medium">This import will also create</h4>
+        <h4 className="font-medium">{t("data.preview.creates.title")}</h4>
         <ul className="text-muted-foreground">
           <li data-testid="import-new-clients">
-            Clients: {nameList(preview.newClients)}
+            {t("data.preview.creates.clients", { names: nameList(preview.newClients) })}
           </li>
           <li data-testid="import-new-projects">
-            Projects: {nameList(preview.newProjects)}
+            {t("data.preview.creates.projects", { names: nameList(preview.newProjects) })}
           </li>
-          <li>Tasks: {preview.newTasks.length}</li>
-          <li data-testid="import-new-tags">Tags: {nameList(preview.newTags)}</li>
+          <li>
+            {t("data.preview.creates.tasks", { count: preview.newTasks.length })}
+          </li>
+          <li data-testid="import-new-tags">
+            {t("data.preview.creates.tags", { names: nameList(preview.newTags) })}
+          </li>
         </ul>
       </div>
 
       {preview.sample.length > 0 ? (
         <div className="space-y-2">
           <h4 className="text-sm font-medium">
-            First {preview.sample.length} entries
+            {t("data.preview.sample.title", { count: preview.sample.length })}
           </h4>
           <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Start</TableHead>
-                  <TableHead>Length</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead>Tags</TableHead>
+                  <TableHead>{tc("fields.start")}</TableHead>
+                  <TableHead>{t("data.preview.sample.length")}</TableHead>
+                  <TableHead>{tc("fields.description")}</TableHead>
+                  <TableHead>{tc("fields.project")}</TableHead>
+                  <TableHead>{tc("fields.tags")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {preview.sample.map((row) => (
                   <TableRow key={row.row}>
                     <TableCell className="whitespace-nowrap">
-                      {shortTime(row.start)}
+                      {f.date(row.start, SHORT_MOMENT)}
                     </TableCell>
-                    <TableCell>{formatDurationShort(row.durationSec)}</TableCell>
+                    <TableCell>{f.durationShort(row.durationSec)}</TableCell>
                     <TableCell className="max-w-64 truncate">
                       {row.description || (
-                        <span className="text-muted-foreground">No description</span>
+                        <span className="text-muted-foreground">
+                          {t("data.preview.sample.noDescription")}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell>{row.projectName ?? "—"}</TableCell>
@@ -334,13 +347,15 @@ export function ImportPreviewView({
       {preview.issues.length > 0 ? (
         <details className="rounded-md border p-3" data-testid="import-issues">
           <summary className="cursor-pointer text-sm font-medium">
-            {preview.issues.length} row
-            {preview.issues.length === 1 ? "" : "s"} need attention
+            {t("data.preview.issues.title", { count: preview.issues.length })}
           </summary>
           <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
             {preview.issues.map((item) => (
               <li key={`${item.row}-${item.code}`}>
-                Row {item.row}: {item.message}
+                {t("data.preview.issues.row", {
+                  row: String(item.row),
+                  message: item.message,
+                })}
               </li>
             ))}
           </ul>

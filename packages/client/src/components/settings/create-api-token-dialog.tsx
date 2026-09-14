@@ -22,41 +22,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import { translate } from "@/i18n/translate";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
+import { userErrorMessage } from "@/lib/error-message";
 
 /**
  * What each scope actually lets a token do, in the terms of this app.
  *
  * Spelled out rather than showing the raw scope string alone: `catalog:write`
- * reads as harmless until somebody realises it deletes projects.
+ * reads as harmless until somebody realises it deletes projects. The values
+ * are keys under `settings.apiTokens.scopes`.
  */
-export const SCOPE_LABELS: Record<
-  ApiTokenScope,
-  { title: string; description: string }
-> = {
-  "entries:read": {
-    title: "Read time entries",
-    description: "List entries, read one, and see the running timer.",
-  },
-  "entries:write": {
-    title: "Write time entries",
-    description:
-      "Create, edit and delete entries, and start or stop the timer.",
-  },
-  "catalog:read": {
-    title: "Read the catalog",
-    description: "List clients, projects, tasks and tags.",
-  },
-  "catalog:write": {
-    title: "Write the catalog",
-    description:
-      "Create, edit, archive and delete clients, projects, tasks and tags.",
-  },
-  "reports:read": {
-    title: "Read reports",
-    description: "Run the summary, detailed and weekly reports.",
-  },
-};
+const SCOPE_KEYS = {
+  "entries:read": "entriesRead",
+  "entries:write": "entriesWrite",
+  "catalog:read": "catalogRead",
+  "catalog:write": "catalogWrite",
+  "reports:read": "reportsRead",
+} as const satisfies Record<ApiTokenScope, string>;
+
+/** A literal the reader types into their own tool — never translated. */
+const AUTHORIZATION_HEADER = "Authorization: Bearer <token>";
 
 // ── one-time reveal ──────────────────────────────────────────────────
 
@@ -83,23 +70,25 @@ export function OneTimeSecret({
   testId,
 }: OneTimeSecretProps): React.JSX.Element {
   const [copied, setCopied] = React.useState(false);
+  const t = useT("settings");
+  const tc = useT("common");
 
   const copy = (): void => {
     // Clipboard access is unavailable over plain http and in some embedded
     // browsers. Saying so beats a button that silently does nothing while the
     // one chance to keep the value is on screen.
     if (!navigator.clipboard) {
-      toast.error("Copying is unavailable here — select the value by hand.");
+      toast.error(translate("settings")("secret.toasts.copyUnavailable"));
       return;
     }
     void navigator.clipboard
       .writeText(value)
       .then(() => {
         setCopied(true);
-        toast.success("Copied to the clipboard.");
+        toast.success(translate("settings")("secret.toasts.copied"));
       })
       .catch(() => {
-        toast.error("Could not copy — select the value and copy it by hand.");
+        toast.error(translate("settings")("secret.toasts.copyFailed"));
       });
   };
 
@@ -127,7 +116,7 @@ export function OneTimeSecret({
             ) : (
               <Copy className="size-4" />
             )}
-            {copied ? "Copied" : "Copy"}
+            {copied ? tc("actions.copied") : tc("actions.copy")}
           </Button>
         </div>
       </div>
@@ -138,9 +127,7 @@ export function OneTimeSecret({
       >
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
         <div className="space-y-1">
-          <p className="font-medium">
-            Copy it now — this is the only time it is shown.
-          </p>
+          <p className="font-medium">{t("secret.warning")}</p>
           <p className="text-muted-foreground">{hint}</p>
         </div>
       </div>
@@ -180,11 +167,15 @@ export function ApiTokenForm({
   onCancel,
   isPending,
 }: ApiTokenFormProps): React.JSX.Element {
+  const t = useT("settings");
+  const tc = useT("common");
   const [name, setName] = React.useState("");
   const [scopes, setScopes] = React.useState<ApiTokenScope[]>([]);
   const [expiryDay, setExpiryDay] = React.useState("");
-  const [nameError, setNameError] = React.useState<string | null>(null);
-  const [expiryError, setExpiryError] = React.useState<string | null>(null);
+  const [nameError, setNameError] = React.useState<boolean>(false);
+  const [expiryError, setExpiryError] = React.useState<
+    "invalid" | "past" | null
+  >(null);
 
   const toggleScope = (scope: ApiTokenScope): void => {
     setScopes((current) =>
@@ -196,12 +187,12 @@ export function ApiTokenForm({
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    setNameError(null);
+    setNameError(false);
     setExpiryError(null);
 
     const trimmed = name.trim();
     if (trimmed === "") {
-      setNameError("Name is required");
+      setNameError(true);
       return;
     }
 
@@ -209,13 +200,13 @@ export function ApiTokenForm({
     if (expiryDay !== "") {
       expiresAt = endOfDayIso(expiryDay);
       if (expiresAt === null) {
-        setExpiryError("That is not a date");
+        setExpiryError("invalid");
         return;
       }
       if (Date.parse(expiresAt) <= Date.now()) {
         // A token that expired before it was minted is never a request the
         // user meant to make, and the server would happily accept it.
-        setExpiryError("Pick a date in the future");
+        setExpiryError("past");
         return;
       }
     }
@@ -226,44 +217,41 @@ export function ApiTokenForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <DialogHeader>
-        <DialogTitle>New API token</DialogTitle>
-        <DialogDescription>
-          A token authenticates scripts and integrations against the REST API.
-          It belongs to this workspace and can never see more than you can.
-        </DialogDescription>
+        <DialogTitle>{t("apiTokens.form.title")}</DialogTitle>
+        <DialogDescription>{t("apiTokens.form.description")}</DialogDescription>
       </DialogHeader>
 
       <div className="space-y-2">
-        <Label htmlFor="api-token-name">Name</Label>
+        <Label htmlFor="api-token-name">{tc("fields.name")}</Label>
         <Input
           id="api-token-name"
           value={name}
           autoFocus
           maxLength={120}
-          placeholder="Invoicing script"
-          aria-invalid={nameError !== null}
+          placeholder={t("apiTokens.form.namePlaceholder")}
+          aria-invalid={nameError}
           onChange={(event) => {
             setName(event.target.value);
-            if (nameError) setNameError(null);
+            if (nameError) setNameError(false);
           }}
           data-testid="api-token-name-input"
         />
         {nameError ? (
           <p className="text-sm text-destructive" data-testid="api-token-name-error">
-            {nameError}
+            {t("apiTokens.form.nameRequired")}
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Shown in the list below. Name it after the thing that will use it.
+            {t("apiTokens.form.nameHint")}
           </p>
         )}
       </div>
 
       <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">What it may do</legend>
+        <legend className="text-sm font-medium">{t("apiTokens.form.scopes")}</legend>
         <div className="space-y-2 rounded-md border border-border p-3">
           {API_TOKEN_SCOPES.map((scope) => {
-            const copy = SCOPE_LABELS[scope];
+            const key = SCOPE_KEYS[scope];
             const checked = scopes.includes(scope);
             return (
               <label
@@ -277,9 +265,11 @@ export function ApiTokenForm({
                   data-testid={`api-token-scope-${scope}`}
                 />
                 <span>
-                  <span className="font-medium">{copy.title}</span>
+                  <span className="font-medium">
+                    {t(`apiTokens.scopes.${key}.title`)}
+                  </span>
                   <span className="block text-xs text-muted-foreground">
-                    {copy.description}
+                    {t(`apiTokens.scopes.${key}.description`)}
                   </span>
                 </span>
               </label>
@@ -296,18 +286,18 @@ export function ApiTokenForm({
           >
             <TriangleAlert className="mt-0.5 size-4 shrink-0" />
             <span>
-              <span className="font-medium text-foreground">
-                This token can do nothing.
-              </span>{" "}
-              Nothing is ticked, so every request it makes is refused. Tick at
-              least one capability.
+              {t.rich("apiTokens.form.noScopes", {
+                b: (chunks) => (
+                  <span className="font-medium text-foreground">{chunks}</span>
+                ),
+              })}
             </span>
           </p>
         ) : null}
       </fieldset>
 
       <div className="space-y-2">
-        <Label htmlFor="api-token-expiry">Expires (optional)</Label>
+        <Label htmlFor="api-token-expiry">{t("apiTokens.form.expiry")}</Label>
         <Input
           id="api-token-expiry"
           type="date"
@@ -324,11 +314,13 @@ export function ApiTokenForm({
             className="text-sm text-destructive"
             data-testid="api-token-expiry-error"
           >
-            {expiryError}
+            {expiryError === "past"
+              ? t("apiTokens.form.expiryPast")
+              : t("apiTokens.form.expiryInvalid")}
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Leave empty and it works until you revoke it.
+            {t("apiTokens.form.expiryHint")}
           </p>
         )}
       </div>
@@ -340,10 +332,10 @@ export function ApiTokenForm({
           onClick={onCancel}
           data-testid="api-token-cancel"
         >
-          Cancel
+          {tc("actions.cancel")}
         </Button>
         <Button type="submit" disabled={isPending} data-testid="api-token-submit">
-          Create token
+          {t("apiTokens.form.submit")}
         </Button>
       </DialogFooter>
     </form>
@@ -362,6 +354,7 @@ export function CreateApiTokenDialog({
   onOpenChange,
 }: CreateApiTokenDialogProps): React.JSX.Element {
   const utils = trpc.useUtils();
+  const t = useT("settings");
   /**
    * The plaintext lives here and nowhere else — not in the query cache, not in
    * storage. Closing the dialog unmounts this state, which is the whole
@@ -371,7 +364,9 @@ export function CreateApiTokenDialog({
 
   const create = trpc.apiTokens.create.useMutation({
     onError: (error) => {
-      toast.error(error.message || "Could not create that token");
+      toast.error(
+        userErrorMessage(error, translate("settings")("apiTokens.toasts.createFailed")),
+      );
     },
     onSettled: () => {
       void utils.apiTokens.list.invalidate();
@@ -392,7 +387,11 @@ export function CreateApiTokenDialog({
         // "shown once" would otherwise mean "held by react-query for the rest
         // of the session".
         create.reset();
-        toast.success(`Token "${created.token.name}" created.`);
+        toast.success(
+          translate("settings")("apiTokens.toasts.created", {
+            name: created.token.name,
+          }),
+        );
       })
       .catch(() => {
         // onError already reported it; swallowing keeps the dialog open with
@@ -411,17 +410,19 @@ export function CreateApiTokenDialog({
         {!open ? null : minted ? (
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Token created</DialogTitle>
+              <DialogTitle>{t("apiTokens.reveal.title")}</DialogTitle>
               <DialogDescription>
-                Send it as <code>Authorization: Bearer &lt;token&gt;</code> on
-                every REST request.
+                {t.rich("apiTokens.reveal.description", {
+                  header: AUTHORIZATION_HEADER,
+                  code: (chunks) => <code>{chunks}</code>,
+                })}
               </DialogDescription>
             </DialogHeader>
 
             <OneTimeSecret
               value={minted.plaintext}
               label={minted.token.name}
-              hint="Only a hash of it is stored, so nothing here or in the database can show it again. If you lose it, revoke this token and create another."
+              hint={t("apiTokens.reveal.hint")}
               testId="api-token-reveal"
             />
 
@@ -431,7 +432,7 @@ export function CreateApiTokenDialog({
                 onClick={() => handleOpenChange(false)}
                 data-testid="api-token-reveal-done"
               >
-                I have stored it
+                {t("secret.stored")}
               </Button>
             </DialogFooter>
           </div>

@@ -17,34 +17,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatMoney } from "@/lib/format";
 import { BusinessProfileCard } from "@/components/settings/business-profile-form";
 import { NumberField } from "@/components/settings/number-field";
 import { SaveIndicator, SettingRow } from "@/components/settings/setting-row";
 import type { WorkspaceSettingsController } from "@/components/settings/use-workspace-settings";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 
-/** ISO 4217 codes offered in the picker. Any 3-letter code is valid server-side. */
-export const CURRENCIES: { code: string; label: string }[] = [
-  { code: "EUR", label: "Euro" },
-  { code: "USD", label: "US Dollar" },
-  { code: "GBP", label: "British Pound" },
-  { code: "CHF", label: "Swiss Franc" },
-  { code: "SEK", label: "Swedish Krona" },
-  { code: "NOK", label: "Norwegian Krone" },
-  { code: "DKK", label: "Danish Krone" },
-  { code: "PLN", label: "Polish Zloty" },
-  { code: "CZK", label: "Czech Koruna" },
-  { code: "CAD", label: "Canadian Dollar" },
-  { code: "AUD", label: "Australian Dollar" },
-  { code: "NZD", label: "New Zealand Dollar" },
-  { code: "JPY", label: "Japanese Yen" },
-  { code: "SGD", label: "Singapore Dollar" },
-  { code: "HKD", label: "Hong Kong Dollar" },
-  { code: "INR", label: "Indian Rupee" },
-  { code: "BRL", label: "Brazilian Real" },
-  { code: "MXN", label: "Mexican Peso" },
-  { code: "ZAR", label: "South African Rand" },
+/**
+ * ISO 4217 codes offered in the picker. Any 3-letter code is valid server-side.
+ * Names come from `Intl.DisplayNames` in the rendered language.
+ */
+export const CURRENCIES: readonly string[] = [
+  "EUR",
+  "USD",
+  "GBP",
+  "CHF",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
+  "CZK",
+  "CAD",
+  "AUD",
+  "NZD",
+  "JPY",
+  "SGD",
+  "HKD",
+  "INR",
+  "BRL",
+  "MXN",
+  "ZAR",
 ];
+
+/** "Euro" / "Euro", "US Dollar" / "US-Dollar"; the code itself when Intl has no name. */
+const currencyName = (code: string, intlLocale: string): string => {
+  try {
+    return new Intl.DisplayNames([intlLocale], { type: "currency" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+};
 
 export type BillingSettingsProps = {
   controller: WorkspaceSettingsController;
@@ -58,34 +71,33 @@ export function BillingSettings({
   controller,
 }: BillingSettingsProps): React.JSX.Element {
   const { settings, saveState, save } = controller;
+  const t = useT("settings");
+  const f = useFormat();
 
   // A currency the workspace already uses but that isn't in the curated list
   // must still be selectable, or the <Select> would silently drop it.
   const options = React.useMemo(() => {
-    const known = CURRENCIES.some((item) => item.code === settings.currency);
-    return known
+    const codes = CURRENCIES.includes(settings.currency)
       ? CURRENCIES
-      : [{ code: settings.currency, label: settings.currency }, ...CURRENCIES];
-  }, [settings.currency]);
+      : [settings.currency, ...CURRENCIES];
+    return codes.map((code) => ({ code, label: currencyName(code, f.intlLocale) }));
+  }, [settings.currency, f.intlLocale]);
 
   return (
     <div className="space-y-6">
       <Card data-testid="settings-billing">
         <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
           <div className="space-y-1.5">
-            <CardTitle>Billing</CardTitle>
-            <CardDescription>
-              The rate applied to billable time when a project has no rate of its
-              own.
-            </CardDescription>
+            <CardTitle>{t("billing.title")}</CardTitle>
+            <CardDescription>{t("billing.description")}</CardDescription>
           </div>
           <SaveIndicator state={saveState} testId="billing-save-indicator" />
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="divide-y divide-border">
             <SettingRow
-              title="Default hourly rate"
-              description="Used whenever a billable entry belongs to a project without its own rate."
+              title={t("billing.defaultRate.title")}
+              description={t("billing.defaultRate.description")}
               htmlFor="default-hourly-rate"
               testId="setting-default-rate"
             >
@@ -98,13 +110,15 @@ export function BillingSettings({
                 step={0.01}
                 suffix={settings.currency}
                 testId="default-hourly-rate"
-                aria-label="Default hourly rate"
+                aria-label={t("billing.defaultRate.title")}
               />
             </SettingRow>
 
             <SettingRow
-              title="Currency"
-              description={`Amounts render as ${formatMoney(1234.5, settings.currency)}.`}
+              title={t("billing.currency.title")}
+              description={t("billing.currency.description", {
+                sample: f.money(1234.5, settings.currency),
+              })}
               htmlFor="workspace-currency"
               testId="setting-currency"
             >
@@ -115,10 +129,10 @@ export function BillingSettings({
                 <SelectTrigger
                   id="workspace-currency"
                   className="sm:w-56"
-                  aria-label="Currency"
+                  aria-label={t("billing.currency.title")}
                   data-testid="currency-select"
                 >
-                  <SelectValue placeholder="Select a currency" />
+                  <SelectValue placeholder={t("billing.currency.placeholder")} />
                 </SelectTrigger>
                 <SelectContent data-testid="currency-select-content">
                   {options.map((option) => (
@@ -143,11 +157,7 @@ export function BillingSettings({
             data-testid="rate-snapshot-note"
           >
             <Info className="mt-0.5 size-4 shrink-0" />
-            <p>
-              Changing the rate or currency only affects time you track from now
-              on — each entry stores the rate and currency that applied when it
-              was stopped, so past reports and invoices never move.
-            </p>
+            <p className="min-w-0">{t("billing.snapshotNote")}</p>
           </div>
         </CardContent>
       </Card>

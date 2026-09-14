@@ -38,20 +38,25 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
+import type { ClientLocale } from "@/i18n/config";
+import { formatDate } from "@/i18n/format";
+import { getActiveLocale } from "@/i18n/locale-store";
+import { translate } from "@/i18n/translate";
+import type { Translator } from "@/i18n/translator";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { CreateWebhookDialog } from "./create-webhook-dialog";
+import { userErrorMessage } from "@/lib/error-message";
 
 /** Deliveries are minutes old, so they read as a moment rather than a day. */
-const formatMoment = (iso: string): string => {
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return "Unknown";
-  return parsed.toLocaleString(undefined, {
+const formatMoment = (iso: string, locale: ClientLocale): string =>
+  formatDate(iso, locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  });
-};
+  }) || translate("common")("status.unknown");
 
 export type WebhookHealth = {
   label: string;
@@ -66,53 +71,77 @@ export type WebhookHealth = {
  * An endpoint that turned itself off after repeated failures is the failure
  * mode people find weeks later, when the data they thought was syncing is
  * already wrong — so the row says both that it is off and what turned it off.
+ *
+ * `t` defaults to the active locale for callers outside a component; a
+ * component passes its own `useT("settings")`.
  */
 export function webhookHealth(
   subscription: WebhookSubscriptionWire,
+  t: Translator<"settings"> = translate("settings"),
 ): WebhookHealth {
+  const count = subscription.consecutiveFailures;
   if (!subscription.enabled && subscription.disabledAt !== null) {
     return {
-      label: "Turned off",
+      label: t("webhooks.health.turnedOff"),
       variant: "destructive",
-      detail: `Stopped after ${subscription.consecutiveFailures} failed deliveries in a row. Switch it back on once the endpoint answers again.`,
+      detail: t("webhooks.health.turnedOffDetail", { count }),
     };
   }
   if (!subscription.enabled) {
-    return { label: "Paused", variant: "secondary", detail: null };
+    return { label: t("webhooks.health.paused"), variant: "secondary", detail: null };
   }
-  if (subscription.consecutiveFailures > 0) {
+  if (count > 0) {
     return {
-      label: "Failing",
+      label: t("webhooks.health.failing"),
       variant: "destructive",
-      detail: `${subscription.consecutiveFailures} failed deliveries in a row. It is still retrying.`,
+      detail: t("webhooks.health.failingDetail", { count }),
     };
   }
-  return { label: "Active", variant: "secondary", detail: null };
+  return { label: t("webhooks.health.active"), variant: "secondary", detail: null };
 }
 
-export const DELIVERY_STATUS_LABELS: Record<
-  WebhookDeliveryStatus,
-  { label: string; variant: BadgeProps["variant"] }
-> = {
-  pending: { label: "Queued", variant: "outline" },
-  delivered: { label: "Delivered", variant: "secondary" },
-  failed: { label: "Failed", variant: "destructive" },
+const DELIVERY_STATUS_VARIANTS: Record<WebhookDeliveryStatus, BadgeProps["variant"]> = {
+  pending: "outline",
+  delivered: "secondary",
+  failed: "destructive",
   // Not a failure: the payload was about time the subscription's owner is not
   // allowed to see, so it was dropped rather than retried forever.
-  skipped_visibility: { label: "Not sent", variant: "outline" },
+  skipped_visibility: "outline",
 };
 
+const DELIVERY_STATUS_KEYS = {
+  pending: "webhooks.deliveryStatus.pending",
+  delivered: "webhooks.deliveryStatus.delivered",
+  failed: "webhooks.deliveryStatus.failed",
+  skipped_visibility: "webhooks.deliveryStatus.skippedVisibility",
+} as const satisfies Record<WebhookDeliveryStatus, string>;
+
+/** The badge for one delivery status. */
+export function deliveryStatusBadge(
+  status: WebhookDeliveryStatus,
+  t: Translator<"settings"> = translate("settings"),
+): { label: string; variant: BadgeProps["variant"] } {
+  return { label: t(DELIVERY_STATUS_KEYS[status]), variant: DELIVERY_STATUS_VARIANTS[status] };
+}
+
 /** The one line of detail a delivery row can offer beyond its status. */
-export function deliveryDetail(delivery: WebhookDeliveryWire): string {
+export function deliveryDetail(
+  delivery: WebhookDeliveryWire,
+  t: Translator<"settings"> = translate("settings"),
+  locale: ClientLocale = getActiveLocale(),
+): string {
   if (delivery.status === "skipped_visibility") {
-    return "You cannot see the entry this was about.";
+    return t("webhooks.deliveries.skippedDetail");
   }
+  // The error is a machine code from the server, shown as it is.
   if (delivery.error) return delivery.error;
   if (delivery.responseStatus !== null) {
-    return `HTTP ${delivery.responseStatus}`;
+    return t("webhooks.deliveries.httpStatus", { status: String(delivery.responseStatus) });
   }
   if (delivery.status === "pending" && delivery.nextAttemptAt) {
-    return `Next try ${formatMoment(delivery.nextAttemptAt)}`;
+    return t("webhooks.deliveries.nextTry", {
+      when: formatMoment(delivery.nextAttemptAt, locale),
+    });
   }
   return "—";
 }
@@ -132,6 +161,9 @@ function DeliveriesDialog({
     { subscriptionId: subscription?.id ?? "" },
     { enabled: subscription !== null },
   );
+  const t = useT("settings");
+  const tc = useT("common");
+  const f = useFormat();
 
   const deliveries = deliveriesQuery.data?.deliveries ?? [];
 
@@ -139,11 +171,12 @@ function DeliveriesDialog({
     <Dialog open={subscription !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl" data-testid="webhook-deliveries-dialog">
         <DialogHeader>
-          <DialogTitle>Recent deliveries</DialogTitle>
+          <DialogTitle>{t("webhooks.deliveries.title")}</DialogTitle>
           <DialogDescription>
-            The last attempts to reach{" "}
-            <span className="font-mono">{subscription?.url ?? ""}</span>. Each
-            failed delivery is retried on a widening schedule.
+            {t.rich("webhooks.deliveries.description", {
+              url: subscription?.url ?? "",
+              mono: (chunks) => <span className="font-mono">{chunks}</span>,
+            })}
           </DialogDescription>
         </DialogHeader>
 
@@ -155,8 +188,8 @@ function DeliveriesDialog({
         ) : deliveries.length === 0 ? (
           <EmptyState
             icon={Webhook}
-            title="Nothing delivered yet"
-            description="Attempts appear here as soon as one of the chosen events happens."
+            title={t("webhooks.deliveries.empty.title")}
+            description={t("webhooks.deliveries.empty.description")}
             testId="webhook-deliveries-empty"
           />
         ) : (
@@ -164,23 +197,25 @@ function DeliveriesDialog({
             <Table data-testid="webhook-deliveries-table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Event</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Attempt</TableHead>
-                  <TableHead>Detail</TableHead>
+                  <TableHead>{t("webhooks.deliveries.columns.when")}</TableHead>
+                  <TableHead>{t("webhooks.deliveries.columns.event")}</TableHead>
+                  <TableHead>{t("webhooks.deliveries.columns.status")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("webhooks.deliveries.columns.attempt")}
+                  </TableHead>
+                  <TableHead>{t("webhooks.deliveries.columns.detail")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {deliveries.map((delivery) => {
-                  const status = DELIVERY_STATUS_LABELS[delivery.status];
+                  const status = deliveryStatusBadge(delivery.status, t);
                   return (
                     <TableRow
                       key={delivery.id}
                       data-testid={`webhook-delivery-${delivery.id}`}
                     >
                       <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {formatMoment(delivery.createdAt)}
+                        {formatMoment(delivery.createdAt, f.locale)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap font-mono text-xs">
                         {delivery.event}
@@ -192,7 +227,7 @@ function DeliveriesDialog({
                         {delivery.attempt}
                       </TableCell>
                       <TableCell className="max-w-64 truncate text-muted-foreground">
-                        {deliveryDetail(delivery)}
+                        {deliveryDetail(delivery, t, f.locale)}
                       </TableCell>
                     </TableRow>
                   );
@@ -209,7 +244,7 @@ function DeliveriesDialog({
             onClick={() => onOpenChange(false)}
             data-testid="webhook-deliveries-close"
           >
-            Close
+            {tc("actions.close")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -229,6 +264,8 @@ function DeleteWebhookDialog({
   onOpenChange,
 }: DeleteWebhookDialogProps): React.JSX.Element {
   const utils = trpc.useUtils();
+  const t = useT("settings");
+  const tc = useT("common");
 
   const remove = trpc.webhooks.remove.useMutation({
     onMutate: async ({ id }) => {
@@ -243,10 +280,12 @@ function DeleteWebhookDialog({
       if (context?.previous) {
         utils.webhooks.list.setData(undefined, context.previous);
       }
-      toast.error(error.message || "Could not delete that webhook");
+      toast.error(
+        userErrorMessage(error, translate("settings")("webhooks.toasts.deleteFailed")),
+      );
     },
     onSuccess: () => {
-      toast.success("Webhook deleted.");
+      toast.success(translate("settings")("webhooks.toasts.deleted"));
     },
     onSettled: () => {
       void utils.webhooks.invalidate();
@@ -257,12 +296,12 @@ function DeleteWebhookDialog({
     <Dialog open={subscription !== null} onOpenChange={onOpenChange}>
       <DialogContent data-testid="delete-webhook-dialog">
         <DialogHeader>
-          <DialogTitle>Delete this webhook?</DialogTitle>
+          <DialogTitle>{t("webhooks.delete.title")}</DialogTitle>
           <DialogDescription>
-            We stop calling{" "}
-            <span className="font-mono">{subscription?.url ?? "it"}</span>{" "}
-            immediately, and its delivery log goes with it. The signing secret
-            cannot be recovered — a new webhook gets a new one.
+            {t.rich("webhooks.delete.description", {
+              url: subscription?.url ?? "",
+              mono: (chunks) => <span className="font-mono">{chunks}</span>,
+            })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -272,7 +311,7 @@ function DeleteWebhookDialog({
             onClick={() => onOpenChange(false)}
             data-testid="delete-webhook-cancel"
           >
-            Cancel
+            {tc("actions.cancel")}
           </Button>
           <Button
             type="button"
@@ -285,7 +324,7 @@ function DeleteWebhookDialog({
             }}
             data-testid="delete-webhook-confirm"
           >
-            Delete
+            {tc("actions.delete")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -299,6 +338,9 @@ function DeleteWebhookDialog({
 export function WebhooksPanel(): React.JSX.Element {
   const webhooksQuery = trpc.webhooks.list.useQuery();
   const utils = trpc.useUtils();
+  const t = useT("settings");
+  const tc = useT("common");
+  const f = useFormat();
   const [creating, setCreating] = React.useState(false);
   const [inspecting, setInspecting] =
     React.useState<WebhookSubscriptionWire | null>(null);
@@ -309,11 +351,15 @@ export function WebhooksPanel(): React.JSX.Element {
 
   const update = trpc.webhooks.update.useMutation({
     onError: (error) => {
-      toast.error(error.message || "Could not change that webhook");
+      toast.error(
+        userErrorMessage(error, translate("settings")("webhooks.toasts.updateFailed")),
+      );
     },
     onSuccess: (subscription) => {
       toast.success(
-        subscription.enabled ? "Webhook switched on." : "Webhook paused.",
+        translate("settings")(
+          subscription.enabled ? "webhooks.toasts.enabled" : "webhooks.toasts.paused",
+        ),
       );
     },
     onSettled: () => {
@@ -325,13 +371,8 @@ export function WebhooksPanel(): React.JSX.Element {
     <Card data-testid="settings-webhooks">
       <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1.5">
-          <CardTitle>Webhooks</CardTitle>
-          <CardDescription>
-            Push events to your own endpoint as they happen, instead of polling
-            the API for them. Payloads are signed, and only carry what you are
-            allowed to see. Webhooks you create are yours — nobody else in the
-            workspace can see their URLs or change where they point.
-          </CardDescription>
+          <CardTitle>{t("webhooks.title")}</CardTitle>
+          <CardDescription>{t("webhooks.description")}</CardDescription>
         </div>
         <Button
           type="button"
@@ -341,7 +382,7 @@ export function WebhooksPanel(): React.JSX.Element {
           data-testid="create-webhook"
         >
           <Plus className="size-4" />
-          New webhook
+          {t("webhooks.create")}
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -353,8 +394,8 @@ export function WebhooksPanel(): React.JSX.Element {
         ) : subscriptions.length === 0 ? (
           <EmptyState
             icon={Webhook}
-            title="No webhooks"
-            description="Add an endpoint to be told when a timer starts or an entry changes."
+            title={t("webhooks.empty.title")}
+            description={t("webhooks.empty.description")}
             testId="webhooks-empty"
           />
         ) : (
@@ -362,16 +403,18 @@ export function WebhooksPanel(): React.JSX.Element {
             <Table data-testid="webhooks-table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Endpoint</TableHead>
-                  <TableHead>Events</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Last delivery</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("webhooks.columns.endpoint")}</TableHead>
+                  <TableHead>{t("webhooks.columns.events")}</TableHead>
+                  <TableHead>{t("webhooks.columns.state")}</TableHead>
+                  <TableHead>{t("webhooks.columns.lastDelivery")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("webhooks.columns.actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {subscriptions.map((subscription) => {
-                  const health = webhookHealth(subscription);
+                  const health = webhookHealth(subscription, t);
                   return (
                     <TableRow
                       key={subscription.id}
@@ -413,8 +456,8 @@ export function WebhooksPanel(): React.JSX.Element {
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
                         {subscription.lastDeliveryAt
-                          ? formatMoment(subscription.lastDeliveryAt)
-                          : "Never"}
+                          ? formatMoment(subscription.lastDeliveryAt, f.locale)
+                          : t("webhooks.never")}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-2">
@@ -423,8 +466,8 @@ export function WebhooksPanel(): React.JSX.Element {
                             disabled={update.isPending}
                             aria-label={
                               subscription.enabled
-                                ? "Pause this webhook"
-                                : "Switch this webhook on"
+                                ? t("webhooks.toggle.pause")
+                                : t("webhooks.toggle.enable")
                             }
                             onCheckedChange={(enabled) =>
                               update.mutate({
@@ -442,7 +485,7 @@ export function WebhooksPanel(): React.JSX.Element {
                             onClick={() => setInspecting(subscription)}
                             data-testid={`webhook-deliveries-${subscription.id}`}
                           >
-                            Deliveries
+                            {t("webhooks.deliveriesAction")}
                           </Button>
                           <Button
                             type="button"
@@ -451,7 +494,7 @@ export function WebhooksPanel(): React.JSX.Element {
                             onClick={() => setDeleting(subscription)}
                             data-testid={`delete-webhook-${subscription.id}`}
                           >
-                            Delete
+                            {tc("actions.delete")}
                           </Button>
                         </div>
                       </TableCell>
@@ -485,23 +528,23 @@ export function WebhooksPanel(): React.JSX.Element {
 
 /** The part a receiver has to get right, and can only get right on purpose. */
 function VerifyingDeliveriesHint(): React.JSX.Element {
+  const t = useT("settings");
+  const code = (chunks: React.ReactNode): React.JSX.Element => (
+    <code className="font-mono text-foreground">{chunks}</code>
+  );
   return (
     <div
       className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground"
       data-testid="webhook-hint"
     >
-      <p className="font-medium text-foreground">Verifying a delivery</p>
+      <p className="font-medium text-foreground">{t("webhooks.hint.title")}</p>
       <p className="mt-1">
-        Each request carries{" "}
-        <code className="font-mono text-foreground">X-TrackYourTime-Timestamp</code>{" "}
-        and{" "}
-        <code className="font-mono text-foreground">X-TrackYourTime-Signature</code>
-        . Recompute the HMAC-SHA256 of{" "}
-        <code className="font-mono text-foreground">
-          &lt;timestamp&gt;.&lt;raw body&gt;
-        </code>{" "}
-        with your signing secret and compare — anything that does not match did
-        not come from us.
+        {t.rich("webhooks.hint.body", {
+          timestampHeader: "X-TrackYourTime-Timestamp",
+          signatureHeader: "X-TrackYourTime-Signature",
+          signedPayload: "<timestamp>.<raw body>",
+          code,
+        })}
       </p>
     </div>
   );

@@ -65,10 +65,11 @@ export function LanguagePicker({
       description={t("language.description")}
       testId="setting-language"
     >
-      <div className="inline-flex items-center gap-2">
-        <Languages className="size-4 text-muted-foreground" aria-hidden />
+      <div className="inline-flex max-w-full items-center gap-2">
+        <Languages className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <OptionGroup
           label={t("language.title")}
+          className="min-w-0"
           value={allowPseudo && pseudo ? "pseudo" : preference}
           options={options}
           onChange={onChange}
