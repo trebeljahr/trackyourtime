@@ -122,7 +122,7 @@
     "@starter/core": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "22.19.17",
+    "@types/node": "26.5.1",
     "@types/react": "19.0.10",
     "typescript": "^6.0.3"
   },
