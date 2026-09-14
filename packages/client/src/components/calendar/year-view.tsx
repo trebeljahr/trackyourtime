@@ -2,13 +2,11 @@
 
 import * as React from "react";
 import {
-  addDays,
   endOfMonth,
   endOfYear,
   getDay,
   isSameDay,
   startOfMonth,
-  startOfWeek,
   startOfYear,
 } from "date-fns";
 import type { WeekStart } from "@starter/shared";
@@ -16,6 +14,8 @@ import type { WeekStart } from "@starter/shared";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toDateKey } from "@/components/date-range-picker";
 import { DEVICE_TIME_ZONE } from "@/components/reports/use-report-filters";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -77,6 +77,8 @@ export function YearView({
   onSelectDay,
 }: YearViewProps): React.JSX.Element {
   const format = useFormatSettings();
+  const f = useFormat();
+  const t = useT("calendar");
   const yearNumber = year.getFullYear();
 
   const summary = trpc.reports.summary.useQuery(
@@ -115,13 +117,13 @@ export function YearView({
 
       return {
         index,
-        label: first.toLocaleDateString(undefined, { month: "long" }),
+        label: f.date(first, { month: "long" }),
         totalSec,
         lead,
         days,
       };
     });
-  }, [secondsByDay, weekStartsOn, yearNumber]);
+  }, [f, secondsByDay, weekStartsOn, yearNumber]);
 
   const stats = React.useMemo(() => {
     let busiest: YearDay | null = null;
@@ -145,14 +147,13 @@ export function YearView({
     };
   }, [months]);
 
-  const weekdayInitials = React.useMemo<string[]>(() => {
-    const first = startOfWeek(new Date(yearNumber, 0, 4), { weekStartsOn });
-    return Array.from({ length: 7 }, (_, index) =>
-      addDays(first, index)
-        .toLocaleDateString(undefined, { weekday: "narrow" })
-        .slice(0, 1)
-    );
-  }, [weekStartsOn, yearNumber]);
+  const weekdayInitials = React.useMemo<string[]>(
+    () =>
+      Array.from({ length: 7 }, (_, index) =>
+        f.weekday(weekStartsOn + index, "narrow").slice(0, 1)
+      ),
+    [f, weekStartsOn]
+  );
 
   const today = new Date();
 
@@ -178,27 +179,26 @@ export function YearView({
         {[
           {
             id: "total",
-            label: "Tracked this year",
+            label: t("year.trackedThisYear"),
             value: format.durationShort(stats.totalSec),
           },
           {
             id: "days",
-            label: "Days tracked",
-            value: `${stats.trackedDays}`,
+            label: t("year.daysTracked"),
+            value: f.number(stats.trackedDays),
           },
           {
             id: "average",
-            label: "Average per tracked day",
+            label: t("year.averagePerDay"),
             value: format.durationShort(Math.round(stats.averageSec)),
           },
           {
             id: "busiest",
-            label: "Busiest day",
+            label: t("year.busiestDay"),
             value: stats.busiest
-              ? `${stats.busiest.date.toLocaleDateString(undefined, {
-                  day: "numeric",
-                  month: "short",
-                })} · ${format.durationShort(stats.busiest.seconds)}`
+              ? `${f.date(stats.busiest.date, "dayMonth")} · ${format.durationShort(
+                  stats.busiest.seconds
+                )}`
               : "–",
           },
         ].map((stat) => (
@@ -254,14 +254,10 @@ export function YearView({
                     key={day.key}
                     type="button"
                     data-testid={`calendar-year-day-${day.key}`}
-                    title={`${day.date.toLocaleDateString(undefined, {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                    })} · ${
+                    title={`${f.date(day.date, "dayLabel")} · ${
                       day.seconds > 0
                         ? format.durationShort(day.seconds)
-                        : "nothing tracked"
+                        : t("year.nothingTracked")
                     }`}
                     onClick={() => {
                       onSelectDay(day.date);
@@ -273,7 +269,7 @@ export function YearView({
                       isSameDay(day.date, today) && "ring-primary ring-1"
                     )}
                   >
-                    {day.date.getDate()}
+                    {f.number(day.date.getDate())}
                   </button>
                 ))}
               </div>
@@ -284,7 +280,9 @@ export function YearView({
 
       {projects.length > 0 ? (
         <div className="border-border rounded-md border p-3">
-          <div className="mb-2 text-sm font-medium">Projects this year</div>
+          <div className="mb-2 text-sm font-medium">
+            {t("year.projectsThisYear")}
+          </div>
           <ul className="space-y-1.5">
             {projects.slice(0, 8).map((group) => (
               <li

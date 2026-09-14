@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { format, parseISO } from "date-fns";
 import { X } from "lucide-react";
 import {
   timesheetRowKey,
@@ -20,6 +19,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useFormat, type LocaleFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import { TimesheetCellField } from "./timesheet-cell";
 import {
@@ -47,10 +48,14 @@ export type TimesheetGridProps = {
   todayKey?: string;
 };
 
-const dayHeading = (day: string): { weekday: string; date: string } => {
-  const parsed = parseISO(day);
-  if (Number.isNaN(parsed.getTime())) return { weekday: day, date: "" };
-  return { weekday: format(parsed, "EEE"), date: format(parsed, "d MMM") };
+/** Column heading for a "YYYY-MM-DD" key, e.g. "Tue" over "3 Feb". */
+const dayHeading = (
+  f: LocaleFormat,
+  day: string
+): { weekday: string; date: string } => {
+  const date = f.date(day, "dayMonth");
+  if (date === "") return { weekday: day, date: "" };
+  return { weekday: f.date(day, { weekday: "short" }), date };
 };
 
 /**
@@ -75,6 +80,9 @@ export function TimesheetGrid({
   // a ref registry: the registry has to be written during render, and every
   // cell already carries a stable identifier for the E2E tests anyway.
   const container = React.useRef<HTMLDivElement>(null);
+  const f = useFormat();
+  const t = useT("calendar");
+  const tc = useT("common");
 
   const navigate = React.useCallback(
     (from: CellPosition, key: TimesheetNavKey): void => {
@@ -102,9 +110,11 @@ export function TimesheetGrid({
       <Table data-testid="timesheet-grid">
         <TableHeader>
           <TableRow>
-            <TableHead className="min-w-44">Project / Task</TableHead>
+            <TableHead className="min-w-44">
+              {t("timesheet.projectTask")}
+            </TableHead>
             {grid.days.map((day) => {
-              const heading = dayHeading(day);
+              const heading = dayHeading(f, day);
               return (
                 <TableHead
                   key={day}
@@ -123,7 +133,9 @@ export function TimesheetGrid({
                 </TableHead>
               );
             })}
-            <TableHead className="w-24 text-right">Total</TableHead>
+            <TableHead className="w-24 text-right">
+              {tc("fields.total")}
+            </TableHead>
           </TableRow>
         </TableHeader>
 
@@ -149,7 +161,9 @@ export function TimesheetGrid({
                         variant="ghost"
                         size="icon"
                         className="ml-auto size-6 shrink-0"
-                        aria-label={`Remove row ${row.label}`}
+                        aria-label={t("timesheet.removeRow", {
+                          label: row.label,
+                        })}
                         onClick={() => onUnpinRow(row)}
                         data-testid={`timesheet-unpin-${key}`}
                       >
@@ -166,9 +180,7 @@ export function TimesheetGrid({
                     <TableCell key={day} className="p-1 text-center">
                       <TimesheetCellField
                         cell={cell}
-                        label={`${row.label}, ${dayHeading(day).weekday} ${
-                          dayHeading(day).date
-                        }`}
+                        label={`${row.label}, ${f.date(day, "dayLabel") || day}`}
                         durationFormat={durationFormat}
                         duration={duration}
                         clock={clock}
@@ -200,7 +212,7 @@ export function TimesheetGrid({
 
         <TableFooter>
           <TableRow>
-            <TableCell>Total</TableCell>
+            <TableCell>{tc("fields.total")}</TableCell>
             {grid.dayTotals.map((seconds, index) => (
               <TableCell
                 key={grid.days[index] ?? index}

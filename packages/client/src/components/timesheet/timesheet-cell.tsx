@@ -4,10 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { Timer, Layers, MoveRight } from "lucide-react";
 import {
-  formatTimesheetCell,
   parseTimesheetCell,
   timesheetCellState,
-  timesheetRefusalMessage,
   TIMESHEET_MAX_CELL_SECONDS,
   type DurationFormat,
   type TimesheetCell,
@@ -19,8 +17,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import { isNavKey, type TimesheetNavKey } from "./timesheet-nav";
+import { refusalMessageKey } from "./refusal-message";
 
 export type TimesheetCellFieldProps = {
   cell: TimesheetCell;
@@ -122,7 +123,15 @@ function EditableCell({
   onNavigate,
   testId,
 }: EditableCellProps): React.JSX.Element {
-  const display = formatTimesheetCell(cell.seconds, durationFormat);
+  const f = useFormat();
+  // Zero is an empty cell, not "0:00:00" — a grid of zeroes is unreadable.
+  // Formatted in the reader's locale ("1,50 h"); the parser takes either mark.
+  const formatCell = React.useCallback(
+    (seconds: number): string =>
+      seconds <= 0 ? "" : f.duration(seconds, durationFormat),
+    [durationFormat, f]
+  );
+  const display = formatCell(cell.seconds);
 
   const [draft, setDraft] = React.useState(display);
   const [editing, setEditing] = React.useState(false);
@@ -156,10 +165,10 @@ function EditableCell({
       return false;
     }
     setInvalid(false);
-    setDraft(formatTimesheetCell(parsed, durationFormat));
+    setDraft(formatCell(parsed));
     if (parsed !== Math.round(cell.seconds)) onCommit(parsed);
     return true;
-  }, [cell.seconds, display, draft, durationFormat, onCommit]);
+  }, [cell.seconds, display, draft, formatCell, onCommit]);
 
   /**
    * Left/Right leave the cell only when the caret has nowhere left to go
@@ -264,6 +273,7 @@ function ReadOnlyCell({
   onNavigate,
   testId,
 }: ReadOnlyCellProps): React.JSX.Element {
+  const t = useT("calendar");
   const state = timesheetCellState(cell);
   const reason =
     state === "running"
@@ -271,7 +281,7 @@ function ReadOnlyCell({
       : state === "multiple"
         ? "multiple"
         : "spans-days";
-  const explanation = timesheetRefusalMessage(reason);
+  const explanation = t(`timesheet.refusal.${refusalMessageKey(reason)}`);
   const Icon = state === "running" ? Timer : state === "multiple" ? Layers : MoveRight;
 
   return (
@@ -318,7 +328,7 @@ function ReadOnlyCell({
               <span className="text-muted-foreground">
                 {clock(entry.start)}
                 {" – "}
-                {entry.end === null ? "running" : clock(entry.end)}
+                {entry.end === null ? t("timesheet.running") : clock(entry.end)}
               </span>
               <span className="font-mono tabular-nums">
                 {duration(entry.secondsInCell)}
@@ -332,7 +342,7 @@ function ReadOnlyCell({
           className="mt-3 inline-block text-xs font-medium underline underline-offset-4"
           data-testid={`${testId}-open`}
         >
-          Open these entries
+          {t("timesheet.openEntries")}
         </Link>
       </PopoverContent>
     </Popover>

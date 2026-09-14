@@ -4,6 +4,7 @@ import * as React from "react";
 import { Play } from "lucide-react";
 import type { DetailedEntry } from "@starter/shared";
 
+import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import { blockPalette } from "./entry-color";
 
@@ -82,7 +83,8 @@ export const EntryBlock = React.forwardRef<HTMLDivElement, EntryBlockProps>(
   ) {
     const palette = blockPalette(entry.projectColor, isDragging || isSelected);
     const touchAction = coarsePointer ? "pan-y" : "none";
-    const title = entry.description || "No description";
+    const tc = useT("common");
+    const title = entry.description || tc("empty.noDescription");
     const compact = height < COMPACT_HEIGHT;
     const tiny = height < TINY_HEIGHT;
     // Shingled blocks need an opaque backing, or the block behind bleeds

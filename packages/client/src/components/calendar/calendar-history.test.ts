@@ -17,6 +17,7 @@ import {
   replaceEntryId,
   restartsTimer,
   undo,
+  type HistoryBlockReason,
   type HistoryMove,
   type HistoryState,
   type HistoryStep,
@@ -70,11 +71,11 @@ const updateStep = (id: number): HistoryStep => ({
   label: "move",
 });
 
-const barrierStep = (id: number, reason: string): HistoryStep => ({
+const barrierStep = (id: number, reason: HistoryBlockReason): HistoryStep => ({
   kind: "barrier",
   reason,
   id,
-  label: "stop timer",
+  label: "timeChange",
 });
 
 const createStep = (id: number, entryId: string | null): HistoryStep => ({
@@ -155,11 +156,11 @@ describe("steps that cannot be applied", () => {
   it("stops at a barrier and says why, without consuming it", () => {
     const state = stacked(
       updateStep(1),
-      barrierStep(2, "Timers are one-way")
+      barrierStep(2, "stopsRunningTimer")
     );
 
     const move = undo(state);
-    expect(move).toEqual({ outcome: "blocked", reason: "Timers are one-way" });
+    expect(move).toEqual({ outcome: "blocked", reason: "stopsRunningTimer" });
     // The older step underneath is NOT reached — undo must never skip ahead.
     expect(state.past).toHaveLength(2);
   });
@@ -277,11 +278,11 @@ describe("inverting a patch", () => {
         end: "2026-09-02T10:00:00.000Z",
       })
     ).toBe("move");
-    expect(patchLabel({ end: "2026-09-02T10:00:00.000Z" })).toBe("time change");
-    expect(patchLabel({ description: "x" })).toBe("description change");
-    expect(patchLabel({ projectId: null })).toBe("project change");
-    expect(patchLabel({ billable: false })).toBe("billable change");
-    expect(patchLabel({ tagIds: ["tag-2"] })).toBe("tag change");
+    expect(patchLabel({ end: "2026-09-02T10:00:00.000Z" })).toBe("timeChange");
+    expect(patchLabel({ description: "x" })).toBe("descriptionChange");
+    expect(patchLabel({ projectId: null })).toBe("projectChange");
+    expect(patchLabel({ billable: false })).toBe("billableChange");
+    expect(patchLabel({ tagIds: ["tag-2"] })).toBe("tagChange");
   });
 });
 

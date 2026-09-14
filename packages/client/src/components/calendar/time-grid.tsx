@@ -6,6 +6,8 @@ import type { DetailedEntry } from "@starter/shared";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverAnchor } from "@/components/ui/popover";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toDateKey } from "@/components/date-range-picker";
@@ -140,6 +142,8 @@ export function TimeGrid({
   onRequestCreate,
 }: TimeGridProps): React.JSX.Element {
   const format = useFormatSettings();
+  const f = useFormat();
+  const t = useT("calendar");
   const hasRunning = entries.some((entry) => entry.end === null);
   const nowMs = useNow(hasRunning ? 1_000 : 30_000);
 
@@ -576,7 +580,7 @@ export function TimeGrid({
               )}
             >
               <span className="text-muted-foreground text-[0.7rem] tracking-wide uppercase">
-                {column.day.toLocaleDateString(undefined, {
+                {f.date(column.day, {
                   weekday: isSingleDay ? "long" : "short",
                 })}
               </span>
@@ -587,11 +591,8 @@ export function TimeGrid({
                 )}
               >
                 {isSingleDay
-                  ? column.day.toLocaleDateString(undefined, {
-                      day: "numeric",
-                      month: "long",
-                    })
-                  : column.day.getDate()}
+                  ? f.date(column.day, { day: "numeric", month: "long" })
+                  : f.number(column.day.getDate())}
               </span>
               <span
                 className="text-muted-foreground text-[0.7rem] tabular-nums"
@@ -819,7 +820,7 @@ export function TimeGrid({
                             continuesAfter={block.continuesAfter}
                             timeLabel={`${formatMinuteOfDay(range.startMin, format.timeFormat)} – ${
                               block.isRunning
-                                ? "now"
+                                ? t("grid.now")
                                 : formatMinuteOfDay(range.endMin, format.timeFormat)
                             }`}
                             durationLabel={format.duration(seconds)}

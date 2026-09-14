@@ -18,6 +18,28 @@ import type { EntryDraft, EntryPatch } from "./use-calendar-entries";
 /** How many steps are kept. Older ones fall off the bottom. */
 export const MAX_HISTORY = 50;
 
+/**
+ * What a step changed, as a message key under `calendar.history.changes` —
+ * never display text, so the stack reads the same in every language and the
+ * words are chosen at the moment they are shown.
+ */
+export type HistoryChange =
+  | "move"
+  | "timeChange"
+  | "descriptionChange"
+  | "projectChange"
+  | "tagChange"
+  | "billableChange"
+  | "edit"
+  | "create"
+  | "delete";
+
+/** Why a step cannot be applied, as a key under `calendar.history.blocked`. */
+export type HistoryBlockReason =
+  | "stillSaving"
+  | "stopsRunningTimer"
+  | "deletesRunningTimer";
+
 export type StepBody =
   | {
       kind: "update";
@@ -35,10 +57,10 @@ export type StepBody =
    * that undo stops at it and says why, instead of silently reaching past it
    * and reverting some older, unrelated change the user had forgotten about.
    */
-  | { kind: "barrier"; reason: string };
+  | { kind: "barrier"; reason: HistoryBlockReason };
 
 /** `id` is stack-unique, so an in-flight create can find its own step again. */
-export type HistoryStep = StepBody & { id: number; label: string };
+export type HistoryStep = StepBody & { id: number; label: HistoryChange };
 
 export type HistoryState = {
   past: HistoryStep[];
@@ -124,13 +146,13 @@ export type HistoryMove =
   /** Nothing to undo/redo. */
   | { outcome: "empty" }
   /** The stack is not empty but its next step cannot be applied. */
-  | { outcome: "blocked"; reason: string };
+  | { outcome: "blocked"; reason: HistoryBlockReason };
 
 /** Why a step cannot be applied right now, or null when it can. */
-const blockedReason = (step: HistoryStep): string | null => {
+const blockedReason = (step: HistoryStep): HistoryBlockReason | null => {
   if (step.kind === "barrier") return step.reason;
   if ((step.kind === "create" || step.kind === "remove") && !step.entryId) {
-    return "That change is still saving — try again in a moment";
+    return "stillSaving";
   }
   return null;
 };
@@ -264,15 +286,15 @@ export const restartsTimer = (
 ): boolean => entry.end === null && patch.end !== undefined;
 
 /** What the undo button and its toast call this change. */
-export const patchLabel = (patch: EntryPatch): string => {
+export const patchLabel = (patch: EntryPatch): HistoryChange => {
   if (patch.start !== undefined && patch.end !== undefined) return "move";
-  if (patch.start !== undefined || patch.end !== undefined) return "time change";
-  if (patch.description !== undefined) return "description change";
+  if (patch.start !== undefined || patch.end !== undefined) return "timeChange";
+  if (patch.description !== undefined) return "descriptionChange";
   if (patch.projectId !== undefined || patch.taskId !== undefined) {
-    return "project change";
+    return "projectChange";
   }
-  if (patch.tagIds !== undefined) return "tag change";
-  if (patch.billable !== undefined) return "billable change";
+  if (patch.tagIds !== undefined) return "tagChange";
+  if (patch.billable !== undefined) return "billableChange";
   return "edit";
 };
 

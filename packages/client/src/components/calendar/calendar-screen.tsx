@@ -8,7 +8,6 @@ import {
   addYears,
   endOfMonth,
   endOfWeek,
-  format as formatDate,
   parseISO,
   startOfDay,
   startOfMonth,
@@ -33,7 +32,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatRangeLabel, toDateKey } from "@/components/date-range-picker";
+import { toDateKey } from "@/components/date-range-picker";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import {
   DEFAULT_VISIBLE_RANGE,
@@ -43,6 +44,7 @@ import {
   zoomPxPerMinute,
   type VisibleRange,
 } from "./calendar-math";
+import { formatDayRangeLabel } from "./day-range-label";
 import { EntryCreateDialog, type CreateDraft } from "./entry-create-dialog";
 import { MonthView } from "./month-view";
 import { TimeGrid } from "./time-grid";
@@ -123,6 +125,9 @@ export function CalendarScreen(): React.JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { weekStartsOn } = useFormatSettings();
+  const f = useFormat();
+  const t = useT("calendar");
+  const tc = useT("common");
 
   // Only the *default*. `?view=` is still the source of truth, so a chosen
   // week view survives on a phone — this decides nothing but the first load.
@@ -216,18 +221,20 @@ export function CalendarScreen(): React.JSX.Element {
     const date = new Date(anchorMs);
     switch (view) {
       case "day":
-        return formatDate(date, "EEEE, d MMMM yyyy");
-      case "week":
-        return formatRangeLabel({
-          from: toDateKey(weekStart),
-          to: toDateKey(addDays(weekStart, 6)),
+        return f.date(date, {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
         });
+      case "week":
+        return formatDayRangeLabel(weekStart, addDays(weekStart, 6), f.intlLocale);
       case "month":
-        return formatDate(date, "MMMM yyyy");
+        return f.date(date, "monthYear");
       case "year":
-        return formatDate(date, "yyyy");
+        return f.date(date, { year: "numeric" });
     }
-  }, [anchorMs, view, weekStart]);
+  }, [anchorMs, f, view, weekStart]);
 
   const isGridView = GRID_VIEWS.has(view);
 
@@ -314,6 +321,15 @@ export function CalendarScreen(): React.JSX.Element {
     };
   }, [history, isGridView, navigate, resetZoom, step, zoomBy]);
 
+  const undoChange =
+    history.undoLabel === null
+      ? null
+      : t(`history.changes.${history.undoLabel}`);
+  const redoChange =
+    history.redoLabel === null
+      ? null
+      : t(`history.changes.${history.redoLabel}`);
+
   const openBlankDraft = (): void => {
     const base = new Date(anchorMs);
     const start = new Date(
@@ -336,7 +352,7 @@ export function CalendarScreen(): React.JSX.Element {
           <Button
             variant="outline"
             size="icon"
-            aria-label="Previous"
+            aria-label={tc("actions.previous")}
             data-testid="calendar-prev"
             onClick={() => {
               step(-1);
@@ -352,12 +368,12 @@ export function CalendarScreen(): React.JSX.Element {
               navigate({ date: new Date() });
             }}
           >
-            Today
+            {tc("time.today")}
           </Button>
           <Button
             variant="outline"
             size="icon"
-            aria-label="Next"
+            aria-label={tc("actions.next")}
             data-testid="calendar-next"
             onClick={() => {
               step(1);
@@ -384,7 +400,7 @@ export function CalendarScreen(): React.JSX.Element {
             >
               <SelectTrigger
                 className="w-36"
-                aria-label="Visible hours"
+                aria-label={t("toolbar.visibleHours")}
                 data-testid="calendar-range-select"
               >
                 <SelectValue />
@@ -407,13 +423,13 @@ export function CalendarScreen(): React.JSX.Element {
             <div
               className="border-input flex items-center rounded-md border"
               role="group"
-              aria-label="Zoom"
+              aria-label={t("toolbar.zoom")}
             >
               <Button
                 variant="ghost"
                 size="icon"
                 className="size-8 rounded-r-none"
-                aria-label="Zoom out"
+                aria-label={t("toolbar.zoomOut")}
                 data-testid="calendar-zoom-out"
                 disabled={zoomIndex === 0}
                 onClick={() => {
@@ -425,18 +441,18 @@ export function CalendarScreen(): React.JSX.Element {
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground w-12 text-xs tabular-nums"
-                title="Reset zoom (0)"
-                aria-label="Reset zoom"
+                title={t("toolbar.resetZoomHint")}
+                aria-label={t("toolbar.resetZoom")}
                 data-testid="calendar-zoom-level"
                 onClick={resetZoom}
               >
-                {Math.round(pxPerMinute * 100)}%
+                {f.percent(pxPerMinute)}
               </button>
               <Button
                 variant="ghost"
                 size="icon"
                 className="size-8 rounded-l-none"
-                aria-label="Zoom in"
+                aria-label={t("toolbar.zoomIn")}
                 data-testid="calendar-zoom-in"
                 disabled={zoomIndex === ZOOM_LEVELS.length - 1}
                 onClick={() => {
@@ -460,9 +476,8 @@ export function CalendarScreen(): React.JSX.Element {
                   key={candidate}
                   value={candidate}
                   data-testid={`calendar-view-${candidate}`}
-                  className="capitalize"
                 >
-                  {candidate}
+                  {tc(`time.${candidate}`)}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -473,9 +488,15 @@ export function CalendarScreen(): React.JSX.Element {
               variant="outline"
               size="icon"
               aria-label={
-                history.undoLabel ? `Undo ${history.undoLabel}` : "Undo"
+                undoChange === null
+                  ? t("toolbar.undo")
+                  : t("toolbar.undoChange", { change: undoChange })
               }
-              title={`Undo${history.undoLabel ? ` ${history.undoLabel}` : ""} (Ctrl/\u2318 + Z)`}
+              title={
+                undoChange === null
+                  ? t("toolbar.undoHint")
+                  : t("toolbar.undoChangeHint", { change: undoChange })
+              }
               data-testid="calendar-undo"
               disabled={!history.canUndo}
               onClick={history.undo}
@@ -486,9 +507,15 @@ export function CalendarScreen(): React.JSX.Element {
               variant="outline"
               size="icon"
               aria-label={
-                history.redoLabel ? `Redo ${history.redoLabel}` : "Redo"
+                redoChange === null
+                  ? t("toolbar.redo")
+                  : t("toolbar.redoChange", { change: redoChange })
               }
-              title={`Redo${history.redoLabel ? ` ${history.redoLabel}` : ""} (Ctrl/\u2318 + Shift + Z)`}
+              title={
+                redoChange === null
+                  ? t("toolbar.redoHint")
+                  : t("toolbar.redoChangeHint", { change: redoChange })
+              }
               data-testid="calendar-redo"
               disabled={!history.canRedo}
               onClick={history.redo}
@@ -503,7 +530,7 @@ export function CalendarScreen(): React.JSX.Element {
             onClick={openBlankDraft}
           >
             <Plus className="size-4" />
-            Add entry
+            {t("toolbar.addEntry")}
           </Button>
         </div>
       </div>

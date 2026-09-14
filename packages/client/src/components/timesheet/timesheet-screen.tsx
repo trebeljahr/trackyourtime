@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { format, parseISO } from "date-fns";
+import { parseISO } from "date-fns";
 import { CalendarRange, ChevronLeft, ChevronRight, Clock, Plus } from "lucide-react";
 import { deviceTimeZone } from "@starter/core";
 import {
@@ -25,13 +25,17 @@ import { TaskPicker } from "@/components/task-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatDayRangeLabel } from "@/components/calendar/day-range-label";
 import { useNow } from "@/components/calendar/use-now";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { reportsHref } from "@/lib/report-links";
 import { trpc } from "@/lib/trpc";
 import { TimesheetGrid } from "./timesheet-grid";
 import { useTimesheetMutations } from "./use-timesheet-mutations";
 import { useTimesheetRows } from "./use-timesheet-rows";
+import { userErrorMessage } from "@/lib/error-message";
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const WEEK_PARAM = "week";
@@ -56,19 +60,14 @@ const RUNNING_TICK_MS = 30_000;
  */
 const TIME_ZONE: string = deviceTimeZone();
 
-const rangeLabel = (from: string, to: string): string => {
+/** "2 – 8 Feb 2026" in the reader's language, from two "YYYY-MM-DD" keys. */
+const rangeLabel = (from: string, to: string, intlTag: string): string => {
   const start = parseISO(from);
   const end = parseISO(to);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
     return `${from} – ${to}`;
   }
-  const sameMonth =
-    start.getMonth() === end.getMonth() &&
-    start.getFullYear() === end.getFullYear();
-  return `${format(start, sameMonth ? "d" : "d MMM")} – ${format(
-    end,
-    "d MMM yyyy"
-  )}`;
+  return formatDayRangeLabel(start, end, intlTag);
 };
 
 export function TimesheetScreen(): React.JSX.Element {
@@ -76,6 +75,9 @@ export function TimesheetScreen(): React.JSX.Element {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const fmt = useFormatSettings();
+  const f = useFormat();
+  const t = useT("calendar");
+  const tc = useT("common");
   const { user } = useAuth();
   const nowMs = useNow(RUNNING_TICK_MS);
 
@@ -138,7 +140,7 @@ export function TimesheetScreen(): React.JSX.Element {
         (candidate) => candidate.id === row.projectId
       );
       const task = tasks.find((candidate) => candidate.id === row.taskId);
-      const label = project?.name ?? "No project";
+      const label = project?.name ?? tc("empty.noProject");
       return {
         projectId: row.projectId,
         taskId: row.taskId,
@@ -146,7 +148,7 @@ export function TimesheetScreen(): React.JSX.Element {
         color: project?.color ?? null,
       };
     });
-  }, [pinnedRows, projectsQuery.data, tasksQuery.data]);
+  }, [pinnedRows, projectsQuery.data, tasksQuery.data, tc]);
 
   /**
    * A timesheet is the caller's OWN week.
@@ -229,9 +231,9 @@ export function TimesheetScreen(): React.JSX.Element {
     <div className="space-y-4" data-testid="timesheet-page">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Timesheet</h1>
+          <h1 className="text-xl font-semibold">{t("timesheet.title")}</h1>
           <p className="text-sm text-muted-foreground">
-            {rangeLabel(weekStart, lastDay)}
+            {rangeLabel(weekStart, lastDay, f.intlLocale)}
           </p>
         </div>
 
@@ -240,7 +242,7 @@ export function TimesheetScreen(): React.JSX.Element {
             type="button"
             variant="outline"
             size="icon"
-            aria-label="Previous week"
+            aria-label={t("timesheet.previousWeek")}
             onClick={() => goToWeek(addDaysToKey(weekStart, -DAYS_PER_WEEK))}
             data-testid="timesheet-week-prev"
           >
@@ -254,14 +256,14 @@ export function TimesheetScreen(): React.JSX.Element {
             data-testid="timesheet-week-current"
           >
             {weekStart === currentWeek
-              ? "This week"
-              : rangeLabel(weekStart, lastDay)}
+              ? tc("time.thisWeek")
+              : rangeLabel(weekStart, lastDay, f.intlLocale)}
           </Button>
           <Button
             type="button"
             variant="outline"
             size="icon"
-            aria-label="Next week"
+            aria-label={t("timesheet.nextWeek")}
             onClick={() => goToWeek(addDaysToKey(weekStart, DAYS_PER_WEEK))}
             data-testid="timesheet-week-next"
           >
@@ -277,8 +279,7 @@ export function TimesheetScreen(): React.JSX.Element {
               className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
               data-testid="timesheet-truncated"
             >
-              This week has more entries than the grid can total accurately, so
-              editing is off. Narrow it down in Reports → Entries instead.
+              {t("timesheet.truncated")}
             </p>
           ) : null}
 
@@ -291,8 +292,8 @@ export function TimesheetScreen(): React.JSX.Element {
           ) : grid.rows.length === 0 ? (
             <EmptyState
               icon={CalendarRange}
-              title="Nothing on this timesheet yet"
-              description="Add a row for a project below, then type hours straight into the day you worked them."
+              title={t("timesheet.emptyTitle")}
+              description={t("timesheet.emptyDescription")}
               testId="timesheet-empty"
             />
           ) : (
@@ -337,12 +338,12 @@ export function TimesheetScreen(): React.JSX.Element {
               data-testid="timesheet-add-row-submit"
             >
               <Plus className="size-4" />
-              Add row
+              {t("timesheet.addRow")}
             </Button>
 
             <span className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground">
               <Clock className="size-4" />
-              Week total
+              {t("timesheet.weekTotal")}
               <span
                 className="font-medium tabular-nums text-foreground"
                 data-testid="timesheet-header-total"
@@ -356,12 +357,12 @@ export function TimesheetScreen(): React.JSX.Element {
 
       {entriesQuery.isError ? (
         <p className="text-sm text-destructive" data-testid="timesheet-error">
-          {entriesQuery.error.message}
+          {userErrorMessage(entriesQuery.error, undefined, tc)}
         </p>
       ) : null}
 
       <p className="sr-only" aria-live="polite">
-        {isBusy ? "Saving" : "Saved"}
+        {isBusy ? tc("status.saving") : tc("status.saved")}
       </p>
     </div>
   );

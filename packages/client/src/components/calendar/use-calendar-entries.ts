@@ -4,6 +4,7 @@ import * as React from "react";
 import type { DetailedEntry } from "@starter/shared";
 
 import { toast } from "@/components/ui/sonner";
+import { translate } from "@/i18n/translate";
 import { ORIGIN_ID } from "@/hooks/use-sync";
 import { useFormatSettings } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
@@ -24,12 +25,14 @@ import {
   replaceEntryId,
   restartsTimer,
   undo as undoStep,
+  type HistoryChange,
   type HistoryState,
   type HistoryStep,
   type StepBody,
 } from "./calendar-history";
 import { entrySource } from "@/lib/entry-source";
 import { ownEntries, useViewerId } from "@/components/tracker/own-entries";
+import { userErrorMessage } from "@/lib/error-message";
 
 /** The exact `entries.list` input the calendar screen is showing. */
 export type CalendarQueryInput = {
@@ -116,9 +119,12 @@ export type CalendarHistory = {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  /** What undo would reverse next, e.g. "move" — null when there is nothing. */
-  undoLabel: string | null;
-  redoLabel: string | null;
+  /**
+   * What undo would reverse next, as a `calendar.history.changes` key —
+   * null when there is nothing.
+   */
+  undoLabel: HistoryChange | null;
+  redoLabel: HistoryChange | null;
 };
 
 export type CalendarActions = {
@@ -235,7 +241,7 @@ export const useCalendarActions = (
     },
     onError: (error, _variables, context) => {
       rollback(context?.previous);
-      toast.error(error.message);
+      toast.error(userErrorMessage(error));
     },
     onSettled: settle,
   });
@@ -284,7 +290,7 @@ export const useCalendarActions = (
     },
     onError: (error, _variables, context) => {
       rollback(context?.previous);
-      toast.error(error.message);
+      toast.error(userErrorMessage(error));
     },
     onSettled: settle,
   });
@@ -306,7 +312,7 @@ export const useCalendarActions = (
     },
     onError: (error, _variables, context) => {
       rollback(context?.previous);
-      toast.error(error.message);
+      toast.error(userErrorMessage(error));
     },
     onSettled: settle,
   });
@@ -364,7 +370,7 @@ export const useCalendarActions = (
   const nextStepIdRef = React.useRef(1);
 
   const record = React.useCallback(
-    (body: StepBody, label: string): HistoryStep => {
+    (body: StepBody, label: HistoryChange): HistoryStep => {
       const step: HistoryStep = { ...body, id: nextStepIdRef.current, label };
       nextStepIdRef.current += 1;
       writeHistory((current) => pushStep(current, step));
@@ -423,12 +429,7 @@ export const useCalendarActions = (
         entry && !isNoopPatch(entry, patch)
           ? record(
               restartsTimer(entry, patch)
-                ? {
-                    kind: "barrier",
-                    reason:
-                      "Stopping a running timer cannot be undone — only one " +
-                      "entry can run at a time",
-                  }
+                ? { kind: "barrier", reason: "stopsRunningTimer" }
                 : {
                     kind: "update",
                     entryId: id,
@@ -457,12 +458,7 @@ export const useCalendarActions = (
       const step = entry
         ? record(
             entry.end === null
-              ? {
-                  kind: "barrier",
-                  reason:
-                    "Deleting a running timer cannot be undone — only one " +
-                    "entry can run at a time",
-                }
+              ? { kind: "barrier", reason: "deletesRunningTimer" }
               : {
                   kind: "remove",
                   entryId: id,
@@ -484,7 +480,7 @@ export const useCalendarActions = (
 
       if (move.outcome === "empty") return;
       if (move.outcome === "blocked") {
-        toast.error(move.reason);
+        toast.error(translate("calendar")(`history.blocked.${move.reason}`));
         return;
       }
 
@@ -513,7 +509,11 @@ export const useCalendarActions = (
           return;
       }
 
-      toast.success(`${undoing ? "Undid" : "Redid"} ${target.label}`);
+      const t = translate("calendar");
+      const change = t(`history.changes.${target.label}`);
+      toast.success(
+        undoing ? t("history.undid", { change }) : t("history.redid", { change })
+      );
     },
     [applyRemove, applyUpdate, createTracked, writeHistory]
   );

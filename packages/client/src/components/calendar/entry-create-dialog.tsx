@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { EntryFieldsEditor } from "@/components/entry-fields/entry-fields-editor";
 import { useEntryFields } from "@/components/entry-fields/use-entry-fields";
 import { toast } from "@/components/ui/sonner";
+import { useT } from "@/i18n/use-t";
 import { formatDayLabel, useFormatSettings } from "@/lib/format";
 import type { CalendarActions } from "./use-calendar-entries";
 
@@ -43,6 +44,8 @@ export function EntryCreateDialog({
   onClose,
 }: EntryCreateDialogProps): React.JSX.Element {
   const format = useFormatSettings();
+  const t = useT("calendar");
+  const tc = useT("common");
 
   const { fields, setFields } = useEntryFields(emptyEntryFields, draft);
   const [start, setStart] = React.useState("");
@@ -61,11 +64,11 @@ export function EntryCreateDialog({
     const startIso = parseTimeOfDay(start, draft.start);
     const endIso = parseTimeOfDay(end, draft.start);
     if (startIso === null || endIso === null) {
-      toast.error("Enter times like 9:15 or 14:00");
+      toast.error(t("create.invalidTimes"));
       return;
     }
     if (Date.parse(endIso) <= Date.parse(startIso)) {
-      toast.error("End must be after start");
+      toast.error(t("create.endBeforeStart"));
       return;
     }
 
@@ -86,9 +89,9 @@ export function EntryCreateDialog({
     >
       <DialogContent data-testid="calendar-create-dialog" className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New time entry</DialogTitle>
+          <DialogTitle>{t("create.title")}</DialogTitle>
           <DialogDescription>
-            {draft ? formatDayLabel(draft.start) : ""}
+            {draft ? formatDayLabel(draft.start, format.locale) : ""}
           </DialogDescription>
         </DialogHeader>
 
@@ -97,7 +100,7 @@ export function EntryCreateDialog({
             value={fields}
             onChange={setFields}
             autoFocus
-            descriptionPlaceholder="What are you working on?"
+            descriptionPlaceholder={t("create.descriptionPlaceholder")}
             onSubmit={submit}
             idPrefix="calendar-create"
             testIdPrefix="calendar-create"
@@ -105,7 +108,7 @@ export function EntryCreateDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="calendar-create-start">Start</Label>
+              <Label htmlFor="calendar-create-start">{tc("fields.start")}</Label>
               <Input
                 id="calendar-create-start"
                 data-testid="calendar-create-start"
@@ -117,7 +120,7 @@ export function EntryCreateDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="calendar-create-end">End</Label>
+              <Label htmlFor="calendar-create-end">{tc("fields.end")}</Label>
               <Input
                 id="calendar-create-end"
                 data-testid="calendar-create-end"
@@ -137,10 +140,10 @@ export function EntryCreateDialog({
             data-testid="calendar-create-cancel"
             onClick={onClose}
           >
-            Cancel
+            {tc("actions.cancel")}
           </Button>
           <Button data-testid="calendar-create-submit" onClick={submit}>
-            Create entry
+            {t("create.submit")}
           </Button>
         </DialogFooter>
       </DialogContent>

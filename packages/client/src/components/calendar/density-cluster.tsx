@@ -4,6 +4,7 @@ import * as React from "react";
 import type { DetailedEntry } from "@starter/shared";
 
 import { PopoverContent } from "@/components/ui/popover";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CLUSTER_MIN_PX, formatMinuteOfDay } from "./calendar-math";
@@ -73,6 +74,7 @@ export const DensityCluster = React.forwardRef<
   ref
 ) {
   const format = useFormatSettings();
+  const t = useT("calendar");
   const drawnHeight = Math.max(height, CLUSTER_MIN_PX);
   const span = Math.max(1, endMin - startMin);
   const totalSec = members.reduce(
@@ -90,8 +92,15 @@ export const DensityCluster = React.forwardRef<
       ref={ref}
       role="button"
       tabIndex={0}
-      aria-label={`${members.length} short entries, ${timeLabel}`}
-      title={`${members.length} short entries · ${timeLabel} · ${format.duration(totalSec)}`}
+      aria-label={t("cluster.ariaLabel", {
+        count: members.length,
+        time: timeLabel,
+      })}
+      title={t("cluster.title", {
+        count: members.length,
+        time: timeLabel,
+        duration: format.duration(totalSec),
+      })}
       data-testid="calendar-density-cluster"
       data-cluster-size={members.length}
       className={cn(
@@ -157,7 +166,10 @@ export const DensityCluster = React.forwardRef<
           </span>
           {narrow ? null : (
             <span className="truncate">
-              short entries · {format.durationShort(totalSec)}
+              {t("cluster.chipSuffix", {
+                count: members.length,
+                duration: format.durationShort(totalSec),
+              })}
             </span>
           )}
         </span>
@@ -181,6 +193,8 @@ export function DensityClusterPopover({
   onSelect,
 }: DensityClusterPopoverProps): React.JSX.Element {
   const format = useFormatSettings();
+  const t = useT("calendar");
+  const tc = useT("common");
   const totalSec = members.reduce(
     (sum, member) => sum + Math.max(0, member.endMin - member.startMin) * 60,
     0
@@ -197,7 +211,7 @@ export function DensityClusterPopover({
     >
       <div className="border-border space-y-0.5 border-b px-3 py-2">
         <p className="text-sm font-semibold">
-          {members.length} short entries
+          {t("cluster.count", { count: members.length })}
         </p>
         <p className="text-muted-foreground text-xs tabular-nums">
           {formatMinuteOfDay(startMin, format.timeFormat)} –{" "}
@@ -228,7 +242,7 @@ export function DensityClusterPopover({
                 {formatMinuteOfDay(member.startMin, format.timeFormat)}
               </span>
               <span className="min-w-0 flex-1 truncate">
-                {member.entry.description || "No description"}
+                {member.entry.description || tc("empty.noDescription")}
               </span>
               <span className="text-muted-foreground shrink-0 tabular-nums">
                 {format.durationShort(

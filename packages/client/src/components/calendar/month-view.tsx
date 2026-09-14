@@ -15,6 +15,8 @@ import {
 import type { DetailedEntry, WeekStart } from "@starter/shared";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { useFormat } from "@/i18n/use-format";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toDateKey } from "@/components/date-range-picker";
@@ -61,6 +63,8 @@ export function MonthView({
   onSelectDay,
 }: MonthViewProps): React.JSX.Element {
   const format = useFormatSettings();
+  const f = useFormat();
+  const tc = useT("common");
   const monthMs = startOfMonth(month).getTime();
   const nowMs = useNow(60_000);
   const nowDate = React.useMemo(() => new Date(nowMs), [nowMs]);
@@ -94,7 +98,7 @@ export function MonthView({
         } else {
           byProject.set(key, {
             key,
-            label: entry.projectName ?? "No project",
+            label: entry.projectName ?? tc("empty.noProject"),
             color: entry.projectColor ?? NO_PROJECT_COLOR,
             seconds,
           });
@@ -111,16 +115,17 @@ export function MonthView({
           .slice(0, 3),
       };
     });
-  }, [entries, monthMs, nowMs, weekStartsOn]);
+  }, [entries, monthMs, nowMs, tc, weekStartsOn]);
 
   const busiestSec = days.reduce((max, day) => Math.max(max, day.totalSec), 0);
 
-  const weekdayLabels = React.useMemo<string[]>(() => {
-    const first = startOfWeek(new Date(monthMs), { weekStartsOn });
-    return Array.from({ length: 7 }, (_, index) =>
-      addDays(first, index).toLocaleDateString(undefined, { weekday: "short" })
-    );
-  }, [monthMs, weekStartsOn]);
+  const weekdayLabels = React.useMemo<string[]>(
+    () =>
+      Array.from({ length: 7 }, (_, index) =>
+        f.weekday(weekStartsOn + index, "short")
+      ),
+    [f, weekStartsOn]
+  );
 
   if (isLoading) {
     return (
@@ -170,7 +175,7 @@ export function MonthView({
                     isToday && "text-primary"
                   )}
                 >
-                  {day.date.getDate()}
+                  {f.number(day.date.getDate())}
                 </span>
                 <span
                   className="text-muted-foreground text-[0.7rem] tabular-nums"

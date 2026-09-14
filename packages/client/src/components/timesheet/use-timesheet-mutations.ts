@@ -3,13 +3,13 @@
 import * as React from "react";
 import { deviceTimeZone } from "@starter/core";
 import {
-  timesheetRefusalMessage,
   type DetailedEntry,
   type EntryListInput,
   type TimesheetCellPlan,
 } from "@starter/shared";
 
 import { toast } from "@/components/ui/sonner";
+import { translate } from "@/i18n/translate";
 import { ORIGIN_ID } from "@/hooks/use-sync";
 import { getActiveWorkspaceId } from "@/lib/active-workspace";
 import {
@@ -30,6 +30,8 @@ import {
 import { OFFLINE_QUEUED_MUTATION } from "@/lib/query-client";
 import { trpc } from "@/lib/trpc";
 import { entrySource } from "@/lib/entry-source";
+import { refusalMessageKey } from "./refusal-message";
+import { userErrorMessage } from "@/lib/error-message";
 
 /** What a plan needs to know beyond the numbers: which row it belongs to. */
 export type CellEditContext = {
@@ -152,12 +154,12 @@ export const useTimesheetMutations = (
       if (inFlight === undefined) {
         // Queued offline, or already failed: an update would be lost the
         // moment the create replays under a real id.
-        toast.info("Still syncing — try again in a moment.");
+        toast.info(translate("calendar")("timesheet.stillSyncing"));
         return;
       }
       void inFlight.then((serverId) => {
         if (serverId === null) {
-          toast.info("Still syncing — try again in a moment.");
+          toast.info(translate("calendar")("timesheet.stillSyncing"));
           return;
         }
         apply(serverId);
@@ -209,9 +211,7 @@ export const useTimesheetMutations = (
         }
         if (stillHere()) restore(previous);
         toast.error(
-          error instanceof Error && error.message !== ""
-            ? error.message
-            : args.failure
+          userErrorMessage(error, args.failure)
         );
       } finally {
         setPending((count) => Math.max(0, count - 1));
@@ -272,7 +272,7 @@ export const useTimesheetMutations = (
         },
         queue: (workspaceId) =>
           enqueueOffline("entries.create", input, tempId, workspaceId),
-        failure: "Could not add the time",
+        failure: translate("calendar")("timesheet.failed.add"),
       }).then((): string | null => serverId);
 
       createdIds.current.set(tempId, named);
@@ -313,7 +313,7 @@ export const useTimesheetMutations = (
           },
           queue: (workspaceId) =>
             enqueueOffline("entries.update", input, undefined, workspaceId),
-          failure: "Could not save the change",
+          failure: translate("calendar")("timesheet.failed.save"),
         });
       });
     },
@@ -348,9 +348,9 @@ export const useTimesheetMutations = (
             // Clearing a cell deletes tracked time, so the way back is offered
             // rather than assumed — the grid has no other undo.
             if (existing?.end) {
-              toast.message("Entry removed", {
+              toast.message(translate("calendar")("timesheet.entryRemoved"), {
                 action: {
-                  label: "Undo",
+                  label: translate("common")("actions.undo"),
                   onClick: () =>
                     create(
                       existing.start,
@@ -363,7 +363,7 @@ export const useTimesheetMutations = (
           },
           queue: (workspaceId) =>
             enqueueOffline("entries.remove", input, undefined, workspaceId),
-          failure: "Could not remove the time",
+          failure: translate("calendar")("timesheet.failed.remove"),
         });
       });
     },
@@ -376,7 +376,11 @@ export const useTimesheetMutations = (
         case "noop":
           return;
         case "refuse":
-          toast.error(timesheetRefusalMessage(plan.reason));
+          toast.error(
+            translate("calendar")(
+              `timesheet.refusal.${refusalMessageKey(plan.reason)}`
+            )
+          );
           return;
         case "create":
           create(plan.start, plan.end, context);

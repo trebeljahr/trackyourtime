@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { EntryFieldsEditor } from "@/components/entry-fields/entry-fields-editor";
 import { useWriteThroughEntryFields } from "@/components/entry-fields/use-entry-fields";
 import { toast } from "@/components/ui/sonner";
+import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import type { CalendarActions } from "./use-calendar-entries";
 
@@ -36,6 +37,8 @@ export function EntryEditPopover({
   onClose,
 }: EntryEditPopoverProps): React.JSX.Element {
   const format = useFormatSettings();
+  const t = useT("calendar");
+  const tc = useT("common");
   const isRunning = entry.end === null;
   const endIso = entry.end ?? new Date(nowMs).toISOString();
 
@@ -67,7 +70,7 @@ export function EntryEditPopover({
     const anchor = field === "start" ? entry.start : endIso;
     const iso = parseTimeOfDay(raw, anchor);
     if (iso === null) {
-      toast.error(`"${raw}" is not a time we understand`);
+      toast.error(t("edit.invalidTime", { value: raw }));
       if (field === "start") setStart(format.clock(entry.start));
       else setEnd(format.clock(endIso));
       return;
@@ -76,7 +79,7 @@ export function EntryEditPopover({
     const nextStart = field === "start" ? iso : entry.start;
     const nextEnd = field === "end" ? iso : endIso;
     if (Date.parse(nextEnd) <= Date.parse(nextStart)) {
-      toast.error("End must be after start");
+      toast.error(t("create.endBeforeStart"));
       if (field === "start") setStart(format.clock(entry.start));
       else setEnd(format.clock(endIso));
       return;
@@ -114,7 +117,7 @@ export function EntryEditPopover({
         value={fields}
         onChange={onChange}
         fields={["description", "projectTask", "tags"]}
-        descriptionPlaceholder="What are you working on?"
+        descriptionPlaceholder={t("create.descriptionPlaceholder")}
         onDescriptionCommit={commitDescription}
         idPrefix={`calendar-edit-${entry.id}`}
         testIdPrefix="calendar-edit"
@@ -122,7 +125,9 @@ export function EntryEditPopover({
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1.5">
-          <Label htmlFor={`calendar-edit-start-${entry.id}`}>Start</Label>
+          <Label htmlFor={`calendar-edit-start-${entry.id}`}>
+            {tc("fields.start")}
+          </Label>
           <Input
             id={`calendar-edit-start-${entry.id}`}
             data-testid="calendar-edit-start"
@@ -144,7 +149,7 @@ export function EntryEditPopover({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`calendar-edit-end-${entry.id}`}>
-            {isRunning ? "End (stops timer)" : "End"}
+            {isRunning ? t("edit.endStopsTimer") : tc("fields.end")}
           </Label>
           <Input
             id={`calendar-edit-end-${entry.id}`}
@@ -177,7 +182,9 @@ export function EntryEditPopover({
               actions.update(entry.id, { billable });
             }}
           />
-          <Label htmlFor={`calendar-edit-billable-${entry.id}`}>Billable</Label>
+          <Label htmlFor={`calendar-edit-billable-${entry.id}`}>
+            {tc("fields.billable")}
+          </Label>
         </div>
         <span
           className="text-muted-foreground text-sm tabular-nums"
@@ -201,7 +208,7 @@ export function EntryEditPopover({
           }}
         >
           <Trash2 className="size-4" />
-          Delete
+          {tc("actions.delete")}
         </Button>
         <Button
           variant="secondary"
@@ -209,7 +216,7 @@ export function EntryEditPopover({
           data-testid="calendar-edit-close"
           onClick={onClose}
         >
-          Done
+          {tc("actions.done")}
         </Button>
       </div>
     </PopoverContent>
