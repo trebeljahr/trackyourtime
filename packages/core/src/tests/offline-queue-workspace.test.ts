@@ -5,6 +5,7 @@ import {
   createOfflineQueue,
   isForeignWorkspace,
   isReplayableIn,
+  refusalKeepsRow,
   type QueuedMutation,
 } from "../offline-queue.js";
 import {
@@ -332,4 +333,37 @@ test("a 403 or 404 that is not a tRPC answer never drops a queued row", async ()
   }
   // The same statuses from the server itself still are.
   assert.equal(isPermanentRejection(new ApiError("no", "NOT_FOUND", 404)), true);
+});
+
+test("refusalKeepsRow: a NOT_FOUND keeps a stamped row unless its workspace is confirmed", async () => {
+  const notFound = new ApiError("gone", "NOT_FOUND", 404);
+  const stamped = { workspaceId: "ws-a" };
+  const asked: string[] = [];
+  const member = (answer: boolean) => async (id: string) => {
+    asked.push(id);
+    return answer;
+  };
+
+  // Removed from the workspace while the flush ran: kept.
+  assert.equal(await refusalKeepsRow(notFound, stamped, member(false)), true);
+  // The re-ask failed: kept — not knowing is no reason to delete.
+  assert.equal(
+    await refusalKeepsRow(notFound, stamped, async () => {
+      throw new Error("offline");
+    }),
+    true
+  );
+  // Still a member, so the entry really is gone: dropped as before.
+  assert.equal(await refusalKeepsRow(notFound, stamped, member(true)), false);
+  assert.deepEqual(asked, ["ws-a", "ws-a"]);
+
+  // Nothing to re-ask about: an unstamped row, or a refusal that is not NOT_FOUND.
+  asked.length = 0;
+  assert.equal(await refusalKeepsRow(notFound, {}, member(false)), false);
+  assert.equal(
+    await refusalKeepsRow(new ApiError("bad", "BAD_REQUEST", 400), stamped, member(false)),
+    false
+  );
+  assert.equal(await refusalKeepsRow(new Error("x"), stamped, member(false)), false);
+  assert.deepEqual(asked, []);
 });

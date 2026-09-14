@@ -451,6 +451,14 @@ const wrap = (
     const report = await flushOffline(
       mutators,
       new Set(members.map((workspace) => workspace.id)),
+      // Asked directly, not through `liveWorkspaces`: that answer is memoised
+      // for this client, and its adoption step needs the queue the flush holds.
+      async (workspaceId) => {
+        const fresh = await client.query<WorkspaceSummary[]>("workspaces.list");
+        const { activeId, moved } = await installWorkspaceList(fresh);
+        if (moved) setWorkspaceId(activeId);
+        return fresh.some((workspace) => workspace.id === workspaceId);
+      },
     );
     await reconcileOverlay({
       resolved: report.resolved,

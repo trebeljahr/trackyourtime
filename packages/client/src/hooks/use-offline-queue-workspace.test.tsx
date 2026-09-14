@@ -218,3 +218,72 @@ describe("useOfflineQueue in several workspaces", () => {
     expect(result.current.authBlocked).toBe(true);
   });
 });
+
+describe("a NOT_FOUND mid-flush", () => {
+  const notFound = () =>
+    Object.assign(new Error("not found"), { data: { code: "NOT_FOUND" } });
+
+  it("keeps the row when the workspace was lost after the flush began", async () => {
+    await offline.enqueueOffline("entries.start", start("first"), "temp-1", A.id);
+    await offline.enqueueOffline("entries.start", start("removed mid-flush"), "temp-2", A.id);
+    // The first answer still lists A; the person is removed from A while the
+    // flush runs, so the second row is refused and the re-ask no longer has A.
+    const answers = [[A, B], [B]];
+    listAnswer = async () => answers.shift() ?? [B];
+    failNext.set("entries.start:removed mid-flush", notFound());
+
+    const { result } = renderQueue();
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(sent.map((call) => call.input.description)).toEqual(["first"]);
+    const kept = await offline.getOfflineQueue().list();
+    expect(kept.map((row) => row.workspaceId)).toEqual([A.id]);
+    expect(toastError).not.toHaveBeenCalledWith(
+      "One offline change could not be saved",
+      expect.anything(),
+    );
+    // And it is held from now on, not retried into anything.
+    expect(offline.getForeignCount()).toBe(1);
+  });
+
+  it("keeps the row when the re-ask itself fails", async () => {
+    await offline.enqueueOffline("entries.start", start("gone?"), "temp-1", A.id);
+    let calls = 0;
+    listAnswer = async () => {
+      calls += 1;
+      if (calls > 1) throw new Error("offline again");
+      return [A, B];
+    };
+    failNext.set("entries.start:gone?", notFound());
+
+    const { result } = renderQueue();
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(await offline.getOfflineQueue().size()).toBe(1);
+    expect(toastError).not.toHaveBeenCalledWith(
+      "One offline change could not be saved",
+      expect.anything(),
+    );
+  });
+
+  it("still drops, out loud, a NOT_FOUND in a workspace the person is still in", async () => {
+    await offline.enqueueOffline("entries.start", start("entry gone"), "temp-1", A.id);
+    listAnswer = async () => [A, B];
+    failNext.set("entries.start:entry gone", notFound());
+
+    const { result } = renderQueue();
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(await offline.getOfflineQueue().size()).toBe(0);
+    expect(toastError).toHaveBeenCalledWith(
+      "One offline change could not be saved",
+      expect.anything(),
+    );
+  });
+});

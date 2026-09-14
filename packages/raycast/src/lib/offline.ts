@@ -24,6 +24,7 @@ import {
   isQueuedOn,
   isReplayableBy,
   isReplayableIn,
+  refusalKeepsRow,
   isTransportFailure as isTransportFailureCore,
   OFFLINE_QUEUE_STORAGE_KEY,
   replayOfflineMutation,
@@ -353,6 +354,14 @@ export async function flushOffline(
    * there, never replayed into the workspace chosen now, never dropped.
    */
   memberWorkspaceIds: ReadonlySet<string>,
+  /**
+   * Asks the server again whether this account is still in `workspaceId`.
+   * Consulted when a stamped row is refused as NOT_FOUND: `memberWorkspaceIds`
+   * is only as fresh as the start of the flush, and a removal landing while it
+   * runs reads exactly like "that entry is gone". Must not touch the queue,
+   * which this flush holds. Omitted, every NOT_FOUND is a refusal.
+   */
+  stillMember?: (workspaceId: string) => Promise<boolean>,
 ): Promise<FlushReport> {
   await ready();
   const offline = getOfflineQueue();
@@ -378,6 +387,15 @@ export async function flushOffline(
           return;
         }
         if (isPermanentRejection(error)) {
+          // Kept, and the flush stopped, unless the row's workspace is
+          // demonstrably still a membership: the next flush then holds it by
+          // the filter instead of this one counting it refused and deleting it.
+          if (
+            stillMember !== undefined &&
+            (await refusalKeepsRow(error, decoded, stillMember))
+          ) {
+            throw error;
+          }
           refused += 1;
           return;
         }

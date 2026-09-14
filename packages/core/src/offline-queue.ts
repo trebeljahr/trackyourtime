@@ -1,3 +1,4 @@
+import { ApiError } from "./api-client.js";
 import { createId } from "./ids.js";
 import { sameServerOrigin } from "./server-origin.js";
 import type { KeyValueStorage } from "./storage.js";
@@ -250,6 +251,30 @@ export const isForeignWorkspace = (
 ): boolean =>
   mutation.workspaceId !== undefined &&
   !memberWorkspaceIds.has(mutation.workspaceId);
+
+/**
+ * True when a permanent refusal of a stamped row must NOT drop it.
+ *
+ * A NOT_FOUND on a row addressed to a workspace reads the same whether the
+ * entry is gone or the person was removed from the workspace — and a flush
+ * checks memberships once, before it starts, so a removal landing while it
+ * runs is only visible as that NOT_FOUND. The row is kept (the flush stops at
+ * it, and the next flush holds it by `isReplayableIn`) unless `stillMember`
+ * confirms the workspace is still a membership. A failed confirmation keeps it
+ * too: not knowing is no licence to delete somebody's tracked time.
+ *
+ * `stillMember` must not touch the queue — the flush calling this holds it.
+ */
+export const refusalKeepsRow = async (
+  error: unknown,
+  row: { workspaceId?: string },
+  stillMember: (workspaceId: string) => Promise<boolean>
+): Promise<boolean> => {
+  if (row.workspaceId === undefined) return false;
+  if (!(error instanceof ApiError)) return false;
+  if (error.httpStatus !== 404 && error.code !== "NOT_FOUND") return false;
+  return !(await stillMember(row.workspaceId).catch(() => false));
+};
 
 /**
  * The pure half of `OfflineQueue.adoptUnstampedWorkspace`: `rows` with every

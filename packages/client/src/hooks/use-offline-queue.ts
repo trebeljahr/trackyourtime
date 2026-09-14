@@ -22,6 +22,7 @@ import {
   getServerPendingCount,
   isAuthError,
   isNetworkError,
+  isNotFoundError,
   isOnline,
   refreshPendingCount,
   setOfflineQueueOwner,
@@ -305,9 +306,29 @@ export const useOfflineQueue = (): OfflineQueueState => {
             blocked = true;
             throw error;
           }
-          // The server refused it on the merits (validation, a workspace the
-          // user has left). The server wins: drop the mutation and let the
-          // invalidation below pull the authoritative state back.
+          // A NOT_FOUND on a stamped row can mean "you were removed from this
+          // workspace" as much as "that entry is gone": the list asked for
+          // above is only as fresh as the start of the flush, and a flush of
+          // many rows takes a while. Ask again, and keep the row — stopping
+          // the flush here — unless its workspace is demonstrably still a
+          // membership. The next flush then holds it by the filter instead of
+          // this one deleting it. Applied without the adoption step
+          // (`takeWorkspaceListFor`): that needs the queue this flush holds.
+          if (isNotFoundError(error) && mutation.workspaceId !== undefined) {
+            const fresh = await utilsRef.current.workspaces.list
+              .fetch()
+              .catch(() => null);
+            if (fresh !== null) await applyWorkspaceList(fresh, forUser);
+            if (
+              fresh === null ||
+              !fresh.some((workspace) => workspace.id === mutation.workspaceId)
+            ) {
+              throw error;
+            }
+          }
+          // The server refused it on the merits (validation, a permission a
+          // role change took away). The server wins: drop the mutation and
+          // let the invalidation below pull the authoritative state back.
           rejected += 1;
         }
       }, { memberWorkspaceIds: members });
