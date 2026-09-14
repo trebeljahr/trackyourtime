@@ -646,12 +646,32 @@ no other value from that file, and never prints it.
 [Troubleshooting](#troubleshooting) section explains each failure in more
 depth.
 
+**Run** the server's own configuration check, from the clone directory:
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js doctor
+```
+
+**Expect** no `FAIL` line. `WARN  mail` is normal when SMTP is not configured.
+The script above tests the install from the outside. `doctor` tests it from
+inside the server container: the database, Redis, the trusted origins, the
+auth URL and the clock. See [`doctor`](#doctor).
+
 ### Step 9. Create your account
 
 Open `https://track.example.com/signup` and fill in name, email and a password
 of at least eight characters.
 
 **Expect** to land in the app, signed in, with an empty personal workspace.
+
+To create the account without a browser, use the admin CLI instead. It asks
+for the password twice and does not show it:
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js create-user --email you@example.com --name "Your Name"
+```
+
+See [The admin CLI](#the-admin-cli) for the other commands.
 
 **If it fails**
 
@@ -704,13 +724,15 @@ domain you do not own. The self-host image has the separate name
 There is no allowlist, no invite code and no setup wizard. The first account is
 not special. Email verification is off, so registration needs no mail provider.
 
-**There is no instance administrator.** No account can see other people's data
-or manage the instance. Every account gets its own personal workspace when it
-is created. All data (clients, projects, tasks, entries, tags and invoices)
-belongs to a workspace. The data model supports several members and roles per
-workspace, but the web app has no screen to invite or manage members. In
-practice, one account is one private workspace. You cannot invite a team
-through the web app yet.
+**Administration is a command, not an account.** No account can see other
+people's data or manage the instance. The person who can run commands in the
+server container is the administrator, through
+[the admin CLI](#the-admin-cli). Every account gets its own personal workspace
+when it is created. All data (clients, projects, tasks, entries, tags and
+invoices) belongs to a workspace. The data model supports several members and
+roles per workspace, but the web app has no screen to invite or manage
+members. In practice, one account is one private workspace. You cannot invite
+a team through the web app yet.
 
 **The application cannot close registration.** There is no setting for it.
 Anyone who can reach your domain can create an account. Three workarounds, from
@@ -750,9 +772,139 @@ catalog, its invoices and the entries on those invoices. Your MongoDB backups
 still hold the deleted data until they expire, so rotate them if that matters
 to you.
 
-**If you lock yourself out**, see [Email](#email). Without a mail provider the
-server writes the password-reset link to its log, and that is a supported way
-back in.
+**If you lock yourself out**, set a new password with
+[`reset-password`](#reset-password). The server log also holds a reset link
+when no mail provider is configured. See [Email](#email).
+
+### The admin CLI
+
+The server image contains a command-line tool for the instance. Run it inside
+the `server` container, from the clone directory:
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js <command>
+```
+
+The tool uses the server's own configuration and databases. It opens no port
+and makes no request outside your stack. It sends no telemetry and does not
+check for updates. Anyone who can run `docker compose exec` on the server can
+use it, so protect SSH access to the server.
+
+| Command | Effect |
+|---|---|
+| `create-user --email <address> --name <name>` | Creates an account and its personal workspace. |
+| `reset-password --email <address>` | Sets a new password and signs the account out on every device. |
+| `list-workspaces` | Lists every workspace with its id, name, member count and owner email. |
+| `doctor` | Checks the configuration and the services, one `PASS`, `WARN` or `FAIL` line each. |
+| `help` | Shows the commands and their options. |
+
+Exit status: `0` on success, `1` when the command fails or a `doctor` check
+fails, `2` when the arguments are wrong. `list-workspaces` and `doctor` accept
+`--json` for output that a script can read.
+
+From a checkout with a local server configuration, the same commands run as
+`pnpm --filter @starter/server admin <command>`.
+
+#### Passwords
+
+`create-user` and `reset-password` ask for the password twice and do not show
+it. The password rules are the same as on the sign-up page: at least eight
+characters.
+
+Two other ways to give the password, for scripts:
+
+- On standard input, with `-T` so that Compose does not attach a terminal. The
+  first line is the password:
+
+  ```bash
+  printf '%s\n' "$NEW_PASSWORD" | docker compose -f docker-compose.selfhost.yml exec -T server node dist/cli/admin.js reset-password --email you@example.com
+  ```
+
+- With `--password <password>`. The password is then in your shell history.
+  Use this only for throwaway accounts.
+
+#### `create-user`
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js create-user --email ada@example.com --name "Ada Lovelace"
+```
+
+**Expect:**
+
+```text
+Created ada@example.com (user 6650f0c2a1b2c3d4e5f60718) with personal workspace 6650f0c2a1b2c3d4e5f6071b.
+```
+
+The account is created the same way as on the sign-up page, so the person can
+sign in at once. The command fails when an account with that email exists.
+Registration does not need to be open: the command works when you block the
+sign-up endpoint at the proxy.
+
+#### `reset-password`
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js reset-password --email ada@example.com
+```
+
+**Expect:**
+
+```text
+Set a new password for ada@example.com and signed out 3 sessions.
+```
+
+Every session of the account is deleted. The mobile apps, the browser
+extension and the Raycast extension are signed out at the next request, and
+open live-sync connections close within a minute. A browser tab can keep
+working for up to five minutes from its cached session. The command also works
+for an account that signed up with Google and has no password yet: it adds one.
+
+#### `list-workspaces`
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js list-workspaces
+```
+
+**Expect:**
+
+```text
+ID                        NAME                      MEMBERS  OWNER
+6650f0c2a1b2c3d4e5f6071b  Ada Lovelace's workspace  1        ada@example.com
+```
+
+An owner of `(no owner)` means that no member of the workspace has the owner
+role. That can happen when an account deletion stops before it finishes.
+
+#### `doctor`
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js doctor
+```
+
+**Expect** output like this from a healthy install without SMTP:
+
+```text
+PASS  database         MongoDB answered a ping in 3 ms
+PASS  redis            Redis answered PING
+WARN  mail             no mail transport; password-reset links are written to the server log
+                       fix: set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD and EMAIL_FROM to send mail
+PASS  trusted-origins  https://track.example.com is trusted
+PASS  auth-url         https://track.example.com is well-formed and is the app origin
+PASS  clock            this process is 2 ms behind the database server
+
+0 failed, 1 warned, 5 passed.
+```
+
+| Check | Passes when | Fails when |
+|---|---|---|
+| `database` | MongoDB answers a ping at `MONGODB_URI`. | MongoDB does not answer within five seconds. |
+| `redis` | Redis answers `PING` at `REDIS_URL`. `WARN` when `REDIS_URL` is empty. | `REDIS_URL` is set and Redis does not answer. The server does not start in that state. |
+| `mail` | A mail transport is configured. `WARN` when none is. | `SMTP_HOST` is set and `EMAIL_FROM` is empty. |
+| `trusted-origins` | The origin of `APP_URL` is in the trusted origins exactly as a browser sends it. `WARN` when a `TRUSTED_ORIGINS` entry has a path or a trailing slash. | The origin is missing, or is present only with a trailing slash or a path. Sign-in then fails with `403 INVALID_ORIGIN`. |
+| `auth-url` | `BETTER_AUTH_URL` is a valid URL on the app's origin. `WARN` for a path, or for plain `http` on a public host. | `BETTER_AUTH_URL` is missing, does not parse, or has a different origin from `APP_URL`. |
+| `clock` | The server's clock is within 30 seconds of MongoDB's. `WARN` up to five minutes. | The clocks differ by five minutes or more. |
+
+`doctor` sends no email. To test mail delivery, see
+[Verifying a send](#verifying-a-send).
 
 ---
 
@@ -807,6 +959,9 @@ docker compose -f docker-compose.selfhost.yml logs server | grep 'Password reset
 The line looks like `[auth] Password reset URL for you@example.com: https://…`.
 Open that URL in a browser. It carries a `?token=` query parameter and lands on
 `https://track.example.com/reset-password`, a real page in the web app.
+
+With shell access to the server, [`reset-password`](#reset-password) is faster.
+It needs no link and no browser.
 
 ### Which transport is used
 
@@ -1263,6 +1418,12 @@ Start with the check script. It names the failing layer and prints a fix:
 scripts/selfhost-check.sh track.example.com
 ```
 
+Then check the server's configuration from inside the container:
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js doctor
+```
+
 ### Reading the logs
 
 ```bash
@@ -1472,5 +1633,8 @@ While Mongo is unhealthy the server does not start at all, because
 | `packages/client/Dockerfile.selfhost` | Builds the web app with an empty `NEXT_PUBLIC_API_URL` and serves the static export |
 | `packages/server/Dockerfile` | The server image, shared with the maintainer's deploy |
 | `packages/server/.env.example` | Every server variable, with an explanation for each |
+| `packages/server/src/cli/admin.ts` | The admin CLI, compiled into the server image as `dist/cli/admin.js` |
+| `docker-compose.selfhost.ci.yml` | CI override: runs the stack with images built from the checkout, on `localhost` |
+| [`.github/workflows/selfhost-smoke.yml`](../.github/workflows/selfhost-smoke.yml) | Boots the stack on pull requests that change it, and runs `doctor`, `create-user` and `reset-password` against it |
 | [`.github/workflows/release.yml`](../.github/workflows/release.yml) | Publishes the multi-arch, version-tagged images on a `v*` tag |
 | [`docs/deploy.md`](./deploy.md) | The maintainer's own two-domain Coolify deployment, not this one |
