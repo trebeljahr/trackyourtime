@@ -33,22 +33,47 @@ interface CommandDialogProps
   title?: string;
   description?: string;
   children?: React.ReactNode;
+  /**
+   * Passed to the cmdk root — a custom `filter`, a controlled `value`, a
+   * `data-testid`. Everything but `children`, which is this dialog's own.
+   */
+  commandProps?: Omit<
+    React.ComponentPropsWithoutRef<typeof CommandPrimitive>,
+    "children"
+  >;
+  /** Extra classes for the dialog surface, e.g. to top-anchor it. */
+  contentClassName?: string;
 }
 
 function CommandDialog({
   title = "Command palette",
   description = "Search for a command to run.",
   children,
+  commandProps,
+  contentClassName,
   ...props
 }: CommandDialogProps): React.JSX.Element {
+  const { className: commandClassName, ...restCommandProps } =
+    commandProps ?? {};
   return (
     <Dialog {...props}>
-      <DialogContent className="overflow-hidden p-0">
+      {/* No close button: the X sat on top of the search field, and Escape,
+          the overlay and Android's back button already close it. */}
+      <DialogContent
+        className={cn("overflow-hidden p-0", contentClassName)}
+        showCloseButton={false}
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-input-wrapper]_svg]:size-4 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2 [&_[cmdk-item]_svg]:size-4">
+        <Command
+          className={cn(
+            "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-input-wrapper]_svg]:size-4 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2 [&_[cmdk-item]_svg]:size-4",
+            commandClassName,
+          )}
+          {...restCommandProps}
+        >
           {children}
         </Command>
       </DialogContent>

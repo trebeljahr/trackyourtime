@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   Receipt,
+  Search,
   Settings as SettingsIcon,
   Tags as TagsIcon,
   Timer,
@@ -42,6 +43,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ThemeSync } from "@/components/theme-sync";
+import {
+  CommandPalette,
+  useCommandPaletteShortcut,
+} from "@/components/command-palette/command-palette";
+import { useT } from "@/i18n/use-t";
 import { LocaleSync } from "@/i18n/locale-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useNativeLifecycle } from "@/hooks/use-native-lifecycle";
@@ -306,6 +312,21 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
   const closeMobile = React.useCallback((): void => setMobileOpen(false), []);
   const openMobile = React.useCallback((): void => setMobileOpen(true), []);
 
+  // Mounted here so Cmd/Ctrl+K works on every protected screen.
+  const t = useT("shell");
+  const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const togglePalette = React.useCallback(
+    (): void => setPaletteOpen((current) => !current),
+    [],
+  );
+  useCommandPaletteShortcut(togglePalette);
+  const openPaletteFromDrawer = React.useCallback((): void => {
+    // The drawer goes first, so the two overlays never stack and back closes
+    // the palette alone.
+    setMobileOpen(false);
+    setPaletteOpen(true);
+  }, []);
+
   // The drawer is an overlay like any dialog, so Android's back button closes
   // it before it does anything else. Registering here rather than on the
   // rendered <aside> keeps the stack entry alive for exactly as long as the
@@ -383,6 +404,19 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
                 </Button>
               </div>
               <Separator />
+              {/* The phone has no Cmd+K, so the palette gets an entry of its
+                  own at the top of the drawer the More tab opens. */}
+              <div className="px-3 pt-4">
+                <button
+                  type="button"
+                  onClick={openPaletteFromDrawer}
+                  className="flex w-full items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+                  data-testid="sidebar-search"
+                >
+                  <Search className="size-4 shrink-0" />
+                  <span className="truncate">{t("palette.open")}</span>
+                </button>
+              </div>
               <SidebarNav pathname={pathname} onNavigate={closeMobile} />
             </aside>
           </div>
@@ -405,6 +439,24 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
             </Button>
 
             <div className="ml-auto flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="hidden md:inline-flex"
+                    onClick={() => setPaletteOpen(true)}
+                    aria-label={t("palette.openHint")}
+                    aria-keyshortcuts="Meta+K Control+K"
+                    data-testid="command-palette-open"
+                  >
+                    <Search className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {t("palette.openHint")} <kbd className="ml-1 font-mono">⌘K</kbd>
+                </TooltipContent>
+              </Tooltip>
               <RunningTimerIndicator />
               <SyncDot status={status} />
               <ThemeSync />
@@ -431,6 +483,12 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
           pathname={pathname}
           onOpenMore={openMobile}
           moreOpen={mobileOpen}
+        />
+
+        <CommandPalette
+          open={paletteOpen}
+          onOpenChange={setPaletteOpen}
+          sections={NAV_SECTIONS}
         />
       </div>
     </TooltipProvider>
