@@ -28,7 +28,10 @@ vi.mock("better-auth/react", () => ({
     getSession: vi.fn(),
   }),
 }));
-vi.mock("better-auth/client/plugins", () => ({ deviceAuthorizationClient: () => ({}) }));
+vi.mock("better-auth/client/plugins", () => ({
+  deviceAuthorizationClient: () => ({}),
+  twoFactorClient: () => ({}),
+}));
 
 const clearNativeToken = vi.fn(async () => undefined);
 vi.mock("@/lib/native-session", () => ({

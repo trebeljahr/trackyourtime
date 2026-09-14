@@ -1,5 +1,8 @@
 import { createAuthClient } from "better-auth/react";
-import { deviceAuthorizationClient } from "better-auth/client/plugins";
+import {
+  deviceAuthorizationClient,
+  twoFactorClient,
+} from "better-auth/client/plugins";
 import { isNative } from "@/mobile/bridge";
 import {
   clearNativeToken,
@@ -83,7 +86,16 @@ export const authClient = createAuthClient({
    * signed-in browser approves the short code shown by Raycast or a CLI that
    * has nowhere sensible to type a password.
    */
-  plugins: [deviceAuthorizationClient()],
+  plugins: [
+    deviceAuthorizationClient(),
+    /**
+     * Adds `authClient.twoFactor.*`. No `onTwoFactorRedirect` and no
+     * `twoFactorPage`: /login reads `twoFactorRedirect` off the sign-in
+     * result itself, because on a native shell the right answer is an error,
+     * not a page (see `isTwoFactorChallenge`).
+     */
+    twoFactorClient(),
+  ],
   fetchOptions: {
     customFetchImpl: authFetch,
     /**
@@ -230,6 +242,24 @@ export const deleteAccount = async (args: {
   await clearNativeToken().catch(() => undefined);
   return { ok: true };
 };
+
+/**
+ * Whether a sign-in answered with a second-factor challenge instead of a
+ * session. better-auth's result type does not carry the field, so it is read
+ * structurally.
+ */
+export const isTwoFactorChallenge = (data: unknown): boolean =>
+  typeof data === "object" &&
+  data !== null &&
+  (data as { twoFactorRedirect?: unknown }).twoFactorRedirect === true;
+
+/**
+ * Where a link in a mail (verification, change of email) or a Google
+ * redirect should land. The API is a different origin from the web app, so a
+ * relative path would be resolved against the API and land on its 404.
+ */
+export const webCallbackUrl = (path: string): string =>
+  typeof window === "undefined" ? path : `${window.location.origin}${path}`;
 
 /** Where a freshly authenticated user lands. */
 export const POST_AUTH_REDIRECT = "/track";

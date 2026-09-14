@@ -3,9 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signUp, getSession, POST_AUTH_REDIRECT } from "@/lib/auth-client";
+import {
+  signUp,
+  getSession,
+  POST_AUTH_REDIRECT,
+  webCallbackUrl,
+} from "@/lib/auth-client";
 import { AuthHeader } from "@/components/auth-header";
 import { NativeServerNote } from "@/components/server-picker";
+import { GoogleSignInButton } from "@/components/google-sign-in-button";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -15,6 +21,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,9 +35,19 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const result = await signUp.email({ name, email, password });
+      const result = await signUp.email({
+        name,
+        email,
+        password,
+        // Where the verification link lands, when this server requires one.
+        callbackURL: webCallbackUrl("/login"),
+      });
       if (result.error) {
         setError(result.error.message ?? "Signup failed");
+      } else if (result.data && result.data.token === null) {
+        // The server requires email verification: the account exists, but no
+        // session was created until the link is followed.
+        setVerifyEmail(true);
       } else {
         // Populate the session store before navigating, or the protected
         // layout reads an empty session and redirects back to /login.
@@ -42,6 +59,24 @@ export default function SignupPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (verifyEmail) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-8">
+        <div className="mx-auto w-full max-w-sm space-y-6" data-testid="signup-verify-email">
+          <AuthHeader
+            title="Check your inbox"
+            subtitle={`We sent a verification link to ${email}. Open it, then log in.`}
+          />
+          <div className="text-center text-sm">
+            <Link href="/login" className="text-primary hover:underline">
+              Go to log in
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -132,6 +167,8 @@ export default function SignupPage() {
             {loading ? "Creating account..." : "Sign up"}
           </button>
         </form>
+
+        <GoogleSignInButton />
 
         <div className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}

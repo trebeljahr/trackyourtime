@@ -3,9 +3,24 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn, getSession, POST_AUTH_REDIRECT } from "@/lib/auth-client";
+import {
+  authClient,
+  signIn,
+  getSession,
+  isTwoFactorChallenge,
+  POST_AUTH_REDIRECT,
+  webCallbackUrl,
+} from "@/lib/auth-client";
 import { AuthHeader } from "@/components/auth-header";
 import { NativeServerPicker } from "@/components/server-picker";
+import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import {
+  EMAIL_NOT_VERIFIED_MESSAGE,
+  NATIVE_TWO_FACTOR_UNSUPPORTED,
+  TwoFactorChallenge,
+  type ChallengeOutcome,
+} from "@/components/two-factor-challenge";
+import { isNative } from "@/mobile/bridge";
 import {
   consumeSessionRevokedNotice,
   type SessionRevokedNotice,
@@ -17,6 +32,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<"password" | "two-factor">("password");
 
   /*
    * "Why am I looking at a login screen?"
@@ -41,9 +57,25 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // No `callbackURL` here, ever: sign-in answers with `{ url, redirect:
+      // true }` when one is sent, and better-auth's client then reloads the
+      // browser onto that URL instead of letting this page navigate.
       const result = await signIn.email({ email, password });
-      if (result.error) {
+      if (result.error?.code === "EMAIL_NOT_VERIFIED") {
+        // A fresh link, pointed at the web app rather than the API origin.
+        await authClient
+          .sendVerificationEmail({ email, callbackURL: webCallbackUrl("/login") })
+          .catch(() => undefined);
+        setError(EMAIL_NOT_VERIFIED_MESSAGE);
+      } else if (result.error) {
         setError(result.error.message ?? "Login failed");
+      } else if (isTwoFactorChallenge(result.data)) {
+        // No session exists yet, and no token was issued.
+        if (isNative()) {
+          setError(NATIVE_TWO_FACTOR_UNSUPPORTED);
+        } else {
+          setStep("two-factor");
+        }
       } else {
         // See the note in signup: refresh the session before navigating.
         await getSession();
@@ -54,6 +86,37 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleChallenge(outcome: ChallengeOutcome) {
+    if (outcome === "expired") {
+      setStep("password");
+      setPassword("");
+      setError("The sign-in took too long. Enter your password again.");
+      return;
+    }
+    await getSession();
+    router.replace(POST_AUTH_REDIRECT);
+  }
+
+  if (step === "two-factor") {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-8">
+        <div className="mx-auto w-full max-w-sm space-y-6">
+          <AuthHeader
+            title="Two-factor authentication"
+            subtitle={`Signing in as ${email}`}
+          />
+          <TwoFactorChallenge
+            onDone={handleChallenge}
+            onCancel={() => {
+              setStep("password");
+              setPassword("");
+            }}
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -132,6 +195,8 @@ export default function LoginPage() {
             {loading ? "Logging in..." : "Log in"}
           </button>
         </form>
+
+        <GoogleSignInButton />
 
         <div className="text-center text-sm">
           <Link href="/forgot-password" className="text-primary hover:underline">

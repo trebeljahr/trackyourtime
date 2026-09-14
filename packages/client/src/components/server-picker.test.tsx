@@ -32,7 +32,14 @@ vi.mock("@/mobile/bridge", () => ({ isNative: () => native.value }));
 vi.mock("@/lib/auth-client", () => ({
   signIn: { email: vi.fn() },
   getSession: vi.fn(),
+  isTwoFactorChallenge: () => false,
+  webCallbackUrl: (path: string) => path,
   POST_AUTH_REDIRECT: "/track",
+}));
+
+// Reads the server's auth config over tRPC; covered by its own test.
+vi.mock("@/components/google-sign-in-button", () => ({
+  GoogleSignInButton: () => null,
 }));
 
 // Preferences, as the memory store it is to a test. The real plugin is what
