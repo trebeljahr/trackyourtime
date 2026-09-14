@@ -721,9 +721,25 @@ What fails quietly if it is changed:
   rejection the flush would otherwise drop. Held rows are excluded from the
   "is something ahead of a new mutation" count, or every future start would
   queue behind a row that never drains.
+- **The stamp is read once per write.** The request and the queued row name
+  the same workspace: the extension pins it with `addressedWrite()`, Raycast
+  stamps with the api client's own value, the web tracker and timesheet
+  capture it before their first await. Reading it again when a hung request
+  finally fails stamps the row with whatever was switched to meanwhile.
+- **A NOT_FOUND on a stamped row asks again before dropping.** The
+  membership list is only as fresh as the start of the flush; a removal
+  landing during it reads exactly like "entry gone". The row is kept unless
+  the workspace is confirmed (`refusalKeepsRow` in core), and the re-ask never
+  goes through anything that touches the queue the flush is holding.
 - **Only UNAUTHORIZED halts a flush.** FORBIDDEN is a per-row permanent
   refusal (`PERMANENT_REJECTIONS` includes 403): in a shared workspace it is a
-  role change refusing one row, not a lost session.
+  role change refusing one row, not a lost session. A status is only a verdict
+  when tRPC gave it — a `PARSE_ERROR` body (a WAF page, a proxy's HTML 404) is
+  never permanent.
+- **A write that settles after a switch leaves the cache alone.** React Query
+  keys do not carry the workspace, so its answer or its rollback snapshot
+  would land in the new workspace's screens (`stillInWorkspace` in the
+  tracker, `stillHere` in the timesheet).
 - **Anything cached is keyed by workspace.** The web app clears the React
   Query cache on a switch; the extension drops its per-workspace caches;
   Raycast keys its read cache, overlay and every `useApi` slot by workspace and
