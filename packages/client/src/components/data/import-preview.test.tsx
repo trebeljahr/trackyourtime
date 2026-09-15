@@ -44,6 +44,7 @@ const preview = (overrides: Partial<ImportPreview> = {}): ImportPreview => ({
   // A delimited file carries no sections; a workspace export overrides this.
   sections: {
     version: 1,
+    newerVersion: null,
     settings: false,
     favorites: 0,
     invoices: 0,
@@ -143,6 +144,7 @@ describe("what the file carries besides entries", () => {
       preview({
         sections: {
           version: 2,
+          newerVersion: null,
           settings: true,
           favorites: 0,
           invoices: 0,
@@ -161,6 +163,7 @@ describe("what the file carries besides entries", () => {
       preview({
         sections: {
           version: 2,
+          newerVersion: null,
           settings: false,
           favorites: 0,
           invoices: 3,
@@ -174,10 +177,30 @@ describe("what the file carries besides entries", () => {
     );
   });
 
+  it("says a file from a newer version skips what this version does not know", () => {
+    renderPreview(
+      preview({
+        sections: {
+          version: 2,
+          newerVersion: 3,
+          settings: false,
+          favorites: 0,
+          invoices: 0,
+          moneyRedacted: false,
+        },
+      }),
+    );
+
+    expect(screen.getByTestId("import-newer-version").textContent).toMatch(
+      /newer version of Track Your Time.*export format 3/i,
+    );
+  });
+
   it("says nothing about either when the file states neither", () => {
     renderPreview(preview());
 
     expect(screen.queryByTestId("import-money-redacted")).toBeNull();
     expect(screen.queryByTestId("import-invoices-dropped")).toBeNull();
+    expect(screen.queryByTestId("import-newer-version")).toBeNull();
   });
 });

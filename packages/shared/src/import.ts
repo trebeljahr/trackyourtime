@@ -224,6 +224,12 @@ export type ImportSections = {
   /** The document's own version. 1 for anything written before these sections. */
   version: 1 | 2;
   /**
+   * The version the file declared when it is newer than this server
+   * understands, else null. Stated on the preview: whatever the newer format
+   * added is skipped, and a skip nobody mentioned reads as data loss later.
+   */
+  newerVersion: number | null;
+  /**
    * True when the file states workspace policy a commit could restore. A v1
    * file has no settings section and still says this much: its currency.
    * The business profile counts as policy here: it is restored with the
@@ -300,6 +306,13 @@ export const WORKSPACE_EXPORT_VERSION = 2;
 export type WorkspaceExport = {
   /** See {@link WORKSPACE_EXPORT_VERSION}: additive, and v1 still reads. */
   version: 1 | 2;
+  /**
+   * Set by the READER only, never written by an export: the version a file
+   * declared when it is higher than {@link WORKSPACE_EXPORT_VERSION}. Such a
+   * file reads as the newest known version, and this is what lets the preview
+   * say that sections this build does not know are skipped.
+   */
+  newerVersion?: number;
   exportedAt: string;
   workspaceId: string;
   currency: string;

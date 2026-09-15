@@ -614,6 +614,9 @@ export const settings = {
       range: "{from} to {to}, read as {timeZone} time.",
       ambiguousDates:
         "Every date in this file could be read either way round — <strong>03/04</strong> is the 3rd of April or the 4th of March. Pick the one your file means before importing.",
+      /** `version` is the export format number the file declares, e.g. 3. */
+      newerVersion:
+        "<strong>This file is from a newer version of Track Your Time</strong> (export format {version}). Entries and everything this version knows import as usual. Data this version does not know is skipped.",
       moneyRedacted:
         "<strong>This file’s money was blanked when it was exported.</strong> Entries, catalog and times import in full, but every rate in it is empty, so the imported history is priced by this workspace’s own rates rather than the ones it was tracked at.",
       invoicesDropped:

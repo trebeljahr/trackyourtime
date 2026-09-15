@@ -593,6 +593,8 @@ export const settings: Translation<typeof source> = {
       range: "{from} bis {to}, gelesen in der Zeitzone {timeZone}.",
       ambiguousDates:
         "Jedes Datum in dieser Datei lässt sich auf zwei Arten lesen – <strong>03/04</strong> ist der 3. April oder der 4. März. Wähle vor dem Import, was deine Datei meint.",
+      newerVersion:
+        "<strong>Diese Datei stammt aus einer neueren Version von Track Your Time</strong> (Exportformat {version}). Einträge und alles, was diese Version kennt, werden wie gewohnt importiert. Daten, die diese Version nicht kennt, werden übersprungen.",
       moneyRedacted:
         "<strong>Die Geldbeträge dieser Datei wurden beim Export geleert.</strong> Einträge, Stammdaten und Zeiten werden vollständig importiert, aber jeder Satz ist leer. Die importierten Einträge werden deshalb mit den Sätzen dieses Arbeitsbereichs berechnet, nicht mit denen, zu denen sie erfasst wurden.",
       invoicesDropped:

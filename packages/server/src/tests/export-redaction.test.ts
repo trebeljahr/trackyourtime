@@ -85,10 +85,14 @@ const visibility = (
  * rather than a field of the workspace: an unredacted document must not carry
  * it, so a fixture forced to set it could not represent one.
  */
-type ExhaustiveExport = Required<Omit<WorkspaceExport, "moneyRedacted">> & {
+type ExhaustiveExport = Required<
+  Omit<WorkspaceExport, "moneyRedacted" | "newerVersion">
+> & {
   businessProfile: BusinessProfileValues;
   /** Typed `undefined` rather than dropped: readable, and impossible to set. */
   moneyRedacted?: undefined;
+  /** Set by the reader only; an export never writes it. */
+  newerVersion?: undefined;
   settings: Required<WorkspaceExportSettings>;
   clients: Required<WorkspaceExportClient>[];
   projects: Required<WorkspaceExportProject>[];

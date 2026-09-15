@@ -13,6 +13,7 @@ import {
   IDENTITY_LIMITS,
   INVOICE_FORMATS,
   TAX_CATEGORIES,
+  WORKSPACE_EXPORT_VERSION,
   businessProfileProblems,
   dayKeyInZone,
   isIdentityEmpty,
@@ -504,13 +505,7 @@ export function workspaceJsonCatalog(text: string): WorkspaceExport | null {
     // malformed stamp means "this file makes no such claim", which is what an
     // unredacted export looks like.
     ...(doc.moneyRedacted === true ? { moneyRedacted: true } : {}),
-    // Read, never assumed. A literal `1` here would make every v2 file claim
-    // to be v1, and anything branching on the version — "were there no pins,
-    // or is this file older than pins?" — would then branch wrong with no
-    // error anywhere. Unknown future versions read as themselves is not an
-    // option in a union, so they read as v2: the sections below are what this
-    // reader understands, and a newer file still yields its entries.
-    version: doc.version === 2 ? 2 : 1,
+    ...readExportVersion(doc.version),
     exportedAt: String(doc.exportedAt ?? new Date().toISOString()),
     workspaceId: String(doc.workspaceId ?? ""),
     currency: String(doc.currency ?? "EUR"),
@@ -528,6 +523,33 @@ export function workspaceJsonCatalog(text: string): WorkspaceExport | null {
       : {}),
     ...(Array.isArray(doc.invoices) ? { invoices: doc.invoices } : {}),
   };
+}
+
+/**
+ * The document's version, as far as this reader can honour it.
+ *
+ * Read, never assumed. A literal `1` would make every v2 file claim to be v1,
+ * and anything branching on the version — "were there no pins, or is this
+ * file older than pins?" — would then branch wrong with no error anywhere.
+ *
+ * Unknown future versions cannot read as themselves in a union, so they read
+ * as the newest version this reader understands: every section it knows is
+ * still a section that version defines, and an absent one still means "none"
+ * rather than "the file predates this". Reading a v3 file as v1 would report
+ * its missing pins as a file older than pins. The declared number is kept in
+ * `newerVersion` so the preview can say that sections it does not know are
+ * skipped. A missing or non-numeric version is a v1 file — v1 is the only
+ * format that ever omitted one.
+ */
+export function readExportVersion(
+  value: unknown,
+): Pick<WorkspaceExport, "version" | "newerVersion"> {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 2) {
+    return { version: 1 };
+  }
+  return value > WORKSPACE_EXPORT_VERSION
+    ? { version: WORKSPACE_EXPORT_VERSION, newerVersion: value }
+    : { version: WORKSPACE_EXPORT_VERSION };
 }
 
 /**

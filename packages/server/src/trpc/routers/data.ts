@@ -611,6 +611,7 @@ async function restoreFavorites(args: {
 
 const sectionsOf = (doc: WorkspaceExport | null): ImportSections => ({
   version: doc?.version ?? 1,
+  newerVersion: doc?.newerVersion ?? null,
   // Read back off the file rather than inferred from null rates: "every rate
   // in here is blank" and "this workspace never billed anything" are the same
   // document otherwise, and only the first one is a partial restore the user

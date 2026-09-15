@@ -166,6 +166,15 @@ export function ImportPreviewView({
         </Note>
       ) : null}
 
+      {preview.sections.newerVersion !== null ? (
+        <Note tone="warning" testId="import-newer-version">
+          {t.rich("data.preview.newerVersion", {
+            version: String(preview.sections.newerVersion),
+            strong: (chunks) => <strong>{chunks}</strong>,
+          })}
+        </Note>
+      ) : null}
+
       {preview.sections.moneyRedacted ? (
         <Note tone="warning" testId="import-money-redacted">
           {t.rich("data.preview.moneyRedacted", {
