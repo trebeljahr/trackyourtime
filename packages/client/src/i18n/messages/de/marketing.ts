@@ -19,7 +19,7 @@ export const marketing: Translation<typeof source> = {
   },
 
   meta: {
-    ogImageAlt: "Track Your Time – Open-Source-Zeiterfassung auf deinem eigenen Server",
+    ogImageAlt: "Track Your Time – Open-Source-Zeiterfassung, gehostet oder auf deinem eigenen Server",
   },
 
   shell: {
@@ -32,7 +32,7 @@ export const marketing: Translation<typeof source> = {
     logIn: "Anmelden",
     createAccount: "Konto erstellen",
     footer: {
-      tagline: "Open-Source-Zeiterfassung auf deinem eigenen Server.",
+      tagline: "Open-Source-Zeiterfassung, gehostet oder auf deinem eigenen Server.",
       chromeExtension: "Chrome-Erweiterung",
       raycastExtension: "Raycast-Erweiterung",
       mobile: "iPhone und Android",
@@ -53,24 +53,26 @@ export const marketing: Translation<typeof source> = {
 
   landing: {
     meta: {
-      title: "Track Your Time – Open-Source-Zeiterfassung auf deinem eigenen Server",
+      title: "Track Your Time – Open-Source-Zeiterfassung, gehostet oder auf deinem eigenen Server",
       description:
-        "Deine Stunden, Kunden und Rechnungen liegen auf einem Server, den du kontrollierst. Open Source, mit Timer für Browser, Mac und Handy.",
+        "Erfasse deine Stunden und mach daraus Rechnungen und Berichte. Nutz es auf trackyourtime.dev oder betreib dieselbe Open-Source-App auf deinem eigenen Server.",
     },
     hero: {
       eyebrow: "Open-Source-Zeiterfassung",
-      title: "Zeiterfassung auf deinem eigenen Server",
+      title: "Zeiterfassung auf unserem Server oder deinem",
       hostYourself: "Selbst hosten",
       useHosted: "Gehostete Version nutzen",
       shotAlt: "Der Timer von Track Your Time läuft, darunter die abrechenbaren Einträge von heute",
-      body: "Track Your Time speichert deine Stunden, Kunden und Rechnungen auf einem Server, den du kontrollierst. Den Timer hast du trotzdem überall dabei: im Browser, in der Menüleiste deines Macs und auf dem Handy. Starten dauert eine Sekunde, auch ohne Verbindung.",
+      body: "Track Your Time macht aus deinen Stunden Rechnungen und Berichte. Nutz es direkt hier, oder betreib dieselbe Open-Source-App auf einem Server, den du kontrollierst. So oder so hast du den Timer überall dabei: im Browser, in der Menüleiste deines Macs und auf dem Handy. Starten dauert eine Sekunde, auch ohne Verbindung.",
       beta: "Kostenlos und Open Source. Die gehostete Version ist während der Beta kostenlos.",
     },
     ownership: {
-      title: "Deine Zeitdaten gehören dir",
-      why: "Eine Zeiterfassung weiß, wer deine Kunden sind, was du ihnen berechnest und wie du jeden Arbeitstag verbringst. Das gehört auf einen Server, den du kontrollierst, und nicht in die Datenbank von jemand anderem.",
+      title: "Gehostet oder auf deinem Server, es ist dieselbe App",
+      why: "Eine Zeiterfassung weiß, wer deine Kunden sind, was du ihnen berechnest und wie du jeden Arbeitstag verbringst. Du entscheidest, wo das liegt: auf trackyourtime.dev oder auf einem Server, den du selbst betreibst.",
+      same: "Beide laufen mit demselben Open-Source-Code und haben jede Funktion. Die Chrome-Erweiterung, die Raycast-Erweiterung und die Mobil-Apps funktionieren mit beiden. Jede fragt nach einer Serveradresse, neu bauen musst du also nichts.",
+      move: "Du kannst es dir später anders überlegen. Unter Einstellungen → Daten ziehst du einen Arbeitsbereich von einem Server auf den anderen um, in beide Richtungen. Und exportieren kannst du alles jederzeit, als JSON oder CSV.",
       install:
-        "Eine einzige Compose-Datei startet alles auf einem Server, HTTPS inklusive. Die <guide>Anleitung zum Selbsthosten</guide> führt Schritt für Schritt durch Installation, Backups, Updates und E-Mail. Und exportieren kannst du alles jederzeit, als JSON oder CSV.",
+        "Für deinen eigenen Server brauchst du eine einzige Compose-Datei. Sie startet alles auf einem Server, HTTPS inklusive. Die <guide>Anleitung zum Selbsthosten</guide> führt Schritt für Schritt durch Installation, Backups, Updates und E-Mail.",
       memory:
         "Ein offizielles Release gibt es noch nicht. Der erste Start baut deshalb aus dem Quellcode und braucht einen Server mit 4 GB Arbeitsspeicher. Sobald fertige Images veröffentlicht sind, reichen 1–2 GB.",
     },
@@ -118,7 +120,7 @@ export const marketing: Translation<typeof source> = {
       title: "Fragen",
       hosting: {
         q: "Muss ich es selbst hosten?",
-        a: "Nein. Die gehostete Version auf trackyourtime.dev steht allen offen und ist während der Beta kostenlos. Später kannst du auf deinen eigenen Server umziehen: Daten exportieren und dort importieren.",
+        a: "Nein. Die gehostete Version auf trackyourtime.dev steht allen offen und ist während der Beta kostenlos. Später kannst du unter Einstellungen → Daten auf deinen eigenen Server umziehen, und auch wieder zurück.",
       },
       requirements: {
         q: "Was brauche ich, um es zu betreiben?",
@@ -329,7 +331,7 @@ export const marketing: Translation<typeof source> = {
     },
     selfHost: {
       title: "Du nutzt einen eigenen Server?",
-      body: "Die Version aus dem Chrome Web Store verbindet sich mit trackyourtime.dev. Für deinen eigenen Server baust du die Erweiterung aus dem Quellcode, mit der Adresse deines Servers. Wie das geht, zeigt die <guide>Anleitung zum Selbsthosten</guide>.",
+      body: "Die Erweiterung verbindet sich mit trackyourtime.dev, bis du einen anderen Server wählst. Wähle unter dem Anmeldeformular „Server wechseln“ und gib die Adresse deines Servers ein. Chrome fragt dann nach Zugriff auf genau diese eine Website. Details stehen in der <guide>Anleitung zum Selbsthosten</guide>.",
     },
     permissions: {
       title: "Worauf die Erweiterung zugreifen kann",
@@ -405,7 +407,7 @@ export const marketing: Translation<typeof source> = {
     },
     selfHost: {
       title: "Du nutzt einen eigenen Server?",
-      body: "Die Mobil-Apps verbinden sich vorerst mit trackyourtime.dev. Mit deinem eigenen Server öffnest du die Web-App im Browser deines Handys und legst sie auf den Startbildschirm.",
+      body: "Die Apps verbinden sich mit trackyourtime.dev, bis du einen anderen Server wählst. Wähle auf dem Anmeldebildschirm „Server wechseln“ und gib die Adresse deines Servers ein.",
     },
   },
 

@@ -11,7 +11,7 @@ import { SupportPage, supportMetadata } from "@/components/marketing/pages/suppo
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: () => undefined }) }));
 
 const PAGES = [
-  { name: "landing", Page: LandingPage, meta: landingMetadata, title: "Time tracking on your own server" },
+  { name: "landing", Page: LandingPage, meta: landingMetadata, title: "Time tracking on our server or yours" },
   { name: "privacy", Page: PrivacyPage, meta: privacyMetadata, title: "Privacy policy" },
   { name: "support", Page: SupportPage, meta: supportMetadata, title: "Get help with Track Your Time" },
   { name: "extension", Page: ExtensionPage, meta: extensionMetadata, title: "Your timer, one click away" },

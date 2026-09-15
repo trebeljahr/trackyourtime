@@ -1,12 +1,13 @@
 # Track Your Time
 
-> Open-source time tracking you host on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline, and tracked hours become reports and invoices: a plain PDF, a ZUGFeRD PDF or an XRechnung file.
+> Open-source time tracking. Use the hosted service at trackyourtime.dev, or run the same app on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline, and tracked hours become reports and invoices: a plain PDF, a ZUGFeRD PDF or an XRechnung file.
 
-Track Your Time is for freelancers, consultants and small studios who bill clients by the hour and want that data on a server they control. The code is on GitHub at https://github.com/trebeljahr/trackyourtime under AGPL-3.0-or-later. A hosted instance runs at https://trackyourtime.dev and is free while in beta.
+Track Your Time is for freelancers, consultants and small studios who bill clients by the hour. The code is on GitHub at https://github.com/trebeljahr/trackyourtime under AGPL-3.0-or-later. A hosted instance runs at https://trackyourtime.dev and is free while in beta. It runs the same code as a self-hosted server, and every client app works with both.
 
 **What it does today**
 
-- Your data stays on your server. One Docker Compose file runs five containers on one server and one domain: the API, the web app, MongoDB, Redis and Caddy. Caddy gets the HTTPS certificate from Let's Encrypt.
+- Your data can stay on your own server. One Docker Compose file runs five containers on one server and one domain: the API, the web app, MongoDB, Redis and Caddy. Caddy gets the HTTPS certificate from Let's Encrypt.
+- Settings → Data → Move to another server copies a workspace between two servers, hosted to self-hosted or back.
 - You can export a whole workspace as JSON or CSV at any time. A CSV from another tool imports with a preview and a one-step undo.
 - The timer is where you already work. There is a Chrome extension, a Raycast extension with a menu bar clock and a start/stop hotkey, and iPhone and Android apps.
 - The web app, the extensions and the phone apps keep tracking without a connection. They send the queued changes when the connection returns.
@@ -23,9 +24,8 @@ Track Your Time is for freelancers, consultants and small studios who bill clien
 - There is no tagged release yet, so there are no published images to pull. Until the first release, self-hosting means building the images yourself, which needs about 4 GB of RAM.
 - A self-hosted instance has open sign-up. The application has no setting to close registration. The self-hosting guide lists workarounds at the proxy.
 - The Chrome extension, the Raycast extension and the phone apps are not in any store yet.
-- The Chrome extension has its server address compiled in. To use it with your own server, edit `packages/extension/manifest.config.ts` and build it.
+- The Chrome extension and the phone apps let the person choose a server before signing in. A self-hosted server accepts their store builds by default (`TRUST_STORE_APPS=true`).
 - The Raycast extension has API URL and Web App URL preferences, so one build reaches any server.
-- The phone apps connect only to the hosted service. On your own server, use the web app in the phone's browser.
 
 **How to self-host**
 
@@ -53,7 +53,7 @@ Point a domain at a Linux server with Docker, clone the repository, copy `.env.s
 
 ## Web pages
 
-- [Home](https://trackyourtime.dev/): Keep your hours, clients and invoices on a server you control. How to host it yourself, or use the hosted version.
+- [Home](https://trackyourtime.dev/): What Track Your Time does, and how to use it: on the hosted service, or on your own server with the same app and the same client apps.
 - [Chrome extension](https://trackyourtime.dev/extension/): Start and stop the timer from the Chrome toolbar, add time you forgot, and keep tracking when the connection drops.
 - [Raycast extension](https://trackyourtime.dev/raycast/): Start and stop the timer with a hotkey, and see it running in the Mac menu bar.
 - [iPhone and Android](https://trackyourtime.dev/mobile/): Track billable time on an iPhone or Android phone without signal. Changes sync when the connection returns.

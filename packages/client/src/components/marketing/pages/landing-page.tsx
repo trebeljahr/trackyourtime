@@ -75,6 +75,8 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
       <Section title={t("landing.ownership.title")}>
         <Prose>
           <p>{t("landing.ownership.why")}</p>
+          <p>{t("landing.ownership.same")}</p>
+          <p>{t("landing.ownership.move")}</p>
           <p>{t.rich("landing.ownership.install", { guide })}</p>
           <p className="text-sm">{t("landing.ownership.memory")}</p>
         </Prose>

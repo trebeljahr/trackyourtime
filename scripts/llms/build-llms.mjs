@@ -72,7 +72,7 @@ const WEB_PAGES = [
   {
     title: "Home",
     url: `${WEB_URL}/`,
-    description: "Keep your hours, clients and invoices on a server you control. How to host it yourself, or use the hosted version.",
+    description: "What Track Your Time does, and how to use it: on the hosted service, or on your own server with the same app and the same client apps.",
   },
   {
     title: "Chrome extension",

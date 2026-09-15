@@ -20,7 +20,7 @@ export const marketing = {
 
   /** Shared by every public page's link preview. */
   meta: {
-    ogImageAlt: "Track Your Time — open-source time tracking on your own server",
+    ogImageAlt: "Track Your Time — open-source time tracking, hosted or on your own server",
   },
 
   shell: {
@@ -33,7 +33,7 @@ export const marketing = {
     logIn: "Log in",
     createAccount: "Create an account",
     footer: {
-      tagline: "Open-source time tracking on your own server.",
+      tagline: "Open-source time tracking, hosted or on your own server.",
       chromeExtension: "Chrome extension",
       raycastExtension: "Raycast extension",
       mobile: "iPhone and Android",
@@ -55,24 +55,26 @@ export const marketing = {
 
   landing: {
     meta: {
-      title: "Track Your Time — open-source time tracking on your own server",
+      title: "Track Your Time — open-source time tracking, hosted or on your own server",
       description:
-        "Keep your hours, clients and invoices on a server you control. Open source, with a timer for your browser, your Mac and your phone.",
+        "Track your hours and turn them into invoices and reports. Use it at trackyourtime.dev, or run the same open-source app on your own server.",
     },
     hero: {
       eyebrow: "Open-source time tracking",
-      title: "Time tracking on your own server",
+      title: "Time tracking on our server or yours",
       hostYourself: "Host it yourself",
       useHosted: "Use the hosted version",
       shotAlt: "The Track Your Time timer running, above a list of today’s billable entries",
-      body: "Track Your Time keeps your hours, clients and invoices on a server you control. It also puts a timer in your browser, your Mac’s menu bar and your phone, so starting one takes a second, even without a connection.",
+      body: "Track Your Time turns your hours into invoices and reports. Use it right here, or run the same open-source app on a server you control. Either way, you get a timer in your browser, your Mac’s menu bar and your phone. Starting one takes a second, even without a connection.",
       beta: "Free and open source. The hosted version is free while in beta.",
     },
     ownership: {
-      title: "Your time data belongs to you",
-      why: "A time tracker knows who your clients are, what you charge them and how you spend every working day. That’s worth keeping on a server you control, not in someone else’s database.",
+      title: "Hosted or on your own server, it’s the same app",
+      why: "A time tracker knows who your clients are, what you charge them and how you spend every working day. You choose where that lives: on trackyourtime.dev, or on a server you run yourself.",
+      same: "Both run the same open-source code, with every feature. The Chrome extension, the Raycast extension and the phone apps work with either one. Each asks for a server address, so none of them needs rebuilding.",
+      move: "You can change your mind later. Settings → Data moves a workspace from one server to the other, in either direction. And you can export everything as JSON or CSV whenever you want.",
       install:
-        "One compose file starts everything on a single server, with HTTPS set up for you. The <guide>self-hosting guide</guide> walks through the install, backups, upgrades and email, one step at a time. And you can export all of it as JSON or CSV whenever you want.",
+        "Running your own takes one compose file. It starts everything on a single server, with HTTPS set up for you. The <guide>self-hosting guide</guide> walks through the install, backups, upgrades and email, one step at a time.",
       memory:
         "There’s no tagged release yet, so the first start builds from source and needs a server with 4 GB of memory. Once images are published, 1–2 GB is enough.",
     },
@@ -120,7 +122,7 @@ export const marketing = {
       title: "Questions",
       hosting: {
         q: "Do I have to host it myself?",
-        a: "No. The hosted version at trackyourtime.dev is open to everyone, and free while in beta. You can move to your own server later: export your data and import it there.",
+        a: "No. The hosted version at trackyourtime.dev is open to everyone, and free while in beta. You can move to your own server later from Settings → Data, and back again.",
       },
       requirements: {
         q: "What do I need to run it?",
@@ -332,7 +334,7 @@ export const marketing = {
     },
     selfHost: {
       title: "Using your own server?",
-      body: "The Chrome Web Store version connects to trackyourtime.dev. To use the extension with your own server, build it from source with your server’s address. The <guide>self-hosting guide</guide> shows how.",
+      body: "The extension connects to trackyourtime.dev until you pick another server. Choose Change server below the sign-in form and enter your server’s address. Chrome then asks for access to that one site. The <guide>self-hosting guide</guide> has the details.",
     },
     permissions: {
       title: "What the extension can access",
@@ -409,7 +411,7 @@ export const marketing = {
     },
     selfHost: {
       title: "Using your own server?",
-      body: "The phone apps connect to trackyourtime.dev for now. On your own server, open the web app in your phone’s browser and add it to your home screen.",
+      body: "The apps connect to trackyourtime.dev until you pick another server. On the sign-in screen, choose Change server and enter your server’s address.",
     },
   },
 
