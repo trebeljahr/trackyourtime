@@ -5,6 +5,27 @@ native seams, the release workflows and `docs/mobile-app-plan.md`, whose
 structure and lessons this plan reuses. Nothing below has been run yet; the
 claims marked **(unverified)** are what Stage 0 exists to confirm or refute.
 
+## Answers to the open questions (2026-09-15)
+
+1. **Distribution:** GitHub Releases (electron-updater feed), Mac App Store,
+   Microsoft Store, Linux package managers, and Homebrew. Store submission
+   itself is a manual step; the repo produces store-ready artifacts, manifests
+   and pipelines that fail closed without credentials.
+2. **Signing:** both — Apple Developer ID + notarization (plus Mac App Store
+   distribution certs) and Windows code signing.
+3. **Platforms:** macOS, Windows and Linux, all verified.
+4. **Desktop activity capture:** wanted, but in a separate workflow after the
+   main app runs. Stage 8 is not part of the first build.
+5. **Tauri:** delete it. Moved into Stage 1.
+6. **Global shortcut:** ship a default that does not collide with common OS and
+   app shortcuts, and make shortcuts extensible — several bindable actions, each
+   rebindable or clearable in Settings → Desktop.
+7. **Hatchkit:** it should never rewrite a customised `electron/`. Checked and
+   fixed, if needed, in the hatchkit repo as a separate task.
+
+Execution order for the first build: Stage 0 → 1 (+ Tauri removal) → 2 + 3 →
+4 + 5 → 6 → 7. Stage 8 waits.
+
 ## Implementation notes
 
 None yet. Stage 0 writes the first ones; every later stage adds what its own
