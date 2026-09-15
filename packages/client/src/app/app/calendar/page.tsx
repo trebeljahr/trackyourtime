@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarScreen } from "@/components/calendar/calendar-screen";
 
 /**
- * `/calendar` — week and month views of tracked time. The visible week/month
+ * `/app/calendar` — week and month views of tracked time. The visible week/month
  * lives in `?view=` / `?date=`, so a Suspense boundary is required around
  * `useSearchParams` for the static export.
  */

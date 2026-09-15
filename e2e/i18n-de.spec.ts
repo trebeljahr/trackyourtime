@@ -53,7 +53,7 @@ test.describe("German (de)", () => {
     });
 
     // ── pick German in Settings ─────────────────────────────────────
-    await page.goto("/settings");
+    await page.goto("/app/settings");
     await expect(page.getByTestId("settings-page")).toBeVisible();
     await expect(page.getByTestId("setting-language")).toContainText("Language");
 
@@ -125,7 +125,7 @@ test.describe("German (de)", () => {
     );
 
     // ── settings, straight from a cold load ─────────────────────────
-    await page.goto("/settings");
+    await page.goto("/app/settings");
     await expect(page.getByTestId("settings-tab-general")).toHaveText("Allgemein");
     await expect(page.getByTestId("settings-tab-account")).toHaveText("Konto");
     await expectGermanShell(page);

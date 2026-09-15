@@ -2,7 +2,7 @@ import * as React from "react";
 import Link from "next/link";
 
 import { BrandMark } from "@/components/brand-mark";
-import { SignedInRedirect } from "@/components/marketing/signed-in-redirect";
+import { AccountLinks } from "@/components/marketing/account-links";
 import { FixedLocale } from "@/i18n/locale-root";
 import { localizedPath, marketingT, MARKETING_LOCALES, type Locale } from "@/i18n/marketing";
 import { API_DOCS_URL, DOCS_URL, REPO_URL } from "@/lib/site-links";
@@ -29,22 +29,18 @@ export function MarketingShell({
   children,
   locale = "en",
   path,
-  redirectSignedIn = false,
 }: {
   children: React.ReactNode;
   /** The language this copy of the page is built in. */
   locale?: Locale;
   /** The page's ENGLISH path ("/privacy/"), for the language switch. */
   path: string;
-  /** Send a signed-in visitor to /track. Only the landing page does this. */
-  redirectSignedIn?: boolean;
 }): React.ReactElement {
   const t = marketingT(locale);
   const href = (target: string): string => localizedPath(locale, target);
   return (
     <FixedLocale locale={locale}>
     <div data-marketing className="flex min-h-screen flex-col">
-      {redirectSignedIn && <SignedInRedirect />}
       <header className="border-b">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
           <Link href={href("/")} className="inline-flex items-center gap-2" data-testid="marketing-home">
@@ -63,17 +59,11 @@ export function MarketingShell({
               {t("shell.nav.docs")}
             </a>
           </nav>
-          <div className="ml-auto flex items-center gap-4 text-sm">
-            <Link href="/login/" className="text-muted-foreground hover:text-foreground">
-              {t("shell.logIn")}
-            </Link>
-            <Link
-              href="/signup/"
-              className="rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              {t("shell.createAccount")}
-            </Link>
-          </div>
+          <AccountLinks
+            logIn={t("shell.logIn")}
+            createAccount={t("shell.createAccount")}
+            openApp={t("shell.openApp")}
+          />
         </div>
       </header>
 

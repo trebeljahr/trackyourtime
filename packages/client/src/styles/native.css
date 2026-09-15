@@ -259,7 +259,7 @@ html.cap [data-testid="mobile-tab-bar"] > * {
  *
  * The app opens on `/`, which on the web is the landing page. Inside the app
  * that page is an advertisement for the thing the person is already holding,
- * so it never paints: `SignedInRedirect` sends the shell on to /track, and
+ * so it never paints: `ShellEntryRedirect` sends the shell on to /app/track, and
  * this keeps the frames before that blank. The splash normally covers them,
  * but a WebView reload has no splash.
  */

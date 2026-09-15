@@ -32,6 +32,7 @@ export const marketing = {
     },
     logIn: "Log in",
     createAccount: "Create an account",
+    openApp: "Open the app",
     footer: {
       tagline: "Open-source time tracking, hosted or on your own server.",
       chromeExtension: "Chrome extension",

@@ -31,7 +31,7 @@ vi.mock("@/lib/auth-client", () => ({
   authClient: { sendVerificationEmail: vi.fn(async () => ({ data: null, error: null })) },
   isTwoFactorChallenge: () => false,
   webCallbackUrl: (path: string) => `http://localhost${path}`,
-  POST_AUTH_REDIRECT: "/track",
+  POST_AUTH_REDIRECT: "/app/track",
 }));
 vi.mock("@/components/google-sign-in-button", () => ({ GoogleSignInButton: () => null }));
 vi.mock("@/mobile/bridge", () => ({ isNative: () => false }));
@@ -87,10 +87,10 @@ describe("login ?next=", () => {
   });
 
   it("keeps a device code through sign-in", async () => {
-    visit(`?next=${encodeURIComponent("/device/?user_code=ABCD-EFGH")}`);
+    visit(`?next=${encodeURIComponent("/app/device/?user_code=ABCD-EFGH")}`);
     render(<LoginPage />);
     await submitLogin();
-    expect(replace).toHaveBeenCalledWith("/device/?user_code=ABCD-EFGH");
+    expect(replace).toHaveBeenCalledWith("/app/device/?user_code=ABCD-EFGH");
   });
 
   it.each([
@@ -98,12 +98,12 @@ describe("login ?next=", () => {
     "https://evil.com",
     "/\\evil.com",
     "javascript:alert(1)",
-    "/reports",
-  ])("ignores next=%s and goes to /track", async (next) => {
+    "/app/reports",
+  ])("ignores next=%s and goes to /app/track", async (next) => {
     visit(`?next=${encodeURIComponent(next)}`);
     render(<LoginPage />);
     await submitLogin();
-    expect(replace).toHaveBeenCalledWith("/track");
+    expect(replace).toHaveBeenCalledWith("/app/track");
   });
 
   it("prefills the email and carries next over to signup", async () => {
@@ -151,6 +151,6 @@ describe("signup ?next=", () => {
     visit(`?next=${encodeURIComponent("https://evil.com/invite")}`);
     render(<SignupPage />);
     await submitSignup();
-    expect(replace).toHaveBeenCalledWith("/track");
+    expect(replace).toHaveBeenCalledWith("/app/track");
   });
 });

@@ -22,7 +22,7 @@ test.describe("Profile", () => {
       ...TEST_USER,
       email: `profile-${Date.now()}@example.com`,
     });
-    await page.goto("/profile");
+    await page.goto("/app/profile");
   });
 
   test("shows profile page with user name", async ({ page }) => {

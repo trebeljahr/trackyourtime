@@ -10,7 +10,7 @@ import { addDaysToKey, weekStartKey, type WeekStart } from "@starter/shared";
  * than reaching back into that module.
  */
 
-export const REPORTS_PATH = "/reports";
+export const REPORTS_PATH = "/app/reports";
 export const REPORT_VIEW_PARAM = "view";
 
 export type ReportView = "totals" | "entries";
@@ -52,7 +52,7 @@ const toSearchParams = (
 };
 
 /**
- * `/reports` in the given view, carrying `params` along.
+ * `/app/reports` in the given view, carrying `params` along.
  *
  * Totals is the default and writes no `view` at all, so the plain Reports
  * link and a Totals link are the same URL. A `view` already in `params` is

@@ -121,7 +121,7 @@ const targetEntries = async (email: string): Promise<number> => {
 const trackTwoEntries = async (page: Page, prefix: string): Promise<string> => {
   const email = uniqueEmail(prefix);
   await signUpViaUI(page, { name: "Mover", email, password: PASSWORD });
-  await page.goto("/track");
+  await page.goto("/app/track");
   await expect(page.getByTestId("entries-empty")).toBeVisible();
   await logManualEntry(page, "Design review", "1:00:00");
   await logManualEntry(page, "Invoicing", "0:30:00");
@@ -129,7 +129,7 @@ const trackTwoEntries = async (page: Page, prefix: string): Promise<string> => {
 };
 
 const openMoveDialog = async (page: Page): Promise<void> => {
-  await page.goto("/settings?tab=data");
+  await page.goto("/app/settings?tab=data");
   await expect(page.getByTestId("settings-panel-data")).toBeVisible();
   await page.getByTestId("move-server-open").click();
   await expect(page.getByTestId("move-server-dialog")).toBeVisible();
@@ -188,7 +188,7 @@ test.describe("Move to another server", () => {
 
     // Nothing on the source was touched.
     await page.getByRole("button", { name: "Done" }).click();
-    await page.goto("/track");
+    await page.goto("/app/track");
     await expect(page.locator('[data-testid="entry-row"]')).toHaveCount(2);
 
     // Moving again is safe: both entries are recognised as already there.
@@ -248,7 +248,7 @@ test.describe("Move to another server", () => {
       email: uniqueEmail("move-file-target"),
       password: PASSWORD,
     });
-    await page.goto("/settings?tab=data");
+    await page.goto("/app/settings?tab=data");
     await page.getByTestId("import-file-input").setInputFiles(file);
     await expect(page.getByTestId("import-commit")).toContainText("Import 2 entries");
     // An empty workspace restores the file's settings by default.
@@ -259,7 +259,7 @@ test.describe("Move to another server", () => {
     await page.getByTestId("import-commit").click();
     await expect(page.getByText("Imported 2 entries")).toBeVisible();
 
-    await page.goto("/track");
+    await page.goto("/app/track");
     await expect(page.locator('[data-testid="entry-row"]')).toHaveCount(2);
   });
 });

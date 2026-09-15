@@ -30,7 +30,7 @@ vi.mock("@/lib/trpc", () => ({
 vi.mock("@/lib/auth-client", () => ({
   signIn: { social: (args: unknown) => social(args) },
   webCallbackUrl: (path: string) => `http://localhost:3392${path}`,
-  POST_AUTH_REDIRECT: "/track",
+  POST_AUTH_REDIRECT: "/app/track",
 }));
 
 const { GoogleSignInButton, googleAvailability } = await import("./google-sign-in-button");
@@ -77,7 +77,7 @@ describe("GoogleSignInButton", () => {
     await waitFor(() => expect(social).toHaveBeenCalled());
     expect(social.mock.calls[0]?.[0]).toMatchObject({
       provider: "google",
-      callbackURL: "http://localhost:3392/track",
+      callbackURL: "http://localhost:3392/app/track",
     });
   });
 

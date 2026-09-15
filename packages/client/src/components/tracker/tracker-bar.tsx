@@ -487,7 +487,7 @@ export function TrackerBar(): React.JSX.Element {
             to do silently, so the count is on screen with the reason.
           */}
           {foreign > 0 ? (
-            <Link href="/settings?tab=devices" title={t("queue.heldHint")}>
+            <Link href="/app/settings?tab=devices" title={t("queue.heldHint")}>
               <Badge
                 variant="outline"
                 className="gap-1.5 hover:bg-accent"

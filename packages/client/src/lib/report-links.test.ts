@@ -25,32 +25,32 @@ describe("parseReportView", () => {
 describe("reportsHref", () => {
   it("is the bare path for Totals with nothing to carry", () => {
     expect(reportsHref("totals")).toBe(REPORTS_PATH);
-    expect(reportsHref("totals", "")).toBe("/reports");
-    expect(reportsHref("totals", "?")).toBe("/reports");
+    expect(reportsHref("totals", "")).toBe("/app/reports");
+    expect(reportsHref("totals", "?")).toBe("/app/reports");
   });
 
   it("omits view for Totals, even when the params carried one", () => {
     const href = reportsHref("totals", "view=entries&from=2026-09-01");
 
-    expect(href).toBe("/reports?from=2026-09-01");
+    expect(href).toBe("/app/reports?from=2026-09-01");
     expect(params(href).get("view")).toBeNull();
   });
 
   it("sets view=entries for Entries, once", () => {
     const href = reportsHref("entries", { view: "totals", projects: "p1" });
 
-    expect(href.startsWith("/reports?")).toBe(true);
+    expect(href.startsWith("/app/reports?")).toBe(true);
     expect(params(href).getAll("view")).toEqual(["entries"]);
     expect(params(href).get("projects")).toBe("p1");
   });
 
   it("drops the retired week parameter", () => {
-    expect(reportsHref("totals", "week=2026-09-07")).toBe("/reports");
+    expect(reportsHref("totals", "week=2026-09-07")).toBe("/app/reports");
     expect(params(reportsHref("entries", "week=2026-09-07&q=x")).get("week")).toBeNull();
   });
 
   it("accepts a record, URLSearchParams and a string with or without ?", () => {
-    const expected = "/reports?from=2026-09-01&to=2026-09-07";
+    const expected = "/app/reports?from=2026-09-01&to=2026-09-07";
 
     expect(reportsHref("totals", { from: "2026-09-01", to: "2026-09-07" })).toBe(
       expected,
@@ -80,14 +80,14 @@ describe("legacyReportRedirect", () => {
       1,
     );
 
-    expect(href.startsWith("/reports?")).toBe(true);
+    expect(href.startsWith("/app/reports?")).toBe(true);
     expect(params(href).get("view")).toBeNull();
     expect(params(href).get("group")).toBe("client");
     expect(params(href).get("from")).toBe("2026-09-01");
   });
 
   it("sends a bare summary link to the bare Reports path", () => {
-    expect(legacyReportRedirect("summary", "", 1)).toBe("/reports");
+    expect(legacyReportRedirect("summary", "", 1)).toBe("/app/reports");
   });
 
   it("sends detailed to Entries, dropping group and keeping sort", () => {
@@ -108,7 +108,7 @@ describe("legacyReportRedirect", () => {
   it("turns a Monday-start week into that week's Totals by day", () => {
     const href = legacyReportRedirect("weekly", "?week=2026-09-10", 1, TODAY);
 
-    expect(href).toBe("/reports?from=2026-09-07&to=2026-09-13&group=day");
+    expect(href).toBe("/app/reports?from=2026-09-07&to=2026-09-13&group=day");
   });
 
   it("snaps the same week to Sunday for a Sunday-start workspace", () => {

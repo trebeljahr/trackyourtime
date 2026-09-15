@@ -79,7 +79,7 @@ export function AccountSection({
         <button
           type="button"
           className="button button--block"
-          onClick={() => openTab(join(webUrl, "/track"))}
+          onClick={() => openTab(join(webUrl, "/app/track"))}
           data-testid="account-open-app"
         >
           {t("actions.openAppExternal")}

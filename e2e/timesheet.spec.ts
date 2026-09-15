@@ -72,7 +72,7 @@ test.describe("Weekly timesheet", () => {
       password: PASSWORD,
     });
 
-    await page.goto("/timesheet");
+    await page.goto("/app/timesheet");
     await expect(page.getByTestId("timesheet-page")).toBeVisible();
     await expect(page.getByTestId("timesheet-empty")).toBeVisible();
 
@@ -116,7 +116,7 @@ test.describe("Weekly timesheet", () => {
     await expect(monday).toHaveValue("1:30:00");
 
     // ── the entry is real, and lands on the day it was typed into ───
-    await page.goto("/track");
+    await page.goto("/app/track");
     await expect(page.getByTestId("track-page")).toBeVisible();
     await expect(page.locator('[data-testid="entry-row"]')).toHaveCount(1);
   });
@@ -197,13 +197,13 @@ test.describe("Weekly timesheet", () => {
   test("will not let the running timer's cell be overwritten", async ({
     page,
   }) => {
-    await page.goto("/track");
+    await page.goto("/app/track");
     await expect(page.getByTestId("track-page")).toBeVisible();
     await pickComboboxOption(page, "tracker-project", PROJECT_NAME);
     await page.getByTestId("tracker-toggle").click();
     await expect(page.getByTestId("running-timer-indicator")).toBeVisible();
 
-    await page.goto("/timesheet");
+    await page.goto("/app/timesheet");
     const row = rowFor(page, PROJECT_NAME);
 
     // The cell holding the timer is a button, not a field — there is nothing

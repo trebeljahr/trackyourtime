@@ -288,7 +288,7 @@ export async function initAuth(): Promise<void> {
          * better-auth points the user at the API's own /device, which does
          * not exist.
          */
-        verificationUri: `${env.FRONTEND_URL.replace(/\/$/, "")}/device`,
+        verificationUri: `${env.FRONTEND_URL.replace(/\/$/, "")}/app/device`,
         validateClient: (clientId: string) =>
           Object.hasOwn(DEVICE_FLOW_CLIENT_IDS, clientId),
       }),

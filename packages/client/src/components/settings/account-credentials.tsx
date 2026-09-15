@@ -272,7 +272,7 @@ export function ChangeEmailRow({
     setBusy(true);
     setError(null);
     const { error: refusal } = await authClient
-      .changeEmail({ newEmail, callbackURL: webCallbackUrl("/settings") })
+      .changeEmail({ newEmail, callbackURL: webCallbackUrl("/app/settings") })
       .catch(() => ({ error: { code: "FAILED" } }));
     setBusy(false);
     if (refusal) {

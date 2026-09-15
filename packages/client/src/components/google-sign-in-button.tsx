@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { isNative } from "@/mobile/bridge";
+import { isAppShell } from "@/lib/app-shell-host";
 import { POST_AUTH_REDIRECT, signIn, webCallbackUrl } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { useT } from "@/i18n/use-t";
@@ -29,14 +29,6 @@ export function googleAvailability(input: {
   if (input.shell) return "shell";
   if (input.googleEnabled === undefined) return "pending";
   return input.googleEnabled ? "enabled" : "unconfigured";
-}
-
-/** True inside Capacitor, Electron or Tauri — anywhere that is not the web app's own origin. */
-export function isAppShell(): boolean {
-  if (typeof window === "undefined") return false;
-  if (isNative()) return true;
-  if ("electronAPI" in window || "__TAURI_INTERNALS__" in window) return true;
-  return !/^https?:$/.test(window.location.protocol);
 }
 
 const NOTES = {

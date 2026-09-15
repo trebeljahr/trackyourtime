@@ -24,14 +24,14 @@ async function openTracker(page: Page, prefix: string): Promise<void> {
     email: uniqueEmail(prefix),
     password: PASSWORD,
   });
-  await page.goto("/track");
+  await page.goto("/app/track");
   await expect(page.getByTestId("tracker-bar")).toBeVisible();
   await expect(page.getByTestId("entries-empty")).toBeVisible();
 }
 
 /** A billable-by-default project, created through the projects screen. */
 async function createProject(page: Page, name: string): Promise<void> {
-  await page.goto("/projects");
+  await page.goto("/app/projects");
   await expect(page.getByTestId("projects-page")).toBeVisible();
   await page.getByTestId("new-project").click();
   await page.getByTestId("project-name-input").fill(name);
@@ -86,7 +86,7 @@ test.describe("Command palette", () => {
     await createProject(page, "Harbour Website");
 
     // A page that is not the tracker, so the shell's shortcut is what opens it.
-    await page.goto("/timesheet");
+    await page.goto("/app/timesheet");
     const input = await openPalette(page);
     await input.fill("Harbour Website");
     await expect(
@@ -101,7 +101,7 @@ test.describe("Command palette", () => {
     await expect(input).toBeHidden();
     await expect(page.getByTestId("running-timer-indicator")).toBeVisible();
 
-    await page.goto("/track");
+    await page.goto("/app/track");
     await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
       "data-state",
       "running",
@@ -170,7 +170,7 @@ test.describe("Tracker description autocomplete", () => {
   }) => {
     await openTracker(page, "describe-enter");
     await createProject(page, "Lighthouse App");
-    await page.goto("/track");
+    await page.goto("/app/track");
 
     // History: one entry filed under the project, billable by default.
     const description = page.getByTestId("tracker-description");
@@ -272,7 +272,7 @@ test.describe("Tracker description autocomplete", () => {
 test.describe("Calendar shortcuts", () => {
   test("d/w/m/y/t still navigate with the palette mounted", async ({ page }) => {
     await openTracker(page, "calendar-keys");
-    await page.goto("/calendar");
+    await page.goto("/app/calendar");
     await expect(page.getByTestId("calendar-screen")).toBeVisible();
     const title = page.getByTestId("calendar-title");
     await expect(title).toBeVisible();

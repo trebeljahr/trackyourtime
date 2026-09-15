@@ -51,45 +51,45 @@ describe("MobileTabBar", () => {
     // mismatch under `output: "export"`: the prerender runs in Node, where
     // `window.Capacitor` cannot exist, so the served HTML would always have
     // the bar and the native hydration would always drop it.
-    renderBar("/track");
+    renderBar("/app/track");
     expect(screen.getByTestId("mobile-tab-bar").className).toContain("hidden");
   });
 
   it("lights Track on /track", () => {
-    renderBar("/track");
+    renderBar("/app/track");
     expect(activeTab()).toBe("track");
   });
 
   it("keeps Reports lit under /reports", () => {
     // The retired report routes are redirects under /reports, so a bookmark
     // to one must not light More for the frame before it lands.
-    renderBar("/reports/summary");
+    renderBar("/app/reports/summary");
     expect(activeTab()).toBe("reports");
   });
 
   it("falls back to More on a screen no tab owns", () => {
     // Otherwise a phone sitting on /settings shows no active tab at all,
     // which reads as a broken bar rather than as a deliberate one.
-    renderBar("/settings");
+    renderBar("/app/settings");
     expect(activeTab()).toBe("more");
   });
 
   it("lights More while the drawer is open, over the current route", () => {
-    renderBar("/track", true);
+    renderBar("/app/track", true);
     expect(activeTab()).toBe("more");
   });
 
   it("points Reports at the one Reports page", () => {
-    renderBar("/track");
+    renderBar("/app/track");
     expect(screen.getByTestId("tab-reports").getAttribute("href")).toBe(
-      "/reports",
+      "/app/reports",
     );
   });
 
   it("opens the drawer rather than navigating", () => {
     const onOpenMore = vi.fn();
     render(
-      <MobileTabBar pathname="/track" onOpenMore={onOpenMore} moreOpen={false} />,
+      <MobileTabBar pathname="/app/track" onOpenMore={onOpenMore} moreOpen={false} />,
     );
 
     const more = screen.getByTestId("tab-more");

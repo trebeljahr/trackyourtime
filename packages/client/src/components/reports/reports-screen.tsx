@@ -122,7 +122,7 @@ export function ReportsScreen(): React.JSX.Element {
   );
 }
 
-/** What `/reports` renders: the screen reads search params, so it suspends. */
+/** What `/app/reports` renders: the screen reads search params, so it suspends. */
 export function ReportsScreenPage(): React.JSX.Element {
   return (
     <React.Suspense fallback={<ReportPageSkeleton />}>

@@ -155,7 +155,7 @@ describe("ClientFormDialog billing", () => {
     expect(input.closest("[data-field]")).toHaveAttribute("data-highlight", "true");
     expect(screen.getByTestId("client-billing-back-to-invoice")).toHaveAttribute(
       "href",
-      "/invoices?invoice=inv1",
+      "/app/invoices?invoice=inv1",
     );
   });
 });

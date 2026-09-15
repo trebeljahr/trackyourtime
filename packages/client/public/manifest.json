@@ -2,7 +2,7 @@
   "name": "Track Your Time",
   "short_name": "Track Time",
   "description": "Time tracking with reporting that actually answers questions",
-  "start_url": "/track",
+  "start_url": "/app/track",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4F46E5",

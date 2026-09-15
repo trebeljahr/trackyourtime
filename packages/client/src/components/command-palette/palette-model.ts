@@ -263,7 +263,7 @@ const navigateGroup = (input: PaletteInput): PaletteGroup => ({
     const heading = section.heading ? input.t(`nav.sections.${section.heading}`) : null;
     return section.items.map((item) =>
       row({
-        id: `nav-${item.href.replace(/^\/+/, "").replace(/\//g, "-")}`,
+        id: `nav-${item.id}`,
         label: input.t(`nav.items.${item.id}`),
         hint: heading,
         icon: item.icon,

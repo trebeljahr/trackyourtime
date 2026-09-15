@@ -161,7 +161,7 @@ describe("queue ownership", () => {
 });
 
 /*
- * `(protected)/layout.tsx` keeps a phone with a stored token inside the app
+ * `app/app/layout.tsx` keeps a phone with a stored token inside the app
  * when the session check cannot reach the server, so the tracker is fully
  * usable while `useSession()` still says nothing. That is the launch the
  * offline queue exists for, and it must not produce rows the next account can

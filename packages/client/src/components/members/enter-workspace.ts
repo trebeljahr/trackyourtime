@@ -1,7 +1,7 @@
 import { chooseWorkspaceForNextLoad } from "@/lib/active-workspace";
 
 /** Where somebody lands after joining or leaving a workspace. */
-export const WORKSPACE_LANDING = "/track/";
+export const WORKSPACE_LANDING = "/app/track/";
 
 export type Navigate = (href: string) => void;
 

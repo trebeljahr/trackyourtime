@@ -42,10 +42,10 @@ const input = (overrides: Partial<PaletteInput> = {}): PaletteInput => ({
   running: null,
   quickStarts: [],
   sections: [
-    { heading: null, items: [{ href: "/track", id: "track", icon: Timer }] },
+    { heading: null, items: [{ href: "/app/track", id: "track", icon: Timer }] },
     {
       heading: "manage",
-      items: [{ href: "/clients", id: "clients", icon: Users }],
+      items: [{ href: "/app/clients", id: "clients", icon: Users }],
     },
   ],
   projects: [
@@ -80,8 +80,8 @@ describe("buildPaletteGroups", () => {
     expect(groups.map((group) => group.id)).toEqual(["timer", "navigate"]);
     expect(groups[0]?.items.map((item) => item.id)).toEqual(["timer-start"]);
     expect(groups[1]?.items.map((item) => item.action)).toEqual([
-      { kind: "navigate", href: "/track" },
-      { kind: "navigate", href: "/clients" },
+      { kind: "navigate", href: "/app/track" },
+      { kind: "navigate", href: "/app/clients" },
     ]);
   });
 
@@ -147,7 +147,7 @@ describe("buildPaletteGroups", () => {
     expect(projects?.items[1]?.label).toBe("Open report filtered by Website");
     expect(projects?.items[1]?.action).toEqual({
       kind: "navigate",
-      href: "/reports?from=2026-01-01&to=2026-12-31&projects=p1&view=entries",
+      href: "/app/reports?from=2026-01-01&to=2026-12-31&projects=p1&view=entries",
     });
   });
 

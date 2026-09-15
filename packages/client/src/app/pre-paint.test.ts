@@ -163,7 +163,7 @@ describe("LOCALE_SCRIPT", () => {
   });
 
   it("offers the pseudo-locale only in a build that allows it", () => {
-    at("/track/?locale=pseudo");
+    at("/app/track/?locale=pseudo");
     run(localeScript(false));
     expect(root.getAttribute("data-locale")).toBe("en");
     expect(localeScript(false)).not.toContain("pseudo");

@@ -67,13 +67,13 @@ describe("enterWorkspace", () => {
     await enterWorkspace("ws-team", navigate);
     expect(window.localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)).toBe("ws-team");
     expect(activeWorkspace.getActiveWorkspaceId()).toBe("ws-team");
-    expect(navigate).toHaveBeenCalledWith("/track/");
+    expect(navigate).toHaveBeenCalledWith("/app/track/");
   });
 
   it("stores a workspace the known list does not contain yet (just joined)", async () => {
     const navigate = vi.fn();
     await enterWorkspace("ws-new", navigate);
     expect(window.localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)).toBe("ws-new");
-    expect(navigate).toHaveBeenCalledWith("/track/");
+    expect(navigate).toHaveBeenCalledWith("/app/track/");
   });
 });

@@ -99,7 +99,7 @@ export const createServerSwitch =
     if (options.token) await deps.adoptToken(options.token);
     await deps.refreshPending().catch(() => undefined);
 
-    deps.restart(options.landOn ?? (options.token ? "/track/" : "/login/"));
+    deps.restart(options.landOn ?? (options.token ? "/app/track/" : "/login/"));
     return "switched";
   };
 

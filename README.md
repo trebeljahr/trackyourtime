@@ -11,7 +11,7 @@ Hosted instance: <https://trackyourtime.dev>, with the API on its own host at <h
 
 > The build badge is pinned to `main` and reports the real state of the pipeline. It is not green — see [Not there yet](#not-there-yet).
 
-<!-- Screenshot placeholder: add a capture of the /track screen at docs/screenshots/app.png,
+<!-- Screenshot placeholder: add a capture of the /app/track screen at docs/screenshots/app.png,
      then replace this comment with:
      ![The Track Your Time web app tracking time against a project](docs/screenshots/app.png) -->
 

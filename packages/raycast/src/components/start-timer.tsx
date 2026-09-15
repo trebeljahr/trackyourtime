@@ -122,7 +122,7 @@ export function StartTimer(): React.JSX.Element {
           })}
           <Action.OpenInBrowser
             title="Open Web App"
-            url={webLink("/track")}
+            url={webLink("/app/track")}
             shortcut={{ modifiers: ["cmd"], key: "o" }}
           />
         </ActionPanel>

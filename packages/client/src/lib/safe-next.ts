@@ -2,7 +2,7 @@
  * Where to send somebody after they sign in or sign up.
  *
  * `?next=` exists so a signed-out visit to `/invite/?id=…` or
- * `/device/?user_code=…` comes back to the same page after authenticating,
+ * `/app/device/?user_code=…` comes back to the same page after authenticating,
  * instead of being dropped on /track with the id or code lost.
  *
  * It is also the textbook open redirect: the login page is trusted, so a link
@@ -17,7 +17,7 @@
  *    tabs and newlines out of URLs, so "/\t/evil.com" becomes "//evil.com"
  *    after this check would have passed it;
  *  - it must still resolve to this origin once parsed, which also normalises
- *    dot segments, so "/track/../evil" is judged as "/evil";
+ *    dot segments, so "/app/track/../evil" is judged as "/app/evil";
  *  - its path must be under one of {@link SAFE_NEXT_PREFIXES}.
  *
  * Anything else answers `null`, and the caller uses its default.
@@ -26,10 +26,10 @@
 /** The only screens a `next` may point at. */
 export const SAFE_NEXT_PREFIXES = [
   "/invite",
-  "/device",
-  "/track",
-  "/members",
-  "/settings",
+  "/app/device",
+  "/app/track",
+  "/app/members",
+  "/app/settings",
 ] as const;
 
 /** Longer than any real return path; a cap keeps a crafted value cheap to reject. */
@@ -93,7 +93,7 @@ export const authPageHref = (
 /**
  * `/login`, carrying the page a signed-out visitor was trying to reach.
  *
- * Without it a signed-out visit to `/device/?user_code=ABCD` signed in and
+ * Without it a signed-out visit to `/app/device/?user_code=ABCD` signed in and
  * landed on /track with the code gone. The protected layout calls this at
  * redirect time with `window.location` (never during render, which is
  * prerendered in Node), and a page outside the allowlist simply goes to

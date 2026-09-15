@@ -202,11 +202,11 @@ export function fixHref(
   const back = `from=invoice:${encodeURIComponent(from.invoiceId)}`;
   switch (fixIn) {
     case "businessProfile":
-      return `/settings?tab=billing&field=${leaf}&${back}`;
+      return `/app/settings?tab=billing&field=${leaf}&${back}`;
     case "clientBilling":
       return from.clientId
-        ? `/clients?billing=${encodeURIComponent(from.clientId)}&field=${leaf}&${back}`
-        : "/clients";
+        ? `/app/clients?billing=${encodeURIComponent(from.clientId)}&field=${leaf}&${back}`
+        : "/app/clients";
     case "invoice":
       return null;
   }
@@ -307,7 +307,7 @@ export function parseDeepLink(search: string): {
 
 /** The invoices screen with one invoice selected. */
 export function invoiceHref(invoiceId: string): string {
-  return `/invoices?invoice=${encodeURIComponent(invoiceId)}`;
+  return `/app/invoices?invoice=${encodeURIComponent(invoiceId)}`;
 }
 
 // ── fill dialog ──────────────────────────────────────────────────────

@@ -174,7 +174,7 @@ export function SignIn(): React.JSX.Element {
           <ActionPanel>
             <Action.OpenInBrowser
               title="Open Web App"
-              url={webLink("/track")}
+              url={webLink("/app/track")}
             />
             <Action
               title="Sign Out"
@@ -201,7 +201,7 @@ export function SignIn(): React.JSX.Element {
     const { userCode, verificationUri, verificationUriComplete } =
       phase.authorization;
     const approvalUrl =
-      verificationUriComplete || verificationUri || webLink("/device");
+      verificationUriComplete || verificationUri || webLink("/app/device");
 
     return (
       <Detail
@@ -230,7 +230,7 @@ export function SignIn(): React.JSX.Element {
             <Detail.Metadata.Link
               title="Approval Page"
               target={approvalUrl}
-              text={hostLabel(verificationUri || webLink("/device"))}
+              text={hostLabel(verificationUri || webLink("/app/device"))}
             />
             <Detail.Metadata.Label title="Server" text={hostLabel(apiUrl())} />
           </Detail.Metadata>
@@ -299,7 +299,7 @@ export function SignIn(): React.JSX.Element {
             onAction={openExtensionPreferences}
           />
           <Action title="Try Again" icon={Icon.Repeat} onAction={retry} />
-          <Action.OpenInBrowser title="Open Web App" url={webLink("/track")} />
+          <Action.OpenInBrowser title="Open Web App" url={webLink("/app/track")} />
         </ActionPanel>
       }
     />

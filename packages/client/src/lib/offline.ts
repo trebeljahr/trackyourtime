@@ -239,7 +239,7 @@ let owner: string | null = null;
  * The last account that owned this queue, remembered across launches.
  *
  * `owner` above comes from `useSession()`, and there is a window in which the
- * app is fully usable while that is still null: `(protected)/layout.tsx` keeps
+ * app is fully usable while that is still null: `app/app/layout.tsx` keeps
  * a phone with a stored token *inside* the app when the session check cannot
  * reach the server (`verdictForRejection`), which is precisely the cold
  * offline launch the offline queue exists for. Stamping those rows with

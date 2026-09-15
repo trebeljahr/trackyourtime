@@ -450,7 +450,7 @@ export default function MenuBar(): React.JSX.Element | null {
           title="Open Dashboard"
           icon={Icon.Globe}
           onAction={() => {
-            void open(webLink("/track"));
+            void open(webLink("/app/track"));
           }}
         />
         <MenuBarExtra.Item

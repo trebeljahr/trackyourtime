@@ -74,7 +74,7 @@ const saved = (): BusinessProfile => ({
 beforeEach(() => {
   mutate.mockReset();
   query.current = { isError: false };
-  window.history.replaceState({}, "", "/settings");
+  window.history.replaceState({}, "", "/app/settings");
 });
 afterEach(cleanup);
 
@@ -211,7 +211,7 @@ describe("e-invoice fields", () => {
   });
 
   it("focuses and highlights the field a deep link names, and links back to the invoice", () => {
-    window.history.replaceState({}, "", "/settings?tab=billing&field=iban&from=invoice:inv1");
+    window.history.replaceState({}, "", "/app/settings?tab=billing&field=iban&from=invoice:inv1");
     query.current = { data: saved(), isError: false };
     render(<BusinessProfileCard />);
     expect(screen.getByTestId("business-profile-iban")).toHaveFocus();
@@ -221,7 +221,7 @@ describe("e-invoice fields", () => {
     );
     expect(screen.getByTestId("business-profile-back-to-invoice")).toHaveAttribute(
       "href",
-      "/invoices?invoice=inv1",
+      "/app/invoices?invoice=inv1",
     );
   });
 });

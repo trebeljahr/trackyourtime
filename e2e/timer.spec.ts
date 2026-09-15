@@ -48,7 +48,7 @@ async function openTracker(page: Page, prefix: string): Promise<void> {
     email: uniqueEmail(prefix),
     password: PASSWORD,
   });
-  await page.goto("/track");
+  await page.goto("/app/track");
   await expect(page.getByTestId("track-page")).toBeVisible();
   await expect(page.getByTestId("tracker-bar")).toBeVisible();
   // A fresh account has nothing tracked — waiting for the empty state proves
@@ -127,7 +127,7 @@ test.describe("Timer", () => {
 
     // Configure idle detection: pause and resume, with the shortest threshold
     // the settings allow.
-    await page.goto("/settings");
+    await page.goto("/app/settings");
     await page.getByTestId("settings-tab-idle").click();
     await page.getByTestId("idle-enabled").click();
     await expect(page.getByTestId("idle-enabled")).toHaveAttribute(
@@ -145,7 +145,7 @@ test.describe("Timer", () => {
       "saved",
     );
 
-    await page.goto("/track");
+    await page.goto("/app/track");
     await page.getByTestId("tracker-description").fill("Reading the RFC");
     await page.getByTestId("tracker-toggle").click();
     await expect(runningRows(page)).toHaveCount(1);
@@ -501,7 +501,7 @@ test.describe("Recorded time zone", () => {
     );
     expect(created.ok()).toBe(true);
 
-    await page.goto("/track");
+    await page.goto("/app/track");
     const row = entryRow(page, "Standup in Tokyo");
     await expect(row).toHaveCount(1);
 

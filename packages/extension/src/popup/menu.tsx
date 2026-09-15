@@ -58,7 +58,7 @@ export function Menu({ webUrl }: MenuProps): JSX.Element {
             type="button"
             role="menuitem"
             className="menu__item"
-            onClick={() => openTab(join(webUrl, "/track"))}
+            onClick={() => openTab(join(webUrl, "/app/track"))}
             data-testid="menu-open-app"
           >
             {t("actions.openApp")}
@@ -67,7 +67,7 @@ export function Menu({ webUrl }: MenuProps): JSX.Element {
             type="button"
             role="menuitem"
             className="menu__item"
-            onClick={() => openTab(join(webUrl, "/reports"))}
+            onClick={() => openTab(join(webUrl, "/app/reports"))}
             data-testid="menu-reports"
           >
             {t("menu.reports")}

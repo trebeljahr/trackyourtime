@@ -69,7 +69,7 @@ test.describe("Reports", () => {
       password: PASSWORD,
     });
 
-    await page.goto("/track");
+    await page.goto("/app/track");
     await expect(page.getByTestId("track-page")).toBeVisible();
     await expect(page.getByTestId("entries-empty")).toBeVisible();
 
@@ -93,7 +93,7 @@ test.describe("Reports", () => {
   });
 
   test("totals add up the tracked time and groups it", async ({ page }) => {
-    await page.goto(`/reports${RANGE_QUERY}`);
+    await page.goto(`/app/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("summary-report")).toBeVisible();
 
     // Headline figures match the two entries exactly.
@@ -138,7 +138,7 @@ test.describe("Reports", () => {
   });
 
   test("creates and renames a client from the filter bar", async ({ page }) => {
-    await page.goto(`/reports${RANGE_QUERY}`);
+    await page.goto(`/app/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("report-filters")).toBeVisible();
 
     // ── create one, without leaving the report ──────────────────────
@@ -182,7 +182,7 @@ test.describe("Reports", () => {
   });
 
   test("entries list every entry in the range", async ({ page }) => {
-    await page.goto(`/reports${RANGE_QUERY}&view=entries`);
+    await page.goto(`/app/reports${RANGE_QUERY}&view=entries`);
     await expect(page.getByTestId("detailed-report")).toBeVisible();
     await expect(page.getByTestId("detailed-table")).toBeVisible();
 
@@ -207,7 +207,7 @@ test.describe("Reports", () => {
     // Narrowing to a range with no tracked time empties the log rather than
     // showing stale rows.
     await page.goto(
-      `/reports?from=${dayKey(-30)}&to=${dayKey(-20)}&view=entries`
+      `/app/reports?from=${dayKey(-30)}&to=${dayKey(-20)}&view=entries`
     );
     await expect(page.getByTestId("detailed-empty")).toBeVisible();
     await expect(rows).toHaveCount(0);
@@ -215,7 +215,7 @@ test.describe("Reports", () => {
   });
 
   test("switching views keeps the filters", async ({ page }) => {
-    await page.goto(`/reports${RANGE_QUERY}&group=client`);
+    await page.goto(`/app/reports${RANGE_QUERY}&group=client`);
     await expect(page.getByTestId("summary-report")).toBeVisible();
     await expect(page.getByTestId("report-view-totals")).toHaveAttribute(
       "aria-selected",
@@ -284,7 +284,7 @@ test.describe("Reports", () => {
   });
 
   test("a grouped total drills down into its entries", async ({ page }) => {
-    await page.goto(`/reports${RANGE_QUERY}`);
+    await page.goto(`/app/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("summary-report")).toBeVisible();
 
     const row = page.locator('[data-testid^="summary-row-"]');
@@ -308,21 +308,21 @@ test.describe("Reports", () => {
   });
 
   test("the sidebar has one Reports link", async ({ page }) => {
-    await page.goto("/track");
+    await page.goto("/app/track");
     const nav = page.getByTestId("sidebar-nav");
     await expect(nav).toBeVisible();
 
     await expect(page.getByTestId("nav-reports")).toHaveCount(1);
     await expect(page.getByTestId("nav-reports")).toHaveAttribute(
       "href",
-      /^\/reports\/?$/
+      /^\/app\/reports\/?$/
     );
     await expect(page.getByTestId("nav-summary")).toHaveCount(0);
     await expect(page.getByTestId("nav-detailed")).toHaveCount(0);
     await expect(page.getByTestId("nav-weekly")).toHaveCount(0);
 
     await page.getByTestId("nav-reports").click();
-    await expect(page).toHaveURL(/\/reports\/?(\?|$)/);
+    await expect(page).toHaveURL(/\/app\/reports\/?(\?|$)/);
     await expect(page.getByTestId("report-view-switch")).toBeVisible();
     await expect(page.getByTestId("summary-report")).toBeVisible();
     await expect(page.getByTestId("weekly-report")).toHaveCount(0);
@@ -342,16 +342,16 @@ test.describe("Legacy report addresses", () => {
     });
   });
 
-  /** Matches `/reports?…` and `/reports/?…`, never `/reports/summary`. */
-  const MERGED_PAGE = /\/reports\/?\?/;
+  /** Matches `/app/reports?…` and `/app/reports/?…`, never `/app/reports/summary`. */
+  const MERGED_PAGE = /\/app\/reports\/?\?/;
 
-  test("/reports/summary opens Totals with the same query", async ({
+  test("/app/reports/summary opens Totals with the same query", async ({
     page,
   }) => {
-    await page.goto(`/reports/summary${RANGE_QUERY}&group=client`);
+    await page.goto(`/app/reports/summary${RANGE_QUERY}&group=client`);
 
     await expect(page).toHaveURL(MERGED_PAGE);
-    await expect(page).not.toHaveURL(/\/reports\/summary/);
+    await expect(page).not.toHaveURL(/\/app\/reports\/summary/);
     await expect(page).not.toHaveURL(/view=/);
     await expect(page).toHaveURL(new RegExp(`from=${dayKey(-7)}`));
     await expect(page).toHaveURL(new RegExp(`to=${dayKey(1)}`));
@@ -368,15 +368,15 @@ test.describe("Legacy report addresses", () => {
     );
   });
 
-  test("/reports/detailed opens Entries and drops the grouping", async ({
+  test("/app/reports/detailed opens Entries and drops the grouping", async ({
     page,
   }) => {
     await page.goto(
-      `/reports/detailed${RANGE_QUERY}&group=tag&sort=duration&dir=desc`
+      `/app/reports/detailed${RANGE_QUERY}&group=tag&sort=duration&dir=desc`
     );
 
     await expect(page).toHaveURL(MERGED_PAGE);
-    await expect(page).not.toHaveURL(/\/reports\/detailed/);
+    await expect(page).not.toHaveURL(/\/app\/reports\/detailed/);
     await expect(page).toHaveURL(/view=entries/);
     await expect(page).not.toHaveURL(/group=/);
     await expect(page).toHaveURL(new RegExp(`from=${dayKey(-7)}`));
@@ -390,14 +390,14 @@ test.describe("Legacy report addresses", () => {
     );
   });
 
-  test("/reports/weekly opens Totals for that week, by day", async ({
+  test("/app/reports/weekly opens Totals for that week, by day", async ({
     page,
   }) => {
     const week = dayKey(-7);
-    await page.goto(`/reports/weekly?week=${week}`);
+    await page.goto(`/app/reports/weekly?week=${week}`);
 
     await expect(page).toHaveURL(MERGED_PAGE);
-    await expect(page).not.toHaveURL(/\/reports\/weekly/);
+    await expect(page).not.toHaveURL(/\/app\/reports\/weekly/);
     await expect(page).not.toHaveURL(/view=/);
     await expect(page).not.toHaveURL(/week=/);
     await expect(page).toHaveURL(/group=day/);
@@ -423,10 +423,10 @@ test.describe("Legacy report addresses", () => {
     await expect(page.getByTestId("weekly-report")).toHaveCount(0);
   });
 
-  test("/reports/weekly with no week opens the current week", async ({
+  test("/app/reports/weekly with no week opens the current week", async ({
     page,
   }) => {
-    await page.goto("/reports/weekly");
+    await page.goto("/app/reports/weekly");
 
     await expect(page).toHaveURL(MERGED_PAGE);
     await expect(page).toHaveURL(/group=day/);

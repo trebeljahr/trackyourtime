@@ -22,16 +22,16 @@ const ymd = (d) =>
 const fourWeeksAgo = new Date(Date.now() - 27 * 86_400_000);
 
 const SCREENS = [
-  { name: "web-track", path: "/track/", ready: "main" },
+  { name: "web-track", path: "/app/track/", ready: "main" },
   // Grouped by task across four weeks: the one view the landing page argues for.
   {
     name: "web-reports",
-    path: `/reports/?group=task&from=${ymd(fourWeeksAgo)}&to=${ymd(new Date())}`,
+    path: `/app/reports/?group=task&from=${ymd(fourWeeksAgo)}&to=${ymd(new Date())}`,
     ready: '[data-testid="groupby-switch"]',
   },
-  { name: "web-timesheet", path: "/timesheet/", ready: "main" },
-  { name: "web-calendar", path: "/calendar/", ready: "main" },
-  { name: "web-invoices", path: "/invoices/", ready: '[data-testid="invoices-table"]' },
+  { name: "web-timesheet", path: "/app/timesheet/", ready: "main" },
+  { name: "web-calendar", path: "/app/calendar/", ready: "main" },
+  { name: "web-invoices", path: "/app/invoices/", ready: '[data-testid="invoices-table"]' },
 ];
 
 await mkdir(outDir, { recursive: true });

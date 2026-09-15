@@ -121,7 +121,7 @@ test.describe("Tags", () => {
     );
 
     // ── the tag now shows its usage on the management screen ────────
-    await page.goto("/tags");
+    await page.goto("/app/tags");
     await expect(page.getByTestId("tags-page")).toBeVisible();
     const tagRow = page
       .locator('[data-testid^="tag-row-"]')
@@ -132,7 +132,7 @@ test.describe("Tags", () => {
     await expect(page.getByTestId(`tag-tracked-${tagId}`)).toHaveText(ONE_HOUR);
 
     // ── filter a report down to it ──────────────────────────────────
-    await page.goto(`/reports${RANGE_QUERY}`);
+    await page.goto(`/app/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("report-filters")).toBeVisible();
     // Both entries are in range before the filter is applied.
     await expect(page.getByTestId("summary-total-duration")).toHaveText(
@@ -173,7 +173,7 @@ test.describe("Tags", () => {
 
     await logManualEntry(page, "Pairing at the client", ONE_HOUR);
 
-    await page.goto(`/reports${RANGE_QUERY}&group=tag`);
+    await page.goto(`/app/reports${RANGE_QUERY}&group=tag`);
     await expect(page.getByTestId("summary-table")).toBeVisible();
 
     // The total is the true, un-double-counted hour...
@@ -194,7 +194,7 @@ test.describe("Tags", () => {
     );
 
     // Any other grouping partitions the entries, so the caveat must be gone.
-    await page.goto(`/reports${RANGE_QUERY}&group=project`);
+    await page.goto(`/app/reports${RANGE_QUERY}&group=project`);
     await expect(page.getByTestId("summary-table")).toBeVisible();
     await expect(page.getByTestId("summary-overlap-note")).toHaveCount(0);
   });
@@ -206,7 +206,7 @@ test.describe("Tags", () => {
     await createTagInline(page, "tracker-tags", DEEP_WORK);
     await logManualEntry(page, "Refactor the parser", ONE_HOUR);
 
-    await page.goto("/tags");
+    await page.goto("/app/tags");
     const tagRow = page
       .locator('[data-testid^="tag-row-"]')
       .filter({ hasText: DEEP_WORK });
@@ -224,7 +224,7 @@ test.describe("Tags", () => {
     );
 
     // The rename reaches the entry that carries it, not just this table.
-    await page.goto("/track");
+    await page.goto("/app/track");
     const entry = page
       .locator('[data-testid="entry-row"]')
       .filter({ hasText: "Refactor the parser" });
@@ -233,7 +233,7 @@ test.describe("Tags", () => {
     );
 
     // ── delete, which the server turns into an archive ──────────────
-    await page.goto("/tags");
+    await page.goto("/app/tags");
     await page.getByTestId(`tag-menu-${tagId}`).click();
     await page.getByTestId(`tag-delete-${tagId}`).click();
     const confirm = page.getByTestId("tag-confirm-delete");
@@ -252,7 +252,7 @@ test.describe("Tags", () => {
     );
 
     // And the time it labelled keeps its label — archiving is not a rewrite.
-    await page.goto("/track");
+    await page.goto("/app/track");
     await expect(
       page
         .locator('[data-testid="entry-row"]')
@@ -264,7 +264,7 @@ test.describe("Tags", () => {
   test("creates a tag from the management screen and applies it to a row", async ({
     page,
   }) => {
-    await page.goto("/tags");
+    await page.goto("/app/tags");
     await expect(page.getByTestId("tags-empty")).toBeVisible();
 
     await page.getByTestId("new-tag").click();
@@ -287,7 +287,7 @@ test.describe("Tags", () => {
     await page.getByTestId("tag-cancel").click();
 
     // ── apply it to an existing entry from the row itself ───────────
-    await page.goto("/track");
+    await page.goto("/app/track");
     const row = await logManualEntry(page, "Kickoff workshop", ONE_HOUR);
     await expect(row.getByTestId("entry-tags")).toHaveAttribute(
       "data-tag-count",
@@ -310,7 +310,7 @@ test.describe("Tags", () => {
     await expect(row.getByTestId("entry-tags-chips")).toContainText(ON_SITE);
 
     // The manager picks the usage up on the next visit.
-    await page.goto("/tags");
+    await page.goto("/app/tags");
     await expect(page.getByTestId(`tag-entries-${tagId}`)).toHaveText("1");
     await expect(page.getByTestId(`tag-tracked-${tagId}`)).toHaveText(ONE_HOUR);
   });

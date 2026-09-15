@@ -51,7 +51,7 @@ function fakes(overrides: Partial<RunawayReminderDeps> = {}): {
       },
       isEmailDeliveryConfigured: () => true,
       findUserEmail: async (userId) => (userId === ALICE ? "alice@example.com" : null),
-      trackUrl: "https://app.example.com/track",
+      trackUrl: "https://app.example.com/app/track",
       log: (message) => logs.push(message),
       ...overrides,
     },
@@ -200,7 +200,7 @@ describe("runaway-reminder job", { skip: skipWithoutDatabase }, () => {
     assert.equal(sent[0]?.to, "alice@example.com");
     assert.match(sent[0]?.text ?? "", /Design review/);
     assert.match(sent[0]?.text ?? "", /past your 8 h limit/);
-    assert.match(sent[0]?.text ?? "", /https:\/\/app\.example\.com\/track/);
+    assert.match(sent[0]?.text ?? "", /https:\/\/app\.example\.com\/app\/track/);
     assert.deepEqual(
       broadcasts.map((b) => b.kind),
       ["entry.upserted"],

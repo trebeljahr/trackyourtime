@@ -13,7 +13,7 @@
  *  - `signInWithPassword()` — the client shows its own email/password form.
  *    Right for a browser extension popup.
  *  - `startDeviceAuthorization()` + `pollForDeviceSession()` — the client
- *    shows a short code the user approves at `/device` in a real browser.
+ *    shows a short code the user approves at `/app/device` in a real browser.
  *    Right for Raycast and CLIs, where typing a password is wrong.
  *
  * Persisting the returned token is the caller's job, and it deserves the

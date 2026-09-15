@@ -88,6 +88,45 @@ function resolveFile(urlPath) {
 }
 
 /**
+ * The signed-in screens lived at the root (`/track`, `/settings`, …) until
+ * they moved under `/app/`. Links to the old addresses outlive the move:
+ * bookmarks and saved logins, reminder and device-flow emails already sent,
+ * and extension and Raycast builds already installed. Each is answered with a
+ * permanent redirect to the same path under `/app/`, query string kept.
+ *
+ * Here and not in the app: the export has no middleware, and a client-side
+ * redirect page per old route would put these names back into the route tree.
+ */
+const LEGACY_APP_SEGMENTS = new Set([
+  "calendar",
+  "clients",
+  "device",
+  "invoices",
+  "members",
+  "profile",
+  "projects",
+  "reports",
+  "settings",
+  "tags",
+  "tasks",
+  "timesheet",
+  "track",
+]);
+
+/** `/app/<path>` for a pre-move app address, or null for anything else. */
+function legacyAppRedirect(url) {
+  const [path, query] = splitOnce(url, "?");
+  const segment = path.split("/")[1] ?? "";
+  if (!LEGACY_APP_SEGMENTS.has(segment)) return null;
+  return `/app${path}${query === null ? "" : `?${query}`}`;
+}
+
+function splitOnce(value, separator) {
+  const at = value.indexOf(separator);
+  return at === -1 ? [value, null] : [value.slice(0, at), value.slice(at + 1)];
+}
+
+/**
  * Cache headers by what the file is, not by how old it is.
  *
  * Everything under `/_next/static` carries a content hash in its name, so it
@@ -114,6 +153,14 @@ const server = createServer((req, res) => {
   }
 
   const urlPath = (req.url ?? "/").split("?")[0];
+
+  const moved = legacyAppRedirect(req.url ?? "/");
+  if (moved !== null) {
+    res.writeHead(308, { location: moved, "cache-control": "no-cache" });
+    res.end();
+    return;
+  }
+
   const file = resolveFile(req.url ?? "/");
 
   if (!file) {

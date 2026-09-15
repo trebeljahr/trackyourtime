@@ -157,7 +157,7 @@ describe("MembersScreen as a plain member", () => {
     expect(calls.leave).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId("confirm-accept"));
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/track/"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/app/track/"));
     expect(window.localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)).toBe("ws-personal");
     expect(calls.leave).toHaveBeenCalledWith(undefined);
   });

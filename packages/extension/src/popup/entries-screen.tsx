@@ -277,7 +277,7 @@ export function EntriesScreen({
                     <button
                       type="button"
                       className="button--link"
-                      onClick={() => openTab(join(webUrl, "/track"))}
+                      onClick={() => openTab(join(webUrl, "/app/track"))}
                       data-testid="entries-open-app"
                     >
                       {t("actions.openAppExternal")}

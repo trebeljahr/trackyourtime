@@ -29,7 +29,7 @@ export function NotFoundView(): React.JSX.Element {
         </div>
         <div className="flex flex-wrap gap-3">
           <Link
-            href="/track/"
+            href="/app/track/"
             className="inline-flex h-10 items-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             {t("notFound.openTracker")}

@@ -140,7 +140,7 @@ describe("InviteAcceptance signed in with the invited email", () => {
     render(<InviteAcceptance navigate={navigate} />);
 
     fireEvent.click(screen.getByTestId("invite-accept"));
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/track/"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/app/track/"));
     expect(accept).toHaveBeenCalledWith({ id: "inv-1" });
     expect(window.localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)).toBe("ws-team");
   });

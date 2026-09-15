@@ -85,7 +85,7 @@ build before anything resolves them — hence the ordering in `pnpm run build`.
 From a click in the web app to a MongoDB write and back.
 
 **1. Page → component → hook.** A route such as
-`packages/client/src/app/(protected)/track/page.tsx` is a thin `"use client"`
+`packages/client/src/app/app/track/page.tsx` is a thin `"use client"`
 default export around components in `packages/client/src/components/tracker/`.
 Those call `trpc.<router>.<procedure>.useQuery()` / `.useMutation()`.
 
@@ -236,7 +236,7 @@ about, in both HTTP and the socket upgrade.
 **Getting a token.** A client that can show a sign-in form uses
 `signInWithPassword()`; one that cannot (Raycast, a CLI) uses the RFC 8628
 **device flow** — `startDeviceAuthorization()` then `pollForDeviceSession()`,
-with the user approving a short code at `/device` in an already-signed-in
+with the user approving a short code at `/app/device` in an already-signed-in
 browser. Both helpers live in `packages/core/src/session-auth.ts`; the server
 side is the `deviceAuthorization` plugin, whose `validateClient` only accepts
 client ids listed in `packages/server/src/auth/client-label.ts`
@@ -364,7 +364,7 @@ query), `Invoice.ts`, `ImportBatch.ts`, `Favorite.ts`, `Settings.ts`,
 
 ### A new page in the web client
 
-1. Create `packages/client/src/app/(protected)/<route>/page.tsx`: `"use client"`,
+1. Create `packages/client/src/app/app/<route>/page.tsx`: `"use client"`,
    a **default** export (Next requires it — everything else in the repo is
    named-exports-only), an explicit `React.JSX.Element` return type, and a
    `data-testid` on the root element.
@@ -374,7 +374,7 @@ query), `Invoice.ts`, `ImportBatch.ts`, `Favorite.ts`, `Settings.ts`,
 3. Add it to `NAV_SECTIONS` in `packages/client/src/components/app-shell.tsx`
    (href, label, lucide icon). Child paths of `href` light the item on their
    own; `match` is only for extra prefixes that are not under `href`.
-4. Auth needs nothing — `app/(protected)/layout.tsx` already gates the group and
+4. Auth needs nothing — `app/app/layout.tsx` already gates everything under `/app/` and
    re-confirms the session with the server before redirecting anyone.
 5. Respect the static export (`next.config.ts`: `output: "export"`,
    `trailingSlash: true`): no server components with runtime data, no

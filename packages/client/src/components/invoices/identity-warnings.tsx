@@ -41,7 +41,7 @@ export function InvoiceIdentityWarnings({
         <Warning testId="invoice-warning-profile">
           {t("invoiceIdentity.profileMissing")}{" "}
           <Link
-            href="/settings?tab=billing"
+            href="/app/settings?tab=billing"
             className="font-medium underline underline-offset-2"
             data-testid="invoice-warning-profile-link"
           >
@@ -53,7 +53,7 @@ export function InvoiceIdentityWarnings({
         <Warning testId="invoice-warning-client">
           {t("invoiceIdentity.clientMissing", { client: client.name })}{" "}
           <Link
-            href="/clients"
+            href="/app/clients"
             className="font-medium underline underline-offset-2"
             data-testid="invoice-warning-client-link"
           >

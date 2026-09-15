@@ -63,7 +63,7 @@ export const webUrl = (): string => {
   return resolve(webUrl, defaults().webUrl);
 };
 
-/** Deep link into a page of the web app, e.g. `webLink("/track")`. */
+/** Deep link into a page of the web app, e.g. `webLink("/app/track")`. */
 export const webLink = (path: string): string =>
   `${webUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 

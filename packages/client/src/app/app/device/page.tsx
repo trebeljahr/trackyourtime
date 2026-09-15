@@ -9,7 +9,7 @@ import { DeviceApproval } from "@/components/device/device-approval";
  *
  * Raycast, a CLI or a TV-style client shows a short code; the user types it
  * here — already signed in, in a real browser — and the waiting client
- * receives a session of its own. It sits inside `(protected)` so an anonymous
+ * receives a session of its own. It sits under `/app/` so an anonymous
  * visitor is sent to sign in first, which is exactly the right order.
  *
  * The code may arrive prefilled via `?user_code=`, so `useSearchParams` needs

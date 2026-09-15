@@ -176,7 +176,7 @@ test.describe("E-invoices", () => {
     // ── the fix link opens that client's billing details at the field ─
     await referenceMissing.getByTestId("einvoice-fix-link").click();
     await expect(page).toHaveURL(
-      new RegExp(`/clients/?\\?billing=${clientId}&field=reference&from=invoice:`),
+      new RegExp(`/app/clients/?\\?billing=${clientId}&field=reference&from=invoice:`),
     );
     await expect(page.getByTestId("client-dialog")).toBeVisible();
     await expect(page.getByTestId("client-billing-reference")).toBeFocused();

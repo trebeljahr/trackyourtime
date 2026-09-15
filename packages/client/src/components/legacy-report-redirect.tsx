@@ -20,7 +20,7 @@ export type LegacyReportRedirectProps = {
 
 /**
  * The page a retired report route renders: a skeleton, then a replace to the
- * matching `/reports` URL with the query string carried over.
+ * matching `/app/reports` URL with the query string carried over.
  *
  * Client-side because the static export has no middleware or rewrites. It
  * reads `window.location.search` rather than `useSearchParams`, so the page

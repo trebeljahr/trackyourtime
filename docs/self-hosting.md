@@ -1506,7 +1506,7 @@ A phone needs `https://` with a valid certificate. The app accepts plain
 
 No code change and no `TRUSTED_ORIGINS` entry. Raycast sends no `Origin` header
 at all. The device-approval flow protects it instead: Raycast shows a short
-code, and you approve it at `https://track.example.com/device` in a browser
+code, and you approve it at `https://track.example.com/app/device` in a browser
 where you are signed in.
 
 Set both preference fields in Raycast Settings → Extensions → Track Your Time:

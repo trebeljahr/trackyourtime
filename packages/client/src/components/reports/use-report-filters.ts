@@ -16,7 +16,7 @@ import {
 } from "@/lib/report-links";
 
 /**
- * Query-string parameter names. Both views of `/reports` read and write the
+ * Query-string parameter names. Both views of `/app/reports` read and write the
  * same keys, so switching between Totals and Entries carries the filters along
  * and any report URL is shareable and survives a reload.
  */
@@ -170,7 +170,7 @@ export type ReportViewProps = {
  * Report filter state, stored in the URL rather than component state.
  *
  * Nothing is written until the user actually changes something, so a bare
- * `/reports` keeps a clean URL while still defaulting to this week.
+ * `/app/reports` keeps a clean URL while still defaulting to this week.
  */
 export type UseReportFiltersOptions = {
   /**
@@ -307,7 +307,7 @@ export const useReportFilters = (
   const setView = React.useCallback(
     (next: ReportView): void => {
       // Totals is the default, so it is the absence of the param: the clean
-      // `/reports` URL and the Totals view are the same page.
+      // `/app/reports` URL and the Totals view are the same page.
       //
       // A view switch pushes, where a filter edit replaces: Totals and Entries
       // are two places, and Back from Entries returns to Totals — the way it

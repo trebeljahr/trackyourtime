@@ -94,7 +94,7 @@ async function notificationsEnabled(userId: string): Promise<boolean> {
 }
 
 const trackUrlFromEnv = (): string | null =>
-  env.FRONTEND_URL ? `${env.FRONTEND_URL.replace(/\/+$/, "")}/track` : null;
+  env.FRONTEND_URL ? `${env.FRONTEND_URL.replace(/\/+$/, "")}/app/track` : null;
 
 const defaultDeps = (): RunawayReminderDeps => ({
   enforce: enforceMaxEntryDuration,

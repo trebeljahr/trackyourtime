@@ -416,7 +416,7 @@ still says "open".
 
 **The offline queue is mounted in `AppShell`**, not in `TrackerBar`. Everything
 that drains it lives inside `useOfflineQueue`, so while it was mounted on
-`/track` only, reconnecting on any other screen drained nothing — a plain web
+`/app/track` only, reconnecting on any other screen drained nothing — a plain web
 bug, and a guaranteed one on a phone, which resumes on whatever screen it was
 left on.
 
@@ -529,7 +529,7 @@ Adding a `backButton` listener also *overrides* Capacitor's default, so that
 callback is the whole behaviour of the button. `event.canGoBack` is not the
 signal it looks like: a single-page app accumulates history entries just by
 moving between tabs, so it is nearly always true. The order is
-`mobile/back-button.ts` — close the top overlay, else go to `/track`, else
+`mobile/back-button.ts` — close the top overlay, else go to `/app/track`, else
 return `false`, which means exit. Overlays register themselves in
 `mobile/overlay-stack.ts`; dialogs do it once in `ui/dialog.tsx` rather than
 eleven times, and only when controlled (an uncontrolled dialog has no
@@ -668,7 +668,7 @@ the very thing being replaced.
   (`adoptUnowned`). The browser extension solves the same problem by
   **clearing** its queue in `forgetSession()`, which is the right trade there
   and the wrong one here — these rows are the phone's only copy of the time.
-- **The stamp cannot come from `useSession()` alone.** `(protected)/layout.tsx`
+- **The stamp cannot come from `useSession()` alone.** `app/app/layout.tsx`
   keeps a phone with a stored token inside the app when the session check
   cannot reach the server (`verdictForRejection`), so the tracker is fully
   usable on a cold offline launch while `useAuth().user` is still null — which
@@ -898,7 +898,7 @@ Callback URLs in mail and OAuth are built with `webCallbackUrl()` from
 `callbackURL` would land on the API's 404. **Never pass `callbackURL` to
 `signIn.email`**: the response then carries `{ url, redirect: true }` and
 better-auth's client reloads the browser onto it, so the page never navigates
-to `/track` and the session looks lost. That is why `sendOnSignIn` is off and
+to `/app/track` and the session looks lost. That is why `sendOnSignIn` is off and
 `/login` requests the verification link itself on `EMAIL_NOT_VERIFIED`.
 
 ### Account deletion
@@ -1037,21 +1037,21 @@ no longer (or does not yet) reaches them.
 
 ### Members screen, invite page and `?next=`
 
-The web half of the above: `/members` (`components/members/`), the public
+The web half of the above: `/app/members` (`components/members/`), the public
 `/invite/?id=` page (`components/invite/`) and Settings → Workspace. Four rules
 that fail quietly if broken:
 
-- **`/invite` lives outside `(protected)` and reads a query parameter.** Under
+- **`/invite` lives outside `/app/` and reads a query parameter.** Under
   the protected layout a signed-out invitee is bounced to /login before the
   page can say whose workspace it is; a `/invite/[id]` segment 404s under
   `output: "export"`. `app/invite/route-shape.test.ts` pins both.
 - **`?next=` goes through `lib/safe-next.ts` and nothing else.** Login, signup
   and the protected layout's redirect all use it. It accepts only a single-`/`
   path with no backslash, whitespace or control character, still on this
-  origin after URL parsing, under an allowlisted prefix (`/invite`, `/device`,
-  `/track`, `/members`, `/settings`). The login page is the one everybody
+  origin after URL parsing, under an allowlisted prefix (`/invite`, `/app/device`,
+  `/app/track`, `/app/members`, `/app/settings`). The login page is the one everybody
   trusts, which makes an unvalidated `next` a phishing redirect. It is also
-  what keeps `/device/?user_code=` through sign-in. Never put the email in a
+  what keeps `/app/device/?user_code=` through sign-in. Never put the email in a
   verification `callbackURL`: the link already knows the address.
 - **Joining or leaving a workspace is a full page load** (`enterWorkspace`):
   store the choice with `chooseWorkspaceForNextLoad` (Preferences on the
@@ -1474,8 +1474,8 @@ On the client (`components/einvoice/`, `components/invoices/einvoice-*`):
   `client-form-dialog.tsx` (ids and test ids `${prefix}-${key}` with prefixes
   `business-profile` and `client-billing`, via `IdentityInput` /
   `PostalFields`). Each saves with its existing mutation.
-- **Deep links are `/settings?tab=billing&field=<key>` and
-  `/clients?billing=<clientId>&field=<key>`, plus `&from=invoice:<id>`, read
+- **Deep links are `/app/settings?tab=billing&field=<key>` and
+  `/app/clients?billing=<clientId>&field=<key>`, plus `&from=invoice:<id>`, read
   from `location` in an effect.** `useSearchParams` would force a Suspense
   boundary under the static export. `useDeepLinkFocus` finds the input through
   its wrapper's `data-field="<key>"`, and `<key>` is the issue's `field` path
@@ -2007,7 +2007,7 @@ over `entries.descriptions`. Four rules, each of which fails quietly if broken:
   skips a `defaultPrevented` event). Escape reverts without the blur it causes
   saving the abandoned text, and a Tab-take followed by its blur writes once.
   The list opens on typing, a click or ArrowDown — never on focus, because the
-  field is focused on every visit to /track. Suggestion failures are silent.
+  field is focused on every visit to /app/track. Suggestion failures are silent.
 
 ### Browser extension
 
@@ -2210,7 +2210,7 @@ time with `marketingT(locale)` so the HTML crawlers fetch is already German.
 English) and `og:locale`; `localizedPath` keeps internal links in the
 language; `<MarketingShell locale path>` wraps the page in `<FixedLocale>`,
 which pins it (it never follows the preference) and exempts it from the gate.
-Not a `[locale]` segment: at the root it would compete with `/track` and turn
+Not a `[locale]` segment: at the root it would compete with `/app/` and turn
 unknown paths into marketing pages instead of the 404. The one thing `/de/`
 cannot get is `lang="de"` on the served `<html>` (a second root layout means
 moving every route into groups); the content wrapper carries `lang="de"` and
@@ -2247,6 +2247,28 @@ only the manifest name and description (`__MSG_*__`, `default_locale: "en"`).
 only, and Raycast itself has no locale API to follow — a German Raycast would
 be unpublishable. Never pass a locale to the shared duration helpers from
 `packages/raycast`.
+
+### Public pages and the app under `/app/`
+
+The public pages (landing, `/extension/`, `/raycast/`, `/mobile/`, `/privacy/`,
+`/support/`, `/de/…`) sit at the root; every signed-in screen is under `/app/`
+(`packages/client/src/app/app/`, gated by its `layout.tsx`). Auth pages
+(`/login`, `/signup`, `/forgot-password`, `/reset-password`, `/invite`) stay at
+the root, because mailed links point at them. Three rules:
+
+- **A public page never redirects a signed-in visitor on the web.** The header's
+  `AccountLinks` swaps "Log in" / "Create an account" for "Open the app" after
+  mount (never during hydration). `ShellEntryRedirect` on the landing page
+  moves only Capacitor, Electron and Tauri on to `/app/track`, since all three
+  load `index.html`, and it does not wait for a session.
+- **Old root addresses answer 308 in `serve.mjs`** (`/track` →
+  `/app/track`, query kept) for bookmarks, sent emails and installed extension
+  and Raycast builds. `next dev` has no such redirect; the self-host Caddy
+  proxies to the same `serve.mjs`. Never add a Next route named after one of
+  `LEGACY_APP_SEGMENTS` at the root.
+- **The API server links into `/app/`** — the device-flow `verificationUri`
+  and the runaway reminder's link. Deploy the client first when changing a
+  path, or those links point at a page the running client does not have.
 
 ### Static export caveats
 

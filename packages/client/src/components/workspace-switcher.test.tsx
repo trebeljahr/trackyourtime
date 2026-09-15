@@ -116,7 +116,7 @@ describe("WorkspaceSwitcher", () => {
 
     let handled = false;
     act(() => {
-      handled = handleBackPress({ pathname: "/track", navigate: () => undefined });
+      handled = handleBackPress({ pathname: "/app/track", navigate: () => undefined });
     });
     expect(handled).toBe(true);
     await waitFor(() =>

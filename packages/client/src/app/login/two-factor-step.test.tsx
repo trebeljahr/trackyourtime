@@ -38,7 +38,7 @@ vi.mock("@/lib/auth-client", () => ({
   isTwoFactorChallenge: (data: unknown) =>
     (data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect === true,
   webCallbackUrl: (path: string) => `http://localhost${path}`,
-  POST_AUTH_REDIRECT: "/track",
+  POST_AUTH_REDIRECT: "/app/track",
 }));
 
 const { default: LoginPage } = await import("./page");
@@ -78,7 +78,7 @@ describe("the two-factor step on /login", () => {
     expect(replace).not.toHaveBeenCalled();
 
     enterCode("123 456");
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/track"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/track"));
     expect(verifyTotp).toHaveBeenCalledWith({ code: "123456" });
     expect(getSession).toHaveBeenCalled();
   });
@@ -99,7 +99,7 @@ describe("the two-factor step on /login", () => {
     fireEvent.click(screen.getByTestId("two-factor-switch"));
 
     enterCode("abcde-fghij");
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/track"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/track"));
     expect(verifyBackupCode).toHaveBeenCalledWith({ code: "abcde-fghij" });
     expect(verifyTotp).not.toHaveBeenCalled();
   });
@@ -152,7 +152,7 @@ describe("the two-factor step on /login", () => {
   it("signs a plain account straight in", async () => {
     signInEmail.mockResolvedValue({ data: { token: "t", user: {} }, error: null });
     await submitPassword();
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/track"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/track"));
     expect(screen.queryByTestId("login-two-factor")).toBeNull();
   });
 });

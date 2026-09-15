@@ -46,7 +46,7 @@ test.describe("PDF export", () => {
       password: PASSWORD,
     });
 
-    await page.goto("/track");
+    await page.goto("/app/track");
     await expect(page.getByTestId("track-page")).toBeVisible();
     await expect(page.getByTestId("entries-empty")).toBeVisible();
 
@@ -61,7 +61,7 @@ test.describe("PDF export", () => {
   });
 
   test("downloads a real PDF of the totals report", async ({ page }) => {
-    await page.goto(`/reports${RANGE_QUERY}`);
+    await page.goto(`/app/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("summary-report")).toBeVisible();
     // The button stays disabled until the report has answered; clicking before
     // that would open nothing.
@@ -101,7 +101,7 @@ test.describe("PDF export", () => {
   test("export follows the active view", async ({ page }) => {
     // The Entries view shares the export button with Totals, so the button
     // must ask for the report on screen, not the one the page opened on.
-    await page.goto(`/reports${RANGE_QUERY}`);
+    await page.goto(`/app/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("summary-report")).toBeVisible();
     await page.getByTestId("report-view-entries").click();
     await expect(page.getByTestId("detailed-report")).toBeVisible();
@@ -127,7 +127,7 @@ test.describe("PDF export", () => {
   test("the print item is gone — the PDF is server-rendered now", async ({
     page,
   }) => {
-    await page.goto(`/reports${RANGE_QUERY}`);
+    await page.goto(`/app/reports${RANGE_QUERY}`);
     await expect(page.getByTestId("summary-report")).toBeVisible();
 
     await page.getByTestId("report-export").click();

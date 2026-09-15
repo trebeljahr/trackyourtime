@@ -11,7 +11,7 @@ import {
  * One offline queue for the whole signed-in app.
  *
  * `useOfflineQueue()` used to be called from `TrackerBar`, which renders only
- * on `/track`. Everything that drains the queue — the socket reopening, the
+ * on `/app/track`. Everything that drains the queue — the socket reopening, the
  * network coming back — is wired up inside that hook, so a user who
  * reconnected while looking at Reports or Settings had nothing listening:
  * their queued entries sat there until they happened to navigate to the

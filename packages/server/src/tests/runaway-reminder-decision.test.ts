@@ -85,23 +85,23 @@ test("the claim filter repeats the decision, and matches an absent reminderSentA
   });
 });
 
-test("the email names the entry, the duration, the limit and links to /track", () => {
+test("the email names the entry, the duration, the limit and links to /app/track", () => {
   const email = buildRunawayReminderEmail({
     to: "alice@example.com",
     description: "Design <review>",
     start: new Date("2026-09-13T23:48:00.000Z"),
     now: new Date(NOW),
     limitSec: 8 * 3600,
-    trackUrl: "https://app.example.com/track",
+    trackUrl: "https://app.example.com/app/track",
   });
   assert.equal(email.to, "alice@example.com");
   assert.equal(email.subject, "Your timer has been running for 9 h 12 min");
   assert.match(email.text, /"Design <review>" started at 2026-09-13 23:48 UTC/);
   assert.match(email.text, /past your 8 h limit/);
-  assert.match(email.text, /https:\/\/app\.example\.com\/track/);
+  assert.match(email.text, /https:\/\/app\.example\.com\/app\/track/);
   assert.match(email.html, /Design &lt;review&gt;/);
   assert.doesNotMatch(email.html, /<review>/);
-  assert.match(email.html, /href="https:\/\/app\.example\.com\/track"/);
+  assert.match(email.html, /href="https:\/\/app\.example\.com\/app\/track"/);
 });
 
 test("the email reads sensibly with no description, no limit and no link", () => {
@@ -127,7 +127,7 @@ test("the email is written in the recipient's language, with the name still esca
     start: new Date("2026-09-13T23:48:00.000Z"),
     now: new Date(NOW),
     limitSec: 8 * 3600,
-    trackUrl: "https://app.example.com/track",
+    trackUrl: "https://app.example.com/app/track",
     locale: "de",
   });
   assert.equal(email.subject, "Dein Timer läuft seit 9 h 12 min");

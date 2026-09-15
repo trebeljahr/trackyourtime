@@ -15,7 +15,7 @@ describe("handleBackPress", () => {
     pushOverlay(dismiss);
     const navigate = vi.fn();
 
-    expect(handleBackPress({ pathname: "/settings", navigate })).toBe(true);
+    expect(handleBackPress({ pathname: "/app/settings", navigate })).toBe(true);
     expect(dismiss).toHaveBeenCalledTimes(1);
     // An open dialog absorbs the press entirely — it must not also navigate.
     expect(navigate).not.toHaveBeenCalled();
@@ -25,7 +25,7 @@ describe("handleBackPress", () => {
     const navigate = vi.fn();
     expect(
       handleBackPress({
-        pathname: "/reports",
+        pathname: "/app/reports",
         navigate,
         dismissOverlay: () => false,
       }),
@@ -75,11 +75,11 @@ describe("handleBackPress", () => {
   });
 
   it("treats a child of the root tab as the root", () => {
-    // Nothing lives under /track today, but a future detail route must not
+    // Nothing lives under /app/track today, but a future detail route must not
     // navigate to its own parent and then need a second press to exit.
     expect(
       handleBackPress({
-        pathname: "/track/2026-09-07",
+        pathname: "/app/track/2026-09-07",
         navigate: () => undefined,
         dismissOverlay: () => false,
       }),

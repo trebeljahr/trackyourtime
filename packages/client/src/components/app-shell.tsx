@@ -85,22 +85,22 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     heading: null,
     items: [
-      { href: "/track", id: "track", icon: Timer },
-      { href: "/timesheet", id: "timesheet", icon: Grid3x3 },
-      { href: "/calendar", id: "calendar", icon: CalendarDays },
-      { href: "/reports", id: "reports", icon: BarChart3 },
+      { href: "/app/track", id: "track", icon: Timer },
+      { href: "/app/timesheet", id: "timesheet", icon: Grid3x3 },
+      { href: "/app/calendar", id: "calendar", icon: CalendarDays },
+      { href: "/app/reports", id: "reports", icon: BarChart3 },
     ],
   },
   {
     heading: "manage",
     items: [
-      { href: "/clients", id: "clients", icon: Users },
-      { href: "/projects", id: "projects", icon: FolderKanban },
-      { href: "/tasks", id: "tasks", icon: ListChecks },
-      { href: "/tags", id: "tags", icon: TagsIcon },
-      { href: "/invoices", id: "invoices", icon: Receipt, requires: "invoices" },
-      { href: "/members", id: "members", icon: UserCog },
-      { href: "/settings", id: "settings", icon: SettingsIcon },
+      { href: "/app/clients", id: "clients", icon: Users },
+      { href: "/app/projects", id: "projects", icon: FolderKanban },
+      { href: "/app/tasks", id: "tasks", icon: ListChecks },
+      { href: "/app/tags", id: "tags", icon: TagsIcon },
+      { href: "/app/invoices", id: "invoices", icon: Receipt, requires: "invoices" },
+      { href: "/app/members", id: "members", icon: UserCog },
+      { href: "/app/settings", id: "settings", icon: SettingsIcon },
     ],
   },
 ];
@@ -155,7 +155,7 @@ function RunningTimerIndicator(): React.JSX.Element | null {
 
   return (
     <Link
-      href="/track"
+      href="/app/track"
       className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm hover:bg-accent"
       data-testid="running-timer-indicator"
       data-workspace-id={entry.workspaceId}
@@ -280,13 +280,13 @@ function UserMenu(): React.JSX.Element {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild data-testid="user-menu-profile">
-          <Link href="/profile">
+          <Link href="/app/profile">
             <UserIcon className="size-4" />
             {t("userMenu.profile")}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild data-testid="user-menu-settings">
-          <Link href="/settings">
+          <Link href="/app/settings">
             <SettingsIcon className="size-4" />
             {t("userMenu.settings")}
           </Link>
@@ -320,7 +320,7 @@ export type AppShellProps = {
  * The queue is a provider around the shell rather than a hook inside it
  * because the resume handler needs the same `flush` the tracker bar shows the
  * pending count for. Until now the queue was mounted in `TrackerBar`, which
- * renders only on `/track` — so reconnecting on any other screen drained
+ * renders only on `/app/track` — so reconnecting on any other screen drained
  * nothing at all.
  */
 export function AppShell({ children }: AppShellProps): React.JSX.Element {
@@ -402,7 +402,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
           data-testid="sidebar"
         >
           <Link
-            href="/track"
+            href="/app/track"
             className="flex h-14 items-center gap-2 px-4 font-semibold"
             data-testid="brand"
           >

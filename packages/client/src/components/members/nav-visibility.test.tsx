@@ -28,24 +28,24 @@ const hrefs = (sections: ReturnType<typeof visibleNavSections>): string[] =>
 describe("nav visibility", () => {
   it("lists Members in the Manage group for everyone", () => {
     const manage = NAV_SECTIONS.find((section) => section.heading === "manage");
-    expect(manage?.items.map((item) => item.href)).toContain("/members");
+    expect(manage?.items.map((item) => item.href)).toContain("/app/members");
     for (const role of ["owner", "admin", "member"] as const) {
       const permissions = permissionsFor(role, { canViewOthersTime: false, canViewOthersMoney: false });
-      expect(hrefs(visibleNavSections(NAV_SECTIONS, permissions))).toContain("/members");
+      expect(hrefs(visibleNavSections(NAV_SECTIONS, permissions))).toContain("/app/members");
     }
   });
 
   it("hides Invoices when the workspace does not grant invoices", () => {
     const member = permissionsFor("member", { canViewOthersTime: true, canViewOthersMoney: true });
-    expect(hrefs(visibleNavSections(NAV_SECTIONS, member))).not.toContain("/invoices");
+    expect(hrefs(visibleNavSections(NAV_SECTIONS, member))).not.toContain("/app/invoices");
     const closedAdmin = permissionsFor("admin", { canViewOthersTime: true, canViewOthersMoney: false });
-    expect(hrefs(visibleNavSections(NAV_SECTIONS, closedAdmin))).not.toContain("/invoices");
+    expect(hrefs(visibleNavSections(NAV_SECTIONS, closedAdmin))).not.toContain("/app/invoices");
   });
 
   it("shows Invoices to an owner, and while permissions are still unknown", () => {
     const owner = permissionsFor("owner", { canViewOthersTime: false, canViewOthersMoney: false });
-    expect(hrefs(visibleNavSections(NAV_SECTIONS, owner))).toContain("/invoices");
-    expect(hrefs(visibleNavSections(NAV_SECTIONS, null))).toContain("/invoices");
+    expect(hrefs(visibleNavSections(NAV_SECTIONS, owner))).toContain("/app/invoices");
+    expect(hrefs(visibleNavSections(NAV_SECTIONS, null))).toContain("/app/invoices");
   });
 });
 
@@ -57,7 +57,7 @@ describe("WorkspaceTab", () => {
     expect(screen.getByTestId("workspace-tab-role")).toHaveTextContent("Admin");
     expect(screen.getByTestId("workspace-tab-count")).toHaveTextContent("4 members");
     const link = screen.getByTestId("workspace-tab-members-link");
-    expect(link.getAttribute("href")).toMatch(/^\/members\/?$/);
+    expect(link.getAttribute("href")).toMatch(/^\/app\/members\/?$/);
     expect(link).toHaveTextContent("Manage members");
   });
 

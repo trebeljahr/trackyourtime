@@ -277,7 +277,7 @@ export default function Timer(): React.JSX.Element {
     <ActionPanel.Section>
       <Action.OpenInBrowser
         title="Open Web App"
-        url={webLink("/track")}
+        url={webLink("/app/track")}
         shortcut={{ modifiers: ["cmd"], key: "o" }}
       />
       <Action

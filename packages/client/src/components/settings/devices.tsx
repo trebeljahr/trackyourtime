@@ -332,7 +332,7 @@ function ConnectAnAppHint(): React.JSX.Element {
           link: (chunks) => (
             <a
               className="font-medium text-foreground underline underline-offset-4"
-              href="/device"
+              href="/app/device"
             >
               {chunks}
             </a>

@@ -107,7 +107,7 @@ function entryRow(page: Page, description: string): Locator {
 }
 
 async function openMembers(page: Page): Promise<void> {
-  await page.goto("/track");
+  await page.goto("/app/track");
   await expect(page.getByTestId("track-page")).toBeVisible();
   // Reached from the nav, not typed: the destination has to be in NAV_SECTIONS.
   await page.getByTestId("nav-members").click();
@@ -156,7 +156,7 @@ async function downloadReportCsv(page: Page): Promise<{ headers: string[]; text:
 }
 
 async function openEntriesReport(page: Page): Promise<void> {
-  await page.goto(`/reports${RANGE_QUERY}&view=entries`);
+  await page.goto(`/app/reports${RANGE_QUERY}&view=entries`);
   await expect(page.getByTestId("detailed-report")).toBeVisible();
   await expect(page.getByTestId("detailed-table")).toBeVisible();
 }
@@ -168,7 +168,7 @@ test.describe("Teams", () => {
     await signUpViaUI(owner, { name: OWNER_NAME, email: OWNER_EMAIL, password: PASSWORD });
 
     // A billable project with a rate, so money has something to hide.
-    await owner.goto("/projects");
+    await owner.goto("/app/projects");
     await expect(owner.getByTestId("projects-page")).toBeVisible();
     await owner.getByTestId("new-project").click();
     await owner.getByTestId("project-name-input").fill(PROJECT_NAME);
@@ -177,7 +177,7 @@ test.describe("Teams", () => {
     await owner.getByTestId("project-submit").click();
     await expect(owner.getByTestId("project-dialog")).toBeHidden();
 
-    await owner.goto("/track");
+    await owner.goto("/app/track");
     await expect(owner.getByTestId("entries-empty")).toBeVisible();
     await pickProject(owner, PROJECT_NAME);
     await expect(owner.getByTestId("tracker-billable")).toHaveAttribute("data-billable", "true");
@@ -250,7 +250,7 @@ test.describe("Teams", () => {
   });
 
   test("member switches workspaces, and a timer started in one stops the other", async () => {
-    await member.goto("/track");
+    await member.goto("/app/track");
     await switchTo(member, MEMBER_PERSONAL_WORKSPACE);
     await expect(member.getByTestId("entries-empty")).toBeVisible();
 
@@ -314,7 +314,7 @@ test.describe("Teams", () => {
   });
 
   test("owner's report shows every member's time and money, CSV included", async () => {
-    await owner.goto(`/reports${RANGE_QUERY}&group=member`);
+    await owner.goto(`/app/reports${RANGE_QUERY}&group=member`);
     await expect(owner.getByTestId("summary-report")).toBeVisible();
     await expect(owner.getByTestId("groupby-member")).toHaveAttribute("aria-pressed", "true");
     await expect(owner.locator('[data-testid^="summary-row-"]')).toHaveCount(2);
@@ -355,7 +355,7 @@ test.describe("Teams", () => {
 
     // No member grouping for somebody who can only see themselves, even from
     // a shared link that asks for it.
-    await member.goto(`/reports${RANGE_QUERY}&group=member`);
+    await member.goto(`/app/reports${RANGE_QUERY}&group=member`);
     await expect(member.getByTestId("summary-report")).toBeVisible();
     await expect(member.getByTestId("groupby-member")).toHaveCount(0);
     await expect(member.getByTestId("groupby-project")).toHaveAttribute("aria-pressed", "true");
@@ -400,7 +400,7 @@ test.describe("Teams", () => {
     expect(csv.text).not.toMatch(/\b100(?:\.00)?\b/);
 
     // The member now sees colleagues, so the member dimension is offered.
-    await member.goto(`/reports${RANGE_QUERY}&group=member`);
+    await member.goto(`/app/reports${RANGE_QUERY}&group=member`);
     await expect(member.getByTestId("groupby-member")).toHaveAttribute("aria-pressed", "true");
     await expect(member.locator('[data-testid^="summary-row-"]')).toHaveCount(2);
     await expect(member.getByTestId("summary-total-amount")).toHaveText(WITHHELD);
@@ -408,7 +408,7 @@ test.describe("Teams", () => {
     expect(summary.headers).not.toContain("Amount");
 
     // The whole-workspace export says its rates are withheld.
-    await member.goto("/settings?tab=data");
+    await member.goto("/app/settings?tab=data");
     await expect(member.getByTestId("export-panel")).toBeVisible();
     await expect(member.getByTestId("export-redacted")).toBeVisible();
   });
@@ -427,7 +427,7 @@ test.describe("Teams", () => {
     expect(csv.text).toContain(OWNER_ENTRY);
     for (const header of MONEY_HEADERS) expect(csv.headers).toContain(header);
 
-    await member.goto("/settings?tab=data");
+    await member.goto("/app/settings?tab=data");
     await expect(member.getByTestId("export-panel")).toBeVisible();
     await expect(member.getByTestId("export-count")).toContainText("in this range");
     await expect(member.getByTestId("export-redacted")).toHaveCount(0);
@@ -458,7 +458,7 @@ test.describe("Teams", () => {
 
   test("owner removes the member while their offline entry is queued; it is held, not replayed elsewhere", async () => {
     // The member tracks with no network, into the shared workspace.
-    await member.goto("/track");
+    await member.goto("/app/track");
     await expect(member.getByTestId("workspace-switcher")).toContainText(SHARED_WORKSPACE);
     await expect(entryRow(member, MEMBER_ENTRY)).toHaveCount(1);
     await memberContext.setOffline(true);
@@ -497,7 +497,7 @@ test.describe("Teams", () => {
 
     // A fresh load of the member's device: the stored active workspace is
     // gone, so it lands in the personal one, with the held row still counted.
-    await member.goto("/track");
+    await member.goto("/app/track");
     await expect(member.getByTestId("track-page")).toBeVisible();
     await expect(entryRow(member, MEMBER_PERSONAL_TIMER)).toHaveCount(1, { timeout: 15_000 });
     await expect(member.getByTestId("workspace-switcher")).toHaveCount(0);
@@ -511,7 +511,7 @@ test.describe("Teams", () => {
     );
 
     // Settings → Devices names the work and the workspace it was meant for.
-    await member.goto("/settings?tab=devices");
+    await member.goto("/app/settings?tab=devices");
     const group = member.getByTestId("foreign-queue-group");
     await expect(group).toHaveCount(1);
     await expect(group).toContainText(MEMBER_OFFLINE_ENTRY);
@@ -606,7 +606,7 @@ test.describe("Teams", () => {
     await openMembers(owner);
     await expect(owner.locator('[data-testid^="member-row-"]')).toHaveCount(1);
     await expect((await memberRow(owner, OWNER_EMAIL))[0]).toHaveAttribute("data-role", "owner");
-    await owner.goto(`/reports${RANGE_QUERY}&view=entries`);
+    await owner.goto(`/app/reports${RANGE_QUERY}&view=entries`);
     await expect(owner.getByTestId("detailed-empty")).toBeVisible();
 
     // The new owner is alone in the shared workspace, with its history.

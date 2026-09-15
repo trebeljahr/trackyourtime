@@ -31,6 +31,7 @@ export const marketing: Translation<typeof source> = {
     },
     logIn: "Anmelden",
     createAccount: "Konto erstellen",
+    openApp: "App öffnen",
     footer: {
       tagline: "Open-Source-Zeiterfassung, gehostet oder auf deinem eigenen Server.",
       chromeExtension: "Chrome-Erweiterung",

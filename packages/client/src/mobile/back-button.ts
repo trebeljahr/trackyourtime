@@ -1,7 +1,7 @@
 import { dismissTopOverlay } from "@/mobile/overlay-stack";
 
 /** Where the hardware back button comes to rest before it exits the app. */
-export const ROOT_TAB = "/track";
+export const ROOT_TAB = "/app/track";
 
 export type BackButtonDeps = {
   pathname: string;

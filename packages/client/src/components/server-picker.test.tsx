@@ -34,7 +34,7 @@ vi.mock("@/lib/auth-client", () => ({
   getSession: vi.fn(),
   isTwoFactorChallenge: () => false,
   webCallbackUrl: (path: string) => path,
-  POST_AUTH_REDIRECT: "/track",
+  POST_AUTH_REDIRECT: "/app/track",
 }));
 
 // Reads the server's auth config over tRPC; covered by its own test.

@@ -151,7 +151,7 @@ describe("tax choices", () => {
 describe("issues and deep links", () => {
   it("links profile and client issues to the input that fixes them", () => {
     expect(issueHref(issue({}), { invoiceId: "inv1" })).toBe(
-      "/settings?tab=billing&field=postalCode&from=invoice:inv1",
+      "/app/settings?tab=billing&field=postalCode&from=invoice:inv1",
     );
     expect(
       issueHref(
@@ -163,7 +163,7 @@ describe("issues and deep links", () => {
         }),
         { invoiceId: "inv1" },
       ),
-    ).toBe("/clients?billing=c1&field=reference&from=invoice:inv1");
+    ).toBe("/app/clients?billing=c1&field=reference&from=invoice:inv1");
     expect(
       issueHref(issue({ code: "NO_LINES", fixIn: "invoice", field: "invoice.lineItems" }), {
         invoiceId: "inv1",

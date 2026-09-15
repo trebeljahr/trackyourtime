@@ -11,7 +11,7 @@ describe("entriesHref", () => {
   it("points at Reports → Entries, filtered to the row", () => {
     const href = entriesHref({ dimension: "client", id: "c1" }, RANGE);
 
-    expect(href.startsWith("/reports?")).toBe(true);
+    expect(href.startsWith("/app/reports?")).toBe(true);
     expect(params(href).get("view")).toBe("entries");
     expect(params(href).get("clients")).toBe("c1");
   });

@@ -60,7 +60,7 @@ import {
 } from "./command-palette";
 
 const SECTIONS = [
-  { heading: null, items: [{ href: "/track", id: "track" as const, icon: Timer }] },
+  { heading: null, items: [{ href: "/app/track", id: "track" as const, icon: Timer }] },
 ];
 
 function Harness(): React.JSX.Element {
@@ -181,6 +181,6 @@ describe("CommandPalette", () => {
     render(<Harness />);
     pressShortcut();
     fireEvent.click(screen.getByTestId("command-palette-item-nav-track"));
-    expect(push).toHaveBeenCalledWith("/track");
+    expect(push).toHaveBeenCalledWith("/app/track");
   });
 });

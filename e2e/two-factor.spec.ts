@@ -32,7 +32,7 @@ function totp(base32: string, at = Date.now()): string {
 
 /** Sign out from Settings → Account, which is on screen already. */
 async function signOut(page: Page): Promise<void> {
-  await page.goto("/settings?tab=account");
+  await page.goto("/app/settings?tab=account");
   await page.getByTestId("account-sign-out").click();
   await page.waitForURL(LOGIN_URL, { timeout: 10_000 });
 }
@@ -50,7 +50,7 @@ test.describe("Two-factor authentication", () => {
     await signUpViaUI(page, { name: "Two Factor", email, password: PASSWORD });
 
     // Enrol from Settings → Account.
-    await page.goto("/settings?tab=account");
+    await page.goto("/app/settings?tab=account");
     await page.getByTestId("two-factor-enable").click();
     await page.getByTestId("two-factor-password").fill(PASSWORD);
     await page.getByTestId("two-factor-password-submit").click();

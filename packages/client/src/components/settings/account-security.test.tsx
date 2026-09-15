@@ -204,7 +204,7 @@ describe("changing the email", () => {
     expect(await screen.findByTestId("change-email-sent")).toHaveTextContent(/We sent a link to alice@work.example/);
     expect(changeEmail).toHaveBeenCalledWith({
       newEmail: "alice@work.example",
-      callbackURL: "http://localhost:3392/settings",
+      callbackURL: "http://localhost:3392/app/settings",
     });
   });
 

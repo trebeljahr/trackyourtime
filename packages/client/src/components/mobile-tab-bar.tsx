@@ -35,14 +35,14 @@ type Tab = {
 };
 
 const TABS: Tab[] = [
-  { key: "track", icon: Timer, href: "/track" },
+  { key: "track", icon: Timer, href: "/app/track" },
   {
     key: "reports",
     icon: BarChart3,
     // `isActiveRoute` lights child paths too, so the retired /reports/summary,
     // /detailed and /weekly redirects keep this tab lit for the frame before
     // they land — no `match` needed.
-    href: "/reports",
+    href: "/app/reports",
   },
   { key: "more", icon: Menu, href: null },
 ];

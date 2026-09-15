@@ -95,8 +95,8 @@ describe("runPaletteAction", () => {
 
   it("navigates and closes", () => {
     const r = runner();
-    runPaletteAction({ kind: "navigate", href: "/projects" }, r);
+    runPaletteAction({ kind: "navigate", href: "/app/projects" }, r);
     expect(r.close).toHaveBeenCalled();
-    expect(r.navigate).toHaveBeenCalledWith("/projects");
+    expect(r.navigate).toHaveBeenCalledWith("/app/projects");
   });
 });

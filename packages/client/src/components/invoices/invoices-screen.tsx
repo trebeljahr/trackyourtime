@@ -15,7 +15,7 @@ import { INVOICE_LIST_INPUT, type InvoiceRow } from "./types";
  * The invoices list, the create flow and the invoice detail view.
  *
  * The selected invoice is held in component state and rendered as a panel
- * under the list rather than at `/invoices/[id]`. The client is a STATIC
+ * under the list rather than at `/app/invoices/[id]`. The client is a STATIC
  * EXPORT: a dynamic segment would need `generateStaticParams`, and there is
  * no build-time list of an owner's invoice ids to generate from.
  */

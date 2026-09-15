@@ -5,10 +5,10 @@
  * German under `/de/` (`/de/privacy/`). Both are server components rendered at
  * BUILD time with a fixed locale, so the HTML a crawler or a link preview
  * fetches is already in its language — no JavaScript, no preference, no
- * switch after load. The app routes (/track, /login, …) are the opposite:
+ * switch after load. The app routes (/app/track, /login, …) are the opposite:
  * one file each, following the reader's preference at runtime.
  *
- * Why not a `[locale]` segment: it would sit at the root beside `/track` and
+ * Why not a `[locale]` segment: it would sit at the root beside `/app/track` and
  * `/login`, every static route would have to out-rank it, and an unknown
  * first segment would render a marketing layout instead of the 404. Explicit
  * `app/de/**` files are six one-line re-exports and cannot capture anything.

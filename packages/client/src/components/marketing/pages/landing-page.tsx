@@ -12,6 +12,7 @@ import {
   Shot,
 } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { ShellEntryRedirect } from "@/components/marketing/shell-entry-redirect";
 import { localizedPath, marketingMetadata, marketingT, type Locale } from "@/i18n/marketing";
 import { API_REFERENCE_URL, DONATE_URL, REPO_URL, SELF_HOSTING_URL } from "@/lib/site-links";
 
@@ -36,9 +37,10 @@ const SURFACES = [
 const link = "text-foreground underline underline-offset-4";
 
 /**
- * The landing page, and still the app's front door for a signed-in person:
- * `MarketingShell` sends them on to /track once their session resolves. Inside
- * the native shell none of this paints — see `styles/native.css`.
+ * The landing page. A signed-in visitor stays on it; the header links them
+ * into the app. Inside the native and desktop shells `ShellEntryRedirect`
+ * moves on to /app/track, and on native none of this paints — see
+ * `styles/native.css`.
  */
 export function LandingPage({ locale }: { locale: Locale }): React.ReactElement {
   const t = marketingT(locale);
@@ -48,7 +50,8 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
     </a>
   );
   return (
-    <MarketingShell locale={locale} path="/" redirectSignedIn>
+    <MarketingShell locale={locale} path="/">
+      <ShellEntryRedirect />
       <Hero
         eyebrow={t("landing.hero.eyebrow")}
         title={t("landing.hero.title")}

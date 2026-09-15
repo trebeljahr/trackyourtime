@@ -83,7 +83,7 @@ terms; it is the reference when in doubt.
 | timesheet | Stundenzettel | |
 | total | Gesamt | the invoice's final line is „Gesamtbetrag“ |
 | Totals (report view) | Summen | the Reports switch; never „Übersicht“, which is dashboard |
-| track (time) | erfassen | "Zeit erfassen"; the nav item /track is "Erfassen" |
+| track (time) | erfassen | "Zeit erfassen"; the nav item /app/track is "Erfassen" |
 | webhook | Webhook | |
 | week starts on | Woche beginnt am | |
 | weekly | wöchentlich | |

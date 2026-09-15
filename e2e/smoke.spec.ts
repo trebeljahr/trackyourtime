@@ -9,22 +9,34 @@ test.describe("Smoke tests", () => {
     await expect(page.getByTestId("marketing-title")).toContainText(
       "Time tracking on your own server",
     );
-    // The redirect runs once the session resolves. A signed-out visitor
-    // must still be on the landing page after it has.
     await page.waitForLoadState("networkidle");
     await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByTestId("marketing-log-in")).toBeVisible();
   });
 
-  test("landing page sends a signed-in visitor to the tracker", async ({
+  test("landing page keeps a signed-in visitor and links into the app", async ({
     page,
   }) => {
     await signUpViaUI(page, {
-      name: "Landing Redirect",
+      name: "Landing Stays",
       email: `landing-${Date.now()}@example.com`,
       password: "SecurePassword123!",
     });
     await page.goto("/");
+    const openApp = page.getByTestId("marketing-open-app");
+    await expect(openApp).toBeVisible();
+    // Once the session has resolved, nothing may move the visitor on.
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/$/);
+
+    await openApp.click();
     await page.waitForURL(TRACK_URL, { timeout: 10_000 });
+  });
+
+  test("a pre-move app address redirects under /app/", async ({ request }) => {
+    const response = await request.get("/settings/?tab=devices", { maxRedirects: 0 });
+    expect(response.status()).toBe(308);
+    expect(response.headers().location).toBe("/app/settings/?tab=devices");
   });
 
   for (const [path, title] of [

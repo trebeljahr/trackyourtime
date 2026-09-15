@@ -111,9 +111,9 @@ describe("ProtectedLayout on web", () => {
   });
 
   it("carries the page being visited as ?next= so sign-in comes back to it", async () => {
-    // The device-approval code used to be lost here: /device/?user_code=…
-    // signed in and landed on /track with nothing to approve.
-    window.history.replaceState(null, "", "/device/?user_code=ABCD-EFGH");
+    // The device-approval code used to be lost here: /app/device/?user_code=…
+    // signed in and landed on /app/track with nothing to approve.
+    window.history.replaceState(null, "", "/app/device/?user_code=ABCD-EFGH");
     useAuth.mockReturnValue({ isAuthenticated: false, isLoading: false });
     getSession.mockResolvedValue({ data: null, error: null });
 
@@ -124,12 +124,12 @@ describe("ProtectedLayout on web", () => {
     });
     const target = new URL(String(replace.mock.calls[0]?.[0]), "https://app.test");
     expect(target.pathname).toBe("/login/");
-    expect(target.searchParams.get("next")).toBe("/device/?user_code=ABCD-EFGH");
+    expect(target.searchParams.get("next")).toBe("/app/device/?user_code=ABCD-EFGH");
     window.history.replaceState(null, "", "/");
   });
 
   it("does not forward a page outside the return allowlist", async () => {
-    window.history.replaceState(null, "", "/reports/?from=2026-01-01");
+    window.history.replaceState(null, "", "/app/reports/?from=2026-01-01");
     useAuth.mockReturnValue({ isAuthenticated: false, isLoading: false });
     getSession.mockResolvedValue({ data: null, error: null });
 

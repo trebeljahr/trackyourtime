@@ -51,7 +51,7 @@ export type InviteAcceptanceProps = {
 /**
  * The public page an invitation link opens: `/invite/?id=<id>`.
  *
- * Outside `(protected)` on purpose. The person holding the link often has no
+ * Outside `/app/` on purpose. The person holding the link often has no
  * account yet, and the protected layout would bounce them to /login before the
  * page could say whose workspace it is. A query parameter rather than a
  * `/invite/[id]` segment, because `output: "export"` can only serve paths it
@@ -190,7 +190,7 @@ function InvitationBody({
   if (invitation.status !== "pending") {
     const openApp = (
       <Button asChild variant="outline">
-        <Link href="/track" data-testid="invite-open-app">
+        <Link href="/app/track" data-testid="invite-open-app">
           {t("invitePage.openApp")}
         </Link>
       </Button>

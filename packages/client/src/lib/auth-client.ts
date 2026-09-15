@@ -304,4 +304,4 @@ export const webCallbackUrl = (path: string): string =>
   typeof window === "undefined" ? path : `${window.location.origin}${path}`;
 
 /** Where a freshly authenticated user lands. */
-export const POST_AUTH_REDIRECT = "/track";
+export const POST_AUTH_REDIRECT = "/app/track";

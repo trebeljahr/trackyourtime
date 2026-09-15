@@ -6,11 +6,11 @@ describe("safeNext", () => {
   const accepted: [string, string][] = [
     ["/invite/?id=abc123", "/invite/?id=abc123"],
     ["/invite?id=abc123", "/invite?id=abc123"],
-    ["/device/?user_code=ABCD-EFGH", "/device/?user_code=ABCD-EFGH"],
-    ["/track", "/track"],
-    ["/track/", "/track/"],
-    ["/members/", "/members/"],
-    ["/settings/?tab=workspace", "/settings/?tab=workspace"],
+    ["/app/device/?user_code=ABCD-EFGH", "/app/device/?user_code=ABCD-EFGH"],
+    ["/app/track", "/app/track"],
+    ["/app/track/", "/app/track/"],
+    ["/app/members/", "/app/members/"],
+    ["/app/settings/?tab=workspace", "/app/settings/?tab=workspace"],
   ];
 
   it.each(accepted)("accepts %s", (raw, expected) => {
@@ -29,17 +29,17 @@ describe("safeNext", () => {
     ["tab smuggled between slashes", "/\t/evil.com"],
     ["newline smuggled between slashes", "/\n/evil.com"],
     ["leading space", " /track"],
-    ["unlisted path", "/reports"],
+    ["unlisted path", "/app/reports"],
     ["root", "/"],
     ["prefix look-alike", "/invitee"],
     ["prefix look-alike with query", "/tracker?x=1"],
-    ["dot segments escaping the allowlist", "/track/../evil"],
+    ["dot segments escaping the allowlist", "/app/track/../evil"],
     ["encoded slashes", "/%2F%2Fevil.com"],
     ["relative path", "track"],
     ["empty", ""],
     ["not a string", 42],
     ["null", null],
-    ["overlong", `/track/${"a".repeat(3000)}`],
+    ["overlong", `/app/track/${"a".repeat(3000)}`],
   ];
 
   it.each(rejected)("rejects %s", (_label, raw) => {

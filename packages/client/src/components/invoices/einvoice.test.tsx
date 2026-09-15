@@ -76,7 +76,7 @@ describe("EinvoiceIssues", () => {
     );
     const links = screen.getAllByTestId("einvoice-fix-link");
     expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAttribute("href", "/settings?tab=billing&field=postalCode&from=invoice:inv1");
+    expect(links[0]).toHaveAttribute("href", "/app/settings?tab=billing&field=postalCode&from=invoice:inv1");
     const items = screen.getAllByTestId("einvoice-issues-item");
     expect(items[1]).toHaveAttribute("data-code", "TOTALS_MISMATCH");
   });
@@ -279,8 +279,8 @@ describe("EinvoiceFillBody", () => {
     expect(rows[1]).toHaveTextContent("80331");
     const links = screen.getAllByTestId("einvoice-fill-edit-link");
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/settings?tab=billing&field=legalName&from=invoice:inv1",
-      "/clients?billing=c1&field=postalCode&from=invoice:inv1",
+      "/app/settings?tab=billing&field=legalName&from=invoice:inv1",
+      "/app/clients?billing=c1&field=postalCode&from=invoice:inv1",
     ]);
     // Payment terms are written from the frozen due date: nothing to type or edit.
     expect(screen.getByTestId("einvoice-fill-payment-terms-due")).toHaveTextContent("2026");

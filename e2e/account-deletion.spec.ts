@@ -43,7 +43,7 @@ test.describe("Account deletion", () => {
     const userId = String(user?._id);
     expect((await leftovers(userId, email)).timeentries).toBe(1);
 
-    await page.goto("/settings?tab=account");
+    await page.goto("/app/settings?tab=account");
     await page.getByTestId("delete-account").click();
 
     const dialog = page.getByTestId("delete-account-dialog");
@@ -118,7 +118,7 @@ test.describe("Account deletion", () => {
     await bare.dispose();
 
     // The browser's own session died with the account too.
-    await page.goto("/track");
+    await page.goto("/app/track");
     await page.waitForURL(LOGIN_URL, { timeout: 10_000 });
     await page.getByTestId("login-email").fill(email);
     await page.getByTestId("login-password").fill(PASSWORD);

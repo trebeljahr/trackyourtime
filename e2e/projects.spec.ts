@@ -93,7 +93,7 @@ test.describe("Projects catalog", () => {
       email: uniqueEmail("projects"),
       password: PASSWORD,
     });
-    await page.goto("/projects");
+    await page.goto("/app/projects");
     await expect(page.getByTestId("projects-page")).toBeVisible();
   });
 
@@ -101,7 +101,7 @@ test.describe("Projects catalog", () => {
     page,
   }) => {
     // ── client ──────────────────────────────────────────────────────
-    await page.goto("/clients");
+    await page.goto("/app/clients");
     await expect(page.getByTestId("clients-page")).toBeVisible();
     await expect(page.getByTestId("clients-empty")).toBeVisible();
 
@@ -117,7 +117,7 @@ test.describe("Projects catalog", () => {
     await expect(clientRow).toHaveCount(1);
 
     // ── project, attached to that client, coloured and billed ───────
-    await page.goto("/projects");
+    await page.goto("/app/projects");
     await expect(page.getByTestId("projects-page")).toBeVisible();
     await expect(page.getByTestId("projects-empty")).toBeVisible();
 
@@ -168,7 +168,7 @@ test.describe("Projects catalog", () => {
     // ── task ────────────────────────────────────────────────────────
     // Tasks are their own catalog, not a project's children, so they are made
     // on their own screen and carry no project.
-    await page.goto("/tasks");
+    await page.goto("/app/tasks");
     await expect(page.getByTestId("tasks-empty")).toBeVisible();
 
     await page.getByTestId("new-task").click();
@@ -186,7 +186,7 @@ test.describe("Projects catalog", () => {
     await expect(page.getByTestId(`task-total-${taskId}`)).toHaveText("0:00:00");
 
     // ── track against the project ───────────────────────────────────
-    await page.goto("/track");
+    await page.goto("/app/track");
     await expect(page.getByTestId("track-page")).toBeVisible();
     await expect(page.getByTestId("entries-empty")).toBeVisible();
 
@@ -226,21 +226,21 @@ test.describe("Projects catalog", () => {
     );
 
     // …and the catalog now counts that entry against the project.
-    await page.goto("/projects");
+    await page.goto("/app/projects");
     await expect(page.getByTestId(`project-entries-${projectId}`)).toHaveText(
       "1",
     );
   });
 
   test("filters the catalog by search and by client", async ({ page }) => {
-    await page.goto("/clients");
+    await page.goto("/app/clients");
     await expect(page.getByTestId("clients-page")).toBeVisible();
     await page.getByTestId("new-client").click();
     await page.getByTestId("client-name-input").fill(CLIENT_NAME);
     await page.getByTestId("client-submit").click();
     await expect(page.getByTestId("client-dialog")).toBeHidden();
 
-    await page.goto("/projects");
+    await page.goto("/app/projects");
     await expect(page.getByTestId("projects-page")).toBeVisible();
 
     for (const name of [PROJECT_NAME, "Internal tooling"]) {
@@ -285,7 +285,7 @@ test.describe("Projects catalog", () => {
       .filter({ hasText: PROJECT_NAME });
     const projectId = await idFromTestId(projectRow, "project-row-");
 
-    await page.goto("/tasks");
+    await page.goto("/app/tasks");
     await page.getByTestId("new-task").click();
     await page.getByTestId("task-name-input").fill(TASK_NAME);
     await page.getByTestId("task-submit").click();
@@ -294,7 +294,7 @@ test.describe("Projects catalog", () => {
     ).toHaveCount(1);
 
     // Track a minute against the project so it has entries to cascade over.
-    await page.goto("/track");
+    await page.goto("/app/track");
     await page.getByTestId("tracker-description").fill("Doomed project work");
     await pickComboboxOption(page, "tracker-project", PROJECT_NAME);
     await startAndSettle(page);
@@ -312,7 +312,7 @@ test.describe("Projects catalog", () => {
     );
     await stopped;
 
-    await page.goto("/projects");
+    await page.goto("/app/projects");
     await expect(page.getByTestId(`project-entries-${projectId}`)).toHaveText(
       "1",
     );
@@ -329,14 +329,14 @@ test.describe("Projects catalog", () => {
 
     // The task did NOT go with it: a task names the kind of work, not the
     // project it happened on, so it outlives the project.
-    await page.goto("/tasks");
+    await page.goto("/app/tasks");
     await expect(page.getByTestId("tasks-page")).toBeVisible();
     await expect(
       page.locator('[data-testid^="task-row-"]').filter({ hasText: TASK_NAME }),
     ).toHaveCount(1);
 
     // The entry survived, and simply has no project any more.
-    await page.goto("/track");
+    await page.goto("/app/track");
     const entry = page
       .locator('[data-testid="entry-row"]')
       .filter({ hasText: "Doomed project work" });
@@ -363,7 +363,7 @@ test.describe("Projects catalog", () => {
     );
 
     // Book one entry so there is history for a billing change to reach.
-    await page.goto("/track");
+    await page.goto("/app/track");
     await page.getByTestId("tracker-description").fill("Billed work");
     await pickComboboxOption(page, "tracker-project", PROJECT_NAME);
     await startAndSettle(page);
@@ -382,7 +382,7 @@ test.describe("Projects catalog", () => {
       return entry?.hourlyRate;
     };
 
-    await page.goto("/projects");
+    await page.goto("/app/projects");
     const billing = page.getByTestId(`project-billing-${projectId}`);
 
     // "Only new entries" saves the rate and leaves the entry's snapshot alone.
@@ -433,7 +433,7 @@ test.describe("Projects catalog", () => {
       email: uniqueEmail("layers"),
       password: PASSWORD,
     });
-    await page.goto("/track");
+    await page.goto("/app/track");
     await expect(page.getByTestId("tracker-bar")).toBeVisible();
 
     await page.getByTestId("tracker-project").click();

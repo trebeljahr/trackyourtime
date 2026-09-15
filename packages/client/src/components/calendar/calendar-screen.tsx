@@ -172,7 +172,7 @@ export function CalendarScreen(): React.JSX.Element {
       const params = new URLSearchParams();
       params.set("view", next.view ?? view);
       params.set("date", toDateKey(next.date ?? new Date(anchorMs)));
-      router.replace(`/calendar?${params.toString()}`, { scroll: false });
+      router.replace(`/app/calendar?${params.toString()}`, { scroll: false });
     },
     [anchorMs, router, view]
   );

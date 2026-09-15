@@ -70,7 +70,7 @@ export function WorkspaceTab(): React.JSX.Element {
           </dd>
         </dl>
         <Button asChild variant="outline">
-          <Link href="/members" data-testid="workspace-tab-members-link">
+          <Link href="/app/members" data-testid="workspace-tab-members-link">
             <Users className="size-4" />
             {workspace.permissions.inviteMembers
               ? t("workspaceTab.manage")

@@ -81,7 +81,7 @@ export async function createClientAndProject(
   clientName: string = CLIENT_NAME,
   projectName: string = PROJECT_NAME,
 ): Promise<void> {
-  await page.goto("/projects");
+  await page.goto("/app/projects");
   await expect(page.getByTestId("projects-page")).toBeVisible();
 
   await page.getByTestId("new-project").click();
@@ -118,7 +118,7 @@ export async function trackBillableHours(
   duration: string,
   projectName: string = PROJECT_NAME,
 ): Promise<void> {
-  await page.goto("/track");
+  await page.goto("/app/track");
   await expect(page.getByTestId("track-page")).toBeVisible();
   await pickComboboxOption(page, "tracker-project", projectName);
   await expect(page.getByTestId("tracker-billable")).toHaveAttribute("data-billable", "true");
@@ -127,7 +127,7 @@ export async function trackBillableHours(
 
 /** Open the create dialog and fill in client + range, stopping at the preview. */
 export async function openPreview(page: Page, clientName: string = CLIENT_NAME): Promise<void> {
-  await page.goto("/invoices");
+  await page.goto("/app/invoices");
   await expect(page.getByTestId("invoices-page")).toBeVisible();
   await page.getByTestId("new-invoice").click();
   await expect(page.getByTestId("invoice-dialog")).toBeVisible();
@@ -202,7 +202,7 @@ export async function fillBusinessProfile(
   page: Page,
   overrides: Partial<Record<ProfileField, string>> = {},
 ): Promise<void> {
-  await page.goto("/settings?tab=billing");
+  await page.goto("/app/settings?tab=billing");
   await expect(page.getByTestId("business-profile-form")).toBeVisible();
 
   const values = { ...DEFAULT_PROFILE, ...overrides };
@@ -245,7 +245,7 @@ export const DEFAULT_CLIENT_BILLING: Record<ClientBillingField, string> = {
 
 /** The client's id, read off its row on /clients. */
 export async function clientIdByName(page: Page, clientName: string): Promise<string> {
-  await page.goto("/clients");
+  await page.goto("/app/clients");
   await expect(page.getByTestId("clients-table")).toBeVisible();
   const row = page.locator('[data-testid^="client-row-"]').filter({ hasText: clientName });
   await expect(row).toHaveCount(1);

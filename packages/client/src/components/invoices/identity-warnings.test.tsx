@@ -46,12 +46,12 @@ describe("InvoiceIdentityWarnings", () => {
     expect(screen.getByTestId("invoice-warning-profile")).toBeInTheDocument();
     expect(screen.getByTestId("invoice-warning-profile-link")).toHaveAttribute(
       "href",
-      "/settings?tab=billing",
+      "/app/settings?tab=billing",
     );
     expect(screen.getByTestId("invoice-warning-client")).toHaveTextContent("Acme GmbH");
     expect(screen.getByTestId("invoice-warning-client-link")).toHaveAttribute(
       "href",
-      "/clients",
+      "/app/clients",
     );
   });
 

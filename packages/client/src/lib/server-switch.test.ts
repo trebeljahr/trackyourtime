@@ -85,7 +85,7 @@ describe("switching servers", () => {
     expect(calls.indexOf(`adoptToken:new-token@${OWN}`)).toBeGreaterThan(
       calls.indexOf(`saveChoice:${OWN}`),
     );
-    expect(calls.at(-1)).toBe("restart:/track/");
+    expect(calls.at(-1)).toBe("restart:/app/track/");
   });
 
   it("does nothing but save when the server is the same", async () => {

@@ -262,7 +262,7 @@ export function EntryList(): React.JSX.Element {
           // in a file, and this screen is where they find out it can come with
           // them. The empty state is the only place that question is live.
           <Button type="button" variant="outline" asChild>
-            <Link href="/settings?tab=data" data-testid="entries-empty-import">
+            <Link href="/app/settings?tab=data" data-testid="entries-empty-import">
               <Upload className="size-4" />
               {t("list.importHistory")}
             </Link>

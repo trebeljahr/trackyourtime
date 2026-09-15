@@ -244,7 +244,7 @@ function ResultCard({ approved, onReset }: ResultCardProps): React.JSX.Element {
         </CardHeader>
         <CardContent className="flex gap-2">
           <Button asChild data-testid="device-result-settings">
-            <Link href="/settings">{t("device.result.openSettings")}</Link>
+            <Link href="/app/settings">{t("device.result.openSettings")}</Link>
           </Button>
           <Button variant="ghost" onClick={onReset} data-testid="device-result-again">
             {t("device.result.again")}

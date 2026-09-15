@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The app's screens moved under `/app/` (`/app/track`, `/app/settings`, …).
+  The old addresses redirect to the new ones.
+- A signed-in visitor on the landing page or another public page stays there.
+  The header shows "Open the app" instead of "Log in".
+
 ## [0.1.0] - YYYY-MM-DD
 
 The first tagged release. It publishes the web app and API as self-host

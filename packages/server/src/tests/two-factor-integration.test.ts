@@ -285,7 +285,7 @@ describe("two-factor sign-in", () => {
     assert.ok(browser);
 
     const code = await auth.api.deviceCode({ body: { client_id: "trackyourtime-raycast" } });
-    // /device claims the code for the signed-in browser, then it approves.
+    // /app/device claims the code for the signed-in browser, then it approves.
     await auth.api.deviceVerify({
       query: { user_code: code.user_code },
       headers: bearerHeaders(browser),

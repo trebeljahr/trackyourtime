@@ -257,7 +257,7 @@ export const settings = {
     },
     connectHint: {
       title: "Connecting Raycast or a CLI",
-      body: "Apps that cannot show a sign-in form give you a short code instead. Open <link>/device</link> while signed in here and enter it — the app is then signed in as you and appears in the list above.",
+      body: "Apps that cannot show a sign-in form give you a short code instead. Open <link>/app/device</link> while signed in here and enter it — the app is then signed in as you and appears in the list above.",
     },
     toasts: {
       revoked: "Device signed out.",

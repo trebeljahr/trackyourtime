@@ -251,7 +251,7 @@ export const settings: Translation<typeof source> = {
     },
     connectHint: {
       title: "Raycast oder eine CLI verbinden",
-      body: "Apps, die kein Anmeldeformular zeigen können, geben dir stattdessen einen kurzen Code. Öffne <link>/device</link>, während du hier angemeldet bist, und gib ihn ein – die App ist dann mit deinem Konto angemeldet und erscheint in der Liste oben.",
+      body: "Apps, die kein Anmeldeformular zeigen können, geben dir stattdessen einen kurzen Code. Öffne <link>/app/device</link>, während du hier angemeldet bist, und gib ihn ein – die App ist dann mit deinem Konto angemeldet und erscheint in der Liste oben.",
     },
     toasts: {
       revoked: "Gerät abgemeldet.",

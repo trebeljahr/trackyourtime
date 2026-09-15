@@ -34,7 +34,7 @@ export function SignedOutView(): React.JSX.Element {
             />
             <Action.OpenInBrowser
               title="Open Web App"
-              url={webLink("/track")}
+              url={webLink("/app/track")}
             />
             <Action
               title="Open Extension Preferences"
