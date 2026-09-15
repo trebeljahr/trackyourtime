@@ -33,7 +33,7 @@ export const marketing: Translation<typeof source> = {
     createAccount: "Konto erstellen",
     openApp: "App öffnen",
     footer: {
-      tagline: "Open-Source-Zeiterfassung, gehostet oder auf deinem eigenen Server.",
+      tagline: "Kostenlose Open-Source-Zeiterfassung auf jedem Gerät.",
       chromeExtension: "Chrome-Erweiterung",
       raycastExtension: "Raycast-Erweiterung",
       mobile: "iPhone und Android",
@@ -54,86 +54,108 @@ export const marketing: Translation<typeof source> = {
 
   landing: {
     meta: {
-      title: "Track Your Time – Open-Source-Zeiterfassung, gehostet oder auf deinem eigenen Server",
+      title: "Track Your Time – kostenlose Open-Source-Zeiterfassung auf jedem Gerät",
       description:
-        "Erfasse deine Stunden und mach daraus Rechnungen und Berichte. Nutz es auf trackyourtime.dev oder betreib dieselbe Open-Source-App auf deinem eigenen Server.",
+        "Starte einen Timer im Browser, in der Menüleiste deines Macs oder auf dem Handy, auch offline. Aus den Stunden werden Berichte und Rechnungen. Kostenlos, Open Source und selbst hostbar.",
     },
     hero: {
-      eyebrow: "Open-Source-Zeiterfassung",
-      title: "Zeiterfassung auf unserem Server oder deinem",
+      eyebrow: "Für Freelancer und kleine Teams, die nach Stunden abrechnen",
+      title: "Open-Source-Zeiterfassung auf jedem Gerät, das du nutzt",
       hostYourself: "Selbst hosten",
       useHosted: "Gehostete Version nutzen",
       shotAlt: "Der Timer von Track Your Time läuft, darunter die abrechenbaren Einträge von heute",
-      body: "Track Your Time macht aus deinen Stunden Rechnungen und Berichte. Nutz es direkt hier, oder betreib dieselbe Open-Source-App auf einem Server, den du kontrollierst. So oder so hast du den Timer überall dabei: im Browser, in der Menüleiste deines Macs und auf dem Handy. Starten dauert eine Sekunde, auch ohne Verbindung.",
-      beta: "Kostenlos und Open Source. Die gehostete Version ist während der Beta kostenlos.",
+      body: "Starte einen Timer im Browser, in der Menüleiste deines Macs oder auf dem Handy. Er läuft auch ohne Verbindung weiter, und deine anderen Geräte zeigen denselben Timer. Am Monatsende werden aus den Stunden ein Bericht oder eine Rechnung.",
+      free: "Kostenlos für alle, ohne Bezahlmodell – heute nicht und später nicht. Nutze die gehostete Version oder betreibe es auf deinem eigenen Server.",
     },
-    ownership: {
-      title: "Gehostet oder auf deinem Server, es ist dieselbe App",
-      why: "Eine Zeiterfassung weiß, wer deine Kunden sind, was du ihnen berechnest und wie du jeden Arbeitstag verbringst. Du entscheidest, wo das liegt: auf trackyourtime.dev oder auf einem Server, den du selbst betreibst.",
-      same: "Beide laufen mit demselben Open-Source-Code und haben jede Funktion. Die Chrome-Erweiterung, die Raycast-Erweiterung und die Mobil-Apps funktionieren mit beiden. Jede fragt nach einer Serveradresse, neu bauen musst du also nichts.",
-      move: "Du kannst es dir später anders überlegen. Unter Einstellungen → Daten ziehst du einen Arbeitsbereich von einem Server auf den anderen um, in beide Richtungen. Und exportieren kannst du alles jederzeit, als JSON oder CSV.",
-      install:
-        "Für deinen eigenen Server brauchst du eine einzige Compose-Datei. Sie startet alles auf einem Server, HTTPS inklusive. Die <guide>Anleitung zum Selbsthosten</guide> führt Schritt für Schritt durch Installation, Backups, Updates und E-Mail.",
-      memory:
-        "Ein offizielles Release gibt es noch nicht. Der erste Start baut deshalb aus dem Quellcode und braucht einen Server mit 4 GB Arbeitsspeicher. Sobald fertige Images veröffentlicht sind, reichen 1–2 GB.",
-    },
-    timer: {
-      title: "Ein Timer, den du wirklich benutzt",
+    everywhere: {
+      title: "Starte den Timer dort, wo die Arbeit beginnt",
       shotAlt: "Die Chrome-Erweiterung von Track Your Time mit laufendem Timer",
       forgotten:
-        "Stunden, die du nicht erfasst, rechnest du auch nicht ab. Eine Zeiterfassung, die nur in einem Browsertab steckt, gerät schnell in Vergessenheit. Deshalb ist Track Your Time da, wo du ohnehin bist: ein Klick in Chrome, ein Tastenkürzel auf dem Mac, ein Tippen auf dem Handy.",
+        "Stunden, die du nicht erfasst, rechnest du auch nicht ab. Deshalb ist Track Your Time da, wo du ohnehin bist: ein Klick in Chrome, ein Tastenkürzel auf dem Mac, ein Tippen auf dem Handy.",
       offline:
-        "Verbindung weg? Erfass einfach weiter. Sobald du wieder online bist, wird alles synchronisiert. Und ein Timer, den du auf einem Gerät stoppst, ist auf allen gestoppt.",
+        "Im Zug oder im Flugzeug erfasst du einfach weiter. Jede App behält deine Änderungen und sendet sie, sobald die Verbindung zurück ist. Stoppst du einen Timer auf dem Handy, ist er auch auf dem Laptop gestoppt.",
+    },
+    surfaces: {
+      web: { name: "Web-App", text: "Timer, Stundenzettel, Kalender, Berichte, Rechnungen und dein Team." },
+      chrome: { name: "Chrome", text: "Ein Timer in der Symbolleiste. Ein Klick startet oder stoppt ihn." },
+      raycast: { name: "Raycast", text: "Eine Uhr in der Menüleiste und ein Tastenkürzel zum Starten und Stoppen auf dem Mac." },
+      mobile: { name: "iPhone und Android", text: "Zeit erfassen, wenn du unterwegs bist, auch ohne Empfang." },
+    },
+    routine: {
+      title: "Weniger Klicks, weniger vergessene Timer",
+      repeat:
+        "Die meiste Arbeit von heute hast du gestern schon gemacht. Starte sie erneut aus den zuletzt verwendeten Einträgen, oder hefte die Arbeit, die du jeden Tag machst, als Favorit an. Tipp die ersten Buchstaben einer Beschreibung, und Track Your Time schlägt Kunde, Projekt und Schlagwörter vom letzten Mal vor.",
+      guard:
+        "Timer über Nacht laufen lassen? Leg eine Höchstdauer fest. Ein Timer, der sie überschreitet, wird gestoppt oder wartet auf deine Antwort, mit einer Erinnerung per E-Mail. Gehst du vom Computer weg, fragt Track Your Time, was mit der Zeit passieren soll.",
+      suggestions:
+        "Den Timer ganz vergessen? Schalte in der Chrome-Erweiterung die Aktivitätserfassung ein. Sie merkt sich, welche Website du vor dir hattest, und schlägt Einträge für die Lücken in deinem Tag vor. Nichts verlässt deinen Computer, bevor du einen Vorschlag annimmst.",
+    },
+    reports: {
+      title: "Sieh, wo die Zeit geblieben ist",
+      shotAlt: "Ein Bericht über vier Wochen Arbeit, nach Tätigkeit aufgeteilt, mit Stunden und Umsatz",
+      structure:
+        "Ordne jeden Eintrag einem Kunden und einem Projekt zu, nenne die Tätigkeit und vergib Schlagwörter. Eine Tätigkeit wie „Design-Review“ gilt für alle Projekte. So siehst du, was dich Design-Reviews dieses Jahr gekostet haben.",
+      hours:
+        "Berichte gruppieren die Stunden nach Kunde, Projekt, Tätigkeit, Schlagwort, Teammitglied, Tag, Woche oder Monat und zeigen, was sie eingebracht haben. Gib einem Projekt ein Budget in Stunden oder Geld und sieh, wie viel davon übrig ist.",
+      edit: "Korrigiere einen Tag im Stundenzettel oder verschiebe Einträge im Kalender. Wenn die Steuerberatung fragt, exportierst du jeden Bericht als CSV oder PDF.",
     },
     invoice: {
       title: "Von den Stunden zur Rechnung",
       shotAlt: "Eine Rechnung für einen Kunden, mit einem Monat abrechenbarer Stunden in Positionen zusammengefasst",
       rates:
-        "Gib jedem Projekt einen Stundensatz. Wenn abgerechnet wird, wählst du einen Kunden und einen Monat. Track Your Time macht aus den noch nicht abgerechneten Stunden eine Rechnung, die du als PDF herunterlädst.",
+        "Gib jedem Projekt einen Stundensatz. Wenn abgerechnet wird, wählst du einen Kunden und einen Monat. Track Your Time macht aus den noch nicht abgerechneten Stunden eine Rechnung – als PDF oder als E-Rechnung im Format ZUGFeRD oder XRechnung.",
       once: "Keine Stunde landet zweimal auf einer Rechnung. Und wenn du deinen Stundensatz erhöhst, behalten die schon geleisteten Stunden den Satz, den du vereinbart hattest.",
     },
-    reports: {
-      title: "Sieh, wo die Zeit geblieben ist",
-      shotAlt: "Ein Bericht über vier Wochen Arbeit, nach Tätigkeit aufgeteilt, mit Stunden und Umsatz",
-      hours:
-        "Berichte zeigen, wie viele Stunden jeder Kunde und jedes Projekt gebraucht hat und was diese Stunden eingebracht haben. So merkst du vor deinem Kunden, dass ein Projekt über die Schätzung hinausläuft.",
-      export: "Wenn die Steuerberatung fragt, exportierst du jeden Bericht als CSV oder PDF.",
+    team: {
+      title: "Zeit im Team erfassen",
+      invite:
+        "Lade Kolleginnen und Kollegen per E-Mail ein oder schick ihnen einen Link. Jede Person sieht nur ihre eigene Zeit, bis du ihr die Stunden oder Beträge der anderen freigibst. Berichte teilen die Stunden dann nach Person auf.",
+      limits:
+        "Es gibt keine Überwachung per Screenshot oder Tastenanschlag. Es gibt aber auch noch keine Freigabe von Stundenzetteln, und alle in einem Projekt rechnen zum Stundensatz des Projekts ab.",
     },
-    surfaces: {
-      title: "Da, wo du arbeitest",
-      web: { name: "Web-App", text: "Timer, Stundenzettel, Kalender, Berichte und Rechnungen." },
-      chrome: { name: "Chrome", text: "Ein Timer in der Symbolleiste. Ein Klick startet oder stoppt ihn." },
-      raycast: { name: "Raycast", text: "Eine Uhr in der Menüleiste und ein Tastenkürzel zum Starten und Stoppen auf dem Mac." },
-      mobile: { name: "iPhone und Android", text: "Zeit erfassen, wenn du unterwegs bist, auch ohne Empfang." },
+    data: {
+      title: "Deine Daten gehen dorthin, wo du sie brauchst",
+      import:
+        "Du kommst von einer anderen Zeiterfassung? Exportiere dort eine CSV-Datei und importiere sie hier. Bevor etwas gespeichert wird, siehst du eine Vorschau, und du kannst den Import rückgängig machen.",
+      export:
+        "Exportiere jederzeit alles als JSON oder CSV. Einen Arbeitsbereich ziehst du unter Einstellungen → Daten von der gehosteten Version auf deinen eigenen Server um, oder zurück.",
+      connect:
+        "Verbinde deine anderen Tools über die <reference>REST-API</reference>. Sie liest und schreibt Einträge, Kunden, Projekte, Tätigkeiten und Schlagwörter. Webhooks melden deinen Tools, wenn ein Timer startet oder stoppt oder sich eine Rechnung ändert. Mit dem <mcp>MCP-Server</mcp> startet ein KI-Assistent Timer und erfasst Zeit für dich.",
+    },
+    selfHost: {
+      title: "Gehostet oder auf deinem eigenen Server – es ist dieselbe App",
+      why: "Eine Zeiterfassung weiß, wer deine Kunden sind, was du ihnen berechnest und wie du jeden Arbeitstag verbringst. Du entscheidest, wo das liegt: auf trackyourtime.dev oder auf einem Server, den du selbst betreibst.",
+      install:
+        "Für deinen eigenen Server reicht eine Compose-Datei. Sie startet die App, ihre Datenbank und HTTPS auf einem Server. Ein Kommandozeilen-Tool legt Konten an, setzt Passwörter zurück und prüft die Installation. Die <guide>Anleitung zum Selbsthosten</guide> führt Schritt für Schritt durch Backups, Updates und E-Mail.",
+      clients:
+        "Beide laufen mit demselben Open-Source-Code und haben jede Funktion. Die Chrome-Erweiterung, die Raycast-Erweiterung und die Mobil-Apps funktionieren mit beiden. Jede fragt nach einer Serveradresse, neu bauen musst du keine.",
+      limits:
+        "Das erste Release ist noch nicht veröffentlicht. Der erste Start baut deshalb aus dem Quellcode und braucht einen Server mit 4 GB Arbeitsspeicher. Außerdem kann die App die Registrierung noch nicht schließen – die Anleitung zeigt, wie du sie am Proxy sperrst.",
     },
     free: {
       title: "Kostenlos, ohne Einschränkungen",
       license:
-        "Track Your Time steht unter der AGPL-3.0. Jede Installation hat jede Funktion. Es gibt keine kostenpflichtigen Plugins und keine Premium-Stufe.",
+        "Track Your Time ist Open Source unter der AGPL-3.0. Jede Installation hat jede Funktion, auch die gehostete Version. Es gibt kein Bezahlmodell und keine Premium-Stufe, und es wird keine geben.",
       builtBy: "Entwickelt wird es von einer Person, Rico Trebeljahr, öffentlich auf <repo>GitHub</repo>.",
       donate: "Wenn es dir ein Abo erspart, <donate>kannst du die Entwicklung unterstützen</donate>.",
-    },
-    audience: {
-      title: "Für wen es gedacht ist",
-      body: "Für Freelancer, Berater und kleine Studios, die nach Stunden abrechnen und ihre Daten selbst in der Hand haben wollen. Es gibt keine Überwachung per Screenshot oder Tastenanschlag, und niemand muss deinen Stundenzettel freigeben. Lade Kolleginnen und Kollegen per E-Mail ein. Jede Person sieht nur ihre eigene Zeit, bis du ihr die Zeit oder die Beträge der anderen freigibst. Stundensätze legst du pro Projekt fest, also rechnen alle in einem Projekt zum selben Satz ab.",
     },
     faq: {
       title: "Fragen",
       hosting: {
         q: "Muss ich es selbst hosten?",
-        a: "Nein. Die gehostete Version auf trackyourtime.dev steht allen offen und ist während der Beta kostenlos. Später kannst du unter Einstellungen → Daten auf deinen eigenen Server umziehen, und auch wieder zurück.",
+        a: "Nein. Die gehostete Version auf trackyourtime.dev steht allen offen und ist kostenlos. Später kannst du unter Einstellungen → Daten auf deinen eigenen Server umziehen, und auch wieder zurück.",
       },
       requirements: {
         q: "Was brauche ich, um es zu betreiben?",
-        a: "Einen Linux-Server mit Docker, eine Domain und 4 GB Arbeitsspeicher für den ersten Build. Die <guide>Anleitung</guide> nennt jeden Befehl.",
+        a: "Einen Linux-Server mit Docker, eine Domain und 4 GB Arbeitsspeicher für den ersten Build. Die <guide>Anleitung</guide> nennt jeden Befehl.",
       },
-      import: {
-        q: "Kann ich meine Zeiten aus einer anderen Zeiterfassung mitnehmen?",
-        a: "Ja. Exportiere eine CSV-Datei aus deinem alten Tool und importiere sie. Bevor etwas gespeichert wird, siehst du eine Vorschau, und du kannst den Import rückgängig machen.",
+      clients: {
+        q: "Können meine Kunden den Fortschritt ihres Projekts verfolgen?",
+        a: "In Track Your Time selbst noch nicht. Es gibt keinen Kundenzugang und keinen geteilten Link. Schick ihnen einen Bericht oder eine Rechnung als PDF.",
       },
-      api: {
-        q: "Gibt es eine API?",
-        a: "Ja. Jede Installation bringt eine REST-API und signierte Webhooks mit. Am besten fängst du mit der <reference>API-Referenz</reference> an.",
+      stores: {
+        q: "Wo bekomme ich die Apps?",
+        a: "Die Chrome-Erweiterung, die Raycast-Erweiterung und die Mobil-Apps sind noch nicht in ihren Stores. Die Web-App läuft schon heute in jedem Browser, auch auf dem Handy.",
       },
       shutdown: {
         q: "Was passiert, wenn das Projekt eingestellt wird?",
@@ -206,7 +228,10 @@ export const marketing: Translation<typeof source> = {
       cookies:
         "Die Berechtigung <strong>cookies</strong> liest ein einziges Cookie: das Sitzungscookie der Web-App von Track Your Time, damit du dich nicht zweimal anmelden musst. Andere Cookies liest die Erweiterung nicht.",
       idle: "Die Berechtigung <strong>idle</strong> meldet der Erweiterung, dass der Computer inaktiv oder gesperrt ist. Die Erweiterung nutzt das nur, um zu fragen, was mit der inaktiven Zeit passieren soll. Den Inaktivitätsstatus sendet sie nirgendwohin.",
-      network: "Die Erweiterung spricht nur mit api.trackyourtime.dev. Die Seiten, die du besuchst, kann sie nicht lesen.",
+      network:
+        "Die Erweiterung spricht nur mit dem Track-Your-Time-Server, bei dem du angemeldet bist: api.trackyourtime.dev oder einem anderen Server, den du auswählst und freigibst.",
+      activity:
+        "Die optionale Berechtigung <strong>tabs</strong> wird nur angefragt, wenn du die Aktivitätserfassung einschaltest. Die Erweiterung speichert dann den Hostnamen des aktiven Tabs, und den Seitentitel nur, wenn du das willst, im Speicher auf deinem Computer. Diese Aufzeichnungen werden nach 14 Tagen gelöscht, sofern du das nicht änderst, und nie irgendwohin gesendet. Nur ein Eintrag, den du annimmst, erreicht den Server.",
       limitedUse:
         "Die Nutzung von Informationen, die über Chrome-APIs empfangen werden, entspricht der Chrome Web Store User Data Policy, einschließlich der Anforderungen zur eingeschränkten Nutzung (Limited Use).",
     },
@@ -322,6 +347,12 @@ export const marketing: Translation<typeof source> = {
       title: "Bring den Tag in Ordnung, bevor du abrechnest",
       body: "Vergessen, den Timer vor einem Anruf zu starten? Trag die Zeit hinterher nach. Geh frühere Tage durch und korrigiere, was nicht stimmt, ohne die Web-App zu öffnen.",
     },
+    activity: {
+      title: "Hol dir die Stunden zurück, die du nie gestoppt hast",
+      body: "Schalte die Aktivitätserfassung ein, und die Erweiterung merkt sich, welche Website du vor dir hattest. Später schlägt sie Einträge für die Zeiten vor, die du nicht erfasst hast. Jeden Vorschlag nimmst du an, bearbeitest ihn oder verwirfst ihn.",
+      privacy:
+        "Gespeichert wird die Adresse der Website, nicht ihr Inhalt. Die Aufzeichnungen bleiben auf deinem Computer, und nichts erreicht dein Konto, bevor du einen Vorschlag annimmst.",
+    },
     offline: {
       title: "Erfasst weiter, auch wenn das WLAN streikt",
       body: "Bricht die Verbindung ab, arbeitest du einfach weiter. Die Erweiterung speichert deine Änderungen und sendet sie, sobald du wieder online bist. Stoppst du hier einen Timer, ist er auch in der Web-App und auf dem Handy gestoppt.",
@@ -339,7 +370,8 @@ export const marketing: Translation<typeof source> = {
       login: "Deine Anmeldung bei Track Your Time, damit du dich nicht zweimal anmelden musst.",
       idle: "Ob dein Computer inaktiv ist, damit sie fragen kann, was mit der Zeit passieren soll, in der du weg warst.",
       storage: "Speicher auf deinem Computer, für Änderungen, die du offline gemacht hast.",
-      server: "Dein Track-Your-Time-Server. Die Websites, die du besuchst, kann sie nicht lesen.",
+      server: "Der Track-Your-Time-Server, bei dem du angemeldet bist.",
+      tabs: "Welche Website im aktuellen Tab offen ist – nur, wenn du die Aktivitätserfassung einschaltest.",
     },
   },
 
@@ -408,7 +440,7 @@ export const marketing: Translation<typeof source> = {
     },
     selfHost: {
       title: "Du nutzt einen eigenen Server?",
-      body: "Die Apps verbinden sich mit trackyourtime.dev, bis du einen anderen Server wählst. Wähle auf dem Anmeldebildschirm „Server wechseln“ und gib die Adresse deines Servers ein.",
+      body: "Die Apps verbinden sich mit trackyourtime.dev, bis du einen anderen Server wählst. Wähle auf dem Anmeldebildschirm „Server wechseln“ und gib die Adresse deines Servers ein. Die App prüft, ob der Server antwortet, bevor sie deine Wahl speichert.",
     },
   },
 

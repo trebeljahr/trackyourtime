@@ -1,16 +1,20 @@
 # Track Your Time
 
-> Open-source time tracking. Use the hosted service at trackyourtime.dev, or run the same app on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline, and tracked hours become reports and invoices: a plain PDF, a ZUGFeRD PDF or an XRechnung file.
+> Free, open-source time tracking. Use the hosted service at trackyourtime.dev, or run the same app on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline and syncs across devices, and tracked hours become reports and invoices: a plain PDF, a ZUGFeRD PDF or an XRechnung file.
 
-Track Your Time is for freelancers, consultants and small studios who bill clients by the hour. The code is on GitHub at https://github.com/trebeljahr/trackyourtime under AGPL-3.0-or-later. A hosted instance runs at https://trackyourtime.dev and is free while in beta. It runs the same code as a self-hosted server, and every client app works with both.
+Track Your Time is for freelancers, consultants and small studios who bill clients by the hour. The code is on GitHub at https://github.com/trebeljahr/trackyourtime under AGPL-3.0-or-later. A hosted instance runs at https://trackyourtime.dev. It is free, has no paid plan, and runs the same code as a self-hosted server.
 
 **What it does today**
 
 - Your data can stay on your own server. One Docker Compose file runs five containers on one server and one domain: the API, the web app, MongoDB, Redis and Caddy. Caddy gets the HTTPS certificate from Let's Encrypt.
-- Settings → Data → Move to another server copies a workspace between two servers, hosted to self-hosted or back.
 - You can export a whole workspace as JSON or CSV at any time. A CSV from another tool imports with a preview and a one-step undo.
 - The timer is where you already work. There is a Chrome extension, a Raycast extension with a menu bar clock and a start/stop hotkey, and iPhone and Android apps.
 - The web app, the extensions and the phone apps keep tracking without a connection. They send the queued changes when the connection returns.
+- Every client app works with the hosted service and with a self-hosted server. The Chrome extension and the phone apps let the person choose a server before signing in, and a self-hosted server accepts their store builds by default (`TRUST_STORE_APPS=true`). The Raycast extension has API URL and Web App URL preferences.
+- Recent entries, pinned favorites and description autocomplete fill in earlier details. A maximum timer length stops a forgotten timer or emails a reminder. The Chrome extension can suggest entries from browsing activity, off by default and kept on the computer until a suggestion is accepted.
+- Workspaces have members, email or link invitations, three roles (owner, admin, member) and per-member visibility of colleagues' time and money. Reports group by member.
+- Projects can carry a budget in hours or money, shown as progress.
+- Settings → Data → Move to another server copies a workspace between two servers, hosted to self-hosted or back.
 - A timer you stop on one device stops on every other open device at once, over a WebSocket.
 - Each project has an hourly rate. Reports show totals by project, client, task, tag, day, week or month, or list every entry. Both views export to CSV and PDF.
 - An invoice collects a client's unbilled billable hours. It downloads as a plain PDF, as a ZUGFeRD PDF or as an XRechnung XML file. An hour on an invoice cannot be billed again.
@@ -21,11 +25,10 @@ Track Your Time is for freelancers, consultants and small studios who bill clien
 **Current limits**
 
 - Rates belong to projects and the workspace, not to people. Everyone in a workspace bills a project at the same rate.
+- There is no timesheet approval, no client login or shared report link, and no budget alert.
 - There is no tagged release yet, so there are no published images to pull. Until the first release, self-hosting means building the images yourself, which needs about 4 GB of RAM.
 - A self-hosted instance has open sign-up. The application has no setting to close registration. The self-hosting guide lists workarounds at the proxy.
 - The Chrome extension, the Raycast extension and the phone apps are not in any store yet.
-- The Chrome extension and the phone apps let the person choose a server before signing in. A self-hosted server accepts their store builds by default (`TRUST_STORE_APPS=true`).
-- The Raycast extension has API URL and Web App URL preferences, so one build reaches any server.
 
 **How to self-host**
 
@@ -53,10 +56,10 @@ Point a domain at a Linux server with Docker, clone the repository, copy `.env.s
 
 ## Web pages
 
-- [Home](https://trackyourtime.dev/): What Track Your Time does, and how to use it: on the hosted service, or on your own server with the same app and the same client apps.
-- [Chrome extension](https://trackyourtime.dev/extension/): Start and stop the timer from the Chrome toolbar, add time you forgot, and keep tracking when the connection drops.
+- [Home](https://trackyourtime.dev/): Free, open-source time tracking on every device, offline included. Reports, invoices, teams, import, export and an API, on the hosted service or on your own server with the same app.
+- [Chrome extension](https://trackyourtime.dev/extension/): Start and stop the timer from the Chrome toolbar, add time you forgot, get entry suggestions from browsing activity, and keep tracking when the connection drops.
 - [Raycast extension](https://trackyourtime.dev/raycast/): Start and stop the timer with a hotkey, and see it running in the Mac menu bar.
-- [iPhone and Android](https://trackyourtime.dev/mobile/): Track billable time on an iPhone or Android phone without signal. Changes sync when the connection returns.
+- [iPhone and Android](https://trackyourtime.dev/mobile/): Track billable time on an iPhone or Android phone without signal, against the hosted service or your own server. Changes sync when the connection returns.
 
 ## Optional
 

@@ -34,7 +34,7 @@ export const marketing = {
     createAccount: "Create an account",
     openApp: "Open the app",
     footer: {
-      tagline: "Open-source time tracking, hosted or on your own server.",
+      tagline: "Free, open-source time tracking on every device.",
       chromeExtension: "Chrome extension",
       raycastExtension: "Raycast extension",
       mobile: "iPhone and Android",
@@ -56,86 +56,108 @@ export const marketing = {
 
   landing: {
     meta: {
-      title: "Track Your Time — open-source time tracking, hosted or on your own server",
+      title: "Track Your Time — free, open-source time tracking on every device",
       description:
-        "Track your hours and turn them into invoices and reports. Use it at trackyourtime.dev, or run the same open-source app on your own server.",
+        "Start a timer in your browser, your Mac’s menu bar or on your phone, even offline. Turn the hours into reports and invoices. Free, open source, and yours to host.",
     },
     hero: {
-      eyebrow: "Open-source time tracking",
-      title: "Time tracking on our server or yours",
+      eyebrow: "For freelancers and small teams who bill by the hour",
+      title: "Open-source time tracking on every device you use",
       hostYourself: "Host it yourself",
       useHosted: "Use the hosted version",
       shotAlt: "The Track Your Time timer running, above a list of today’s billable entries",
-      body: "Track Your Time turns your hours into invoices and reports. Use it right here, or run the same open-source app on a server you control. Either way, you get a timer in your browser, your Mac’s menu bar and your phone. Starting one takes a second, even without a connection.",
-      beta: "Free and open source. The hosted version is free while in beta.",
+      body: "Start a timer in your browser, from your Mac’s menu bar or on your phone. It keeps counting without a connection, and your other devices show the same timer. At the end of the month, the hours become a report or an invoice.",
+      free: "Free for everyone, with no paid plan now or later. Use the hosted version, or run it on your own server.",
     },
-    ownership: {
-      title: "Hosted or on your own server, it’s the same app",
-      why: "A time tracker knows who your clients are, what you charge them and how you spend every working day. You choose where that lives: on trackyourtime.dev, or on a server you run yourself.",
-      same: "Both run the same open-source code, with every feature. The Chrome extension, the Raycast extension and the phone apps work with either one. Each asks for a server address, so none of them needs rebuilding.",
-      move: "You can change your mind later. Settings → Data moves a workspace from one server to the other, in either direction. And you can export everything as JSON or CSV whenever you want.",
-      install:
-        "Running your own takes one compose file. It starts everything on a single server, with HTTPS set up for you. The <guide>self-hosting guide</guide> walks through the install, backups, upgrades and email, one step at a time.",
-      memory:
-        "There’s no tagged release yet, so the first start builds from source and needs a server with 4 GB of memory. Once images are published, 1–2 GB is enough.",
-    },
-    timer: {
-      title: "A timer you’ll actually use",
+    everywhere: {
+      title: "Start the timer where the work starts",
       shotAlt: "The Track Your Time Chrome extension with a timer running",
       forgotten:
-        "The hours you forget to track are the hours you don’t bill. A tracker that only lives in a browser tab is easy to forget, so Track Your Time goes where you already are: a click in Chrome, a hotkey on your Mac, a tap on your phone.",
+        "The hours you forget to track are the hours you don’t bill. So Track Your Time sits where you already are: a click in Chrome, a hotkey on your Mac, a tap on your phone.",
       offline:
-        "Lost the connection? Keep tracking. Everything syncs when you’re back online, and a timer you stop on one device stops on all of them.",
+        "On a train or a plane, keep tracking. Each app keeps your changes and sends them when the connection comes back. Stop a timer on your phone, and your laptop shows it stopped.",
+    },
+    surfaces: {
+      web: { name: "Web app", text: "Timer, timesheet, calendar, reports, invoices and your team." },
+      chrome: { name: "Chrome", text: "A timer in your toolbar. One click to start or stop." },
+      raycast: { name: "Raycast", text: "A menu bar clock and a start/stop hotkey on your Mac." },
+      mobile: { name: "iPhone and Android", text: "Track time away from your desk, even without signal." },
+    },
+    routine: {
+      title: "Fewer clicks, fewer forgotten timers",
+      repeat:
+        "Most of today’s work is work you did yesterday. Start it again from your recent entries, or pin the jobs you do every day. Type the first letters of a description, and Track Your Time offers the client, project and tags you used with it last time.",
+      guard:
+        "Left a timer running overnight? Set a maximum length, and a timer that runs past it is stopped, or waits for your answer with an email reminder. Step away from your computer, and Track Your Time asks what to do with the time you were away.",
+      suggestions:
+        "Forgot the timer completely? Turn on activity capture in the Chrome extension. It notes which website had your attention and suggests entries for the gaps in your day. Nothing leaves your computer until you accept one.",
+    },
+    reports: {
+      title: "See where the time went",
+      shotAlt: "A report of four weeks of work, split by task, with hours and money earned",
+      structure:
+        "File each entry under a client and a project, name the task, and add tags. A task like “Design review” works across every project, so you can see what design reviews cost you this year.",
+      hours:
+        "Reports group the hours by client, project, task, tag, team member, day, week or month, and show what they earned. Give a project a budget in hours or money, and see how much of it is left.",
+      edit: "Fix a day in the timesheet or drag entries on the calendar. Export any report as a CSV or a PDF when your accountant asks for it.",
     },
     invoice: {
       title: "From hours to invoice",
       shotAlt: "An invoice for one client, with a month of billable hours grouped into line items",
       rates:
-        "Give each project an hourly rate. When it’s time to bill, pick a client and a month, and Track Your Time turns the unbilled hours into an invoice you can download as a PDF.",
+        "Give each project an hourly rate. When it’s time to bill, pick a client and a month, and Track Your Time turns the unbilled hours into an invoice. Download it as a PDF, or as a ZUGFeRD or XRechnung e-invoice.",
       once: "An hour can’t be billed twice. And when you raise your rate, the hours you already worked keep the rate you agreed on.",
     },
-    reports: {
-      title: "See where the time went",
-      shotAlt: "A report of four weeks of work, split by task, with hours and money earned",
-      hours:
-        "Reports show how many hours each client and project took, and what those hours earned. Spot the project that has run past its estimate before the client does.",
-      export: "Export any report as a CSV or a PDF when your accountant asks for it.",
+    team: {
+      title: "Track time as a team",
+      invite:
+        "Invite colleagues by email, or send them a link. Each person sees only their own time until you let them see colleagues’ hours or money. Reports then split the hours by person.",
+      limits:
+        "There’s no screenshot or keystroke monitoring. There’s also no timesheet approval yet, and everyone on a project bills at that project’s rate.",
     },
-    surfaces: {
-      title: "Works where you work",
-      web: { name: "Web app", text: "Timer, timesheet, calendar, reports and invoices." },
-      chrome: { name: "Chrome", text: "A timer in your toolbar. One click to start or stop." },
-      raycast: { name: "Raycast", text: "A menu bar clock and a start/stop hotkey on your Mac." },
-      mobile: { name: "iPhone and Android", text: "Track time away from your desk, even without signal." },
+    data: {
+      title: "Your data goes where you need it",
+      import:
+        "Coming from another time tracker? Export a CSV there and import it here. You see a preview before anything is saved, and you can undo the import.",
+      export:
+        "Take everything out as JSON or CSV at any time. To move a workspace from the hosted version to your own server, or back, use Settings → Data.",
+      connect:
+        "Connect your other tools through the <reference>REST API</reference>. It reads and writes entries, clients, projects, tasks and tags. Webhooks tell your tools when a timer starts or stops or an invoice changes. The <mcp>MCP server</mcp> lets an AI assistant start timers and log time for you.",
+    },
+    selfHost: {
+      title: "Hosted or on your own server, it’s the same app",
+      why: "A time tracker knows who your clients are, what you charge them and how you spend each working day. You choose where that lives: on trackyourtime.dev, or on a server you run yourself.",
+      install:
+        "Running your own takes one compose file. It starts the app, its database and HTTPS on a single server. A command-line tool creates accounts, resets passwords and checks the install. The <guide>self-hosting guide</guide> covers backups, upgrades and email, one step at a time.",
+      clients:
+        "Both run the same open-source code, with every feature. The Chrome extension, the Raycast extension and the phone apps work with either one. Each asks for a server address, so none of them needs rebuilding.",
+      limits:
+        "The first release isn’t published yet, so the first start builds from source and needs a server with 4 GB of memory. And the app can’t close sign-up yet: the guide shows how to block it at the proxy.",
     },
     free: {
-      title: "Free, and nothing held back",
+      title: "Free, with nothing held back",
       license:
-        "Track Your Time is licensed under AGPL-3.0. Every feature is in every install. There are no paid plugins and no premium tier.",
+        "Track Your Time is open source under the AGPL-3.0. Every feature is in every install, the hosted version included. There’s no paid plan and no premium tier, and there won’t be one.",
       builtBy: "It’s built by one developer, Rico Trebeljahr, in the open on <repo>GitHub</repo>.",
       donate: "If it saves you a subscription, <donate>you can support development</donate>.",
-    },
-    audience: {
-      title: "Who it’s for",
-      body: "Freelancers, consultants and small studios who bill by the hour and want to own their data. There’s no screenshot or keystroke monitoring, and nobody approves your timesheet. Invite colleagues by email. Each one sees only their own time until you let them see colleagues’ time or money. You set hourly rates per project, so everyone on a project bills at the same rate.",
     },
     faq: {
       title: "Questions",
       hosting: {
         q: "Do I have to host it myself?",
-        a: "No. The hosted version at trackyourtime.dev is open to everyone, and free while in beta. You can move to your own server later from Settings → Data, and back again.",
+        a: "No. The hosted version at trackyourtime.dev is open to everyone and free. You can move to your own server later from Settings → Data, and back again.",
       },
       requirements: {
         q: "What do I need to run it?",
         a: "A Linux server with Docker, a domain name, and 4 GB of memory for the first build. The <guide>guide</guide> lists every command.",
       },
-      import: {
-        q: "Can I bring my history from another time tracker?",
-        a: "Yes. Export a CSV from your old tool and import it. You see a preview before anything is saved, and you can undo the import.",
+      clients: {
+        q: "Can my clients follow their project’s progress?",
+        a: "Not inside Track Your Time yet. There’s no client login and no shared link. Send them a report or an invoice as a PDF.",
       },
-      api: {
-        q: "Is there an API?",
-        a: "Yes. A REST API and signed webhooks come with every install. Start with the <reference>API reference</reference>.",
+      stores: {
+        q: "Where do I get the apps?",
+        a: "The Chrome extension, the Raycast extension and the phone apps aren’t in their stores yet. The web app works in any browser today, on your phone too.",
       },
       shutdown: {
         q: "What happens if the project stops?",
@@ -209,7 +231,10 @@ export const marketing = {
       cookies:
         "The <strong>cookies</strong> permission reads one cookie: the Track Your Time web app’s session cookie, so you do not sign in twice. The extension reads no other cookie.",
       idle: "The <strong>idle</strong> permission tells the extension that the computer is idle or locked. The extension uses it only to ask what to do with idle time. It does not send idle state anywhere.",
-      network: "The extension talks only to api.trackyourtime.dev. It cannot read the pages you visit.",
+      network:
+        "The extension talks only to the Track Your Time server you sign in to: api.trackyourtime.dev, or another server you choose and allow.",
+      activity:
+        "The optional <strong>tabs</strong> permission is requested only when you turn on activity capture. The extension then records the host name of the active tab, and its page title only if you choose, in storage on your computer. These records are deleted after 14 days unless you change that, and are never sent anywhere. Only an entry you accept reaches the server.",
       limitedUse:
         "The use of information received from Chrome APIs adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements.",
     },
@@ -325,6 +350,12 @@ export const marketing = {
       title: "Fix the day before you bill it",
       body: "Forgot to start the timer before a call? Add the time afterwards. Look back through earlier days and correct anything that looks wrong, without opening the web app.",
     },
+    activity: {
+      title: "Get back the hours you never timed",
+      body: "Turn on activity capture, and the extension notes which website had your attention. Later it suggests entries for the stretches you didn’t track, and you accept, edit or dismiss each one.",
+      privacy:
+        "It records the site’s address, not what’s on the page. The records stay on your computer, and nothing reaches your account until you accept a suggestion.",
+    },
     offline: {
       title: "Keeps tracking when the Wi-Fi doesn’t",
       body: "If the connection drops, keep working. The extension saves your changes and sends them as soon as you’re back online. Stop a timer here, and it’s stopped in the web app and on your phone too.",
@@ -342,7 +373,8 @@ export const marketing = {
       login: "Your Track Your Time login, so you don't have to sign in twice.",
       idle: "Whether your computer is idle, so it can ask what to do with the time you were away.",
       storage: "Storage on your computer, for changes made while you were offline.",
-      server: "Your Track Your Time server. It can't read the websites you visit.",
+      server: "The Track Your Time server you sign in to.",
+      tabs: "Which website is open in the current tab, only if you turn on activity capture.",
     },
   },
 
@@ -412,7 +444,7 @@ export const marketing = {
     },
     selfHost: {
       title: "Using your own server?",
-      body: "The apps connect to trackyourtime.dev until you pick another server. On the sign-in screen, choose Change server and enter your server’s address.",
+      body: "The apps connect to trackyourtime.dev until you pick another server. On the sign-in screen, choose Change server and enter your server’s address. The app checks that the server answers before it saves your choice.",
     },
   },
 

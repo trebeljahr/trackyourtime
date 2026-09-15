@@ -7,7 +7,7 @@ test.describe("Smoke tests", () => {
   }) => {
     await page.goto("/");
     await expect(page.getByTestId("marketing-title")).toContainText(
-      "Time tracking on your own server",
+      "Open-source time tracking on every device you use",
     );
     await page.waitForLoadState("networkidle");
     await expect(page).toHaveURL(/\/$/);

@@ -59,34 +59,39 @@ Pick an automatic activity tracker if:
 
 ## Track Your Time
 
-Track Your Time is a timer-first tracker for a person who bills clients by the hour. You start a timer against a client and a project, and the hours turn into reports and invoices. It runs on your own server from one Docker Compose file on one domain. The [self-hosting guide](./self-hosting.md) has every command.
+Track Your Time is a timer-first tracker for people who bill clients by the hour, alone or in a small team. You start a timer against a client and a project, and the hours turn into reports and invoices. It is free, with no paid plan, and it runs on your own server from one Docker Compose file on one domain. The [self-hosting guide](./self-hosting.md) has every command.
 
 What it does:
 
 - The timer runs in the web app, a Chrome extension and iPhone and Android apps. A Raycast extension adds a Mac menu bar clock and a hotkey.
 - Each of these keeps tracking without a connection. The queued changes go to the server when the connection returns.
 - A timer you stop on one device stops on every other open device at once.
-- Each project has an hourly rate. Reports show totals by project, client, task, tag, day, week or month, or list every entry. Both views export to CSV and PDF.
-- An invoice collects a client's unbilled billable hours and downloads as a PDF. An hour on an invoice can't be billed a second time.
-- You can export a whole workspace as JSON or CSV. A CSV from another tool imports with a preview, and you can undo the import.
+- Every client connects to the hosted service or to your own server. The Chrome extension, the Raycast extension and the phone apps take the server address in their settings, with no rebuild.
+- Recent entries, pinned favorites and description autocomplete fill in the client, project and tags you used before. A maximum timer length stops a forgotten timer or emails you about it.
+- The Chrome extension can record which websites had your attention and suggest entries for time you did not track. It is off by default, and nothing leaves the computer until you accept a suggestion.
+- Each project has an hourly rate and an optional budget in hours or money. Reports show totals by client, project, task, tag, member, day, week or month, or list every entry. Both views export to CSV and PDF.
+- An invoice collects a client's unbilled billable hours and downloads as a PDF, a ZUGFeRD PDF or an XRechnung file. An hour on an invoice can't be billed a second time.
+- Workspaces have members, invitations and three roles. Each member sees only their own time until an owner or admin lets them see colleagues' time or money.
+- You can export a whole workspace as JSON or CSV, and move it between the hosted service and your own server from Settings. A CSV from another tool imports with a preview, and you can undo the import.
 - A [REST API](./api/overview.md) with an OpenAPI document, signed [webhooks](./api/webhooks.md) and an [MCP server](./mcp.md) connect it to other tools and to AI assistants.
-- The licence is AGPL-3.0-or-later. Every install has every feature, and there is no paid tier.
+- The web app, the extensions and the phone apps are in English and German. The Raycast extension is in English.
+- The licence is AGPL-3.0-or-later. Every install has every feature, the hosted service included, and there is no paid tier.
 
 What it cannot do yet:
 
 - Rates belong to projects and the workspace, not to people. Everyone in a workspace bills a project at the same rate.
+- There is no timesheet approval, no expense tracking and no absence tracking.
+- Clients cannot log in or open a shared report. You send them a PDF.
+- Budgets show progress, but nothing notifies you when a project goes over. There are no milestones or deadlines.
 - There is no tagged release yet, so there are no published Docker images. Until the first release, you build the images yourself, which needs about 4 GB of RAM.
 - Anyone who can reach your domain can create an account. The application has no setting to close sign-up, and the self-hosting guide lists workarounds at the proxy.
-- The Chrome extension, the Raycast extension and the phone apps are not in any store yet.
-- The Chrome extension has its server address compiled in. For your own server, you edit one config file and build it. The Raycast extension has server preferences, so one build works with any server.
-- The phone apps reach only the hosted service at trackyourtime.dev. On your own server, use the web app in your phone's browser.
-- It has no timesheet approval and no expense or absence tracking. English is the only language.
+- The Chrome extension, the Raycast extension and the phone apps are not in any store yet. There is no Firefox extension and no desktop app.
 
 Pick Track Your Time if:
 
 - You bill clients by the hour, and your tracked time ends up on an invoice.
 - You want a timer in your browser, your menu bar and your phone, and it has to work without signal.
-- You want the data on your own server, and one person tracking is enough for now.
+- You want a free tracker whose data you can keep on your own server, move, or export at any time.
 - You want to connect your time data to other tools through an API, webhooks or an AI assistant.
 
 ## Using two patterns together

@@ -19,6 +19,7 @@ export const SELF_HOSTING_URL = `${DOCS_URL}self-hosting/`;
 export const API_DOCS_URL = `${DOCS_URL}api/`;
 /** Every route, with a link to the OpenAPI document (`/docs/openapi.json`). */
 export const API_REFERENCE_URL = `${DOCS_URL}api/reference/`;
+export const MCP_DOCS_URL = `${DOCS_URL}mcp/`;
 export const ISSUES_URL = `${REPO_URL}/issues`;
 export const CONTACT_EMAIL = "ricotrebeljahr@gmail.com";
 

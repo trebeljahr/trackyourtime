@@ -9,7 +9,7 @@ import { LOCALE_SCRIPT, NATIVE_SHELL_SCRIPT, THEME_SCRIPT } from "./pre-paint";
 import "@/styles/globals.css";
 
 const SITE_DESCRIPTION =
-  "Open-source time tracking, hosted or on your own server, with a timer for your browser, your Mac and your phone.";
+  "Free, open-source time tracking with a timer for your browser, your Mac and your phone. It works offline, hosted or on your own server.";
 
 export const metadata: Metadata = {
   // Resolves the card image below to an absolute URL, which every link

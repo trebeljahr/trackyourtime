@@ -72,12 +72,12 @@ const WEB_PAGES = [
   {
     title: "Home",
     url: `${WEB_URL}/`,
-    description: "What Track Your Time does, and how to use it: on the hosted service, or on your own server with the same app and the same client apps.",
+    description: "Free, open-source time tracking on every device, offline included. Reports, invoices, teams, import, export and an API, on the hosted service or on your own server with the same app.",
   },
   {
     title: "Chrome extension",
     url: `${WEB_URL}/extension/`,
-    description: "Start and stop the timer from the Chrome toolbar, add time you forgot, and keep tracking when the connection drops.",
+    description: "Start and stop the timer from the Chrome toolbar, add time you forgot, get entry suggestions from browsing activity, and keep tracking when the connection drops.",
   },
   {
     title: "Raycast extension",
@@ -87,7 +87,7 @@ const WEB_PAGES = [
   {
     title: "iPhone and Android",
     url: `${WEB_URL}/mobile/`,
-    description: "Track billable time on an iPhone or Android phone without signal. Changes sync when the connection returns.",
+    description: "Track billable time on an iPhone or Android phone without signal, against the hosted service or your own server. Changes sync when the connection returns.",
   },
 ];
 

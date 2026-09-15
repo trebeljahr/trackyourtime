@@ -14,7 +14,7 @@ import {
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { ShellEntryRedirect } from "@/components/marketing/shell-entry-redirect";
 import { localizedPath, marketingMetadata, marketingT, type Locale } from "@/i18n/marketing";
-import { API_REFERENCE_URL, DONATE_URL, REPO_URL, SELF_HOSTING_URL } from "@/lib/site-links";
+import { API_REFERENCE_URL, DONATE_URL, MCP_DOCS_URL, REPO_URL, SELF_HOSTING_URL } from "@/lib/site-links";
 
 /** Metadata for one locale of this page. `path` stays the English path. */
 export const landingMetadata = (locale: Locale): Metadata => {
@@ -72,67 +72,26 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
         }
       >
         <p>{t("landing.hero.body")}</p>
-        <p className="text-base">{t("landing.hero.beta")}</p>
+        <p className="text-base">{t("landing.hero.free")}</p>
       </Hero>
 
-      <Section title={t("landing.ownership.title")}>
-        <Prose>
-          <p>{t("landing.ownership.why")}</p>
-          <p>{t("landing.ownership.same")}</p>
-          <p>{t("landing.ownership.move")}</p>
-          <p>{t.rich("landing.ownership.install", { guide })}</p>
-          <p className="text-sm">{t("landing.ownership.memory")}</p>
-        </Prose>
-      </Section>
-
       <Feature
-        title={t("landing.timer.title")}
+        title={t("landing.everywhere.title")}
         shot={
           <Shot
             src="/marketing/popup.png"
-            alt={t("landing.timer.shotAlt")}
+            alt={t("landing.everywhere.shotAlt")}
             width={760}
             height={1200}
             className="mx-auto max-w-xs"
           />
         }
       >
-        <p>{t("landing.timer.forgotten")}</p>
-        <p>{t("landing.timer.offline")}</p>
+        <p>{t("landing.everywhere.forgotten")}</p>
+        <p>{t("landing.everywhere.offline")}</p>
       </Feature>
 
-      <Feature
-        reverse
-        title={t("landing.invoice.title")}
-        shot={
-          <Shot
-            src="/marketing/web-invoice.png"
-            alt={t("landing.invoice.shotAlt")}
-            width={1600}
-            height={1000}
-          />
-        }
-      >
-        <p>{t("landing.invoice.rates")}</p>
-        <p>{t("landing.invoice.once")}</p>
-      </Feature>
-
-      <Feature
-        title={t("landing.reports.title")}
-        shot={
-          <Shot
-            src="/marketing/web-reports.png"
-            alt={t("landing.reports.shotAlt")}
-            width={1600}
-            height={1000}
-          />
-        }
-      >
-        <p>{t("landing.reports.hours")}</p>
-        <p>{t("landing.reports.export")}</p>
-      </Feature>
-
-      <Section title={t("landing.surfaces.title")}>
+      <section className="mx-auto max-w-6xl px-6 pb-14">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {SURFACES.map((surface) => (
             <Link
@@ -147,6 +106,83 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
             </Link>
           ))}
         </div>
+      </section>
+
+      <Section title={t("landing.routine.title")}>
+        <Prose>
+          <p>{t("landing.routine.repeat")}</p>
+          <p>{t("landing.routine.guard")}</p>
+          <p>{t("landing.routine.suggestions")}</p>
+        </Prose>
+      </Section>
+
+      <Feature
+        reverse
+        title={t("landing.reports.title")}
+        shot={
+          <Shot
+            src="/marketing/web-reports.png"
+            alt={t("landing.reports.shotAlt")}
+            width={1600}
+            height={1000}
+          />
+        }
+      >
+        <p>{t("landing.reports.structure")}</p>
+        <p>{t("landing.reports.hours")}</p>
+        <p>{t("landing.reports.edit")}</p>
+      </Feature>
+
+      <Feature
+        title={t("landing.invoice.title")}
+        shot={
+          <Shot
+            src="/marketing/web-invoice.png"
+            alt={t("landing.invoice.shotAlt")}
+            width={1600}
+            height={1000}
+          />
+        }
+      >
+        <p>{t("landing.invoice.rates")}</p>
+        <p>{t("landing.invoice.once")}</p>
+      </Feature>
+
+      <Section title={t("landing.team.title")}>
+        <Prose>
+          <p>{t("landing.team.invite")}</p>
+          <p>{t("landing.team.limits")}</p>
+        </Prose>
+      </Section>
+
+      <Section title={t("landing.data.title")}>
+        <Prose>
+          <p>{t("landing.data.import")}</p>
+          <p>{t("landing.data.export")}</p>
+          <p>
+            {t.rich("landing.data.connect", {
+              reference: (chunks) => (
+                <a href={API_REFERENCE_URL} className={link}>
+                  {chunks}
+                </a>
+              ),
+              mcp: (chunks) => (
+                <a href={MCP_DOCS_URL} className={link}>
+                  {chunks}
+                </a>
+              ),
+            })}
+          </p>
+        </Prose>
+      </Section>
+
+      <Section title={t("landing.selfHost.title")}>
+        <Prose>
+          <p>{t("landing.selfHost.why")}</p>
+          <p>{t.rich("landing.selfHost.install", { guide })}</p>
+          <p>{t("landing.selfHost.clients")}</p>
+          <p className="text-sm">{t("landing.selfHost.limits")}</p>
+        </Prose>
       </Section>
 
       <Section title={t("landing.free.title")}>
@@ -176,28 +212,13 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
         </Prose>
       </Section>
 
-      <Section title={t("landing.audience.title")}>
-        <Prose>
-          <p>{t("landing.audience.body")}</p>
-        </Prose>
-      </Section>
-
       <Section title={t("landing.faq.title")}>
         <Questions
           items={[
             { q: t("landing.faq.hosting.q"), a: t("landing.faq.hosting.a") },
             { q: t("landing.faq.requirements.q"), a: t.rich("landing.faq.requirements.a", { guide }) },
-            { q: t("landing.faq.import.q"), a: t("landing.faq.import.a") },
-            {
-              q: t("landing.faq.api.q"),
-              a: t.rich("landing.faq.api.a", {
-                reference: (chunks) => (
-                  <a href={API_REFERENCE_URL} className={link}>
-                    {chunks}
-                  </a>
-                ),
-              }),
-            },
+            { q: t("landing.faq.clients.q"), a: t("landing.faq.clients.a") },
+            { q: t("landing.faq.stores.q"), a: t("landing.faq.stores.a") },
             { q: t("landing.faq.shutdown.q"), a: t("landing.faq.shutdown.a") },
           ]}
         />

@@ -46,17 +46,21 @@ export const EXCLUDED_DOC_IDS = [];
 export function renderHeader() {
   return `# ${PRODUCT_NAME}
 
-> Open-source time tracking. Use the hosted service at trackyourtime.dev, or run the same app on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline, and tracked hours become reports and invoices: a plain PDF, a ZUGFeRD PDF or an XRechnung file.
+> Free, open-source time tracking. Use the hosted service at trackyourtime.dev, or run the same app on your own server. A timer in the browser, the Mac menu bar and a phone app keeps working offline and syncs across devices, and tracked hours become reports and invoices: a plain PDF, a ZUGFeRD PDF or an XRechnung file.
 
-${PRODUCT_NAME} is for freelancers, consultants and small studios who bill clients by the hour. The code is on GitHub at ${REPO_URL} under AGPL-3.0-or-later. A hosted instance runs at ${WEB_URL} and is free while in beta. It runs the same code as a self-hosted server, and every client app works with both.
+${PRODUCT_NAME} is for freelancers, consultants and small studios who bill clients by the hour. The code is on GitHub at ${REPO_URL} under AGPL-3.0-or-later. A hosted instance runs at ${WEB_URL}. It is free, has no paid plan, and runs the same code as a self-hosted server.
 
 **What it does today**
 
 - Your data can stay on your own server. One Docker Compose file runs five containers on one server and one domain: the API, the web app, MongoDB, Redis and Caddy. Caddy gets the HTTPS certificate from Let's Encrypt.
-- Settings → Data → Move to another server copies a workspace between two servers, hosted to self-hosted or back.
 - You can export a whole workspace as JSON or CSV at any time. A CSV from another tool imports with a preview and a one-step undo.
 - The timer is where you already work. There is a Chrome extension, a Raycast extension with a menu bar clock and a start/stop hotkey, and iPhone and Android apps.
 - The web app, the extensions and the phone apps keep tracking without a connection. They send the queued changes when the connection returns.
+- Every client app works with the hosted service and with a self-hosted server. The Chrome extension and the phone apps let the person choose a server before signing in, and a self-hosted server accepts their store builds by default (\`TRUST_STORE_APPS=true\`). The Raycast extension has API URL and Web App URL preferences.
+- Recent entries, pinned favorites and description autocomplete fill in earlier details. A maximum timer length stops a forgotten timer or emails a reminder. The Chrome extension can suggest entries from browsing activity, off by default and kept on the computer until a suggestion is accepted.
+- Workspaces have members, email or link invitations, three roles (owner, admin, member) and per-member visibility of colleagues' time and money. Reports group by member.
+- Projects can carry a budget in hours or money, shown as progress.
+- Settings → Data → Move to another server copies a workspace between two servers, hosted to self-hosted or back.
 - A timer you stop on one device stops on every other open device at once, over a WebSocket.
 - Each project has an hourly rate. Reports show totals by project, client, task, tag, day, week or month, or list every entry. Both views export to CSV and PDF.
 - An invoice collects a client's unbilled billable hours. It downloads as a plain PDF, as a ZUGFeRD PDF or as an XRechnung XML file. An hour on an invoice cannot be billed again.
@@ -67,11 +71,10 @@ ${PRODUCT_NAME} is for freelancers, consultants and small studios who bill clien
 **Current limits**
 
 - Rates belong to projects and the workspace, not to people. Everyone in a workspace bills a project at the same rate.
+- There is no timesheet approval, no client login or shared report link, and no budget alert.
 - There is no tagged release yet, so there are no published images to pull. Until the first release, self-hosting means building the images yourself, which needs about 4 GB of RAM.
 - A self-hosted instance has open sign-up. The application has no setting to close registration. The self-hosting guide lists workarounds at the proxy.
 - The Chrome extension, the Raycast extension and the phone apps are not in any store yet.
-- The Chrome extension and the phone apps let the person choose a server before signing in. A self-hosted server accepts their store builds by default (\`TRUST_STORE_APPS=true\`).
-- The Raycast extension has API URL and Web App URL preferences, so one build reaches any server.
 
 **How to self-host**
 

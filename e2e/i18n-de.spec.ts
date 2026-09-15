@@ -152,7 +152,7 @@ test.describe("German (de)", () => {
     expect(response?.status()).toBe(200);
 
     await expect(page.getByTestId("marketing-title")).toContainText(
-      "Zeiterfassung auf deinem eigenen Server",
+      "Open-Source-Zeiterfassung auf jedem Gerät, das du nutzt",
     );
     await expect(page.locator("html")).toHaveAttribute("lang", "de");
     // The served <html> cannot carry lang="de" (one root layout for every

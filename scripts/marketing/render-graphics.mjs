@@ -118,7 +118,7 @@ const GRAPHICS = [
   },
   {
     out: "chrome/promo-small-440x280.png", width: 440, height: 280, needs: [],
-    html: async () => centered({ width: 440, height: 280, brandSize: 26, title: "Time tracking on your own server" }),
+    html: async () => centered({ width: 440, height: 280, brandSize: 26, title: "Open-source time tracking on every device" }),
   },
   {
     out: "chrome/promo-marquee-1400x560.png", width: 1400, height: 560, needs: ["ext/popup-running.png"],
@@ -156,7 +156,7 @@ const GRAPHICS = [
     out: "google-play/feature-graphic-1024x500.png", width: 1024, height: 500, needs: [],
     html: async () => centered({
       width: 1024, height: 500, brandSize: 36,
-      title: "Time tracking on your own server",
+      title: "Open-source time tracking on every device",
     }),
   },
 ];

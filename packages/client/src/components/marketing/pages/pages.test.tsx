@@ -11,7 +11,7 @@ import { SupportPage, supportMetadata } from "@/components/marketing/pages/suppo
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: () => undefined }) }));
 
 const PAGES = [
-  { name: "landing", Page: LandingPage, meta: landingMetadata, title: "Time tracking on our server or yours" },
+  { name: "landing", Page: LandingPage, meta: landingMetadata, title: "Open-source time tracking on every device you use" },
   { name: "privacy", Page: PrivacyPage, meta: privacyMetadata, title: "Privacy policy" },
   { name: "support", Page: SupportPage, meta: supportMetadata, title: "Get help with Track Your Time" },
   { name: "extension", Page: ExtensionPage, meta: extensionMetadata, title: "Your timer, one click away" },
@@ -36,7 +36,7 @@ describe("public pages in English", () => {
 
   it("keeps rich-text links and arguments", () => {
     const html = renderToStaticMarkup(<PrivacyPage locale="en" />);
-    expect(html).toContain("Last updated 13 September 2026");
+    expect(html).toContain("Last updated 15 September 2026");
     expect(html).toMatch(/<a href="mailto:[^"]+"[^>]*>[^<]+@[^<]+<\/a>/);
     expect(html).toContain("<strong>Your account.</strong>");
   });

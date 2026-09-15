@@ -63,6 +63,13 @@ export function ExtensionPage({ locale }: { locale: Locale }): React.ReactElemen
         </Prose>
       </Section>
 
+      <Section title={t("extension.activity.title")}>
+        <Prose>
+          <p>{t("extension.activity.body")}</p>
+          <p>{t("extension.activity.privacy")}</p>
+        </Prose>
+      </Section>
+
       <Section title={t("extension.offline.title")}>
         <Prose>
           <p>{t("extension.offline.body")}</p>
@@ -99,6 +106,7 @@ export function ExtensionPage({ locale }: { locale: Locale }): React.ReactElemen
             t("extension.permissions.idle"),
             t("extension.permissions.storage"),
             t("extension.permissions.server"),
+            t("extension.permissions.tabs"),
           ]}
         />
       </Section>
