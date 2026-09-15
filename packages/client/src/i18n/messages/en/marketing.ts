@@ -189,7 +189,7 @@ export const marketing = {
       title: "The short version",
       stores: "Track Your Time stores your account and the time you track, so that it can show them back to you.",
       noAnalytics: "It runs no analytics, shows no ads, and sells no data.",
-      noTracking: "It does not track what you do in other apps or on other websites.",
+      noTracking: "The service never learns which websites you visit or what you do in other apps.",
       control: "You can export all of your data at any time, and ask for all of it to be deleted.",
     },
     stored: {
@@ -231,10 +231,13 @@ export const marketing = {
       cookies:
         "The <strong>cookies</strong> permission reads one cookie: the Track Your Time web app’s session cookie, so you do not sign in twice. The extension reads no other cookie.",
       idle: "The <strong>idle</strong> permission tells the extension that the computer is idle or locked. The extension uses it only to ask what to do with idle time. It does not send idle state anywhere.",
-      network:
-        "The extension talks only to the Track Your Time server you sign in to: api.trackyourtime.dev, or another server you choose and allow.",
+      server:
+        "The extension sends your data to api.trackyourtime.dev. You can pick your own server in the popup instead. Chrome then asks you to allow access to that one server, and your data goes there. This policy does not cover that server.",
+      tabs: "The optional <strong>tabs</strong> permission is for activity capture. Chrome asks for it only when you turn on Settings → Activity. It lets the extension read the address and title of the active tab. The extension never reads what is on a page, and it runs no code inside the pages you visit.",
       activity:
-        "The optional <strong>tabs</strong> permission is requested only when you turn on activity capture. The extension then records the host name of the active tab, and its page title only if you choose, in storage on your computer. These records are deleted after 14 days unless you change that, and are never sent anywhere. Only an entry you accept reaches the server.",
+        "With activity capture on, the extension stores the site name of the active tab in the browser’s IndexedDB on your computer. It stores the page title only if you also switch on page titles. It deletes activity after 14 days, or after the period you set. It never records incognito tabs or the sites you exclude.",
+      activityLocal:
+        "The extension sends your activity nowhere. Only an entry you accept reaches the server, and that entry carries no site data.",
       limitedUse:
         "The use of information received from Chrome APIs adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements.",
     },

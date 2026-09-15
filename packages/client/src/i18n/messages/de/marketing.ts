@@ -186,7 +186,7 @@ export const marketing: Translation<typeof source> = {
       title: "Kurz gesagt",
       stores: "Track Your Time speichert dein Konto und die Zeit, die du erfasst, damit es sie dir wieder anzeigen kann.",
       noAnalytics: "Es gibt keine Analyse-Tools, keine Werbung und keinen Verkauf von Daten.",
-      noTracking: "Der Dienst verfolgt nicht, was du in anderen Apps oder auf anderen Websites tust.",
+      noTracking: "Der Dienst erfährt nie, welche Websites du besuchst oder was du in anderen Apps tust.",
       control: "Du kannst jederzeit alle deine Daten exportieren und verlangen, dass alles gelöscht wird.",
     },
     stored: {
@@ -228,10 +228,13 @@ export const marketing: Translation<typeof source> = {
       cookies:
         "Die Berechtigung <strong>cookies</strong> liest ein einziges Cookie: das Sitzungscookie der Web-App von Track Your Time, damit du dich nicht zweimal anmelden musst. Andere Cookies liest die Erweiterung nicht.",
       idle: "Die Berechtigung <strong>idle</strong> meldet der Erweiterung, dass der Computer inaktiv oder gesperrt ist. Die Erweiterung nutzt das nur, um zu fragen, was mit der inaktiven Zeit passieren soll. Den Inaktivitätsstatus sendet sie nirgendwohin.",
-      network:
-        "Die Erweiterung spricht nur mit dem Track-Your-Time-Server, bei dem du angemeldet bist: api.trackyourtime.dev oder einem anderen Server, den du auswählst und freigibst.",
+      server:
+        "Die Erweiterung sendet deine Daten an api.trackyourtime.dev. Im Popup kannst du stattdessen deinen eigenen Server wählen. Chrome fragt dich dann, ob die Erweiterung auf diesen einen Server zugreifen darf, und deine Daten gehen dorthin. Für diesen Server gilt diese Erklärung nicht.",
+      tabs: "Die optionale Berechtigung <strong>tabs</strong> dient der Aktivitätserfassung. Chrome fragt nur danach, wenn du Einstellungen → Aktivität einschaltest. Mit ihr liest die Erweiterung die Adresse und den Titel des aktiven Tabs. Den Inhalt einer Seite liest die Erweiterung nie, und in den Seiten, die du besuchst, führt sie keinen Code aus.",
       activity:
-        "Die optionale Berechtigung <strong>tabs</strong> wird nur angefragt, wenn du die Aktivitätserfassung einschaltest. Die Erweiterung speichert dann den Hostnamen des aktiven Tabs, und den Seitentitel nur, wenn du das willst, im Speicher auf deinem Computer. Diese Aufzeichnungen werden nach 14 Tagen gelöscht, sofern du das nicht änderst, und nie irgendwohin gesendet. Nur ein Eintrag, den du annimmst, erreicht den Server.",
+        "Ist die Aktivitätserfassung an, speichert die Erweiterung den Namen der Website im aktiven Tab in der IndexedDB des Browsers auf deinem Computer. Den Seitentitel speichert sie nur, wenn du auch Seitentitel einschaltest. Sie löscht die Aktivität nach 14 Tagen oder nach dem Zeitraum, den du einstellst. Inkognito-Tabs und Websites, die du ausschließt, erfasst sie nie.",
+      activityLocal:
+        "Deine Aktivität sendet die Erweiterung nirgendwohin. Nur ein Eintrag, den du übernimmst, erreicht den Server, und dieser Eintrag enthält keine Daten über Websites.",
       limitedUse:
         "Die Nutzung von Informationen, die über Chrome-APIs empfangen werden, entspricht der Chrome Web Store User Data Policy, einschließlich der Anforderungen zur eingeschränkten Nutzung (Limited Use).",
     },
