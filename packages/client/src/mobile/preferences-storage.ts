@@ -18,16 +18,44 @@
  * package in, and the whole module is inert unless `isNative()`.
  */
 
-import { type KeyValueStorage, webStorage } from "@starter/core";
+import {
+  type KeyValueStorage,
+  OFFLINE_QUEUE_OWNER_STORAGE_KEY,
+  OFFLINE_QUEUE_STORAGE_KEY,
+  webStorage,
+} from "@starter/core";
 
 import { isNative } from "./bridge";
 
 /**
- * Written into Preferences once the localStorage hand-over below has run.
- * Preferences is wiped on delete, so a reinstall re-runs a migration that has
- * nothing left to find — which is harmless and correct.
+ * The single marker builds up to 2026-09-15 wrote, once for every store at
+ * once. Whichever store initialised first claimed it, so the other one never
+ * migrated: a device that had already run the queue hand-over skipped the
+ * workspace keys, and one upgrading from a pre-Preferences build could skip
+ * the queue if the workspace store came first.
+ *
+ * It is still read, and only for the keys it was introduced for. For those it
+ * means "probably handed over already", which is not the same as "handed
+ * over": it cannot say which store wrote it. So a legacy-covered key still
+ * adopts a localStorage copy when Preferences holds nothing under that key —
+ * rows that can only be stranded ones — but never removes a localStorage copy
+ * it did not adopt. Keys added later (the workspace keys) ignore it entirely.
  */
-const MIGRATION_MARKER_KEY = "trackyourtime.preferences-migrated";
+const LEGACY_MIGRATION_MARKER_KEY = "trackyourtime.preferences-migrated";
+const LEGACY_MARKER_COVERS: ReadonlySet<string> = new Set([
+  OFFLINE_QUEUE_STORAGE_KEY,
+  OFFLINE_QUEUE_OWNER_STORAGE_KEY,
+]);
+
+/**
+ * Written into Preferences once a key's localStorage hand-over below has run —
+ * one marker PER KEY, because several stores migrate different keys and each
+ * must run its own hand-over whichever of them initialises first. Preferences
+ * is wiped on delete, so a reinstall re-runs a migration that has nothing left
+ * to find — which is harmless and correct.
+ */
+export const migrationMarkerKey = (key: string): string =>
+  `${LEGACY_MIGRATION_MARKER_KEY}:${key}`;
 
 /** The plugin surface this module uses, so nothing here holds the Proxy. */
 type PreferencesPlugin = {
@@ -83,36 +111,52 @@ const migrateFromLocalStorage = async (
   plugin: PreferencesPlugin,
   keys: readonly string[],
 ): Promise<void> => {
-  if (keys.length === 0) return;
-
-  const marker = await plugin.get({ key: MIGRATION_MARKER_KEY });
-  if (marker.value) return;
+  let legacyMarker: Promise<boolean> | null = null;
+  const legacyMarkerPresent = (): Promise<boolean> => {
+    legacyMarker ??= plugin
+      .get({ key: LEGACY_MIGRATION_MARKER_KEY })
+      .then(({ value }) => Boolean(value));
+    return legacyMarker;
+  };
 
   for (const key of keys) {
+    const markerKey = migrationMarkerKey(key);
+    const marker = await plugin.get({ key: markerKey });
+    if (marker.value) continue;
+
+    const coveredByLegacy =
+      LEGACY_MARKER_COVERS.has(key) && (await legacyMarkerPresent());
+
     let local: string | null = null;
     try {
       local = window.localStorage.getItem(key);
     } catch {
       local = null;
     }
-    if (local === null || local === "") continue;
 
-    // Never overwrite: if this build has already written something here, the
-    // Preferences copy is the newer one and localStorage is the leftover.
-    const existing = await plugin.get({ key });
-    if (existing.value === null || existing.value === undefined) {
-      await plugin.set({ key, value: local });
+    if (local !== null && local !== "") {
+      // Never overwrite: if this build has already written something here, the
+      // Preferences copy is the newer one and localStorage is the leftover.
+      const existing = await plugin.get({ key });
+      const adopt = existing.value === null || existing.value === undefined;
+      if (adopt) await plugin.set({ key, value: local });
+
+      // Under the legacy marker a copy that was not adopted may be rows the
+      // old marker stranded, not a leftover — keep it rather than delete it.
+      if (adopt || !coveredByLegacy) {
+        try {
+          window.localStorage.removeItem(key);
+        } catch {
+          /* storage denied — the copy across already happened, which is the
+             half that matters */
+        }
+      }
     }
 
-    try {
-      window.localStorage.removeItem(key);
-    } catch {
-      /* storage denied — the copy across already happened, which is the half
-         that matters */
-    }
+    // Per key and after the key's own work, so a throw part-way leaves the
+    // remaining keys to the next launch rather than claiming them.
+    await plugin.set({ key: markerKey, value: "1" });
   }
-
-  await plugin.set({ key: MIGRATION_MARKER_KEY, value: "1" });
 };
 
 export type PreferencesStorageOptions = {

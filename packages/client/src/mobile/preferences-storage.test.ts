@@ -11,10 +11,24 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { preferencesStorage } from "@/mobile/preferences-storage";
+import {
+  ACTIVE_WORKSPACE_STORAGE_KEY,
+  OFFLINE_QUEUE_OWNER_STORAGE_KEY,
+  OFFLINE_QUEUE_STORAGE_KEY,
+} from "@starter/core";
 
-const QUEUE_KEY = "trackyourtime.offline-queue";
-const MARKER_KEY = "trackyourtime.preferences-migrated";
+import {
+  migrationMarkerKey,
+  preferencesStorage,
+} from "@/mobile/preferences-storage";
+
+const QUEUE_KEY = OFFLINE_QUEUE_STORAGE_KEY;
+const OWNER_KEY = OFFLINE_QUEUE_OWNER_STORAGE_KEY;
+const WORKSPACE_KEY = ACTIVE_WORKSPACE_STORAGE_KEY;
+const KNOWN_KEY = "trackyourtime.known-workspaces";
+/** The one global marker builds before per-key markers wrote. */
+const LEGACY_MARKER_KEY = "trackyourtime.preferences-migrated";
+const MARKER_KEY = migrationMarkerKey(QUEUE_KEY);
 
 /** A fake @capacitor/preferences: the three calls, over a Map. */
 const fakePlugin = (seed: Record<string, string> = {}) => {
@@ -144,5 +158,122 @@ describe("preferencesStorage", () => {
     // hand-over happened.
     expect(window.localStorage.getItem(QUEUE_KEY)).toBe("queued");
     expect(plugin.store.get(MARKER_KEY)).toBeUndefined();
+  });
+
+  describe("with several stores migrating different keys", () => {
+    const queueStore = (plugin: ReturnType<typeof fakePlugin>) =>
+      preferencesStorage({
+        migrateKeys: [QUEUE_KEY, OWNER_KEY],
+        loadPlugin: async () => plugin,
+      });
+    const workspaceStore = (plugin: ReturnType<typeof fakePlugin>) =>
+      preferencesStorage({
+        migrateKeys: [WORKSPACE_KEY, KNOWN_KEY],
+        loadPlugin: async () => plugin,
+      });
+
+    const seedLocal = () => {
+      window.localStorage.setItem(QUEUE_KEY, "queue");
+      window.localStorage.setItem(OWNER_KEY, "owner");
+      window.localStorage.setItem(WORKSPACE_KEY, "ws-1");
+      window.localStorage.setItem(KNOWN_KEY, "known");
+    };
+
+    it.each([
+      ["queue first", ["queue", "workspace"]],
+      ["workspace first", ["workspace", "queue"]],
+    ] as const)("migrates both, %s", async (_label, order) => {
+      seedLocal();
+      const plugin = fakePlugin();
+      const stores = {
+        queue: queueStore(plugin),
+        workspace: workspaceStore(plugin),
+      };
+
+      for (const name of order) await stores[name].getItem("anything");
+
+      expect(await stores.queue.getItem(QUEUE_KEY)).toBe("queue");
+      expect(await stores.queue.getItem(OWNER_KEY)).toBe("owner");
+      expect(await stores.workspace.getItem(WORKSPACE_KEY)).toBe("ws-1");
+      expect(await stores.workspace.getItem(KNOWN_KEY)).toBe("known");
+      for (const key of [QUEUE_KEY, OWNER_KEY, WORKSPACE_KEY, KNOWN_KEY]) {
+        expect(window.localStorage.getItem(key)).toBeNull();
+        expect(plugin.store.get(migrationMarkerKey(key))).toBe("1");
+      }
+    });
+
+    it("migrates both when their first calls race", async () => {
+      seedLocal();
+      const plugin = fakePlugin();
+      const queue = queueStore(plugin);
+      const workspace = workspaceStore(plugin);
+
+      const [queued, active] = await Promise.all([
+        queue.getItem(QUEUE_KEY),
+        workspace.getItem(WORKSPACE_KEY),
+      ]);
+      expect(queued).toBe("queue");
+      expect(active).toBe("ws-1");
+    });
+
+    it("still migrates the workspace keys on a device with the old global marker", async () => {
+      // The queue hand-over already ran under the old marker: its localStorage
+      // copy is gone and Preferences holds the live queue.
+      window.localStorage.setItem(WORKSPACE_KEY, "ws-1");
+      window.localStorage.setItem(KNOWN_KEY, "known");
+      const plugin = fakePlugin({
+        [LEGACY_MARKER_KEY]: "1",
+        [QUEUE_KEY]: "live-queue",
+      });
+
+      const workspace = workspaceStore(plugin);
+      expect(await workspace.getItem(WORKSPACE_KEY)).toBe("ws-1");
+      expect(await workspace.getItem(KNOWN_KEY)).toBe("known");
+      expect(window.localStorage.getItem(WORKSPACE_KEY)).toBeNull();
+      expect(window.localStorage.getItem(KNOWN_KEY)).toBeNull();
+
+      const queue = queueStore(plugin);
+      expect(await queue.getItem(QUEUE_KEY)).toBe("live-queue");
+    });
+
+    it("does not let the old global marker's queue copy clobber or delete anything", async () => {
+      // Under the old marker Preferences already holds the queue. Something is
+      // in localStorage under the same key too; it is neither written over the
+      // live queue nor deleted, since the old marker cannot say whether it is
+      // a leftover or rows it stranded.
+      window.localStorage.setItem(QUEUE_KEY, "local-rows");
+      const plugin = fakePlugin({
+        [LEGACY_MARKER_KEY]: "1",
+        [QUEUE_KEY]: "live-queue",
+      });
+
+      const queue = queueStore(plugin);
+      expect(await queue.getItem(QUEUE_KEY)).toBe("live-queue");
+      expect(window.localStorage.getItem(QUEUE_KEY)).toBe("local-rows");
+      expect(plugin.store.get(MARKER_KEY)).toBe("1");
+    });
+
+    it("adopts queue rows the old global marker stranded when Preferences has none", async () => {
+      // The workspace store initialised first on an upgrade from a
+      // pre-Preferences build and claimed the old marker for everyone.
+      window.localStorage.setItem(QUEUE_KEY, "stranded");
+      const plugin = fakePlugin({ [LEGACY_MARKER_KEY]: "1" });
+
+      const queue = queueStore(plugin);
+      expect(await queue.getItem(QUEUE_KEY)).toBe("stranded");
+      expect(window.localStorage.getItem(QUEUE_KEY)).toBeNull();
+    });
+
+    it("never overwrites a workspace value the native store already holds", async () => {
+      window.localStorage.setItem(WORKSPACE_KEY, "stale");
+      const plugin = fakePlugin({
+        [LEGACY_MARKER_KEY]: "1",
+        [WORKSPACE_KEY]: "live",
+      });
+
+      const workspace = workspaceStore(plugin);
+      expect(await workspace.getItem(WORKSPACE_KEY)).toBe("live");
+      expect(window.localStorage.getItem(WORKSPACE_KEY)).toBeNull();
+    });
   });
 });
