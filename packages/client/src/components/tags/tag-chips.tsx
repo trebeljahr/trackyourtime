@@ -75,7 +75,10 @@ export function TagChips({
         <span
           key={tag.id}
           title={tag.name}
-          className="flex h-5 max-w-24 shrink-0 items-center gap-1 rounded-full border px-1.5 text-[11px] leading-none"
+          // Shrinkable, not `shrink-0`: the entry row's tag column goes down
+          // to 5rem and the trigger clips its overflow, so a chip that cannot
+          // shrink loses its right edge instead of truncating its name.
+          className="flex h-5 min-w-0 max-w-24 items-center gap-1 rounded-full border px-1.5 text-[11px] leading-none"
           style={{
             // 22% alpha over the tag colour reads on both themes without a
             // per-theme palette; the border carries the hue at full strength.
