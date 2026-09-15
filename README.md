@@ -1,15 +1,21 @@
 # Track Your Time
 
-A self-hostable time tracker: clients, projects, tasks, tags, billable rates, reports and invoices, with a web app, a browser extension and a Raycast extension sharing one backend.
+Free, open-source time tracking for freelancers and small teams who bill by the hour.
 
-The product was called tracktime until September 2026. The repository, images, bundle ids and every other identifier were renamed to `trackyourtime` before the first release.
+Start a timer in the web app, the Chrome extension, Raycast on your Mac, or the iPhone and Android apps. Each one keeps counting without a connection and sends your changes when the connection comes back. Stop the timer on your phone, and your laptop shows it stopped.
+
+At the end of the month, the hours become a report, a PDF invoice, or a ZUGFeRD or XRechnung e-invoice. Invite colleagues, and each person sees only their own time until you let them see more. Import a CSV from another tracker, take everything out as JSON or CSV, or connect other tools through the REST API.
+
+There's no paid plan, now or later. Use the hosted version at <https://trackyourtime.dev>, or run the same app on your own server from one compose file. The extensions and the phone apps work with either, because each one asks for a server address.
+
+The extensions and the phone apps aren't in their stores yet, and no release is tagged. Today you build them, and the self-host images, from source. [Not there yet](#not-there-yet) lists the other gaps.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![build-and-deploy](https://github.com/trebeljahr/trackyourtime/actions/workflows/build-and-deploy.yml/badge.svg?branch=main)](https://github.com/trebeljahr/trackyourtime/actions/workflows/build-and-deploy.yml?query=branch%3Amain)
 
-Hosted instance: <https://trackyourtime.dev>, with the API on its own host at <https://api.trackyourtime.dev> — [`docs/deploy.md`](docs/deploy.md) explains the topology and why the domain moved.
+The product was called tracktime until September 2026. The repository, images, bundle ids and every other identifier were renamed to `trackyourtime` before the first release.
 
-> The build badge is pinned to `main` and reports the real state of the pipeline. It is not green — see [Not there yet](#not-there-yet).
+The hosted web app is at <https://trackyourtime.dev>, with the API on its own host at <https://api.trackyourtime.dev>. [`docs/deploy.md`](docs/deploy.md) explains the topology and why the domain moved.
 
 <!-- Screenshot placeholder: add a capture of the /app/track screen at docs/screenshots/app.png,
      then replace this comment with:
@@ -17,11 +23,9 @@ Hosted instance: <https://trackyourtime.dev>, with the API on its own host at <h
 
 ## What it is
 
-Time tracking for freelance and consulting work: start a timer, tag it with a client, project and task, and get the hours back as a report, a CSV, a PDF or an invoice. Rates are per project, snapshotted onto each entry when it is written, so changing a project's rate never rewrites what you already billed.
+A pnpm monorepo: one Express + tRPC API, one Next.js web client exported as static files, and shared packages (`shared`, `core`) that the extension, Raycast, the phone apps and the MCP server reuse. Two Docker images and a MongoDB are the whole production footprint; Redis is optional. There is no feature gate between the hosted version and a self-hosted one, and no telemetry you have not configured yourself.
 
-It is a pnpm monorepo — one Express + tRPC API, one Next.js web client, and shared packages the other clients reuse. Two Docker images and a MongoDB is the whole production footprint; Redis is optional. There is no SaaS tier gate and no telemetry you have not configured yourself.
-
-Everything is scoped to a workspace, but today that is effectively one workspace per person — see [Not there yet](#not-there-yet) before assuming team features.
+Everything is scoped to a workspace. A person can belong to several, and a workspace can have many members — see [Teams](#teams).
 
 ## Where things live
 
@@ -40,71 +44,87 @@ Everything is scoped to a workspace, but today that is effectively one workspace
 
 - **Timer with start / stop / continue / discard**, plus manual entry creation and editing. Entries carry a description, project, task, tags, a billable flag, a snapshotted hourly rate and currency, a source (web/desktop/mobile/extension/api/import) and the time zone they were recorded in.
 - **Favorites and quick-start recents.** Favorites are reorderable one-tap job templates; quick-start collapses your recent entries into distinct combinations. Quick starts deliberately open untagged, so the same job tagged differently one day does not fragment the list.
-- **Idle detection**, configurable per user (threshold, behaviour, whether a screen lock counts immediately), with a per-project behaviour override on the project itself.
-- **Runaway-timer guard.** A maximum entry duration, evaluated lazily whenever something resolves what is running — asking what is current, starting another timer, joining the sync room. There is no cron: nothing pushes you a notification on Saturday about Friday's forgotten timer, it is caught the next time you look.
+- **Description autocomplete** from earlier entries, searched server-side. Tab takes the name; Cmd/Ctrl+Enter also takes the project, task, tags and billable flag.
+- **Command palette** (Cmd/Ctrl+K) for timer actions, every page, and clients, projects, tasks and tags. On a phone it opens from the More drawer.
+- **Idle detection** with ask, pause-and-resume, keep-running or stop, and a per-project override.
+- **Runaway-timer guard.** A maximum entry duration that asks, caps or stops a forgotten timer. A scheduler job (`services/scheduler/`) checks running timers every 5 minutes and sends one reminder email per timer; the lazy check on every read of the running timer stays as the fallback. `SCHEDULER_ENABLED=false` turns the job off.
 
 ### Catalog
 
-- **Clients → Projects → Tasks**, plus **Tags** as an orthogonal dimension (many per entry, across projects).
-- Full CRUD. Clients, projects and tasks have an archive toggle and a delete that always deletes — never the tracked time, though: entries and favorites are detached and survive as project-less rows. Tags follow a different rule: a tag that still labels tracked time is archived instead of deleted, and only an unreferenced tag is removed outright (with a `$pull` sweep afterwards for anything written during the check).
-- Projects carry colour, client, billable default, hourly rate, estimated hours, a budget amount and currency, and an idle-behaviour override.
+- **Clients → Projects**, one two-level hierarchy. **Tasks** are workspace-wide and sit beside it, so an entry carries a project and a task as two independent references. **Tags** are a third dimension, many per entry.
+- Full CRUD. Clients, projects and tasks have an archive toggle and a delete that always deletes — never the tracked time, though: entries and favorites are detached and survive as project-less rows. Tags follow a different rule: a tag that still labels tracked time is archived instead of deleted, and only an unreferenced tag is removed outright.
+- Projects carry colour, client, billable default, hourly rate, estimated hours, a budget amount and currency, and an idle-behaviour override. A billing change can also reprice the project's un-invoiced entries.
 
 ### Views
 
 - **Track** — the timer plus the day's entries.
 - **Weekly timesheet grid** — rows of project + task, columns of weekday, editable cells. The edit rules are explicit and unit-tested: the running entry's cell is never writable, an empty cell creates exactly one entry, a single same-day entry has its end moved (typing 0 deletes it), and a midnight-crossing or multi-entry cell is refused read-only with a breakdown and a link through rather than guessing.
-- **Calendar** — a time grid positioned by clock time, with drag editing, zoom, clustering for dense bursts of short entries, and an undo stack.
+- **Calendar** — day, week, month and year views positioned by clock time, with drag editing, zoom, clustering for dense bursts of short entries, and an undo stack.
 
 ### Reports and money
 
-- **One Reports screen with two views** over the same URL-backed filters: Totals (grouped breakdown by project/client/task/tag/day/week/month, zero-filled timeline, budgets; each group drills down into its entries) and Entries (paginated, sortable, bulk-editable entry log whose totals span the whole range). Switching views keeps every filter. The old `/reports/summary`, `/reports/detailed` and `/reports/weekly` addresses redirect to it; the REST API still serves summary, detailed and weekly reports.
+- **One Reports screen with two views** over the same URL-backed filters: Totals (grouped by client, project, task, tag, member, day, week or month, with a zero-filled timeline and budgets; each group drills down into its entries) and Entries (paginated, sortable, bulk-editable, with totals that span the whole range). The old `/app/reports/summary`, `/detailed` and `/weekly` addresses redirect to it; the REST API still serves summary, detailed and weekly reports.
 - **CSV and PDF export** for both views, paginating the full range so an export is never a page of what you were looking at.
 - **Invoices** built from un-invoiced billable time. Preview rolls up line items without writing; creating an invoice re-gathers server-side rather than trusting the client's line items, assigns a per-year sequential number, and stamps the invoice onto every entry it billed. Draft/sent/paid status, PDF export, and a guard that refuses edits to entries already on an invoice.
+- **Business profile and client billing details.** The issuer and recipient are copied onto the invoice when it is created, so a later address change does not rewrite a document a customer holds.
+- **E-invoices.** An invoice also downloads as a ZUGFeRD PDF (PDF/A-3b with the EN 16931 XML embedded) or an XRechnung 3.0 XML file. CI runs every sample through the Mustang and KoSIT validators. See [`docs-site/docs/e-invoices.md`](docs-site/docs/e-invoices.md).
 - **Project budgets and estimates** — a lifetime roll-up of hours and earnings against estimated hours and budget, computed from each entry's own snapshotted rate.
 
 > Reporting grouped by tag gives each of an entry's tags that entry's **full** duration, so tag rows sum to more than the range total on purpose. The alternative — splitting a duration across tags — would invent time nobody spent. The screen says so where it happens; the report's own totals stay single-counted.
+
+### Teams
+
+- **Workspaces, members and invitations** through the `workspaces`, `members` and `invitations` tRPC routers. Invite by email, or copy the invitation link when the server has no mail transport. The public `/invite/?id=` page accepts it, before or after sign-in.
+- **Roles** `owner`, `admin` and `member`, with ownership transfer. A workspace always keeps an owner.
+- **Two visibility flags per member**: colleagues' time, and colleagues' money. Every surface answers both server-side — reports, entry lists, exports, the REST API and the sync socket, which sends each member only what they may see.
+- **A workspace switcher** in the app shell. Each client keeps its own choice and names the workspace on every request.
+- Invoices are limited to owners and admins who may see both time and money.
 
 ### Data in and out
 
 - **Import from a delimited file.** Headers are matched to roles by an alias table and the values decide the granularity, so it is column shapes rather than vendor-specific formats. Day/month order is decided per file and stated on screen when nothing in the data settles it.
 - **Preview then commit.** The commit re-parses the same input rather than trusting the preview it handed back, so a tampered preview cannot write something you never approved.
 - **Every import is one undoable batch**, deleted by an indexed id — and refused if any of its entries have since landed on an invoice.
-- **Workspace export**: JSON (lossless — colours, archived rows, project rates, catalog referenced by name so it restores into an empty or different workspace) and CSV (written in the exact column shape the importer reads back).
+- **Workspace export**: JSON (lossless — colours, archived rows, project rates, the business profile, catalog referenced by name so it restores into an empty or different workspace) and CSV (written in the exact column shape the importer reads back).
+- **Move to another server** (Settings → Data): the same export and import, driven from one device, hosted → self-hosted and back.
+- **REST API and webhooks.** `/api/v1` covers entries, clients, projects, tasks, tags, reports and the current user, with scoped API tokens, an OpenAPI document and RFC 9457 errors. Signed webhooks report entry and invoice events. See [`docs/api.md`](docs/api.md) and the [MCP server](#mcp-server).
 
 ### Platform
 
-- **Realtime multi-device sync** over WebSocket on the same Express process. The upgrade is authenticated and refused with a real 401/403; mutations carry a per-tab origin id echoed back, so a client ignores its own echo.
-- **Offline queue** in the web app and browser extension: entry mutations made offline are queued and replayed on reconnect, with optimistic temporary ids until the server answers.
-- **Sign-in for clients without a cookie jar** without minting API tokens. Every client signs in normally and sends the resulting session token as `Authorization: Bearer <token>`; clients that cannot show a form (Raycast, a CLI) use the RFC 8628 device flow, approved in an already signed-in browser. Sessions are named by their client under Settings → Devices, where any of them can be revoked — killing HTTP and WebSocket at once.
-- **Split settings**: money and calendar conventions per workspace (default rate, currency, week start), rendering per user (12h/24h, h:m:s vs decimal, idle, limits).
-- Optional Google sign-in, optional Sentry/GlitchTip error reporting, optional Listmonk + SES newsletter double-opt-in.
+- **Realtime multi-device sync** over WebSocket on the same Express process. The upgrade is authenticated, a socket joins only its own account's room, and a revoked session closes its socket within a minute.
+- **Offline queue** in the web app, the phone apps, the browser extension and Raycast: entry mutations made offline are queued and replayed in order on reconnect, with optimistic temporary ids until the server answers. Each queued row records the account, workspace and server it was queued for, and replays only there.
+- **Sign-in for clients without a cookie jar.** Every first-party client signs in normally and sends the resulting session token as `Authorization: Bearer <token>`; clients that cannot show a form (Raycast, a CLI) use the RFC 8628 device flow, approved in an already signed-in browser. Sessions are named by their client under Settings → Devices, where any of them can be revoked. API tokens are a separate credential, for the REST API only.
+- **Account security**: TOTP two-factor with backup codes, change password, change email, and account deletion from Settings → Account. Email verification is required whenever the server has a mail transport.
+- **English and German** in the web app, the phone apps, the browser extension, invoices, report PDFs and email, plus German public pages under `/de/`. Raycast stays English.
+- **Split settings**: money and calendar conventions per workspace (default rate, currency, week start), rendering per user (12h/24h, h:m:s vs decimal, theme, language).
+- Optional Google sign-in (web app only), optional Sentry/GlitchTip error reporting, optional Listmonk + SES newsletter double-opt-in.
 
 ## Clients
 
 | Client | State |
 | --- | --- |
-| **Web app** (Next.js static export) | Shipped, and the reference implementation. 12 signed-in routes: track, timesheet, calendar, reports, clients, projects, tasks, tags, invoices, settings, profile, device. |
-| **Browser extension** (Chrome MV3) | Working and genuinely useful — popup only, no content scripts. Timer, badge, catalog, favorites, idle and the offline queue. Version 0.1.0, not published to any store; you load it unpacked. |
-| **Raycast extension** (macOS) | Working and broad — 4 commands (menu bar timer, a live one-second timer view, an entries browser and an open-dashboard action), with full catalog CRUD reached through pushed forms rather than commands of its own. Not published to the Raycast store, and it has **no offline queue**: a mutation made without connectivity is lost, unlike the same action from the web app or extension. |
-| **Desktop** (Electron) | Real but thin. Window lifecycle, persisted fullscreen preference, external-link handling and `powerMonitor`-backed idle reporting over IPC. No tray icon, no global shortcuts, no auto-update, no signing setup. Never built or distributed. |
+| **Web app** (Next.js static export) | Shipped, and the reference implementation. 13 signed-in screens under `/app/`: track, timesheet, calendar, reports, clients, projects, tasks, tags, invoices, members, settings, profile, device. |
+| **Browser extension** (Chrome MV3) | Working. Popup only, no content scripts: timer, badge, catalog, favorites, idle, the offline queue, a server picker, and optional activity-based entry suggestions. English and German. Version 0.1.0, not in the Chrome Web Store; you load it unpacked. |
+| **Raycast extension** (macOS) | Working. 5 commands — menu bar timer, Start / Stop Timer (hotkey-able, no window), a live timer view, Show All Time and Open Dashboard — with catalog CRUD through pushed forms and an offline queue (`packages/raycast/src/lib/offline.ts`). Not in the Raycast Store. |
+| **iOS and Android** (Capacitor) | Working from source. `ios/` and `android/` are committed, the bundle id is `com.trebeljahr.trackyourtime`, and `pnpm build:mobile` builds and syncs both. Keychain/Keystore session token, offline queue and running timer that survive an OS kill, safe areas, a bottom tab bar, and a server picker on the login screen. Not in the App Store or Google Play. See [`docs/mobile-app-plan.md`](docs/mobile-app-plan.md). |
+| **Desktop** (Electron) | Real but thin, and never packaged. Window lifecycle, persisted fullscreen preference, external-link handling and `powerMonitor`-backed idle reporting over IPC. No tray, no global shortcuts, no auto-update, no signing. [`docs/desktop-app-plan.md`](docs/desktop-app-plan.md) is the plan. |
 | **Desktop** (Tauri) | Scaffolding only — 24 lines of Rust with an empty setup and a Steamworks block inherited from the starter this repo was generated from. Do not count it as a desktop app. |
-| **Mobile** (Capacitor) | Config and a small JS bridge only. No `ios/` or `android/` directory exists, the bundle id is still `com.example.trackyourtime`, and nothing has been run on a device — despite the `dev:ios` / `dev:android` / `build:mobile` scripts existing in `package.json`. |
-| **CLI** | Does not exist. `trackyourtime-cli` appears only as an allowlisted device-flow client id. |
+| **CLI** | No end-user CLI. `trackyourtime-cli` appears only as an allowlisted device-flow client id. The server image does ship an admin CLI for self-hosters (`node dist/cli/admin.js`). |
 | **MCP server** (`packages/mcp`) | Working. Lets Claude Desktop, Claude Code or any MCP client start and stop timers, log time, list entries, manage the catalog and run the summary report, through the public REST API with an API token. stdio only, not published to npm — run it from a clone. See [MCP server](#mcp-server). |
 
 ## Not there yet
 
-Stated plainly, because the code has more scaffolding than product in these areas:
-
-- **Teams, invitations and workspace switching.** The substrate is real — every user gets a personal workspace, there is a member model with roles and visibility flags, and one middleware scopes every query — and better-auth's `organization` plugin is mounted, so its create-organization, invite-member, list-members and set-role endpoints are callable under `/api/auth/*`. What is missing is everything above them: **no tRPC router, no invite UI, no member list, no role editing and no workspace switcher**. The invitation email links to `/invite/<id>`, and that page does not exist, so an invitation sent today lands on a 404. The realtime layer is not ready either: every member currently receives the identical sync payload, which is only correct while a workspace has one member. Treat this as a single-user app.
-- **Timesheet approvals.** Nothing. No submitted/approved state, no approver role, no lock-after-approval, no notifications. The timesheet is an editing grid, not a submittable document. Invoice status is invoice lifecycle, not time approval.
-- **Time off, PTO, holidays, absence.** No model, no screen, no shared type. There is no non-working-day concept, so nothing computes capacity or utilization.
-- **Notifications of any kind.** No web push, no email digests, no scheduler, no job runner. The runaway guard is lazy on purpose and says so in its own source.
-- **SaaS subscription billing.** There is no Stripe service in the server at all — only a `billing.status` query that reports which `STRIPE_*` env vars are missing so the UI can show a developer notice. (Watch the word: "Billing" in the settings screen means *your clients' billable rates*, not a subscription.)
-- **Avatar upload / object storage.** The server stores no files. `avatarUrl` is a field with no upload path behind it.
-- **Search, a command palette, and third-party integrations.** No global search, no palette, no calendar sync, no issue-tracker or commit import. Import is file-based only.
-- **Email verification is off.** Password reset, verification and invitation mail goes out over SMTP once `SMTP_HOST` is set, and falls back to logging the URL to the server console when no transport is configured at all — which is the default local setup. `requireEmailVerification` is still `false`.
-- **CI has never gone green.** The build-and-deploy workflow has two runs in its history — one failed at the build/test job, the other at E2E — so the Docker image builds and the deploy path have never actually executed. The self-host images are published by a separate tag-triggered workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)), which has not run either — no `v*` tag has been cut yet, so `docker-compose.selfhost.yml`, which only pulls, has nothing to pull until one is, and running it means the opt-in local build in `docker-compose.selfhost.build.yml`.
+- **No release.** No git tag exists, so no self-host image has been published. `docker-compose.selfhost.yml` only pulls, which means a first start today needs the build override in `docker-compose.selfhost.build.yml` and about 4 GB of memory. [`docs/releasing.md`](docs/releasing.md) is the release process.
+- **No store listings.** The Chrome extension, the Raycast extension and the iPhone and Android apps all build from source.
+- **Sign-up cannot be closed in the app.** Anyone who reaches a server can register. The self-hosting guide shows how to [block the sign-up endpoint at the proxy](docs/self-hosting.md#accounts-and-what-admin-means-here).
+- **No timesheet approval.** No submitted/approved state, no approver role, no lock-after-approval. Invoice status is invoice lifecycle, not time approval.
+- **Rates are per project, not per person.** An entry takes its project's rate, else the workspace default, so everyone on a project bills at the same rate.
+- **No client portal or shared reports.** A client cannot sign in or open a link to follow a project. Send them a report or an invoice as a PDF.
+- **No Firefox extension and no desktop app.** The extension is Chrome MV3 only; see the Electron and Tauri rows above.
+- **Two-factor sign-in does not work in the phone apps or the extension's own sign-in form.** The second step needs a cookie those clients cannot send. Raycast's device flow is unaffected, because the approval happens in a browser. Google sign-in is web-only too.
+- **Time off, PTO, holidays, absence.** No model and no screen, so nothing computes capacity or utilization.
+- **Notifications** are one reminder email per runaway timer. No web push and no digests.
+- **Avatar upload.** The server stores no files. `avatarUrl` is a field with no upload path behind it.
 
 ## Self-hosting
 
@@ -126,7 +146,7 @@ docker compose -f docker-compose.selfhost.yml up -d
 
 | File | Purpose |
 | --- | --- |
-| `docker-compose.selfhost.yml` | **Self-hosting.** Everything on one domain behind Caddy, with Mongo and Redis included. Pulls the published images. The one you want. |
+| `docker-compose.selfhost.yml` | **Self-hosting.** Everything on one domain behind Caddy, with Mongo and Redis included. Pulls the published images — none exist until the first release is tagged, so add the build override below for now. The one you want. |
 | `docker-compose.selfhost.build.yml` | Opt-in override for `docker-compose.selfhost.yml` that builds both app images from the clone instead of pulling them. Needs about 4 GB of memory. |
 | `docker-compose.dev.yml` | Local dev infra only: Mongo, Redis, SeaweedFS S3. No app containers. |
 | `docker-compose.server.yml` | The maintainer's production API. One service, `server`. Expects an externally managed Mongo/Redis. |
@@ -144,11 +164,11 @@ A single-domain self-host does not need this at all: the browser's origin *is* `
 better-auth validates the `Origin` header on sign-in whenever the request carries `Sec-Fetch-*` headers, which every real browser fetch does. A browser origin that is not `FRONTEND_URL` gets `403 INVALID_ORIGIN` **before the password is checked**. Add, comma-separated, whichever apply:
 
 - `chrome-extension://<id>` — a browser extension you built yourself (`pnpm run extension:id prod` prints it)
-- `capacitor://localhost,https://localhost` — Capacitor
-
-Or set `TRUST_STORE_APPS=true`, which trusts the iOS and Android apps and the Chrome Web Store extension (its id is pinned in `packages/shared/src/store-clients.ts`) in one switch. `docker-compose.selfhost.yml` defaults it to `true`, so the store-installed clients can sign in to a self-hosted server with nothing to configure.
+- `capacitor://localhost,https://localhost` — the iOS and Android apps
 - `app://-` — Electron via a custom protocol (`file://` sends `Origin: null` and cannot be trusted with credentials)
 - `tauri://localhost` and `http://tauri.localhost` — Tauri on macOS/Linux and Windows
+
+Or set `TRUST_STORE_APPS=true`, which trusts the iOS and Android apps and the Chrome Web Store extension (its id is pinned in `packages/shared/src/store-clients.ts`) in one switch. `docker-compose.selfhost.yml` defaults it to `true`, so the store builds, once they exist, can sign in to a self-hosted server with nothing to configure.
 
 Raycast and CLI clients need nothing here — their requests carry neither `Origin` nor `Sec-Fetch-*`. What guards them is the device flow plus the client-id allowlist in `packages/server/src/auth/client-label.ts`.
 
@@ -215,9 +235,9 @@ pnpm run dev:desktop         # Next dev + an Electron window
 ## Testing
 
 ```bash
-pnpm run test:unit      # 21 server suites (node:test) — pure logic, no services needed
-pnpm run test:client    # 27 Vitest suites in the client — jsdom, no services needed
-pnpm run test:e2e       # 10 Playwright specs — REQUIRES DOCKER
+pnpm run test:unit      # core, server (node:test), MCP and extension suites — no services needed
+pnpm run test:client    # Vitest suites in the client — jsdom, no services needed
+pnpm run test:e2e       # Playwright specs — REQUIRES DOCKER
 pnpm run test:mcp:integration  # MCP server over a real API — starts its own mongod
 pnpm test               # all three in sequence
 

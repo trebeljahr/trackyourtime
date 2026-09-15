@@ -34,9 +34,12 @@ The server image reports its commit in `/api/health` as `version`.
 
 ## Steps
 
-1. **Date the changelog, then push `main`.** Replace `YYYY-MM-DD` in the
-   version's `CHANGELOG.md` heading with the release date and commit it. The
-   tag must contain the dated entry. The workflow builds what GitHub has, not
+1. **Date the changelog, then push `main`.** In `CHANGELOG.md`, rename
+   `## [Unreleased]` to `## [X.Y.Z] - <release date>`, rewrite its opening
+   paragraph in the past tense, and add an empty `## [Unreleased]` above it.
+   Point the `[Unreleased]` link at `compare/vX.Y.Z...HEAD` and add a
+   `[X.Y.Z]` link to `releases/tag/vX.Y.Z`. Commit it. The tag must contain
+   the dated entry. The workflow builds what GitHub has, not
    your local checkout. This must print nothing:
 
    ```bash

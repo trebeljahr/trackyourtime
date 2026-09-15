@@ -7,20 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+Nothing is tagged yet. Everything below will be `v0.1.0`, the first tagged
+release, and [`docs/releasing.md`](docs/releasing.md) renames this heading
+when the tag is cut.
 
-- The app's screens moved under `/app/` (`/app/track`, `/app/settings`, …).
-  The old addresses redirect to the new ones.
-- A signed-in visitor on the landing page or another public page stays there.
-  The header shows "Open the app" instead of "Log in".
+That release publishes the web app and API as self-host images. The Raycast
+extension, the browser extension and the iOS and Android projects are in the
+repository and build from source.
 
-## [0.1.0] - YYYY-MM-DD
-
-The first tagged release. It publishes the web app and API as self-host
-images. The Raycast extension, the browser extension and the iOS and Android
-projects are in the repository and build from source.
-
-Not part of this release: no desktop app, no mobile app and no store listing.
+Not part of it: no desktop app, no mobile app and no store listing.
 `desktop-release.yml`, `mobile-release.yml` and `tauri-release.yml` run on
 manual dispatch only, so the `v0.1.0` tag builds none of them. Their output is
 unsigned.
@@ -71,7 +66,7 @@ unsigned.
 
 #### Reports
 
-- One reports page, `/reports`, with a Totals view and an Entries view. Days
+- One reports page, `/app/reports`, with a Totals view and an Entries view. Days
   are bucketed in your time zone, and an entry that crosses midnight is split
   between the two days.
 - The export menu on the reports page exports the view that is open.
@@ -102,6 +97,38 @@ unsigned.
   later edit to the profile or the client does not change it.
 - The new invoice dialog warns when either address is missing, and suggests
   a due date from the payment terms.
+- An invoice also downloads as a ZUGFeRD PDF (PDF/A-3b with the EN 16931 XML
+  embedded) or as an XRechnung 3.0 XML file.
+- The business profile and client billing details take the e-invoice fields:
+  VAT ID, tax number, electronic address, bank details, a default VAT category
+  and small-business status.
+- Each invoice line has a VAT category. A 0 % rate is never guessed as exempt,
+  reverse charge or zero rated.
+- Before an e-invoice download, the invoice lists what is missing and links to
+  the field that fixes it. Missing party details on an older invoice can be
+  filled from today's profile and client, after you confirm the list.
+- The first e-invoice XML of an invoice that is no longer a draft is stored
+  and served unchanged from then on.
+- CI checks every sample file with the Mustang and KoSIT validators.
+  `docs-site/docs/e-invoices.md` covers the setup.
+
+#### Teams
+
+- Invite people to a workspace by email from `/app/members`. Without a mail
+  server, copy the invitation link instead. The `/invite` page accepts it
+  before or after sign-in.
+- Roles: owner, admin and member. Owners and admins invite, remove members
+  and cancel invitations, and an admin manages only members. Only an owner
+  changes roles. Ownership moves by transfer, and a workspace always keeps an
+  owner.
+- Two switches per member: whether they see colleagues' time, and whether they
+  see colleagues' money. A new member sees only their own.
+- Leave a workspace, and switch between workspaces from the app shell. The
+  browser extension and Raycast keep their own workspace choice.
+- The tracker, calendar and runaway prompt show only your own entries.
+  Colleagues' time appears in Reports.
+- Starting a timer in one workspace stops a timer running in another. One
+  person has one running timer.
 
 #### Clients, projects, tasks and tags
 
@@ -195,6 +222,13 @@ unsigned.
 #### Accounts and devices
 
 - Sign in with email and password, and reset a password by email over SMTP.
+- Two-factor authentication with an authenticator app and ten single-use
+  backup codes, in Settings → Account. The phone apps and the extension's own
+  sign-in form cannot complete the second step yet.
+- Change your password or your email address in Settings → Account.
+- New accounts verify their email address when the server can send mail.
+- Google sign-in on the web app, when the server has Google credentials. It
+  is disabled in the native shells.
 - The browser extension signs in with its own form. Raycast signs in with a
   code you approve in a signed-in browser.
 - Settings → Devices lists every signed-in session and signs any of them out.
@@ -212,11 +246,12 @@ unsigned.
 
 - A language setting in Settings → General: System, English or Deutsch. It
   is stored with your account. "System" follows the language of each device.
-- German text so far covers the language and theme controls and the save
-  status of a setting. Every other screen, invoices, email and the browser
-  extension are still in English.
-- Each public page also has a `/de/` address with a language switch. The page
-  text there is still English.
+- German covers the web app, the phone apps and the browser extension.
+- Each public page also has a German version under `/de/`, with a language
+  switch.
+- An invoice is written in the language chosen for it, else the client's,
+  else the issuer's, and keeps that language for good. Report PDFs follow the device's
+  language, and email follows the recipient's.
 - With German selected, dates, numbers, money and durations use German
   formatting, for example "1,50 h".
 - Raycast stays in English.
@@ -347,7 +382,7 @@ Load it unpacked in Chrome. It is not in the Chrome Web Store.
 
 ### Changed
 
-The first three items matter to people who used the hosted app before this
+The first three items matter to people who used the hosted app before the first
 tag.
 
 - The product is now called Track Your Time. The home-screen label is
@@ -358,6 +393,10 @@ tag.
   `https://api.trackyourtime.dev`.
 - Tasks no longer belong to a project. Changing an entry's project keeps its
   task.
+- The app's screens moved under `/app/` (`/app/track`, `/app/settings`, …).
+  The old addresses redirect to the new ones.
+- A signed-in visitor on the landing page or another public page stays there.
+  The header shows "Open the app" instead of "Log in".
 - CI (`.github/workflows/build-and-deploy.yml`) now runs on pull requests as
   well as pushes to `main`. Pull requests reach `verify` (typecheck, build,
   server unit tests, client unit tests), `e2e` and `dco`; the image-build and
@@ -419,5 +458,4 @@ tag.
   and admins who may see both. An invoice id answers "not found" to anyone
   else.
 
-[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.0
+[Unreleased]: https://github.com/trebeljahr/trackyourtime/commits/main
