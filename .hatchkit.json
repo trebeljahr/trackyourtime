@@ -10,13 +10,11 @@
   ],
   "features": [
     "websocket",
-    "s3",
     "analytics",
     "desktop",
     "mobile"
   ],
   "mlServices": [],
-  "s3Provider": "r2",
   "deployTarget": "existing",
   "deploymentMode": "coolify",
   "topology": "split",
@@ -53,25 +51,5 @@
         "value": "v=spf1 include:amazonses.com ~all"
       }
     ]
-  },
-  "s3Buckets": {
-    "assets": {
-      "name": "tracktime-assets",
-      "publicUrl": "https://assets.tracktime.trebeljahr.com",
-      "cors": {
-        "origins": [
-          "http://localhost:5159",
-          "http://localhost:6477",
-          "https://trackyourtime.dev"
-        ],
-        "methods": [
-          "GET",
-          "HEAD"
-        ],
-        "maxAgeSeconds": 86400
-      }
-    },
-    "tokenId": "defa5813b8a3798ae0f2882ba8bf684b",
-    "accountId": "236db6b7957ea3079844334856fc162e"
   }
 }

@@ -159,9 +159,9 @@ before this change still connects wherever `/ws` is still routed.
 4. **DNS**: two records on the `trackyourtime.dev` zone — the apex `@` and
    `api`, both proxied. The old `tracktime` record on `trebeljahr.com` (and
    any leftover `api.tracktime`) can go once the move is verified; nothing in
-   the app points at them any more. `assets.tracktime.trebeljahr.com` is a
-   separate thing and stays — it is the R2 asset host, unrelated to this
-   move.
+   the app points at them any more. `assets.tracktime.trebeljahr.com` was the
+   custom domain of the unused R2 bucket `tracktime-assets`; it goes when that
+   bucket is deleted.
 5. **GitHub secrets** so CI can trigger both deploys:
    `COOLIFY_SERVER_RESOURCE_UUID` and `COOLIFY_CLIENT_RESOURCE_UUID`
    (alongside the existing `COOLIFY_BASE_URL` and `COOLIFY_API_TOKEN`). With

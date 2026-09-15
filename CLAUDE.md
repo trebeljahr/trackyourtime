@@ -21,8 +21,7 @@ data, integrations and self-hosters' `.env` files.
 
 What still says `tracktime`, on purpose: the `*.tracktime.trebeljahr.com` hosts
 in the deploy history and the hatchkit dev URL, the `tracktime` slug and every
-provisioned resource in `.hatchkit.json` (the R2 bucket `tracktime-assets`, the
-SES identity), because those name live infrastructure that code cannot move;
+provisioned resource in `.hatchkit.json` (the SES identity), because those name live infrastructure that code cannot move;
 and the on-disk checkout path `~/projects/tracktime`.
 
 ## Hatchkit Context
