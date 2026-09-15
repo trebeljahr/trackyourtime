@@ -219,6 +219,43 @@ describe("useOfflineQueue in several workspaces", () => {
   });
 });
 
+describe("a transient server error mid-flush", () => {
+  const cases = [
+    ["a 500", { code: "INTERNAL_SERVER_ERROR", httpStatus: 500 }],
+    ["a 429", { code: "TOO_MANY_REQUESTS", httpStatus: 429 }],
+    ["a 503", { code: "SERVICE_UNAVAILABLE", httpStatus: 503 }],
+  ] as const;
+
+  for (const [label, data] of cases) {
+    it(`${label} stops the flush and keeps that row and every row behind it`, async () => {
+      await offline.enqueueOffline("entries.start", start("first"), "temp-1", A.id);
+      await offline.enqueueOffline("entries.start", start("hit"), "temp-2", A.id);
+      await offline.enqueueOffline("entries.start", start("behind"), "temp-3", A.id);
+      failNext.set("entries.start:hit", Object.assign(new Error(data.code), { data }));
+      listAnswer = async () => [A, B];
+
+      const { result } = renderQueue();
+      await act(async () => {
+        await result.current.flush();
+      });
+
+      expect(sent.map((call) => call.input.description)).toEqual(["first"]);
+      const kept = await offline.getOfflineQueue().list();
+      expect(kept).toHaveLength(2);
+      expect(result.current.authBlocked).toBe(false);
+      expect(toastError).not.toHaveBeenCalled();
+
+      // The next flush, once the server is back, sends both in order.
+      failNext.delete("entries.start:hit");
+      await act(async () => {
+        await result.current.flush();
+      });
+      expect(sent.map((call) => call.input.description)).toEqual(["first", "hit", "behind"]);
+      expect(await offline.getOfflineQueue().size()).toBe(0);
+    });
+  }
+});
+
 describe("a NOT_FOUND mid-flush", () => {
   const notFound = () =>
     Object.assign(new Error("not found"), { data: { code: "NOT_FOUND" } });

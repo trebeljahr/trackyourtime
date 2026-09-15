@@ -24,6 +24,7 @@ import {
   isNetworkError,
   isNotFoundError,
   isOnline,
+  isTransientServerError,
   refreshPendingCount,
   setOfflineQueueOwner,
   subscribePending,
@@ -306,6 +307,12 @@ export const useOfflineQueue = (): OfflineQueueState => {
             blocked = true;
             throw error;
           }
+          // The server answered, but not about this row: a 500, a 429, a 503
+          // mid-deploy, a proxy's HTML page. Only the permanent set shared with
+          // `@starter/core` (400/403/404/409/410/422) is a refusal on the
+          // merits. Anything else stops the flush like a network failure, and
+          // the row keeps its place for the next one.
+          if (isTransientServerError(error)) throw error;
           // A NOT_FOUND on a stamped row can mean "you were removed from this
           // workspace" as much as "that entry is gone": the list asked for
           // above is only as fresh as the start of the flush, and a flush of

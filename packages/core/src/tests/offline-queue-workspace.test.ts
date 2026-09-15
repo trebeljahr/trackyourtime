@@ -20,6 +20,7 @@ import {
   ApiError,
   createApiClient,
   isPermanentRejection,
+  isPermanentRejectionStatus,
   withWorkspaceId,
 } from "../api-client.js";
 import { memoryStorage } from "../storage.js";
@@ -312,6 +313,21 @@ test("without a getter the request is exactly what it was", async () => {
 test("FORBIDDEN is a permanent refusal of the row; UNAUTHORIZED is not", () => {
   assert.equal(isPermanentRejection(new ApiError("no", "FORBIDDEN", 403)), true);
   assert.equal(isPermanentRejection(new ApiError("no", "UNAUTHORIZED", 401)), false);
+});
+
+test("5xx, 429 and 401 are never permanent, from an ApiError or a bare status", () => {
+  for (const [code, status] of [
+    ["INTERNAL_SERVER_ERROR", 500],
+    ["SERVICE_UNAVAILABLE", 503],
+    ["TOO_MANY_REQUESTS", 429],
+    ["TIMEOUT", 408],
+    ["UNAUTHORIZED", 401],
+  ] as const) {
+    assert.equal(isPermanentRejection(new ApiError("no", code, status)), false, code);
+    assert.equal(isPermanentRejectionStatus(code, status), false, code);
+  }
+  assert.equal(isPermanentRejectionStatus("BAD_REQUEST", 400), true);
+  assert.equal(isPermanentRejectionStatus("PARSE_ERROR", 404), false);
 });
 
 test("a 403 or 404 that is not a tRPC answer never drops a queued row", async () => {

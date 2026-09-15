@@ -15,12 +15,14 @@
  * React subscribes to, and the tRPC error classification.
  */
 
+import { TRPCClientError } from "@trpc/client";
 import {
   createOfflineQueue,
   decodeOfflineMutation,
   describeQueuedMutation,
   isForeignTo,
   isForeignWorkspace,
+  isPermanentRejectionStatus,
   isQueuedOn,
   isReplayableBy,
   isReplayableIn,
@@ -779,6 +781,57 @@ const serverCode = (error: unknown): string | null => {
 /** True when the server answered NOT_FOUND. */
 export const isNotFoundError = (error: unknown): boolean =>
   serverCode(error) === "NOT_FOUND";
+
+/**
+ * tRPC's HTTP status for the codes the permanent set covers, for an error that
+ * carries a code and no `data.httpStatus`. The server always sends the status;
+ * a code outside this table with no status reads as not permanent.
+ */
+const STATUS_BY_CODE: Readonly<Record<string, number>> = {
+  BAD_REQUEST: 400,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  UNPROCESSABLE_CONTENT: 422,
+};
+
+const serverHttpStatus = (error: unknown): number | null => {
+  if (typeof error !== "object" || error === null) return null;
+  const data = (error as { data?: unknown }).data;
+  if (typeof data !== "object" || data === null) return null;
+  const status = (data as { httpStatus?: unknown }).httpStatus;
+  return typeof status === "number" ? status : null;
+};
+
+/**
+ * True when the server refused a queued mutation for good, so the flush may
+ * drop it: the same status set as `isPermanentRejection` in `@starter/core`,
+ * which the extension and Raycast queues use.
+ *
+ * Everything else the server answers is NOT a verdict on the row. A 500, a
+ * 429, a 503 behind a deploy or a TIMEOUT used to be dropped here simply for
+ * carrying a code — the user's only copy of offline-tracked time, deleted
+ * because the server had a bad minute.
+ */
+export const isPermanentServerRejection = (error: unknown): boolean => {
+  const code = serverCode(error);
+  if (code === null) return false;
+  const status = serverHttpStatus(error) ?? STATUS_BY_CODE[code];
+  return status !== undefined && isPermanentRejectionStatus(code, status);
+};
+
+/**
+ * True when a response came back but is no verdict on the row: a tRPC error
+ * outside the permanent set (5xx, 429, TIMEOUT), or a `TRPCClientError` with
+ * no tRPC envelope at all — an HTML page from a proxy or captive portal. The
+ * flush stops on it and keeps the row, and everything behind it, for later.
+ *
+ * Check `isNetworkError` and `isAuthError` first; UNAUTHORIZED answers true
+ * here too, and has a flush outcome of its own.
+ */
+export const isTransientServerError = (error: unknown): boolean =>
+  (serverCode(error) !== null || error instanceof TRPCClientError) &&
+  !isPermanentServerRejection(error);
 
 /**
  * True when the mutation never reached the server, so it is safe to keep the

@@ -8,6 +8,7 @@
  * Everything is imported through "./offline", so these also pin the module's
  * public surface after the contract moved into @starter/core.
  */
+import { TRPCClientError } from "@trpc/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelQueuedForTemp,
@@ -19,6 +20,8 @@ import {
   getServerPendingCount,
   isNetworkError,
   isOnline,
+  isPermanentServerRejection,
+  isTransientServerError,
   refreshPendingCount,
   setOfflineQueueOwner,
   subscribePending,
@@ -155,5 +158,52 @@ describe("isNetworkError", () => {
     expect(isNetworkError(null)).toBe(false);
     expect(isNetworkError(undefined)).toBe(false);
     expect(isNetworkError({ nope: true })).toBe(false);
+  });
+});
+
+describe("which server answers may drop a queued row", () => {
+  const answered = (code: string, httpStatus?: number) =>
+    Object.assign(new Error(code), { data: { code, httpStatus } });
+
+  it("drops only on the permanent set shared with @starter/core", () => {
+    for (const [code, status] of [
+      ["BAD_REQUEST", 400],
+      ["FORBIDDEN", 403],
+      ["NOT_FOUND", 404],
+      ["CONFLICT", 409],
+      ["UNPROCESSABLE_CONTENT", 422],
+    ] as const) {
+      expect(isPermanentServerRejection(answered(code, status)), code).toBe(true);
+      expect(isTransientServerError(answered(code, status)), code).toBe(false);
+    }
+  });
+
+  it("keeps a row the server failed to answer about", () => {
+    for (const [code, status] of [
+      ["INTERNAL_SERVER_ERROR", 500],
+      ["TOO_MANY_REQUESTS", 429],
+      ["SERVICE_UNAVAILABLE", 503],
+      ["TIMEOUT", 408],
+      ["BAD_GATEWAY", 502],
+    ] as const) {
+      expect(isPermanentServerRejection(answered(code, status)), code).toBe(false);
+      expect(isTransientServerError(answered(code, status)), code).toBe(true);
+    }
+  });
+
+  it("reads the status from the code when the error carries none", () => {
+    expect(isPermanentServerRejection(answered("FORBIDDEN"))).toBe(true);
+    expect(isTransientServerError(answered("INTERNAL_SERVER_ERROR"))).toBe(true);
+  });
+
+  it("keeps a row when the response was not a tRPC answer at all", () => {
+    const html = new TRPCClientError("Unexpected token '<', \"<html>\" is not valid JSON");
+    expect(isPermanentServerRejection(html)).toBe(false);
+    expect(isTransientServerError(html)).toBe(true);
+  });
+
+  it("leaves errors that never came from a response to the flush's other rules", () => {
+    expect(isTransientServerError(new Error("local bug"))).toBe(false);
+    expect(isTransientServerError(null)).toBe(false);
   });
 });
