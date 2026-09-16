@@ -7,20 +7,9 @@
  * one thing Raycast lists are unambiguously good at — and picking a row fills
  * the field back on the form.
  */
-import {
-  Action,
-  ActionPanel,
-  Color,
-  Icon,
-  List,
-  useNavigation,
-} from "@raycast/api";
-import {
-  quickStartHint,
-  type DescriptionSuggestion,
-} from "@starter/core";
+import { Action, ActionPanel, Color, Icon, List, useNavigation } from "@raycast/api";
+import { quickStartHint, type DescriptionSuggestion } from "../vendor/index.js";
 import { useState } from "react";
-import { getTrackYourTime } from "../lib/api.js";
 import { formatDayHeading } from "../lib/format.js";
 import { useApi } from "../lib/hooks.js";
 import { SignedOutView } from "./signed-out.js";
@@ -44,32 +33,24 @@ export type DescriptionPickerProps = {
   onAdopt?: (suggestion: DescriptionSuggestion) => void;
 };
 
-export function DescriptionPicker({
-  projectId,
-  onPick,
-  onAdopt,
-}: DescriptionPickerProps): React.JSX.Element {
+export function DescriptionPicker({ projectId, onPick, onAdopt }: DescriptionPickerProps): React.JSX.Element {
   const { pop } = useNavigation();
   // An unfiled composer opens on the whole workspace: "things I have called
   // work with no project" is a far narrower memory than the user means, and
   // usually an empty one.
-  const [scope, setScope] = useState<Scope>(
-    projectId === null ? "all" : "project",
-  );
+  const [scope, setScope] = useState<Scope>(projectId === null ? "all" : "project");
   const [search, setSearch] = useState("");
 
   // Searched server-side rather than by Raycast's own filtering, because the
   // list is a page out of six months of entries — filtering the page would
   // only search the newest few dozen and quietly answer "no matches" for a
   // description that is certainly there.
-  const suggestions = useApi(
-    `descriptions:${scope}:${projectId ?? ""}:${search}`,
-    (api) =>
-      api.descriptions({
-        ...(scope === "project" ? { projectId } : {}),
-        ...(search.trim() === "" ? {} : { search: search.trim() }),
-        limit: LIMIT,
-      }),
+  const suggestions = useApi(`descriptions:${scope}:${projectId ?? ""}:${search}`, (api) =>
+    api.descriptions({
+      ...(scope === "project" ? { projectId } : {}),
+      ...(search.trim() === "" ? {} : { search: search.trim() }),
+      limit: LIMIT,
+    }),
   );
 
   if (suggestions.signedOut) return <SignedOutView />;
@@ -99,13 +80,9 @@ export function DescriptionPicker({
       searchBarPlaceholder="Search what you have tracked before…"
       searchBarAccessory={
         projectId === null ? undefined : (
-          <List.Dropdown
-            tooltip="Which entries to search"
-            value={scope}
-            onChange={(value) => setScope(value as Scope)}
-          >
-            <List.Dropdown.Item value="project" title="This project" />
-            <List.Dropdown.Item value="all" title="All projects" />
+          <List.Dropdown tooltip="Which entries to search" value={scope} onChange={(value) => setScope(value as Scope)}>
+            <List.Dropdown.Item value="project" title="This Project" />
+            <List.Dropdown.Item value="all" title="All Projects" />
           </List.Dropdown>
         )
       }
@@ -124,9 +101,7 @@ export function DescriptionPicker({
         <List.Item
           key={suggestion.description}
           icon={
-            suggestion.projectColor
-              ? { source: Icon.CircleFilled, tintColor: suggestion.projectColor }
-              : Icon.Circle
+            suggestion.projectColor ? { source: Icon.CircleFilled, tintColor: suggestion.projectColor } : Icon.Circle
           }
           title={suggestion.description}
           subtitle={quickStartHint(suggestion) ?? undefined}
@@ -145,11 +120,7 @@ export function DescriptionPicker({
           ]}
           actions={
             <ActionPanel>
-              <Action
-                title="Use Description"
-                icon={Icon.Text}
-                onAction={() => use(suggestion)}
-              />
+              <Action title="Use Description" icon={Icon.Text} onAction={() => use(suggestion)} />
               {onAdopt ? (
                 <Action
                   // The whole row, not just its name: the project, task, tags

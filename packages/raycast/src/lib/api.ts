@@ -35,7 +35,7 @@ import {
   type Task,
   type TimeEntry,
   type ResolvedSettings,
-} from "@starter/core";
+} from "../vendor/index.js";
 import { CLIENT_ID, getOriginId, getStoredSession } from "./auth.js";
 import { APP_VERSION } from "./version.js";
 import { NotSignedInError, StillSyncingError } from "./errors.js";
@@ -56,11 +56,7 @@ import {
   getOfflineQueue,
   isTransportFailure,
 } from "./offline.js";
-import {
-  activeWorkspaceId,
-  installWorkspaceList,
-  knownWorkspaces,
-} from "./workspace.js";
+import { activeWorkspaceId, installWorkspaceList, knownWorkspaces } from "./workspace.js";
 import {
   applyOverlay,
   loadOverlay,
@@ -231,10 +227,7 @@ export type TrackYourTime = {
   descriptions(input?: DescriptionsInput): Promise<DescriptionSuggestion[]>;
   update(input: UpdateInput): Promise<TimeEntry>;
   remove(id: string): Promise<{ success: true; id: string }>;
-  projects(options?: {
-    includeArchived?: boolean;
-    clientId?: string | null;
-  }): Promise<ProjectWithStats[]>;
+  projects(options?: { includeArchived?: boolean; clientId?: string | null }): Promise<ProjectWithStats[]>;
   /** Tasks are workspace-wide, so this takes no project. */
   tasks(options?: { includeArchived?: boolean }): Promise<TaskWithStats[]>;
   /** Tags are not scoped to a project, so this takes no project either. */
@@ -320,10 +313,7 @@ const echoing = async <T>(
  * sent must build on the first, then the cached window the last successful
  * read left behind.
  */
-const knownEntry = async (
-  id: string,
-  overlay: OfflineOverlay,
-): Promise<DetailedEntry | null> => {
+const knownEntry = async (id: string, overlay: OfflineOverlay): Promise<DetailedEntry | null> => {
   const local = overlay.entries.find((entry) => entry.id === id);
   if (local) return local;
   const cached = (await loadCache()).entries.find((entry) => entry.id === id);
@@ -344,10 +334,7 @@ const cachedDescriptions = (
     const description = entry.description.trim();
     if (description === "") continue;
     if (search && !description.toLowerCase().includes(search)) continue;
-    if (
-      input?.projectId !== undefined &&
-      entry.projectId !== input.projectId
-    ) {
+    if (input?.projectId !== undefined && entry.projectId !== input.projectId) {
       continue;
     }
 
@@ -401,11 +388,8 @@ const wrap = (
    * Queue a write in the workspace this client addresses its requests to, so
    * the row and the attempt it replaces cannot disagree about where it goes.
    */
-  const enqueue = <K extends OfflineOp>(
-    op: K,
-    input: OfflinePayloadMap[K],
-    tempId?: string,
-  ): Promise<void> => enqueueOffline(op, input, tempId, getWorkspaceId());
+  const enqueue = <K extends OfflineOp>(op: K, input: OfflinePayloadMap[K], tempId?: string): Promise<void> =>
+    enqueueOffline(op, input, tempId, getWorkspaceId());
 
   const mutators: OfflineReplayMutators = {
     "entries.start": (input) => client.mutate("entries.start", input),
@@ -501,10 +485,7 @@ const wrap = (
    * before the start it ends. So a non-empty queue routes even a perfectly
    * online mutation into the queue, where the order is kept.
    */
-  const writing = async <T>(
-    live: () => Promise<T>,
-    queued: () => Promise<T>,
-  ): Promise<T> => {
+  const writing = async <T>(live: () => Promise<T>, queued: () => Promise<T>): Promise<T> => {
     // A Mac that has never resolved a workspace does so before its first
     // write: a write naming none lands in the SESSION's active workspace,
     // which another client moves. Offline this fails and the row is stamped
@@ -534,10 +515,7 @@ const wrap = (
    * failure falls back: a 401 is a real answer and must reach the sign-in
    * handling.
    */
-  const reading = async <T>(
-    live: () => Promise<T>,
-    fallback: () => Promise<T>,
-  ): Promise<T> => {
+  const reading = async <T>(live: () => Promise<T>, fallback: () => Promise<T>): Promise<T> => {
     try {
       return await live();
     } catch (error) {
@@ -554,8 +532,7 @@ const wrap = (
       projectId: input.projectId ?? null,
       taskId: input.taskId ?? null,
       tagIds: input.tagIds,
-      billable:
-        input.billable ?? (await cachedBillableDefault(input.projectId ?? null)),
+      billable: input.billable ?? (await cachedBillableDefault(input.projectId ?? null)),
       start: new Date().toISOString(),
       source: SOURCE,
       timeZone: deviceTimeZone(),
@@ -674,8 +651,7 @@ const wrap = (
       projectId: input.projectId ?? null,
       taskId: input.taskId ?? null,
       tagIds: input.tagIds,
-      billable:
-        input.billable ?? (await cachedBillableDefault(input.projectId ?? null)),
+      billable: input.billable ?? (await cachedBillableDefault(input.projectId ?? null)),
       start: input.start,
       end: input.end,
       source: SOURCE,
@@ -754,11 +730,7 @@ const wrap = (
 
     stop: (id) =>
       writing(
-        () =>
-          echoing(
-            client.mutate<TimeEntry>("entries.stop", { id, originId }),
-            () => null,
-          ),
+        () => echoing(client.mutate<TimeEntry>("entries.stop", { id, originId }), () => null),
         () => queueStop(id),
       ),
 
@@ -797,18 +769,10 @@ const wrap = (
     // rather than making this guess at them.
     continue: (id, quick) =>
       writing(
-        () =>
-          echoing(
-            client.mutate<TimeEntry>("entries.continue", { id, originId }),
-            (entry) => entry.id,
-          ),
+        () => echoing(client.mutate<TimeEntry>("entries.continue", { id, originId }), (entry) => entry.id),
         () => {
           if (!quick) {
-            throw new ApiError(
-              "Cannot continue this entry while offline",
-              "PRECONDITION_FAILED",
-              412,
-            );
+            throw new ApiError("Cannot continue this entry while offline", "PRECONDITION_FAILED", 412);
           }
           return queueStart({
             description: quick.description,
@@ -862,8 +826,7 @@ const wrap = (
     favorites: () =>
       reading(
         async () => {
-          const favorites =
-            await client.query<DetailedFavorite[]>("favorites.list");
+          const favorites = await client.query<DetailedFavorite[]>("favorites.list");
           await remember({ favorites });
           return favorites;
         },
@@ -873,8 +836,7 @@ const wrap = (
     // Pinning mints an id the server owns and changes nothing about tracked
     // time, so it is deliberately not queueable: a favorite that failed to
     // pin is a button to press again, not lost work.
-    addFavorite: (quick) =>
-      client.mutate<DetailedFavorite>("favorites.create", { ...quick, originId }),
+    addFavorite: (quick) => client.mutate<DetailedFavorite>("favorites.create", { ...quick, originId }),
 
     removeFavorite: (id) =>
       client.mutate<{ success: true; id: string }>("favorites.remove", {
@@ -898,34 +860,21 @@ const wrap = (
         async () => {
           const cached = (await loadCache()).entries.filter((entry) => {
             const startMs = Date.parse(entry.start);
-            return (
-              startMs >= Date.parse(input.from) && startMs <= Date.parse(input.to)
-            );
+            return startMs >= Date.parse(input.from) && startMs <= Date.parse(input.to);
           });
           const search = input.search?.trim().toLowerCase();
-          const matched = search
-            ? cached.filter((entry) =>
-                entry.description.toLowerCase().includes(search),
-              )
-            : cached;
+          const matched = search ? cached.filter((entry) => entry.description.toLowerCase().includes(search)) : cached;
           return {
             // No cursor: what is cached is all there is, and offering one
             // would page into a request that cannot be made.
-            entries: applyOverlay(matched, await loadOverlay(), input).slice(
-              0,
-              input.limit ?? 100,
-            ),
+            entries: applyOverlay(matched, await loadOverlay(), input).slice(0, input.limit ?? 100),
           };
         },
       ),
 
     descriptions: (input) =>
       reading(
-        () =>
-          client.query<DescriptionSuggestion[]>(
-            "entries.descriptions",
-            input ?? {},
-          ),
+        () => client.query<DescriptionSuggestion[]>("entries.descriptions", input ?? {}),
         async () => cachedDescriptions((await loadCache()).entries, input),
       ),
 
@@ -975,15 +924,10 @@ const wrap = (
     projects: (options) =>
       reading(
         async () => {
-          const projects = await client.query<ProjectWithStats[]>(
-            "projects.list",
-            {
-              includeArchived: options?.includeArchived ?? false,
-              ...(options?.clientId === undefined
-                ? {}
-                : { clientId: options.clientId }),
-            },
-          );
+          const projects = await client.query<ProjectWithStats[]>("projects.list", {
+            includeArchived: options?.includeArchived ?? false,
+            ...(options?.clientId === undefined ? {} : { clientId: options.clientId }),
+          });
           // Only the unfiltered list is worth remembering: a filtered one
           // would shrink the catalog an offline picker can offer.
           if (!options?.includeArchived && options?.clientId === undefined) {
@@ -1034,25 +978,17 @@ const wrap = (
     // an id that does not exist yet — so none of them are queueable. Offline
     // they fail loudly, which is the honest answer: the project the user is
     // trying to create is not available to file anything under.
-    createClient: (input) =>
-      client.mutate<Client>("clients.create", { ...input, originId }),
-    updateClient: (input) =>
-      client.mutate<Client>("clients.update", { ...input, originId }),
+    createClient: (input) => client.mutate<Client>("clients.create", { ...input, originId }),
+    updateClient: (input) => client.mutate<Client>("clients.update", { ...input, originId }),
 
-    createProject: (input) =>
-      client.mutate<Project>("projects.create", { ...input, originId }),
-    updateProject: (input) =>
-      client.mutate<Project>("projects.update", { ...input, originId }),
+    createProject: (input) => client.mutate<Project>("projects.create", { ...input, originId }),
+    updateProject: (input) => client.mutate<Project>("projects.update", { ...input, originId }),
 
-    createTask: (input) =>
-      client.mutate<Task>("tasks.create", { ...input, originId }),
-    updateTask: (input) =>
-      client.mutate<Task>("tasks.update", { ...input, originId }),
+    createTask: (input) => client.mutate<Task>("tasks.create", { ...input, originId }),
+    updateTask: (input) => client.mutate<Task>("tasks.update", { ...input, originId }),
 
-    createTag: (input) =>
-      client.mutate<Tag>("tags.create", { ...input, originId }),
-    updateTag: (input) =>
-      client.mutate<Tag>("tags.update", { ...input, originId }),
+    createTag: (input) => client.mutate<Tag>("tags.create", { ...input, originId }),
+    updateTag: (input) => client.mutate<Tag>("tags.update", { ...input, originId }),
 
     settings: () =>
       reading(
@@ -1064,18 +1000,13 @@ const wrap = (
         async () => {
           const settings = (await loadCache()).settings;
           if (settings === null) {
-            throw new ApiError(
-              "Settings have never been loaded on this Mac",
-              "NOT_FOUND",
-              404,
-            );
+            throw new ApiError("Settings have never been loaded on this Mac", "NOT_FOUND", 404);
           }
           return settings;
         },
       ),
 
-    workspaces: () =>
-      reading(liveWorkspaces, async () => (await knownWorkspaces()) ?? []),
+    workspaces: () => reading(liveWorkspaces, async () => (await knownWorkspaces()) ?? []),
 
     /** Replay what is queued, and report what is left. */
     sync: () => drain(),
@@ -1086,7 +1017,7 @@ const wrap = (
  * Build a caller bound to the stored session.
  *
  * Throws {@link NotSignedInError} when there is no token, which every command
- * turns into "run Sign in to Track Your Time" rather than a raw failure toast.
+ * turns into "run Sign In to Track Your Time" rather than a raw failure toast.
  */
 export async function getTrackYourTime(): Promise<TrackYourTime> {
   const session = await getStoredSession();

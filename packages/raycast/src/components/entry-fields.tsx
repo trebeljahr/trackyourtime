@@ -25,12 +25,10 @@ import { TaskForm } from "./catalog/task-form.js";
 export const NONE = "";
 
 /** `""` and "field absent" both mean "unassigned" by the time this ships. */
-export const orNull = (value: string | undefined): string | null =>
-  value && value !== NONE ? value : null;
+export const orNull = (value: string | undefined): string | null => (value && value !== NONE ? value : null);
 
 /** The other direction: an entry's null is the dropdown's `""`. */
-export const orNone = (value: string | null | undefined): string =>
-  value ?? NONE;
+export const orNone = (value: string | null | undefined): string => value ?? NONE;
 
 export type EntryCatalog = {
   projects: ApiHookResult<ProjectWithStats[]>;
@@ -95,9 +93,7 @@ export function useProjectBillableDefault(
  * along as a keyword, so typing it filters to that client's projects even
  * though Raycast searches item titles only.
  */
-const projectSections = (
-  projects: readonly ProjectWithStats[],
-): React.JSX.Element[] => {
+const projectSections = (projects: readonly ProjectWithStats[]): React.JSX.Element[] => {
   const byClient = new Map<string, ProjectWithStats[]>();
   for (const project of projects) {
     const key = project.clientName ?? "";
@@ -106,9 +102,7 @@ const projectSections = (
     else byClient.set(key, [project]);
   }
 
-  const named = [...byClient.keys()]
-    .filter((name) => name !== "")
-    .sort((a, b) => a.localeCompare(b));
+  const named = [...byClient.keys()].filter((name) => name !== "").sort((a, b) => a.localeCompare(b));
   const groups = byClient.has("") ? [...named, ""] : named;
 
   return groups.map((clientName) => (
@@ -145,12 +139,7 @@ export const projectField = (
   if (projects.length === 0) return null;
 
   return (
-    <Form.Dropdown
-      id="projectId"
-      title="Project"
-      value={projectId}
-      onChange={onChange}
-    >
+    <Form.Dropdown id="projectId" title="Project" value={projectId} onChange={onChange}>
       <Form.Dropdown.Item value={NONE} title="No project" icon={Icon.Circle} />
       {projectSections(projects)}
     </Form.Dropdown>
@@ -172,11 +161,7 @@ export const taskField = (
         <Form.Dropdown.Item
           key={task.id}
           value={task.id}
-          title={
-            task.totalSec > 0
-              ? `${task.name} (${formatDurationShort(task.totalSec)})`
-              : task.name
-          }
+          title={task.totalSec > 0 ? `${task.name} (${formatDurationShort(task.totalSec)})` : task.name}
           icon={task.done ? Icon.CheckCircle : Icon.Circle}
         />
       ))}
@@ -227,10 +212,7 @@ export type CatalogActionHandlers = {
  * new row already selected, so a missing project is a detour rather than a
  * dead end.
  */
-export const catalogActions = (
-  catalog: EntryCatalog,
-  handlers: CatalogActionHandlers,
-): React.JSX.Element[] => {
+export const catalogActions = (catalog: EntryCatalog, handlers: CatalogActionHandlers): React.JSX.Element[] => {
   const actions = [
     <Action.Push
       key="project"

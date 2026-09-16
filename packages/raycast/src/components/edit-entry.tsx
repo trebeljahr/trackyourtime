@@ -1,13 +1,5 @@
-import {
-  Action,
-  ActionPanel,
-  Form,
-  Icon,
-  Toast,
-  showToast,
-  useNavigation,
-} from "@raycast/api";
-import type { DetailedEntry } from "@starter/core";
+import { Action, ActionPanel, Form, Icon, Toast, showToast, useNavigation } from "@raycast/api";
+import type { DetailedEntry } from "../vendor/index.js";
 import { useState } from "react";
 import { getTrackYourTime } from "../lib/api.js";
 import { refreshMenuBar, showFailureToast } from "../lib/ui.js";
@@ -108,11 +100,7 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
       isLoading={catalog.isLoading || submitting}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Save Entry"
-            icon={Icon.Check}
-            onSubmit={submit}
-          />
+          <Action.SubmitForm title="Save Entry" icon={Icon.Check} onSubmit={submit} />
           {offersDescriptions ? (
             <Action.Push
               title="Pick a Past Description…"
@@ -152,12 +140,7 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
       {projectField(catalog, projectId, setProjectId)}
       {taskField(catalog, taskId, setTaskId)}
       {tagsField(catalog, tagIds, setTagIds)}
-      <Form.Checkbox
-        id="billable"
-        label="Billable"
-        value={billable}
-        onChange={setBillable}
-      />
+      <Form.Checkbox id="billable" label="Billable" value={billable} onChange={setBillable} />
       <Form.DatePicker
         id="start"
         title="Start"

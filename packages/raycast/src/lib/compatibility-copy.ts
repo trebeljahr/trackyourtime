@@ -12,7 +12,7 @@ import {
   SERVER_TOO_OLD,
   type ServerLevel,
   type VersionRefusal,
-} from "@starter/core";
+} from "../vendor/index.js";
 
 export type CompatibilityBanner = {
   /** Short enough for a list row or a menu bar item. */

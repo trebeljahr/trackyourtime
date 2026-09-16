@@ -1,14 +1,4 @@
-import {
-  Action,
-  ActionPanel,
-  Alert,
-  Color,
-  Icon,
-  List,
-  Toast,
-  confirmAlert,
-  showToast,
-} from "@raycast/api";
+import { Action, ActionPanel, Alert, Color, Icon, List, Toast, confirmAlert, showToast } from "@raycast/api";
 import {
   entryDurationSec,
   formatDuration,
@@ -19,49 +9,24 @@ import {
   toQuickStart,
   type DetailedEntry,
   type DetailedFavorite,
-} from "@starter/core";
+} from "./vendor/index.js";
 import { CompatibilityListSection } from "./components/compatibility-banner.js";
 import { EditEntry } from "./components/edit-entry.js";
 import { LogTime } from "./components/log-time.js";
 import { SignedOutView } from "./components/signed-out.js";
 import { SignIn } from "./components/sign-in.js";
 import { StartTimer } from "./components/start-timer.js";
-import {
-  getTrackYourTime,
-  type ProjectWithStats,
-  type StartedEntry,
-} from "./lib/api.js";
-import {
-  discardForeign,
-  heldCopy,
-  listForeign,
-  type KeptKind,
-} from "./lib/offline.js";
+import { getTrackYourTime, type ProjectWithStats, type StartedEntry } from "./lib/api.js";
+import { discardForeign, heldCopy, listForeign, type KeptKind } from "./lib/offline.js";
 import { isLocalEntry } from "./lib/overlay.js";
-import {
-  formatClock,
-  formatDayHeading,
-  formatDurationShort,
-  projectIcon,
-} from "./lib/format.js";
+import { formatClock, formatDayHeading, formatDurationShort, projectIcon } from "./lib/format.js";
 import { useApi, useNow, useReconciledRunning } from "./lib/hooks.js";
 import { apiUrl, hostLabel, webLink } from "./lib/preferences.js";
-import {
-  RECENT_DAYS,
-  entryHint,
-  entryLabel,
-  favoriteFor,
-  loadTimerSnapshot,
-} from "./lib/timer-data.js";
+import { RECENT_DAYS, entryHint, entryLabel, favoriteFor, loadTimerSnapshot } from "./lib/timer-data.js";
 import { useServerLevel } from "./lib/server-level.js";
 import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
-import {
-  isAlreadyStopped,
-  refreshMenuBar,
-  replacedNotice,
-  showFailureToast,
-} from "./lib/ui.js";
+import { isAlreadyStopped, refreshMenuBar, replacedNotice, showFailureToast } from "./lib/ui.js";
 import { chooseWorkspace } from "./lib/workspace.js";
 
 /** Long enough to cover a normal week of work without a scroll marathon. */
@@ -99,10 +64,7 @@ export default function Timer(): React.JSX.Element {
   // Also the command-start refresh of the server's API level.
   const { banner } = useServerLevel();
 
-  const run = async (
-    action: () => Promise<string>,
-    failureTitle: string,
-  ): Promise<void> => {
+  const run = async (action: () => Promise<string>, failureTitle: string): Promise<void> => {
     try {
       const message = await action();
       await refreshMenuBar();
@@ -135,9 +97,7 @@ export default function Timer(): React.JSX.Element {
   const discard = async (entry: DetailedEntry): Promise<void> => {
     const confirmed = await confirmAlert({
       title: "Discard this timer?",
-      message: `${entryLabel(entry)} — ${formatDurationShort(
-        entryDurationSec(entry, Date.now()),
-      )} will not be kept.`,
+      message: `${entryLabel(entry)} — ${formatDurationShort(entryDurationSec(entry, Date.now()))} will not be kept.`,
       icon: Icon.Trash,
       primaryAction: { title: "Discard", style: Alert.ActionStyle.Destructive },
     });
@@ -155,10 +115,7 @@ export default function Timer(): React.JSX.Element {
    * project orphans whatever task was set, so the task goes with it — a task
    * only exists inside one project.
    */
-  const fileUnder = (
-    entry: DetailedEntry,
-    project: ProjectWithStats | null,
-  ): Promise<void> =>
+  const fileUnder = (entry: DetailedEntry, project: ProjectWithStats | null): Promise<void> =>
     run(async () => {
       const api = await getTrackYourTime();
       // The task is left alone: moving an entry to another project does not
@@ -189,10 +146,7 @@ export default function Timer(): React.JSX.Element {
       return `Switched to ${name}`;
     }, "Could not switch workspace");
 
-  const togglePin = (
-    entry: DetailedEntry,
-    pinned: DetailedFavorite | undefined,
-  ): Promise<void> =>
+  const togglePin = (entry: DetailedEntry, pinned: DetailedFavorite | undefined): Promise<void> =>
     run(async () => {
       const api = await getTrackYourTime();
       if (pinned) {
@@ -234,22 +188,16 @@ export default function Timer(): React.JSX.Element {
         return;
       }
 
-      const named = rows
-        .slice(0, MAX_NAMED_FOREIGN)
-        .map(
-          (row) =>
-            `${row.description?.trim() || "No description"} — ${formatDayHeading(row.at)}${
-              row.server && !sameServerOrigin(row.server, apiUrl())
-                ? ` — ${hostLabel(row.server)}`
-                : ""
-            }${
-              // Named when the row is this account's in a workspace it left:
-              // "in Acme", or the honest fallback when even the name is gone.
-              row.leftWorkspace
-                ? ` — in ${row.workspaceName ?? "a workspace you left"}`
-                : ""
-            }`,
-        );
+      const named = rows.slice(0, MAX_NAMED_FOREIGN).map(
+        (row) =>
+          `${row.description?.trim() || "No description"} — ${formatDayHeading(row.at)}${
+            row.server && !sameServerOrigin(row.server, apiUrl()) ? ` — ${hostLabel(row.server)}` : ""
+          }${
+            // Named when the row is this account's in a workspace it left:
+            // "in Acme", or the honest fallback when even the name is gone.
+            row.leftWorkspace ? ` — in ${row.workspaceName ?? "a workspace you left"}` : ""
+          }`,
+      );
       const rest = rows.length - named.length;
 
       const confirmed = await confirmAlert({
@@ -349,9 +297,7 @@ export default function Timer(): React.JSX.Element {
     />
   );
 
-  const runningAccessories = (
-    entry: DetailedEntry,
-  ): List.Item.Accessory[] => {
+  const runningAccessories = (entry: DetailedEntry): List.Item.Accessory[] => {
     const accessories: List.Item.Accessory[] = [];
 
     // A timer started with no signal has no server id yet. Saying so is what
@@ -420,11 +366,7 @@ export default function Timer(): React.JSX.Element {
               subtitle="Kept on this Mac until the server answers"
               actions={
                 <ActionPanel>
-                  <Action
-                    title="Try Again"
-                    icon={Icon.ArrowClockwise}
-                    onAction={revalidate}
-                  />
+                  <Action title="Try Again" icon={Icon.ArrowClockwise} onAction={revalidate} />
                   {commonActions}
                 </ActionPanel>
               }
@@ -445,11 +387,7 @@ export default function Timer(): React.JSX.Element {
               }
               actions={
                 <ActionPanel>
-                  <Action.Push
-                    title="Account and Session…"
-                    icon={Icon.Person}
-                    target={<SignIn />}
-                  />
+                  <Action.Push title="Account and Session…" icon={Icon.Person} target={<SignIn />} />
                   <Action
                     title="Discard Them…"
                     icon={Icon.Trash}
@@ -467,11 +405,7 @@ export default function Timer(): React.JSX.Element {
               {...heldCopy(held, data?.heldReason ?? null)}
               actions={
                 <ActionPanel>
-                  <Action
-                    title="Try Again"
-                    icon={Icon.ArrowClockwise}
-                    onAction={revalidate}
-                  />
+                  <Action title="Try Again" icon={Icon.ArrowClockwise} onAction={revalidate} />
                   <Action
                     title="Discard Them…"
                     icon={Icon.Trash}
@@ -487,29 +421,18 @@ export default function Timer(): React.JSX.Element {
       ) : null}
 
       {running ? (
-        <List.Section
-          title="Running"
-          subtitle={`today ${formatDurationShort(todaySec)}`}
-        >
+        <List.Section title="Running" subtitle={`today ${formatDurationShort(todaySec)}`}>
           <List.Item
             icon={projectIcon(running.projectColor)}
             title={entryLabel(running)}
             // A timer running in another workspace is named by where it runs:
             // this workspace's catalog cannot name its project.
-            subtitle={
-              runningWorkspaceName !== null
-                ? `Running in ${runningWorkspaceName}`
-                : entryHint(running)
-            }
+            subtitle={runningWorkspaceName !== null ? `Running in ${runningWorkspaceName}` : entryHint(running)}
             accessories={runningAccessories(running)}
             actions={
               <ActionPanel>
                 <ActionPanel.Section>
-                  <Action
-                    title="Stop Timer"
-                    icon={Icon.Stop}
-                    onAction={() => stop(running)}
-                  />
+                  <Action title="Stop Timer" icon={Icon.Stop} onAction={() => stop(running)} />
                   {/* Stopping works wherever the timer runs; editing does not.
                       Every edit is addressed to the chosen workspace, where
                       that entry does not exist, and this workspace's projects
@@ -525,37 +448,23 @@ export default function Timer(): React.JSX.Element {
                       <ActionPanel.Submenu
                         title="Move to Project…"
                         icon={Icon.Folder}
-                        shortcut={{ modifiers: ["cmd"], key: "p" }}
+                        shortcut={{ modifiers: ["cmd", "shift"], key: "m" }}
                       >
                         {projects.map((project) => (
                           <Action
                             key={project.id}
-                            title={
-                              project.clientName
-                                ? `${project.name} — ${project.clientName}`
-                                : project.name
-                            }
+                            title={project.clientName ? `${project.name} — ${project.clientName}` : project.name}
                             icon={projectIcon(project.color)}
                             onAction={() => fileUnder(running, project)}
                           />
                         ))}
-                        <Action
-                          title="No Project"
-                          icon={Icon.Circle}
-                          onAction={() => fileUnder(running, null)}
-                        />
+                        <Action title="No Project" icon={Icon.Circle} onAction={() => fileUnder(running, null)} />
                       </ActionPanel.Submenu>
                       <Action
-                        title={
-                          favoriteFor(running, favorites)
-                            ? "Remove Favorite"
-                            : "Pin as Favorite"
-                        }
+                        title={favoriteFor(running, favorites) ? "Remove Favorite" : "Pin as Favorite"}
                         icon={Icon.Star}
                         shortcut={{ modifiers: ["cmd"], key: "f" }}
-                        onAction={() =>
-                          togglePin(running, favoriteFor(running, favorites))
-                        }
+                        onAction={() => togglePin(running, favoriteFor(running, favorites))}
                       />
                     </>
                   ) : null}
@@ -587,10 +496,7 @@ export default function Timer(): React.JSX.Element {
           />
         </List.Section>
       ) : (
-        <List.Section
-          title="No timer running"
-          subtitle={`today ${formatDurationShort(todaySec)}`}
-        >
+        <List.Section title="No timer running" subtitle={`today ${formatDurationShort(todaySec)}`}>
           <List.Item
             icon={Icon.Play}
             title="Start a New Timer…"
@@ -687,16 +593,10 @@ export default function Timer(): React.JSX.Element {
                       target={<EditEntry entry={entry} onSaved={onSaved} />}
                     />
                     <Action
-                      title={
-                        favoriteFor(entry, favorites)
-                          ? "Remove Favorite"
-                          : "Pin as Favorite"
-                      }
+                      title={favoriteFor(entry, favorites) ? "Remove Favorite" : "Pin as Favorite"}
                       icon={Icon.Star}
                       shortcut={{ modifiers: ["cmd"], key: "f" }}
-                      onAction={() =>
-                        togglePin(entry, favoriteFor(entry, favorites))
-                      }
+                      onAction={() => togglePin(entry, favoriteFor(entry, favorites))}
                     />
                   </ActionPanel.Section>
                   {commonActions}

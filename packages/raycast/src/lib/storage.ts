@@ -4,12 +4,7 @@
  * `KeyValueStorage` works here without a Raycast-specific copy.
  */
 import { LocalStorage } from "@raycast/api";
-import {
-  readTimerEcho,
-  writeTimerEcho,
-  type KeyValueStorage,
-  type TimerEcho,
-} from "@starter/core";
+import { readTimerEcho, writeTimerEcho, type KeyValueStorage, type TimerEcho } from "../vendor/index.js";
 
 export const raycastStorage: KeyValueStorage = {
   getItem: async (key) => (await LocalStorage.getItem<string>(key)) ?? null,
@@ -26,8 +21,6 @@ export const raycastStorage: KeyValueStorage = {
  * what stops the menu bar from ticking a timer the user stopped a second ago
  * from somewhere else in Raycast.
  */
-export const noteTimerEcho = (runningId: string | null): Promise<void> =>
-  writeTimerEcho(raycastStorage, runningId);
+export const noteTimerEcho = (runningId: string | null): Promise<void> => writeTimerEcho(raycastStorage, runningId);
 
-export const loadTimerEcho = (): Promise<TimerEcho | null> =>
-  readTimerEcho(raycastStorage);
+export const loadTimerEcho = (): Promise<TimerEcho | null> => readTimerEcho(raycastStorage);

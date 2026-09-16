@@ -1,13 +1,5 @@
-import {
-  Action,
-  ActionPanel,
-  Form,
-  Icon,
-  Toast,
-  showToast,
-  useNavigation,
-} from "@raycast/api";
-import type { Tag } from "@starter/core";
+import { Action, ActionPanel, Form, Icon, Toast, showToast, useNavigation } from "@raycast/api";
+import type { Tag } from "../../vendor/index.js";
 import { useState } from "react";
 import { getTrackYourTime } from "../../lib/api.js";
 import { showFailureToast } from "../../lib/ui.js";
@@ -55,10 +47,7 @@ export function TagForm({ tag, onSaved }: Props): React.JSX.Element {
       onSaved?.(saved);
       pop();
     } catch (error) {
-      await showFailureToast(
-        error,
-        tag ? "Could not save the tag" : "Could not create the tag",
-      );
+      await showFailureToast(error, tag ? "Could not save the tag" : "Could not create the tag");
     } finally {
       setSubmitting(false);
     }
@@ -70,11 +59,7 @@ export function TagForm({ tag, onSaved }: Props): React.JSX.Element {
       navigationTitle={tag ? `Edit ${tag.name}` : "New Tag"}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title={tag ? "Save Tag" : "Create Tag"}
-            icon={Icon.Check}
-            onSubmit={submit}
-          />
+          <Action.SubmitForm title={tag ? "Save Tag" : "Create Tag"} icon={Icon.Check} onSubmit={submit} />
         </ActionPanel>
       }
     >

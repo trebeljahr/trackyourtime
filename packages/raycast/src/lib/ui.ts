@@ -1,11 +1,5 @@
-import {
-  LaunchType,
-  Toast,
-  launchCommand,
-  openExtensionPreferences,
-  showToast,
-} from "@raycast/api";
-import { ApiError, AuthError } from "@starter/core";
+import { LaunchType, Toast, launchCommand, openExtensionPreferences, showToast } from "@raycast/api";
+import { ApiError, AuthError } from "../vendor/index.js";
 import { NotSignedInError, StillSyncingError } from "./errors.js";
 import { apiUrl } from "./preferences.js";
 
@@ -35,9 +29,7 @@ export async function refreshMenuBar(): Promise<void> {
  * genuinely different thing.
  */
 export const isAlreadyStopped = (error: unknown): boolean =>
-  error instanceof ApiError &&
-  error.httpStatus === 404 &&
-  error.message === "No running timer";
+  error instanceof ApiError && error.httpStatus === 404 && error.message === "No running timer";
 
 /**
  * "Stopped your timer in Acme", when a start stopped a timer that ran in
@@ -48,17 +40,14 @@ export const isAlreadyStopped = (error: unknown): boolean =>
  * it is an hour of work quietly ended somewhere the user is not looking, so
  * every start surface says so.
  */
-export const replacedNotice = (entry: {
-  replaced?: { workspaceName: string } | null;
-}): string | undefined =>
+export const replacedNotice = (entry: { replaced?: { workspaceName: string } | null }): string | undefined =>
   entry.replaced ? `Stopped your timer in ${entry.replaced.workspaceName}` : undefined;
 
 /** True when the failure means "your token is gone or no longer valid". */
 export const isAuthFailure = (error: unknown): boolean =>
   error instanceof NotSignedInError ||
   error instanceof AuthError ||
-  (error instanceof ApiError &&
-    (error.httpStatus === 401 || error.code === "UNAUTHORIZED"));
+  (error instanceof ApiError && (error.httpStatus === 401 || error.code === "UNAUTHORIZED"));
 
 /**
  * Turn a thrown value into something a human can act on.
@@ -75,9 +64,7 @@ export const describeFailure = (error: unknown): string => {
 
   const cause = error instanceof Error ? error.cause : undefined;
   const code =
-    typeof cause === "object" && cause !== null && "code" in cause
-      ? String((cause as { code?: unknown }).code)
-      : null;
+    typeof cause === "object" && cause !== null && "code" in cause ? String((cause as { code?: unknown }).code) : null;
 
   return `Could not reach ${apiUrl()}${code ? ` (${code})` : ""}. Check the API URL preference, and that the server is running.`;
 };
@@ -85,10 +72,7 @@ export const describeFailure = (error: unknown): string => {
 const messageOf = (error: unknown): string => describeFailure(error);
 
 /** One place that turns any thrown value into a toast the user can act on. */
-export async function showFailureToast(
-  error: unknown,
-  title: string,
-): Promise<void> {
+export async function showFailureToast(error: unknown, title: string): Promise<void> {
   // Not a failure of the network or the server: the entry is queued on this
   // Mac and cannot be edited until it has an id the server would recognise.
   // The preferences prompt every other failure carries would be actively

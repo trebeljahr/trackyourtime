@@ -9,25 +9,10 @@ import {
   openExtensionPreferences,
   showToast,
 } from "@raycast/api";
-import {
-  pollForDeviceSession,
-  startDeviceAuthorization,
-  type DeviceAuthorization,
-} from "@starter/core";
+import { pollForDeviceSession, startDeviceAuthorization, type DeviceAuthorization } from "../vendor/index.js";
 import { useEffect, useRef, useState } from "react";
-import {
-  CLIENT_ID,
-  getStoredSession,
-  signOut,
-  storeSession,
-} from "../lib/auth.js";
-import {
-  apiUrl,
-  hostLabel,
-  isDevBuild,
-  webLink,
-  webUrl,
-} from "../lib/preferences.js";
+import { CLIENT_ID, getStoredSession, signOut, storeSession } from "../lib/auth.js";
+import { DEFAULT_ORIGINS, apiUrl, hostLabel, usesLocalDefaults, webLink, webUrl } from "../lib/preferences.js";
 import { getTrackYourTime } from "../lib/api.js";
 import { adoptUnownedHere } from "../lib/offline.js";
 import { describeFailure, refreshMenuBar } from "../lib/ui.js";
@@ -78,15 +63,11 @@ export function SignIn(): React.JSX.Element {
           await open(authorization.verificationUriComplete);
         }
 
-        const session = await pollForDeviceSession(
-          options,
-          authorization.deviceCode,
-          {
-            intervalSeconds: authorization.intervalSeconds,
-            timeoutSeconds: authorization.expiresInSeconds,
-            signal: abort.signal,
-          },
-        );
+        const session = await pollForDeviceSession(options, authorization.deviceCode, {
+          intervalSeconds: authorization.intervalSeconds,
+          timeoutSeconds: authorization.expiresInSeconds,
+          signal: abort.signal,
+        });
         if (cancelled) return;
 
         await storeSession(session);
@@ -99,9 +80,7 @@ export function SignIn(): React.JSX.Element {
          * without it the very rows this pairing exists to rescue would sit
          * there being counted as somebody else's.
          */
-        const adopted = session.userId
-          ? await adoptUnownedHere(session.userId)
-          : 0;
+        const adopted = session.userId ? await adoptUnownedHere(session.userId) : 0;
         const stuck = await (await getTrackYourTime()).sync().catch(() => 0);
 
         await refreshMenuBar();
@@ -111,9 +90,7 @@ export function SignIn(): React.JSX.Element {
           title: "Raycast paired with Track Your Time",
           message:
             adopted > 0 && stuck === 0
-              ? `${session.email ?? "Signed in"} · ${adopted} queued change${
-                  adopted === 1 ? "" : "s"
-                } sent`
+              ? `${session.email ?? "Signed in"} · ${adopted} queued change${adopted === 1 ? "" : "s"} sent`
               : (session.email ?? undefined),
         });
       } catch (error) {
@@ -137,13 +114,7 @@ export function SignIn(): React.JSX.Element {
   };
 
   if (phase.kind === "checking") {
-    return (
-      <Detail
-        isLoading
-        navigationTitle="Track Your Time"
-        markdown="Connecting to Track Your Time…"
-      />
-    );
+    return <Detail isLoading navigationTitle="Track Your Time" markdown="Connecting to Track Your Time…" />;
   }
 
   if (phase.kind === "signedIn") {
@@ -163,20 +134,13 @@ export function SignIn(): React.JSX.Element {
         ].join("\n")}
         metadata={
           <Detail.Metadata>
-            <Detail.Metadata.Label
-              title="Account"
-              text={phase.email ?? "Signed in"}
-              icon={Icon.Person}
-            />
+            <Detail.Metadata.Label title="Account" text={phase.email ?? "Signed in"} icon={Icon.Person} />
             <Detail.Metadata.Label title="Server" text={hostLabel(apiUrl())} />
           </Detail.Metadata>
         }
         actions={
           <ActionPanel>
-            <Action.OpenInBrowser
-              title="Open Web App"
-              url={webLink("/app/track")}
-            />
+            <Action.OpenInBrowser title="Open Web App" url={webLink("/app/track")} />
             <Action
               title="Sign Out"
               icon={Icon.Logout}
@@ -199,10 +163,8 @@ export function SignIn(): React.JSX.Element {
   }
 
   if (phase.kind === "pairing") {
-    const { userCode, verificationUri, verificationUriComplete } =
-      phase.authorization;
-    const approvalUrl =
-      verificationUriComplete || verificationUri || webLink("/app/device");
+    const { userCode, verificationUri, verificationUriComplete } = phase.authorization;
+    const approvalUrl = verificationUriComplete || verificationUri || webLink("/app/device");
 
     return (
       <Detail
@@ -217,16 +179,9 @@ export function SignIn(): React.JSX.Element {
         metadata={
           <Detail.Metadata>
             <Detail.Metadata.TagList title="Code">
-              <Detail.Metadata.TagList.Item
-                text={userCode}
-                color={Color.Blue}
-              />
+              <Detail.Metadata.TagList.Item text={userCode} color={Color.Blue} />
             </Detail.Metadata.TagList>
-            <Detail.Metadata.Label
-              title="Status"
-              text="Waiting for approval…"
-              icon={Icon.Clock}
-            />
+            <Detail.Metadata.Label title="Status" text="Waiting for approval…" icon={Icon.Clock} />
             <Detail.Metadata.Separator />
             <Detail.Metadata.Link
               title="Approval Page"
@@ -257,48 +212,26 @@ export function SignIn(): React.JSX.Element {
         "",
         "---",
         "",
-        ...(isDevBuild()
-          ? [
-              "This is a `ray develop` build, so it defaults to the local dev",
-              "server — `pnpm run dev` (API `5159`, client `3392`). A git",
-              "worktree runs on random ports and prints them; put those in",
-              "**API URL** and **Web App URL**.",
-              "",
-              "Preferences override the default even here, so clear them to go",
-              "back to localhost.",
-            ]
-          : [
-              "**Running locally?** `pnpm dev` prints one port for the API and",
-              "one for the client. Put the API port in **API URL** and the",
-              "client port in **Web App URL**, then try again.",
-            ]),
+        "Track Your Time did not answer at **API URL**. Check that the address",
+        "is right and that the server is running, or open Extension Preferences",
+        "and clear **API URL** and **Web App URL** to use the default server.",
+        "",
+        usesLocalDefaults()
+          ? `In this development build the default server is \`${DEFAULT_ORIGINS.development.apiUrl}\`.`
+          : `The default server is the hosted service, \`${DEFAULT_ORIGINS.production.apiUrl}\`.`,
       ].join("\n")}
       metadata={
         <Detail.Metadata>
           <Detail.Metadata.TagList title="Status">
-            <Detail.Metadata.TagList.Item
-              text="Unreachable"
-              color={Color.Red}
-            />
+            <Detail.Metadata.TagList.Item text="Unreachable" color={Color.Red} />
           </Detail.Metadata.TagList>
-          <Detail.Metadata.Label
-            title="API URL"
-            text={hostLabel(apiUrl())}
-            icon={Icon.Globe}
-          />
-          <Detail.Metadata.Label
-            title="Web App URL"
-            text={hostLabel(webUrl())}
-          />
+          <Detail.Metadata.Label title="API URL" text={hostLabel(apiUrl())} icon={Icon.Globe} />
+          <Detail.Metadata.Label title="Web App URL" text={hostLabel(webUrl())} />
         </Detail.Metadata>
       }
       actions={
         <ActionPanel>
-          <Action
-            title="Open Extension Preferences"
-            icon={Icon.Gear}
-            onAction={openExtensionPreferences}
-          />
+          <Action title="Open Extension Preferences" icon={Icon.Gear} onAction={openExtensionPreferences} />
           <Action title="Try Again" icon={Icon.Repeat} onAction={retry} />
           <Action.OpenInBrowser title="Open Web App" url={webLink("/app/track")} />
         </ActionPanel>

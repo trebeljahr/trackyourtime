@@ -1,16 +1,11 @@
 import { LaunchType, launchCommand, showHUD } from "@raycast/api";
-import { toQuickStart } from "@starter/core";
+import { toQuickStart } from "./vendor/index.js";
 import { getTrackYourTime } from "./lib/api.js";
 import { pendingCounts } from "./lib/offline.js";
 import { formatDurationShort, isoDaysAgo } from "./lib/format.js";
 import { noteTimerEcho } from "./lib/storage.js";
 import { entryLabel, RECENT_DAYS } from "./lib/timer-data.js";
-import {
-  isAlreadyStopped,
-  refreshMenuBar,
-  replacedNotice,
-  showFailureToast,
-} from "./lib/ui.js";
+import { isAlreadyStopped, refreshMenuBar, replacedNotice, showFailureToast } from "./lib/ui.js";
 import { ownOnly, resolveUserId } from "./lib/timer-data.js";
 
 /**
@@ -76,9 +71,7 @@ export default async function ToggleTimer(): Promise<void> {
       to: new Date().toISOString(),
       limit: 20,
     });
-    const last = ownOnly(entries, await resolveUserId()).find(
-      (entry) => entry.end !== null,
-    );
+    const last = ownOnly(entries, await resolveUserId()).find((entry) => entry.end !== null);
 
     if (!last) {
       await launchCommand({ name: "timer", type: LaunchType.UserInitiated });
@@ -91,9 +84,7 @@ export default async function ToggleTimer(): Promise<void> {
     // back: the list rows are joined with their project and client names, so
     // an entry with no description still reads as something.
     const replaced = replacedNotice(started);
-    await showHUD(
-      `▶ Started — ${entryLabel(last)}${replaced ? ` · ${replaced}` : ""}${await queuedSuffix()}`,
-    );
+    await showHUD(`▶ Started — ${entryLabel(last)}${replaced ? ` · ${replaced}` : ""}${await queuedSuffix()}`);
   } catch (error) {
     await showFailureToast(error, "Could not toggle the timer");
   }

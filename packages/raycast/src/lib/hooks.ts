@@ -1,6 +1,6 @@
 import { useCachedPromise } from "@raycast/utils";
 import { useEffect, useRef, useState } from "react";
-import { reconcileRunning, type TimerEcho } from "@starter/core";
+import { reconcileRunning, type TimerEcho } from "../vendor/index.js";
 import { getTrackYourTime, type TrackYourTime } from "./api.js";
 import { loadTimerEcho } from "./storage.js";
 import { isAuthFailure, showFailureToast } from "./ui.js";
@@ -34,9 +34,7 @@ export function useActiveWorkspaceId(): {
         .then((workspaceId) => {
           if (cancelled) return;
           setState((previous) =>
-            previous.resolved && previous.workspaceId === workspaceId
-              ? previous
-              : { workspaceId, resolved: true },
+            previous.resolved && previous.workspaceId === workspaceId ? previous : { workspaceId, resolved: true },
           );
         });
     };
@@ -87,6 +85,7 @@ export function useApi<T>(
   const { data, isLoading, error, revalidate } = useCachedPromise(
     // The key is passed as an argument, not closed over, because that is what
     // `useCachedPromise` hashes into its cache slot.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     async (_key: string): Promise<Tagged<T>> => {
       // Read before the load: the tag says which workspace the requests were
       // addressed to, even when the load itself moves the choice.
@@ -108,9 +107,7 @@ export function useApi<T>(
 
   return {
     data:
-      data !== undefined && workspace.resolved && data.workspaceId === workspace.workspaceId
-        ? data.value
-        : undefined,
+      data !== undefined && workspace.resolved && data.workspaceId === workspace.workspaceId ? data.value : undefined,
     isLoading,
     error,
     signedOut: isAuthFailure(error),
@@ -240,9 +237,7 @@ export function useReconciledRunning<T extends { id: string }>(
     };
   }, []);
 
-  const { running, refetch } = snapshot
-    ? reconcileRunning(snapshot, echo)
-    : { running: null, refetch: false };
+  const { running, refetch } = snapshot ? reconcileRunning(snapshot, echo) : { running: null, refetch: false };
 
   // Once per transition rather than once per render: `echo.at` only moves
   // when something actually happened to the timer.

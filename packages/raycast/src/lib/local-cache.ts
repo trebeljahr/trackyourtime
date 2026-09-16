@@ -37,8 +37,8 @@ import {
   type ResolvedSettings,
   type ShapeableTask,
   type VersionedSpec,
-} from "@starter/core";
-import type { Client } from "@starter/core";
+} from "../vendor/index.js";
+import type { Client } from "../vendor/index.js";
 import type { ProjectWithStats, TagWithStats, TaskWithStats } from "./api.js";
 import { raycastStorage } from "./storage.js";
 import { clearEveryWorkspace, workspaceKey } from "./workspace.js";
@@ -157,15 +157,11 @@ export const remember = async (parts: Partial<LocalCache>): Promise<void> => {
  * menu bar asks for seven days and the entries command asks for a month, and
  * whichever ran last must not shrink what the other can fall back on.
  */
-export const rememberEntries = async (
-  fetched: readonly DetailedEntry[],
-): Promise<void> => {
+export const rememberEntries = async (fetched: readonly DetailedEntry[]): Promise<void> => {
   const current = await loadCache();
   const byId = new Map(current.entries.map((entry) => [entry.id, entry]));
   for (const entry of fetched) byId.set(entry.id, entry);
-  const merged = [...byId.values()].sort(
-    (a, b) => Date.parse(b.start) - Date.parse(a.start),
-  );
+  const merged = [...byId.values()].sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
   await remember({ entries: merged });
 };
 
@@ -213,13 +209,8 @@ export const loadShapeContext = async (): Promise<EntryShapeContext> => {
  * one falls back to not billable — the choice that cannot silently invent
  * money on an entry the user never marked.
  */
-export const cachedBillableDefault = async (
-  projectId: string | null,
-): Promise<boolean> => {
+export const cachedBillableDefault = async (projectId: string | null): Promise<boolean> => {
   if (projectId === null) return false;
   const cache = await loadCache();
-  return (
-    cache.projects.find((project) => project.id === projectId)
-      ?.billableDefault ?? false
-  );
+  return cache.projects.find((project) => project.id === projectId)?.billableDefault ?? false;
 };

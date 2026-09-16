@@ -13,12 +13,7 @@
  * it. This only ever narrows the window; it never becomes the sole path.
  */
 import { useEffect, useRef, useState } from "react";
-import {
-  createSyncClient,
-  resolveSyncUrl,
-  syncEventReach,
-  type SyncEvent,
-} from "@starter/core";
+import { createSyncClient, resolveSyncUrl, syncEventReach, type SyncEvent } from "../vendor/index.js";
 import { getStoredSession } from "./auth.js";
 import { apiUrl } from "./preferences.js";
 import { activeWorkspaceId } from "./workspace.js";
@@ -37,15 +32,16 @@ const affectsTimer = (event: SyncEvent): boolean => {
     case "favorites.changed":
     case "catalog.changed":
     case "data.imported":
-    // A removal or a visibility change can take away the workspace the
-    // running row lives in.
     case "membership.changed":
+      // A removal or a visibility change (membership.changed) can take away
+      // the workspace the running row lives in.
       return true;
     case "invoice.changed":
     case "settings.changed":
-    // An API token or webhook subscription changing alters no timer surface —
-    // it is Settings-only state, and Raycast shows none of it.
     case "integrations.changed":
+      // An API token or webhook subscription changing (integrations.changed)
+      // alters no timer surface — it is Settings-only state, and Raycast shows
+      // none of it.
       return false;
     default: {
       // A new SyncEvent kind stops this file compiling rather than silently
@@ -72,10 +68,7 @@ const affectsTimer = (event: SyncEvent): boolean => {
  * `enabled` is false while signed out, so a machine that has never paired
  * does not sit in a reconnect loop against a socket that will refuse it.
  */
-export function useSyncRevalidate(
-  revalidate: () => void,
-  enabled: boolean,
-): boolean {
+export function useSyncRevalidate(revalidate: () => void, enabled: boolean): boolean {
   const latest = useRef(revalidate);
   latest.current = revalidate;
   const [open, setOpen] = useState(false);

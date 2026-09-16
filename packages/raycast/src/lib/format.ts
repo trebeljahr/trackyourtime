@@ -5,13 +5,12 @@ import {
   formatDurationShort,
   type DurationFormat,
   type TimeEntry,
-} from "@starter/core";
+} from "../vendor/index.js";
 
 export { entryDurationSec, formatDuration, formatDurationShort };
 
 /** Elapsed seconds of an entry right now. */
-export const elapsedSec = (entry: TimeEntry): number =>
-  entryDurationSec(entry, Date.now());
+export const elapsedSec = (entry: TimeEntry): number => entryDurationSec(entry, Date.now());
 
 /**
  * Menu bar title for a total that is not moving — today's tracked time while
@@ -24,8 +23,7 @@ export const elapsedSec = (entry: TimeEntry): number =>
  * Seconds only appear below a minute, where "0m" would read as nothing
  * tracked at all.
  */
-export const formatMenuBarTotal = (seconds: number): string =>
-  formatDurationShort(Math.max(0, seconds));
+export const formatMenuBarTotal = (seconds: number): string => formatDurationShort(Math.max(0, seconds));
 
 /**
  * Menu bar clock for the running timer, ticking: `m:ss` under an hour and
@@ -47,10 +45,8 @@ export const formatMenuBarClock = (seconds: number): string => {
 };
 
 /** Respects the workspace's hms/decimal preference when one is loaded. */
-export const formatEntryDuration = (
-  entry: TimeEntry,
-  format: DurationFormat = "hms",
-): string => formatDuration(elapsedSec(entry), format);
+export const formatEntryDuration = (entry: TimeEntry, format: DurationFormat = "hms"): string =>
+  formatDuration(elapsedSec(entry), format);
 
 /** "14:32" in the user's locale — entry list subtitles. */
 export const formatClock = (iso: string): string => {
@@ -70,9 +66,7 @@ export const formatDayHeading = (iso: string): string => {
   const startOfDay = (value: Date): number =>
     new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
 
-  const dayDelta = Math.round(
-    (startOfDay(new Date()) - startOfDay(date)) / 86_400_000,
-  );
+  const dayDelta = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000);
   if (dayDelta === 0) return "Today";
   if (dayDelta === 1) return "Yesterday";
 
@@ -92,9 +86,7 @@ export const isoDaysAgo = (daysAgo: number): string => {
 };
 
 /** A project's dot, so a list row is scannable without reading the name. */
-export const projectIcon = (
-  color: string | null,
-): { source: Icon; tintColor: Color.ColorLike } => ({
+export const projectIcon = (color: string | null): { source: Icon; tintColor: Color.ColorLike } => ({
   source: Icon.CircleFilled,
   tintColor: color ?? Color.SecondaryText,
 });

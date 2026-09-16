@@ -18,7 +18,7 @@ import {
   type HoldReason,
   type TimeEntry,
   type WorkspaceSummary,
-} from "@starter/core";
+} from "../vendor/index.js";
 import type { ProjectWithStats, TrackYourTime } from "./api.js";
 import { getStoredUserId } from "./auth.js";
 import { isoDaysAgo } from "./format.js";
@@ -90,13 +90,8 @@ export const resolveUserId = async (): Promise<string | null> =>
  * the running clock, "Continue". An entry this Mac invented offline counts as
  * its own whatever it is stamped with — nobody else could have made it here.
  */
-export const ownOnly = (
-  entries: readonly DetailedEntry[],
-  userId: string | null,
-): DetailedEntry[] =>
-  entries.filter(
-    (entry) => isTempId(entry.id) || entry.authorId === "" || isOwnEntry(entry, userId),
-  );
+export const ownOnly = (entries: readonly DetailedEntry[], userId: string | null): DetailedEntry[] =>
+  entries.filter((entry) => isTempId(entry.id) || entry.authorId === "" || isOwnEntry(entry, userId));
 
 /**
  * A running entry from another workspace, shaped for a row. Its project and
@@ -123,10 +118,7 @@ const startOfToday = (): number => {
  * Two entries that share a description, project and task are the same job
  * done twice, so only the newest of them earns a slot.
  */
-const shortlist = (
-  entries: DetailedEntry[],
-  limit: number,
-): DetailedEntry[] => {
+const shortlist = (entries: DetailedEntry[], limit: number): DetailedEntry[] => {
   const seen = new Set<string>();
   const out: DetailedEntry[] = [];
 
@@ -204,10 +196,7 @@ export const loadTimerSnapshot = async (
     }
   }
 
-  const { running, refetch } = reconcileRunning(
-    { running: windowRunning, fetchedAt: now },
-    await loadTimerEcho(),
-  );
+  const { running, refetch } = reconcileRunning({ running: windowRunning, fetchedAt: now }, await loadTimerEcho());
 
   const { mine, foreign, left, held, heldReason } = await pendingCounts();
 

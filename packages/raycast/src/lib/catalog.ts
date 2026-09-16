@@ -13,9 +13,7 @@ export const NONE = "";
  * sets it, and anything else is a mistake the caller must refuse rather than
  * silently turn into a cleared field.
  */
-export const parseOptionalNumber = (
-  raw: string,
-): { ok: true; value: number | null } | { ok: false } => {
+export const parseOptionalNumber = (raw: string): { ok: true; value: number | null } | { ok: false } => {
   const trimmed = raw.trim();
   if (trimmed === "") return { ok: true, value: null };
 

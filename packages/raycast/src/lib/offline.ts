@@ -43,17 +43,13 @@ import {
   type ReplayIdMap,
   type StoredOfflinePayload,
   type WorkspaceSummary,
-} from "@starter/core";
+} from "../vendor/index.js";
 import { NotSignedInError } from "./errors.js";
 import { getStoredUserId } from "./auth.js";
 import { raycastStorage } from "./storage.js";
 import { apiUrl } from "./preferences.js";
 import { knownServerApiLevel, refreshServerLevel } from "./server-level.js";
-import {
-  activeWorkspaceId,
-  knownWorkspaces,
-  workspaceNameLookup,
-} from "./workspace.js";
+import { activeWorkspaceId, knownWorkspaces, workspaceNameLookup } from "./workspace.js";
 
 let queue: OfflineQueue | null = null;
 
@@ -93,8 +89,7 @@ const ready = (): Promise<unknown> => {
   return claimed;
 };
 
-const isOnThisServer = (row: QueuedMutation): boolean =>
-  isQueuedOn(row, apiUrl(), apiUrl());
+const isOnThisServer = (row: QueuedMutation): boolean => isQueuedOn(row, apiUrl(), apiUrl());
 
 /**
  * Not this session's to send: another server's row, another account's, or one
@@ -110,10 +105,7 @@ const isElsewhere = (
   row: QueuedMutation,
   owner: string | null,
   workspaces: readonly WorkspaceSummary[] | null,
-): boolean =>
-  !isOnThisServer(row) ||
-  isForeignTo(row, owner) ||
-  isHeldByWorkspace(row, workspaces);
+): boolean => !isOnThisServer(row) || isForeignTo(row, owner) || isHeldByWorkspace(row, workspaces);
 
 /**
  * This account's held rows on this server, by queue id: written by a newer
@@ -124,18 +116,14 @@ const heldHere = (
   rows: readonly QueuedMutation[],
   owner: string | null,
   workspaces: readonly WorkspaceSummary[] | null,
-): Map<string, HoldReason> =>
-  heldReasons(rows.filter((row) => !isElsewhere(row, owner, workspaces)));
+): Map<string, HoldReason> => heldReasons(rows.filter((row) => !isElsewhere(row, owner, workspaces)));
 
 /** True when the row is this account's, on this server, in a left workspace. */
 const isInLeftWorkspace = (
   row: QueuedMutation,
   owner: string | null,
   workspaces: readonly WorkspaceSummary[] | null,
-): boolean =>
-  isOnThisServer(row) &&
-  !isForeignTo(row, owner) &&
-  isHeldByWorkspace(row, workspaces);
+): boolean => isOnThisServer(row) && !isForeignTo(row, owner) && isHeldByWorkspace(row, workspaces);
 
 /**
  * Stamp this account's unstamped rows on this server with `workspaceId` — the
@@ -189,8 +177,7 @@ export const isTransportFailure = (error: unknown): boolean =>
 // again. Counting it here held every row behind it hostage under "sign in"
 // copy for a person who was signed in. It is a permanent refusal of that row.
 export const isAuthRefusal = (error: unknown): boolean =>
-  error instanceof ApiError &&
-  (error.httpStatus === 401 || error.code === "UNAUTHORIZED");
+  error instanceof ApiError && (error.httpStatus === 401 || error.code === "UNAUTHORIZED");
 
 // ── writing ──────────────────────────────────────────────────────────
 
@@ -225,7 +212,7 @@ export async function enqueueOffline<K extends OfflineOp>(
     apiUrl(),
     // The workspace it was made in, so a switch before the network returns
     // cannot file it somewhere else: the replay sends this stamp explicitly.
-    (workspaceId ?? (await activeWorkspaceId())) ?? undefined,
+    workspaceId ?? (await activeWorkspaceId()) ?? undefined,
   );
 }
 
@@ -289,10 +276,7 @@ export async function pendingCounts(): Promise<PendingCounts> {
  * The words for held rows, shared by the timer and the menu bar. Raycast stays
  * English. `null` is a mix of reasons.
  */
-export const heldCopy = (
-  count: number,
-  reason: HoldReason | null,
-): { title: string; subtitle: string } => {
+export const heldCopy = (count: number, reason: HoldReason | null): { title: string; subtitle: string } => {
   const changes = `${count} change${count === 1 ? "" : "s"}`;
   switch (reason) {
     case "unknown-op":
@@ -331,7 +315,9 @@ export type ForeignQueuedRow = QueuedMutationSummary & {
  */
 export type KeptKind = "foreign" | "held";
 
-const keptRows = async (kind: KeptKind): Promise<{
+const keptRows = async (
+  kind: KeptKind,
+): Promise<{
   rows: QueuedMutation[];
   owner: string | null;
   workspaces: readonly WorkspaceSummary[] | null;
@@ -342,9 +328,7 @@ const keptRows = async (kind: KeptKind): Promise<{
   const workspaces = await knownWorkspaces();
   const all = await getOfflineQueue().list();
   const holds = heldHere(all, owner, workspaces);
-  const rows = all.filter((row) =>
-    kind === "held" ? holds.has(row.id) : isElsewhere(row, owner, workspaces),
-  );
+  const rows = all.filter((row) => (kind === "held" ? holds.has(row.id) : isElsewhere(row, owner, workspaces)));
   return { rows, owner, workspaces, holds };
 };
 
@@ -354,10 +338,7 @@ export async function listForeign(kind: KeptKind = "foreign"): Promise<ForeignQu
   // never described with workspace names this account happens to know.
   const nameOf = await workspaceNameLookup();
   return rows.map((row) => ({
-    ...describeQueuedMutation(
-      row,
-      isForeignTo(row, owner) ? undefined : nameOf,
-    ),
+    ...describeQueuedMutation(row, isForeignTo(row, owner) ? undefined : nameOf),
     hold: holds.get(row.id) ?? null,
     leftWorkspace: isInLeftWorkspace(row, owner, workspaces),
   }));

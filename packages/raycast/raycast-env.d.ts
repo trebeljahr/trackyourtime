@@ -8,9 +8,9 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 type ExtensionPreferences = {
-  /** API URL - Origin of the Track Your Time server, e.g. https://api.example.com. Empty means the deployed server, or the local dev server under `ray develop`. */
+  /** API URL - Address of your Track Your Time server, for example https://api.example.com. Leave empty for the hosted server. */
   "apiUrl"?: string,
-  /** Web App URL - Origin of the Track Your Time web app, used for the device-pairing page and Open in Browser. Empty follows the build: the deployed web app in a `ray build`, http://localhost:3392 under `ray develop`. */
+  /** Web App URL - Address of the matching web app, where you approve sign-in. Leave empty for the hosted web app. */
   "webUrl"?: string
 }
 
@@ -22,11 +22,11 @@ declare namespace Preferences {
   export type MenuBar = ExtensionPreferences & {
   /** Menu Bar Title - What the menu bar shows while a timer runs. */
   "titleMode": "duration" | "description" | "both" | "icon",
-  /** When Nothing Runs - What the menu bar shows while no timer is running. */
+  /** When No Timer Runs - What the menu bar shows while no timer runs. */
   "idleTitle": "none" | "prompt" | "total",
-  /** Clock - Keeps the command loaded so the menu bar clock moves every second. Off shows minutes, refreshed on the command's interval. */
+  /** Clock - On keeps the command loaded so the clock moves every second. Off updates the clock once a minute. */
   "tickSeconds": boolean,
-  /** Idle - Keeps the menu bar clean; the item reappears on the next start. */
+  /** Idle - The item comes back when a timer starts. */
   "hideWhenIdle": boolean
 }
   /** Preferences accessible in the `toggle-timer` command */

@@ -3,3 +3,5 @@ node_modules
 .raycast-swift-build
 .swiftpm
 compiled_raycast_swift
+# The npm-ready copy scripts/export-store.mjs writes for the Raycast Store.
+store

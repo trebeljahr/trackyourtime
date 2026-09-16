@@ -1,12 +1,4 @@
-import {
-  Action,
-  ActionPanel,
-  Form,
-  Icon,
-  Toast,
-  popToRoot,
-  showToast,
-} from "@raycast/api";
+import { Action, ActionPanel, Form, Icon, Toast, popToRoot, showToast, Keyboard } from "@raycast/api";
 import { useState } from "react";
 import { getTrackYourTime } from "../lib/api.js";
 import { webLink } from "../lib/preferences.js";
@@ -74,9 +66,7 @@ export function StartTimer(): React.JSX.Element {
       await showToast({
         style: Toast.Style.Success,
         title: "Timer started",
-        message: [entry.description || "No description", replacedNotice(entry)]
-          .filter(Boolean)
-          .join(" · "),
+        message: [entry.description || "No description", replacedNotice(entry)].filter(Boolean).join(" · "),
       });
       await popToRoot();
     } catch (error) {
@@ -91,11 +81,7 @@ export function StartTimer(): React.JSX.Element {
       isLoading={catalog.isLoading || submitting}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Start Timer"
-            icon={Icon.Play}
-            onSubmit={submit}
-          />
+          <Action.SubmitForm title="Start Timer" icon={Icon.Play} onSubmit={submit} />
           {/* The completion for the description field. A form cannot offer one
               inline, so it is a pushed list — and the shortcut matters more
               than the row, because reaching for it means the name is already
@@ -130,7 +116,7 @@ export function StartTimer(): React.JSX.Element {
           <Action.OpenInBrowser
             title="Open Web App"
             url={webLink("/app/track")}
-            shortcut={{ modifiers: ["cmd"], key: "o" }}
+            shortcut={Keyboard.Shortcut.Common.Open}
           />
         </ActionPanel>
       }
@@ -146,12 +132,7 @@ export function StartTimer(): React.JSX.Element {
       {projectField(catalog, projectId, setProjectId)}
       {taskField(catalog, taskId, setTaskId)}
       {tagsField(catalog, tagIds, setTagIds)}
-      <Form.Checkbox
-        id="billable"
-        label="Billable"
-        value={billable}
-        onChange={setBillable}
-      />
+      <Form.Checkbox id="billable" label="Billable" value={billable} onChange={setBillable} />
       <Form.Description
         text={
           (catalog.projects.data ?? []).length > 0

@@ -1739,14 +1739,74 @@ the editor deliberately does not, because the flag on an existing entry is an
 answer somebody already gave and a rate may already be snapshotted from it.
 
 ```bash
-pnpm dev:raycast                      # builds @starter/core, then `ray develop`
-pnpm build:raycast                    # `ray build -e dist`
+pnpm dev:raycast                      # re-vendors core, then `ray develop`
+pnpm build:raycast                    # re-vendors core, then `ray build -e dist`
+pnpm vendor:raycast                   # regenerate packages/raycast/src/vendor
+pnpm export:raycast [dir] --license MIT --author <raycast-username> [--lint] [--build]   # store copy (default packages/raycast/store; --draft skips author/license)
 ```
 
 It is a thin shell over `@starter/core` — `createApiClient` for the tRPC
 HTTP endpoints, `session-auth.ts` for the device flow, the shared
 `formatDuration` helpers for display. Domain logic belongs in `core` so
 the browser extension and CLI inherit it; only Raycast UI belongs here.
+
+**The extension imports core through `src/vendor/`, never `@starter/core`.**
+The Raycast Store builds the extension alone with `npm ci`, where
+`workspace:*` cannot resolve, so `scripts/vendor-core.mjs` copies exactly the
+core and shared files the extension reaches (import lines rewritten to name
+the declaring file, everything else byte-for-byte) and writes
+`src/vendor/index.ts` with the names the sources import from it. Never edit
+`src/vendor/`: change `packages/core` or `packages/shared` and run
+`pnpm vendor:raycast`. `vendor-core.test.mjs` (in `pnpm test:unit`) fails on a
+stale copy, and on any runtime path to `zod` other than core's stored-data
+readers (`stored-entry.ts`, `stored-catalog.ts`, which validate the local
+cache and make `zod` a runtime dependency of the extension). Type-only files
+such as `shared/members.ts` are vendored for `tsc` and must stay type-only
+imports, or every command bundle carries their schemas. The allowlist is
+`RUNTIME_ZOD_FILES` in that test. Six more rules:
+
+- **Publish only from the export.** `pnpm export:raycast` writes the store copy
+  (template scripts, npm `package-lock.json`, no `dist/`); `publish` in the
+  monorepo package is a guard that exits. The store requires `license: "MIT"`
+  and a real Raycast `author`, which `--license`/`--author` set on the copy
+  only — both are decisions, not defaults. Then, by hand, in the export:
+  its own `git init` and commit (publish needs a clean work tree and writes a
+  tag there — never the monorepo), `npx @raycast/api@latest publish`. Reviewer
+  edits come back with `npx @raycast/api@latest pull-contributions` in the
+  export and are ported into `packages/raycast` by hand, anything under
+  `src/vendor/` into core or shared; `pull-contributions` merges, so it never
+  runs in the monorepo. The steps are in `packages/raycast/PUBLISHING.md`,
+  which the export does not copy: the README is the store page, and
+  `export-store.mjs` refuses one that mentions pnpm, `packages/` or
+  `src/vendor`.
+- **`name` and `author` are permanent once published.** Raycast keys
+  `LocalStorage` by them, so changing either orphans every install's token,
+  offline queue and timer echo. The store also rejects a `description` or
+  preference copy that promises more than the code does — the manifest and
+  README claims (7-day resume, 14-day list, 180-day descriptions, what needs
+  the network) are the numbers in `timer-data.ts`, `entries.tsx` and the
+  server; change them together. `CHANGELOG.md` headings are
+  `## [Title] - {PR_MERGE_DATE}`, and store CI fails a PR that does not touch
+  it. Screenshots go in `metadata/` (2000×1250 PNG, at most six).
+- **The export changes the copy in three places, and nothing else.**
+  `src/lib/local-defaults.ts` flips to `false`, so a Store reviewer's
+  `npm run dev` with empty preferences reaches the hosted service instead of
+  `localhost` (the monorepo's `ray develop` keeps the dev ports above); the
+  vendored headers, `.prettierignore` and the `eslint.config.js` comment stop
+  naming `vendor-core.mjs`. It refuses a README or any user-visible string in
+  `src/` (comments and `src/vendor/` excluded) that mentions pnpm, a worktree,
+  `packages/` or `src/vendor`. `export-store.test.mjs` pins all of it.
+- **`ray build` without `-o` writes into
+  `~/.config/raycast/extensions/<name>`**, replacing whatever dev copy Raycast
+  has installed under that name. `export:raycast --build` builds into a temp
+  dir for that reason.
+- **Prettier (120 columns) and `@raycast/eslint-config` apply to `src/`
+  minus `src/vendor/`** (`pnpm --filter trackyourtime-raycast lint`); the store
+  runs the same checks through `ray lint`.
+- `lib` includes `DOM`, as in core's own tsconfig: the vendored `ids.ts`
+  types `globalThis.crypto` as the DOM `Crypto`.
+
+The rules below predate the store copy and apply to the extension itself.
 
 - Auth: device flow, token in Raycast's encrypted `LocalStorage`, sent as
   `Authorization: Bearer <token>` with `x-trackyourtime-client: trackyourtime-raycast`.

@@ -14,16 +14,8 @@
  * shape the edit form already uses, which is also the shape that cannot
  * disagree with itself.
  */
-import {
-  Action,
-  ActionPanel,
-  Form,
-  Icon,
-  Toast,
-  showToast,
-  useNavigation,
-} from "@raycast/api";
-import { defaultManualRange } from "@starter/core";
+import { Action, ActionPanel, Form, Icon, Toast, showToast, useNavigation } from "@raycast/api";
+import { defaultManualRange } from "../vendor/index.js";
 import { useState } from "react";
 import { getTrackYourTime } from "../lib/api.js";
 import { formatDurationShort } from "../lib/format.js";
@@ -142,11 +134,7 @@ export function LogTime({ onSaved }: Props): React.JSX.Element {
       isLoading={catalog.isLoading || submitting}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Log Time"
-            icon={Icon.Plus}
-            onSubmit={submit}
-          />
+          <Action.SubmitForm title="Log Time" icon={Icon.Plus} onSubmit={submit} />
           {offersDescriptions ? (
             <Action.Push
               title="Pick a Past Description…"
@@ -186,12 +174,7 @@ export function LogTime({ onSaved }: Props): React.JSX.Element {
       {projectField(catalog, projectId, setProjectId)}
       {taskField(catalog, taskId, setTaskId)}
       {tagsField(catalog, tagIds, setTagIds)}
-      <Form.Checkbox
-        id="billable"
-        label="Billable"
-        value={billable}
-        onChange={setBillable}
-      />
+      <Form.Checkbox id="billable" label="Billable" value={billable} onChange={setBillable} />
       <Form.DatePicker
         id="start"
         title="Start"
@@ -200,12 +183,7 @@ export function LogTime({ onSaved }: Props): React.JSX.Element {
         // the one you have just finished doing.
         defaultValue={new Date(range.start)}
       />
-      <Form.DatePicker
-        id="end"
-        title="End"
-        type={Form.DatePicker.Type.DateTime}
-        defaultValue={new Date(range.end)}
-      />
+      <Form.DatePicker id="end" title="End" type={Form.DatePicker.Type.DateTime} defaultValue={new Date(range.end)} />
       <Form.Description text="This logs finished work — it does not touch the running timer." />
     </Form>
   );

@@ -1,10 +1,5 @@
 import { LocalStorage } from "@raycast/api";
-import {
-  createId,
-  sameServerOrigin,
-  signOutSession,
-  type IssuedSession,
-} from "@starter/core";
+import { createId, sameServerOrigin, signOutSession, type IssuedSession } from "../vendor/index.js";
 import { clearCache } from "./local-cache.js";
 import { clearEveryOverlay } from "./overlay.js";
 import { apiUrl } from "./preferences.js";

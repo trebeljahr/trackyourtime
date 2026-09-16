@@ -1,13 +1,5 @@
-import {
-  Action,
-  ActionPanel,
-  Form,
-  Icon,
-  showToast,
-  Toast,
-  useNavigation,
-} from "@raycast/api";
-import type { Task } from "@starter/core";
+import { Action, ActionPanel, Form, Icon, showToast, Toast, useNavigation } from "@raycast/api";
+import type { Task } from "../../vendor/index.js";
 import { useState } from "react";
 import { getTrackYourTime } from "../../lib/api.js";
 import { showFailureToast } from "../../lib/ui.js";
@@ -53,10 +45,7 @@ export function TaskForm({ task, onSaved }: Props): React.JSX.Element {
       onSaved?.(saved);
       pop();
     } catch (error) {
-      await showFailureToast(
-        error,
-        task ? "Could not save the task" : "Could not create the task",
-      );
+      await showFailureToast(error, task ? "Could not save the task" : "Could not create the task");
     } finally {
       setSubmitting(false);
     }
@@ -68,11 +57,7 @@ export function TaskForm({ task, onSaved }: Props): React.JSX.Element {
       navigationTitle={task ? `Edit ${task.name}` : "New Task"}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title={task ? "Save Task" : "Create Task"}
-            icon={Icon.Check}
-            onSubmit={submit}
-          />
+          <Action.SubmitForm title={task ? "Save Task" : "Create Task"} icon={Icon.Check} onSubmit={submit} />
         </ActionPanel>
       }
     >

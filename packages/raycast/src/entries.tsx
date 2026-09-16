@@ -1,28 +1,8 @@
-import {
-  Action,
-  ActionPanel,
-  Alert,
-  Color,
-  Icon,
-  List,
-  Toast,
-  confirmAlert,
-  showToast,
-} from "@raycast/api";
-import {
-  entryDurationSec,
-  toQuickStart,
-  type DetailedEntry,
-} from "@starter/core";
+import { Action, ActionPanel, Alert, Color, Icon, List, Toast, confirmAlert, showToast } from "@raycast/api";
+import { entryDurationSec, toQuickStart, type DetailedEntry } from "./vendor/index.js";
 import { getTrackYourTime } from "./lib/api.js";
 import { isLocalEntry } from "./lib/overlay.js";
-import {
-  formatClock,
-  formatDayHeading,
-  formatDurationShort,
-  isoDaysAgo,
-  projectIcon,
-} from "./lib/format.js";
+import { formatClock, formatDayHeading, formatDurationShort, isoDaysAgo, projectIcon } from "./lib/format.js";
 import { useApi } from "./lib/hooks.js";
 import { useServerLevel } from "./lib/server-level.js";
 import { ownOnly, resolveUserId } from "./lib/timer-data.js";
@@ -36,8 +16,7 @@ import { SignedOutView } from "./components/signed-out.js";
 /** Window the list covers. Anything older belongs in the web app's reports. */
 const HISTORY_DAYS = 14;
 
-const label = (entry: DetailedEntry): string =>
-  entry.description.trim() || entry.projectName || "No description";
+const label = (entry: DetailedEntry): string => entry.description.trim() || entry.projectName || "No description";
 
 /** Day heading → its entries, newest day first (the API already sorts). */
 const byDay = (entries: DetailedEntry[]): [string, DetailedEntry[]][] => {
@@ -93,9 +72,7 @@ const accessoriesFor = (
   // `DetailedEntry` carries only `tagIds`, so the names come from the tag
   // catalog this command already loads. An id it cannot name is skipped
   // rather than shown raw — an archived tag is absent from that list.
-  const named = entry.tagIds
-    .map((id) => tagNames.get(id))
-    .filter((name): name is string => name !== undefined);
+  const named = entry.tagIds.map((id) => tagNames.get(id)).filter((name): name is string => name !== undefined);
 
   // Capped: a Raycast row has a fixed width, and an entry with six tags would
   // push the clock range and the duration off the end of it.
@@ -113,9 +90,7 @@ const accessoriesFor = (
   }
 
   accessories.push({
-    text: running
-      ? "running"
-      : `${formatClock(entry.start)}–${formatClock(entry.end ?? entry.start)}`,
+    text: running ? "running" : `${formatClock(entry.start)}–${formatClock(entry.end ?? entry.start)}`,
   });
 
   accessories.push({
@@ -130,25 +105,20 @@ const accessoriesFor = (
 
 export default function Entries(): React.JSX.Element {
   const now = Date.now();
-  const { data, isLoading, signedOut, revalidate } = useApi(
-    "entries",
-    async (api) => {
-      const { entries } = await api.list({
-        from: isoDaysAgo(HISTORY_DAYS),
-        to: new Date(Date.now() + 60_000).toISOString(),
-        limit: 200,
-      });
-      // "Show All Time" is this person's time. A member allowed to see
-      // colleagues' entries gets them from the same list, and a colleague's
-      // row here would offer Continue and Edit on work that is not theirs.
-      return ownOnly(entries, await resolveUserId());
-    },
-  );
+  const { data, isLoading, signedOut, revalidate } = useApi("entries", async (api) => {
+    const { entries } = await api.list({
+      from: isoDaysAgo(HISTORY_DAYS),
+      to: new Date(Date.now() + 60_000).toISOString(),
+      limit: 200,
+    });
+    // "Show All Time" is this person's time. A member allowed to see
+    // colleagues' entries gets them from the same list, and a colleague's
+    // row here would offer Continue and Edit on work that is not theirs.
+    return ownOnly(entries, await resolveUserId());
+  });
 
   const tags = useApi("tags", (api) => api.tags());
-  const tagNames = new Map(
-    (tags.data ?? []).map((tag) => [tag.id, tag.name] as const),
-  );
+  const tagNames = new Map((tags.data ?? []).map((tag) => [tag.id, tag.name] as const));
   // Also the command-start refresh of the server's API level.
   const { banner } = useServerLevel();
 
@@ -156,10 +126,7 @@ export default function Entries(): React.JSX.Element {
 
   const entries = data ?? [];
 
-  const run = async (
-    action: () => Promise<string>,
-    failureTitle: string,
-  ): Promise<void> => {
+  const run = async (action: () => Promise<string>, failureTitle: string): Promise<void> => {
     try {
       const message = await action();
       await refreshMenuBar();
@@ -173,9 +140,7 @@ export default function Entries(): React.JSX.Element {
   const remove = async (entry: DetailedEntry): Promise<void> => {
     const confirmed = await confirmAlert({
       title: "Delete this entry?",
-      message: `${label(entry)} — ${formatDurationShort(
-        entryDurationSec(entry, Date.now()),
-      )}`,
+      message: `${label(entry)} — ${formatDurationShort(entryDurationSec(entry, Date.now()))}`,
       icon: Icon.Trash,
       primaryAction: {
         title: "Delete",
@@ -222,11 +187,7 @@ export default function Entries(): React.JSX.Element {
       />
 
       {byDay(entries).map(([heading, group]) => (
-        <List.Section
-          key={heading}
-          title={heading}
-          subtitle={formatDurationShort(dayTotal(group, now))}
-        >
+        <List.Section key={heading} title={heading} subtitle={formatDurationShort(dayTotal(group, now))}>
           {group.map((entry) => {
             const running = entry.end === null;
 
@@ -235,11 +196,7 @@ export default function Entries(): React.JSX.Element {
                 key={entry.id}
                 icon={projectIcon(entry.projectColor)}
                 title={label(entry)}
-                subtitle={
-                  [entry.projectName, entry.taskName]
-                    .filter(Boolean)
-                    .join(" › ") || undefined
-                }
+                subtitle={[entry.projectName, entry.taskName].filter(Boolean).join(" › ") || undefined}
                 accessories={accessoriesFor(entry, now, tagNames)}
                 actions={
                   <ActionPanel>
@@ -273,9 +230,7 @@ export default function Entries(): React.JSX.Element {
                         title="Edit Entry"
                         icon={Icon.Pencil}
                         shortcut={{ modifiers: ["cmd"], key: "e" }}
-                        target={
-                          <EditEntry entry={entry} onSaved={revalidate} />
-                        }
+                        target={<EditEntry entry={entry} onSaved={revalidate} />}
                       />
                     </ActionPanel.Section>
 

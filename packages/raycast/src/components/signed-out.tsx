@@ -1,10 +1,4 @@
-import {
-  Action,
-  ActionPanel,
-  Icon,
-  List,
-  openExtensionPreferences,
-} from "@raycast/api";
+import { Action, ActionPanel, Icon, List, openExtensionPreferences } from "@raycast/api";
 import { webLink } from "../lib/preferences.js";
 import { SignIn } from "./sign-in.js";
 
@@ -27,20 +21,9 @@ export function SignedOutView(): React.JSX.Element {
         description="Pair this Mac with your Track Your Time account to start tracking from Raycast."
         actions={
           <ActionPanel>
-            <Action.Push
-              title="Sign in to Track Your Time"
-              icon={Icon.Key}
-              target={<SignIn />}
-            />
-            <Action.OpenInBrowser
-              title="Open Web App"
-              url={webLink("/app/track")}
-            />
-            <Action
-              title="Open Extension Preferences"
-              icon={Icon.Gear}
-              onAction={openExtensionPreferences}
-            />
+            <Action.Push title="Sign In to Track Your Time" icon={Icon.Key} target={<SignIn />} />
+            <Action.OpenInBrowser title="Open Web App" url={webLink("/app/track")} />
+            <Action title="Open Extension Preferences" icon={Icon.Gear} onAction={openExtensionPreferences} />
           </ActionPanel>
         }
       />

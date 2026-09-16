@@ -1,4 +1,5 @@
 import { environment, getPreferenceValues } from "@raycast/api";
+import { DEV_BUILD_USES_LOCALHOST } from "./local-defaults.js";
 
 /**
  * Where an unset preference points, per build mode.
@@ -13,8 +14,12 @@ import { environment, getPreferenceValues } from "@raycast/api";
  * The ports are the ones `pnpm run dev` pins. A worktree runs on random ports
  * instead (agents, several at once), which is what the preferences below are
  * for.
+ *
+ * The store copy has no local server to reach, so its `ray develop` build
+ * (what a Store reviewer runs) uses the production origins too — see
+ * `local-defaults.ts`.
  */
-const DEFAULT_ORIGINS = {
+export const DEFAULT_ORIGINS = {
   development: {
     apiUrl: "http://localhost:5159",
     webUrl: "http://localhost:3392",
@@ -33,8 +38,11 @@ const DEFAULT_ORIGINS = {
 /** True under `ray develop`, false in a `ray build` bundle. */
 export const isDevBuild = (): boolean => environment.isDevelopment;
 
+/** True when empty preferences point at the local dev stack. */
+export const usesLocalDefaults = (): boolean => isDevBuild() && DEV_BUILD_USES_LOCALHOST;
+
 const defaults = (): { apiUrl: string; webUrl: string } =>
-  isDevBuild() ? DEFAULT_ORIGINS.development : DEFAULT_ORIGINS.production;
+  usesLocalDefaults() ? DEFAULT_ORIGINS.development : DEFAULT_ORIGINS.production;
 
 const trimSlash = (value: string): string => value.trim().replace(/\/+$/, "");
 
@@ -64,8 +72,7 @@ export const webUrl = (): string => {
 };
 
 /** Deep link into a page of the web app, e.g. `webLink("/app/track")`. */
-export const webLink = (path: string): string =>
-  `${webUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+export const webLink = (path: string): string => `${webUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 
 /**
  * Host without the scheme, for Raycast's metadata column.
@@ -73,5 +80,4 @@ export const webLink = (path: string): string =>
  * That column is narrow and renders plain text — a full URL truncates to
  * "https://api.example…" and hides the part that matters.
  */
-export const hostLabel = (url: string): string =>
-  url.replace(/^https?:\/\//, "") || url;
+export const hostLabel = (url: string): string => url.replace(/^https?:\/\//, "") || url;

@@ -29,16 +29,11 @@ import {
   withoutResolved,
   type DetailedEntry,
   type OfflineOverlay,
-} from "@starter/core";
+} from "../vendor/index.js";
 import { raycastStorage } from "./storage.js";
 import { clearEveryWorkspace, workspaceKey } from "./workspace.js";
 
-export {
-  applyOverlay,
-  overlayRunning,
-  resolveRunning,
-  type OfflineOverlay,
-};
+export { applyOverlay, overlayRunning, resolveRunning, type OfflineOverlay };
 
 const OVERLAY_KEY = "trackyourtime.offline.overlay";
 
@@ -68,13 +63,10 @@ const saveAt = async (key: string, overlay: OfflineOverlay): Promise<void> => {
   }
 };
 
-const save = async (overlay: OfflineOverlay): Promise<void> =>
-  saveAt(await workspaceKey(OVERLAY_KEY), overlay);
+const save = async (overlay: OfflineOverlay): Promise<void> => saveAt(await workspaceKey(OVERLAY_KEY), overlay);
 
 /** One key for the read and the write — see `remember` in local-cache.ts. */
-const edit = async (
-  change: (overlay: OfflineOverlay) => OfflineOverlay,
-): Promise<void> => {
+const edit = async (change: (overlay: OfflineOverlay) => OfflineOverlay): Promise<void> => {
   const key = await workspaceKey(OVERLAY_KEY);
   await saveAt(key, change(await loadOverlayAt(key)));
 };
@@ -82,10 +74,8 @@ const edit = async (
 export const noteOptimisticEntry = (entry: DetailedEntry): Promise<void> =>
   edit((overlay) => withOptimisticEntry(overlay, entry));
 
-export const noteOptimisticPatch = (
-  id: string,
-  patch: Partial<DetailedEntry>,
-): Promise<void> => edit((overlay) => withOptimisticPatch(overlay, id, patch));
+export const noteOptimisticPatch = (id: string, patch: Partial<DetailedEntry>): Promise<void> =>
+  edit((overlay) => withOptimisticPatch(overlay, id, patch));
 
 export const noteOptimisticRemoval = (id: string): Promise<void> =>
   edit((overlay) => withOptimisticRemoval(overlay, id));
@@ -116,9 +106,7 @@ export const reconcileOverlay = async ({
 export const clearOverlay = (): Promise<void> => save(emptyOverlay());
 
 /** Every workspace's overlay — for a sign-out. */
-export const clearEveryOverlay = (): Promise<void> =>
-  clearEveryWorkspace(OVERLAY_KEY);
+export const clearEveryOverlay = (): Promise<void> => clearEveryWorkspace(OVERLAY_KEY);
 
 /** True when this entry only exists here — the server has never heard of it. */
-export const isLocalEntry = (entry: { id: string }): boolean =>
-  isTempId(entry.id);
+export const isLocalEntry = (entry: { id: string }): boolean => isTempId(entry.id);

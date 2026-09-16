@@ -19,7 +19,7 @@ import {
   type ServerLevel,
   type ServerLevelCache,
   type VersionRefusal,
-} from "@starter/core";
+} from "../vendor/index.js";
 import { compatibilityBanner, type CompatibilityBanner } from "./compatibility-copy.js";
 import { apiUrl } from "./preferences.js";
 import { raycastStorage } from "./storage.js";

@@ -27,7 +27,7 @@ import {
   workspaceScopedKey,
   type StoredWorkspaceChoice,
   type WorkspaceSummary,
-} from "@starter/core";
+} from "../vendor/index.js";
 import { getStoredUserId } from "./auth.js";
 import { apiUrl } from "./preferences.js";
 import { raycastStorage } from "./storage.js";

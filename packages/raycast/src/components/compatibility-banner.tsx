@@ -26,9 +26,7 @@ export function CompatibilityListSection({
         accessories={[{ icon: Icon.Info, tooltip: banner.message }]}
         actions={
           <ActionPanel>
-            {banner.url ? (
-              <Action.OpenInBrowser title="How to Update the Server" url={banner.url} />
-            ) : null}
+            {banner.url ? <Action.OpenInBrowser title="How to Update the Server" url={banner.url} /> : null}
             <Action.CopyToClipboard title="Copy Message" content={banner.message} />
             {children}
           </ActionPanel>

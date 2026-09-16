@@ -15,40 +15,19 @@ import {
   repairQuickStart,
   toQuickStart,
   type DetailedEntry,
-} from "@starter/core";
+} from "./vendor/index.js";
 import { getTrackYourTime, type ProjectWithStats } from "./lib/api.js";
 import { CompatibilityMenuBarSection } from "./components/compatibility-banner.js";
 import { BRAND_MARK } from "./lib/brand.js";
-import {
-  formatClock,
-  formatDurationShort,
-  formatMenuBarClock,
-  formatMenuBarTotal,
-} from "./lib/format.js";
-import {
-  useApi,
-  useNow,
-  usePoll,
-  useReconciledRunning,
-  useWatchRunning,
-} from "./lib/hooks.js";
+import { formatClock, formatDurationShort, formatMenuBarClock, formatMenuBarTotal } from "./lib/format.js";
+import { useApi, useNow, usePoll, useReconciledRunning, useWatchRunning } from "./lib/hooks.js";
 import { heldCopy } from "./lib/offline.js";
 import { webLink } from "./lib/preferences.js";
-import {
-  entryHint,
-  entryLabel,
-  favoriteFor,
-  loadTimerSnapshot,
-} from "./lib/timer-data.js";
+import { entryHint, entryLabel, favoriteFor, loadTimerSnapshot } from "./lib/timer-data.js";
 import { useServerLevel } from "./lib/server-level.js";
 import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
-import {
-  describeFailure,
-  isAlreadyStopped,
-  replacedNotice,
-  showFailureToast,
-} from "./lib/ui.js";
+import { describeFailure, isAlreadyStopped, replacedNotice, showFailureToast } from "./lib/ui.js";
 
 /** A dropdown is a glance, not a browser — six rows is already a lot. */
 const RECENT_LIMIT = 6;
@@ -79,11 +58,9 @@ const openTimer = (): void => {
 };
 
 export default function MenuBar(): React.JSX.Element | null {
-  const { titleMode, idleTitle, hideWhenIdle, tickSeconds } =
-    getPreferenceValues<Preferences.MenuBar>();
-  const { data, isLoading, error, signedOut, revalidate } = useApi(
-    "menu-bar",
-    (api) => loadTimerSnapshot(api, { recentLimit: RECENT_LIMIT }),
+  const { titleMode, idleTitle, hideWhenIdle, tickSeconds } = getPreferenceValues<Preferences.MenuBar>();
+  const { data, isLoading, error, signedOut, revalidate } = useApi("menu-bar", (api) =>
+    loadTimerSnapshot(api, { recentLimit: RECENT_LIMIT }),
   );
 
   /**
@@ -128,11 +105,7 @@ export default function MenuBar(): React.JSX.Element | null {
   if (signedOut) {
     return (
       <MenuBarExtra icon={BRAND_MARK} tooltip="Track Your Time — not signed in">
-        <MenuBarExtra.Item
-          title="Sign in to Track Your Time"
-          icon={Icon.Key}
-          onAction={openTimer}
-        />
+        <MenuBarExtra.Item title="Sign In to Track Your Time" icon={Icon.Key} onAction={openTimer} />
       </MenuBarExtra>
     );
   }
@@ -170,10 +143,7 @@ export default function MenuBar(): React.JSX.Element | null {
     return `${label} · ${clock}`;
   })();
 
-  const act = async (
-    run: () => Promise<void>,
-    failureTitle: string,
-  ): Promise<void> => {
+  const act = async (run: () => Promise<void>, failureTitle: string): Promise<void> => {
     try {
       await run();
       revalidate();
@@ -199,10 +169,7 @@ export default function MenuBar(): React.JSX.Element | null {
    * project because a task only exists inside one — keeping it would leave
    * the entry pointing at a task from a project it is no longer in.
    */
-  const fileUnder = (
-    entry: DetailedEntry,
-    project: ProjectWithStats | null,
-  ): void => {
+  const fileUnder = (entry: DetailedEntry, project: ProjectWithStats | null): void => {
     void act(async () => {
       const api = await getTrackYourTime();
       // The task is left alone: moving an entry to another project does not
@@ -227,14 +194,10 @@ export default function MenuBar(): React.JSX.Element | null {
         error
           ? `Track Your Time — could not refresh · ${describeFailure(error)}`
           : pending > 0
-            ? `${pending} change${pending === 1 ? "" : "s"} waiting to sync${
-                running ? ` · ${label} — ${clock}` : ""
-              }`
-          : running
-            ? `${label} — ${clock}`
-            : `Track Your Time — no timer running · today ${formatDurationShort(
-                data?.todaySec ?? 0,
-              )}`
+            ? `${pending} change${pending === 1 ? "" : "s"} waiting to sync${running ? ` · ${label} — ${clock}` : ""}`
+            : running
+              ? `${label} — ${clock}`
+              : `Track Your Time — no timer running · today ${formatDurationShort(data?.todaySec ?? 0)}`
       }
     >
       {/* First: while one side is too old nothing below works as it should. */}
@@ -250,18 +213,10 @@ export default function MenuBar(): React.JSX.Element | null {
             onAction={openTimer}
           />
           {data?.runningWorkspaceName ? (
-            <MenuBarExtra.Item
-              title={`In ${data.runningWorkspaceName}`}
-              icon={Icon.Building}
-              onAction={openTimer}
-            />
+            <MenuBarExtra.Item title={`In ${data.runningWorkspaceName}`} icon={Icon.Building} onAction={openTimer} />
           ) : null}
           {entryHint(running) ? (
-            <MenuBarExtra.Item
-              title={entryHint(running) ?? ""}
-              icon={Icon.Folder}
-              onAction={openTimer}
-            />
+            <MenuBarExtra.Item title={entryHint(running) ?? ""} icon={Icon.Folder} onAction={openTimer} />
           ) : null}
           <MenuBarExtra.Item
             title="Stop Timer"
@@ -297,11 +252,7 @@ export default function MenuBar(): React.JSX.Element | null {
                 onAction={() => fileUnder(running, project)}
               />
             ))}
-            <MenuBarExtra.Item
-              title="No Project"
-              icon={Icon.Circle}
-              onAction={() => fileUnder(running, null)}
-            />
+            <MenuBarExtra.Item title="No Project" icon={Icon.Circle} onAction={() => fileUnder(running, null)} />
           </MenuBarExtra.Submenu>
           <MenuBarExtra.Item
             title={pinned ? "Remove Favorite" : "Pin as Favorite"}
@@ -371,9 +322,7 @@ export default function MenuBar(): React.JSX.Element | null {
                   await showToast({
                     style: Toast.Style.Success,
                     title: "Timer started",
-                    message: [quickStartLabel(favorite), replacedNotice(started)]
-                      .filter(Boolean)
-                      .join(" · "),
+                    message: [quickStartLabel(favorite), replacedNotice(started)].filter(Boolean).join(" · "),
                   });
                 }, "Could not start the timer");
               }}
@@ -397,9 +346,7 @@ export default function MenuBar(): React.JSX.Element | null {
                   await showToast({
                     style: Toast.Style.Success,
                     title: "Timer started",
-                    message: [entryLabel(entry), replacedNotice(started)]
-                      .filter(Boolean)
-                      .join(" · "),
+                    message: [entryLabel(entry), replacedNotice(started)].filter(Boolean).join(" · "),
                   });
                 }, "Could not start the timer");
               }}
@@ -445,9 +392,7 @@ export default function MenuBar(): React.JSX.Element | null {
         </MenuBarExtra.Section>
       ) : null}
 
-      <MenuBarExtra.Section
-        title={`Today · ${formatDurationShort(data?.todaySec ?? 0)}`}
-      >
+      <MenuBarExtra.Section title={`Today · ${formatDurationShort(data?.todaySec ?? 0)}`}>
         <MenuBarExtra.Item
           title="Timer…"
           icon={Icon.Stopwatch}

@@ -1,13 +1,5 @@
-import {
-  Action,
-  ActionPanel,
-  Form,
-  Icon,
-  Toast,
-  showToast,
-  useNavigation,
-} from "@raycast/api";
-import type { Client } from "@starter/core";
+import { Action, ActionPanel, Form, Icon, Toast, showToast, useNavigation } from "@raycast/api";
+import type { Client } from "../../vendor/index.js";
 import { useState } from "react";
 import { getTrackYourTime } from "../../lib/api.js";
 import { showFailureToast } from "../../lib/ui.js";
@@ -58,10 +50,7 @@ export function ClientForm({ client, onSaved }: Props): React.JSX.Element {
     } catch (error) {
       // A duplicate name comes back as CONFLICT with a usable message, so the
       // toast is the whole story — no need to guess at what clashed.
-      await showFailureToast(
-        error,
-        client ? "Could not save the client" : "Could not create the client",
-      );
+      await showFailureToast(error, client ? "Could not save the client" : "Could not create the client");
     } finally {
       setSubmitting(false);
     }
@@ -73,11 +62,7 @@ export function ClientForm({ client, onSaved }: Props): React.JSX.Element {
       navigationTitle={client ? `Edit ${client.name}` : "New Client"}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title={client ? "Save Client" : "Create Client"}
-            icon={Icon.Check}
-            onSubmit={submit}
-          />
+          <Action.SubmitForm title={client ? "Save Client" : "Create Client"} icon={Icon.Check} onSubmit={submit} />
         </ActionPanel>
       }
     >

@@ -1,13 +1,5 @@
-import {
-  Action,
-  ActionPanel,
-  Form,
-  Icon,
-  Toast,
-  showToast,
-  useNavigation,
-} from "@raycast/api";
-import type { Project } from "@starter/core";
+import { Action, ActionPanel, Form, Icon, Toast, showToast, useNavigation, Keyboard } from "@raycast/api";
+import type { Project } from "../../vendor/index.js";
 import { useState } from "react";
 import { getTrackYourTime, type ProjectWithStats } from "../../lib/api.js";
 import { NONE, parseOptionalNumber } from "../../lib/catalog.js";
@@ -37,30 +29,16 @@ const numberField = (value: number | null | undefined): string =>
  * than a Raycast form can carry, and neither is something you set from a
  * launcher mid-flow.
  */
-export function ProjectForm({
-  project,
-  clientId,
-  onSaved,
-}: Props): React.JSX.Element {
+export function ProjectForm({ project, clientId, onSaved }: Props): React.JSX.Element {
   const { pop } = useNavigation();
   const [name, setName] = useState(project?.name ?? "");
   const [nameError, setNameError] = useState<string | undefined>();
   const [color, setColor] = useState(project?.color ?? AUTOMATIC);
-  const [client, setClient] = useState(
-    project?.clientId ?? clientId ?? NONE,
-  );
-  const [billableDefault, setBillableDefault] = useState(
-    project?.billableDefault ?? false,
-  );
-  const [hourlyRate, setHourlyRate] = useState(
-    numberField(project?.hourlyRate),
-  );
-  const [estimatedHours, setEstimatedHours] = useState(
-    numberField(project?.estimatedHours),
-  );
-  const [budgetAmount, setBudgetAmount] = useState(
-    numberField(project?.budgetAmount),
-  );
+  const [client, setClient] = useState(project?.clientId ?? clientId ?? NONE);
+  const [billableDefault, setBillableDefault] = useState(project?.billableDefault ?? false);
+  const [hourlyRate, setHourlyRate] = useState(numberField(project?.hourlyRate));
+  const [estimatedHours, setEstimatedHours] = useState(numberField(project?.estimatedHours));
+  const [budgetAmount, setBudgetAmount] = useState(numberField(project?.budgetAmount));
   const [submitting, setSubmitting] = useState(false);
 
   const clients = useApi("clients", (api) => api.clients());
@@ -99,9 +77,7 @@ export function ProjectForm({
     setSubmitting(true);
     try {
       const api = await getTrackYourTime();
-      const saved = project
-        ? await api.updateProject({ id: project.id, ...fields })
-        : await api.createProject(fields);
+      const saved = project ? await api.updateProject({ id: project.id, ...fields }) : await api.createProject(fields);
 
       await showToast({
         style: Toast.Style.Success,
@@ -111,10 +87,7 @@ export function ProjectForm({
       onSaved?.(saved);
       pop();
     } catch (error) {
-      await showFailureToast(
-        error,
-        project ? "Could not save the project" : "Could not create the project",
-      );
+      await showFailureToast(error, project ? "Could not save the project" : "Could not create the project");
     } finally {
       setSubmitting(false);
     }
@@ -126,18 +99,14 @@ export function ProjectForm({
       navigationTitle={project ? `Edit ${project.name}` : "New Project"}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title={project ? "Save Project" : "Create Project"}
-            icon={Icon.Check}
-            onSubmit={submit}
-          />
+          <Action.SubmitForm title={project ? "Save Project" : "Create Project"} icon={Icon.Check} onSubmit={submit} />
           {/* The client you want rarely exists yet when you are filing a new
               project, and bouncing out to another command to make one loses
               everything typed so far. */}
           <Action.Push
             title="New Client…"
             icon={Icon.PersonCircle}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+            shortcut={Keyboard.Shortcut.Common.Copy}
             target={
               <ClientForm
                 onSaved={(created) => {
@@ -161,12 +130,7 @@ export function ProjectForm({
           if (nameError) setNameError(undefined);
         }}
       />
-      <Form.Dropdown
-        id="clientId"
-        title="Client"
-        value={client}
-        onChange={setClient}
-      >
+      <Form.Dropdown id="clientId" title="Client" value={client} onChange={setClient}>
         <Form.Dropdown.Item value={NONE} title="No client" icon={Icon.Circle} />
         {(clients.data ?? []).map((candidate) => (
           <Form.Dropdown.Item

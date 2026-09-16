@@ -2,7 +2,7 @@
   "$schema": "https://www.raycast.com/schemas/tsconfig.json",
   "include": ["src/**/*", "raycast-env.d.ts"],
   "compilerOptions": {
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM"],
     "types": ["node", "react"],
     "target": "ES2022",
     "module": "ESNext",

@@ -2,10 +2,11 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "trackyourtime-raycast",
   "title": "Track Your Time",
-  "description": "Start, stop and edit Track Your Time timers from Raycast, with a live menu bar clock.",
+  "description": "Start, stop and edit Track Your Time entries, with a live timer in the macOS menu bar.",
   "icon": "icon.png",
   "author": "trebeljahr",
   "categories": ["Productivity"],
+  "platforms": ["macOS"],
   "license": "AGPL-3.0-or-later",
   "private": true,
   "type": "module",
@@ -14,7 +15,7 @@
       "name": "menu-bar",
       "title": "Timer Menu Bar",
       "subtitle": "Track Your Time",
-      "description": "Show the running timer in the macOS menu bar.",
+      "description": "Show the running timer in the macOS menu bar, with stop, edit and recent work in its menu.",
       "mode": "menu-bar",
       "interval": "1m",
       "preferences": [
@@ -26,30 +27,30 @@
           "required": false,
           "default": "duration",
           "data": [
-            { "title": "Duration only", "value": "duration" },
-            { "title": "Description only", "value": "description" },
-            { "title": "Duration and description", "value": "both" },
-            { "title": "Icon only", "value": "icon" }
+            { "title": "Duration Only", "value": "duration" },
+            { "title": "Description Only", "value": "description" },
+            { "title": "Description and Duration", "value": "both" },
+            { "title": "Icon Only", "value": "icon" }
           ]
         },
         {
           "name": "idleTitle",
-          "title": "When Nothing Runs",
-          "description": "What the menu bar shows while no timer is running.",
+          "title": "When No Timer Runs",
+          "description": "What the menu bar shows while no timer runs.",
           "type": "dropdown",
           "required": false,
           "default": "none",
           "data": [
-            { "title": "Just the icon", "value": "none" },
-            { "title": "Start timer", "value": "prompt" },
-            { "title": "Today's total", "value": "total" }
+            { "title": "Icon Only", "value": "none" },
+            { "title": "Start Timer", "value": "prompt" },
+            { "title": "Today's Total", "value": "total" }
           ]
         },
         {
           "name": "tickSeconds",
           "title": "Clock",
-          "label": "Count the seconds up while a timer runs",
-          "description": "Keeps the command loaded so the menu bar clock moves every second. Off shows minutes, refreshed on the command's interval.",
+          "label": "Count seconds while a timer runs",
+          "description": "On keeps the command loaded so the clock moves every second. Off updates the clock once a minute.",
           "type": "checkbox",
           "required": false,
           "default": true
@@ -58,7 +59,7 @@
           "name": "hideWhenIdle",
           "title": "Idle",
           "label": "Hide the menu bar item when no timer runs",
-          "description": "Keeps the menu bar clean; the item reappears on the next start.",
+          "description": "The item comes back when a timer starts.",
           "type": "checkbox",
           "required": false,
           "default": false
@@ -69,7 +70,7 @@
       "name": "toggle-timer",
       "title": "Start / Stop Timer",
       "subtitle": "Track Your Time",
-      "description": "Stop the running timer, or resume the last thing you tracked. Bind it to a hotkey — it never opens a window.",
+      "description": "Stop the running timer, or resume your latest entry from the past 7 days. Assign a hotkey to it.",
       "mode": "no-view",
       "keywords": ["toggle", "start", "stop", "resume", "continue", "track"]
     },
@@ -77,7 +78,7 @@
       "name": "timer",
       "title": "Timer",
       "subtitle": "Track Your Time",
-      "description": "Start or stop tracking — the running timer, favorites and recent work.",
+      "description": "Start or stop a timer from a form, a favorite or recent work.",
       "mode": "view",
       "keywords": ["start", "stop", "track", "resume", "favorites", "recent"]
     },
@@ -85,7 +86,7 @@
       "name": "entries",
       "title": "Show All Time",
       "subtitle": "Track Your Time",
-      "description": "Browse, continue, edit and delete recent time entries.",
+      "description": "Browse the last 14 days of entries, then continue, edit or delete them.",
       "mode": "view",
       "keywords": ["entries", "history", "log", "today", "week"]
     },
@@ -93,7 +94,7 @@
       "name": "open-dashboard",
       "title": "Open Dashboard",
       "subtitle": "Track Your Time",
-      "description": "Open the Track Your Time web app, where reports, invoices and catalog editing live.",
+      "description": "Open the web app for reports, invoices and catalog editing.",
       "mode": "no-view",
       "keywords": ["web", "reports", "invoices", "projects", "clients", "tags"]
     }
@@ -102,7 +103,7 @@
     {
       "name": "apiUrl",
       "title": "API URL",
-      "description": "Origin of the Track Your Time server, e.g. https://api.example.com. Empty means the deployed server, or the local dev server under `ray develop`.",
+      "description": "Address of your Track Your Time server, for example https://api.example.com. Leave empty for the hosted server.",
       "type": "textfield",
       "required": false,
       "placeholder": "https://api.trackyourtime.dev"
@@ -110,26 +111,36 @@
     {
       "name": "webUrl",
       "title": "Web App URL",
-      "description": "Origin of the Track Your Time web app, used for the device-pairing page and Open in Browser. Empty follows the build: the deployed web app in a `ray build`, http://localhost:3392 under `ray develop`.",
+      "description": "Address of the matching web app, where you approve sign-in. Leave empty for the hosted web app.",
       "type": "textfield",
       "required": false,
       "placeholder": "https://trackyourtime.dev"
     }
   ],
   "dependencies": {
-    "@raycast/api": "^2.1.2",
-    "@raycast/utils": "^2.3.0",
-    "@starter/core": "workspace:*"
+    "@raycast/api": "^2.4.1",
+    "@raycast/utils": "^2.3.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@raycast/eslint-config": "^2.2.0",
     "@types/node": "22.19.17",
     "@types/react": "19.0.10",
+    "eslint": "^9.39.4",
+    "prettier": "^3.9.6",
     "typescript": "^6.0.3"
   },
   "scripts": {
     "dev": "ray develop",
     "build": "ray build -e dist",
-    "publish": "npx @raycast/api@latest publish",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**\" && prettier --list-different \"src/**\"",
+    "fix-lint": "eslint \"src/**\" --fix && prettier --write \"src/**\"",
+    "test": "node --test scripts/*.test.mjs",
+    "vendor": "node scripts/vendor-core.mjs",
+    "vendor:check": "node scripts/vendor-core.mjs --check",
+    "export:store": "node scripts/export-store.mjs",
+    "publish": "node -e \"console.error(\\\"Not from the monorepo. Run pnpm export:raycast, then publish from the exported directory.\\\"); process.exit(1)\"",
+    "prepublishOnly": "node -e \"console.error(\\\"This is a Raycast extension, not an npm package.\\\"); process.exit(1)\""
   }
 }
