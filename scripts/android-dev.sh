@@ -41,6 +41,9 @@
 #                    10.0.2.2, the emulator alias). Required for a real device.
 #   CAP_DEV_URL=<url> full WebView dev URL override, e.g.
 #                     https://<slug>.local.<your-domain>/
+#   ANDROID_HEADLESS=1  boot the emulator with -no-window -no-audio (agent
+#                     runs; screenshot with `adb exec-out screencap -p`), so no
+#                     emulator window appears or takes focus
 
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -164,7 +167,13 @@ elif adb devices | awk 'NR>1 && $2 == "unauthorized" { found=1 } END { exit !fou
   exit 1
 else
   echo "No device attached — booting emulator: $AVD_NAME"
+  EMULATOR_WINDOW_FLAGS=()
+  if [ "${ANDROID_HEADLESS:-}" = "1" ]; then
+    EMULATOR_WINDOW_FLAGS=(-no-window -no-audio)
+    echo "   headless (ANDROID_HEADLESS=1)"
+  fi
   nohup emulator -avd "$AVD_NAME" \
+      ${EMULATOR_WINDOW_FLAGS[@]+"${EMULATOR_WINDOW_FLAGS[@]}"} \
       -no-boot-anim \
       -memory 2048 \
       -gpu host \

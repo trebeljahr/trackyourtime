@@ -175,6 +175,17 @@ pnpm icons:desktop                    # regenerate icns/ico/png set (electron-ic
 every other shipped bitmap) from `packages/client/public/brand/mark-tile.svg`,
 then `pnpm icons:desktop` to fan it out to icns/ico. Do not hand-edit it.
 Bundle config lives in root `package.json` `"build"` (electron-builder).
+
+**Native windows never take focus during dev and agent runs.** Under
+`pnpm dev:desktop` the Electron window is shown with `showInactive()`;
+`TRACKYOURTIME_ELECTRON_BACKGROUND=1` does that anywhere and also hides the
+macOS Dock icon, `=0` restores a normal `show()`. A packaged build sets
+neither, so users are unaffected. The same rule for the other shells:
+`pnpm dev:tauri:background` (window with `focus: false`), `IOS_HEADLESS=1
+pnpm dev:ios` (simctl only; without it Simulator.app is opened with
+`open -g`), and `ANDROID_HEADLESS=1 pnpm dev:android` (emulator with
+`-no-window`). Screenshot with `simctl io` / `adb exec-out screencap`, never
+by bringing a window forward.
 Electron IPC bridge: `electron/preload.ts` exposes `window.electronAPI`.
 
 ### Desktop (Tauri + Steamworks)
@@ -183,6 +194,7 @@ Requires the Rust toolchain (https://rustup.rs).
 
 ```bash
 pnpm dev:tauri                        # Next dev + Tauri window, HMR
+pnpm dev:tauri:background             # same, window never takes focus
 pnpm build:tauri                      # static export + native bundle (dmg/msi/AppImage)
 pnpm icons:tauri                      # regenerate src-tauri/icons/ from build/icon.png
 pnpm tauri build -- --features steam  # Steam-enabled build (needs Steamworks SDK redistributable)
@@ -464,7 +476,8 @@ is quietly wrong:
   `defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool
   false`, so a headless loop screenshots a focused field with no keyboard under
   it and nothing about the layout is being tested. Write the default, then
-  `open -a Simulator` once.
+  `open -g -a Simulator` once — `-g` opens it in the background; a plain
+  `open -a` activates it and takes keyboard focus from the person at the Mac.
 
 **Native chrome lives in `packages/client/src/styles/native.css`**, imported by
 one line from `globals.css`. Every selector in it is under `html.cap` — safe-area

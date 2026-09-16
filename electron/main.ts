@@ -13,6 +13,22 @@ import fs from "fs";
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 const DEV_URL = process.env.ELECTRON_DEV_URL || "http://localhost:7130";
 
+/*
+ * Background mode: the window is shown without activating the app or taking
+ * keyboard focus, so an agent (or a watch loop) relaunching Electron never
+ * pulls it in front of whatever the person at the machine is typing into.
+ *
+ *   TRACKYOURTIME_ELECTRON_BACKGROUND=1  showInactive(), and no Dock icon on macOS
+ *   TRACKYOURTIME_ELECTRON_BACKGROUND=0  normal show() even under `pnpm dev:desktop`
+ *   unset                                showInactive() under `pnpm dev:desktop`
+ *                                        (ELECTRON_DEV_URL set), show() otherwise
+ *
+ * A packaged build never sets either variable, so real users get show().
+ */
+const BACKGROUND_FLAG = process.env.TRACKYOURTIME_ELECTRON_BACKGROUND;
+const showInBackground =
+  BACKGROUND_FLAG === "1" || (BACKGROUND_FLAG !== "0" && Boolean(process.env.ELECTRON_DEV_URL));
+
 ipcMain.handle("app:quit", () => {
   for (const w of BrowserWindow.getAllWindows()) {
     try {
@@ -179,7 +195,9 @@ function createWindow(): void {
   });
 
   win.once("ready-to-show", () => {
-    if (!win.isDestroyed()) win.show();
+    if (win.isDestroyed()) return;
+    if (showInBackground) win.showInactive();
+    else win.show();
   });
 
   const handleExternal = (url: string) => {
@@ -304,6 +322,11 @@ function installApplicationMenu(): void {
 }
 
 app.whenReady().then(() => {
+  if (BACKGROUND_FLAG === "1" && process.platform === "darwin") {
+    // A Dock icon bounces and the app activates on launch; hiding it keeps the
+    // process an accessory that never comes to the front on its own.
+    app.dock?.hide();
+  }
   installApplicationMenu();
   // powerMonitor is only usable after the app is ready.
   startIdleMonitor();

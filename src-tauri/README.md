@@ -19,9 +19,14 @@ here.
 
 ```bash
 pnpm dev:tauri      # Next dev server + Tauri window with HMR
+pnpm dev:tauri:background  # same, window opened without taking focus (agents)
 pnpm build:tauri    # static export + native bundle (dmg/msi/AppImage)
 pnpm icons:tauri    # regenerate src-tauri/icons/ from build/icon.png
 ```
+
+`dev:tauri:background` merges `tauri.background.conf.json`, which repeats the
+`main` window with `"focus": false`. Tauri merges configs as a JSON merge patch,
+so `windows` is replaced whole: keep the two window entries in step.
 
 ## Next.js static-export caveat
 

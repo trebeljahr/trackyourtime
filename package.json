@@ -52,6 +52,7 @@
     "itch:push:linux": "butler push release/*.AppImage $ITCH_USER/$ITCH_GAME:linux",
     "tauri": "tauri",
     "dev:tauri": "tauri dev",
+    "dev:tauri:background": "tauri dev --config src-tauri/tauri.background.conf.json",
     "build:tauri": "RELATIVE_ASSET_PREFIX=1 tauri build",
     "icons:tauri": "tauri icon build/icon.png --output src-tauri/icons",
     "dev:android": "bash scripts/android-dev.sh",

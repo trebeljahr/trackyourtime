@@ -29,6 +29,10 @@
 #                       share the Mac's network namespace)
 #   CAP_DEV_URL=<url>   full WebView dev URL override, e.g.
 #                       https://<slug>.local.<your-domain>/
+#   IOS_HEADLESS=1      boot with simctl only, never open Simulator.app (agent
+#                       runs; screenshot with `xcrun simctl io`). Otherwise
+#                       Simulator.app is opened with `open -g`, in the
+#                       background, so it never takes focus.
 
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -89,7 +93,11 @@ else
     exit 1
   fi
   xcrun simctl boot "$UDID"
-  open -a Simulator
+  # -g: open in the background. A plain `open -a` activates Simulator.app and
+  # takes keyboard focus from whatever the person at the Mac is typing into.
+  if [ "${IOS_HEADLESS:-}" != "1" ]; then
+    open -g -a Simulator
+  fi
   until xcrun simctl list devices | grep -F "$UDID" | grep -q "Booted"; do
     sleep 1
   done
