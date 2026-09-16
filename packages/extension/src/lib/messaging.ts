@@ -34,6 +34,7 @@ import type {
   ActivitySuggestion,
 } from "@starter/core/activity/index";
 import type { ActivitySettings } from "../background/activity/settings";
+import type { ActivityStorageProblem } from "../background/activity/store";
 
 export type { ActivityRule, ActivitySettings, ActivitySuggestion };
 
@@ -74,6 +75,12 @@ export type ActivitySnapshot = {
   rules: ActivityRule[] | null;
   /** Stored segments on this device, or null when not counted for this view. */
   storedSegments: number | null;
+  /**
+   * Why this build cannot use the activity database, or null when it can (or
+   * has not needed to look). `newer-version`: a newer extension upgraded it,
+   * and capture is off here until that version is back.
+   */
+  storageProblem: ActivityStorageProblem | null;
 };
 
 /** The fields an accepted suggestion is filed with. */

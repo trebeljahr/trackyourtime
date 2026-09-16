@@ -16,6 +16,16 @@
  * can test them.
  */
 import type { DetailedEntry } from "@starter/shared";
+import {
+  readStoredDetailedEntry,
+  readStoredEntryPatch,
+  readStoredList,
+} from "./stored-entry.js";
+import {
+  decodeVersioned,
+  encodeVersioned,
+  type VersionedSpec,
+} from "./versioned-storage.js";
 
 export type OfflineOverlay = {
   /** Entries invented locally. Their ids are temp ids until a replay lands. */
@@ -52,16 +62,39 @@ export const parseOverlay = (value: unknown): OfflineOverlay => {
     !Array.isArray(record.entries) ||
     !Array.isArray(record.removed) ||
     typeof record.patches !== "object" ||
-    record.patches === null
+    record.patches === null ||
+    Array.isArray(record.patches)
   ) {
     return emptyOverlay();
   }
+  // Row by row: a local entry or patch written by another build with a field
+  // this one would misread (a string rate is NaN money on screen) is dropped on
+  // its own, and the replay puts the server's version in its place.
+  const patches: Record<string, Partial<DetailedEntry>> = {};
+  for (const [id, patch] of Object.entries(record.patches)) {
+    const read = readStoredEntryPatch(patch);
+    if (read !== null) patches[id] = read;
+  }
   return {
-    entries: record.entries as DetailedEntry[],
-    patches: record.patches as Record<string, Partial<DetailedEntry>>,
-    removed: record.removed as string[],
+    entries: readStoredList(record.entries, readStoredDetailedEntry),
+    patches,
+    removed: record.removed.filter((id): id is string => typeof id === "string"),
   };
 };
+
+/** Version 1 is the overlay itself; builds before the envelope wrote it bare. */
+const OVERLAY_SPEC: VersionedSpec<OfflineOverlay> = {
+  version: 1,
+  decode: parseOverlay,
+  legacy: parseOverlay,
+};
+
+/** A stored overlay string; an unknown version or garbage is an empty overlay. */
+export const decodeStoredOverlay = (raw: string | null): OfflineOverlay =>
+  decodeVersioned(raw, OVERLAY_SPEC) ?? emptyOverlay();
+
+export const encodeStoredOverlay = (overlay: OfflineOverlay): string =>
+  encodeVersioned(OVERLAY_SPEC.version, overlay);
 
 // ── editing ──────────────────────────────────────────────────────────
 

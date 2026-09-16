@@ -98,3 +98,23 @@ test("a storage that throws never breaks the caller", async () => {
   assert.equal(await readTimerEcho(broken), null);
   await writeTimerEcho(broken, null, 1);
 });
+
+test("writes the versioned envelope and still reads an unversioned echo", async () => {
+  const storage = memoryStorage();
+  await writeTimerEcho(storage, "a", 42);
+  assert.deepEqual(JSON.parse((await storage.getItem(TIMER_ECHO_KEY)) ?? ""), {
+    v: 1,
+    data: { runningId: "a", at: 42 },
+  });
+
+  // What every build before the envelope wrote.
+  await storage.setItem(TIMER_ECHO_KEY, JSON.stringify({ runningId: "b", at: 7 }));
+  assert.deepEqual(await readTimerEcho(storage), { runningId: "b", at: 7 });
+
+  // A newer build's echo is not guessed at.
+  await storage.setItem(
+    TIMER_ECHO_KEY,
+    JSON.stringify({ v: 2, data: { runningId: "c", at: 9 } }),
+  );
+  assert.equal(await readTimerEcho(storage), null);
+});

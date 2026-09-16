@@ -17,6 +17,10 @@ import {
   createOfflineQueue,
   createSyncClient,
   decodeOfflineMutation,
+  decodeVersioned,
+  encodeVersioned,
+  readStoredList,
+  readStoredTimeEntry,
   describeQueuedMutation,
   emptyWorkspaceChoice,
   isHeldByWorkspace,
@@ -56,6 +60,7 @@ import {
   type Task,
   type TimeEntry,
   type ResolvedSettings,
+  type VersionedSpec,
 } from "@starter/core";
 import { chromeStorage, localStorageArea } from "../lib/chrome-storage";
 import type { PopupView, SessionSource } from "../lib/messaging";
@@ -496,6 +501,34 @@ const getOptimisticStore = (): KeyValueStorage => {
   return optimisticStore;
 };
 
+type OptimisticRunning = { entry: TimeEntry | null };
+
+const readOptimisticRunning = (value: unknown): OptimisticRunning | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const { entry } = value as { entry?: unknown };
+  if (entry === null) return { entry: null };
+  const read = readStoredTimeEntry(entry);
+  // Only a running entry is an optimistic running one; anything else is a row
+  // this build cannot paint the timer from.
+  return read !== null && read.end === null ? { entry: read } : null;
+};
+
+/**
+ * Version 1 is `{ entry }` inside the envelope; builds before it wrote the bare
+ * `{ entry }`. A value from a newer build, or one whose entry a field this
+ * build reads is wrong on, is a miss: the queue still holds the start or stop,
+ * so the next snapshot after the replay puts the timer right.
+ */
+const OPTIMISTIC_RUNNING_SPEC: VersionedSpec<OptimisticRunning> = {
+  version: 1,
+  decode: readOptimisticRunning,
+  legacy: readOptimisticRunning,
+};
+
+export const decodeOptimisticRunning = (
+  raw: string | null,
+): OptimisticRunning | null => decodeVersioned(raw, OPTIMISTIC_RUNNING_SPEC);
+
 /**
  * `{ entry: null }` is a real state — "a stop is queued" — and is why this is
  * stored as an envelope rather than as a bare nullable entry.
@@ -505,7 +538,7 @@ export async function rememberOptimisticRunning(
 ): Promise<void> {
   await getOptimisticStore().setItem(
     OPTIMISTIC_RUNNING_KEY,
-    JSON.stringify({ entry }),
+    encodeVersioned(OPTIMISTIC_RUNNING_SPEC.version, { entry }),
   );
 }
 
@@ -513,23 +546,10 @@ const forgetOptimisticRunning = async (): Promise<void> => {
   await getOptimisticStore().removeItem(OPTIMISTIC_RUNNING_KEY);
 };
 
-const loadOptimisticRunning = async (): Promise<{
-  entry: TimeEntry | null;
-} | null> => {
-  const raw = await getOptimisticStore().getItem(OPTIMISTIC_RUNNING_KEY);
-  if (raw === null) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return null;
-    const { entry } = parsed as { entry?: unknown };
-    if (entry === null) return { entry: null };
-    if (typeof entry !== "object" || entry === undefined) return null;
-    return { entry: entry as TimeEntry };
-  } catch {
-    // A row from an older build is not worth wedging a cold start over.
-    return null;
-  }
-};
+const loadOptimisticRunning = async (): Promise<OptimisticRunning | null> =>
+  decodeOptimisticRunning(
+    await getOptimisticStore().getItem(OPTIMISTIC_RUNNING_KEY),
+  );
 
 /**
  * Restore the optimistic view on a cold start, but only while the queue that
@@ -572,45 +592,34 @@ const EMPTY_OPTIMISTIC: OptimisticEntries = { upserts: [], deletes: [] };
  * The same defence the `deletes` list gets, and for the same reason: these rows
  * were written by whatever build was installed at the time, and one that is
  * missing a field goes straight through `applyOverlay` into the rendered list,
- * where `entry.description.trim()` throws and blanks the whole screen. Only the
- * fields the overlay and the row actually read are checked — a stricter guard
- * would throw away rows that render perfectly well.
+ * where `entry.description.trim()` throws and blanks the whole screen — or
+ * into the money helpers, where a string rate is `NaN`. Only the fields the
+ * overlay, the row and the money read are checked (`readStoredTimeEntry`), and
+ * fields this build does not know pass through: a stricter guard would throw
+ * away rows that render perfectly well. One bad row drops alone.
  */
-const isOptimisticRow = (value: unknown): value is TimeEntry => {
-  if (typeof value !== "object" || value === null) return false;
-  const row = value as Partial<TimeEntry>;
-  return (
-    typeof row.id === "string" &&
-    typeof row.description === "string" &&
-    typeof row.start === "string" &&
-    (row.end === null || typeof row.end === "string") &&
-    (row.projectId === null || typeof row.projectId === "string") &&
-    (row.taskId === null || typeof row.taskId === "string") &&
-    typeof row.durationSec === "number" &&
-    Array.isArray(row.tagIds)
-  );
+const readOptimisticEntries = (value: unknown): OptimisticEntries | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const { upserts, deletes } = value as { upserts?: unknown; deletes?: unknown };
+  return {
+    upserts: readStoredList(upserts, readStoredTimeEntry),
+    deletes: Array.isArray(deletes)
+      ? deletes.filter((id): id is string => typeof id === "string")
+      : [],
+  };
+};
+
+/** Version 1 is `{ upserts, deletes }`, which builds before it wrote bare. */
+const OPTIMISTIC_ENTRIES_SPEC: VersionedSpec<OptimisticEntries> = {
+  version: 1,
+  decode: readOptimisticEntries,
+  legacy: readOptimisticEntries,
 };
 
 export async function loadOptimisticEntries(): Promise<OptimisticEntries> {
   const raw = await getOptimisticStore().getItem(OPTIMISTIC_ENTRIES_KEY);
-  if (raw === null) return EMPTY_OPTIMISTIC;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return EMPTY_OPTIMISTIC;
-    const { upserts, deletes } = parsed as {
-      upserts?: unknown;
-      deletes?: unknown;
-    };
-    return {
-      upserts: Array.isArray(upserts) ? upserts.filter(isOptimisticRow) : [],
-      deletes: Array.isArray(deletes)
-        ? deletes.filter((id): id is string => typeof id === "string")
-        : [],
-    };
-  } catch {
-    // A row from an older build is not worth wedging a cold start over.
-    return EMPTY_OPTIMISTIC;
-  }
+  // A row from an older or newer build is not worth wedging a cold start over.
+  return decodeVersioned(raw, OPTIMISTIC_ENTRIES_SPEC) ?? EMPTY_OPTIMISTIC;
 }
 
 const writeOptimisticEntries = async (
@@ -622,7 +631,7 @@ const writeOptimisticEntries = async (
   }
   await getOptimisticStore().setItem(
     OPTIMISTIC_ENTRIES_KEY,
-    JSON.stringify(value),
+    encodeVersioned(OPTIMISTIC_ENTRIES_SPEC.version, value),
   );
 };
 

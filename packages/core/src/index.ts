@@ -21,5 +21,8 @@ export * from "./idle.js";
 export * from "./entry-fields.js";
 export * from "./entry-shape.js";
 export * from "./timer-echo.js";
+export * from "./versioned-storage.js";
+export * from "./stored-entry.js";
+export * from "./stored-catalog.js";
 export * from "./workspace-context.js";
 export * from "./activity/index.js";

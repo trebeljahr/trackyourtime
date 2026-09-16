@@ -10,10 +10,13 @@
  * `chrome.storage.local`.
  */
 import {
+  decodeVersioned,
+  encodeVersioned,
   normalizeServerInput,
   resolveSyncUrl,
   type ClientId,
   type ServerInfo,
+  type VersionedSpec,
 } from "@starter/core";
 import { chromeStorage, localStorageArea } from "./chrome-storage";
 
@@ -75,36 +78,48 @@ export async function saveApiUrl(url: string): Promise<void> {
  */
 export const SERVER_INFO_STORAGE_KEY = "trackyourtime.server-info";
 
-export async function saveServerInfo(info: ServerInfo): Promise<void> {
-  await storage().setItem(SERVER_INFO_STORAGE_KEY, JSON.stringify(info));
-}
-
 const textOrNull = (value: unknown): string | null =>
   typeof value === "string" && value.trim() !== "" ? value : null;
 
+const readServerInfo = (value: unknown): ServerInfo | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const record = value as Record<string, unknown>;
+  const origin = textOrNull(record.origin);
+  if (origin === null) return null;
+  return {
+    origin,
+    release: textOrNull(record.release),
+    commit: textOrNull(record.commit),
+    webUrl: textOrNull(record.webUrl),
+    originTrusted:
+      typeof record.originTrusted === "boolean" ? record.originTrusted : null,
+  };
+};
+
+/**
+ * Version 1 is the `ServerInfo` itself, which builds before it wrote bare.
+ * Written by another build, or hand-edited: a missing version line is the
+ * whole cost of a miss, which is not worth failing a snapshot over.
+ */
+const SERVER_INFO_SPEC: VersionedSpec<ServerInfo> = {
+  version: 1,
+  decode: readServerInfo,
+  legacy: readServerInfo,
+};
+
+export async function saveServerInfo(info: ServerInfo): Promise<void> {
+  await storage().setItem(
+    SERVER_INFO_STORAGE_KEY,
+    encodeVersioned(SERVER_INFO_SPEC.version, info),
+  );
+}
+
 /** The stored record, or null when there is none or it is not readable. */
 export async function loadServerInfo(): Promise<ServerInfo | null> {
-  const raw = await storage().getItem(SERVER_INFO_STORAGE_KEY);
-  if (raw === null) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return null;
-    const record = parsed as Record<string, unknown>;
-    const origin = textOrNull(record.origin);
-    if (origin === null) return null;
-    return {
-      origin,
-      release: textOrNull(record.release),
-      commit: textOrNull(record.commit),
-      webUrl: textOrNull(record.webUrl),
-      originTrusted:
-        typeof record.originTrusted === "boolean" ? record.originTrusted : null,
-    };
-  } catch {
-    // Written by another build, or hand-edited: a missing version line is the
-    // whole cost, which is not worth failing a snapshot over.
-    return null;
-  }
+  return decodeVersioned(
+    await storage().getItem(SERVER_INFO_STORAGE_KEY),
+    SERVER_INFO_SPEC,
+  );
 }
 
 /**

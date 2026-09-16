@@ -13,12 +13,16 @@
  */
 import {
   createIdleWatcher,
+  decodeVersioned,
+  encodeVersioned,
   noteReplayedServerId,
   type IdleWatcher,
+  type IdleResumeSeed,
   type IdleWatcherState,
   type KeyValueStorage,
   type OfflineMutation,
   type PendingIdle,
+  type VersionedSpec,
 } from "@starter/core";
 import { chromeStorage, localStorageArea } from "../lib/chrome-storage";
 
@@ -40,19 +44,91 @@ const getStore = (): KeyValueStorage => {
   return store;
 };
 
-const loadState = async (): Promise<IdleWatcherState> => {
-  const raw = await getStore().getItem(IDLE_STATE_KEY);
-  if (raw === null) return EMPTY_STATE;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return EMPTY_STATE;
-    // Merged onto the empty state rather than trusted wholesale: a row written
-    // by an older build must not leave a field undefined.
-    return { ...EMPTY_STATE, ...(parsed as Partial<IdleWatcherState>) };
-  } catch {
-    return EMPTY_STATE;
-  }
+const idOrNull = (value: unknown): string | null =>
+  typeof value === "string" && value !== "" ? value : null;
+
+const isInstant = (value: unknown): value is string =>
+  typeof value === "string" && !Number.isNaN(Date.parse(value));
+
+const readSeed = (value: unknown): IdleResumeSeed | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const seed = value as Record<string, unknown>;
+  if (typeof seed.description !== "string") return null;
+  if (seed.projectId !== null && typeof seed.projectId !== "string") return null;
+  if (seed.taskId !== null && typeof seed.taskId !== "string") return null;
+  if (typeof seed.billable !== "boolean") return null;
+  return {
+    description: seed.description,
+    projectId: seed.projectId,
+    taskId: seed.taskId,
+    billable: seed.billable,
+  };
 };
+
+const readPending = (value: unknown): PendingIdle | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const pending = value as Record<string, unknown>;
+  const seed = readSeed(pending.seed);
+  const entryId = idOrNull(pending.entryId);
+  if (
+    seed === null ||
+    entryId === null ||
+    !isInstant(pending.idleStartedAt) ||
+    !isInstant(pending.detectedAt) ||
+    !isInstant(pending.truncateAt) ||
+    typeof pending.idleSec !== "number" ||
+    !Number.isFinite(pending.idleSec) ||
+    (pending.signal !== "idle" && pending.signal !== "locked")
+  ) {
+    return null;
+  }
+  return {
+    entryId,
+    idleStartedAt: pending.idleStartedAt,
+    detectedAt: pending.detectedAt,
+    idleSec: pending.idleSec,
+    signal: pending.signal,
+    truncateAt: pending.truncateAt,
+    seed,
+  };
+};
+
+/**
+ * Field by field rather than trusted wholesale: a row written by another build
+ * must not leave a field undefined, or hand the watcher a prompt it would
+ * render with `NaN` minutes. A field that is wrong falls back to its empty
+ * value alone — the watcher's memory is a cache of decisions, and the worst a
+ * reset field costs is one prompt asked again or one idle span not noticed.
+ */
+const readState = (value: unknown): IdleWatcherState | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const state = value as Record<string, unknown>;
+  return {
+    ownedEntryId: idOrNull(state.ownedEntryId),
+    idleFloorMs:
+      typeof state.idleFloorMs === "number" && Number.isFinite(state.idleFloorMs)
+        ? state.idleFloorMs
+        : EMPTY_STATE.idleFloorMs,
+    pending: readPending(state.pending),
+    settledEntryId: idOrNull(state.settledEntryId),
+    awaitingResume: readSeed(state.awaitingResume),
+    pausedEntryId: idOrNull(state.pausedEntryId),
+  };
+};
+
+/** Version 1 is the watcher state itself, which builds before it wrote bare. */
+const STATE_SPEC: VersionedSpec<IdleWatcherState> = {
+  version: 1,
+  decode: readState,
+  legacy: readState,
+};
+
+/** Exported for tests: what a stored value restores the watcher to. */
+export const decodeIdleState = (raw: string | null): IdleWatcherState =>
+  decodeVersioned(raw, STATE_SPEC) ?? EMPTY_STATE;
+
+const loadState = async (): Promise<IdleWatcherState> =>
+  decodeIdleState(await getStore().getItem(IDLE_STATE_KEY));
 
 let watcher: IdleWatcher | null = null;
 
@@ -64,7 +140,12 @@ export const getIdleWatcher = async (): Promise<IdleWatcher> => {
 
 /** Write the watcher's memory back to disk. Call after every state change. */
 export const persistIdleWatcher = async (): Promise<void> => {
-  if (watcher) await getStore().setItem(IDLE_STATE_KEY, JSON.stringify(watcher.state()));
+  if (watcher) {
+    await getStore().setItem(
+      IDLE_STATE_KEY,
+      encodeVersioned(STATE_SPEC.version, watcher.state()),
+    );
+  }
 };
 
 /** Forget everything — used when the session goes away. */

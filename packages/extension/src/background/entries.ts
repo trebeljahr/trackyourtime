@@ -38,7 +38,7 @@ import type {
   PopupView,
 } from "../lib/messaging";
 import { capturePermitted, loadActivityScope, loadActivitySettings } from "./activity/settings";
-import { countSegments } from "./activity/store";
+import { countSegments, probeActivityStorage } from "./activity/store";
 import {
   activityRules,
   suggestionsFor,
@@ -797,6 +797,13 @@ export async function resolveActivitySnapshot(view: PopupView): Promise<Activity
     loadActivityScope(),
   ]);
 
+  // Only opened when something would open it anyway, so a person who never
+  // turned capture on does not get an empty database from looking at a popup.
+  const storageProblem =
+    settings.enabled || view === "settings" || view === "suggestions"
+      ? await probeActivityStorage()
+      : null;
+
   const snapshot: ActivitySnapshot = {
     settings,
     permitted,
@@ -804,10 +811,13 @@ export async function resolveActivitySnapshot(view: PopupView): Promise<Activity
     suggestions: null,
     rules: null,
     storedSegments: null,
+    storageProblem,
   };
 
   if (view === "suggestions") {
-    if (scope === null) return { ...snapshot, suggestions: [], rules: [] };
+    if (scope === null || storageProblem !== null) {
+      return { ...snapshot, suggestions: [], rules: [] };
+    }
     const range = dayRange(day, zone);
     const tracked = await trackedIntervalsBetween(range);
     return {
@@ -820,8 +830,10 @@ export async function resolveActivitySnapshot(view: PopupView): Promise<Activity
   if (view === "settings") {
     return {
       ...snapshot,
-      rules: scope === null ? [] : await activityRules(scope),
-      storedSegments: await countSegments().catch(() => 0),
+      rules:
+        scope === null || storageProblem !== null ? [] : await activityRules(scope),
+      storedSegments:
+        storageProblem !== null ? null : await countSegments().catch(() => 0),
     };
   }
 

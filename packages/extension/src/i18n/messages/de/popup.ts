@@ -171,6 +171,8 @@ export const popup: Translation<typeof source> = {
     accepting: "Wird übernommen …",
   },
   activity: {
+    storageNewerVersion:
+      "Die Aktivitätsdaten stammen von einer neueren Version der Erweiterung. Die Erfassung bleibt aus, bis diese Version wieder installiert ist. Es wurde nichts gelöscht.",
     enabledNote:
       "Merkt sich die Website, die du gerade vor dir hast, nur auf diesem Gerät. Es wird nichts gesendet, bis du einen Vorschlag übernimmst.",
     on: "Aktivität wird erfasst",

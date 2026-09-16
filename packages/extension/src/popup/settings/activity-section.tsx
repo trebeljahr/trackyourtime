@@ -29,7 +29,9 @@ export const MIN_RETENTION_DAYS = 1;
 export const MAX_RETENTION_DAYS = 90;
 
 export function activityHint(activity: ActivitySnapshot, t: PopupT): string {
-  return activity.settings.enabled && activity.permitted ? t("settings.on") : t("settings.off");
+  return activity.settings.enabled && activity.permitted && activity.storageProblem === null
+    ? t("settings.on")
+    : t("settings.off");
 }
 
 export function ActivitySection({
@@ -43,7 +45,7 @@ export function ActivitySection({
   const [host, setHost] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const on = settings.enabled && activity.permitted;
+  const on = settings.enabled && activity.permitted && activity.storageProblem === null;
 
   const addHost = (): void => {
     const next = host.trim();
@@ -55,6 +57,11 @@ export function ActivitySection({
 
   return (
     <>
+      {activity.storageProblem === "newer-version" ? (
+        <p className="notice" role="status" data-testid="activity-storage-newer">
+          {t("activity.storageNewerVersion")}
+        </p>
+      ) : null}
       <SettingRow
         note={t("activity.enabledNote")}
         testId="setting-activity-enabled"
@@ -73,6 +80,7 @@ export function ActivitySection({
             });
           }}
           label={on ? t("activity.on") : t("activity.off")}
+          disabled={activity.storageProblem !== null}
           testId="activity-enabled"
         />
       </SettingRow>

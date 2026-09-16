@@ -31,7 +31,15 @@ const running: TimeEntry = {
   durationSec: 0,
   hourlyRate: null,
   currency: "EUR",
-} as TimeEntry;
+  source: "mobile",
+  timeZone: "Europe/Berlin",
+  runaway: null,
+  tagIds: [],
+  invoiceId: null,
+  importId: null,
+  createdAt: "2026-08-21T09:00:00.000Z",
+  updatedAt: "2026-08-21T09:00:00.000Z",
+};
 
 /**
  * A plain in-memory store, injected so the specs never depend on how
@@ -87,6 +95,53 @@ describe("the mirror", () => {
 
     backing.set("trackyourtime.running-entry", JSON.stringify({ id: "e1" }));
     expect(await readRunningMirror()).toBeNull();
+  });
+
+  it("writes the versioned envelope", async () => {
+    await writeRunningMirror(running);
+    expect(JSON.parse(backing.get("trackyourtime.running-entry") ?? "")).toEqual({
+      v: 1,
+      data: running,
+    });
+  });
+
+  it("restores a bare entry written before the envelope", async () => {
+    backing.set("trackyourtime.running-entry", JSON.stringify(running));
+    expect(await readRunningMirror()).toEqual(running);
+  });
+
+  it("restores an old shape missing fields, filling what the timer draws", async () => {
+    // A build from before tags and time zones, as a phone left in a drawer has it.
+    const { tagIds: _tags, timeZone: _zone, runaway: _runaway, ...old } = running;
+    backing.set("trackyourtime.running-entry", JSON.stringify(old));
+    const restored = await readRunningMirror();
+    expect(restored?.id).toBe("e1");
+    expect(restored?.description).toBe("On the train");
+    expect(restored?.tagIds).toEqual([]);
+    expect(restored?.timeZone).toBeNull();
+  });
+
+  it("keeps an entry carrying fields this build does not know", async () => {
+    backing.set(
+      "trackyourtime.running-entry",
+      JSON.stringify({ v: 1, data: { ...running, somethingNew: { a: 1 } } }),
+    );
+    expect((await readRunningMirror())?.id).toBe("e1");
+  });
+
+  it("reads a mirror from a newer build as nothing running", async () => {
+    backing.set(
+      "trackyourtime.running-entry",
+      JSON.stringify({ v: 2, data: running }),
+    );
+    expect(await readRunningMirror()).toBeNull();
+  });
+
+  it("treats garbage inside the envelope as nothing running", async () => {
+    for (const data of [null, 42, "entry", [], { id: "e1", start: "soon", end: null }]) {
+      backing.set("trackyourtime.running-entry", JSON.stringify({ v: 1, data }));
+      expect(await readRunningMirror()).toBeNull();
+    }
   });
 
   it("is inert on web", async () => {

@@ -27,7 +27,14 @@
  *    allowed to overwrite it.
  */
 
-import type { KeyValueStorage, TimerStore } from "@starter/core";
+import {
+  decodeVersioned,
+  encodeVersioned,
+  readRunningEntryLeniently,
+  type KeyValueStorage,
+  type TimerStore,
+  type VersionedSpec,
+} from "@starter/core";
 import type { TimeEntry } from "@starter/shared";
 
 import { isNative } from "@/mobile/bridge";
@@ -55,25 +62,22 @@ export const isRunningProvisional = (): boolean => provisional;
 /**
  * A mirrored entry has to look like a running entry to be worth restoring.
  * Anything else — a finished entry left behind by an older build, a truncated
- * write — is treated as "nothing was running", which is the safe reading.
+ * write, a version a newer build wrote — is treated as "nothing was running",
+ * which is the safe reading.
+ *
+ * Lenient past that on purpose: this may be the only copy of the running timer
+ * on a cold offline launch, so a field an older build never wrote, or one a
+ * newer build added, must not throw the timer away. Version 1 is the entry
+ * itself inside the envelope; builds before it wrote the bare entry.
  */
-const parseMirrored = (raw: string | null): TimeEntry | null => {
-  if (raw === null || raw === "") return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== "object" || parsed === null) return null;
-  const entry = parsed as Partial<TimeEntry>;
-  if (typeof entry.id !== "string" || entry.id === "") return null;
-  if (typeof entry.start !== "string" || Number.isNaN(Date.parse(entry.start))) {
-    return null;
-  }
-  if (entry.end !== null) return null;
-  return parsed as TimeEntry;
+const MIRROR_SPEC: VersionedSpec<TimeEntry> = {
+  version: 1,
+  decode: readRunningEntryLeniently,
+  legacy: readRunningEntryLeniently,
 };
+
+const parseMirrored = (raw: string | null): TimeEntry | null =>
+  decodeVersioned(raw, MIRROR_SPEC);
 
 /** Record what the server last said is running. `null` clears the mirror. */
 export const writeRunningMirror = async (
@@ -85,7 +89,7 @@ export const writeRunningMirror = async (
     await store().removeItem(MIRROR_KEY);
     return;
   }
-  await store().setItem(MIRROR_KEY, JSON.stringify(entry));
+  await store().setItem(MIRROR_KEY, encodeVersioned(MIRROR_SPEC.version, entry));
 };
 
 /** Read the mirror back. Null on web, and whenever it holds nothing usable. */

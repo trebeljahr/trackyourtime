@@ -34,10 +34,12 @@ import {
   type ActivitySettings,
 } from "./settings";
 import {
+  ActivityStorageUnavailableError,
   appendSegment,
   deleteOtherScopes,
   deleteSegmentsWhere,
   loadOpenSegment,
+  probeActivityStorage,
   saveOpenSegment,
   wipeAllActivity,
   type OpenSegment,
@@ -130,6 +132,9 @@ const captureContext = async (): Promise<CaptureContext | null> => {
   ]);
   if (!settings.enabled || scope === null) return null;
   if (!(await capturePermitted())) return null;
+  // A database a newer build upgraded cannot be opened here. Capture stops,
+  // the setting stays as the person left it, and Settings → Activity says why.
+  if ((await probeActivityStorage()) !== null) return null;
   return { scope, settings };
 };
 
@@ -156,9 +161,24 @@ const closeSegment = async (open: OpenSegment, end: number): Promise<void> => {
   });
 };
 
+/**
+ * Run a storage step that has nothing to act on when this build cannot open
+ * the database (a newer build upgraded it). Capture is off in that state, so
+ * "no open segment" and "nothing to delete" are the true answers, and every
+ * other failure still surfaces.
+ */
+const unlessUnavailable = async <T>(step: () => Promise<T>, fallback: T): Promise<T> => {
+  try {
+    return await step();
+  } catch (error) {
+    if (error instanceof ActivityStorageUnavailableError) return fallback;
+    throw error;
+  }
+};
+
 /** The open segment, with a stale one already closed at its `lastSeen`. */
 const liveOpenSegment = async (now: number): Promise<OpenSegment | null> => {
-  const open = await loadOpenSegment();
+  const open = await unlessUnavailable(loadOpenSegment, null);
   if (open === null) return null;
   if (now - open.lastSeen <= STALE_AFTER_MS) return open;
   await closeSegment(open, open.lastSeen);
@@ -318,12 +338,17 @@ export const applyActivitySettings = (
     await syncAlarms();
     // "Never record" covers what is already stored, not just what comes next.
     if (patch.excludedHosts !== undefined && settings.excludedHosts.length > 0) {
-      await deleteSegmentsWhere((segment) => hostMatchesAny(settings.excludedHosts, segment.key));
+      await unlessUnavailable(
+        () => deleteSegmentsWhere((segment) => hostMatchesAny(settings.excludedHosts, segment.key)),
+        0,
+      );
     }
     // Re-asked under the new settings: turning capture off, excluding the host
     // on screen or switching titles off all close the open segment here.
     await observe(Date.now());
-    if (patch.retentionDays !== undefined) await runPrune(Date.now());
+    if (patch.retentionDays !== undefined) {
+      await unlessUnavailable(() => runPrune(Date.now()), 0);
+    }
     return { ok: true, settings } as const;
   });
 
@@ -341,7 +366,14 @@ export const setActivityScope = (userId: string, workspaceId: string): Promise<v
     const scope = activityScopeOf(userId, workspaceId);
     const previous = await loadActivityScope();
     if (previous === scope) return;
-    await deleteOtherScopes(scope, activityScopeOf(userId, ""));
+    const swept = await unlessUnavailable(async () => {
+      await deleteOtherScopes(scope, activityScopeOf(userId, ""));
+      return true;
+    }, false);
+    // Unopenable here means a newer build's database. The scope is left as it
+    // was, so that build still sees a change and runs this sweep itself —
+    // saving it now would let another account's rows outlive the switch.
+    if (!swept) return;
     await saveActivityScope(scope);
   });
 

@@ -21,6 +21,11 @@
  * a stale local record of a stop.
  */
 import type { KeyValueStorage } from "./storage.js";
+import {
+  decodeVersioned,
+  encodeVersioned,
+  type VersionedSpec,
+} from "./versioned-storage.js";
 
 export type TimerEcho = {
   /** Entry this install last put into the running state, or null for "stopped". */
@@ -32,11 +37,19 @@ export type TimerEcho = {
 /** One key per install, shared by every surface the install renders. */
 export const TIMER_ECHO_KEY = "trackyourtime.timer.echo";
 
-const isEcho = (value: unknown): value is TimerEcho => {
-  if (typeof value !== "object" || value === null) return false;
+const readEcho = (value: unknown): TimerEcho | null => {
+  if (typeof value !== "object" || value === null) return null;
   const { runningId, at } = value as Record<string, unknown>;
-  if (runningId !== null && typeof runningId !== "string") return false;
-  return typeof at === "number" && Number.isFinite(at);
+  if (runningId !== null && typeof runningId !== "string") return null;
+  if (typeof at !== "number" || !Number.isFinite(at)) return null;
+  return { runningId, at };
+};
+
+/** Version 1 is the unversioned `{ runningId, at }`, now inside the envelope. */
+const ECHO_SPEC: VersionedSpec<TimerEcho> = {
+  version: 1,
+  decode: readEcho,
+  legacy: readEcho,
 };
 
 /**
@@ -49,10 +62,7 @@ export const readTimerEcho = async (
   storage: KeyValueStorage,
 ): Promise<TimerEcho | null> => {
   try {
-    const raw = await storage.getItem(TIMER_ECHO_KEY);
-    if (raw === null) return null;
-    const parsed: unknown = JSON.parse(raw);
-    return isEcho(parsed) ? parsed : null;
+    return decodeVersioned(await storage.getItem(TIMER_ECHO_KEY), ECHO_SPEC);
   } catch {
     return null;
   }
@@ -72,7 +82,10 @@ export const writeTimerEcho = async (
   at: number = Date.now(),
 ): Promise<void> => {
   try {
-    await storage.setItem(TIMER_ECHO_KEY, JSON.stringify({ runningId, at }));
+    await storage.setItem(
+      TIMER_ECHO_KEY,
+      encodeVersioned(ECHO_SPEC.version, { runningId, at }),
+    );
   } catch {
     /* storage full or unavailable — the poll and the socket still catch up */
   }

@@ -6,6 +6,8 @@ import {
   isOverlayEmpty,
   overlayRunning,
   parseOverlay,
+  decodeStoredOverlay,
+  encodeStoredOverlay,
   resolveRunning,
   withOptimisticEntry,
   withOptimisticPatch,
@@ -187,4 +189,33 @@ test("an unreadable stored overlay reads as no overlay at all", () => {
     removed: ["b"],
   };
   assert.deepEqual(parseOverlay(JSON.parse(JSON.stringify(real))), real);
+});
+
+test("a stored overlay round trips through the envelope and reads the bare shape", () => {
+  const overlay = withOptimisticEntry(
+    emptyOverlay(),
+    entry("temp-1", "2026-09-08T09:00:00.000Z"),
+  );
+  const raw = encodeStoredOverlay(overlay);
+  assert.equal((JSON.parse(raw) as { v: number }).v, 1);
+  assert.deepEqual(decodeStoredOverlay(raw), overlay);
+  assert.deepEqual(decodeStoredOverlay(JSON.stringify(overlay)), overlay);
+});
+
+test("a newer build's overlay, or rows another build shaped wrongly, are dropped", () => {
+  const good = entry("temp-1", "2026-09-08T09:00:00.000Z");
+  const overlay = { entries: [good], patches: {}, removed: [] };
+  assert.ok(isOverlayEmpty(decodeStoredOverlay(JSON.stringify({ v: 2, data: overlay }))));
+  assert.ok(isOverlayEmpty(decodeStoredOverlay("{broken")));
+
+  const mixed = decodeStoredOverlay(
+    JSON.stringify({
+      entries: [good, { ...good, id: "temp-2", hourlyRate: "80" }],
+      patches: { a: { description: "x" }, b: { hourlyRate: "NaN" }, c: 4 },
+      removed: ["d", 5],
+    }),
+  );
+  assert.deepEqual(mixed.entries.map((row) => row.id), ["temp-1"]);
+  assert.deepEqual(mixed.patches, { a: { description: "x" } });
+  assert.deepEqual(mixed.removed, ["d"]);
 });

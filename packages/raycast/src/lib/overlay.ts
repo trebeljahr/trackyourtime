@@ -16,11 +16,12 @@
  */
 import {
   applyOverlay,
+  decodeStoredOverlay,
   emptyOverlay,
+  encodeStoredOverlay,
   isOverlayEmpty,
   isTempId,
   overlayRunning,
-  parseOverlay,
   resolveRunning,
   withOptimisticEntry,
   withOptimisticPatch,
@@ -43,9 +44,7 @@ const OVERLAY_KEY = "trackyourtime.offline.overlay";
 
 const loadOverlayAt = async (key: string): Promise<OfflineOverlay> => {
   try {
-    const raw = await raycastStorage.getItem(key);
-    if (raw === null) return emptyOverlay();
-    return parseOverlay(JSON.parse(raw) as unknown);
+    return decodeStoredOverlay(await raycastStorage.getItem(key));
   } catch {
     return emptyOverlay();
   }
@@ -63,7 +62,7 @@ export const loadOverlay = async (): Promise<OfflineOverlay> => {
 const saveAt = async (key: string, overlay: OfflineOverlay): Promise<void> => {
   try {
     if (isOverlayEmpty(overlay)) await raycastStorage.removeItem(key);
-    else await raycastStorage.setItem(key, JSON.stringify(overlay));
+    else await raycastStorage.setItem(key, encodeStoredOverlay(overlay));
   } catch {
     /* storage unavailable — the queue still holds the work itself */
   }

@@ -175,6 +175,8 @@ export const popup = {
     accepting: "Accepting…",
   },
   activity: {
+    storageNewerVersion:
+      "Activity data was created by a newer version of the extension. Capture is off until that version is installed again. Nothing was deleted.",
     enabledNote:
       "Records the site in front of you, on this device only. Nothing is sent until you accept a suggestion.",
     on: "Capturing activity",

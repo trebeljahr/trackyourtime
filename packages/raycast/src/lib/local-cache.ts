@@ -20,12 +20,23 @@
  * optimistic entries with A's currency and rates — the moment the network
  * dropped after a switch.
  */
-import type {
-  DetailedEntry,
-  DetailedFavorite,
-  EntryShapeContext,
-  ResolvedSettings,
-  ShapeableTask,
+import {
+  decodeVersioned,
+  encodeVersioned,
+  readStoredClient,
+  readStoredDetailedEntry,
+  readStoredFavorite,
+  readStoredList,
+  readStoredProject,
+  readStoredSettings,
+  readStoredTag,
+  readStoredTask,
+  type DetailedEntry,
+  type DetailedFavorite,
+  type EntryShapeContext,
+  type ResolvedSettings,
+  type ShapeableTask,
+  type VersionedSpec,
 } from "@starter/core";
 import type { Client } from "@starter/core";
 import type { ProjectWithStats, TagWithStats, TaskWithStats } from "./api.js";
@@ -64,15 +75,37 @@ const EMPTY: LocalCache = {
   settings: null,
 };
 
-const isCache = (value: unknown): value is Partial<LocalCache> =>
-  typeof value === "object" && value !== null;
+/**
+ * Part by part and row by row, never spread in wholesale. This cache is read
+ * by builds other than the one that wrote it, and a project whose rate became
+ * a string, or settings without a currency, would shape optimistic entries
+ * with `NaN` money that sits on screen until the queue drains. A bad row drops
+ * alone; bad settings read as "not loaded", which the shapers already handle.
+ */
+const readCache = (value: unknown): LocalCache | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const parts = value as Record<string, unknown>;
+  return {
+    entries: readStoredList(parts.entries, readStoredDetailedEntry),
+    favorites: readStoredList(parts.favorites, readStoredFavorite),
+    projects: readStoredList(parts.projects, readStoredProject),
+    tasks: readStoredList(parts.tasks, readStoredTask),
+    tags: readStoredList(parts.tags, readStoredTag),
+    clients: readStoredList(parts.clients, readStoredClient),
+    settings: readStoredSettings(parts.settings),
+  };
+};
+
+/** Version 1 is `LocalCache`; builds before the envelope wrote it bare. */
+const CACHE_SPEC: VersionedSpec<LocalCache> = {
+  version: 1,
+  decode: readCache,
+  legacy: readCache,
+};
 
 const loadCacheAt = async (key: string): Promise<LocalCache> => {
   try {
-    const raw = await raycastStorage.getItem(key);
-    if (raw === null) return EMPTY;
-    const parsed: unknown = JSON.parse(raw);
-    return isCache(parsed) ? { ...EMPTY, ...parsed } : EMPTY;
+    return decodeVersioned(await raycastStorage.getItem(key), CACHE_SPEC) ?? EMPTY;
   } catch {
     return EMPTY;
   }
@@ -111,7 +144,7 @@ export const remember = async (parts: Partial<LocalCache>): Promise<void> => {
     settings: parts.settings === undefined ? current.settings : parts.settings,
   };
   try {
-    await raycastStorage.setItem(key, JSON.stringify(next));
+    await raycastStorage.setItem(key, encodeVersioned(CACHE_SPEC.version, next));
   } catch {
     /* storage unavailable — reads still work, offline shaping gets less right */
   }

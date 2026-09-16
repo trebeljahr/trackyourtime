@@ -23,6 +23,19 @@ import type {
 } from "@starter/core/activity/index";
 
 export const ACTIVITY_DB_NAME = "trackyourtime-activity";
+
+/**
+ * The schema version of the activity database.
+ *
+ * Bumps must be ADDITIVE: an upgrade may create object stores and indexes, and
+ * must never delete, rename or re-key one, or rewrite rows into a shape the
+ * previous build cannot read. The reason is rollbacks. A person who installs
+ * an older build after a newer one opened the database cannot open it at all —
+ * IndexedDB refuses a lower version with `VersionError` — and this build then
+ * reports that (`activityStorageProblem`) and stops capturing rather than
+ * deleting their data. When the newer build returns, everything is still
+ * there, which only holds if the newer build never broke the older layout.
+ */
 const ACTIVITY_DB_VERSION = 1;
 
 const SEGMENTS = "segments";
@@ -60,6 +73,25 @@ let opening: Promise<IDBDatabase> | null = null;
 /** The factory `opening` came from; a replaced global means a new database. */
 let openedFrom: IDBFactory | null = null;
 
+/** Why the activity database cannot be used by this build, if it cannot. */
+export type ActivityStorageProblem = "newer-version";
+
+let problem: ActivityStorageProblem | null = null;
+
+/** Thrown by every read and write while {@link activityStorageProblem} is set. */
+export class ActivityStorageUnavailableError extends Error {
+  readonly problem: ActivityStorageProblem;
+
+  constructor(reason: ActivityStorageProblem) {
+    super("Activity data was created by a newer version of the extension");
+    this.name = "ActivityStorageUnavailableError";
+    this.problem = reason;
+  }
+}
+
+/** The problem found by the last attempt to open the database, if any. */
+export const activityStorageProblem = (): ActivityStorageProblem | null => problem;
+
 const requestToPromise = <T>(request: IDBRequest<T>): Promise<T> =>
   new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -76,6 +108,12 @@ const transactionDone = (transaction: IDBTransaction): Promise<void> =>
   });
 
 const openDatabase = (): Promise<IDBDatabase> => {
+  if (openedFrom !== indexedDB) problem = null;
+  if (problem !== null) {
+    // Known unopenable for this worker's lifetime: asking again on every tab
+    // event would log once a second and answer the same.
+    return Promise.reject(new ActivityStorageUnavailableError(problem));
+  }
   if (opening !== null && openedFrom === indexedDB) return opening;
   openedFrom = indexedDB;
   const pending = new Promise<IDBDatabase>((resolve, reject) => {
@@ -111,7 +149,20 @@ const openDatabase = (): Promise<IDBDatabase> => {
       };
       resolve(db);
     };
-    request.onerror = () => reject(request.error ?? new Error("Could not open activity storage"));
+    request.onerror = () => {
+      if (request.error?.name === "VersionError") {
+        // A newer build upgraded the database and this one was installed over
+        // it. Never delete it to get going again: that is the person's
+        // activity, rules and dismissals, and the newer build reads them fine.
+        problem = "newer-version";
+        console.warn(
+          "[activity] Activity data was created by a newer version of the extension; capture is off until that version is installed again.",
+        );
+        reject(new ActivityStorageUnavailableError(problem));
+        return;
+      }
+      reject(request.error ?? new Error("Could not open activity storage"));
+    };
   });
   opening = pending;
   pending.catch(() => {
@@ -120,10 +171,24 @@ const openDatabase = (): Promise<IDBDatabase> => {
   return pending;
 };
 
+/**
+ * Whether this build can use the database, opening it to find out.
+ * Resolves the problem, or null when it opened.
+ */
+export const probeActivityStorage = async (): Promise<ActivityStorageProblem | null> => {
+  try {
+    await openDatabase();
+    return null;
+  } catch {
+    return problem;
+  }
+};
+
 /** Drop the cached connection. Tests use it between databases. */
 export const closeActivityDatabase = async (): Promise<void> => {
   const pending = opening;
   opening = null;
+  problem = null;
   if (pending === null) return;
   try {
     (await pending).close();
