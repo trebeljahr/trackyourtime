@@ -17,7 +17,11 @@ export type AdminCommand =
   | { kind: "create-user"; email: string; name: string; password?: string }
   | { kind: "reset-password"; email: string; password?: string }
   | { kind: "list-workspaces"; json: boolean }
-  | { kind: "doctor"; json: boolean };
+  | { kind: "doctor"; json: boolean }
+  | { kind: "migrate"; mode: MigrateMode; json: boolean };
+
+/** `--status` reads, `--dry-run` lists what would run, neither applies. */
+export type MigrateMode = "status" | "dry-run" | "apply";
 
 export type ParseResult =
   | { ok: true; command: AdminCommand }
@@ -44,7 +48,14 @@ Commands:
 
   doctor          [--json]
                   Check the database, Redis, mail, trusted origins, the auth
-                  URL and clock skew. Exits 1 when any check fails.
+                  URL, clock skew, the schema version and the indexes. Exits 1
+                  when any check fails.
+
+  migrate         [--status | --dry-run] [--json]
+                  --status lists applied and pending migrations. --dry-run
+                  lists what would run and changes nothing. With neither, applies
+                  pending migrations, as the server does at start. Exits 1 when
+                  the database needs a newer release.
 
   help            Show this text.
 
@@ -163,6 +174,28 @@ export function parseAdminArgs(argv: readonly string[]): ParseResult {
       const parsed = parseFlags(rest, { json: { type: "boolean" } });
       if (!parsed.ok) return parsed;
       return { ok: true, command: { kind: name, json: parsed.values.json === true } };
+    }
+
+    case "migrate": {
+      const parsed = parseFlags(rest, {
+        status: { type: "boolean" },
+        "dry-run": { type: "boolean" },
+        json: { type: "boolean" },
+      });
+      if (!parsed.ok) return parsed;
+      const status = parsed.values.status === true;
+      const dryRun = parsed.values["dry-run"] === true;
+      if (status && dryRun) {
+        return { ok: false, error: "migrate takes --status or --dry-run, not both" };
+      }
+      return {
+        ok: true,
+        command: {
+          kind: "migrate",
+          mode: status ? "status" : dryRun ? "dry-run" : "apply",
+          json: parsed.values.json === true,
+        },
+      };
     }
 
     default:

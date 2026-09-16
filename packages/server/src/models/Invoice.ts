@@ -1,6 +1,5 @@
 import mongoose, { Schema, type Document } from "mongoose";
 import {
-  SUPPORTED_LOCALES,
   normalizeIssuer,
   normalizeRecipient,
   type Invoice as InvoiceWire,
@@ -197,7 +196,10 @@ const invoiceSchema = new Schema<IInvoice>(
     // A snapshot like every figure above, so NO default: a default would be
     // applied on read to invoices that predate localisation and could later be
     // changed, re-languaging documents already sent. Absent reads as English.
-    locale: { type: String, enum: [...SUPPORTED_LOCALES] },
+    // No enum either: a copied value is checked where it is resolved
+    // (`invoiceLocaleFor`), and a newer release's locale must not fail a
+    // create here (models/README.md).
+    locale: { type: String },
     issuer: { type: issuerSchema, default: undefined },
     recipient: { type: recipientSchema, default: undefined },
     // Snapshots too: no defaults, so a legacy invoice reads and saves untouched.

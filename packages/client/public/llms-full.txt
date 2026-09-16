@@ -1529,28 +1529,64 @@ stays published.
 
 Check out the previous tag, set `TRACKYOURTIME_VERSION` back to it, and repeat
 `pull` and `up -d`. If you build the images yourself, check out the previous
-tag and run the build command instead. If the newer version wrote data that
-the older one cannot read, restore the dump you took before upgrading (see
-[Backup and restore](#backup-and-restore)).
+tag and run the build command instead.
+
+A rollback can end in one of two ways:
+
+- **The older server starts.** Every migration the newer version ran is one
+  older versions can read. Nothing else to do.
+- **The older server refuses to start** and logs `This database was migrated
+  by a newer Track Your Time (vX.Y.Z)`. That version ran a migration that
+  older versions misread, so the older server stops before it serves a single
+  request. Restore the dump you took before upgrading (see
+  [Backup and restore](#backup-and-restore)), or go forward to vX.Y.Z again.
+
+To see which case applies before you roll back, run
+`node dist/cli/admin.js migrate --status` in the newer container. The first
+line names the schema each side needs.
 
 ### Migrations
 
-**There is no migration runner, and nothing migrates at startup.** The server
-boots in four steps: connect to MongoDB, connect to Redis if configured,
-initialise auth, listen. No schema step exists.
+The server migrates its own database at startup. After it connects to
+MongoDB, and before it accepts a connection, it takes three steps:
 
-Mongoose applies schema changes implicitly:
+1. **It checks that it can read the database.** Every migration records the
+   oldest schema that can still read the data after it ran. If the database
+   needs a newer schema than this version has, the server logs which release
+   migrated it and exits with status 1.
+2. **It applies pending migrations, in order.** Each one is recorded in the
+   `schema_migrations` collection with the time and the release that applied
+   it. A lock in the `app_meta` collection keeps two server processes from
+   running migrations at the same time; the second one waits. A migration that
+   fails is not recorded: the server exits, and the next start runs it again.
+3. **It builds every index and reports each failure.** A unique index usually
+   fails because duplicate documents already exist. If that index guards data
+   integrity (one running timer per person, one membership per person and
+   workspace, unique invoice numbers, unique scheduled jobs, unique API token
+   prefixes), the server logs the index and the reason and exits. Other index
+   failures are logged as warnings. The server never drops an index.
 
-- A new field is absent on documents that older versions wrote. The code reads
-  an absent field as its default rather than requiring it. This is a
-  deliberate convention in this codebase.
-- Mongoose creates indexes when the models register at startup.
-- Nothing rewrites existing documents.
+Most releases add no migration, and most migrations stay readable by older
+versions. The runner changes nothing about the rule above: **take a
+`mongodump` before every upgrade.** No tool undoes a migration.
 
-In practice, an upgrade is usually a new image and nothing more. A downgrade
-usually works too, because old code ignores fields it does not know. "Usually" matters here.
-No tool undoes a change that does rewrite data, which is why the `mongodump`
-above is not optional.
+Look before you upgrade, or migrate without starting the server:
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js migrate --status
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js migrate --dry-run
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js migrate
+```
+
+`--status` lists applied and pending migrations. `--dry-run` lists what would
+run and changes nothing. With neither flag, the command applies pending
+migrations exactly as a server start does. All three exit with status 1 when
+the database needs a newer release. `doctor` also reports the schema state
+and any missing index.
+
+New fields need no migration. A field added in a new version is absent on
+older documents, and the code reads an absent field as its default. Old code
+ignores fields it does not know.
 
 Two one-off scripts exist. `backfill-email-verified` marks existing accounts
 verified when you configure mail; see

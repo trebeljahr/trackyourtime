@@ -173,7 +173,7 @@ importers:
         specifier: ^11.17.0
         version: 11.17.0(@tanstack/react-query@5.100.11(react@19.2.6))(@trpc/client@11.17.0(@trpc/server@11.17.0(typescript@6.0.3))(typescript@6.0.3))(@trpc/server@11.17.0(typescript@6.0.3))(react@19.2.6)(typescript@6.0.3)
       better-auth:
-        specifier: ^1.6.11
+        specifier: 1.6.11
         version: 1.6.11(@opentelemetry/api@1.9.1)(mongodb@7.2.0)(next@16.2.6(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.1)(tsx@4.22.2)))
       class-variance-authority:
         specifier: ^0.7.1
@@ -400,7 +400,7 @@ importers:
         specifier: ^11.17.0
         version: 11.17.0(typescript@6.0.3)
       better-auth:
-        specifier: ^1.6.11
+        specifier: 1.6.11
         version: 1.6.11(@opentelemetry/api@1.9.1)(mongodb@7.2.0)(next@16.2.6(@opentelemetry/api@1.9.1)(@playwright/test@1.60.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.1)(tsx@4.22.2)))
       cors:
         specifier: ^2.8.5

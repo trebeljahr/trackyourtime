@@ -33,6 +33,14 @@ const snapshotText = { type: String, default: null };
 
 const schemeEnum = { type: String, enum: [...ELECTRONIC_ADDRESS_SCHEMES, null] };
 
+/**
+ * Snapshot enums carry no `enum`: the value is copied from a stored profile or
+ * client that a newer release may have written, and the normalisers in
+ * `@starter/shared/business-identity` already map anything unknown to null.
+ * A validator here could only turn that into a failed invoice create.
+ */
+const snapshotEnum = { type: String };
+
 /** Keys the issuer snapshot and the business profile share (`Invoice.issuer`). */
 export const issuerIdentityFields = {
   vatId: snapshotText,
@@ -41,7 +49,7 @@ export const issuerIdentityFields = {
   sellerIdentifier: snapshotText,
   contactName: snapshotText,
   electronicAddress: snapshotText,
-  electronicAddressScheme: { ...schemeEnum, default: null },
+  electronicAddressScheme: { ...snapshotEnum, default: null },
   iban: snapshotText,
   bic: snapshotText,
   bankName: snapshotText,
@@ -54,7 +62,7 @@ export const issuerIdentityFields = {
 export const recipientIdentityFields = {
   vatId: snapshotText,
   electronicAddress: snapshotText,
-  electronicAddressScheme: { ...schemeEnum, default: null },
+  electronicAddressScheme: { ...snapshotEnum, default: null },
 };
 
 /** The business profile's e-invoice fields. */
@@ -87,14 +95,14 @@ export const clientBillingEinvoiceFields = {
 
 /** Per-line VAT on `Invoice.lineItems`. No defaults: absent means "not categorised". */
 export const lineTaxFields = {
-  taxCategory: { type: String, enum: [...TAX_CATEGORIES] },
+  taxCategory: snapshotEnum,
   taxRate: { type: Number, min: 0, max: 100 },
 };
 
 /** One BG-23 row. Required inside the row is safe: a row never exists partially. */
 export const taxBreakdownRowSchema = new Schema<TaxBreakdownRow>(
   {
-    category: { type: String, enum: [...TAX_CATEGORIES], required: true },
+    category: { ...snapshotEnum, required: true },
     rate: { type: Number, required: true, min: 0, max: 100 },
     basisAmount: { type: Number, required: true },
     taxAmount: { type: Number, required: true },

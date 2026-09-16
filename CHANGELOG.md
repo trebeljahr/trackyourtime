@@ -327,11 +327,21 @@ Load it unpacked in Chrome. It is not in the Chrome Web Store.
   Store extension id, with no edit to `TRUSTED_ORIGINS`. The self-host
   compose file sets it by default.
 - An admin CLI in the server image, `node dist/cli/admin.js`: `create-user`,
-  `reset-password`, `list-workspaces` and `doctor`.
+  `reset-password`, `list-workspaces`, `doctor` and `migrate`.
 - `reset-password` signs the account out on every device. Without
   `--password`, both account commands prompt and do not echo the password.
-- `doctor` checks the database, Redis, mail, trusted origins, the auth URL
-  and clock skew, and exits 1 when a check fails.
+- `doctor` checks the database, Redis, mail, trusted origins, the auth URL,
+  clock skew, the schema version and the indexes, and exits 1 when a check
+  fails.
+- The server applies database migrations at startup, before it accepts
+  connections. It records each one in `schema_migrations`, and a lock keeps two
+  server processes from running the same migration.
+- A server refuses to start against a database that a newer release migrated
+  in a way it cannot read. The log names that release.
+- The server builds every index at startup and logs each failure. It refuses
+  to start when a unique index that guards data integrity cannot be built.
+- `migrate --status` and `migrate --dry-run` show the schema state and the
+  pending migrations without changing anything.
 - `docs/self-hosting.md` covers the admin CLI and moving between the hosted
   app and a self-hosted server.
 - `docs/self-hosting.md` covers install, email, backup and restore, upgrades

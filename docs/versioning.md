@@ -79,3 +79,33 @@ IndexedDB refuses to open it with `VersionError`. The older build then stops
 capture and shows "Activity data was created by a newer version of the
 extension" in Settings → Activity. It does not delete the database, because the
 newer build can still read it.
+
+## Migration-bearing releases
+
+A release is migration-bearing when it changes what is stored in MongoDB in a
+way the runner has to know about: it adds a migration to
+`packages/server/src/services/migrations/registry.ts`, or it changes the shape
+of a collection another library owns. Its release notes say so, and say
+whether older releases can still read the database afterwards (the migration's
+`minReaderSchema`). See `docs/self-hosting.md` → Migrations and Rolling back.
+
+### better-auth upgrades are migration-bearing
+
+better-auth owns the shape of its collections (`user`, `session`, `account`,
+`verification`, `organization`, `member`, `invitation`, `twoFactor`,
+`deviceCode`), and a minor release can add or change fields there. That is why
+`better-auth` is pinned to an exact version in `packages/server/package.json`
+and `packages/client/package.json`, not a `^` range: a lockfile refresh must
+never move it.
+
+An upgrade is a deliberate change, released as migration-bearing:
+
+1. Read the better-auth changelog for every version in between, for schema and
+   stored-token changes.
+2. Change both pins together, and keep the lockfile on that exact version.
+3. Add a migration for any stored shape that changed. Raise its
+   `minReaderSchema` when a server on the old version would misread the new
+   shape, so a rollback refuses to start instead of reading it wrong.
+4. Run the auth integration tests (`two-factor-integration`,
+   `session-lifetime-integration`, `organization-http-lockdown`,
+   `account-deletion-integration`) against a copy of a real database.

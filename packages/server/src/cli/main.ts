@@ -12,8 +12,10 @@ import {
 } from "./accounts.js";
 import { doctorExitCode, formatDoctorReport, runDoctor, type DoctorInputs } from "./doctor.js";
 import { CliError } from "./errors.js";
+import { runMigrate } from "./migrate.js";
 import { promptNewPassword, type SecretInput, type SecretOutput } from "./prompt.js";
 import type { AdminAuth } from "./accounts.js";
+import type { Db } from "mongodb";
 
 export type AdminIo = {
   stdin: SecretInput;
@@ -25,6 +27,8 @@ export type AdminIo = {
 export type AdminRuntime = {
   withAuth: <T>(task: (auth: AdminAuth) => Promise<T>) => Promise<T>;
   doctorInputs: () => Promise<DoctorInputs>;
+  /** The app database on its own client, and the release this build is. */
+  withDatabase: <T>(task: (db: Db, release: string) => Promise<T>) => Promise<T>;
 };
 
 export const EXIT_OK = 0;
@@ -99,6 +103,14 @@ async function execute(command: AdminCommand, io: AdminIo, runtime: AdminRuntime
         command.json ? `${JSON.stringify(results, null, 2)}\n` : formatDoctorReport(results),
       );
       return doctorExitCode(results);
+    }
+
+    case "migrate": {
+      const result = await runtime.withDatabase((db, release) =>
+        runMigrate(db, release, command.mode, command.json),
+      );
+      io.stdout.write(result.stdout);
+      return result.exitCode;
     }
   }
 }

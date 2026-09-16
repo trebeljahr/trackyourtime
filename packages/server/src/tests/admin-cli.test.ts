@@ -37,9 +37,11 @@ import {
   CLOCK_SKEW_WARN_MS,
   checkAuthUrl,
   checkClockSkew,
+  checkIndexes,
   checkMail,
   checkMongo,
   checkRedis,
+  checkSchema,
   checkTrustedOrigins,
   doctorExitCode,
   formatDoctorReport,
@@ -103,6 +105,22 @@ describe("parseAdminArgs", () => {
     for (const argv of [[], ["help"], ["--help"], ["-h"], ["create-user", "--help"]]) {
       assert.deepEqual(parseAdminArgs(argv), { ok: true, command: { kind: "help" } });
     }
+  });
+  it("reads migrate's mode, and refuses --status with --dry-run", () => {
+    assert.deepEqual(parseAdminArgs(["migrate"]), {
+      ok: true,
+      command: { kind: "migrate", mode: "apply", json: false },
+    });
+    assert.deepEqual(parseAdminArgs(["migrate", "--status", "--json"]), {
+      ok: true,
+      command: { kind: "migrate", mode: "status", json: true },
+    });
+    assert.deepEqual(parseAdminArgs(["migrate", "--dry-run"]), {
+      ok: true,
+      command: { kind: "migrate", mode: "dry-run", json: false },
+    });
+    assert.equal(parseAdminArgs(["migrate", "--status", "--dry-run"]).ok, false);
+    assert.equal(parseAdminArgs(["migrate", "--force"]).ok, false);
   });
 });
 
@@ -469,6 +487,29 @@ describe("doctor: services", () => {
     assert.equal(checkMail({ configured: true, transport: "listmonk", fromAddress: "" }).status, "pass");
   });
 
+  it("schema: fail when the database needs a newer build, warn on pending, pass when current", () => {
+    const state = { schemaVersion: 3, requiredReaderSchema: 0, readable: true, raisedBy: null, pending: [] };
+    assert.equal(checkSchema({ ok: true, state }).status, "pass");
+    assert.equal(checkSchema({ ok: true, state: { ...state, pending: [{ id: 3 }] } }).status, "warn");
+    const tooNew = checkSchema({
+      ok: true,
+      state: { ...state, requiredReaderSchema: 5, readable: false, raisedBy: { release: "2.0.0" } },
+    });
+    assert.equal(tooNew.status, "fail");
+    assert.match(tooNew.detail, /v2\.0\.0/);
+    assert.equal(checkSchema({ ok: false, error: "down" }).status, "warn");
+  });
+
+  it("indexes: fail on a missing critical index, warn on any other, pass when all exist", () => {
+    const index = { model: "TimeEntry", keys: { authorId: 1 }, unique: true, critical: true, error: null };
+    assert.equal(checkIndexes({ ok: true, indexes: [index] }).status, "pass");
+    assert.equal(checkIndexes({ ok: true, indexes: [{ ...index, error: "missing" }] }).status, "fail");
+    assert.equal(
+      checkIndexes({ ok: true, indexes: [{ ...index, critical: false, error: "missing" }] }).status,
+      "warn",
+    );
+  });
+
   it("exits non-zero on any fail, and zero on warnings alone", () => {
     assert.equal(doctorExitCode([{ name: "a", status: "warn", detail: "" }]), 0);
     assert.equal(
@@ -509,6 +550,9 @@ const healthyInputs = (urls: UrlState): DoctorInputs => ({
 const runtimeFor = (inputs: DoctorInputs): AdminRuntime => ({
   withAuth: async (task) => task(auth as AdminAuth),
   doctorInputs: async () => inputs,
+  withDatabase: async () => {
+    throw new Error("no database in this test");
+  },
 });
 
 describe("runAdmin", () => {

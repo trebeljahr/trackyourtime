@@ -15,12 +15,12 @@
  * could ask for, and there is no admin surface on the network to attack.
  */
 import { runAdmin } from "./main.js";
-import { doctorInputsFromEnv, withAuth } from "./runtime.js";
+import { doctorInputsFromEnv, withAuth, withDatabase } from "./runtime.js";
 
 const code = await runAdmin(
   process.argv.slice(2),
   { stdin: process.stdin, stdout: process.stdout, stderr: process.stderr },
-  { withAuth, doctorInputs: doctorInputsFromEnv },
+  { withAuth, doctorInputs: doctorInputsFromEnv, withDatabase },
 ).catch((error: unknown) => {
   process.stderr.write(
     `admin: unexpected error\n${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,

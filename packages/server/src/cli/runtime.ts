@@ -10,6 +10,7 @@
  */
 import { CliError } from "./errors.js";
 import type { AdminAuth } from "./accounts.js";
+import type { Db } from "mongodb";
 import type { DoctorInputs } from "./doctor.js";
 
 /** How long a connection attempt may take before the command gives up. */
@@ -54,6 +55,32 @@ export async function withAuth<T>(task: (auth: AdminAuth) => Promise<T>): Promis
   }
 }
 
+/**
+ * The app database on a plain driver client — the migration runner and the
+ * index inspection need nothing from mongoose or better-auth.
+ */
+export async function withDatabase<T>(task: (db: Db, release: string) => Promise<T>): Promise<T> {
+  const { env } = await loadEnv();
+  const { MongoClient } = await import("mongodb");
+  const client = new MongoClient(env.MONGODB_URI, {
+    serverSelectionTimeoutMS: CONNECT_TIMEOUT_MS,
+    connectTimeoutMS: CONNECT_TIMEOUT_MS,
+  });
+  try {
+    try {
+      await client.connect();
+    } catch (error) {
+      throw new CliError(
+        `could not connect to MongoDB: ${error instanceof Error ? error.message : String(error)}. ` +
+          "Run the doctor command for details.",
+      );
+    }
+    return await task(client.db(), env.RELEASE);
+  } finally {
+    await client.close().catch(() => undefined);
+  }
+}
+
 /** The doctor's inputs, bound to this process's environment. */
 export async function doctorInputsFromEnv(): Promise<DoctorInputs> {
   const { env, getTrustedOrigins } = await loadEnv();
@@ -75,6 +102,19 @@ export async function doctorInputsFromEnv(): Promise<DoctorInputs> {
     redisUrl: env.REDIS_URL,
     mongo: () => pingMongo(env.MONGODB_URI),
     redisPing: pingRedis,
+    schema: () =>
+      withDatabase(async (db) => {
+        const { MIGRATIONS, SCHEMA_VERSION, migrationStatus } = await import(
+          "../services/migrations/index.js"
+        );
+        return migrationStatus(db, MIGRATIONS, SCHEMA_VERSION);
+      }),
+    indexes: () =>
+      withDatabase(async (db) => {
+        const { allModels } = await import("../models/registry.js");
+        const { inspectModelIndexes } = await import("../db/indexes.js");
+        return inspectModelIndexes(db, allModels());
+      }),
   };
 }
 

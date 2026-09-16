@@ -24,6 +24,8 @@ import {
   invoiceListSchema,
   invoicePdfSchema,
   invoicePreviewSchema,
+  isLocale,
+  isLocalePreference,
   issuerSnapshot,
   normalizeClientBilling,
   recipientSnapshot,
@@ -580,7 +582,9 @@ const gather = async (
     clientName: client.name,
     recipient,
     clientBilling: normalizeClientBilling(client.billing),
-    clientLocale: client.invoiceLocale ?? null,
+    // A newer release may have stored a locale this build does not ship;
+    // it contributes nothing rather than failing the create (models/README.md).
+    clientLocale: isLocale(client.invoiceLocale) ? client.invoiceLocale : null,
     selection,
     lineItems,
     currency: selection.currencies[0] ?? settings.currency,
@@ -602,14 +606,16 @@ const invoiceLocaleFor = async (
 ): Promise<Locale> => {
   // The preference is only consulted when nothing ahead of it decides, so the
   // read is skipped then; the ORDER stays resolveInvoiceLocale's alone.
-  const issuerPreference =
+  const stored: unknown =
     override || clientLocale
       ? null
-      : ((
+      : (
           await UserPreferencesModel.findOne({ userId: issuerId })
             .select("locale")
             .lean()
-        )?.locale ?? null);
+        )?.locale;
+  // Same tolerance as the client's locale: unknown reads as no preference.
+  const issuerPreference = isLocalePreference(stored) ? stored : null;
   return resolveInvoiceLocale({ override, clientLocale, issuerPreference });
 };
 

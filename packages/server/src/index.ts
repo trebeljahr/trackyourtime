@@ -4,6 +4,8 @@ import "./instrument.js";
 import { createServer } from "http";
 import { createApp } from "./app.js";
 import { connectToDB, disconnectFromDB } from "./db/connection.js";
+import { BootRefusedError, prepareDatabase } from "./db/prepare.js";
+import { SchemaTooNewError } from "./services/migrations/index.js";
 import { connectRedis, disconnectRedis } from "./db/redis.js";
 import { initAuth, disconnectAuth } from "./auth/auth.js";
 import { setupWebSocket } from "./ws/handler.js";
@@ -23,6 +25,10 @@ async function start(): Promise<void> {
   try {
     // 1. Connect to databases
     await connectToDB();
+    // Refuse a database migrated by a newer release, apply pending
+    // migrations under a lock, then build and check every index. Before
+    // anything else reads or writes, and long before listen.
+    await prepareDatabase();
     await connectRedis();
 
     // 2. Initialize auth (needs DB connection)
@@ -58,6 +64,10 @@ async function start(): Promise<void> {
       );
     });
   } catch (err) {
+    if (err instanceof SchemaTooNewError || err instanceof BootRefusedError) {
+      console.error(`[server] ${err.message}`);
+      process.exit(1);
+    }
     console.error("[server] Failed to start:", err);
     process.exit(1);
   }

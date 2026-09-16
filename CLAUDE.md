@@ -1330,6 +1330,32 @@ Four rules, each of which fails quietly if broken:
   claimed, so the log gets one line per timer, not one per poll.
   `reminderSentAt` has no default and is never required, so old rows validate.
 
+### Migrations and indexes at boot
+
+`index.ts` runs `db/prepare.ts` right after `connectToDB()` and before
+anything else: `services/migrations/` (records in `schema_migrations`, lock in
+`app_meta`), then `db/indexes.ts`. `SCHEMA_VERSION` is the id of the last entry
+in `services/migrations/registry.ts`. `admin migrate --status|--dry-run` and
+`doctor` read the same state. User docs: `docs/self-hosting.md` → Migrations.
+
+Five rules, each of which fails quietly if broken:
+
+- **Migrations are append-only, 1…n, idempotent and on the raw driver.** A
+  process can die between `up` and the record, and a lease can lapse mid-run;
+  both re-run `up`. Today's mongoose models are not what an old database needs.
+- **`minReaderSchema` stays low unless older code would misread the result.**
+  Raising it makes every older build refuse to start on that database, which
+  is the point for a breaking change and an outage for an additive one.
+- **The readable check runs before the lock.** A too-old build must exit
+  without touching the database or waiting on a newer build's lock.
+- **Never `syncIndexes()`.** It drops indexes a newer release added. A failed
+  index in `CRITICAL_INDEXES` stops the boot; every other failure warns. A new
+  model goes in `models/registry.ts`, or neither the boot nor `doctor` checks it.
+- **No `enum` on a field a create copies from another stored document**
+  (`models/README.md`). A newer release may have written a value this one does
+  not know; normalise it where it is read instead. better-auth is pinned
+  exactly, and an upgrade is migration-bearing (`docs/versioning.md`).
+
 ### E-invoices (ZUGFeRD / XRechnung)
 
 An invoice downloads three ways: the plain PDF, a ZUGFeRD PDF (PDF/A-3b with

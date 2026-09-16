@@ -342,6 +342,88 @@ export function checkAuthUrl(state: UrlState): CheckResult {
   return { name, status: "pass", detail: `${url.origin} is well-formed and is the app origin` };
 }
 
+// ── Schema and indexes ────────────────────────────────────────────────────
+
+/** The fields of `MigrationStatus` the check reads. */
+export type SchemaState = {
+  schemaVersion: number;
+  requiredReaderSchema: number;
+  readable: boolean;
+  raisedBy: { release: string } | null;
+  pending: readonly { id: number }[];
+};
+
+export function checkSchema(outcome: { ok: true; state: SchemaState } | { ok: false; error: string }): CheckResult {
+  const name = "schema";
+  if (!outcome.ok) {
+    return {
+      name,
+      status: "warn",
+      detail: `not checked: ${outcome.error}`,
+      fix: "fix the database check first",
+    };
+  }
+  const { state } = outcome;
+  if (!state.readable) {
+    return {
+      name,
+      status: "fail",
+      detail:
+        `the database requires schema ${state.requiredReaderSchema}, written by ` +
+        `${state.raisedBy?.release ? `v${state.raisedBy.release}` : "a newer release"}; this build reads up to ${state.schemaVersion}, and the server refuses to start`,
+      fix: "upgrade to that release, or restore the mongodump taken before upgrading",
+    };
+  }
+  if (state.pending.length > 0) {
+    return {
+      name,
+      status: "warn",
+      detail: `${state.pending.length} migration(s) pending (${state.pending.map((m) => m.id).join(", ")}); the server applies them at its next start`,
+      fix: "take a mongodump, then restart the server or run: node dist/cli/admin.js migrate",
+    };
+  }
+  return { name, status: "pass", detail: `schema ${state.schemaVersion}, no migrations pending` };
+}
+
+/** The fields of an index inspection the check reads (`db/indexes.ts`). */
+export type IndexState = {
+  model: string;
+  keys: Record<string, unknown>;
+  unique: boolean;
+  critical: boolean;
+  error: string | null;
+};
+
+export function checkIndexes(
+  outcome: { ok: true; indexes: readonly IndexState[] } | { ok: false; error: string },
+): CheckResult {
+  const name = "indexes";
+  if (!outcome.ok) {
+    return { name, status: "warn", detail: `not checked: ${outcome.error}`, fix: "fix the database check first" };
+  }
+  const describe = (index: IndexState) =>
+    `${index.model} ${JSON.stringify(index.keys)}${index.unique ? " (unique)" : ""}`;
+  const missing = outcome.indexes.filter((index) => index.error !== null);
+  const critical = missing.filter((index) => index.critical);
+  if (critical.length > 0) {
+    return {
+      name,
+      status: "fail",
+      detail: `missing: ${critical.map(describe).join("; ")}; the invariant it enforces is not guaranteed`,
+      fix: `restart the server and read its log: it builds each index and names the one that fails, usually over duplicate documents (${COMPOSE} logs server)`,
+    };
+  }
+  if (missing.length > 0) {
+    return {
+      name,
+      status: "warn",
+      detail: `missing: ${missing.map(describe).join("; ")}`,
+      fix: "restart the server, which builds missing indexes; its log says why one fails",
+    };
+  }
+  return { name, status: "pass", detail: `all ${outcome.indexes.length} declared indexes exist` };
+}
+
 // ── Running and printing ──────────────────────────────────────────────────
 
 export type DoctorInputs = {
@@ -350,6 +432,10 @@ export type DoctorInputs = {
   redisUrl: string;
   mongo: MongoProbe;
   redisPing: (url: string) => Promise<void>;
+  /** Stored migration state. Checked only when given and the database answers. */
+  schema?: () => Promise<SchemaState>;
+  /** Declared indexes and whether each exists. Same condition. */
+  indexes?: () => Promise<readonly IndexState[]>;
   now?: () => number;
 };
 
@@ -363,7 +449,24 @@ export async function runDoctor(inputs: DoctorInputs): Promise<CheckResult[]> {
     checkTrustedOrigins(inputs.urls),
     checkAuthUrl(inputs.urls),
     checkClockSkew(mongo),
+    ...(inputs.schema ? [checkSchema(await settle(mongo, inputs.schema, (state) => ({ ok: true as const, state })))] : []),
+    ...(inputs.indexes
+      ? [checkIndexes(await settle(mongo, inputs.indexes, (indexes) => ({ ok: true as const, indexes })))]
+      : []),
   ];
+}
+
+async function settle<T, R>(
+  mongo: MongoOutcome,
+  read: () => Promise<T>,
+  wrap: (value: T) => R,
+): Promise<R | { ok: false; error: string }> {
+  if (!mongo.ok) return { ok: false, error: "the database did not answer" };
+  try {
+    return wrap(await read());
+  } catch (error) {
+    return { ok: false, error: errorText(error) };
+  }
 }
 
 /** Non-zero when any check failed. A warning alone never fails the run. */

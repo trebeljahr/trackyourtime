@@ -15,6 +15,7 @@ import {
   normalizeRecipient,
   recipientLegalName,
   recipientSnapshot,
+  taxCategorySchema,
   withDefaultElectronicAddress,
   type BusinessProfileFields,
 } from "@starter/shared";
@@ -275,12 +276,16 @@ describe("rows written before e-invoicing", () => {
     assert.equal(profile.smallBusiness, false);
   });
 
-  it("refuses an out-of-range enum on the models", () => {
+  it("checks a line's category at the zod boundary, not on the snapshot model", () => {
+    // A newer release may add a category; the invoice model must still accept
+    // what it copies (models/README.md). The request schema is what refuses.
     const invoice = new Invoice({
       ...legacyInvoice(),
       lineItems: legacyInvoice().lineItems.map((line) => ({ ...line, taxCategory: "X", taxRate: 19 })),
     });
-    assert.ok(invoice.validateSync()?.errors["lineItems.0.taxCategory"]);
+    assert.equal(invoice.validateSync()?.errors["lineItems.0.taxCategory"], undefined);
+    assert.equal(taxCategorySchema.safeParse("X").success, false);
+    assert.equal(taxCategorySchema.safeParse("S").success, true);
   });
 
   it("normalizeIssuer and normalizeBusinessProfile differ only by the defaults", () => {
