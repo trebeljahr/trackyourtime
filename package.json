@@ -29,6 +29,7 @@
     "llms:emit": "node scripts/llms/build-llms.mjs",
     "docs:sync": "node scripts/docs/sync-self-hosting.mjs",
     "openapi:emit": "pnpm --filter @starter/shared run build && pnpm --filter @starter/server exec tsx src/api/v1/emit-openapi.ts",
+    "contract:emit": "pnpm --filter @starter/shared run build && pnpm --filter @starter/server exec tsx src/contract/emit-trpc-contract.ts",
     "einvoice:validate": "node scripts/einvoice-validate.mjs",
     "icons:brand": "node scripts/icons-brand.mjs",
     "test": "pnpm run test:unit && pnpm run test:client && pnpm run test:e2e",
