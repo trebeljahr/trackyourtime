@@ -10,6 +10,11 @@ Both are built for `linux/amd64` and `linux/arm64`. Nothing is deployed, and
 no GitHub Release is created. The hosted instance still deploys from
 `build-and-deploy.yml` on every push to `main`.
 
+The same tag also runs `.github/workflows/extension-release.yml`, which builds
+the browser extension and, once its secrets exist, submits it to the Chrome
+Web Store. Without the secrets it only uploads the zip as an artifact. See
+[Chrome Web Store](#chrome-web-store).
+
 A tag runs no other workflow. `desktop-release.yml`, `mobile-release.yml` and
 `tauri-release.yml` run on manual dispatch only.
 
@@ -34,8 +39,16 @@ The server image reports its commit in `/api/health` as `version`.
 
 ## Steps
 
-1. **Date the changelog, then push `main`.** In `CHANGELOG.md`, rename
-   `## [Unreleased]` to `## [X.Y.Z] - <release date>`, rewrite its opening
+1. **Set the version, date the changelog, then push `main`.** Set
+   `"version"` in the root `package.json` to `X.Y.Z`. It is the one version
+   number. `/version.json` and the browser extension's manifest read it, and
+   `pnpm build:mobile` fails until the iOS `MARKETING_VERSION` and the Android
+   `versionName` match it. `extension-release.yml` fails before it uploads
+   anything when the manifest does not match the tag, because the Chrome Web
+   Store refuses a version that is not higher than the published one.
+
+   In `CHANGELOG.md`, rename `## [Unreleased]` to
+   `## [X.Y.Z] - <release date>`, rewrite its opening
    paragraph in the past tense, and add an empty `## [Unreleased]` above it.
    Point the `[Unreleased]` link at `compare/vX.Y.Z...HEAD` and add a
    `[X.Y.Z]` link to `releases/tag/vX.Y.Z`. Commit it. The tag must contain
@@ -93,8 +106,11 @@ The server image reports its commit in `/api/health` as `version`.
    Without Docker, `REGISTRY_ONLY=1` checks only that both tags can be pulled
    anonymously and list both arches.
 
-6. **Check nothing else ran.** Actions should show one `release` run for the
-   tag, and no desktop, mobile or tauri runs.
+6. **Check nothing else ran.** Actions should show one `release` run and one
+   `Extension Release` run for the tag, and no desktop, mobile or tauri runs.
+   With the store secrets set, the extension run has submitted the new version
+   for review. Without them it is green with the notice "store upload
+   skipped".
 
    Then publish the release page. The workflow creates none. The body is
    written ahead in `docs/release-notes/`:
@@ -135,3 +151,107 @@ Re-publishing an older release does not move `latest` or `X.Y` backwards.
 - **`merge`: "attestation manifest(s)".** Provenance or SBOM was lost when the
   digests were joined. The exact tag is already pushed. `smoke` and `promote`
   did not run.
+
+## Chrome Web Store
+
+`.github/workflows/extension-release.yml` publishes new versions of the
+browser extension to the existing store item `opibnndhibnigcfgfbgbipakadhnbjfi`
+(`STORE_EXTENSION_ID` in `packages/shared/src/store-clients.ts`) through the
+[Chrome Web Store API v2](https://developer.chrome.com/docs/webstore/api).
+The logic is `scripts/chrome-web-store.mjs`, tested in
+`scripts/lib/chrome-web-store.test.mjs`.
+
+The API only updates an item that exists. Creating the item, the store
+listing, the privacy answers and the distribution settings are dashboard work.
+After a visibility change in the dashboard, publish once by hand. Until then
+the API cannot publish.
+
+### What a run does
+
+1. Builds `pnpm run build:extension:prod` (`packages/extension/dist-prod`).
+2. Checks that the manifest `version` equals the tag without its `v`. The
+   version comes from the root `package.json`.
+3. Checks that the manifest `key` pins the store item, then removes `key` from
+   the zipped manifest. The key is public, but the API docs do not say that an
+   update accepts one, and the store keeps the item's own key. The zip is
+   refused if it holds a `.pem`, a `.crx`, an `.env` file or a private key.
+4. Zips the directory contents with `manifest.json` at the root and uploads
+   the zip as a workflow artifact, `chrome-extension-X.Y.Z`.
+5. Uploads the zip to the store and polls `fetchStatus` until the upload is
+   processed.
+6. Submits the item for review, unless the mode is `upload`.
+7. Prints the item status: the published and submitted revisions, their
+   versions and deploy percentages.
+
+Any API error, a `FAILED` upload, or a submission state other than
+`PENDING_REVIEW`, `STAGED`, `PUBLISHED` or `PUBLISHED_TO_TESTERS` fails the job.
+
+### When it runs
+
+| Trigger | Result |
+|---|---|
+| `vX.Y.Z` tag, secrets set | Submits for review. Published when review passes. |
+| `vX.Y.Z` tag, no secrets | Artifact only, with a notice. |
+| Prerelease tag (`v0.2.0-rc.1`) | Artifact only, with a notice. The store has one public channel. |
+| Only one of the two secrets set | Fails with `::error::`. |
+| Actions → Extension Release → Run workflow | `mode` `build`, `upload` or `publish`. `upload` and `publish` need `tag` and both secrets. |
+
+Dispatch inputs:
+
+- `mode: upload` uploads the package as a draft and does not submit it. Use
+  it as a dry run for the store half. A later `publish` run of the same tag
+  uploads again and submits.
+- `deploy-percentage` sets the initial rollout percentage for `publish`.
+  Empty keeps the value saved in the dashboard. The store allows a partial
+  rollout only for items with more than 10,000 seven-day active users.
+- `staged` holds the approved version until you publish it in the dashboard.
+
+When a run fails:
+
+- **Upload refused because of the version.** The store already has this
+  version or a higher one. Bump the root `package.json` and cut a new patch
+  tag.
+- **Upload succeeded, submission failed.** The new package is in the
+  dashboard as a draft. Fix the cause the log names, for example a review
+  still pending, then click "Submit for review" in the dashboard. A re-run
+  uploads the same version again, which the store can refuse.
+- **Token exchange failed.** Check that `CWS_SERVICE_ACCOUNT_JSON` is the
+  whole key file and that the service account is linked in the dashboard.
+
+### One-time setup
+
+Do these once, after the item exists in the dashboard.
+
+The version you uploaded by hand is the published version. A tag with the same
+version fails at upload once the secrets are set. Add the secrets after that
+tag has run, or bump to the next version before the first automated release. The API supports
+[service accounts](https://developer.chrome.com/docs/webstore/service-accounts),
+so no OAuth consent screen and no refresh token are needed.
+
+1. Turn on 2-step verification for the Google account that owns the
+   publisher. The store requires it to publish or update an item.
+2. In the [Google Cloud Console](https://console.cloud.google.com/), create a
+   project, or select one, for example `trackyourtime-release`.
+3. APIs & Services → Library → search "Chrome Web Store API" → Enable.
+4. IAM & Admin → Service Accounts → Create service account, for example
+   `chrome-web-store-publisher`. Grant it no project roles.
+5. Open the service account → Keys → Add key → Create new key → JSON. The
+   file downloads once. Keep it out of the repository.
+6. In the [Developer Dashboard](https://chrome.google.com/webstore/devconsole),
+   open Account and add the service account's email
+   (`…@<project>.iam.gserviceaccount.com`) as the service account. A
+   publisher can link one service account only.
+7. In the Developer Dashboard, Publisher → Settings shows the publisher ID.
+8. In GitHub, Settings → Secrets and variables → Actions, add two repository
+   secrets:
+   - `CWS_SERVICE_ACCOUNT_JSON`: the whole JSON key file.
+   - `CWS_PUBLISHER_ID`: the publisher ID.
+9. Delete the local copy of the JSON key.
+10. Test it: Actions → Extension Release → Run workflow, `tag` set to the
+    newest tag, `mode: upload`. If the store already has that version, the
+    upload fails with the store's own message, which also proves the
+    credentials work. Otherwise it leaves a draft that the next `publish`
+    run replaces.
+
+To rotate the key, create a new JSON key for the same service account, replace
+`CWS_SERVICE_ACCOUNT_JSON`, and delete the old key in the Cloud Console.

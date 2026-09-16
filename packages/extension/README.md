@@ -275,6 +275,17 @@ tile brings its own indigo ground and reads on light and dark chrome alike. At
 16px the arc gap closes up and the mark reads as a ring — that is the honest
 limit of the shape at that size, not a rendering fault.
 
+## Publishing to the Chrome Web Store
+
+A `vX.Y.Z` tag runs `.github/workflows/extension-release.yml`. It builds
+`dist-prod`, checks that the manifest version equals the tag, removes `key`
+from the zipped manifest and submits the new version for review through the
+Chrome Web Store API. The version comes from the root `package.json`, so bump
+it there before tagging. The job skips the store when the
+`CWS_SERVICE_ACCOUNT_JSON` and `CWS_PUBLISHER_ID` secrets are not set.
+
+Setup and dispatch options: [docs/releasing.md → Chrome Web Store](../../docs/releasing.md#chrome-web-store).
+
 ## Before shipping
 
 `minimum_chrome_version` is `116` because WebSocket activity only keeps an MV3

@@ -2194,6 +2194,16 @@ session, never a borrowed web-app cookie) and clears its queue, per the
 extension's existing sign-out rule. `serverAccess` in the snapshot reports a
 revoked grant, and the popup offers "Allow access".
 
+**Store releases** are `.github/workflows/extension-release.yml` on every `v*`
+tag (setup: `docs/releasing.md` → "Chrome Web Store"). Three rules: the
+manifest `version` is the root `package.json` version (a prerelease becomes
+`version` + `version_name`), and the job fails before uploading when it is not
+the tag; the zipped manifest has no `key`, and the key is checked to pin
+`STORE_EXTENSION_ID` before it is removed, so a build with a fork's
+`EXTENSION_KEY` is never uploaded over the listing; with neither
+`CWS_SERVICE_ACCOUNT_JSON` nor `CWS_PUBLISHER_ID` set the tag run only uploads
+an artifact, and one without the other is an error.
+
 As unpacked extensions the two have different ids, and **each id's origin must
 be trusted by that server**. The dev id is derived and trusted by `pnpm run
 dev` (`scripts/lib/extension-id.mjs`, shared with `extension:id` so the two

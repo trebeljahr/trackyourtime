@@ -1,0 +1,219 @@
+name: Extension Release
+
+# Builds the production browser extension (packages/extension/dist-prod),
+# zips it for the Chrome Web Store and — when the store secrets are set —
+# uploads it to the existing store item and submits it for review, through
+# the Chrome Web Store API v2 (scripts/chrome-web-store.mjs).
+#
+# Runs beside release.yml on every `v*` tag, and on manual dispatch. Unlike
+# desktop-release.yml and mobile-release.yml it is safe on the tag with
+# nothing configured: the zip is the same unsigned bundle anyone builds from
+# the tagged source, and with no store secrets the job stops after uploading
+# it as an artifact, green, with a notice saying why.
+#
+# The API cannot create the item, edit its listing, privacy answers or
+# distribution; those stay dashboard work. The item id is STORE_EXTENSION_ID
+# in packages/shared/src/store-clients.ts. One-time setup (Google Cloud
+# project, service account, dashboard link, secrets): docs/releasing.md →
+# "Chrome Web Store".
+#
+# Modes:
+#   build    build, check, zip, upload the artifact. Nothing reaches the store.
+#   upload   also upload the package to the store as a draft — NOT submitted
+#            for review. The dry run for the store half.
+#   publish  also submit for review; published when review passes (or staged,
+#            with `staged` checked). A tag run is `publish` when the secrets
+#            exist and `build` when they do not.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "vX.Y.Z to build from. Required for upload/publish; empty builds the dispatched branch"
+        required: false
+        type: string
+        default: ""
+      mode:
+        description: "build: artifact only. upload: store draft, not submitted. publish: submit for review"
+        required: true
+        type: choice
+        options:
+          - build
+          - upload
+          - publish
+        default: build
+      deploy-percentage:
+        description: "publish only: initial rollout percentage (0-100). Empty keeps the dashboard's value. Partial rollout needs 10,000+ weekly users"
+        required: false
+        type: string
+        default: ""
+      staged:
+        description: "publish only: stage after approval instead of publishing immediately"
+        required: false
+        type: boolean
+        default: false
+
+# One store submission at a time: a second upload while the first is being
+# processed or reviewed is refused by the store anyway, and never cancelled
+# half-way, because a cancelled job can leave an upload the next run trips on.
+concurrency:
+  group: extension-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  chrome-web-store:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Job-level, so the `if:` guards below can read them — a step's own `env:`
+    # is not in scope for that step's `if:` (see mobile-release.yml).
+    env:
+      CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+      CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+    steps:
+      # Decides tag, ref and mode before anything is checked out. Every input
+      # is read through env, never interpolated into the script.
+      - id: resolve
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "push" ]; then
+            tag="$REF_NAME"
+            mode=publish
+          else
+            tag="${INPUT_TAG:-}"
+            mode="${INPUT_MODE:-build}"
+          fi
+
+          if [ -n "$tag" ] && ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$tag' is not a vX.Y.Z tag."
+            exit 1
+          fi
+
+          if [ "$mode" != "build" ] && [ -z "$tag" ]; then
+            echo "::error::mode '$mode' needs a tag: the store only gets packages whose version was checked against a release tag."
+            exit 1
+          fi
+
+          # The store has one public channel. A prerelease tag still builds and
+          # is checked, but never reaches it.
+          case "$tag" in
+            *-*)
+              if [ "$mode" != "build" ]; then
+                if [ "$EVENT" = "push" ]; then
+                  echo "::notice::$tag is a prerelease — built and zipped, not uploaded to the Chrome Web Store."
+                  mode=build
+                else
+                  echo "::error::$tag is a prerelease; prereleases are not uploaded to the Chrome Web Store."
+                  exit 1
+                fi
+              fi
+              ;;
+          esac
+
+          # Both secrets or neither. Half a configuration is an error on every
+          # event — skipping it would hide the missing half behind a green run.
+          if [ -n "${CWS_SERVICE_ACCOUNT_JSON:-}" ] && [ -z "${CWS_PUBLISHER_ID:-}" ]; then
+            echo "::error::CWS_SERVICE_ACCOUNT_JSON is set but CWS_PUBLISHER_ID is not."
+            exit 1
+          fi
+          if [ -z "${CWS_SERVICE_ACCOUNT_JSON:-}" ] && [ -n "${CWS_PUBLISHER_ID:-}" ]; then
+            echo "::error::CWS_PUBLISHER_ID is set but CWS_SERVICE_ACCOUNT_JSON is not."
+            exit 1
+          fi
+          if [ -z "${CWS_SERVICE_ACCOUNT_JSON:-}" ] && [ "$mode" != "build" ]; then
+            if [ "$EVENT" = "push" ]; then
+              echo "::notice::CWS_SERVICE_ACCOUNT_JSON and CWS_PUBLISHER_ID are not set — built and zipped, store upload skipped. See docs/releasing.md → Chrome Web Store."
+              mode=build
+            else
+              echo "::error::mode '$mode' needs the CWS_SERVICE_ACCOUNT_JSON and CWS_PUBLISHER_ID secrets. See docs/releasing.md → Chrome Web Store."
+              exit 1
+            fi
+          fi
+
+          {
+            echo "tag=$tag"
+            echo "mode=$mode"
+          } >> "$GITHUB_OUTPUT"
+          echo "tag=${tag:-none} mode=$mode"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.tag || github.ref }}
+
+      # No `version:` input — see desktop-release.yml. action-setup reads
+      # `packageManager` from package.json and throws on a differing pin.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      # dist-prod pins the store key, so this is the id the servers trust.
+      # EXTENSION_KEY must NOT be set here: the package step refuses a build
+      # whose key does not pin the store item.
+      - name: Build (production target)
+        run: pnpm run build:extension:prod
+
+      # Checks the manifest version against the tag (the root package.json is
+      # the single source — docs/releasing.md step 1 bumps it), strips `key`
+      # and zips the directory contents with manifest.json at the root. Without
+      # a tag (a branch build) it checks against package.json's own version.
+      - id: package
+        name: Check version and zip
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TAG" ]; then
+            TAG="v$(node -p 'require("./package.json").version')"
+          fi
+          version="${TAG#v}"
+          zip="$RUNNER_TEMP/trackyourtime-extension-$version.zip"
+          node scripts/chrome-web-store.mjs package --tag "$TAG" --out "$zip"
+          {
+            echo "zip=$zip"
+            echo "tag=$TAG"
+            echo "name=chrome-extension-$version"
+          } >> "$GITHUB_OUTPUT"
+
+      # Before any store call, so the exact bytes sent are kept even when the
+      # upload or the review submission fails.
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: ${{ steps.package.outputs.zip }}
+          if-no-files-found: error
+
+      - name: Upload to the Chrome Web Store
+        if: steps.resolve.outputs.mode != 'build'
+        env:
+          TAG: ${{ steps.package.outputs.tag }}
+          ZIP: ${{ steps.package.outputs.zip }}
+          MODE: ${{ steps.resolve.outputs.mode }}
+          DEPLOY_PERCENTAGE: ${{ inputs.deploy-percentage }}
+          STAGED: ${{ inputs.staged }}
+        run: |
+          set -euo pipefail
+          args=(publish --tag "$TAG" --zip "$ZIP")
+          if [ "$MODE" = "upload" ]; then
+            args+=(--upload-only)
+          else
+            if [ -n "$DEPLOY_PERCENTAGE" ]; then args+=(--deploy-percentage "$DEPLOY_PERCENTAGE"); fi
+            if [ "$STAGED" = "true" ]; then args+=(--staged); fi
+          fi
+          node scripts/chrome-web-store.mjs "${args[@]}"

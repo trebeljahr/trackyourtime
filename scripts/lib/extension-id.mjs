@@ -16,6 +16,9 @@ const idFromBytes = (bytes) =>
     .map((c) => String.fromCharCode(97 + parseInt(c, 16)))
     .join("");
 
+/** The id a manifest `key` (base64 DER public key) pins. */
+export const extensionIdFromKey = (key) => idFromBytes(Buffer.from(key, "base64"));
+
 /**
  * A `key` in the built manifest, if the build had EXTENSION_KEY pinned.
  *
@@ -50,7 +53,7 @@ const pinnedKey = (dir) => {
 export function extensionId(dir) {
   const key = pinnedKey(dir);
   return {
-    id: key ? idFromBytes(Buffer.from(key, "base64")) : idFromBytes(dir),
+    id: key ? extensionIdFromKey(key) : idFromBytes(dir),
     source: key ? "pinned manifest key" : "unpacked load path",
   };
 }

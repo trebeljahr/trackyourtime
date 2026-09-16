@@ -17,6 +17,7 @@
  * because that is the line Chrome shows at install time.
  */
 import { STORE_EXTENSION_KEY } from "@starter/shared/store-clients";
+import rootPackage from "../../package.json" with { type: "json" };
 
 export type BuildMode = "development" | "production";
 
@@ -114,7 +115,35 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
   },
 };
 
-export const VERSION = "0.1.0";
+/**
+ * The release version, read from the root `package.json` — the one number the
+ * release process bumps (docs/releasing.md), and the one `/version.json` and
+ * the mobile builds already report. A second literal here drifted from it
+ * silently, and the Chrome Web Store refuses an upload whose version is not
+ * higher than the published one, so a forgotten bump only surfaced at upload.
+ * `.github/workflows/extension-release.yml` checks it against the tag.
+ */
+export const RELEASE_VERSION: string = rootPackage.version;
+
+/**
+ * Chrome's `version` is one to four dot-separated integers, so a prerelease
+ * such as `0.2.0-rc.1` cannot be one. It becomes `version: "0.2.0"` with the
+ * full string kept as `version_name`, which is what Chrome shows people.
+ */
+export const manifestVersionFields = (
+  release: string,
+): { version: string; version_name?: string } => {
+  const match = /^(\d+(?:\.\d+){0,3})(?:[-+].*)?$/.exec(release.trim());
+  if (!match) {
+    throw new Error(
+      `package.json version "${release}" does not start with a Chrome version (1-4 dot-separated integers).`,
+    );
+  }
+  const version = match[1];
+  return version === release.trim()
+    ? { version }
+    : { version, version_name: release.trim() };
+};
 
 /** The environment a build reads, narrowed so no Node typings are needed. */
 export type BuildEnv = Readonly<Record<string, string | undefined>>;
@@ -157,7 +186,7 @@ export function buildManifest(
     // that directory exists, and Chrome refuses to load the extension without it.
     name: `__MSG_${target.nameMessage}__`,
     default_locale: "en",
-    version: VERSION,
+    ...manifestVersionFields(RELEASE_VERSION),
     description: "__MSG_extDescription__",
     // WebSocket traffic only keeps an MV3 service worker alive from 116 on,
     // and the sync socket depends on that.

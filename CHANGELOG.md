@@ -15,10 +15,11 @@ That release publishes the web app and API as self-host images. The Raycast
 extension, the browser extension and the iOS and Android projects are in the
 repository and build from source.
 
-Not part of it: no desktop app, no mobile app and no store listing.
+Not part of it: no desktop app and no mobile app.
 `desktop-release.yml`, `mobile-release.yml` and `tauri-release.yml` run on
 manual dispatch only, so the `v0.1.0` tag builds none of them. Their output is
-unsigned.
+unsigned. The tag also runs `extension-release.yml`, which submits the browser
+extension to the Chrome Web Store only when its store secrets are set.
 
 ### Added
 
