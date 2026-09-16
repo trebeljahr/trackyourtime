@@ -68,6 +68,8 @@ const clientLabel = (client: ClientKind, t: PopupT): string => {
     case "cli":
       return t("devices.clients.cli");
     case "unknown":
+    default:
+      // A client kind a newer server knows and this build does not.
       return t("devices.clients.unknown");
   }
 };

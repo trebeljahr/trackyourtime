@@ -403,6 +403,11 @@ export const createIdleWatcher = (
         settledEntryId = timer.id;
         ownedEntryId = null;
         return truncatePlan(pending, "never");
+
+      default:
+        // A behaviour a newer server added. Doing nothing never loses time;
+        // guessing at a truncation could.
+        return NONE;
     }
   };
 

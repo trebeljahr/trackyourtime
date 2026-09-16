@@ -81,6 +81,7 @@ const SAMPLE_DURATION_SEC = 5400;
 const themeLabel = (theme: ThemePreference, t: PopupT): string => {
   switch (theme) {
     case "system":
+    default:
       return t("general.themes.system");
     case "light":
       return t("general.themes.light");
@@ -92,6 +93,7 @@ const themeLabel = (theme: ThemePreference, t: PopupT): string => {
 const languageLabel = (language: LocalePreference, t: PopupT): string => {
   switch (language) {
     case "system":
+    default:
       return t("general.languages.system");
     case "en":
       return t("general.languages.en");

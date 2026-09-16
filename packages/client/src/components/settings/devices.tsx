@@ -253,7 +253,7 @@ export function DevicesPanel(): React.JSX.Element {
               </TableHeader>
               <TableBody>
                 {devices.map((device) => {
-                  const Icon = CLIENT_ICONS[device.client];
+                  const Icon = CLIENT_ICONS[device.client] ?? CLIENT_ICONS.unknown;
                   return (
                     <TableRow
                       key={device.id}

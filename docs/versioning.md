@@ -56,6 +56,56 @@ Raise a floor only with a change that cannot work without it. Raising
 `MIN_SERVER_API_LEVEL` past what the oldest supported self-hosted release reports
 locks those servers out of every store client at once.
 
+### The contract snapshot
+
+`packages/server/contract/trpc-contract.json` is the tRPC surface as data:
+every procedure's path, its type (query or mutation) and its input JSON Schema
+(from `z.toJSONSchema`), every sync event kind with its payload schema, and
+`apiLevel` / `minClientApiLevel`. It is committed, like the OpenAPI document,
+so a change to what clients may send shows up in review.
+
+```bash
+pnpm run contract:emit    # regenerate after changing a procedure, an input or a sync event
+```
+
+`packages/server/src/tests/trpc-contract.test.ts` regenerates it and compares.
+When they differ, it classifies the difference:
+
+| Class | Changes | What the test asks for |
+| --- | --- | --- |
+| Breaking | Procedure removed or renamed, type changed, input added where there was none, required input property added, optional → required, enum value removed, type or bound narrowed, sync kind removed, required sync field removed | Raise `MIN_CLIENT_API_LEVEL` and `API_LEVEL` in the same change |
+| Additive | Procedure added, optional input property added, enum value added, sync kind added | Bump `API_LEVEL` and add an `API_LEVEL_CHANGES` row |
+| Neutral | Input property removed (zod strips unknown keys, never refuses them), a description changed | Regenerate |
+
+Inputs are compared from the server's side (what an older client sends must
+still parse) and sync payloads from the client's side (what an older client
+receives must still make sense). A changed `pattern` or `format` cannot be
+ordered, so it reads as breaking. Outputs are not in the snapshot: they are
+TypeScript types that no client validates.
+
+Sync event kinds live in three places: the `SyncEvent` union and
+`SYNC_EVENT_KIND_SET` in `packages/shared/src/protocol.ts`, and
+`packages/server/src/contract/sync-events.ts`. `tsc` fails when either copy
+disagrees with the union.
+
+### Unknown values from a newer server
+
+A client can be older than its server, so every value a server sends can be one
+the client has never heard of.
+
+- **Sync events.** An unknown kind, or an unknown `catalog.changed` /
+  `integrations.changed` scope, means "something changed": the web app
+  invalidates every query, the extension drops its workspace caches and its
+  running timer, Raycast revalidates. From another workspace an unknown kind
+  reaches the timer (`syncEventReach` answers `"timer"`), because a timer spans
+  workspaces. Known kinds keep their targeted handling.
+- **Switches over server strings** (invoice and invitation status, idle and
+  runaway behaviour, device client kind, theme, language, e-invoice fix
+  location) keep their `never` checks for the build and return a safe value at
+  runtime: a neutral label, no action, no crash. Codes that reach the UI
+  (membership refusals, e-invoice refusals and issue codes) are checked against
+  the known list first and fall back to a generic message.
+
 ### The header contract
 
 Every first-party client sends two headers on every API request:

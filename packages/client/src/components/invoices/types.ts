@@ -108,7 +108,9 @@ const ALLOWED_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
  * (a retried mutation must not fail) but is not a button anybody wants.
  */
 export function statusTransitions(from: InvoiceStatus): InvoiceStatus[] {
-  return ALLOWED_TRANSITIONS[from].filter((status) => status !== from);
+  // A status a newer server added has no known transitions: offer none rather
+  // than crash the invoice list.
+  return (ALLOWED_TRANSITIONS[from] ?? []).filter((status) => status !== from);
 }
 
 /**
@@ -132,6 +134,8 @@ export function statusLabel(
   status: InvoiceStatus,
   locale: ClientLocale = getActiveLocale(),
 ): string {
+  // A status a newer server added has no message; its own word beats a key path.
+  if (!(INVOICE_STATUSES as readonly string[]).includes(status)) return status;
   return reportsT(locale)(`invoices.status.${status}`);
 }
 
@@ -145,6 +149,8 @@ export function statusBadgeTone(status: InvoiceStatus): BadgeTone {
     case "sent":
       return "secondary";
     case "draft":
+      return "outline";
+    default:
       return "outline";
   }
 }

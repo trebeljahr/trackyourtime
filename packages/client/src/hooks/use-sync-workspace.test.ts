@@ -28,7 +28,7 @@ vi.mock("better-auth/client/plugins", () => ({
   twoFactorClient: () => ({}),
 }));
 
-const { isOwnActivity, syncEventReach, timerStore } = await import("./use-sync");
+const { invalidateFor, isOwnActivity, syncEventReach, timerStore } = await import("./use-sync");
 const { signOut } = await import("@/lib/auth-client");
 
 const entry = (authorId: string, workspaceId = "ws-a"): TimeEntry =>
@@ -72,6 +72,41 @@ describe("isOwnActivity", () => {
   it("counts person-level events, not another member's workspace changes", () => {
     expect(isOwnActivity({ kind: "settings.changed" }, undefined, "me")).toBe(true);
     expect(isOwnActivity({ kind: "catalog.changed", scope: "tag" }, "ws-a", "me")).toBe(false);
+  });
+});
+
+describe("invalidateFor and a newer server", () => {
+  /** A stand-in for `trpc.useUtils()`: every router's and the root's `invalidate`. */
+  const fakeUtils = () => {
+    const calls: string[] = [];
+    const router = (name: string) => ({ invalidate: vi.fn(() => calls.push(name)) });
+    const utils = new Proxy(
+      { invalidate: vi.fn(() => calls.push("*")) } as Record<string, unknown>,
+      { get: (target, key: string) => target[key] ?? (target[key] = router(key)) },
+    );
+    return { utils: utils as unknown as Parameters<typeof invalidateFor>[0], calls };
+  };
+
+  it("refetches everything for an event kind this build does not know", () => {
+    const { utils, calls } = fakeUtils();
+    invalidateFor(utils, { kind: "timer.paused" } as unknown as SyncEvent);
+    expect(calls).toEqual(["*"]);
+  });
+
+  it("refetches everything for an unknown catalog or integrations scope", () => {
+    const catalog = fakeUtils();
+    invalidateFor(catalog.utils, { kind: "catalog.changed", scope: "rate" } as unknown as SyncEvent);
+    expect(catalog.calls).toEqual(["*"]);
+
+    const integrations = fakeUtils();
+    invalidateFor(integrations.utils, { kind: "integrations.changed", scope: "oauth-app" } as unknown as SyncEvent);
+    expect(integrations.calls).toEqual(["*"]);
+  });
+
+  it("keeps known scopes targeted", () => {
+    const { utils, calls } = fakeUtils();
+    invalidateFor(utils, { kind: "integrations.changed", scope: "webhook" });
+    expect(calls).toEqual(["webhooks"]);
   });
 });
 

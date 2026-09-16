@@ -53,6 +53,9 @@ const behaviorLabel = (behavior: RunawayBehavior, t: PopupT): string => {
       return t("limits.behaviors.cap.label");
     case "stop":
       return t("limits.behaviors.stop.label");
+    default:
+      // A behaviour a newer server added.
+      return String(behavior);
   }
 };
 
@@ -64,6 +67,8 @@ const behaviorDescription = (behavior: RunawayBehavior, t: PopupT): string => {
       return t("limits.behaviors.cap.description");
     case "stop":
       return t("limits.behaviors.stop.description");
+    default:
+      return "";
   }
 };
 

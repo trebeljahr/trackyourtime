@@ -143,6 +143,8 @@ export const members: Translation<typeof source> = {
     acceptedBody: "Öffne die App, um Zeit in {workspace} zu erfassen.",
     rejectedTitle: "Diese Einladung wurde abgelehnt",
     rejectedBody: "Bitte {inviter} um eine neue, falls das ein Versehen war.",
+    unavailableTitle: "Diese Einladung kann nicht mehr angenommen werden",
+    unavailableBody: "Bitte {inviter}, dir eine neue zu schicken.",
     notFoundTitle: "Einladung nicht gefunden",
     notFoundBody: "Der Link ist vielleicht unvollständig, oder die Einladung wurde gelöscht.",
   },

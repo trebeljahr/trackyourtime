@@ -252,6 +252,29 @@ test("another workspace's catalog change leaves this workspace's catalog alone",
   expect(getCachedProjects()).toBeNull();
 });
 
+test("a sync event kind or scope from a newer server rebuilds the snapshot instead of being ignored", async () => {
+  await resolveWorkspaces();
+  setCachedProjects([{ id: "p-a" } as never]);
+  setCachedRunning(entry({ id: "mine" }));
+  // Neither is in this build's SyncEvent union — exactly what a newer server sends.
+  applyEvent({ kind: "timer.paused" } as never, A);
+  expect(getCachedProjects()).toBeNull();
+  expect(peekRunning()).toBeNull();
+
+  setCachedProjects([{ id: "p-a" } as never]);
+  applyEvent({ kind: "catalog.changed", scope: "rate" } as never, A);
+  expect(getCachedProjects()).toBeNull();
+});
+
+test("an unknown kind from another workspace re-reads the timer and nothing else", async () => {
+  await resolveWorkspaces();
+  setCachedProjects([{ id: "p-a" } as never]);
+  setCachedRunning(entry({ id: "mine" }));
+  applyEvent({ kind: "timer.paused" } as never, B);
+  expect(peekRunning()).toBeNull();
+  expect(getCachedProjects()).not.toBeNull();
+});
+
 test("without knowing who is signed in, no event's timer is believed", async () => {
   await saveSession({ token: "token-2", userId: null, email: null });
   await reload();

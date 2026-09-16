@@ -10,7 +10,7 @@
  * resolves to, which socket events concern the screen, or whose time a total
  * adds up.
  */
-import type { SyncEvent, WorkspaceSummary } from "@starter/shared";
+import { isKnownSyncEventKind, type SyncEvent, type WorkspaceSummary } from "@starter/shared";
 
 /**
  * The workspace a client should address, given what it stored and the
@@ -44,7 +44,8 @@ export const resolveActiveWorkspaceId = (
  *    nothing else; A's rows must not reach B's lists.
  *  - `"membership"`: another workspace's membership changed. Only the
  *    workspace list can be affected.
- *  - `"ignore"`: anything else from another workspace.
+ *  - `"ignore"`: anything else from another workspace. A kind this build does
+ *    not know is `"timer"` instead: it may be a newer server's timer event.
  */
 export type SyncEventReach = "all" | "timer" | "membership" | "ignore";
 
@@ -69,7 +70,10 @@ export const syncEventReach = (
     case "membership.changed":
       return "membership";
     default:
-      return "ignore";
+      // A kind a newer server added may well move the person's timer, which
+      // spans workspaces. Re-reading the running entry is cheap; a badge left
+      // on a timer that another workspace's event ended is not.
+      return isKnownSyncEventKind(event.kind) ? "ignore" : "timer";
   }
 };
 

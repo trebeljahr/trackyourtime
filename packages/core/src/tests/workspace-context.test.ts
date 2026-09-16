@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { SyncEvent, TimeEntry, WorkspaceSummary } from "@starter/shared";
+import {
+  SYNC_EVENT_KINDS,
+  isKnownCatalogScope,
+  isKnownIntegrationScope,
+  isKnownSyncEventKind,
+  type SyncEvent,
+  type TimeEntry,
+  type WorkspaceSummary,
+} from "@starter/shared";
 import {
   emptyWorkspaceChoice,
   isHeldByWorkspace,
@@ -102,4 +110,23 @@ test("workspace-scoped keys fall back to the bare key while nothing is resolved"
   assert.equal(workspaceScopedKey("cache", "ws-a"), "cache:ws-a");
   assert.notEqual(workspaceScopedKey("cache", "ws-a"), workspaceScopedKey("cache", "ws-b"));
   assert.equal(workspaceScopedKey("cache", null), "cache");
+});
+
+test("an event kind this build does not know reaches the timer from another workspace", () => {
+  const unknown = { kind: "timer.paused" } as unknown as SyncEvent;
+  assert.equal(syncEventReach(unknown, "ws-b", "ws-a"), "timer");
+  assert.equal(syncEventReach(unknown, "ws-a", "ws-a"), "all");
+  // A known non-timer kind from another workspace is still ignored.
+  assert.equal(syncEventReach({ kind: "favorites.changed" }, "ws-b", "ws-a"), "ignore");
+});
+
+test("known sync kinds and scopes are exactly the union's", () => {
+  assert.equal(isKnownSyncEventKind("timer.started"), true);
+  assert.equal(isKnownSyncEventKind("timer.paused"), false);
+  assert.equal(isKnownSyncEventKind("toString"), false);
+  assert.equal(SYNC_EVENT_KINDS.length, 11);
+  assert.equal(isKnownCatalogScope("tag"), true);
+  assert.equal(isKnownCatalogScope("rate"), false);
+  assert.equal(isKnownIntegrationScope("webhook"), true);
+  assert.equal(isKnownIntegrationScope("oauth-app"), false);
 });

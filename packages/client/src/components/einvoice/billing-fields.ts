@@ -209,6 +209,9 @@ export function fixHref(
         : "/app/clients";
     case "invoice":
       return null;
+    default:
+      // A location a newer server added: no page here to link to.
+      return null;
   }
 }
 

@@ -104,6 +104,57 @@ export type SyncEvent =
         | "invitation";
     };
 
+/**
+ * Every sync event kind this build knows, as a value.
+ *
+ * A server can be NEWER than the client reading its socket (a store client
+ * talking to a freshly upgraded self-hosted server lags nothing, but a desktop
+ * build or a tab left open does), so a frame can carry a kind that is not in
+ * {@link SyncEvent} at all. Ignoring it leaves screens stale with nothing to
+ * say why; every client instead treats an unknown kind — and an unknown scope
+ * below — as "something changed, refetch". The mapped type fails `tsc` when a
+ * kind is added to the union and not here.
+ */
+const SYNC_EVENT_KIND_SET: { readonly [K in SyncEvent["kind"]]: true } = {
+  "entry.upserted": true,
+  "entry.deleted": true,
+  "timer.started": true,
+  "timer.stopped": true,
+  "catalog.changed": true,
+  "favorites.changed": true,
+  "invoice.changed": true,
+  "settings.changed": true,
+  "data.imported": true,
+  "integrations.changed": true,
+  "membership.changed": true,
+};
+
+export const SYNC_EVENT_KINDS = Object.keys(SYNC_EVENT_KIND_SET) as readonly SyncEvent["kind"][];
+
+/** True for a kind this build has a case for; false for one a newer server added. */
+export const isKnownSyncEventKind = (kind: string): kind is SyncEvent["kind"] =>
+  Object.prototype.hasOwnProperty.call(SYNC_EVENT_KIND_SET, kind);
+
+export type CatalogChangeScope = Extract<SyncEvent, { kind: "catalog.changed" }>["scope"];
+export type IntegrationChangeScope = Extract<SyncEvent, { kind: "integrations.changed" }>["scope"];
+
+const CATALOG_SCOPE_SET: { readonly [S in CatalogChangeScope]: true } = {
+  client: true,
+  project: true,
+  task: true,
+  tag: true,
+};
+const INTEGRATION_SCOPE_SET: { readonly [S in IntegrationChangeScope]: true } = {
+  "api-token": true,
+  webhook: true,
+};
+
+/** A scope a newer server added reads as unknown — refetch everything it could touch. */
+export const isKnownCatalogScope = (scope: string): scope is CatalogChangeScope =>
+  Object.prototype.hasOwnProperty.call(CATALOG_SCOPE_SET, scope);
+export const isKnownIntegrationScope = (scope: string): scope is IntegrationChangeScope =>
+  Object.prototype.hasOwnProperty.call(INTEGRATION_SCOPE_SET, scope);
+
 /** Room name every sync event for a given owner is published to. */
 export const userRoomId = (ownerId: string): string => `user:${ownerId}`;
 

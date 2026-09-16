@@ -36,6 +36,8 @@ import {
   withWorkspaceList,
   workspaceChoiceFor,
   workspaceNameIn,
+  isKnownCatalogScope,
+  isKnownSyncEventKind,
   isOwnActivity,
   tempIdOf,
   withWorkspaceId,
@@ -900,6 +902,9 @@ const applyRunning = (event: SyncEvent): void => {
       if (cachedRunning?.entry?.id === event.id) rememberRunning(null);
       return;
     default:
+      // A kind a newer server added may have moved the timer. Believe nothing
+      // cached: the next read asks `entries.current`.
+      if (!isKnownSyncEventKind(event.kind)) forgetRunning();
       return;
   }
 };
@@ -961,6 +966,12 @@ export const applyEvent = (event: SyncEvent, eventWorkspaceId?: string): void =>
       forgetWorkspaceCaches();
       return;
     case "catalog.changed":
+      if (!isKnownCatalogScope(event.scope)) {
+        // A scope a newer server added: rebuild the whole snapshot rather
+        // than guess which cache it concerns.
+        forgetWorkspaceCaches();
+        return;
+      }
       if (event.scope === "project") cachedProjects = null;
       if (event.scope === "client") cachedClients = null;
       if (event.scope === "tag") cachedTags = null;
@@ -978,6 +989,21 @@ export const applyEvent = (event: SyncEvent, eventWorkspaceId?: string): void =>
       // `devices.revoke` and `devices.revokeOthers` publish exactly this event
       // and nothing else, so a device list signed out from the web app would
       // otherwise keep listing sessions that no longer exist.
+      cachedDevices = null;
+      return;
+    case "data.imported":
+      // An import (or its undo) rewrites entries and the catalog at once.
+      forgetWorkspaceCaches();
+      return;
+    case "invoice.changed":
+    case "integrations.changed":
+      return;
+    default:
+      // A kind a newer server added. Ignoring it would leave the popup on
+      // stale data with nothing to say why, so the snapshot is rebuilt from
+      // scratch on the next read.
+      workspacesFresh = false;
+      forgetWorkspaceCaches();
       cachedDevices = null;
       return;
   }

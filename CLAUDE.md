@@ -1935,6 +1935,19 @@ on `/api/health`. Rules that fail quietly if broken:
 - **The root `package.json` version is the one version.** The web export and the
   extension read it at build time; the other copies are checked by
   `scripts/lib/version-sync.test.mjs`.
+- **The tRPC contract is a committed snapshot.** `pnpm run contract:emit` writes
+  `packages/server/contract/trpc-contract.json` (every procedure's type and
+  input JSON Schema, every sync event kind, both levels);
+  `tests/trpc-contract.test.ts` fails when it is stale and says whether the
+  change is breaking (raise `MIN_CLIENT_API_LEVEL` and `API_LEVEL`), additive
+  (bump `API_LEVEL`) or neither. A sync kind is added in three places:
+  `SyncEvent`, `SYNC_EVENT_KIND_SET` in `protocol.ts`, and
+  `contract/sync-events.ts` — `tsc` enforces the last two.
+- **An unknown sync kind or scope means "refetch", never "ignore".** The web app
+  calls `utils.invalidate()`, the extension drops its workspace caches and the
+  running timer, Raycast revalidates; from another workspace an unknown kind
+  reaches the timer (`syncEventReach`). Keep the `never` defaults — they fail
+  the build — but let them fall through to the refetch at runtime.
 
 ### Held queue rows and the queue format
 

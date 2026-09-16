@@ -52,7 +52,9 @@ const affectsTimer = (event: SyncEvent): boolean => {
       // becoming a case Raycast never reacts to.
       const unhandled: never = event;
       void unhandled;
-      return false;
+      // At runtime a newer server can still send one. Revalidating costs a
+      // fetch; ignoring it could leave the menu bar on a timer that ended.
+      return true;
     }
   }
 };

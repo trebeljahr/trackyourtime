@@ -137,6 +137,8 @@ export const members = {
     acceptedBody: "Open the app to track time in {workspace}.",
     rejectedTitle: "This invitation was declined",
     rejectedBody: "Ask {inviter} to send a new one if that was a mistake.",
+    unavailableTitle: "This invitation can no longer be accepted",
+    unavailableBody: "Ask {inviter} to send a new one.",
     notFoundTitle: "Invitation not found",
     notFoundBody: "The link may be incomplete, or the invitation was deleted.",
   },

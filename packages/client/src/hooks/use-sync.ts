@@ -5,6 +5,7 @@ import {
   createId,
   createSyncClient,
   createTimerStore,
+  isKnownCatalogScope,
   isOwnActivity,
   resolveSyncUrl,
   startTicking,
@@ -116,7 +117,7 @@ export { isOwnActivity };
  * Map a sync event onto the query caches it invalidates. Reports depend on
  * both entries and the catalog, so they are refreshed by either.
  */
-const invalidateFor = (utils: Utils, event: SyncEvent): void => {
+export const invalidateFor = (utils: Utils, event: SyncEvent): void => {
   switch (event.kind) {
     case "entry.upserted":
     case "entry.deleted":
@@ -126,6 +127,12 @@ const invalidateFor = (utils: Utils, event: SyncEvent): void => {
       void utils.reports.invalidate();
       return;
     case "catalog.changed":
+      // A scope a newer server added names a list this build may not even
+      // have. Refetch everything rather than guess which screens it touches.
+      if (!isKnownCatalogScope(event.scope)) {
+        void utils.invalidate();
+        return;
+      }
       void utils.clients.invalidate();
       void utils.projects.invalidate();
       void utils.tasks.invalidate();
@@ -167,7 +174,8 @@ const invalidateFor = (utils: Utils, event: SyncEvent): void => {
       // token revoked on a laptop disappears from the phone without either
       // client having to reconstruct what changed from a payload.
       if (event.scope === "api-token") void utils.apiTokens.invalidate();
-      else void utils.webhooks.invalidate();
+      else if (event.scope === "webhook") void utils.webhooks.invalidate();
+      else void utils.invalidate();
       return;
     case "membership.changed":
       // A role or visibility change alters what EVERY query may return for
@@ -181,6 +189,9 @@ const invalidateFor = (utils: Utils, event: SyncEvent): void => {
       // instead: this line stops compiling the moment the union grows.
       const unhandled: never = event;
       void unhandled;
+      // At runtime the default IS reachable: a newer server sends a kind this
+      // build has never heard of. Everything on screen may be stale.
+      void utils.invalidate();
       return;
     }
   }

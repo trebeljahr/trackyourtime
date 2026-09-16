@@ -231,7 +231,17 @@ function InvitationBody({
         );
       default: {
         const unhandled: never = invitation.status;
-        return <>{String(unhandled)}</>;
+        void unhandled;
+        // A status a newer server added: all this build knows is that the
+        // invitation is not pending, so it cannot be accepted here.
+        return (
+          <StatusPanel
+            title={t("invitePage.unavailableTitle")}
+            body={t("invitePage.unavailableBody", names)}
+            testId="invite-unavailable"
+            action={openApp}
+          />
+        );
       }
     }
   }

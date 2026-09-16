@@ -75,6 +75,9 @@ function idleBehaviorLabel(
       return t("projects.form.idle.behaviors.keepRunning");
     case "stop":
       return t("projects.form.idle.behaviors.stop");
+    default:
+      // A behaviour a newer server added: its id beats a crash or a key path.
+      return String(behavior);
   }
 }
 
