@@ -15,8 +15,8 @@ the browser extension and, once its secrets exist, submits it to the Chrome
 Web Store. Without the secrets it only uploads the zip as an artifact. See
 [Chrome Web Store](#chrome-web-store).
 
-A tag runs no other workflow. `desktop-release.yml`, `mobile-release.yml` and
-`tauri-release.yml` run on manual dispatch only.
+A tag runs no other workflow. `desktop-release.yml` and `mobile-release.yml`
+run on manual dispatch only.
 
 ## What the workflow does
 
