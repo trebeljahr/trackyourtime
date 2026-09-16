@@ -59,58 +59,37 @@ German label for it. Nothing to translate here.
 ## Full description
 
 Plain text, as the store renders it. Upper-case lines are section headings.
+Rewritten 2026-09-16 with the English listing: problem first, no permission list
+(the Privacy tab carries it).
 
-> Du arbeitest den ganzen Tag im Browser. Deine Zeiterfassung sollte nicht noch ein Tab sein, den du suchen musst. Mit Track Your Time startest du den Timer mit einem Klick in der Chrome-Symbolleiste, und das Symbol zeigt, wie lange er schon läuft.
+> Die Stunden, die du vergisst zu erfassen, sind die Stunden, die du nicht abrechnest. Track Your Time legt deinen Timer in die Chrome-Symbolleiste, dorthin, wo deine Arbeit ohnehin passiert. Ein Klick startet ihn.
 >
-> WAS DAS POP-UP KANN
-> • Timer starten und stoppen, ohne einen Tab zu öffnen.
-> • Zuletzt erfasste Arbeit mit einem Klick neu starten oder als Favorit anheften.
-> • Zeit nachtragen, die du vergessen hast, und jeden Eintrag bearbeiten oder löschen.
-> • Frühere Tage durchsehen und korrigieren, bevor du abrechnest.
+> Kostenlos für alle, ohne Bezahlversion. Open Source.
 >
-> Ein Eintrag hat eine Beschreibung, ein Projekt, eine Tätigkeit, Schlagwörter und die Angabe, ob er abrechenbar ist. Projekte sind nach Kunden geordnet. Fehlt ein Projekt, eine Tätigkeit oder ein Schlagwort, legst du es direkt im Pop-up an. Es ist danach gleich ausgewählt.
+> EIN KLICK, UND DIE ZEIT LÄUFT
+> Klick auf das Symbol, und der Timer läuft. Das Symbol zeigt, wie lange schon. So fällt dir auch ein Timer auf, den du vergessen hast zu stoppen. Die Arbeit von heute ist meist die von gestern. Starte sie aus deinen letzten Einträgen neu, oder hefte an, was du jeden Tag machst.
 >
-> BESCHREIBUNGEN, DIE SICH VERVOLLSTÄNDIGEN
-> Tipp die ersten Buchstaben, und das Pop-up schlägt Beschreibungen vor, die du schon benutzt hast, auch solche von vor sechs Monaten. Tab übernimmt den Vorschlag, Enter startet weiterhin den Timer. Mit ⌘ + Enter kommen Projekt, Tätigkeit, Schlagwörter und die Abrechenbarkeit gleich mit.
+> HOL DIR DIE STUNDEN ZURÜCK, DIE DU NIE GESTOPPT HAST
+> Vergessen, den Timer vor einem Anruf zu starten? Trag die Zeit hinterher nach. Geh frühere Tage durch und korrigiere, was nicht stimmt, bevor du abrechnest.
 >
-> VORSCHLÄGE FÜR VERGESSENE ZEIT
-> Schaltest du in den Einstellungen die Aktivitätserfassung ein, merkt sich die Erweiterung, auf welcher Website du gerade bist. Für Zeit ohne Eintrag schlägt sie dir dann Einträge vor. Du übernimmst einen Vorschlag, bearbeitest ihn vorher oder blendest ihn aus. Mit einer Regel legst du eine Website immer unter demselben Projekt ab.
+> Oder schalte die Aktivitätserfassung ein. Die Erweiterung merkt sich, welche Website du vor dir hattest, und schlägt später Einträge für die Lücken in deinem Tag vor. Jeden Vorschlag nimmst du an, bearbeitest ihn oder verwirfst ihn. Gespeichert wird der Name der Website, nicht ihr Inhalt. Nichts verlässt deinen Computer, bevor du einen Vorschlag annimmst.
 >
-> Die Aktivität bleibt auf diesem Computer. Erst ein Vorschlag, den du übernimmst, geht als Eintrag an den Server. Die Aktivitätserfassung ist anfangs aus. Sie speichert nur den Namen der Website, außer du schaltest Seitentitel ausdrücklich ein. Ältere Aktivität löscht sie nach 14 Tagen, oder nach dem Zeitraum, den du einstellst. Inkognito-Tabs und Websites auf deiner Ausschlussliste erfasst sie nie.
+> WENIGER TIPPEN
+> Tipp eine Beschreibung ein, und die Erweiterung schlägt vor, was du schon benutzt hast, auch vor Monaten. Wählst du einen Vorschlag, kann sie Projekt und Schlagwörter vom letzten Mal gleich übernehmen.
+>
+> ERFASST WEITER, AUCH WENN DAS WLAN STREIKT
+> Im Zug oder im Flugzeug arbeitest du einfach weiter. Die Erweiterung speichert deine Änderungen und sendet sie, sobald du wieder online bist. Stoppst du hier einen Timer, ist er auch in der Web-App und auf deinen anderen Geräten gestoppt.
 >
 > KEINE ZWEITE ANMELDUNG
-> Bist du in Chrome schon bei Track Your Time angemeldet, nutzt die Erweiterung diese Anmeldung. Kein zusätzliches Passwort, kein API-Token zum Kopieren. Bist du nicht angemeldet, meldest du dich direkt im Pop-up an. Nutzt dein Konto die Zwei-Faktor-Authentifizierung, meldest du dich zuerst in der Web-App an. Das Formular im Pop-up kann den zweiten Faktor nicht abfragen.
+> Du bist in Chrome schon bei Track Your Time angemeldet? Dann nutzt die Erweiterung diese Anmeldung. Kein zusätzliches Passwort, kein API-Token zum Kopieren.
 >
-> FUNKTIONIERT AUCH OHNE VERBINDUNG
-> Starte und stoppe Timer, auch wenn das WLAN weg ist. Die Erweiterung speichert deine Änderungen auf diesem Computer und sendet sie der Reihe nach, sobald du wieder online bist. Meldest du dich ab, löscht sie Änderungen, die noch nicht gesendet sind. So landen deine Stunden nie im Konto der nächsten Person an diesem Computer.
+> VON DEN STUNDEN ZUR RECHNUNG
+> Die Erweiterung ist der schnelle Weg hinein. Die Web-App macht aus deinen Stunden Berichte nach Kunde, Projekt oder Person und Rechnungen als PDF oder E-Rechnung. Lade dein Team ein. Jede Person sieht nur ihre eigene Zeit, bis du mehr freigibst.
 >
-> ÜBERALL AUF DEMSELBEN STAND
-> Das Pop-up hält eine Live-Verbindung zum Server. Stoppst du einen Timer in der Web-App oder auf einem anderen Gerät, zeigt das Pop-up es sofort.
+> GEHOSTET ODER AUF DEINEM EIGENEN SERVER
+> Nutze trackyourtime.dev, oder betreibe Track Your Time auf deinem eigenen Server. Es ist in beiden Fällen dieselbe Open-Source-App. Wähle unter dem Anmeldeformular „Server wechseln“, und Chrome fragt nach Zugriff auf genau diese eine Website.
 >
-> MIT DEINEM TEAM
-> In der Web-App lädst du Kolleginnen und Kollegen per E-Mail in deinen Arbeitsbereich ein, als Mitglied oder Admin. Jede Person sieht nur ihre eigene Zeit, bis du ihr die Zeit oder die Beträge der anderen freigibst. Das Pop-up zeigt jeder Person nur ihre eigenen Einträge.
->
-> Bist du in mehreren Arbeitsbereichen, wählst du im Pop-up, in welchem du erfasst. Die Web-App behält dabei ihre eigene Auswahl. Eine Änderung ohne Verbindung landet in dem Arbeitsbereich, in dem du sie gemacht hast, auch wenn du danach wechselst.
->
-> EINSTELLUNGEN
-> Sprache (Deutsch oder Englisch), Design, 12- oder 24-Stunden-Uhr, Dauerformat, Inaktivitätserkennung und eine maximale Eintragsdauer gegen vergessene Timer. Sie gelten auch in der Web-App und auf deinen anderen Geräten. Wochenbeginn, Währung und Standard-Stundensatz gelten für den ganzen Arbeitsbereich, und nur Inhaber und Admins können sie ändern. Außerdem siehst du alle angemeldeten Geräte und kannst jedes davon abmelden.
->
-> BERECHTIGUNGEN
-> • storage: speichert deine Sitzung, noch nicht gesendete Änderungen und, falls eingeschaltet, deine Aktivität auf diesem Computer.
-> • cookies: liest die Anmeldung der Track-Your-Time-Web-App, damit du dich nur einmal anmeldest.
-> • idle: merkt, dass du nicht am Computer bist, damit die Erweiterung dich fragen kann, was mit dieser Zeit passiert.
-> • alarms: aktualisiert die Laufzeit am Symbol alle 30 Sekunden.
-> • tabs (optional): fragt Chrome erst, wenn du die Aktivitätserfassung einschaltest. Damit sieht die Erweiterung die Adresse und den Titel des aktiven Tabs. Den Inhalt einer Seite liest sie nie.
-> • api.trackyourtime.dev: der Standardserver. Wählst du einen eigenen Server, fragt Chrome dich nach Zugriff auf genau diese eine Adresse.
->
-> WAS IN DER WEB-APP BLEIBT
-> Berichte, Rechnungen, der Kalender, die Verwaltung deiner Kunden und das Einladen von Mitgliedern. Das Pop-up ist 380 Pixel breit, und ein Bericht passt da nicht hinein.
->
-> EIGENER SERVER
-> Die Erweiterung aus dem Chrome Web Store funktioniert auch mit einem selbst gehosteten Track-Your-Time-Server. Wähle beim Anmelden „Mein eigener Server“ und gib seine Adresse ein. Wie du den Server einrichtest, zeigt die Anleitung zum Selbsthosten.
->
-> OPEN SOURCE
-> Track Your Time ist Open Source unter der AGPL-3.0: github.com/trebeljahr/trackyourtime.
+> Eine Einschränkung: Nutzt dein Konto die Zwei-Faktor-Authentifizierung, melde dich zuerst in Chrome in der Web-App an. Das Anmeldeformular im Pop-up kann den zweiten Code nicht abfragen.
 
 ## Screenshot captions
 
