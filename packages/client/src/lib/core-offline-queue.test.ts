@@ -106,7 +106,7 @@ describe("createOfflineQueue", () => {
       });
 
       expect(seen).toEqual(["a", "b", "c"]);
-      expect(result).toEqual({ flushed: 3, skipped: 0, remaining: 0 });
+      expect(result).toEqual({ flushed: 3, skipped: 0, held: 0, remaining: 0 });
       expect(await offline.size()).toBe(0);
     });
 
@@ -148,7 +148,7 @@ describe("createOfflineQueue", () => {
       expect(await offline.size()).toBe(2);
 
       const second = await offline.flush(async () => {});
-      expect(second).toEqual({ flushed: 2, skipped: 0, remaining: 0 });
+      expect(second).toEqual({ flushed: 2, skipped: 0, held: 0, remaining: 0 });
       expect(await offline.size()).toBe(0);
     });
 
@@ -156,6 +156,7 @@ describe("createOfflineQueue", () => {
       expect(await queue().flush(async () => {})).toEqual({
         flushed: 0,
         skipped: 0,
+        held: 0,
         remaining: 0,
       });
     });
@@ -204,7 +205,7 @@ describe("createOfflineQueue", () => {
       );
 
       expect(seen).toEqual([]);
-      expect(result).toEqual({ flushed: 0, skipped: 2, remaining: 2 });
+      expect(result).toEqual({ flushed: 0, skipped: 2, held: 0, remaining: 2 });
       expect((await offline.list()).map((m) => m.op)).toEqual([
         "a-start",
         "a-stop",
@@ -225,7 +226,7 @@ describe("createOfflineQueue", () => {
       );
 
       expect(seen).toEqual(["a-start", "a-stop"]);
-      expect(result).toEqual({ flushed: 2, skipped: 0, remaining: 0 });
+      expect(result).toEqual({ flushed: 2, skipped: 0, held: 0, remaining: 0 });
       expect(await offline.size()).toBe(0);
     });
 
@@ -245,7 +246,7 @@ describe("createOfflineQueue", () => {
       );
 
       expect(seen).toEqual(["b-1", "b-2"]);
-      expect(result).toEqual({ flushed: 2, skipped: 2, remaining: 2 });
+      expect(result).toEqual({ flushed: 2, skipped: 2, held: 0, remaining: 2 });
       expect((await offline.list()).map((m) => m.op)).toEqual(["a-1", "a-2"]);
     });
 

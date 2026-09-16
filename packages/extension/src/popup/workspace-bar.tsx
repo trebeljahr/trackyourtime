@@ -66,13 +66,31 @@ export type HeldQueueProps = {
   t: ExtensionTranslator<"popup">;
 };
 
+/** Which group a held row is shown in: a left workspace, or a `HoldReason`. */
+type HeldGroup = "left" | NonNullable<QueuedMutationSummary["hold"]>;
+
+const GROUP_ORDER: readonly HeldGroup[] = ["left", "unknown-procedure", "unknown-op"];
+
+/** Catalog keys per group. A new `HoldReason` is a type error here. */
+const GROUP_KEYS = {
+  left: { title: "workspace.heldTitle", hint: "workspace.heldHint" },
+  "unknown-op": { title: "workspace.waitingNewer.title", hint: "workspace.waitingNewer.hint" },
+  "unknown-procedure": {
+    title: "workspace.waitingServer.title",
+    hint: "workspace.waitingServer.hint",
+  },
+} as const satisfies Record<HeldGroup, { title: string; hint: string }>;
+
 /**
- * Rows queued in a workspace this account no longer belongs to.
+ * Rows the worker keeps and does not send.
  *
- * They are never sent — not there, which would refuse them, and not anywhere
- * else — and never dropped on their own, because they are time no server has
- * seen. So they are listed by what they were and where, and the one way out
- * is a deliberate, confirmed discard of a named row.
+ * Two kinds, each with its own words. Rows queued in a workspace this account
+ * no longer belongs to are never sent — not there, which would refuse them,
+ * and not anywhere else. Rows `hold` names are waiting for something that may
+ * change: a newer extension that can read them, or a server that has the
+ * procedure they need. Neither is dropped on its own, because they are time
+ * no server has seen. So they are listed by what they were and where, and the
+ * one way out is a deliberate, confirmed discard of a named row.
  */
 export function HeldQueue({ rows, onDiscard, t }: HeldQueueProps): JSX.Element | null {
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -102,46 +120,60 @@ export function HeldQueue({ rows, onDiscard, t }: HeldQueueProps): JSX.Element |
     }
   };
 
+  const groupOf = (row: QueuedMutationSummary): HeldGroup => row.hold ?? "left";
+
   return (
-    <div className="panel" data-testid="held-queue">
-      <p className="panel__title">{t("workspace.heldTitle", { count: rows.length })}</p>
-      <p className="panel__hint">{t("workspace.heldHint")}</p>
-      <ul className="held-queue">
-        {rows.map((row) =>
-          confirming === row.queueId ? (
-            <li key={row.queueId}>
-              <ConfirmPanel
-                title={label(row)}
-                hint={t("workspace.discardHint", { workspace: workspaceOf(row) })}
-                confirmLabel={t("workspace.discard")}
-                danger
-                busy={busy}
-                onCancel={() => setConfirming(null)}
-                onConfirm={() => {
-                  setBusy(true);
-                  void onDiscard(row.queueId).finally(() => {
-                    setBusy(false);
-                    setConfirming(null);
-                  });
-                }}
-                testId="held-queue-confirm"
-              />
-            </li>
-          ) : (
-            <li key={row.queueId} className="held-queue__row" data-testid="held-queue-row">
-              <span>{label(row)}</span>
-              <button
-                type="button"
-                className="button--link"
-                onClick={() => setConfirming(row.queueId)}
-                data-testid="held-queue-discard"
-              >
-                {t("workspace.discard")}
-              </button>
-            </li>
-          ),
-        )}
-      </ul>
-    </div>
+    <>
+      {GROUP_ORDER.map((group) => {
+        const members = rows.filter((row) => groupOf(row) === group);
+        if (members.length === 0) return null;
+        return (
+          <div className="panel" data-testid="held-queue" data-hold={group} key={group}>
+            <p className="panel__title">{t(GROUP_KEYS[group].title, { count: members.length })}</p>
+            <p className="panel__hint">{t(GROUP_KEYS[group].hint)}</p>
+            <ul className="held-queue">
+              {members.map((row) =>
+                confirming === row.queueId ? (
+                  <li key={row.queueId}>
+                    <ConfirmPanel
+                      title={label(row)}
+                      hint={
+                        group === "left"
+                          ? t("workspace.discardHint", { workspace: workspaceOf(row) })
+                          : t("workspace.discardHintWaiting")
+                      }
+                      confirmLabel={t("workspace.discard")}
+                      danger
+                      busy={busy}
+                      onCancel={() => setConfirming(null)}
+                      onConfirm={() => {
+                        setBusy(true);
+                        void onDiscard(row.queueId).finally(() => {
+                          setBusy(false);
+                          setConfirming(null);
+                        });
+                      }}
+                      testId="held-queue-confirm"
+                    />
+                  </li>
+                ) : (
+                  <li key={row.queueId} className="held-queue__row" data-testid="held-queue-row">
+                    <span>{label(row)}</span>
+                    <button
+                      type="button"
+                      className="button--link"
+                      onClick={() => setConfirming(row.queueId)}
+                      data-testid="held-queue-discard"
+                    >
+                      {t("workspace.discard")}
+                    </button>
+                  </li>
+                ),
+              )}
+            </ul>
+          </div>
+        );
+      })}
+    </>
   );
 }

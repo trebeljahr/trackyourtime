@@ -90,7 +90,7 @@ type Call = { path: string; input: Record<string, unknown> | undefined };
 const server = {
   memberships: [workspace(A, "Acme", true), workspace(B, "Beta", false)],
   listFails: false,
-  refuse: null as null | { path: string; status: number; code: string },
+  refuse: null as null | { path: string; status: number; code: string; message?: string },
   calls: [] as Call[],
 };
 
@@ -114,7 +114,7 @@ const fakeFetch = async (url: string, init?: RequestInit): Promise<Response> => 
   if (server.refuse?.path === path) {
     return reply(server.refuse.status, {
       error: {
-        message: "refused",
+        message: server.refuse.message ?? "refused",
         data: { code: server.refuse.code, httpStatus: server.refuse.status },
       },
     });
@@ -382,4 +382,66 @@ test("a worker that never resolved a workspace resolves one before its first wri
   const start = server.calls.find((call) => call.path === "entries.start");
   // Never left for the server to fill from the session, which the web app moves.
   expect(start?.input?.workspaceId).toBe(A);
+});
+
+// ── held rows ────────────────────────────────────────────────────────
+
+test("a server without the procedure holds the row and its chain, and the rest still goes", async () => {
+  await resolveWorkspaces();
+  await enqueueOffline("entries.discard", { originId: "o" }, "tmp_1");
+  await enqueueOffline("entries.stop", { end: "2026-09-14T10:00:00.000Z", originId: "o" }, "tmp_1");
+  await enqueueOffline("entries.start", startInput("after"), "tmp_2");
+  server.refuse = {
+    path: "entries.discard",
+    status: 404,
+    code: "NOT_FOUND",
+    message: 'No procedure found on path "entries.discard"',
+  };
+  server.calls = [];
+
+  // Not blocking: a new mutation must not queue behind rows that may never drain.
+  expect(await flushQueue()).toBe(0);
+  expect(server.calls.map((call) => call.path).filter((path) => path.startsWith("entries."))).toEqual([
+    "entries.discard",
+    "entries.start",
+  ]);
+  expect(await getOfflineQueue().size()).toBe(2);
+  expect(await pendingSyncCount()).toBe(0);
+  const held = await listHeldRows();
+  expect(held.map((row) => [row.op, row.hold])).toEqual([
+    ["entries.discard", "unknown-procedure"],
+    ["entries.stop", "unknown-procedure"],
+  ]);
+
+  // Within the hour the server is not asked again.
+  server.calls = [];
+  await flushQueue();
+  expect(server.calls.some((call) => call.path === "entries.discard")).toBe(false);
+
+  // The way out is deliberate, one named row at a time.
+  expect(await discardHeldRow(held[1]?.queueId ?? "")).toBe(true);
+  expect(await getOfflineQueue().size()).toBe(1);
+});
+
+test("a row this build cannot read is held, never sent and never dropped", async () => {
+  await resolveWorkspaces();
+  await getOfflineQueue().enqueue("entries.future", { input: {} }, undefined, undefined, A);
+  server.calls = [];
+
+  expect(await flushQueue()).toBe(0);
+  expect(server.calls.some((call) => call.path === "entries.future")).toBe(false);
+  expect(await getOfflineQueue().size()).toBe(1);
+  const [held] = await listHeldRows();
+  expect(held?.op).toBeNull();
+  expect(held?.hold).toBe("unknown-op");
+});
+
+test("an application NOT_FOUND in a workspace the person is still in drops the row", async () => {
+  await resolveWorkspaces();
+  await enqueueOffline("entries.stop", { end: "2026-09-14T10:00:00.000Z", originId: "o" });
+  server.refuse = { path: "entries.stop", status: 404, code: "NOT_FOUND", message: "No running entry" };
+
+  expect(await flushQueue()).toBe(0);
+  expect(await getOfflineQueue().size()).toBe(0);
+  expect(await listHeldRows()).toHaveLength(0);
 });

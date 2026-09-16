@@ -16,7 +16,9 @@ import {
   enqueueOffline,
   flushOfflineQueue,
   getOfflineQueue,
+  getHeldCount,
   getPendingCount,
+  hasReplayableRows,
   getServerPendingCount,
   isNetworkError,
   isOnline,
@@ -67,7 +69,7 @@ describe("the client queue", () => {
       "entries.stop",
     ]);
     expect(replayed[0].input).toEqual(startInput);
-    expect(result).toEqual({ flushed: 2, skipped: 0, remaining: 0 });
+    expect(result).toEqual({ flushed: 2, skipped: 0, held: 0, remaining: 0 });
     expect(getPendingCount()).toBe(0);
   });
 
@@ -97,18 +99,23 @@ describe("the client queue", () => {
     expect(getPendingCount()).toBe(2);
   });
 
-  it("drops an unreadable row instead of replaying it blind", async () => {
+  it("holds a row this build cannot read: never replayed, never dropped", async () => {
     await getOfflineQueue().enqueue("entries.frobnicate", { input: {} });
     await refreshPendingCount();
+    expect(getPendingCount()).toBe(0);
+    expect(getHeldCount()).toBe(1);
 
     const replayed: string[] = [];
     const result = await flushOfflineQueue(async (mutation) => {
       replayed.push(mutation.op);
-    });
+    }, { retryHeld: true });
 
     expect(replayed).toEqual([]);
-    expect(result.flushed).toBe(1);
+    expect(result.flushed).toBe(0);
+    expect(await getOfflineQueue().size()).toBe(1);
     expect(getPendingCount()).toBe(0);
+    expect(getHeldCount()).toBe(1);
+    expect(await hasReplayableRows({ retryHeld: true })).toBe(false);
   });
 
   it("cancels everything queued for a temp entry", async () => {

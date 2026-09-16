@@ -261,6 +261,20 @@ export const settings: Translation<typeof source> = {
     },
   },
   foreignQueue: {
+    held: {
+      unknownOp: {
+        title: "Wartet auf eine neuere App-Version",
+        description:
+          "{count, plural, one {# Änderung auf diesem Gerät stammt von einer neueren Version von Track Your Time.} other {# Änderungen auf diesem Gerät stammen von einer neueren Version von Track Your Time.}} Diese Version kann sie nicht lesen, deshalb werden sie nicht gesendet. Aktualisiere die App, um sie zu synchronisieren, oder verwirf sie hier.",
+      },
+      unknownProcedure: {
+        title: "Dein Server unterstützt das noch nicht",
+        description:
+          "{count, plural, one {# Änderung auf diesem Gerät braucht eine Funktion, die dein Server noch nicht hat.} other {# Änderungen auf diesem Gerät brauchen eine Funktion, die dein Server noch nicht hat.}} Bitte deinen Admin, den Server zu aktualisieren – danach werden sie gesendet. Oder verwirf sie hier.",
+      },
+      confirm:
+        "Damit löschst du Arbeit, die kein Server je erhalten hat. Sie lässt sich nicht wiederherstellen. Aktualisiere stattdessen die App oder den Server, wenn sie erhalten bleiben soll.",
+    },
     leftTitle: "Nicht synchronisierte Daten für {workspace}",
     leftWorkspace: "einen verlassenen Arbeitsbereich",
     leftDescription: "{count, plural, one {# Änderung} other {# Änderungen}} auf diesem Gerät in {workspace} in die Warteschlange gestellt. Dein Konto gehört nicht mehr dazu. Sie werden an keinen anderen Arbeitsbereich gesendet. Bitte einen Inhaber, dich wieder hinzuzufügen, um sie zu synchronisieren, oder verwirf sie hier.",

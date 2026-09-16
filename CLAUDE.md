@@ -1913,6 +1913,44 @@ What fails quietly if it is changed:
   revalidates the instant the sync socket connects — the earliest and clearest
   proof available that the network is back.
 
+### Held queue rows and the queue format
+
+A queued row that this build or this server cannot handle is **held**: kept,
+counted, listed with a reason and a deliberate discard, and never deleted on
+its own. The web app counts it as `held` in the tracker bar and lists it in
+Settings → Devices. The extension lists it in the popup's held list, and
+Raycast lists it under "Not synced". `HoldReason` in `offline-queue.ts` is a
+union that will grow. Rules that fail quietly if broken:
+
+- **One classifier.** `classifyReplayOutcome` in `offline-replay.ts` turns a
+  failed replay into `retry-later` / `hold` / `drop` for all three clients. A
+  client supplies only its transport test and its membership re-check.
+  `holdRefusal` is the seam for a hold that depends on the row, such as a 400
+  from a server older than the row's API level.
+- **`unknown-procedure` is tRPC's message, not the status.** tRPC answers an
+  unknown path with NOT_FOUND/404 and `No procedure found on path "…"`. An
+  application NOT_FOUND, such as "entry gone" or a stop with nothing running,
+  has the same code and still drops. It is checked before the permanent set,
+  or a newer client's `entries.discard` against an older self-hosted server
+  is deleted.
+- **`unknown-op` is never written onto a row.** Every read computes it again
+  (`holdReasonOf`), so a newer build that can decode the row releases it.
+  `unknown-procedure` is written with `at` and asked again after
+  `HELD_RETRY_MS` (one hour). The web app also asks again on the first flush
+  of a document.
+- **Holds follow the temp-id chain** (`chainOf: tempIdOf` on `flush`,
+  `heldReasons` for counts). A stop that is replayed without its held start
+  ends whatever runs on the server.
+- **Held rows are not pending.** They are left out of every "is something
+  ahead of a new mutation" count, the same way left-workspace rows are.
+- **The stored queue is `{ v: 1, data: rows }`** (docs/versioning.md, rule 4). A bare array is still read as v1.
+  An unreadable value is copied to `trackyourtime.offline-queue.corrupt.<ms>`
+  before the reset. A `v` newer than `QUEUE_FORMAT_VERSION` locks the queue:
+  its rows are held `unknown-op`, `enqueue`/`remove` throw
+  `OfflineQueueLockedError`, and `clear` and adoption do nothing. A build from
+  before the envelope reads `{ v, data }` as empty, so a client rollback past
+  this change strands the queue until the next enqueue overwrites it.
+
 ### Deployment (two Coolify apps, two hosts)
 
 Production is two apps on **two hosts of one zone**: `trackyourtime-client` on

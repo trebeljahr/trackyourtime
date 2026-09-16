@@ -35,8 +35,14 @@ vi.mock("@/providers/auth-provider", () => ({
 vi.mock("@/hooks/use-sync", () => ({ useSyncStatus: () => "closed" }));
 
 const toastError = vi.fn();
+const toastWarning = vi.fn();
 vi.mock("@/components/ui/sonner", () => ({
-  toast: { error: (...args: unknown[]) => toastError(...args), success: vi.fn(), message: vi.fn() },
+  toast: {
+    error: (...args: unknown[]) => toastError(...args),
+    warning: (...args: unknown[]) => toastWarning(...args),
+    success: vi.fn(),
+    message: vi.fn(),
+  },
 }));
 
 type Sent = { op: string; input: Record<string, unknown> };
@@ -133,6 +139,7 @@ beforeEach(async () => {
   sent.length = 0;
   failNext.clear();
   toastError.mockClear();
+  toastWarning.mockClear();
   offline.__resetOfflineQueueForTests();
   offline.__resetOfflineQueueOwnerForTests();
   activeWorkspace.__resetActiveWorkspaceForTests();
@@ -318,6 +325,107 @@ describe("a NOT_FOUND mid-flush", () => {
     });
 
     expect(await offline.getOfflineQueue().size()).toBe(0);
+    expect(toastError).toHaveBeenCalledWith(
+      "One offline change could not be saved",
+      expect.anything(),
+    );
+  });
+});
+
+describe("a server without the procedure", () => {
+  const unknownPath = (path: string) =>
+    Object.assign(new Error(`No procedure found on path "${path}"`), {
+      data: { code: "NOT_FOUND", httpStatus: 404 },
+    });
+
+  it("holds the row and its chain, keeps flushing, and asks again only later", async () => {
+    await offline.enqueueOffline("entries.start", start("new timer"), "temp-1", A.id);
+    await offline.enqueueOffline("entries.discard", { originId: "tab" }, "temp-1", A.id);
+    await offline.enqueueOffline("entries.stop", { end: new Date().toISOString(), originId: "tab" }, "temp-1", A.id);
+    await offline.enqueueOffline("entries.start", start("after"), "temp-2", A.id);
+    listAnswer = async () => [A, B];
+    failNext.set("entries.discard:", unknownPath("entries.discard"));
+
+    const { result } = renderQueue();
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    // The start went; the discard is held and the stop that shares its temp
+    // id waits with it; the unrelated start behind them still went.
+    expect(sent.map((call) => [call.op, call.input.description])).toEqual([
+      ["entries.start", "new timer"],
+      ["entries.start", "after"],
+    ]);
+    const kept = await offline.getOfflineQueue().list();
+    expect(kept.map((row) => [row.op, row.hold?.reason ?? null])).toEqual([
+      ["entries.discard", "unknown-procedure"],
+      ["entries.stop", null],
+    ]);
+    expect(offline.getHeldCount()).toBe(2);
+    expect(offline.getPendingCount()).toBe(0);
+    expect(result.current.authBlocked).toBe(false);
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastWarning).toHaveBeenCalledWith(
+      "One offline change is waiting",
+      expect.anything(),
+    );
+
+    // Within the hour, the next flush does not ask the server again.
+    const before = sent.length;
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(sent.length).toBe(before);
+    expect(await offline.getOfflineQueue().size()).toBe(2);
+
+    // The listing says why, for both rows.
+    const listed = await offline.listForeignQueued();
+    expect(listed.map((row) => row.hold)).toEqual(["unknown-procedure", "unknown-procedure"]);
+  });
+
+  it("sends a held row, and its chain, once the hold is due and the server has it", async () => {
+    await offline.enqueueOffline("entries.discard", { originId: "tab" }, "temp-1", A.id);
+    await offline.enqueueOffline("entries.stop", { end: new Date().toISOString(), originId: "tab" }, "temp-1", A.id);
+    listAnswer = async () => [A, B];
+    failNext.set("entries.discard:", unknownPath("entries.discard"));
+
+    const { result } = renderQueue();
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(sent).toEqual([]);
+
+    // An hour on, the server was upgraded.
+    failNext.clear();
+    const later = Date.now() + 61 * 60 * 1000;
+    const now = vi.spyOn(Date, "now").mockReturnValue(later);
+    try {
+      await act(async () => {
+        await result.current.flush();
+      });
+    } finally {
+      now.mockRestore();
+    }
+    expect(sent.map((call) => call.op)).toEqual(["entries.discard", "entries.stop"]);
+    expect(await offline.getOfflineQueue().size()).toBe(0);
+  });
+
+  it("an application NOT_FOUND is still a refusal on the merits", async () => {
+    await offline.enqueueOffline("entries.stop", { end: new Date().toISOString(), originId: "tab" }, undefined, A.id);
+    listAnswer = async () => [A, B];
+    failNext.set(
+      "entries.stop:",
+      Object.assign(new Error("No running entry"), { data: { code: "NOT_FOUND", httpStatus: 404 } }),
+    );
+
+    const { result } = renderQueue();
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(await offline.getOfflineQueue().size()).toBe(0);
+    expect(offline.getHeldCount()).toBe(0);
     expect(toastError).toHaveBeenCalledWith(
       "One offline change could not be saved",
       expect.anything(),

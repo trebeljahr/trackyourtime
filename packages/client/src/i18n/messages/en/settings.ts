@@ -268,6 +268,21 @@ export const settings = {
     },
   },
   foreignQueue: {
+    /** This account's rows that cannot be sent yet, by `HoldReason`. */
+    held: {
+      unknownOp: {
+        title: "Waiting for a newer app version",
+        description:
+          "{count, plural, one {# change on this device was made by a newer version of Track Your Time.} other {# changes on this device were made by a newer version of Track Your Time.}} This version cannot read them, so they are not sent. Update the app to sync them, or discard them here.",
+      },
+      unknownProcedure: {
+        title: "Your server doesn’t support this yet",
+        description:
+          "{count, plural, one {# change on this device needs a feature your server does not have.} other {# changes on this device need a feature your server does not have.}} Ask your admin to update the server — they are sent after that. Or discard them here.",
+      },
+      confirm:
+        "This deletes work that no server has ever received. It cannot be recovered. Update the app or the server instead if it should be kept.",
+    },
     leftTitle: "Unsynced data for {workspace}",
     leftWorkspace: "a workspace you left",
     leftDescription: "{count, plural, one {# change} other {# changes}} queued on this device in {workspace}, which your account no longer belongs to. They are not sent to any other workspace. Ask an owner to add you back to sync them, or discard them here.",

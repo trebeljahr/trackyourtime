@@ -14,6 +14,16 @@ export const popup = {
     label: "Workspace",
     heldTitle: "{count, plural, one {# change} other {# changes}} not sent",
     heldHint: "Queued in a workspace your account no longer belongs to. They are not sent to any other workspace. Ask an owner to add you back to sync them, or discard them here.",
+    /** Held rows that are not a left workspace's, by `HoldReason`. */
+    waitingNewer: {
+      title: "{count, plural, one {# change} other {# changes}} waiting for a newer version",
+      hint: "A newer version of the extension made these changes. This version cannot read them, so they are not sent. Update the extension to sync them, or discard them here.",
+    },
+    waitingServer: {
+      title: "{count, plural, one {# change} other {# changes}} your server doesn’t support yet",
+      hint: "Your server doesn’t support these changes yet. Ask your admin to update it — they are sent after that. Or discard them here.",
+    },
+    discardHintWaiting: "This deletes work that no server has received. It cannot be recovered.",
     leftWorkspace: "a workspace you left",
     untitled: "(no description)",
     discard: "Discard",

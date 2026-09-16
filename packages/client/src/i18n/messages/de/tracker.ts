@@ -12,6 +12,8 @@ export const tracker: Translation<typeof source> = {
   queue: {
     held: "{count, plural, one {# Änderung} other {# Änderungen}} nicht gesendet",
     heldHint: "Von einem anderen Konto, für einen anderen Server oder in einem verlassenen Arbeitsbereich in die Warteschlange gestellt. Sie bleiben erhalten und werden von hier nie gesendet.",
+    waiting: "{count, plural, one {# Änderung wartet} other {# Änderungen warten}} auf ein Update",
+    waitingHint: "Diese Änderungen brauchen eine neuere App-Version oder ein Server-Update. Sie bleiben erhalten und werden gesendet, sobald das möglich ist.",
   },
   description: {
     label: "Beschreibung",
@@ -152,5 +154,9 @@ export const tracker: Translation<typeof source> = {
       "{count, plural, one {Ein alter Eintrag konnte nicht beendet werden} other {# alte Einträge konnten nicht beendet werden}}",
     staleDescription:
       "Ein Stopp, der vor mehr als einem Tag gespeichert wurde, verweist auf keinen Eintrag mehr, den wir sicher beenden können. Prüfe den Timer und stopp ihn von Hand.",
+    held:
+      "{count, plural, one {Eine Offline-Änderung wartet} other {# Offline-Änderungen warten}}",
+    heldDescription:
+      "Dein Server unterstützt sie noch nicht. Sie bleiben erhalten und werden gesendet, sobald der Server aktualisiert ist.",
   },
 };

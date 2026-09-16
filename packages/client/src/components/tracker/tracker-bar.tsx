@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Building2,
   CloudOff,
+  Hourglass,
   Play,
   Plus,
   Square,
@@ -52,7 +53,7 @@ export function TrackerBar(): React.JSX.Element {
   useRunawayGuard(mutations);
   // The shell owns the queue, so it keeps draining on Reports and Settings
   // too — see providers/offline-queue-provider.tsx.
-  const { pending, foreign, online, authBlocked } = useOfflineQueueState();
+  const { pending, foreign, held, online, authBlocked } = useOfflineQueueState();
   const projects = trpc.projects.list.useQuery({});
   const { activeId, workspaces } = useActiveWorkspace();
 
@@ -411,7 +412,7 @@ export function TrackerBar(): React.JSX.Element {
         </div>
       </div>
 
-      {pending > 0 || foreign > 0 || !online || clockSkewed || runningElsewhere ? (
+      {pending > 0 || foreign > 0 || held > 0 || !online || clockSkewed || runningElsewhere ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {runningElsewhere ? (
             <Badge
@@ -496,6 +497,26 @@ export function TrackerBar(): React.JSX.Element {
               >
                 <UserRoundX className="size-3" />
                 {t("queue.held", { count: foreign })}
+              </Badge>
+            </Link>
+          ) : null}
+
+          {/*
+            This account's own rows that cannot be sent yet: written by a newer
+            app version, or needing a procedure the server lacks. Kept and
+            retried, not pending — they are not ahead of anything — and named,
+            so a count that stops going down does not read as lost time.
+          */}
+          {held > 0 ? (
+            <Link href="/app/settings?tab=devices" title={t("queue.waitingHint")}>
+              <Badge
+                variant="outline"
+                className="gap-1.5 hover:bg-accent"
+                data-testid="offline-held"
+                data-held={held}
+              >
+                <Hourglass className="size-3" />
+                {t("queue.waiting", { count: held })}
               </Badge>
             </Link>
           ) : null}

@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Building2, ServerOff, UserRoundX } from "lucide-react";
-import { serverLabel } from "@starter/core";
+import { Building2, Hourglass, ServerOff, UserRoundX } from "lucide-react";
+import { serverLabel, type HoldReason } from "@starter/core";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -59,7 +59,24 @@ import { getAbsoluteApiOrigin } from "@/lib/api-origin";
  * workspace's name while the list still knows it, else as "a workspace you
  * left". The way to keep them is different again — be added back — so they
  * get their own group and their own confirmation.
+ *
+ * And for this account's HELD rows — written by a newer app version, or
+ * needing a procedure the server does not have (`HoldReason` in core). They
+ * are grouped per reason, because the way to keep them is different again:
+ * update the app, or ask the admin to update the server.
  */
+
+/** Catalog keys per hold reason. A new reason is a type error here. */
+const HELD_KEYS = {
+  "unknown-op": {
+    title: "foreignQueue.held.unknownOp.title",
+    description: "foreignQueue.held.unknownOp.description",
+  },
+  "unknown-procedure": {
+    title: "foreignQueue.held.unknownProcedure.title",
+    description: "foreignQueue.held.unknownProcedure.description",
+  },
+} as const satisfies Record<HoldReason, { title: string; description: string }>;
 
 /**
  * Catalog key per op. The ops themselves are dotted tRPC paths, which cannot
@@ -96,18 +113,24 @@ type Group = {
    * and, while the list still knows it, its name.
    */
   workspace: { id: string; name: string | null } | null;
+  /** Set for this account's held rows: why they cannot be sent yet. */
+  hold: HoldReason | null;
   rows: ForeignQueuedRow[];
 };
 
 const groupKey = (row: ForeignQueuedRow): string => {
   if (row.otherServer !== null) return `server:${row.otherServer}`;
+  if (row.hold !== null) return `held:${row.hold}`;
   if (row.leftWorkspace) return `workspace:${row.workspaceId ?? ""}`;
   return "account";
 };
 
-/** Another account on this server first, then left workspaces, then servers. */
+/**
+ * Another account on this server first, then left workspaces, then servers,
+ * then this account's held rows — the only group that can clear by itself.
+ */
 const groupRank = (group: Group): number =>
-  group.server !== null ? 2 : group.workspace !== null ? 1 : 0;
+  group.hold !== null ? 3 : group.server !== null ? 2 : group.workspace !== null ? 1 : 0;
 
 const groupRows = (rows: ForeignQueuedRow[]): Group[] => {
   const groups = new Map<string, Group>();
@@ -116,9 +139,10 @@ const groupRows = (rows: ForeignQueuedRow[]): Group[] => {
     const group = groups.get(key) ?? {
       server: row.otherServer,
       workspace:
-        row.otherServer === null && row.leftWorkspace
+        row.otherServer === null && row.hold === null && row.leftWorkspace
           ? { id: row.workspaceId ?? "", name: row.workspaceName }
           : null,
+      hold: row.otherServer === null ? row.hold : null,
       rows: [],
     };
     group.rows.push(row);
@@ -130,7 +154,8 @@ const groupRows = (rows: ForeignQueuedRow[]): Group[] => {
 };
 
 export function ForeignQueuePanel(): React.JSX.Element | null {
-  const { foreign } = useOfflineQueueState();
+  const { foreign: others, held } = useOfflineQueueState();
+  const foreign = others + held;
   const t = useT("settings");
   const tc = useT("common");
   const f = useFormat();
@@ -206,18 +231,21 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
         const there = group.server === null ? null : serverLabel(group.server);
         return (
           <div
-            key={
-              group.server ??
-              (group.workspace === null ? "account" : `workspace:${group.workspace.id}`)
-            }
+            key={groupKey(group.rows[0])}
             className="border-b last:border-b-0"
             data-testid="foreign-queue-group"
             data-server={group.server ?? ""}
             data-workspace-id={group.workspace?.id ?? ""}
+            data-hold={group.hold ?? ""}
           >
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                {group.workspace !== null ? (
+                {group.hold !== null ? (
+                  <>
+                    <Hourglass className="size-4" />
+                    {t(HELD_KEYS[group.hold].title)}
+                  </>
+                ) : group.workspace !== null ? (
                   <>
                     <Building2 className="size-4" />
                     {t("foreignQueue.leftTitle", {
@@ -237,7 +265,9 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
                 )}
               </CardTitle>
               <CardDescription>
-                {group.workspace !== null ? (
+                {group.hold !== null ? (
+                  t(HELD_KEYS[group.hold].description, { count })
+                ) : group.workspace !== null ? (
                   t("foreignQueue.leftDescription", {
                     count,
                     workspace: workspaceLabel(group.workspace),
@@ -313,7 +343,9 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
               })}
             </DialogTitle>
             <DialogDescription>
-              {confirming?.workspace
+              {confirming?.hold
+                ? t("foreignQueue.held.confirm")
+                : confirming?.workspace
                 ? t("foreignQueue.confirmLeft", {
                     workspace: workspaceLabel(confirming.workspace),
                   })

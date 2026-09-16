@@ -15,6 +15,8 @@ export const tracker = {
   queue: {
     held: "{count, plural, one {# change} other {# changes}} not sent",
     heldHint: "Queued by another account, for another server, or in a workspace you left. They are kept, and never sent from here.",
+    waiting: "{count, plural, one {# change} other {# changes}} waiting for an update",
+    waitingHint: "These changes need a newer app version or a server update. They are kept, and sent once that is possible.",
   },
   description: {
     label: "Description",
@@ -158,5 +160,9 @@ export const tracker = {
       "{count, plural, one {An old entry could not be closed} other {# old entries could not be closed}}",
     staleDescription:
       "A stop queued more than a day ago no longer names an entry we can safely end. Check the timer and stop it by hand.",
+    held:
+      "{count, plural, one {One offline change is waiting} other {# offline changes are waiting}}",
+    heldDescription:
+      "Your server doesn’t support them yet. They are kept, and sent after the server is updated.",
   },
 } as const;

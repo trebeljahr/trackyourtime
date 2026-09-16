@@ -15,21 +15,24 @@
  */
 import {
   ApiError,
+  classifyReplayOutcome,
   createOfflineQueue,
   decodeOfflineMutation,
   describeQueuedMutation,
+  flushVerdictFor,
+  heldReasons,
+  holdBlocksReplay,
   isForeignTo,
   isHeldByWorkspace,
-  isPermanentRejection,
   isQueuedOn,
   isReplayableBy,
   isReplayableIn,
-  refusalKeepsRow,
+  tempIdOf,
   isTransportFailure as isTransportFailureCore,
   OFFLINE_QUEUE_STORAGE_KEY,
   replayOfflineMutation,
-  StaleQueuedStopError,
   type FlushResult,
+  type HoldReason,
   type OfflineOp,
   type OfflinePayloadMap,
   type OfflineQueue,
@@ -109,6 +112,18 @@ const isElsewhere = (
   !isOnThisServer(row) ||
   isForeignTo(row, owner) ||
   isHeldByWorkspace(row, workspaces);
+
+/**
+ * This account's held rows on this server, by queue id: written by a newer
+ * build, or needing a procedure the server does not have (`HoldReason` in
+ * core), with the temp-id chains that depend on them.
+ */
+const heldHere = (
+  rows: readonly QueuedMutation[],
+  owner: string | null,
+  workspaces: readonly WorkspaceSummary[] | null,
+): Map<string, HoldReason> =>
+  heldReasons(rows.filter((row) => !isElsewhere(row, owner, workspaces)));
 
 /** True when the row is this account's, on this server, in a left workspace. */
 const isInLeftWorkspace = (
@@ -222,6 +237,15 @@ export type PendingCounts = {
   foreign: number;
   /** How many of `foreign` are this account's rows in a workspace it left. */
   left: number;
+  /**
+   * This account's rows that cannot be sent yet — a newer build wrote them, or
+   * the server lacks what they need. Not in `mine`: they are not "ahead of" a
+   * new mutation, and counting them would queue every future start behind a
+   * row that may never drain.
+   */
+  held: number;
+  /** Why, when every held row waits for the same thing; else null. */
+  heldReason: HoldReason | null;
 };
 
 /**
@@ -239,7 +263,15 @@ export async function pendingCounts(): Promise<PendingCounts> {
   const workspaces = await knownWorkspaces();
   const foreign = rows.filter((row) => isElsewhere(row, owner, workspaces)).length;
   const left = rows.filter((row) => isInLeftWorkspace(row, owner, workspaces)).length;
-  return { mine: rows.length - foreign, foreign, left };
+  const holds = heldHere(rows, owner, workspaces);
+  const reasons = new Set(holds.values());
+  return {
+    mine: rows.length - foreign - holds.size,
+    foreign,
+    left,
+    held: holds.size,
+    heldReason: reasons.size === 1 ? [...reasons][0] : null,
+  };
 }
 
 /**
@@ -251,32 +283,82 @@ export async function pendingCounts(): Promise<PendingCounts> {
  * deleting "3 changes", and anybody can decide about two entries called
  * "Invoicing" from 21 August.
  */
+/**
+ * The words for held rows, shared by the timer and the menu bar. Raycast stays
+ * English. `null` is a mix of reasons.
+ */
+export const heldCopy = (
+  count: number,
+  reason: HoldReason | null,
+): { title: string; subtitle: string } => {
+  const changes = `${count} change${count === 1 ? "" : "s"}`;
+  switch (reason) {
+    case "unknown-op":
+      return {
+        title: `${changes} waiting for a newer version`,
+        subtitle: "Made by a newer version of this extension — update it to sync them, or discard them",
+      };
+    case "unknown-procedure":
+      return {
+        title: `${changes} your server doesn’t support yet`,
+        subtitle: "Ask your admin to update the server — they are sent after that. Or discard them",
+      };
+    case null:
+      return {
+        title: `${changes} waiting for an update`,
+        subtitle: "They need a newer extension or a server update, and are kept until then — or discard them",
+      };
+  }
+};
+
 export type ForeignQueuedRow = QueuedMutationSummary & {
   /** This account's row, in a workspace it no longer belongs to. */
   leftWorkspace: boolean;
 };
 
-export async function listForeign(): Promise<ForeignQueuedRow[]> {
+/**
+ * Which kept rows a list or a discard is about. `foreign`: another account's,
+ * another server's or a left workspace's. `held`: this account's rows waiting
+ * for a newer build or a server update. Separate, because the way to keep each
+ * is different, and one "discard all" would decide about both at once.
+ */
+export type KeptKind = "foreign" | "held";
+
+const keptRows = async (kind: KeptKind): Promise<{
+  rows: QueuedMutation[];
+  owner: string | null;
+  workspaces: readonly WorkspaceSummary[] | null;
+  holds: Map<string, HoldReason>;
+}> => {
   await ready();
   const owner = await getStoredUserId();
   const workspaces = await knownWorkspaces();
+  const all = await getOfflineQueue().list();
+  const holds = heldHere(all, owner, workspaces);
+  const rows = all.filter((row) =>
+    kind === "held" ? holds.has(row.id) : isElsewhere(row, owner, workspaces),
+  );
+  return { rows, owner, workspaces, holds };
+};
+
+export async function listForeign(kind: KeptKind = "foreign"): Promise<ForeignQueuedRow[]> {
+  const { rows, owner, workspaces, holds } = await keptRows(kind);
   // Names only from this account's own choice, so another account's rows are
   // never described with workspace names this account happens to know.
   const nameOf = await workspaceNameLookup();
-  const rows = await getOfflineQueue().list();
-  return rows
-    .filter((row) => isElsewhere(row, owner, workspaces))
-    .map((row) => ({
-      ...describeQueuedMutation(
-        row,
-        isForeignTo(row, owner) ? undefined : nameOf,
-      ),
-      leftWorkspace: isInLeftWorkspace(row, owner, workspaces),
-    }));
+  return rows.map((row) => ({
+    ...describeQueuedMutation(
+      row,
+      isForeignTo(row, owner) ? undefined : nameOf,
+    ),
+    hold: holds.get(row.id) ?? null,
+    leftWorkspace: isInLeftWorkspace(row, owner, workspaces),
+  }));
 }
 
 /**
- * Delete the rows queued by another account, and only those.
+ * Delete the rows queued by another account, and only those — or, asked for
+ * `held`, this account's rows waiting for a newer build or a server update.
  *
  * The one deletion path for unsynced time here, and it exists only behind an
  * explicit confirmation that names what is going. Nothing calls it on a timer,
@@ -284,16 +366,13 @@ export async function listForeign(): Promise<ForeignQueuedRow[]> {
  * mechanism was built to avoid, and putting one behind a clock does not make
  * it less silent.
  */
-export async function discardForeign(): Promise<number> {
-  await ready();
-  const owner = await getStoredUserId();
-  const workspaces = await knownWorkspaces();
+export async function discardForeign(kind: KeptKind = "foreign"): Promise<number> {
+  // Re-read rather than trusted from the list the alert showed: a row that
+  // became sendable since is nobody's to delete.
+  const { rows } = await keptRows(kind);
   const offline = getOfflineQueue();
-  const theirs = (await offline.list()).filter((row) =>
-    isElsewhere(row, owner, workspaces),
-  );
-  for (const row of theirs) await offline.remove(row.id);
-  return theirs.length;
+  for (const row of rows) await offline.remove(row.id);
+  return rows.length;
 }
 
 /**
@@ -366,7 +445,8 @@ export async function flushOffline(
    * Consulted when a stamped row is refused as NOT_FOUND: `memberWorkspaceIds`
    * is only as fresh as the start of the flush, and a removal landing while it
    * runs reads exactly like "that entry is gone". Must not touch the queue,
-   * which this flush holds. Omitted, every NOT_FOUND is a refusal.
+   * which this flush holds. Omitted, every NOT_FOUND on the merits is a
+   * refusal.
    */
   stillMember?: (workspaceId: string) => Promise<boolean>,
 ): Promise<FlushReport> {
@@ -380,40 +460,44 @@ export async function flushOffline(
   const result = await offline.flush(
     async (row) => {
       const decoded = decodeOfflineMutation(row);
-      // A row written by an older build cannot be replayed against today's
-      // schema. Resolving drops it rather than wedging everything behind it.
-      if (decoded === null) return;
+      // A row this build cannot read was written by a newer one: held, not
+      // dropped. The filter already keeps it from getting here.
+      if (decoded === null) return { hold: "unknown-op" };
       try {
         await replayOfflineMutation(mutators, NO_IDLE_WATCHER, decoded, {
           createdAt: row.createdAt,
           resolved,
         });
+        return undefined;
       } catch (error) {
-        if (error instanceof StaleQueuedStopError) {
-          stale += 1;
-          return;
+        // One classifier for every client (`classifyReplayOutcome` in core):
+        // no answer, a lapsed session or a 5xx keeps the row and everything
+        // behind it; a server without the procedure holds the row and carries
+        // on; a NOT_FOUND on a stamped row is kept unless its workspace is
+        // confirmed — the next flush then holds it by the filter instead of
+        // this one deleting it.
+        const outcome = await classifyReplayOutcome(error, decoded, {
+          isTransportFailure,
+          stillMember,
+        });
+        if (outcome.kind === "drop") {
+          if (outcome.reason === "stale-stop") stale += 1;
+          else refused += 1;
         }
-        if (isPermanentRejection(error)) {
-          // Kept, and the flush stopped, unless the row's workspace is
-          // demonstrably still a membership: the next flush then holds it by
-          // the filter instead of this one counting it refused and deleting it.
-          if (
-            stillMember !== undefined &&
-            (await refusalKeepsRow(error, decoded, stillMember))
-          ) {
-            throw error;
-          }
-          refused += 1;
-          return;
-        }
-        throw error;
+        return flushVerdictFor(outcome, error);
       }
     },
     {
       filter: (row) =>
         isReplayableBy(row, owner) &&
         isOnThisServer(row) &&
-        isReplayableIn(row, memberWorkspaceIds),
+        isReplayableIn(row, memberWorkspaceIds) &&
+        // Waits for its hold to end: a newer build, or an hour since the
+        // server last said it lacks the procedure.
+        !holdBlocksReplay(row),
+      // A start and the stop that ends it share a temp id: when one is held
+      // the other waits with it.
+      chainOf: tempIdOf,
     },
   );
 

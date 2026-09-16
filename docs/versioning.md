@@ -72,6 +72,15 @@ server's answer replaces it as soon as one arrives.
 The offline queue holds time that no server has seen. A row that a build
 cannot read is kept and shown, never read as a miss and never overwritten.
 
+The queue (`trackyourtime.offline-queue`, every client) is written as
+`{ "v": 1, "data": [rows] }` by `createOfflineQueue`, not through
+`decodeVersioned`, whose miss would be an empty queue. A bare array is read
+as version 1. A higher `v` locks the queue: its rows are listed as held
+`unknown-op`, and nothing is written back. A value that does not parse is
+copied to `trackyourtime.offline-queue.corrupt.<ms>` before the queue is reset.
+A row with an op this build does not know is held, not dropped. CLAUDE.md →
+"Held queue rows and the queue format" has the rest.
+
 The extension's activity database (IndexedDB `trackyourtime-activity`) follows
 the same rule. A version bump must be additive: create stores and indexes, and
 never delete, rename or re-key one. When an older build finds a newer database,

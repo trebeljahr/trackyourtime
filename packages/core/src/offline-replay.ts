@@ -16,6 +16,12 @@ import type {
   OfflinePayloadMap,
 } from "./offline-ops.js";
 import type { IdleWatcher } from "./idle.js";
+import {
+  ApiError,
+  isPermanentRejectionStatus,
+  isTransportFailure,
+} from "./api-client.js";
+import type { FlushVerdict, HoldReason } from "./offline-queue.js";
 
 /**
  * What a replayed call is handed: the queued input, plus the workspace the row
@@ -182,5 +188,183 @@ export const replayOfflineMutation = async (
         inWorkspace<"entries.discard">(mutation, mutation.input)
       );
       return;
+  }
+};
+
+// ── what a failed replay means ───────────────────────────────────────
+
+/**
+ * What became of one queued row's replay. Every client acts on exactly this,
+ * so a 404 means the same thing on the phone, in the extension and in Raycast.
+ *
+ * - `applied`: the server took it. The row is removed.
+ * - `retry-later`: no verdict on the row. The flush stops here and this row
+ *   and everything behind it keep their places. `unauthorized` is its own
+ *   reason because clients say it differently ("sign in to sync").
+ * - `hold`: the row cannot be sent by this build to this server, and may be
+ *   later. Kept in place, never replayed until its hold may have ended
+ *   (`holdBlocksReplay`), never deleted without a person deciding. The flush
+ *   carries on past it.
+ * - `drop`: the server refused this row on the merits, or it is a stop too old
+ *   to target. Removed, and said out loud.
+ */
+export type ReplayOutcome =
+  | { kind: "applied" }
+  | {
+      kind: "retry-later";
+      reason: "transport" | "unauthorized" | "server" | "membership";
+    }
+  | { kind: "hold"; reason: HoldReason }
+  | { kind: "drop"; reason: "stale-stop" | "refused" };
+
+/** What a client could read from a server's answer. */
+export type ReplayErrorFacts = {
+  /** The tRPC code, or null when the body was no tRPC envelope. */
+  code: string | null;
+  httpStatus: number | null;
+  message: string;
+};
+
+/** The least a classifier needs of a row; a caller's own row type flows through. */
+export type ReplayRow = { op: string; workspaceId?: string };
+
+export type ReplayClassifyContext<R extends ReplayRow = ReplayRow> = {
+  /**
+   * True when no answer came back. Defaults to core's `isTransportFailure`
+   * (anything that is not an `ApiError`); the web app, whose errors are tRPC
+   * client errors, passes its own.
+   */
+  isTransportFailure?: (error: unknown) => boolean;
+  /**
+   * Read the server's answer. Defaults to `ApiError` and to anything carrying
+   * tRPC's `data: { code, httpStatus }`. Null means the error is no answer this
+   * client understands — kept, never dropped.
+   */
+  readFacts?: (error: unknown) => ReplayErrorFacts | null;
+  /**
+   * Asked on a NOT_FOUND for a row stamped with a workspace: is the person
+   * still in it? "Removed from the workspace" and "that entry is gone" answer
+   * alike. Anything but a confirmed yes keeps the row. Must not touch the
+   * queue — the flush calling this holds it. Omitted, every NOT_FOUND on the
+   * merits is a refusal.
+   */
+  stillMember?: (workspaceId: string) => Promise<boolean>;
+  /**
+   * The seam for holds decided by what the row needs of the server rather
+   * than by the error alone — a 400 from a server older than the row's API
+   * level, say. Consulted only for a refusal on the merits, before it drops.
+   */
+  holdRefusal?: (facts: ReplayErrorFacts, row: R) => HoldReason | null;
+};
+
+/**
+ * tRPC's own answer for a path its router does not have — v11's
+ * `No procedure found on path "entries.discard"`, as NOT_FOUND/404.
+ *
+ * Told apart from an application NOT_FOUND ("that entry is gone", a stop with
+ * nothing running) by the message, which is the only thing that differs: both
+ * carry the same code and status. Application messages never start this way.
+ */
+export const isUnknownProcedure = (facts: ReplayErrorFacts): boolean =>
+  (facts.code === "NOT_FOUND" || facts.httpStatus === 404) &&
+  /^No procedure found on path\b/.test(facts.message);
+
+const STATUS_BY_CODE: Readonly<Record<string, number>> = {
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  UNPROCESSABLE_CONTENT: 422,
+};
+
+/** `ApiError`, or anything shaped like a tRPC client error. */
+export const readReplayErrorFacts = (error: unknown): ReplayErrorFacts | null => {
+  if (error instanceof ApiError) {
+    return { code: error.code, httpStatus: error.httpStatus, message: error.message };
+  }
+  if (typeof error !== "object" || error === null) return null;
+  const { data, message } = error as { data?: unknown; message?: unknown };
+  if (typeof data !== "object" || data === null) return null;
+  const { code, httpStatus } = data as { code?: unknown; httpStatus?: unknown };
+  if (typeof code !== "string") return null;
+  return {
+    code,
+    httpStatus: typeof httpStatus === "number" ? httpStatus : STATUS_BY_CODE[code] ?? null,
+    message: typeof message === "string" ? message : "",
+  };
+};
+
+/**
+ * Decide what a replay that threw means for its row.
+ *
+ * The order is the policy:
+ * 1. A stop too old to target is dropped — it would end whatever runs now.
+ * 2. No answer at all keeps the row.
+ * 3. UNAUTHORIZED keeps it: "we do not know who you are" is no verdict.
+ * 4. A server without the procedure holds it. Before the permanent set, which
+ *    a 404 is in — a newer client replaying `entries.discard` against an
+ *    older self-hosted server would otherwise delete the time.
+ * 5. Anything outside the permanent set (5xx, 429, a proxy's HTML page) keeps
+ *    it.
+ * 6. `holdRefusal` may hold a refusal on the merits.
+ * 7. A NOT_FOUND on a stamped row is kept unless the membership is confirmed.
+ * 8. The rest is a refusal on the merits — 400, 403, 404, 409, 410, 422.
+ */
+export const classifyReplayOutcome = async <R extends ReplayRow>(
+  error: unknown,
+  row: R,
+  context: ReplayClassifyContext<R> = {}
+): Promise<ReplayOutcome> => {
+  if (error instanceof StaleQueuedStopError) {
+    return { kind: "drop", reason: "stale-stop" };
+  }
+  const transport = context.isTransportFailure ?? isTransportFailure;
+  if (transport(error)) return { kind: "retry-later", reason: "transport" };
+
+  const facts = (context.readFacts ?? readReplayErrorFacts)(error);
+  if (facts === null) return { kind: "retry-later", reason: "server" };
+  if (facts.code === "UNAUTHORIZED" || facts.httpStatus === 401) {
+    return { kind: "retry-later", reason: "unauthorized" };
+  }
+  if (isUnknownProcedure(facts)) return { kind: "hold", reason: "unknown-procedure" };
+
+  const status = facts.httpStatus ?? (facts.code ? STATUS_BY_CODE[facts.code] : undefined);
+  if (status === undefined || !isPermanentRejectionStatus(facts.code ?? "PARSE_ERROR", status)) {
+    return { kind: "retry-later", reason: "server" };
+  }
+
+  const held = context.holdRefusal?.(facts, row) ?? null;
+  if (held !== null) return { kind: "hold", reason: held };
+
+  if (
+    row.workspaceId !== undefined &&
+    context.stillMember !== undefined &&
+    (facts.code === "NOT_FOUND" || status === 404)
+  ) {
+    const confirmed = await context.stillMember(row.workspaceId).catch(() => false);
+    if (!confirmed) return { kind: "retry-later", reason: "membership" };
+  }
+
+  return { kind: "drop", reason: "refused" };
+};
+
+/**
+ * What a flush runner hands back to `OfflineQueue.flush` for an outcome: a
+ * hold verdict, nothing (the row is done with), or the error rethrown so the
+ * flush stops in order.
+ */
+export const flushVerdictFor = (
+  outcome: ReplayOutcome,
+  error: unknown
+): FlushVerdict | undefined => {
+  switch (outcome.kind) {
+    case "applied":
+    case "drop":
+      return undefined;
+    case "hold":
+      return { hold: outcome.reason };
+    case "retry-later":
+      throw error;
   }
 };

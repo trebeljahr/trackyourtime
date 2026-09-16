@@ -380,7 +380,8 @@ export type PopupToBackground =
    */
   | { type: "workspace:switch"; workspaceId: string }
   /**
-   * Discard one queued change held for a workspace this person has left.
+   * Discard one held queued change: a left workspace's, or one waiting for a
+   * newer build or a server update.
    *
    * The only way such a row ever leaves the queue short of a sign-out: it is
    * never replayed and never dropped on its own, because it is time no server
@@ -542,9 +543,11 @@ export type BackgroundState = {
   /** The workspace every request is addressed to, or null before any is known. */
   activeWorkspaceId: string | null;
   /**
-   * Queued changes held for a workspace this person no longer belongs to —
-   * never sent, never dropped on their own, and NOT in `pendingSync`. Each
-   * names its workspace when the name is still known.
+   * Queued changes held here — for a workspace this person no longer belongs
+   * to (`hold: null`), or for a `HoldReason` (a newer build wrote them, or the
+   * server lacks the procedure they need) — never sent while held, never
+   * dropped on their own, and NOT in `pendingSync`. Each names its workspace
+   * when the name is still known.
    */
   heldSync: QueuedMutationSummary[];
 };

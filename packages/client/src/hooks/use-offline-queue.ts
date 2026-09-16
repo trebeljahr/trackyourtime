@@ -2,7 +2,11 @@
 
 import * as React from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { WorkspaceSummary } from "@starter/core";
+import {
+  classifyReplayOutcome,
+  flushVerdictFor,
+  type WorkspaceSummary,
+} from "@starter/core";
 
 import { toast } from "@/components/ui/sonner";
 import { translate } from "@/i18n/translate";
@@ -17,14 +21,14 @@ import {
   adoptUnstampedOfflineRows,
   flushOfflineQueue,
   getForeignCount,
+  getHeldCount,
   getPendingCount,
   getServerForeignCount,
+  getServerHeldCount,
   getServerPendingCount,
-  isAuthError,
+  hasReplayableRows,
   isNetworkError,
-  isNotFoundError,
   isOnline,
-  isTransientServerError,
   refreshPendingCount,
   setOfflineQueueOwner,
   subscribePending,
@@ -34,7 +38,6 @@ import { useAuth } from "@/providers/auth-provider";
 import { useSyncStatus } from "@/hooks/use-sync";
 import {
   replayOfflineMutation,
-  StaleQueuedStopError,
   type OfflineReplayMutators,
   type ReplayIdMap,
 } from "@/hooks/replay-offline-mutation";
@@ -54,6 +57,12 @@ export type OfflineQueueState = {
    * quietly sit on somebody's unsynced time.
    */
   foreign: number;
+  /**
+   * This account's rows that cannot be sent yet — written by a newer app
+   * version, or needing something the server does not have. Kept, retried when
+   * that may have changed, and listed in Settings → Devices.
+   */
+  held: number;
   online: boolean;
   isFlushing: boolean;
   /**
@@ -169,6 +178,11 @@ export const useOfflineQueue = (): OfflineQueueState => {
     getForeignCount,
     getServerForeignCount
   );
+  const held = React.useSyncExternalStore(
+    subscribePending,
+    getHeldCount,
+    getServerHeldCount
+  );
   const online = React.useSyncExternalStore(
     subscribeNetwork,
     getOnline,
@@ -231,6 +245,13 @@ export const useOfflineQueue = (): OfflineQueueState => {
   const dispatchRef = React.useRef(dispatch);
   const utilsRef = React.useRef(utils);
   const runningRef = React.useRef(false);
+  /*
+   * The first flush of this document asks again about held rows whatever
+   * their clock says: a page load (and on a phone, a launch) is when a server
+   * upgrade is most likely to have happened unobserved. After that, once an
+   * hour (`HELD_RETRY_MS` in core).
+   */
+  const retriedHeldRef = React.useRef(false);
 
   React.useEffect(() => {
     dispatchRef.current = dispatch;
@@ -242,7 +263,8 @@ export const useOfflineQueue = (): OfflineQueueState => {
 
   const flush = React.useCallback(async (): Promise<void> => {
     if (runningRef.current) return;
-    if ((await refreshPendingCount()) === 0) return;
+    const retryHeld = !retriedHeldRef.current;
+    if (!(await hasReplayableRows({ retryHeld }))) return;
     if (!isOnline()) return;
     const forUser = userIdRef.current;
     if (forUser === null) return;
@@ -270,6 +292,7 @@ export const useOfflineQueue = (): OfflineQueueState => {
     let applied = 0;
     let rejected = 0;
     let stale = 0;
+    let heldNow = 0;
     let blocked = false;
 
     // One map for the whole flush: a start and the stop that ends it are
@@ -278,6 +301,7 @@ export const useOfflineQueue = (): OfflineQueueState => {
     const resolved: ReplayIdMap = new Map();
 
     try {
+      retriedHeldRef.current = true;
       const result = await flushOfflineQueue(async (mutation, meta) => {
         try {
           await dispatchRef.current(mutation, {
@@ -285,60 +309,44 @@ export const useOfflineQueue = (): OfflineQueueState => {
             resolved,
           });
           applied += 1;
+          return undefined;
         } catch (error) {
-          // Still unreachable — stop here so the rest keeps its order.
-          if (isNetworkError(error)) throw error;
-          // A stop from days ago that names no entry. Dropping it is right —
-          // it would otherwise end whatever is running now — but it is the
-          // user's tracked time, so it is said out loud rather than binned.
-          if (error instanceof StaleQueuedStopError) {
-            stale += 1;
-            return;
-          }
-          // The session is gone (expired, or signed out from another device).
-          // UNAUTHORIZED only: a FORBIDDEN is a refusal of this one row by a
-          // valid session (a role change) and falls through to `rejected`
-          // below, so it cannot wedge the rest of the queue behind it.
-          // Also a stop, not a drop: the request arrived, but "we do not know
-          // who you are" is no verdict on the user's tracked time. Throwing
-          // leaves this row and everything behind it in the queue — see
-          // `createOfflineQueue.flush`, which writes the remainder back.
-          if (isAuthError(error)) {
+          /*
+           * One classifier for every client (`classifyReplayOutcome` in core):
+           * - a network failure, a 5xx/429 or a proxy's page keeps this row and
+           *   everything behind it, in order;
+           * - UNAUTHORIZED does the same and says "sign in to sync" — the
+           *   request arrived, but "we do not know who you are" is no verdict
+           *   on the user's tracked time;
+           * - a server without the procedure (a newer app against an older
+           *   self-hosted server) HOLDS the row and carries on past it;
+           * - a NOT_FOUND on a stamped row is kept unless its workspace is
+           *   confirmed a membership again: the list asked for above is only
+           *   as fresh as the start of the flush;
+           * - a refusal on the merits (400/403/404/409/410/422) and a stop too
+           *   old to target are dropped, and said out loud below.
+           */
+          const outcome = await classifyReplayOutcome(error, mutation, {
+            isTransportFailure: isNetworkError,
+            // Applied without the adoption step (`takeWorkspaceListFor`):
+            // that needs the queue this flush holds.
+            stillMember: async (workspaceId) => {
+              const fresh = await utilsRef.current.workspaces.list.fetch();
+              await applyWorkspaceList(fresh, forUser);
+              return fresh.some((workspace) => workspace.id === workspaceId);
+            },
+          });
+          if (outcome.kind === "retry-later" && outcome.reason === "unauthorized") {
             blocked = true;
-            throw error;
           }
-          // The server answered, but not about this row: a 500, a 429, a 503
-          // mid-deploy, a proxy's HTML page. Only the permanent set shared with
-          // `@starter/core` (400/403/404/409/410/422) is a refusal on the
-          // merits. Anything else stops the flush like a network failure, and
-          // the row keeps its place for the next one.
-          if (isTransientServerError(error)) throw error;
-          // A NOT_FOUND on a stamped row can mean "you were removed from this
-          // workspace" as much as "that entry is gone": the list asked for
-          // above is only as fresh as the start of the flush, and a flush of
-          // many rows takes a while. Ask again, and keep the row — stopping
-          // the flush here — unless its workspace is demonstrably still a
-          // membership. The next flush then holds it by the filter instead of
-          // this one deleting it. Applied without the adoption step
-          // (`takeWorkspaceListFor`): that needs the queue this flush holds.
-          if (isNotFoundError(error) && mutation.workspaceId !== undefined) {
-            const fresh = await utilsRef.current.workspaces.list
-              .fetch()
-              .catch(() => null);
-            if (fresh !== null) await applyWorkspaceList(fresh, forUser);
-            if (
-              fresh === null ||
-              !fresh.some((workspace) => workspace.id === mutation.workspaceId)
-            ) {
-              throw error;
-            }
+          if (outcome.kind === "drop") {
+            if (outcome.reason === "stale-stop") stale += 1;
+            else rejected += 1;
           }
-          // The server refused it on the merits (validation, a permission a
-          // role change took away). The server wins: drop the mutation and
-          // let the invalidation below pull the authoritative state back.
-          rejected += 1;
+          if (outcome.kind === "hold") heldNow += 1;
+          return flushVerdictFor(outcome, error);
         }
-      }, { memberWorkspaceIds: members });
+      }, { memberWorkspaceIds: members, retryHeld });
 
       setAuthBlocked(blocked);
 
@@ -359,6 +367,14 @@ export const useOfflineQueue = (): OfflineQueueState => {
       if (stale > 0) {
         toast.error(t("offlineQueue.stale", { count: stale }), {
           description: t("offlineQueue.staleDescription"),
+        });
+      }
+      // Nothing was lost, but nothing was sent either, and a count that
+      // silently stops going down reads as "my time is stuck". Said once per
+      // flush that held something new; the tracker bar keeps the count.
+      if (heldNow > 0) {
+        toast.warning(t("offlineQueue.held", { count: heldNow }), {
+          description: t("offlineQueue.heldDescription"),
         });
       }
 
@@ -425,6 +441,7 @@ export const useOfflineQueue = (): OfflineQueueState => {
   return {
     pending,
     foreign,
+    held,
     online,
     isFlushing,
     authBlocked: authBlocked && pending > 0,

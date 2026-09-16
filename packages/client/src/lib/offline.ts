@@ -20,6 +20,8 @@ import {
   createOfflineQueue,
   decodeOfflineMutation,
   describeQueuedMutation,
+  heldReasons,
+  holdBlocksReplay,
   isForeignTo,
   isForeignWorkspace,
   isPermanentRejectionStatus,
@@ -30,7 +32,10 @@ import {
   OFFLINE_QUEUE_OWNER_STORAGE_KEY,
   OFFLINE_QUEUE_STORAGE_KEY,
   webStorage,
+  tempIdOf,
   type FlushResult,
+  type FlushVerdict,
+  type HoldReason,
   type KeyValueStorage,
   type OfflineMutation,
   type OfflineOp,
@@ -384,12 +389,20 @@ type Listener = () => void;
 
 let pending = 0;
 let foreign = 0;
+let held = 0;
 const listeners = new Set<Listener>();
 
-const setCounts = (nextPending: number, nextForeign: number): void => {
-  if (nextPending === pending && nextForeign === foreign) return;
+const setCounts = (
+  nextPending: number,
+  nextForeign: number,
+  nextHeld: number
+): void => {
+  if (nextPending === pending && nextForeign === foreign && nextHeld === held) {
+    return;
+  }
   pending = nextPending;
   foreign = nextForeign;
+  held = nextHeld;
   for (const listener of listeners) listener();
 };
 
@@ -409,9 +422,34 @@ export const getPendingCount = (): number => pending;
  */
 export const getForeignCount = (): number => foreign;
 
+/**
+ * This account's rows that cannot be sent from here yet: written by a newer
+ * build, or needing a procedure the server does not have (`HoldReason` in
+ * core), plus whatever is chained to one of those. Kept, never replayed until
+ * the hold may have ended, never counted as pending — they are not "ahead of"
+ * a new mutation, and counting them would queue every future start behind
+ * a row that may never drain.
+ */
+export const getHeldCount = (): number => held;
+
 /** Server snapshot for `useSyncExternalStore` — nothing is ever queued on SSR. */
 export const getServerPendingCount = (): number => 0;
 export const getServerForeignCount = (): number => 0;
+export const getServerHeldCount = (): number => 0;
+
+/**
+ * This account's held rows, by queue id, with their chains. With no account
+ * known, the same rows `refreshPendingCount` would call this device's.
+ */
+const heldHere = (
+  rows: readonly QueuedMutation[],
+  against: string | null
+): Map<string, HoldReason> =>
+  heldReasons(
+    rows.filter((row) =>
+      against === null ? isOnThisServer(row) : !isElsewhere(row, against),
+    ),
+  );
 
 /**
  * Recount, and return what this account can send.
@@ -427,8 +465,26 @@ export const refreshPendingCount = async (): Promise<number> => {
   const theirs = rows.filter((row) =>
     against === null ? !isOnThisServer(row) : isElsewhere(row, against),
   ).length;
-  setCounts(rows.length - theirs, theirs);
-  return rows.length - theirs;
+  const heldCount = heldHere(rows, against).size;
+  const mine = rows.length - theirs - heldCount;
+  setCounts(mine, theirs, heldCount);
+  return mine;
+};
+
+/**
+ * True when a flush has something to try: a pending row, or a held row whose
+ * hold may have ended (`holdBlocksReplay`). The pending count alone would
+ * never ask a server again once everything left is held.
+ */
+export const hasReplayableRows = async (
+  options: { retryHeld?: boolean } = {}
+): Promise<boolean> => {
+  if ((await refreshPendingCount()) > 0) return true;
+  const against = owner ?? lastOwner;
+  const rows = await getOfflineQueue().list();
+  return rows.some(
+    (row) => !isElsewhere(row, against) && !holdBlocksReplay(row, options),
+  );
 };
 
 /**
@@ -509,7 +565,7 @@ export const flushOfflineQueue = async (
   runner: (
     mutation: OfflineMutation,
     meta: { createdAt: string }
-  ) => Promise<void>,
+  ) => Promise<void | FlushVerdict>,
   options: {
     /**
      * The workspaces this account belongs to, as the server said just now.
@@ -517,22 +573,30 @@ export const flushOfflineQueue = async (
      * replay, because a stamped row cannot be checked against nothing.
      */
     memberWorkspaceIds?: ReadonlySet<string>;
+    /** Ask again about held rows whatever their hold's clock says. */
+    retryHeld?: boolean;
   } = {}
 ): Promise<FlushResult> => {
   const members =
     options.memberWorkspaceIds ?? getKnownWorkspaceIds() ?? new Set<string>();
+  const now = Date.now();
   const result = await getOfflineQueue().flush(
     async (row) => {
       const decoded = decodeOfflineMutation(row);
-      // A row we can no longer read is dropped by resolving successfully.
-      if (decoded === null) return;
-      await runner(decoded, { createdAt: row.createdAt });
+      // A row this build cannot read was written by a newer one. It is held,
+      // not dropped — the filter below already keeps it from getting here.
+      if (decoded === null) return { hold: "unknown-op" };
+      return runner(decoded, { createdAt: row.createdAt });
     },
     {
       filter: (row) =>
         isReplayableBy(row, owner) &&
         isOnThisServer(row) &&
-        isReplayableIn(row, members),
+        isReplayableIn(row, members) &&
+        !holdBlocksReplay(row, { now, retryHeld: options.retryHeld }),
+      // A start and the stop that ends it share a temp id: when one is held
+      // the other waits with it.
+      chainOf: tempIdOf,
     }
   );
   await refreshPendingCount();
@@ -571,19 +635,29 @@ export type ForeignQueuedRow = QueuedMutationSummary & {
   leftWorkspace: boolean;
 };
 
+/**
+ * The rows the queue keeps and does not send: another account's, another
+ * server's, a left workspace's — and this account's HELD rows, whose `hold`
+ * says why (a newer build wrote them, or the server lacks what they need).
+ */
 export const listForeignQueued = async (): Promise<ForeignQueuedRow[]> => {
   await hydrateLastOwner();
   await whenApiOriginReady();
   const against = owner ?? lastOwner;
   const rows = await getOfflineQueue().list();
+  const holds = heldHere(rows, against);
   return rows
-    .filter((row) => isElsewhere(row, against))
+    .filter((row) => isElsewhere(row, against) || holds.has(row.id))
     .map((row) => {
       const otherServer = isOnThisServer(row)
         ? null
         : (row.server ?? getDefaultAbsoluteApiOrigin());
+      const elsewhere = isElsewhere(row, against);
       return {
         ...describeQueuedMutation(row, workspaceNameFor),
+        // Only this account's rows are described as held: another account's
+        // or another server's row is grouped by whose it is.
+        hold: elsewhere ? null : (holds.get(row.id) ?? null),
         otherServer,
         leftWorkspace:
           otherServer === null &&
@@ -594,7 +668,8 @@ export const listForeignQueued = async (): Promise<ForeignQueuedRow[]> => {
 };
 
 /**
- * Delete the rows queued by another account, and only those.
+ * Delete the rows queued by another account, and only those — or this
+ * account's held rows, which no flush from this build will ever send.
  *
  * The one deletion path for unsynced time in this client, and it exists only
  * behind an explicit human confirmation that names what is being destroyed
@@ -615,9 +690,10 @@ export const discardForeignQueued = async (
   // Re-checked here rather than trusted from the list the panel rendered: a
   // row that became replayable since (the person switched back) is no longer
   // anybody else's to delete.
+  const holds = heldHere(rows, against);
   const theirs = rows.filter(
     (row) =>
-      isElsewhere(row, against) &&
+      (isElsewhere(row, against) || holds.has(row.id)) &&
       (queueIds === undefined || queueIds.includes(row.id)),
   );
 

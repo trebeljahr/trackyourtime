@@ -12,6 +12,7 @@
  */
 import {
   ApiError,
+  classifyReplayOutcome,
   createApiClient,
   createId,
   createOfflineQueue,
@@ -23,8 +24,10 @@ import {
   readStoredTimeEntry,
   describeQueuedMutation,
   emptyWorkspaceChoice,
+  flushVerdictFor,
+  heldReasons,
+  holdBlocksReplay,
   isHeldByWorkspace,
-  isPermanentRejection,
   isQueuedOn,
   isReplayableIn,
   OFFLINE_QUEUE_STORAGE_KEY,
@@ -34,6 +37,7 @@ import {
   workspaceChoiceFor,
   workspaceNameIn,
   isOwnActivity,
+  tempIdOf,
   withWorkspaceId,
   type OfflineMutation,
   type QueuedMutation,
@@ -1059,34 +1063,58 @@ export const isServerReachable = (): boolean => serverReachable;
  * never dropped on its own. The popup lists it by name until the person
  * discards it.
  */
-const isHeldRow = (row: QueuedMutation): boolean =>
+const isLeftWorkspaceRow = (row: QueuedMutation): boolean =>
   isHeldByWorkspace(row, workspaceChoice.workspaces);
+
+/**
+ * Every held row and why: a left workspace (`hold: null` in the summary), or
+ * a `HoldReason` from core — written by a newer build, or needing a procedure
+ * the server does not have — with the temp-id chain that depends on it.
+ */
+const heldRowsIn = (
+  rows: readonly QueuedMutation[],
+): Map<string, QueuedMutationSummary["hold"]> => {
+  const held = new Map<string, QueuedMutationSummary["hold"]>();
+  for (const [id, reason] of heldReasons(rows.filter((row) => !isLeftWorkspaceRow(row)))) {
+    held.set(id, reason);
+  }
+  for (const row of rows) if (isLeftWorkspaceRow(row)) held.set(row.id, null);
+  return held;
+};
 
 /**
  * How many mutations are waiting to be replayed — held rows excluded.
  *
  * Excluded because every caller reads this as "is something still ahead of a
  * new mutation": the live-or-queue decision, the optimistic running entry, the
- * overlay. A held row is never sent, so counting it would queue every future
- * start behind a row that can never drain, and pin the optimistic timer on
- * screen forever.
+ * overlay. A held row is not sent by an ordinary flush, so counting it would
+ * queue every future start behind a row that may never drain, and pin the
+ * optimistic timer on screen forever.
  */
 export const pendingSyncCount = async (): Promise<number> => {
   const rows = await getOfflineQueue().list();
-  return rows.filter((row) => !isHeldRow(row)).length;
+  const held = heldRowsIn(rows);
+  return rows.filter((row) => !held.has(row.id)).length;
 };
 
 /** Every queued row, held or not — what a server switch would discard. */
 export const queuedRowCount = (): Promise<number> => getOfflineQueue().size();
 
-/** Rows held for a workspace this person has left, described by name. */
+/**
+ * Rows held here, described by name: `hold` null for a left workspace's row,
+ * else why it cannot be sent yet.
+ */
 export type HeldQueuedRow = QueuedMutationSummary;
 
 export async function listHeldRows(): Promise<HeldQueuedRow[]> {
   const rows = await getOfflineQueue().list();
+  const held = heldRowsIn(rows);
   return rows
-    .filter(isHeldRow)
-    .map((row) => describeQueuedMutation(row, workspaceNameFor));
+    .filter((row) => held.has(row.id))
+    .map((row) => ({
+      ...describeQueuedMutation(row, workspaceNameFor),
+      hold: held.get(row.id) ?? null,
+    }));
 }
 
 /**
@@ -1098,8 +1126,7 @@ export async function listHeldRows(): Promise<HeldQueuedRow[]> {
  */
 export async function discardHeldRow(id: string): Promise<boolean> {
   const rows = await getOfflineQueue().list();
-  const row = rows.find((it) => it.id === id);
-  if (row === undefined || !isHeldRow(row)) return false;
+  if (!heldRowsIn(rows).has(id)) return false;
   await getOfflineQueue().remove(id);
   return true;
 }
@@ -1594,42 +1621,35 @@ export async function flushQueue(): Promise<number> {
   const result = await offline.flush(
     async (row) => {
       const decoded = decodeOfflineMutation(row);
-      // A row written by an older build cannot be replayed against today's
-      // schema; resolving drops it rather than wedging everything behind it.
-      if (decoded === null) return;
+      // A row this build cannot read was written by a newer one: held, not
+      // dropped. The filter already keeps it from getting here.
+      if (decoded === null) return { hold: "unknown-op" };
       let replayed: unknown;
       try {
         // The op string *is* the tRPC path, by design — so there is no dispatch
         // table here to drift out of step with the queue contract.
         replayed = await current.api.mutate(decoded.op, replayInput(decoded));
       } catch (error) {
-        // Anything the server can still accept later — a lapsed session, a 500,
-        // a dead network — keeps its place and wedges the rest deliberately, so
-        // ordering survives. A permanent refusal cannot: the server has already
-        // moved on (the runaway guard capping an entry this stop was going to
-        // close is exactly that), and stopping here would wedge the queue
-        // forever. Drop it and let the reconcile below pull the truth back.
-        if (!isPermanentRejection(error)) throw error;
-        // Except a NOT_FOUND that may mean "you left this workspace" rather
-        // than "that entry is gone": the list above can be a minute old. Ask
-        // again, and keep the row unless its workspace is demonstrably still
-        // a membership — the next flush then holds it by the filter.
-        if (
-          decoded.workspaceId !== undefined &&
-          error instanceof ApiError &&
-          (error.httpStatus === 404 || error.code === "NOT_FOUND")
-        ) {
-          // Asked directly rather than through `resolveWorkspaces`, whose
-          // adoption step needs the queue this flush is holding.
-          const fresh = await current.api
-            .query<WorkspaceSummary[]>("workspaces.list")
-            .catch(() => null);
-          if (fresh !== null) await installWorkspaceList(fresh, current.apiUrl, false);
-          if (fresh === null || !fresh.some((it) => it.id === decoded.workspaceId)) {
-            throw error;
-          }
-        }
-        return;
+        // One classifier for every client (`classifyReplayOutcome` in core).
+        // Anything the server can still accept later — a lapsed session, a
+        // 500, a dead network — keeps its place and wedges the rest, so
+        // ordering survives. A server without the procedure holds the row and
+        // carries on. A refusal on the merits is dropped (the runaway guard
+        // capping an entry this stop was going to close is exactly that) and
+        // the reconcile below pulls the truth back — except a NOT_FOUND that
+        // may mean "you left this workspace": the list above can be a minute
+        // old, so it is asked again, and the row kept unless its workspace is
+        // demonstrably still a membership.
+        const outcome = await classifyReplayOutcome(error, decoded, {
+          stillMember: async (workspaceId) => {
+            // Asked directly rather than through `resolveWorkspaces`, whose
+            // adoption step needs the queue this flush is holding.
+            const fresh = await current.api.query<WorkspaceSummary[]>("workspaces.list");
+            await installWorkspaceList(fresh, current.apiUrl, false);
+            return fresh.some((it) => it.id === workspaceId);
+          },
+        });
+        return flushVerdictFor(outcome, error);
       }
 
       // Outside the catch above on purpose: this writes to `chrome.storage`, and
@@ -1637,6 +1657,7 @@ export async function flushQueue(): Promise<number> {
       // would re-queue a mutation the server has already applied and replay it
       // twice.
       await noteReplayedStart(decoded, replayed);
+      return undefined;
     },
     {
       // Only rows made against the server in use. Rows written before the
@@ -1648,7 +1669,13 @@ export async function flushQueue(): Promise<number> {
         isQueuedOn(row, current.apiUrl, DEFAULT_API_URL) &&
         // A row for a workspace this person has left is held in place: not
         // replayed there, not replayed anywhere else, not dropped.
-        isReplayableIn(row, memberIds),
+        isReplayableIn(row, memberIds) &&
+        // A held row waits for its hold to end: a newer build, or an hour
+        // since the server last said it lacks the procedure.
+        !holdBlocksReplay(row),
+      // A start and the stop that ends it share a temp id, and stand or fall
+      // together.
+      chainOf: tempIdOf,
     },
   );
 

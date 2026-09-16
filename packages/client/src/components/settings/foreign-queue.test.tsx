@@ -18,7 +18,7 @@ import type { ForeignQueuedRow } from "@/lib/offline";
  * until a person has seen what the rows are and confirmed a second time.
  */
 
-const state = { foreign: 0 };
+const state = { foreign: 0, held: 0 };
 const rows: ForeignQueuedRow[] = [];
 const discardForeignQueued = vi.fn(async (ids?: readonly string[]) =>
   ids === undefined ? rows.length : ids.length,
@@ -47,6 +47,7 @@ const setRows = (next: ForeignQueuedRow[]): void => {
   rows.length = 0;
   rows.push(...next);
   state.foreign = next.length;
+  state.held = 0;
 };
 
 beforeEach(() => {
@@ -74,6 +75,7 @@ describe("ForeignQueuePanel", () => {
         workspaceId: null,
         workspaceName: null,
         leftWorkspace: false,
+        hold: null,
       },
       {
         queueId: "2",
@@ -85,6 +87,7 @@ describe("ForeignQueuePanel", () => {
         workspaceId: null,
         workspaceName: null,
         leftWorkspace: false,
+        hold: null,
       },
     ]);
 
@@ -110,6 +113,7 @@ describe("ForeignQueuePanel", () => {
         workspaceId: null,
         workspaceName: null,
         leftWorkspace: false,
+        hold: null,
       },
     ]);
     render(<ForeignQueuePanel />);
@@ -128,6 +132,7 @@ describe("ForeignQueuePanel", () => {
         workspaceId: null,
         workspaceName: null,
         leftWorkspace: false,
+        hold: null,
       },
     ]);
 
@@ -162,6 +167,7 @@ describe("ForeignQueuePanel", () => {
         workspaceId: null,
         workspaceName: null,
         leftWorkspace: false,
+        hold: null,
       },
       {
         queueId: "s1",
@@ -173,6 +179,7 @@ describe("ForeignQueuePanel", () => {
         workspaceId: null,
         workspaceName: null,
         leftWorkspace: false,
+        hold: null,
       },
       {
         queueId: "s2",
@@ -184,6 +191,7 @@ describe("ForeignQueuePanel", () => {
         workspaceId: null,
         workspaceName: null,
         leftWorkspace: false,
+        hold: null,
       },
     ]);
 
@@ -222,6 +230,7 @@ describe("ForeignQueuePanel", () => {
         workspaceId: "ws-acme",
         workspaceName: "Acme",
         leftWorkspace: true,
+        hold: null,
       },
       {
         queueId: "w2",
@@ -233,6 +242,7 @@ describe("ForeignQueuePanel", () => {
         workspaceId: "ws-gone",
         workspaceName: null,
         leftWorkspace: true,
+        hold: null,
       },
       {
         queueId: "a1",
@@ -244,6 +254,7 @@ describe("ForeignQueuePanel", () => {
         workspaceId: null,
         workspaceName: null,
         leftWorkspace: false,
+        hold: null,
       },
     ]);
 
@@ -266,5 +277,46 @@ describe("ForeignQueuePanel", () => {
     await waitFor(() =>
       expect(discardForeignQueued).toHaveBeenCalledWith(["w1"]),
     );
+  });
+
+  it("groups this account's held rows by reason, says why, and discards only that group", async () => {
+    const base = {
+      at: "2026-09-12T09:00:00.000Z",
+      server: null,
+      otherServer: null,
+      workspaceId: "ws-a",
+      workspaceName: "Acme",
+      leftWorkspace: false,
+    };
+    rows.length = 0;
+    rows.push(
+      { ...base, queueId: "h1", op: null, description: null, hold: "unknown-op" },
+      { ...base, queueId: "h2", op: "entries.discard", description: null, hold: "unknown-procedure" },
+      { ...base, queueId: "h3", op: "entries.stop", description: null, hold: "unknown-procedure" },
+    );
+    // Held rows are not somebody else's: the panel shows for `held` alone.
+    state.foreign = 0;
+    state.held = 3;
+
+    render(<ForeignQueuePanel />);
+    await screen.findByText(/Discarded a timer/);
+
+    const groups = screen.getAllByTestId("foreign-queue-group");
+    expect(groups.map((group) => group.dataset.hold)).toEqual(["unknown-op", "unknown-procedure"]);
+    const [newer, server] = groups as [HTMLElement, HTMLElement];
+    expect(newer).toHaveTextContent("Waiting for a newer app version");
+    expect(newer).toHaveTextContent("Unrecognised change");
+    expect(server).toHaveTextContent("Your server doesn’t support this yet");
+    expect(server).toHaveTextContent("Ask your admin to update the server");
+
+    fireEvent.click(within(server).getByTestId("foreign-queue-discard"));
+    const confirm = await screen.findByTestId("foreign-queue-confirm");
+    expect(confirm).toHaveTextContent("Update the app or the server instead");
+    expect(discardForeignQueued).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("foreign-queue-confirm-discard"));
+    await waitFor(() =>
+      expect(discardForeignQueued).toHaveBeenCalledWith(["h2", "h3"]),
+    );
+    state.held = 0;
   });
 });

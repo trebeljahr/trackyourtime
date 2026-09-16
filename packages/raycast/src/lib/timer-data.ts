@@ -15,6 +15,7 @@ import {
   toQuickStart,
   type DetailedEntry,
   type DetailedFavorite,
+  type HoldReason,
   type TimeEntry,
   type WorkspaceSummary,
 } from "@starter/core";
@@ -55,6 +56,13 @@ export type TimerSnapshot = {
   foreign: number;
   /** How many of `foreign` were queued in a workspace this account left. */
   left: number;
+  /**
+   * This account's rows that cannot be sent yet — a newer build wrote them, or
+   * the server lacks what they need. Kept and retried, not pending.
+   */
+  held: number;
+  /** Why, when every held row waits for the same thing. */
+  heldReason: HoldReason | null;
   /** Every workspace this account belongs to; a switcher shows with two or more. */
   workspaces: WorkspaceSummary[];
   /** The workspace this snapshot was read from. */
@@ -201,7 +209,7 @@ export const loadTimerSnapshot = async (
     await loadTimerEcho(),
   );
 
-  const { mine, foreign, left } = await pendingCounts();
+  const { mine, foreign, left, held, heldReason } = await pendingCounts();
 
   return {
     running,
@@ -214,6 +222,8 @@ export const loadTimerSnapshot = async (
     pending: mine,
     foreign,
     left,
+    held,
+    heldReason,
     workspaces,
     activeWorkspaceId: workspaceId,
     runningWorkspaceName: running?.id === windowRunning?.id ? runningWorkspaceName : null,

@@ -31,6 +31,7 @@ import {
   useReconciledRunning,
   useWatchRunning,
 } from "./lib/hooks.js";
+import { heldCopy } from "./lib/offline.js";
 import { webLink } from "./lib/preferences.js";
 import {
   entryHint,
@@ -402,7 +403,7 @@ export default function MenuBar(): React.JSX.Element | null {
           the user tracked, and a client holding it quietly looks exactly like
           one that lost it. Retrying is what every other read here already
           does, so the row simply refreshes. */}
-      {pending > 0 || foreign > 0 ? (
+      {pending > 0 || foreign > 0 || (data?.held ?? 0) > 0 ? (
         <MenuBarExtra.Section title="Not synced">
           {pending > 0 ? (
             <MenuBarExtra.Item
@@ -421,6 +422,14 @@ export default function MenuBar(): React.JSX.Element | null {
               }
               subtitle="Kept, never sent from here — open the Timer to review"
               icon={Icon.Person}
+              onAction={openTimer}
+            />
+          ) : null}
+          {(data?.held ?? 0) > 0 ? (
+            <MenuBarExtra.Item
+              title={heldCopy(data?.held ?? 0, data?.heldReason ?? null).title}
+              subtitle="Kept — open the Timer to review"
+              icon={Icon.Hourglass}
               onAction={openTimer}
             />
           ) : null}

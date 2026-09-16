@@ -8,6 +8,15 @@ export const popup: Translation<typeof source> = {
     label: "Arbeitsbereich",
     heldTitle: "{count, plural, one {# Änderung} other {# Änderungen}} nicht gesendet",
     heldHint: "In einem Arbeitsbereich in die Warteschlange gestellt, zu dem dein Konto nicht mehr gehört. Sie werden an keinen anderen Arbeitsbereich gesendet. Bitte einen Inhaber, dich wieder hinzuzufügen, um sie zu synchronisieren, oder verwirf sie hier.",
+    waitingNewer: {
+      title: "{count, plural, one {# Änderung wartet} other {# Änderungen warten}} auf eine neuere Version",
+      hint: "Eine neuere Version der Erweiterung hat diese Änderungen erstellt. Diese Version kann sie nicht lesen, deshalb werden sie nicht gesendet. Aktualisiere die Erweiterung, um sie zu synchronisieren, oder verwirf sie hier.",
+    },
+    waitingServer: {
+      title: "{count, plural, one {# Änderung wird} other {# Änderungen werden}} von deinem Server noch nicht unterstützt",
+      hint: "Dein Server unterstützt diese Änderungen noch nicht. Bitte deinen Admin, ihn zu aktualisieren – danach werden sie gesendet. Oder verwirf sie hier.",
+    },
+    discardHintWaiting: "Damit löschst du Arbeit, die kein Server erhalten hat. Sie lässt sich nicht wiederherstellen.",
     leftWorkspace: "einen verlassenen Arbeitsbereich",
     untitled: "(ohne Beschreibung)",
     discard: "Verwerfen",

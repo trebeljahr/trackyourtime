@@ -12,7 +12,7 @@
 
 import { createId } from "./ids.js";
 import type { IdleWatcher } from "./idle.js";
-import type { QueuedMutation } from "./offline-queue.js";
+import type { HoldReason, QueuedMutation } from "./offline-queue.js";
 import type { EntrySource } from "@starter/shared";
 
 export const OFFLINE_QUEUE_STORAGE_KEY = "trackyourtime.offline-queue";
@@ -163,9 +163,11 @@ const readStored = (payload: unknown): StoredOfflinePayload | null => {
 };
 
 /**
- * Narrow a raw queue row back into a typed mutation. Returns null for rows
- * written by an older build — a stale row must be dropped, never replayed
- * blind against a schema it no longer matches.
+ * Narrow a raw queue row back into a typed mutation. Returns null for a row
+ * this build cannot read — an op a newer build added, or a payload in a shape
+ * it does not know. Such a row is never replayed blind, and never dropped
+ * either: it is held `unknown-op` (`holdReasonOf`) until a build that can read
+ * it runs, or a person discards it.
  */
 export const decodeOfflineMutation = (
   mutation: QueuedMutation
@@ -231,6 +233,90 @@ const decodeOp = (
         input: stored.input as OfflineDiscardInput,
       };
   }
+};
+
+// ── held rows ────────────────────────────────────────────────────────
+
+/**
+ * How long a hold that can end on the server's side waits before a flush asks
+ * again. A self-hosted server is upgraded on its admin's schedule, not ours,
+ * and asking on every flush would send the same doomed request on every
+ * socket reconnect.
+ */
+export const HELD_RETRY_MS = 60 * 60 * 1000;
+
+/**
+ * When each hold may end. A new reason must pick one — the `Record` makes
+ * forgetting a type error.
+ *
+ * - `new-build`: nothing this build can do ends it. Never replayed here.
+ * - `server`: the server may change. Asked again after `HELD_RETRY_MS`, or
+ *   sooner when the caller says so (a launch, a resume).
+ */
+export const HOLD_RELEASE: Readonly<Record<HoldReason, "new-build" | "server">> = {
+  "unknown-op": "new-build",
+  "unknown-procedure": "server",
+};
+
+/**
+ * The temp id a row's payload carries, read without decoding — so a row this
+ * build cannot read still chains to the rows that depend on it.
+ */
+export const tempIdOf = (row: Pick<QueuedMutation, "payload">): string | undefined => {
+  if (typeof row.payload !== "object" || row.payload === null) return undefined;
+  const { tempId } = row.payload as { tempId?: unknown };
+  return typeof tempId === "string" && tempId.length > 0 ? tempId : undefined;
+};
+
+/** Why this row on its own is held, or null. Chains are `heldReasons`. */
+export const holdReasonOf = (row: QueuedMutation): HoldReason | null => {
+  if (row.hold?.reason === "unknown-op") return "unknown-op";
+  if (decodeOfflineMutation(row) === null) return "unknown-op";
+  return row.hold?.reason ?? null;
+};
+
+/**
+ * True when a flush must not send `row` now.
+ *
+ * `retryHeld` asks again whatever the clock says — for the first flush after a
+ * launch or a resume, the moments a server upgrade is most likely to have
+ * happened unobserved.
+ */
+export const holdBlocksReplay = (
+  row: QueuedMutation,
+  options: { now?: number; retryHeld?: boolean } = {}
+): boolean => {
+  const reason = holdReasonOf(row);
+  if (reason === null) return false;
+  if (HOLD_RELEASE[reason] === "new-build") return true;
+  if (options.retryHeld === true) return false;
+  const at = Date.parse(row.hold?.at ?? "");
+  if (Number.isNaN(at)) return false;
+  return (options.now ?? Date.now()) - at < HELD_RETRY_MS;
+};
+
+/**
+ * Every held row in `rows` and why, following temp-id chains in queue order:
+ * a stop whose start is held is held with it, for the start's reason, because
+ * replaying it alone would end whatever is running on the server.
+ *
+ * `rows` should be the rows one account may send; another account's chain is
+ * its own business.
+ */
+export const heldReasons = (
+  rows: readonly QueuedMutation[]
+): Map<string, HoldReason> => {
+  const held = new Map<string, HoldReason>();
+  const chains = new Map<string, HoldReason>();
+  for (const row of rows) {
+    const link = tempIdOf(row);
+    const reason =
+      holdReasonOf(row) ?? (link === undefined ? null : chains.get(link) ?? null);
+    if (reason === null) continue;
+    held.set(row.id, reason);
+    if (link !== undefined && !chains.has(link)) chains.set(link, reason);
+  }
+  return held;
 };
 
 // ── replay ───────────────────────────────────────────────────────────
@@ -312,6 +398,11 @@ export type QueuedMutationSummary = {
    * never collapsed into a guessed name.
    */
   workspaceName: string | null;
+  /**
+   * Why the row is held, when it is — the row's own reason only. A client
+   * listing a chain passes the chain's reason through `heldReasons`.
+   */
+  hold: HoldReason | null;
 };
 
 /** Workspace id → name, for the workspaces the caller still knows about. */
@@ -330,6 +421,7 @@ export const describeQueuedMutation = (
         : workspaceName(workspaceId),
   };
   const decoded = decodeOfflineMutation(row);
+  const hold = holdReasonOf(row);
   if (decoded === null) {
     return {
       queueId: row.id,
@@ -338,15 +430,17 @@ export const describeQueuedMutation = (
       at: row.createdAt,
       server: row.server ?? null,
       ...workspace,
+      hold,
     };
   }
   const input = decoded.input as { description?: string; start?: string };
   return {
     queueId: row.id,
     op: decoded.op,
-    description: input.description ?? null,
-    at: input.start ?? row.createdAt,
+    description: typeof input.description === "string" ? input.description : null,
+    at: typeof input.start === "string" ? input.start : row.createdAt,
     server: row.server ?? null,
     ...workspace,
+    hold,
   };
 };

@@ -30,7 +30,12 @@ import {
   type ProjectWithStats,
   type StartedEntry,
 } from "./lib/api.js";
-import { discardForeign, listForeign } from "./lib/offline.js";
+import {
+  discardForeign,
+  heldCopy,
+  listForeign,
+  type KeptKind,
+} from "./lib/offline.js";
 import { isLocalEntry } from "./lib/overlay.js";
 import {
   formatClock,
@@ -205,6 +210,7 @@ export default function Timer(): React.JSX.Element {
   const recent = data?.recent ?? [];
   const workspaces = data?.workspaces ?? [];
   const left = data?.left ?? 0;
+  const held = data?.held ?? 0;
   const runningWorkspaceName = data?.runningWorkspaceName ?? null;
 
   /**
@@ -216,9 +222,9 @@ export default function Timer(): React.JSX.Element {
    * than saying nothing. The confirmation lists the work rather than counting
    * it, because "discard 3 changes" is not a decision anybody can make.
    */
-  const discardForeignWork = (): void => {
+  const discardForeignWork = (kind: KeptKind = "foreign"): void => {
     void (async () => {
-      const rows = await listForeign();
+      const rows = await listForeign(kind);
       if (rows.length === 0) {
         revalidate();
         return;
@@ -258,7 +264,7 @@ export default function Timer(): React.JSX.Element {
       });
       if (!confirmed) return;
 
-      const dropped = await discardForeign();
+      const dropped = await discardForeign(kind);
       revalidate();
       await showToast({
         style: Toast.Style.Success,
@@ -397,7 +403,7 @@ export default function Timer(): React.JSX.Element {
 
       {/* Stated rather than hidden: what is queued is time the user tracked,
           and a client holding it quietly looks like one that lost it. */}
-      {pending > 0 || foreign > 0 ? (
+      {pending > 0 || foreign > 0 || held > 0 ? (
         <List.Section title="Not synced">
           {pending > 0 ? (
             <List.Item
@@ -440,7 +446,29 @@ export default function Timer(): React.JSX.Element {
                     title="Discard Them…"
                     icon={Icon.Trash}
                     style={Action.Style.Destructive}
-                    onAction={discardForeignWork}
+                    onAction={() => discardForeignWork("foreign")}
+                  />
+                  {commonActions}
+                </ActionPanel>
+              }
+            />
+          ) : null}
+          {held > 0 ? (
+            <List.Item
+              icon={{ source: Icon.Hourglass, tintColor: Color.SecondaryText }}
+              {...heldCopy(held, data?.heldReason ?? null)}
+              actions={
+                <ActionPanel>
+                  <Action
+                    title="Try Again"
+                    icon={Icon.ArrowClockwise}
+                    onAction={revalidate}
+                  />
+                  <Action
+                    title="Discard Them…"
+                    icon={Icon.Trash}
+                    style={Action.Style.Destructive}
+                    onAction={() => discardForeignWork("held")}
                   />
                   {commonActions}
                 </ActionPanel>

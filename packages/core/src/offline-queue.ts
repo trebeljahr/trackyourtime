@@ -51,7 +51,75 @@ export type QueuedMutation = {
    * (`adoptUnstampedWorkspace`).
    */
   workspaceId?: string;
+  /**
+   * Why a replay put this row aside instead of sending or dropping it, and
+   * when. Written only for holds that can end on their own — the server gained
+   * the procedure — so a flush knows when to ask again (`holdBlocksReplay` in
+   * `offline-ops.ts`). A row this build cannot decode is never stamped: that
+   * hold is recomputed on every read, which is what releases it the moment a
+   * newer build that understands it is installed.
+   *
+   * Optional forever, like every other stamp.
+   */
+  hold?: QueuedHold;
 };
+
+/**
+ * Why a queued row is held: kept, counted, described, never replayed and
+ * never deleted until the condition may have changed or a person discards it.
+ *
+ * A union on purpose, and meant to grow — a server that is too old for a
+ * row's API level is the next reason. Every client switches on it to choose
+ * the words, so a new member is a type error everywhere it needs a sentence.
+ *
+ * - `unknown-op`: this build cannot decode the row. A newer build wrote it,
+ *   or the queue itself is in a newer format (`QUEUE_FORMAT_VERSION`).
+ * - `unknown-procedure`: the server answered that it has no such procedure —
+ *   a newer client replaying against an older self-hosted server.
+ */
+export type HoldReason = "unknown-op" | "unknown-procedure";
+
+export type QueuedHold = {
+  reason: HoldReason;
+  /** When the hold was last confirmed — the clock a retry is measured from. */
+  at: string;
+};
+
+/**
+ * What a flush runner may answer instead of resolving (sent, drop the row) or
+ * throwing (stop, keep this row and everything behind it).
+ */
+export type FlushVerdict = { hold: HoldReason };
+
+/**
+ * The format `createOfflineQueue` writes: `{ v, data: rows }`, the same
+ * envelope as `versioned-storage.ts`. Not read through `decodeVersioned`,
+ * whose answer to a newer version is a miss: here that would be an empty
+ * queue, overwritten by the next enqueue. See docs/versioning.md, rule 4.
+ */
+export const QUEUE_FORMAT_VERSION = 1;
+
+/**
+ * Where an unreadable stored queue is copied before the queue is reset. The
+ * timestamp keeps a second corruption from overwriting the first copy.
+ */
+export const corruptQueueKey = (key: string, at: number): string =>
+  `${key}.corrupt.${at}`;
+
+/**
+ * Raised by a write to a queue stored in a format newer than this build knows.
+ * Writing would replace rows this build cannot even read with rows a newer
+ * build would then misread — so nothing is written, and the caller hears so.
+ */
+export class OfflineQueueLockedError extends Error {
+  readonly version: number;
+
+  constructor(version: number) {
+    super(`Offline queue is stored in format v${version}, newer than this build`);
+    this.name = "OfflineQueueLockedError";
+    this.version = version;
+  }
+}
 
 export type OfflineQueue = {
   enqueue(
@@ -105,9 +173,13 @@ export type OfflineQueue = {
    * rejects is neither run nor dropped: it keeps its place in the queue and
    * is counted in `skipped`. That is what lets one device hold another
    * account's queued work without either replaying it or destroying it.
+   *
+   * A runner that answers a `FlushVerdict` holds its row: kept in place,
+   * stamped with the hold, counted in `skipped` and `held`, and the flush
+   * carries on. Whatever shares its chain (`options.chainOf`) is held with it.
    */
   flush(
-    runner: (mutation: QueuedMutation) => Promise<void>,
+    runner: (mutation: QueuedMutation) => Promise<void | FlushVerdict>,
     options?: FlushOptions
   ): Promise<FlushResult>;
 };
@@ -115,16 +187,44 @@ export type OfflineQueue = {
 export type FlushOptions = {
   /** Rows this predicate rejects stay queued, untouched and unreplayed. */
   filter?: (mutation: QueuedMutation) => boolean;
+  /**
+   * Rows that must stand or fall together — a start and the stop that ends it
+   * share a temp id. Once one row of a chain is not run (filtered, or held),
+   * no later row of that chain is run either: a stop replayed without its
+   * start would end whatever happens to be running on the server.
+   */
+  chainOf?: (mutation: QueuedMutation) => string | undefined;
 };
 
 export type FlushResult = {
   flushed: number;
   remaining: number;
-  /** Rows the filter held back. They are part of `remaining`. */
+  /**
+   * Rows the flush left in place without stopping: filtered, held, or chained
+   * to one of those. They are part of `remaining`, and nothing a flush does
+   * will send them, so they are never "ahead of" a new mutation.
+   */
   skipped: number;
+  /** Of `skipped`, the rows this flush held (a verdict, or its chain). */
+  held: number;
   /** The mutation that failed, if the flush stopped early. */
   failed?: QueuedMutation;
   error?: unknown;
+};
+
+/**
+ * Holds that are written onto a row. `unknown-op` is not among them: it is a
+ * fact about the build reading the row, recomputed on every read, and a stored
+ * copy would outlive the upgrade that ends it.
+ */
+const STORED_HOLD_REASONS: readonly string[] = ["unknown-procedure"];
+
+const readHold = (value: unknown): QueuedHold | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { reason, at } = value as { reason?: unknown; at?: unknown };
+  if (typeof reason !== "string" || !STORED_HOLD_REASONS.includes(reason)) return undefined;
+  if (typeof at !== "string") return undefined;
+  return { reason: reason as HoldReason, at };
 };
 
 const isQueuedMutation = (value: unknown): value is QueuedMutation => {
@@ -155,10 +255,12 @@ const normalize = (mutation: QueuedMutation): QueuedMutation => {
     typeof mutation.workspaceId === "string" && mutation.workspaceId.length > 0
       ? mutation.workspaceId
       : undefined;
+  const hold = mutation.hold === undefined ? undefined : readHold(mutation.hold);
   if (
     owner === mutation.owner &&
     server === mutation.server &&
-    workspaceId === mutation.workspaceId
+    workspaceId === mutation.workspaceId &&
+    hold === mutation.hold
   ) {
     return mutation;
   }
@@ -167,6 +269,9 @@ const normalize = (mutation: QueuedMutation): QueuedMutation => {
   // exactly as it was stored.
   if (workspaceId === undefined) delete normalized.workspaceId;
   else normalized.workspaceId = workspaceId;
+  // A hold this build does not recognise is no hold: the replay decides again.
+  if (hold === undefined) delete normalized.hold;
+  else normalized.hold = hold;
   return normalized;
 };
 
@@ -307,26 +412,87 @@ export const createOfflineQueue = ({
   storage: KeyValueStorage;
   key?: string;
 }): OfflineQueue => {
+  /**
+   * Set when the stored queue is in a format newer than this build — a
+   * downgrade, or a newer client sharing the store. Its rows are listed as
+   * held `unknown-op` and nothing is ever written back over them.
+   */
+  let lockedVersion: number | null = null;
+
+  const readRows = (parsed: unknown): unknown[] | null => {
+    // The format before the envelope: a bare array, still read as v1.
+    if (Array.isArray(parsed)) return parsed;
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const { v, data } = parsed as { v?: unknown; data?: unknown };
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 1) return null;
+    if (!Array.isArray(data)) return null;
+    return data;
+  };
+
   const read = async (): Promise<QueuedMutation[]> => {
     const raw = await storage.getItem(key);
+    lockedVersion = null;
     if (!raw) return [];
+    let parsed: unknown;
+    let rows: unknown[] | null = null;
     try {
-      const parsed: unknown = JSON.parse(raw);
-      return Array.isArray(parsed)
-        ? parsed.filter(isQueuedMutation).map(normalize)
-        : [];
+      parsed = JSON.parse(raw);
+      rows = readRows(parsed);
     } catch {
-      // Corrupt payload — better to drop the queue than to wedge the app.
+      rows = null;
+    }
+
+    if (rows === null) {
+      // Unreadable. Resetting is still right — a wedged queue would stop every
+      // future offline mutation — but the raw value is somebody's tracked time
+      // in a shape we failed to read, so it is copied aside first rather than
+      // overwritten by the next enqueue.
+      const copy = corruptQueueKey(key, Date.now());
+      await storage.setItem(copy, raw);
+      await storage.removeItem(key);
+      console.warn(
+        `[offline-queue] unreadable queue under "${key}" copied to "${copy}" and reset`
+      );
       return [];
     }
+
+    const version =
+      Array.isArray(parsed) ? 1 : (parsed as { v: number }).v;
+    const mutations = rows.filter(isQueuedMutation).map(normalize);
+    if (version > QUEUE_FORMAT_VERSION) {
+      lockedVersion = version;
+      return mutations.map((row) => ({
+        ...row,
+        hold: { reason: "unknown-op", at: row.createdAt },
+      }));
+    }
+    return mutations;
   };
 
   const write = async (mutations: QueuedMutation[]): Promise<void> => {
+    if (lockedVersion !== null) throw new OfflineQueueLockedError(lockedVersion);
     if (mutations.length === 0) {
       await storage.removeItem(key);
       return;
     }
-    await storage.setItem(key, JSON.stringify(mutations));
+    await storage.setItem(
+      key,
+      JSON.stringify({ v: QUEUE_FORMAT_VERSION, data: mutations })
+    );
+  };
+
+  /**
+   * Housekeeping writes — adoption, a sign-out's clear — on a locked queue do
+   * nothing rather than fail: refusing them must not break a sign-out, and
+   * skipping them loses nothing that is this build's to keep.
+   */
+  const bestEffort = async (task: () => Promise<number>): Promise<number> => {
+    try {
+      return await task();
+    } catch (error) {
+      if (error instanceof OfflineQueueLockedError) return 0;
+      throw error;
+    }
   };
 
   // Serialize access so two concurrent enqueues can't clobber each other
@@ -369,10 +535,17 @@ export const createOfflineQueue = ({
         await write(mutations.filter((m) => m.id !== id));
       }),
 
-    clear: () => serial(async () => write([])),
+    clear: () =>
+      serial(async () => {
+        await read();
+        await bestEffort(async () => {
+          await write([]);
+          return 0;
+        });
+      }),
 
     adoptUnowned: (owner, where) =>
-      serial(async () => {
+      serial(() => bestEffort(async () => {
         const mutations = await read();
         // `where` keeps an account from claiming rows it could never have
         // made: an account on one server adopting a row queued against another.
@@ -382,10 +555,10 @@ export const createOfflineQueue = ({
         if (unowned.length === 0) return 0;
         await write(mutations.map((m) => (claimable(m) ? { ...m, owner } : m)));
         return unowned.length;
-      }),
+      })),
 
     adoptUnserved: (server) =>
-      serial(async () => {
+      serial(() => bestEffort(async () => {
         const mutations = await read();
         const unserved = mutations.filter((m) => m.server === undefined);
         if (unserved.length === 0) return 0;
@@ -393,10 +566,10 @@ export const createOfflineQueue = ({
           mutations.map((m) => (m.server === undefined ? { ...m, server } : m))
         );
         return unserved.length;
-      }),
+      })),
 
     adoptUnstampedWorkspace: (workspaceId, where) =>
-      serial(async () => {
+      serial(() => bestEffort(async () => {
         const mutations = await read();
         const next = adoptUnstampedWorkspace(mutations, workspaceId, where);
         const adopted = next.filter(
@@ -405,40 +578,84 @@ export const createOfflineQueue = ({
         if (adopted === 0) return 0;
         await write(next);
         return adopted;
-      }),
+      })),
 
     flush: (runner, options) =>
       serial(async () => {
         const mutations = await read();
+        const locked = lockedVersion !== null;
         const wanted = options?.filter ?? (() => true);
-        // Rows the filter held back, in order, so they can be written back
-        // ahead of whatever is still unprocessed when a flush stops early.
+        const chainOf = options?.chainOf ?? (() => undefined);
+        // Rows left in place, in order, so they can be written back ahead of
+        // whatever is still unprocessed when a flush stops early.
         const kept: QueuedMutation[] = [];
+        // Chains with a row that was not run, and whether that row was held:
+        // nothing later in them may run.
+        const stranded = new Map<string, boolean>();
         let flushed = 0;
+        let held = 0;
+        let changed = false;
+
+        const leave = (mutation: QueuedMutation, asHeld: boolean): void => {
+          kept.push(mutation);
+          const link = chainOf(mutation);
+          if (link !== undefined && !stranded.get(link)) stranded.set(link, asHeld);
+        };
 
         for (const [index, mutation] of mutations.entries()) {
-          if (!wanted(mutation)) {
-            kept.push(mutation);
+          if (locked || !wanted(mutation)) {
+            leave(mutation, false);
             continue;
           }
+          const link = chainOf(mutation);
+          if (link !== undefined && stranded.has(link)) {
+            const heldChain = stranded.get(link) === true;
+            leave(mutation, heldChain);
+            if (heldChain) held += 1;
+            continue;
+          }
+          let verdict: void | FlushVerdict;
           try {
-            await runner(mutation);
-            flushed += 1;
+            verdict = await runner(mutation);
           } catch (error) {
             const remaining = [...kept, ...mutations.slice(index)];
-            await write(remaining);
+            if (!locked && (changed || flushed > 0)) await write(remaining);
             return {
               flushed,
               skipped: kept.length,
+              held,
               remaining: remaining.length,
               failed: mutation,
               error,
             };
           }
+          if (verdict !== undefined && verdict !== null && "hold" in verdict) {
+            held += 1;
+            if (!STORED_HOLD_REASONS.includes(verdict.hold)) {
+              leave(mutation, true);
+              continue;
+            }
+            leave(
+              {
+                ...mutation,
+                hold: { reason: verdict.hold, at: new Date().toISOString() },
+              },
+              true
+            );
+            changed = true;
+            continue;
+          }
+          flushed += 1;
+          changed = true;
         }
 
-        await write(kept);
-        return { flushed, skipped: kept.length, remaining: kept.length };
+        if (!locked && changed) await write(kept);
+        return {
+          flushed,
+          skipped: kept.length,
+          held,
+          remaining: kept.length,
+        };
       }),
   };
 };
