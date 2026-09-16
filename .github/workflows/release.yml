@@ -181,6 +181,18 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Releasing $version at $sha (push=$PUSH, latest=$latest, minor=${minor:-none})"
 
+      # The version number must say what changed: a new API level or a
+      # migration is at least a minor release, a raised API-level floor or a
+      # migration the previous release cannot read is a major one, and the
+      # CHANGELOG and release notes must exist. Before any build, so a tag that
+      # understates its changes publishes nothing. A dry run has no version to
+      # check. See docs/versioning.md → Release numbers.
+      - name: Check the version bump against API and schema changes
+        if: steps.resolve.outputs.push == 'true'
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: node scripts/release-policy-check.mjs "$VERSION" HEAD
+
   release-server:
     needs: [prepare]
     runs-on: ${{ matrix.runner }}

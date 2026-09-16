@@ -238,7 +238,70 @@ web banner renders nothing in the prerender and on the hydrating render
 the extension's `setServer`) refuse a server in either state, beside the
 `originTrusted` check.
 
-### The release version
+## Release numbers
+
+A release is a `vX.Y.Z` tag (`docs/releasing.md`). Its number says what a
+server or client of the previous release can expect from it:
+
+| Bump | Allowed changes |
+| --- | --- |
+| **Patch** `X.Y.Z+1` | No change to `API_LEVEL` and no new migration (`SCHEMA_VERSION` unchanged). Fixes, copy, UI that needs nothing new from the other side. |
+| **Minor** `X.Y+1.0` | `API_LEVEL` raised, and/or migrations every earlier release can still read: each new migration's `minReaderSchema` is at or below the previous release's `SCHEMA_VERSION`. |
+| **Major** `X+1.0.0` | `MIN_CLIENT_API_LEVEL` or `MIN_SERVER_API_LEVEL` raised, or a migration whose `minReaderSchema` is above the previous release's `SCHEMA_VERSION`, so rolling back needs the dump. |
+
+While the major number is 0, a minor bump is the breaking bump (semver §4): a
+change that needs a major bump ships as `0.Y+1.0`.
+
+`scripts/release-policy-check.mjs` enforces the table. `release.yml`'s `prepare`
+job runs it on every tag before anything is built. It compares the tag with the
+newest stable `v*` tag below it, reads the three constants and the migration
+files at both, and fails when the bump is smaller than the changes need, when
+`API_LEVEL` or `SCHEMA_VERSION` went down, or when the written record is
+missing (see the checklist in `docs/releasing.md`). A release from before a
+constant existed reads it as 0.
+
+### Support windows
+
+- **A server serves clients down to `MIN_CLIENT_API_LEVEL`.** It is raised only
+  in a major release. A client that declares no level at all (from before the
+  handshake) is always served.
+- **Clients work with servers down to `MIN_SERVER_API_LEVEL`.** It is raised
+  only in a major release too, and never past the level of the oldest release
+  self-hosters are told they can stay on.
+- Every release between the floor and today is inside the window. Both
+  directions are exercised on every pull request by `.github/workflows/compat.yml`:
+  the current clients against the previous release's server, and the previous
+  release's clients against the current server.
+
+### Cross-version CI
+
+`compat.yml` runs the compatibility suite in `packages/core/src/compat/` in
+both directions against the newest stable `v*` tag:
+
+1. **New client, old server.** It pulls that tag's server image anonymously,
+   starts it with MongoDB and Redis from that tag's
+   `docker-compose.selfhost.yml`, and runs this checkout's suite.
+2. **Old client, new server.** It builds this checkout's server image, starts
+   it the same way, checks the tag out into a subdirectory, builds only
+   `@starter/shared` and `@starter/core` there, and runs that tag's suite.
+
+The suite signs up a fresh account, starts, stops and creates entries, then
+flushes an offline queue that includes a row for a procedure no server has.
+It asserts that the row is held, never dropped, and that the rest of the queue
+applied. When the server refuses the suite's API level (`CLIENT_TOO_OLD`), it
+asserts the refusal instead and that every queued row is still there.
+
+Each direction skips with a notice, not a failure, while no tag exists, and
+the second one while no tag contains the suite yet. Every run uses its own
+compose project, and so its own database volume.
+
+**The entry point is a contract with future releases.** A later release runs
+this tag's suite exactly as `node packages/core/dist/compat/run.js`, with the
+server origin in `COMPAT_API_URL`, after `pnpm --filter @starter/core... run
+build`. Exit status 0 is a pass. Never move that file or change how it is
+configured; add to the suite instead.
+
+## The release version
 
 The root `package.json` `version` is the single source of truth.
 

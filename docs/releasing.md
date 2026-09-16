@@ -22,7 +22,7 @@ A tag runs no other workflow. `desktop-release.yml`, `mobile-release.yml` and
 
 | Job | Result |
 |---|---|
-| `prepare` | Resolves the version, the commit, and whether `X.Y` and `latest` may move. |
+| `prepare` | Resolves the version, the commit, and whether `X.Y` and `latest` may move. Fails a tag whose version bump understates its API or schema changes (see [Checklist](#checklist)). |
 | `release-server`, `release-client-selfhost` | Build each image on a native amd64 and a native arm64 runner and push them by digest, with no tag. |
 | `merge` | Joins the two digests into one multi-arch image and pushes the exact tag, `vX.Y.Z`. |
 | `smoke` | On amd64 and arm64, with no registry login: pulls `vX.Y.Z`, starts `docker-compose.selfhost.yml` from the tagged commit, and checks `/api/health`, `/` and `/api/auth/get-session`. |
@@ -37,6 +37,33 @@ Tag rules:
 
 The server image reports its commit in `/api/health` as `commit`, and as
 `version` for older readers.
+
+## Checklist
+
+`prepare` runs `scripts/release-policy-check.mjs` and fails the tag, before
+anything is built, when one of the checked items is wrong. Go through the list
+before tagging:
+
+- [ ] **The number matches the changes** (`docs/versioning.md` → Release
+  numbers). Patch: no `API_LEVEL` change and no new migration. Minor: a new
+  API level or migrations older releases can read. Major (minor while the major
+  is 0): a raised `MIN_CLIENT_API_LEVEL` / `MIN_SERVER_API_LEVEL`, or a
+  migration with a `minReaderSchema` above the previous release's schema.
+  *Checked.*
+- [ ] **Every new API level has an `API_LEVEL_CHANGES` row**, and its `release`
+  is this version, e.g. `"0.2.0"`. *Checked.*
+- [ ] **The API contract snapshot is current.** `pnpm test:unit` passes on the
+  tagged commit.
+- [ ] **The release notes exist** at `docs/release-notes/vX.Y.Z.md`. *Checked.*
+  When the release adds migrations they say so, and what each one does.
+  *Checked.* When a migration raises `minReaderSchema` they also contain the
+  sentence "Rollback requires restoring your dump." *Checked.*
+- [ ] **`CHANGELOG.md` has a dated `## [X.Y.Z]` section.** *Checked.*
+- [ ] **`compat.yml` is green on `main`**: the current clients against the
+  previous release's server, and the reverse.
+
+Prereleases (`vX.Y.Z-rc.N`) are checked for the bump and the API-level rows
+only.
 
 ## Steps
 
