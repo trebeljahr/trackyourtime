@@ -23,13 +23,6 @@ build/icon.icns
 build/icon.ico
 build/icons/
 
-# Tauri build output (source is src-tauri/; target/ and gen/ are generated)
-src-tauri/target/
-src-tauri/gen/
-# macOS-style global gitignores often contain `Icon?`, which also matches
-# the src-tauri/icons/ directory — re-include the Tauri icon set explicitly.
-!src-tauri/icons/
-
 # Release signing material. CI decodes ANDROID_KEYSTORE_BASE64 to this path
 # (.github/workflows/mobile-release.yml) and android/app/build.gradle signs with
 # it when it is present — so on a developer machine it is a real upload key

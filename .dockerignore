@@ -45,7 +45,6 @@ docs-site/build
 # Native shells and their toolchain output.
 ios
 android
-src-tauri/target
 
 # Test and tooling artifacts.
 playwright-report

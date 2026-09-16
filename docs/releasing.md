@@ -141,7 +141,7 @@ only.
    anonymously and list both arches.
 
 6. **Check nothing else ran.** Actions should show one `release` run and one
-   `Extension Release` run for the tag, and no desktop, mobile or tauri runs.
+   `Extension Release` run for the tag, and no desktop or mobile runs.
    With the store secrets set, the extension run has submitted the new version
    for review. Without them it is green with the notice "store upload
    skipped".

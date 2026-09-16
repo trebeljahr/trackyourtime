@@ -68,7 +68,7 @@ RUN test -n "$NEXT_PUBLIC_API_URL" \
 
 # The docs, at https://trackyourtime.dev/docs/. Built here and not in the
 # client's own `build` script, because that script also feeds the Electron,
-# Tauri and E2E builds, none of which should carry them. The script exits
+# Capacitor and E2E builds, none of which should carry them. The script exits
 # non-zero if any page would ship noindex or a canonical link to another host.
 # No git in this stage and no .git in the context: the docs sitemap therefore
 # carries no lastmod (docs-site/docusaurus.config.ts explains).

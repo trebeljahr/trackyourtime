@@ -5,6 +5,10 @@ allowBuilds:
   '@sentry/cli': true
   core-js: true
   core-js-pure: true
+  # Electron's postinstall downloads the platform binary into
+  # node_modules/electron/dist. Without it `electron` and Playwright's
+  # `_electron.launch` find no executable on a fresh install.
+  electron: true
   electron-winstaller: true
   esbuild: true
   sharp: true

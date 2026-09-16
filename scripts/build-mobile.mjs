@@ -460,9 +460,6 @@ step(`Building the mobile export against ${apiUrl}`);
 run("pnpm", ["build:client"], {
   // Its own output directory (see the header): never the web/E2E `out`.
   NEXT_DIST_DIR: MOBILE_OUT_DIR,
-  // Capacitor resolves assets root-absolutely, so the relative prefix the
-  // Electron/Tauri builds need would blank the screen here. Never inherit it.
-  RELATIVE_ASSET_PREFIX: "",
   NEXT_PUBLIC_API_URL: apiUrl,
 });
 
@@ -488,8 +485,8 @@ const relativeRefs = htmlFiles.filter((f) => readFileSync(f, "utf8").includes('"
 if (relativeRefs.length) {
   fail(
     'Emitted HTML references "./_next" — Capacitor resolves assets from the bundle\n' +
-      "  root, so a relative prefix 404s on every route but /. Is RELATIVE_ASSET_PREFIX\n" +
-      `  leaking into this build?\n${relativeRefs.slice(0, 5).map((f) => `    ${f}`).join("\n")}`,
+      "  root, so a relative prefix 404s on every route but /. Did an assetPrefix\n" +
+      `  get into next.config.ts?\n${relativeRefs.slice(0, 5).map((f) => `    ${f}`).join("\n")}`,
   );
 }
 console.log(`    ${htmlFiles.length} HTML files, all root-absolute`);

@@ -14,7 +14,7 @@ import { useT } from "@/i18n/use-t";
  *   disabled, which is also exactly what the prerendered HTML shows.
  * - `unconfigured`: this server has no Google client id and secret.
  * - `shell`: a native or desktop shell. The OAuth redirect returns to the
- *   web origin, and `capacitor://localhost` or an Electron/Tauri window can
+ *   web origin, and `capacitor://localhost` or the Electron window (`app://-`) can
  *   never be that origin, so a sign-in started here could not come back.
  * - `enabled`: the web app, on a server with Google configured.
  */

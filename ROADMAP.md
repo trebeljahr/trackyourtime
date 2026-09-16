@@ -254,15 +254,6 @@ attention, on your own device, and nothing leaves it until you accept a
 suggested entry. Recording what a person types or sees, or sending activity to
 a colleague, is out of scope.
 
-### Tauri as a second desktop app
-
-`src-tauri/` is scaffolding inherited from the starter — a near-empty Rust
-entry point with a Steamworks feature block that has nothing to do with a time
-tracker (see the Clients table in [README.md](README.md#clients)). Do not treat
-it as a shipping target or invest in it. Electron is the desktop wrapper, and
-[`docs/desktop-app-plan.md`](docs/desktop-app-plan.md) asks whether to delete
-the Tauri files outright.
-
 ---
 
 ## Picking something up

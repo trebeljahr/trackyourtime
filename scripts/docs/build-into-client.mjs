@@ -7,8 +7,8 @@
  *   pnpm build:web                                   # the same two steps
  *
  * Run after the client build, never as part of it. `packages/client/out` is
- * written by the web build AND by Playwright (with a throwaway API port) AND
- * by the Electron/Tauri builds, and the Capacitor shells use `out-mobile`. Only
+ * written by the web build AND by Playwright (with a throwaway API port), and
+ * the Electron and Capacitor shells use `out-desktop` / `out-mobile`. Only
  * the web image wants the docs, so only `packages/client/Dockerfile` calls
  * this; `@starter/client`'s own `build` script stays docs-free.
  *

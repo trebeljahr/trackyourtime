@@ -10,17 +10,16 @@
  * hand-edited binaries nobody can regenerate. (They had: before this script
  * existed, every PNG below except the extension's was a flat #6366F1 square
  * with no mark in it at all — the starter placeholder, inherited by the
- * Electron, Tauri, Raycast and Capacitor builds in turn.)
+ * Electron, Raycast and Capacitor builds in turn.)
  *
  * The generated files are committed, because the toolchains that consume them
  * cannot rasterize an SVG themselves: Chrome's `icons` manifest key takes PNG
- * only, `tauri icon` and `capacitor-assets` take a PNG source, and Raycast
+ * only, `capacitor-assets` takes a PNG source, and Raycast
  * reads PNG from `assets/`.
  *
  * Run after any change to the mark:  pnpm run icons:brand
  * Then re-run the downstream generators that fan these out further:
  *   pnpm run icons:desktop   build/icon.png  -> icns + ico
- *   pnpm run icons:tauri     build/icon.png  -> src-tauri/icons/*
  *   pnpm run mobile:assets   resources/*.png -> ios/ + android/
  *
  * resources/ holds five inputs, all generated here: icon.png (the launcher
@@ -81,7 +80,7 @@ async function emit(relPath, buffer) {
  * Every square PNG target, and why it exists.
  *
  * Sizes are what each consumer asks for at its largest: the downstream
- * generators (icon-gen, `tauri icon`, capacitor-assets) produce the smaller
+ * generators (icon-gen, capacitor-assets) produce the smaller
  * variants from these, so there is no point committing those by hand.
  */
 const TARGETS = [
@@ -91,7 +90,7 @@ const TARGETS = [
   ["packages/extension/public/icons/48.png", 48],
   ["packages/extension/public/icons/128.png", 128],
   // electron-builder reads this directly for Linux, and `icons:desktop`
-  // derives icon.icns / icon.ico from it. `icons:tauri` reads it too.
+  // derives icon.icns / icon.ico from it.
   ["build/icon.png", 512],
   // Raycast's store listing and every command's icon.
   ["packages/raycast/assets/icon.png", 512],

@@ -151,16 +151,13 @@ pnpm run test:e2e                     # Playwright E2E tests
 pnpm run build                        # build all packages
 ```
 
-## Desktop (Electron or Tauri) + Mobile (Capacitor)
+## Desktop (Electron) + Mobile (Capacitor)
 
 All native targets wrap the Next.js client as a **static export** (`output: "export"`).
 The Express server is always remote — the client talks to it over HTTPS.
 
-There are two desktop wrappers — a project has at most one:
-
-- **Electron** (`desktop` feature) — the default for apps.
-- **Tauri** (`desktop-tauri` feature) — for games: much smaller binaries,
-  Steamworks integration via the Rust side. See `src-tauri/README.md`.
+Electron is the one desktop wrapper. The Tauri scaffold the starter shipped
+was deleted on 2026-09-16 (`docs/desktop-app-plan.md`, answer 5).
 
 ### Desktop (Electron)
 
@@ -181,29 +178,12 @@ Bundle config lives in root `package.json` `"build"` (electron-builder).
 `TRACKYOURTIME_ELECTRON_BACKGROUND=1` does that anywhere and also hides the
 macOS Dock icon, `=0` restores a normal `show()`. A packaged build sets
 neither, so users are unaffected. The same rule for the other shells:
-`pnpm dev:tauri:background` (window with `focus: false`), `IOS_HEADLESS=1
+`IOS_HEADLESS=1
 pnpm dev:ios` (simctl only; without it Simulator.app is opened with
 `open -g`), and `ANDROID_HEADLESS=1 pnpm dev:android` (emulator with
 `-no-window`). Screenshot with `simctl io` / `adb exec-out screencap`, never
 by bringing a window forward.
 Electron IPC bridge: `electron/preload.ts` exposes `window.electronAPI`.
-
-### Desktop (Tauri + Steamworks)
-
-Requires the Rust toolchain (https://rustup.rs).
-
-```bash
-pnpm dev:tauri                        # Next dev + Tauri window, HMR
-pnpm dev:tauri:background             # same, window never takes focus
-pnpm build:tauri                      # static export + native bundle (dmg/msi/AppImage)
-pnpm icons:tauri                      # regenerate src-tauri/icons/ from build/icon.png
-pnpm tauri build -- --features steam  # Steam-enabled build (needs Steamworks SDK redistributable)
-```
-
-Bundle config lives in `src-tauri/tauri.conf.json` (strict JSON — no
-comments; caveats documented in `src-tauri/README.md`). Steam init is
-gated behind the `steam` cargo feature in `src-tauri/src/main.rs` — set
-`STEAM_APP_ID` there before shipping.
 
 ### Mobile
 
@@ -309,7 +289,7 @@ run a bare `pnpm build:mobile` without failing on the half they never wanted.
 
 The mobile export has its own directory, `packages/client/out-mobile`, and
 `capacitor.config.ts` points `webDir` at it. `out/` is written by the web build,
-the Electron/Tauri shells AND Playwright (which bakes a throwaway 127.0.0.1 API
+and Playwright (which bakes a throwaway 127.0.0.1 API
 port), and `cap run` syncs implicitly — a shared directory means a test run can
 silently be installed as the app. Never run bare `cap sync` / `cap run ios`;
 `cap:run:*` and `build:ios:release` go through the script and then `--no-sync`.
@@ -569,10 +549,6 @@ says. `STORE_EXTENSION_ID` is recomputed from `STORE_EXTENSION_KEY` in
 Electron `file://` sends `Origin: null` and can't be trusted with
 credentials. Register a custom protocol in `electron/main.ts` and add
 it (e.g. `app://-`) instead.
-
-Tauri serves the bundled frontend from `tauri://localhost` (macOS/Linux)
-and `http://tauri.localhost` (Windows) — both must be in
-`TRUSTED_ORIGINS` for cookie auth to work.
 
 ### Choosing a server on the phone
 
@@ -905,8 +881,8 @@ Five rules, each of which fails quietly if broken:
 - **The Google button renders in every build and decides after mount**
   (`components/google-sign-in-button.tsx`): disabled in the prerendered HTML,
   enabled only on the web app when `health.check` reports
-  `authConfig.googleEnabled`, and disabled with a note in Capacitor, Electron
-  and Tauri, where the OAuth redirect cannot return to the shell's origin.
+  `authConfig.googleEnabled`, and disabled with a note in Capacitor and Electron,
+  where the OAuth redirect cannot return to the shell's origin.
 - **Some of these calls replace the caller's own session, and its socket
   still holds the old one.** better-auth's `changePassword` with
   `revokeOtherSessions`, and switching two-factor on (the first verify) or
@@ -2176,8 +2152,8 @@ merges same-host `caddy_0` sites and `handle_path` strips its prefix, the two
 reasons above. Four rules that fail quietly if broken:
 
 - **Never add the docs to `@starter/client`'s own `build` script.** `out/` is
-  also written by the Electron/Tauri builds and by Playwright, and the phones
-  use `out-mobile`; only the web image should carry the docs.
+  also written by Playwright, and the phones and the desktop app
+  use `out-mobile` / `out-desktop`; only the web image should carry the docs.
 - **The docs address is a literal, and indexing is always on.** The config
   used to read `DOCS_SITE_URL` and fall back to a placeholder that set
   `noIndex` — a forgotten variable would ship an unindexable site that looks
@@ -2636,7 +2612,7 @@ the root, because mailed links point at them. Three rules:
 - **A public page never redirects a signed-in visitor on the web.** The header's
   `AccountLinks` swaps "Log in" / "Create an account" for "Open the app" after
   mount (never during hydration). `ShellEntryRedirect` on the landing page
-  moves only Capacitor, Electron and Tauri on to `/app/track`, since all three
+  moves only Capacitor and Electron on to `/app/track`, since both
   load `index.html`, and it does not wait for a session.
 - **Old root addresses answer 308 in `serve.mjs`** (`/track` →
   `/app/track`, query kept) for bookmarks, sent emails and installed extension

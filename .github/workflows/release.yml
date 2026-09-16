@@ -38,7 +38,7 @@
 #
 # A `v*` tag runs THIS workflow and extension-release.yml (the Chrome Web Store
 # upload, which only uploads an artifact while its secrets are unset) and
-# nothing else. desktop-release.yml, mobile-release.yml and tauri-release.yml
+# nothing else. desktop-release.yml and mobile-release.yml
 # run on manual dispatch only (their `on:` blocks list what has to be true
 # before a tag trigger comes back), and build-and-deploy.yml runs on pushes to
 # main and on pull requests.

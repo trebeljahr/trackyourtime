@@ -30,11 +30,6 @@ indent_size = 2
 indent_style = space
 indent_size = 2
 
-# Rust in src-tauri/ indents by four, as rustfmt produces.
-[*.{rs,toml}]
-indent_style = space
-indent_size = 4
-
 # Two trailing spaces are a hard line break in Markdown, so trimming them
 # silently changes rendered output. Indentation is left unset: Markdown mixes
 # list continuation, fenced code and nested lists at widths an editor should

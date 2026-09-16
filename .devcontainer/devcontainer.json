@@ -31,7 +31,7 @@
 
   // pnpm is pinned by package.json "packageManager" (pnpm@11.1.2); corepack
   // installs exactly that version. The install is slow the first time —
-  // electron and @tauri-apps/cli download platform binaries in postinstall.
+  // electron downloads its platform binary in postinstall.
   "postCreateCommand": "corepack enable && pnpm install --frozen-lockfile",
 
   "forwardPorts": [

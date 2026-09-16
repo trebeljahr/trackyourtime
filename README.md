@@ -108,7 +108,6 @@ Everything is scoped to a workspace. A person can belong to several, and a works
 | **Raycast extension** (macOS) | Working. 5 commands — menu bar timer, Start / Stop Timer (hotkey-able, no window), a live timer view, Show All Time and Open Dashboard — with catalog CRUD through pushed forms and an offline queue (`packages/raycast/src/lib/offline.ts`). Not in the Raycast Store. |
 | **iOS and Android** (Capacitor) | Working from source. `ios/` and `android/` are committed, the bundle id is `com.trebeljahr.trackyourtime`, and `pnpm build:mobile` builds and syncs both. Keychain/Keystore session token, offline queue and running timer that survive an OS kill, safe areas, a bottom tab bar, and a server picker on the login screen. Not in the App Store or Google Play. See [`docs/mobile-app-plan.md`](docs/mobile-app-plan.md). |
 | **Desktop** (Electron) | Real but thin, and never packaged. Window lifecycle, persisted fullscreen preference, external-link handling and `powerMonitor`-backed idle reporting over IPC. No tray, no global shortcuts, no auto-update, no signing. [`docs/desktop-app-plan.md`](docs/desktop-app-plan.md) is the plan. |
-| **Desktop** (Tauri) | Scaffolding only — 24 lines of Rust with an empty setup and a Steamworks block inherited from the starter this repo was generated from. Do not count it as a desktop app. |
 | **CLI** | No end-user CLI. `trackyourtime-cli` appears only as an allowlisted device-flow client id. The server image does ship an admin CLI for self-hosters (`node dist/cli/admin.js`). |
 | **MCP server** (`packages/mcp`) | Working. Lets Claude Desktop, Claude Code or any MCP client start and stop timers, log time, list entries, manage the catalog and run the summary report, through the public REST API with an API token. stdio only, not published to npm — run it from a clone. See [MCP server](#mcp-server). |
 
@@ -120,7 +119,7 @@ Everything is scoped to a workspace. A person can belong to several, and a works
 - **No timesheet approval.** No submitted/approved state, no approver role, no lock-after-approval. Invoice status is invoice lifecycle, not time approval.
 - **Rates are per project, not per person.** An entry takes its project's rate, else the workspace default, so everyone on a project bills at the same rate.
 - **No client portal or shared reports.** A client cannot sign in or open a link to follow a project. Send them a report or an invoice as a PDF.
-- **No Firefox extension and no desktop app.** The extension is Chrome MV3 only; see the Electron and Tauri rows above.
+- **No Firefox extension and no desktop app.** The extension is Chrome MV3 only; see the Electron row above.
 - **Two-factor sign-in does not work in the phone apps or the extension's password form.** The second step needs a cookie those clients cannot send. The extension's "Sign in with the web app" button and Raycast use the device flow instead, where you approve the sign-in in a browser. Google sign-in is web-only too.
 - **Time off, PTO, holidays, absence.** No model and no screen, so nothing computes capacity or utilization.
 - **Notifications** are one reminder email per runaway timer. No web push and no digests.
@@ -166,7 +165,6 @@ better-auth validates the `Origin` header on sign-in whenever the request carrie
 - `chrome-extension://<id>` — a browser extension you built yourself (`pnpm run extension:id prod` prints it)
 - `capacitor://localhost,https://localhost` — the iOS and Android apps
 - `app://-` — Electron via a custom protocol (`file://` sends `Origin: null` and cannot be trusted with credentials)
-- `tauri://localhost` and `http://tauri.localhost` — Tauri on macOS/Linux and Windows
 
 Or set `TRUST_STORE_APPS=true`, which trusts the iOS and Android apps and the Chrome Web Store extension (its id is pinned in `packages/shared/src/store-clients.ts`) in one switch. `docker-compose.selfhost.yml` defaults it to `true`, so the store builds, once they exist, can sign in to a self-hosted server with nothing to configure. The extension asks Chrome for no access to any website, so every request it sends is a cross-origin request: without this trust it cannot sign in, sync or send an entry.
 

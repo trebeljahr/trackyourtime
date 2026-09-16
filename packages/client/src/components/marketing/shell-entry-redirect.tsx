@@ -8,7 +8,7 @@ import { isAppShell } from "@/lib/app-shell-host";
 /**
  * Sends the native and desktop shells from `/` into the app.
  *
- * Capacitor, Electron and Tauri all load the export's `index.html`, which is
+ * Capacitor and Electron both load the export's `index.html`, which is
  * the landing page — an advertisement for the app the person is already
  * holding. So inside a shell `/` moves straight on to /app/track, without
  * waiting for a session: the protected layout decides sign-in, and it must be
