@@ -8,7 +8,8 @@
  *   browser, and nothing else goes anywhere.
  * - `<webview>` is refused outright.
  * - Every permission request (camera, geolocation, clipboard-read, …) is
- *   denied, except notifications from the app's own documents.
+ *   denied, except notifications and clipboard writes from the app's own
+ *   documents (`isPermissionGranted` in trust.ts).
  *
  * The IPC sender check is in ipc.ts, the CSP in csp.ts, the menu without
  * DevTools in menu.ts, and the fuses in electron-builder.config.mjs.
@@ -16,7 +17,7 @@
 
 import { app, session, shell, type WebContents } from "electron";
 
-import { isExternalWebUrl, isTrustedSenderUrl } from "./trust.ts";
+import { isExternalWebUrl, isPermissionGranted, isTrustedSenderUrl } from "./trust.ts";
 
 function openExternally(url: string): void {
   if (!isExternalWebUrl(url)) return;
@@ -55,10 +56,10 @@ export function installSecurity(options: { devUrl: string | null }): void {
     const ses = session.defaultSession;
     ses.setPermissionRequestHandler((contents, permission, callback, details) => {
       const url = details.requestingUrl || contents?.getURL();
-      callback(permission === "notifications" && trusted(url));
+      callback(isPermissionGranted(permission, url, devUrl));
     });
     ses.setPermissionCheckHandler((_contents, permission, requestingOrigin) => {
-      return permission === "notifications" && trusted(requestingOrigin);
+      return isPermissionGranted(permission, requestingOrigin, devUrl);
     });
   });
 }

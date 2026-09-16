@@ -45,3 +45,24 @@ export function isExternalWebUrl(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * The web permissions the app's own documents are granted. Everything else —
+ * camera, microphone, geolocation, MIDI, clipboard *read*, … — is denied, and
+ * nothing is granted to any other document.
+ *
+ * - `notifications`: running-timer and reminder prompts (Stage 5).
+ * - `clipboard-sanitized-write`: `navigator.clipboard.writeText`, which the
+ *   invite link, a new API token and the 2FA backup codes are copied with.
+ *   Chromium gates it on this permission, so a blanket deny made every Copy
+ *   button in the app fail with "Write permission denied".
+ */
+const GRANTED_PERMISSIONS: ReadonlySet<string> = new Set(["notifications", "clipboard-sanitized-write"]);
+
+export function isPermissionGranted(
+  permission: string,
+  url: string | null | undefined,
+  devUrl: string | null,
+): boolean {
+  return GRANTED_PERMISSIONS.has(permission) && isTrustedSenderUrl(url, devUrl);
+}

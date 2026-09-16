@@ -205,6 +205,38 @@ test("navigation off the app origin and permission requests are denied", async (
   expect(geolocation).toBe("denied:1");
 });
 
+test("the permission lockdown leaves clipboard copy working", async () => {
+  ({ app, page } = await launchApp());
+  await expectAt(page, /\/login\//);
+  // Invite links, API tokens and 2FA backup codes are copied with
+  // navigator.clipboard.writeText, which Chromium gates on a permission.
+  // This writes the machine's real clipboard, so whatever was on it is put back.
+  const previous = await app.evaluate(({ clipboard }) => clipboard.readText());
+  try {
+    await page.bringToFront();
+    await page.getByTestId("login-email").click();
+    const copied = await page.evaluate(() =>
+      navigator.clipboard.writeText("desktop-e2e-copy").then(
+        () => "ok",
+        (err: unknown) => `failed: ${String(err)}`,
+      ),
+    );
+    expect(copied).toBe("ok");
+    expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe("desktop-e2e-copy");
+
+    // Reading stays denied: nothing in the app needs another app's clipboard.
+    const read = await page.evaluate(() =>
+      navigator.clipboard.readText().then(
+        () => "allowed",
+        () => "denied",
+      ),
+    );
+    expect(read).toBe("denied");
+  } finally {
+    await app.evaluate(({ clipboard }, text) => clipboard.writeText(text), previous);
+  }
+});
+
 test("DevTools cannot be opened and the menu has no reload or inspector", async () => {
   ({ app, page } = await launchApp());
   await expectAt(page, /\/login\//);

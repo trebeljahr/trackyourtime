@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { isAppUrl, isExternalWebUrl, isTrustedSenderUrl } from "./trust.ts";
+import { isAppUrl, isExternalWebUrl, isPermissionGranted, isTrustedSenderUrl } from "./trust.ts";
 
 describe("isTrustedSenderUrl", () => {
   it("trusts the app's own origin", () => {
@@ -46,5 +46,26 @@ describe("isExternalWebUrl", () => {
     assert.equal(isExternalWebUrl("javascript:alert(1)"), false);
     assert.equal(isExternalWebUrl("smb://server/share"), false);
     assert.equal(isExternalWebUrl("not a url"), false);
+  });
+});
+
+describe("isPermissionGranted", () => {
+  it("grants notifications and clipboard writes to the app's own documents", () => {
+    assert.equal(isPermissionGranted("notifications", "app://-/app/track/", null), true);
+    assert.equal(isPermissionGranted("clipboard-sanitized-write", "app://-/app/members/", null), true);
+    assert.equal(isPermissionGranted("clipboard-sanitized-write", "app://-", null), true);
+  });
+
+  it("denies everything else, including clipboard reads", () => {
+    for (const permission of ["clipboard-read", "media", "geolocation", "midi", "openExternal", "fullscreen"]) {
+      assert.equal(isPermissionGranted(permission, "app://-/", null), false, permission);
+    }
+  });
+
+  it("grants nothing to a document outside the app", () => {
+    for (const url of ["https://example.com/", "data:text/html,x", "about:blank", "", null]) {
+      assert.equal(isPermissionGranted("clipboard-sanitized-write", url, null), false, String(url));
+      assert.equal(isPermissionGranted("notifications", url, null), false, String(url));
+    }
   });
 });
