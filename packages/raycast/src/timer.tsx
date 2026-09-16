@@ -20,6 +20,7 @@ import {
   type DetailedEntry,
   type DetailedFavorite,
 } from "@starter/core";
+import { CompatibilityListSection } from "./components/compatibility-banner.js";
 import { EditEntry } from "./components/edit-entry.js";
 import { LogTime } from "./components/log-time.js";
 import { SignedOutView } from "./components/signed-out.js";
@@ -52,6 +53,7 @@ import {
   favoriteFor,
   loadTimerSnapshot,
 } from "./lib/timer-data.js";
+import { useServerLevel } from "./lib/server-level.js";
 import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
 import {
@@ -94,6 +96,8 @@ export default function Timer(): React.JSX.Element {
   // Open in front of the user, so it is the surface where a change made
   // elsewhere is most obviously wrong to miss.
   useSyncRevalidate(revalidate, !signedOut);
+  // Also the command-start refresh of the server's API level.
+  const { banner } = useServerLevel();
 
   const run = async (
     action: () => Promise<string>,
@@ -400,6 +404,10 @@ export default function Timer(): React.JSX.Element {
           </ActionPanel>
         }
       />
+
+      {/* Above everything: while one side is too old, nothing below works
+          the way it should, and the way out is an update, not a retry. */}
+      <CompatibilityListSection banner={banner}>{commonActions}</CompatibilityListSection>
 
       {/* Stated rather than hidden: what is queued is time the user tracked,
           and a client holding it quietly looks like one that lost it. */}

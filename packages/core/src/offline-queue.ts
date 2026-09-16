@@ -1,3 +1,4 @@
+import { API_LEVEL } from "@starter/shared";
 import { ApiError } from "./api-client.js";
 import { createId } from "./ids.js";
 import { sameServerOrigin } from "./server-origin.js";
@@ -62,6 +63,17 @@ export type QueuedMutation = {
    * Optional forever, like every other stamp.
    */
   hold?: QueuedHold;
+  /**
+   * The `API_LEVEL` of the build that queued this row — what the row may need
+   * of the server. A server whose known level is lower cannot be trusted with
+   * it: an input field it does not know is stripped or refused, and either way
+   * the time is lost. Such a row is held `server-too-old` before it is sent
+   * (`serverLevelHold` in `offline-replay.ts`).
+   *
+   * Optional forever: a row from before the stamp is of unknown level and is
+   * sent as it always was.
+   */
+  apiLevel?: number;
 };
 
 /**
@@ -76,8 +88,11 @@ export type QueuedMutation = {
  *   or the queue itself is in a newer format (`QUEUE_FORMAT_VERSION`).
  * - `unknown-procedure`: the server answered that it has no such procedure —
  *   a newer client replaying against an older self-hosted server.
+ * - `server-too-old`: the server's API level is below the level of the build
+ *   that queued the row (`QueuedMutation.apiLevel`). Released the moment the
+ *   server reports a level high enough.
  */
-export type HoldReason = "unknown-op" | "unknown-procedure";
+export type HoldReason = "unknown-op" | "unknown-procedure" | "server-too-old";
 
 export type QueuedHold = {
   reason: HoldReason;
@@ -217,7 +232,7 @@ export type FlushResult = {
  * fact about the build reading the row, recomputed on every read, and a stored
  * copy would outlive the upgrade that ends it.
  */
-const STORED_HOLD_REASONS: readonly string[] = ["unknown-procedure"];
+const STORED_HOLD_REASONS: readonly string[] = ["unknown-procedure", "server-too-old"];
 
 const readHold = (value: unknown): QueuedHold | undefined => {
   if (typeof value !== "object" || value === null) return undefined;
@@ -256,11 +271,18 @@ const normalize = (mutation: QueuedMutation): QueuedMutation => {
       ? mutation.workspaceId
       : undefined;
   const hold = mutation.hold === undefined ? undefined : readHold(mutation.hold);
+  const apiLevel =
+    typeof mutation.apiLevel === "number" &&
+    Number.isInteger(mutation.apiLevel) &&
+    mutation.apiLevel > 0
+      ? mutation.apiLevel
+      : undefined;
   if (
     owner === mutation.owner &&
     server === mutation.server &&
     workspaceId === mutation.workspaceId &&
-    hold === mutation.hold
+    hold === mutation.hold &&
+    apiLevel === mutation.apiLevel
   ) {
     return mutation;
   }
@@ -272,6 +294,9 @@ const normalize = (mutation: QueuedMutation): QueuedMutation => {
   // A hold this build does not recognise is no hold: the replay decides again.
   if (hold === undefined) delete normalized.hold;
   else normalized.hold = hold;
+  // An unreadable level is an unknown one: the row is sent as a legacy row.
+  if (apiLevel === undefined) delete normalized.apiLevel;
+  else normalized.apiLevel = apiLevel;
   return normalized;
 };
 
@@ -518,6 +543,9 @@ export const createOfflineQueue = ({
           owner,
           server,
           ...(workspaceId ? { workspaceId } : {}),
+          // The level of the build writing the row, so a server that turns
+          // out to be older holds it instead of half-understanding it.
+          apiLevel: API_LEVEL,
         };
         const mutations = await read();
         mutations.push(mutation);

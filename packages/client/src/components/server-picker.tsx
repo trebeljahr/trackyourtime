@@ -6,8 +6,12 @@ import { Loader2, Server } from "lucide-react";
 import {
   CLOUD_API_ORIGIN,
   CLOUD_SERVER_LABEL,
+  CLIENT_TOO_OLD,
   checkServer,
   describeServerVersion,
+  MIN_SERVER_API_LEVEL,
+  serverCompatibility,
+  SERVER_TOO_OLD,
   normalizeServerInput,
   sameServerOrigin,
   serverHost,
@@ -21,6 +25,7 @@ import { useApiOrigin } from "@/hooks/use-api-origin";
 import { useIsNative } from "@/hooks/use-is-native";
 import { getApiOrigin, getDefaultApiOrigin } from "@/lib/api-origin";
 import { refreshPendingCount } from "@/lib/offline";
+import { getServerLevelCache } from "@/lib/server-level";
 import { switchServer } from "@/lib/server-switch";
 import { serverCheckMessage, serverInputMessage } from "@/lib/server-problem-message";
 import { useT } from "@/i18n/use-t";
@@ -52,6 +57,28 @@ const defaultLabel = (origin: string, t: Translator<"shell">): string =>
 /** Why a reachable server still cannot be used from this app. */
 export const untrustedMessage = (server: ServerInfo, t: Translator<"shell">): string =>
   t("serverPicker.untrusted", { host: serverHost(server.origin) });
+
+/**
+ * Why a reachable, trusted server still cannot be used by this build, or null.
+ * Checked beside `originTrusted`: signing in to a server this app cannot talk
+ * to would only move the failure to every request after it.
+ */
+export const incompatibleMessage = (
+  server: ServerInfo,
+  t: Translator<"shell">,
+): string | null => {
+  const refusal = serverCompatibility(server);
+  const host = serverHost(server.origin);
+  if (refusal === SERVER_TOO_OLD) {
+    return t("serverPicker.serverTooOld", {
+      host,
+      level: String(server.apiLevel),
+      min: String(MIN_SERVER_API_LEVEL),
+    });
+  }
+  if (refusal === CLIENT_TOO_OLD) return t("serverPicker.appTooOld", { host });
+  return null;
+};
 
 export function NativeServerPicker(): React.JSX.Element | null {
   const native = useIsNative();
@@ -121,6 +148,19 @@ function ServerPickerBody({
         setError(untrustedMessage(result.server, t));
         return;
       }
+      const incompatible = incompatibleMessage(result.server, t);
+      if (incompatible !== null) {
+        setError(incompatible);
+        return;
+      }
+      // What the server just said is the level cache's first answer about it;
+      // the app start after the switch's reload asks again.
+      getServerLevelCache().record({
+        origin: result.server.origin,
+        apiLevel: result.server.apiLevel,
+        minClientApiLevel: result.server.minClientApiLevel,
+        release: result.server.release,
+      });
       setFound(result.server);
       await switchServer(
         sameServerOrigin(origin, fallback)

@@ -14,8 +14,11 @@
  */
 import {
   checkServer,
+  MIN_SERVER_API_LEVEL,
   normalizeServerInput,
   sameServerOrigin,
+  SERVER_TOO_OLD,
+  serverCompatibility,
   serverHost,
   signInWithPassword,
   signOutSession,
@@ -79,6 +82,7 @@ import {
   ensureSyncConnected,
   flushQueue,
   forgetSession,
+  getServerLevels,
   isUnauthorized,
   onWebSessionChanged,
   peekRunning,
@@ -281,6 +285,30 @@ const setServer = async (
   const check = await checkServer(origin);
   if (!check.ok) {
     throw new BackgroundError(SERVER_CHECK_CODES[check.problem], check.message);
+  }
+
+  // What the check learned about the server's level is worth keeping even
+  // when the switch is refused below: the answer is true either way.
+  getServerLevels().record({
+    origin,
+    apiLevel: check.server.apiLevel,
+    minClientApiLevel: check.server.minClientApiLevel,
+    release: check.server.release,
+  });
+
+  // A server below this build's floor would refuse or half-understand what
+  // the extension sends, so it is refused before anything is changed. The
+  // popup translates the code and names the level from `details`.
+  if (serverCompatibility(check.server) === SERVER_TOO_OLD) {
+    throw new BackgroundError(
+      "SERVER_TOO_OLD",
+      `${host} runs API level ${check.server.apiLevel}. This extension needs level ${MIN_SERVER_API_LEVEL} or higher. Ask the server admin to update it.`,
+      {
+        apiLevel: check.server.apiLevel,
+        release: check.server.release,
+        minApiLevel: MIN_SERVER_API_LEVEL,
+      },
+    );
   }
 
   const current = await ensureReady();

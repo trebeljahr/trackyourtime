@@ -280,6 +280,11 @@ export const settings: Translation<typeof source> = {
         description:
           "{count, plural, one {# Änderung auf diesem Gerät braucht eine Funktion, die dein Server noch nicht hat.} other {# Änderungen auf diesem Gerät brauchen eine Funktion, die dein Server noch nicht hat.}} Bitte deinen Admin, den Server zu aktualisieren – danach werden sie gesendet. Oder verwirf sie hier.",
       },
+      serverTooOld: {
+        title: "Dein Server ist älter als diese App",
+        description:
+          "Dein Server ist älter als diese App. {count, plural, one {Diese Änderung wird} other {Diese # Änderungen werden}} gesendet, sobald er aktualisiert ist. Bitte deinen Admin, den Server zu aktualisieren, oder verwirf sie hier.",
+      },
       confirm:
         "Damit löschst du Arbeit, die kein Server je erhalten hat. Sie lässt sich nicht wiederherstellen. Aktualisiere stattdessen die App oder den Server, wenn sie erhalten bleiben soll.",
     },

@@ -69,7 +69,12 @@ export type HeldQueueProps = {
 /** Which group a held row is shown in: a left workspace, or a `HoldReason`. */
 type HeldGroup = "left" | NonNullable<QueuedMutationSummary["hold"]>;
 
-const GROUP_ORDER: readonly HeldGroup[] = ["left", "unknown-procedure", "unknown-op"];
+const GROUP_ORDER: readonly HeldGroup[] = [
+  "left",
+  "server-too-old",
+  "unknown-procedure",
+  "unknown-op",
+];
 
 /** Catalog keys per group. A new `HoldReason` is a type error here. */
 const GROUP_KEYS = {
@@ -78,6 +83,10 @@ const GROUP_KEYS = {
   "unknown-procedure": {
     title: "workspace.waitingServer.title",
     hint: "workspace.waitingServer.hint",
+  },
+  "server-too-old": {
+    title: "workspace.waitingServerUpdate.title",
+    hint: "workspace.waitingServerUpdate.hint",
   },
 } as const satisfies Record<HeldGroup, { title: string; hint: string }>;
 

@@ -30,6 +30,7 @@ import { forgetRoute, loadRoute, rememberRoute } from "./route-memory";
 import { Screens } from "./screens";
 import { rememberTheme } from "./theme";
 import { ServerAccessNotice } from "./server-access-notice";
+import { VersionBanner } from "./version-banner";
 import { applyLocalePreference, useT } from "../i18n/use-t";
 import { SignInScreen } from "./sign-in-screen";
 import type { SetServerOutcome } from "./switch-server";
@@ -127,7 +128,13 @@ export function App(): JSX.Element {
         return true;
       }
       setError(
-        describeError(response.code, response.message, apiUrlRef.current, tRef.current),
+        describeError(
+          response.code,
+          response.message,
+          apiUrlRef.current,
+          tRef.current,
+          response.details,
+        ),
       );
       // A failure retires whatever the last transition said: "Entry added."
       // sitting above "The end has to be after the start." reads as though
@@ -369,7 +376,13 @@ export function App(): JSX.Element {
       return {
         ok: false,
         code: response.code,
-        message: describeError(response.code, response.message, origin, tRef.current),
+        message: describeError(
+          response.code,
+          response.message,
+          origin,
+          tRef.current,
+          response.details,
+        ),
       };
     },
     [],
@@ -685,6 +698,7 @@ export function App(): JSX.Element {
 
   return (
     <div className="popup">
+      <VersionBanner compatibility={state.compatibility} t={t} />
       {!state.serverAccess ? (
         <ServerAccessNotice apiUrl={state.apiUrl} onAnswered={refreshState} />
       ) : null}

@@ -225,3 +225,19 @@ describe("workspace link", () => {
     expect(settled.url).toBe("https://api.example/api/trpc/a?batch=1");
   });
 });
+
+describe("the CLIENT_TOO_OLD refusal", () => {
+  it("is read from a batched or single tRPC error body, and nothing else", async () => {
+    const { isClientTooOldBody } = await import("@/lib/trpc");
+    const refusal = {
+      error: { message: "x", code: -32012, data: { code: "PRECONDITION_FAILED", httpStatus: 412, versionRefusal: "CLIENT_TOO_OLD" } },
+    };
+    expect(isClientTooOldBody([{ result: { data: 1 } }, refusal])).toBe(true);
+    expect(isClientTooOldBody(refusal)).toBe(true);
+    expect(isClientTooOldBody({ error: { json: refusal.error } })).toBe(true);
+    expect(
+      isClientTooOldBody([{ error: { data: { code: "PRECONDITION_FAILED", httpStatus: 412, versionRefusal: null } } }]),
+    ).toBe(false);
+    expect(isClientTooOldBody("<html>")).toBe(false);
+  });
+});

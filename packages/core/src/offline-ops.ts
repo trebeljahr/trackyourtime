@@ -146,6 +146,11 @@ export type OfflineMutation = {
      * exactly the shape it always had.
      */
     workspaceId?: string;
+    /**
+     * The API level of the build that queued the row
+     * (`QueuedMutation.apiLevel`). Present only when the row carries one.
+     */
+    apiLevel?: number;
   };
 }[OfflineOp];
 
@@ -177,9 +182,13 @@ export const decodeOfflineMutation = (
   if (stored === null) return null;
 
   const decoded = decodeOp(mutation.id, mutation.op, stored);
-  return mutation.workspaceId === undefined
-    ? decoded
-    : { ...decoded, workspaceId: mutation.workspaceId };
+  const inWorkspace =
+    mutation.workspaceId === undefined
+      ? decoded
+      : { ...decoded, workspaceId: mutation.workspaceId };
+  return mutation.apiLevel === undefined
+    ? inWorkspace
+    : { ...inWorkspace, apiLevel: mutation.apiLevel };
 };
 
 const decodeOp = (
@@ -256,6 +265,7 @@ export const HELD_RETRY_MS = 60 * 60 * 1000;
 export const HOLD_RELEASE: Readonly<Record<HoldReason, "new-build" | "server">> = {
   "unknown-op": "new-build",
   "unknown-procedure": "server",
+  "server-too-old": "server",
 };
 
 /**
@@ -284,11 +294,27 @@ export const holdReasonOf = (row: QueuedMutation): HoldReason | null => {
  */
 export const holdBlocksReplay = (
   row: QueuedMutation,
-  options: { now?: number; retryHeld?: boolean } = {}
+  options: {
+    now?: number;
+    retryHeld?: boolean;
+    /**
+     * The server's API level, when the client knows it. A `server-too-old`
+     * hold is then decided by the level alone — released the moment the
+     * server reports enough, kept while it does not, whatever the clock says.
+     */
+    serverApiLevel?: number | null;
+  } = {}
 ): boolean => {
   const reason = holdReasonOf(row);
   if (reason === null) return false;
   if (HOLD_RELEASE[reason] === "new-build") return true;
+  if (
+    reason === "server-too-old" &&
+    options.serverApiLevel !== undefined &&
+    options.serverApiLevel !== null
+  ) {
+    return row.apiLevel !== undefined && options.serverApiLevel < row.apiLevel;
+  }
   if (options.retryHeld === true) return false;
   const at = Date.parse(row.hold?.at ?? "");
   if (Number.isNaN(at)) return false;

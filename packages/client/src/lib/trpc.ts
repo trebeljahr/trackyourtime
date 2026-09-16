@@ -1,6 +1,6 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { httpBatchLink, type TRPCLink } from "@trpc/client";
-import { versionHeaders, withWorkspaceId } from "@starter/core";
+import { CLIENT_TOO_OLD, versionHeaders, withWorkspaceId } from "@starter/core";
 import type { AppRouter } from "@starter/server/trpc";
 import { isNative } from "@/mobile/bridge";
 import { getNativeToken } from "@/lib/native-session";
@@ -11,6 +11,7 @@ import {
   whenActiveWorkspaceReady,
 } from "@/lib/active-workspace";
 import { APP_VERSION } from "@/lib/app-version";
+import { noteClientTooOld } from "@/lib/server-level";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -99,6 +100,42 @@ export const settlePendingWorkspace = (
   return { url: nextUrl, init: nextInit };
 };
 
+/**
+ * True when a tRPC response body refuses this build as `CLIENT_TOO_OLD`
+ * (`data.versionRefusal`, docs/versioning.md → Refusals). Reads a batched
+ * array as well as a single envelope.
+ */
+export const isClientTooOldBody = (body: unknown): boolean => {
+  const items = Array.isArray(body) ? body : [body];
+  return items.some((item) => {
+    if (typeof item !== "object" || item === null) return false;
+    const error = (item as { error?: unknown }).error;
+    if (typeof error !== "object" || error === null) return false;
+    const json = (error as { json?: unknown }).json ?? error;
+    const data = (json as { data?: unknown }).data;
+    return (
+      typeof data === "object" &&
+      data !== null &&
+      (data as { versionRefusal?: unknown }).versionRefusal === CLIENT_TOO_OLD
+    );
+  });
+};
+
+/**
+ * Tell the level cache when the server refused this build, so the app shell
+ * shows "Update the app" instead of a string of generic errors. Only a 412 is
+ * read — the refusal's status — and the response handed on is untouched.
+ */
+export const watchVersionRefusal = async (response: Response): Promise<Response> => {
+  if (response.status !== 412) return response;
+  try {
+    if (isClientTooOldBody(await response.clone().json())) noteClientTooOld();
+  } catch {
+    // Not JSON: not a version refusal.
+  }
+  return response;
+};
+
 export function getTRPCClient() {
   return trpc.createClient({
     links: [
@@ -118,7 +155,7 @@ export function getTRPCClient() {
             return fetch(url, {
               ...options,
               credentials: token ? "omit" : "include",
-            });
+            }).then(watchVersionRefusal);
           }
           // The phone apps choose their server at runtime (`lib/api-origin.ts`).
           // The link above keeps the build-time URL; the request is rebased
@@ -139,7 +176,7 @@ export function getTRPCClient() {
             return fetch(rebaseApiUrl(settled.url), {
               ...settled.init,
               credentials: token ? "omit" : "include",
-            });
+            }).then(watchVersionRefusal);
           });
         },
         headers: () => {

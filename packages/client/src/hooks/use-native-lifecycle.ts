@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { refreshPendingCount } from "@/lib/offline";
+import { refreshServerLevel } from "@/lib/server-level";
 import {
   isRunningProvisional,
   writeRunningMirror,
@@ -24,6 +25,12 @@ export const resumePlan = (pending: number): "flush" | "invalidate" =>
 export type ResumeSteps = {
   reconnect: () => void;
   tick: () => void;
+  /**
+   * Ask the server for its API level again. Started after the tick, in
+   * parallel with the pending count, and awaited only before a flush — whose
+   * held rows depend on it. An invalidate never waits for it.
+   */
+  refreshLevel: () => Promise<unknown>;
   pending: () => Promise<number>;
   flush: () => Promise<void>;
   invalidateCurrent: () => Promise<void>;
@@ -40,7 +47,10 @@ export type ResumeSteps = {
  * 2. **Tick.** Synchronous and instant, so the clock is right on the FIRST
  *    frame rather than up to a second later. Elapsed is derived from
  *    `entry.start`, so this is just "recompute now".
- * 3. **Flush, and only then invalidate.** This order is load-bearing and the
+ * 3. **Refresh the server's API level**, without holding up anything but a
+ *    flush: a server updated while the app was in the background releases
+ *    the rows held `server-too-old` on this very flush.
+ * 4. **Flush, and only then invalidate.** This order is load-bearing and the
  *    obvious one is wrong. A timer started with no signal lives in the queue
  *    and in an optimistic `entries.current`; refetching first asks a server
  *    that has never heard of that start, gets `null`, and blanks the running
@@ -53,8 +63,10 @@ export type ResumeSteps = {
 export const runResume = async (steps: ResumeSteps): Promise<void> => {
   steps.reconnect();
   steps.tick();
+  const level = steps.refreshLevel().catch(() => undefined);
 
   if (resumePlan(await steps.pending()) === "flush") {
+    await level;
     await steps.flush();
     return;
   }
@@ -86,6 +98,7 @@ export const useNativeLifecycle = (): void => {
           void runResume({
             reconnect: reconnectSync,
             tick: () => timerStore.getState().tick(),
+            refreshLevel: refreshServerLevel,
             pending: refreshPendingCount,
             flush: () => flushRef.current(),
             invalidateCurrent: () => utilsRef.current.entries.current.invalidate(),

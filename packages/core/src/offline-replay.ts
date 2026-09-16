@@ -226,7 +226,7 @@ export type ReplayErrorFacts = {
 };
 
 /** The least a classifier needs of a row; a caller's own row type flows through. */
-export type ReplayRow = { op: string; workspaceId?: string };
+export type ReplayRow = { op: string; workspaceId?: string; apiLevel?: number };
 
 export type ReplayClassifyContext<R extends ReplayRow = ReplayRow> = {
   /**
@@ -255,7 +255,31 @@ export type ReplayClassifyContext<R extends ReplayRow = ReplayRow> = {
    * level, say. Consulted only for a refusal on the merits, before it drops.
    */
   holdRefusal?: (facts: ReplayErrorFacts, row: R) => HoldReason | null;
+  /**
+   * The server's API level, when the client knows it (`ServerLevelCache`).
+   * A 400 on a row queued by a build of a higher level is then held
+   * `server-too-old` rather than dropped: the server refused a field it does
+   * not know yet, which says nothing about the row.
+   */
+  serverApiLevel?: number | null;
 };
+
+/**
+ * Whether a row must wait for its server to be updated, decided before it is
+ * sent: the server's level is known and below the level of the build that
+ * queued the row. A row of unknown level (queued before the stamp) and a
+ * server of unknown level are never held here.
+ */
+export const serverLevelHold = (
+  row: { apiLevel?: number },
+  serverApiLevel: number | null | undefined
+): HoldReason | null =>
+  row.apiLevel !== undefined &&
+  serverApiLevel !== undefined &&
+  serverApiLevel !== null &&
+  serverApiLevel < row.apiLevel
+    ? "server-too-old"
+    : null;
 
 /**
  * tRPC's own answer for a path its router does not have — v11's
@@ -307,7 +331,8 @@ export const readReplayErrorFacts = (error: unknown): ReplayErrorFacts | null =>
  *    older self-hosted server would otherwise delete the time.
  * 5. Anything outside the permanent set (5xx, 429, a proxy's HTML page) keeps
  *    it.
- * 6. `holdRefusal` may hold a refusal on the merits.
+ * 6. A 400 on a row of a higher API level than the server's holds it
+ *    `server-too-old`; otherwise `holdRefusal` may hold a refusal on the merits.
  * 7. A NOT_FOUND on a stamped row is kept unless the membership is confirmed.
  * 8. The rest is a refusal on the merits — 400, 403, 404, 409, 410, 422.
  */
@@ -333,6 +358,11 @@ export const classifyReplayOutcome = async <R extends ReplayRow>(
   if (status === undefined || !isPermanentRejectionStatus(facts.code ?? "PARSE_ERROR", status)) {
     return { kind: "retry-later", reason: "server" };
   }
+
+  const tooOld =
+    (facts.code === "BAD_REQUEST" || status === 400) &&
+    serverLevelHold(row, context.serverApiLevel) !== null;
+  if (tooOld) return { kind: "hold", reason: "server-too-old" };
 
   const held = context.holdRefusal?.(facts, row) ?? null;
   if (held !== null) return { kind: "hold", reason: held };

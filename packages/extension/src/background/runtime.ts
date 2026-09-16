@@ -13,7 +13,11 @@
 import {
   ApiError,
   classifyReplayOutcome,
+  CLIENT_TOO_OLD,
   createApiClient,
+  createServerLevelCache,
+  SERVER_LEVELS_STORAGE_KEY,
+  serverLevelHold,
   createId,
   createOfflineQueue,
   createSyncClient,
@@ -32,6 +36,7 @@ import {
   isReplayableIn,
   OFFLINE_QUEUE_STORAGE_KEY,
   resolveActiveWorkspaceId,
+  sameServerOrigin,
   syncEventReach,
   withWorkspaceList,
   workspaceChoiceFor,
@@ -58,6 +63,7 @@ import {
   type Project,
   type RecentEntry,
   type ServerInfo,
+  type ServerLevelCache,
   type StoredOfflinePayload,
   type SyncClient,
   type SyncEvent,
@@ -76,6 +82,7 @@ import {
   DEFAULT_API_URL,
   EXTENSION_CLIENT_ID,
   loadApiUrl,
+  loadServerInfo,
   syncUrlFrom,
 } from "../lib/config";
 import {
@@ -693,6 +700,95 @@ export async function cancelQueuedForTemp(tempId: string): Promise<boolean> {
   return removed;
 }
 
+// ── the server's API level ───────────────────────────────────────────
+
+/**
+ * What each server this extension has talked to said about its API level
+ * (core's `ServerLevelCache`, see docs/versioning.md).
+ *
+ * Persisted in `chrome.storage.local`, so a worker revived offline still knows
+ * the server is too old for a queued row instead of sending it. The storage
+ * area is resolved per call rather than captured: the cache is module state
+ * and outlives any one `chrome` it was first built against.
+ */
+let serverLevels: ServerLevelCache | null = null;
+
+const lazyLocalStorage: KeyValueStorage = {
+  getItem: (key) => chromeStorage(localStorageArea()).getItem(key),
+  setItem: (key, value) => chromeStorage(localStorageArea()).setItem(key, value),
+  removeItem: (key) => chromeStorage(localStorageArea()).removeItem(key),
+};
+
+export const getServerLevels = (): ServerLevelCache => {
+  serverLevels ??= createServerLevelCache({
+    storage: lazyLocalStorage,
+    key: SERVER_LEVELS_STORAGE_KEY,
+  });
+  return serverLevels;
+};
+
+/** The API level of `apiUrl` as last reported, or null when not known yet. */
+export const serverApiLevelOf = (apiUrl: string): number | null =>
+  getServerLevels().apiLevel(apiUrl);
+
+/**
+ * How old a known level may be before a cold worker start asks again.
+ *
+ * MV3 revives this worker every 30 seconds for the badge alarm, and a health
+ * read on each revival would be two requests a minute for an answer that
+ * changes when an operator upgrades. A deliberate `reload()` (a server switch,
+ * a sign-in) always asks.
+ */
+const SERVER_LEVEL_MAX_AGE_MS = 15 * 60 * 1000;
+
+/** Set by `reload()`: the next build refreshes the level whatever its age. */
+let forceLevelRefresh = true;
+
+/**
+ * Load the persisted levels, seed the current server from the record the
+ * server picker stored when it chose it, and refresh when due. The refresh
+ * is not awaited: a worker start must not wait on the network.
+ */
+const prepareServerLevel = async (apiUrl: string): Promise<void> => {
+  const levels = getServerLevels();
+  await levels.hydrate();
+  if (levels.get(apiUrl) === null) {
+    const stored = await loadServerInfo().catch(() => null);
+    if (stored !== null && sameServerOrigin(stored.origin, apiUrl)) {
+      levels.record({
+        origin: apiUrl,
+        apiLevel: stored.apiLevel,
+        minClientApiLevel: stored.minClientApiLevel,
+        release: stored.release,
+      });
+    }
+  }
+  const known = levels.get(apiUrl);
+  const age = known === null ? Infinity : Date.now() - Date.parse(known.checkedAt);
+  if (forceLevelRefresh || !(age < SERVER_LEVEL_MAX_AGE_MS)) {
+    forceLevelRefresh = false;
+    void levels.refresh(apiUrl);
+  }
+};
+
+/**
+ * Note every `CLIENT_TOO_OLD` refusal on the server's level, for the popup's
+ * banner. Wrapped around the api client once, so no call site can forget.
+ */
+const watchVersionRefusals = (api: ApiClient, apiUrl: string): ApiClient => {
+  const noted = <T>(request: Promise<T>): Promise<T> =>
+    request.catch((error: unknown) => {
+      if (error instanceof ApiError && error.versionRefusal === CLIENT_TOO_OLD) {
+        getServerLevels().noteClientTooOld(apiUrl);
+      }
+      throw error;
+    });
+  return {
+    query: <T>(path: string, input?: unknown) => noted(api.query<T>(path, input)),
+    mutate: <T>(path: string, input?: unknown) => noted(api.mutate<T>(path, input)),
+  };
+};
+
 // ── rebuilding ───────────────────────────────────────────────────────
 
 const buildRuntime = async (): Promise<Runtime> => {
@@ -723,15 +819,18 @@ const buildRuntime = async (): Promise<Runtime> => {
     apiUrl,
     session,
     sessionSource,
-    api: createApiClient({
-      baseUrl: apiUrl,
-      token: session?.token,
-      clientId: EXTENSION_CLIENT_ID,
-      clientVersion: APP_VERSION,
-      // Read per request: a switch changes it under a live client. An input
-      // that already names a workspace — a replayed queue row — keeps it.
-      workspaceId: getActiveWorkspaceId,
-    }),
+    api: watchVersionRefusals(
+      createApiClient({
+        baseUrl: apiUrl,
+        token: session?.token,
+        clientId: EXTENSION_CLIENT_ID,
+        clientVersion: APP_VERSION,
+        // Read per request: a switch changes it under a live client. An input
+        // that already names a workspace — a replayed queue row — keeps it.
+        workspaceId: getActiveWorkspaceId,
+      }),
+      apiUrl,
+    ),
   };
 
   // A reload landed while this build was reading storage, so `next` was built
@@ -739,6 +838,11 @@ const buildRuntime = async (): Promise<Runtime> => {
   // would point the api client and the socket at the old one — and because
   // `reload` cleared `building` before starting its own, the newer build is
   // what `ensureReady` now hands back.
+  if (mine !== generation) return ensureReady();
+
+  // Before the runtime is installed, so the first flush after a cold start
+  // already knows a level it learned on an earlier one.
+  await prepareServerLevel(apiUrl);
   if (mine !== generation) return ensureReady();
 
   runtime = next;
@@ -787,6 +891,7 @@ export async function reload(): Promise<Runtime> {
   // handing that same stale build back as if it were the new one.
   generation += 1;
   building = null;
+  forceLevelRefresh = true;
 
   closeSync();
   // A reload is a deliberate retarget, so the next connect must not be held
@@ -1105,7 +1210,19 @@ const heldRowsIn = (
   rows: readonly QueuedMutation[],
 ): Map<string, QueuedMutationSummary["hold"]> => {
   const held = new Map<string, QueuedMutationSummary["hold"]>();
-  for (const [id, reason] of heldReasons(rows.filter((row) => !isLeftWorkspaceRow(row)))) {
+  // A `server-too-old` hold ends the moment the server reports a level high
+  // enough — the same test the flush's filter makes — so a row about to be
+  // sent is not listed as held, nor left out of the pending count.
+  const serverApiLevel = runtime === null ? null : serverApiLevelOf(runtime.apiUrl);
+  const current = rows
+    .filter((row) => !isLeftWorkspaceRow(row))
+    .map((row) => {
+      if (row.hold?.reason !== "server-too-old" || serverApiLevel === null) return row;
+      if (holdBlocksReplay(row, { serverApiLevel })) return row;
+      const { hold: _released, ...rest } = row;
+      return rest;
+    });
+  for (const [id, reason] of heldReasons(current)) {
     held.set(id, reason);
   }
   for (const row of rows) if (isLeftWorkspaceRow(row)) held.set(row.id, null);
@@ -1433,6 +1550,14 @@ export async function resolveWebUrl(): Promise<string | null> {
       originTrusted:
         typeof record.originTrusted === "boolean" ? record.originTrusted : null,
     };
+    // The level rides on the same answer, so the cache is kept current without
+    // a health read of its own.
+    getServerLevels().record({
+      origin: current.apiUrl,
+      apiLevel: cachedServerInfo.apiLevel,
+      minClientApiLevel: cachedServerInfo.minClientApiLevel,
+      release: cachedServerInfo.release,
+    });
     return cachedWebUrl;
   } catch {
     return null;
@@ -1646,12 +1771,24 @@ export async function flushQueue(): Promise<number> {
   if (members === null) return pendingSyncCount();
   const memberIds = new Set(members.map((it) => it.id));
 
+  // What the server said about its level, or null when it has not said yet —
+  // then nothing is held on a level and the replay goes as it always did.
+  const levels = getServerLevels();
+  let serverApiLevel = levels.apiLevel(current.apiUrl);
+  let missingProcedure = false;
+
   const result = await offline.flush(
     async (row) => {
       const decoded = decodeOfflineMutation(row);
       // A row this build cannot read was written by a newer one: held, not
       // dropped. The filter already keeps it from getting here.
       if (decoded === null) return { hold: "unknown-op" };
+      // Queued by a build of a higher level than the server has: an input
+      // field the server does not know would be stripped or refused, and the
+      // time lost either way. Held before it is sent, until the server is
+      // updated.
+      const tooOld = serverLevelHold(row, serverApiLevel);
+      if (tooOld !== null) return { hold: tooOld };
       let replayed: unknown;
       try {
         // The op string *is* the tRPC path, by design — so there is no dispatch
@@ -1668,6 +1805,20 @@ export async function flushQueue(): Promise<number> {
         // may mean "you left this workspace": the list above can be a minute
         // old, so it is asked again, and the row kept unless its workspace is
         // demonstrably still a membership.
+        //
+        // A 400 on a row that carries a level may be the server refusing a
+        // field it does not know yet. When the level on hand does not already
+        // explain it (unknown on a cold offline start, or stale), ask the
+        // server once before the classifier decides between hold and drop.
+        if (
+          row.apiLevel !== undefined &&
+          serverLevelHold(row, serverApiLevel) === null &&
+          error instanceof ApiError &&
+          (error.httpStatus === 400 || error.code === "BAD_REQUEST")
+        ) {
+          await levels.refresh(current.apiUrl);
+          serverApiLevel = levels.apiLevel(current.apiUrl);
+        }
         const outcome = await classifyReplayOutcome(error, decoded, {
           stillMember: async (workspaceId) => {
             // Asked directly rather than through `resolveWorkspaces`, whose
@@ -1676,7 +1827,11 @@ export async function flushQueue(): Promise<number> {
             await installWorkspaceList(fresh, current.apiUrl, false);
             return fresh.some((it) => it.id === workspaceId);
           },
+          serverApiLevel,
         });
+        if (outcome.kind === "hold" && outcome.reason === "unknown-procedure") {
+          missingProcedure = true;
+        }
         return flushVerdictFor(outcome, error);
       }
 
@@ -1700,12 +1855,18 @@ export async function flushQueue(): Promise<number> {
         isReplayableIn(row, memberIds) &&
         // A held row waits for its hold to end: a newer build, or an hour
         // since the server last said it lacks the procedure.
-        !holdBlocksReplay(row),
+        // A `server-too-old` hold is decided by the level alone.
+        !holdBlocksReplay(row, { serverApiLevel }),
       // A start and the stop that ends it share a temp id, and stand or fall
       // together.
       chainOf: tempIdOf,
     },
   );
+
+  // A server without a procedure this build sends has told us something about
+  // its level. Ask it again, so the banner, the feature gates and the next
+  // flush's preflight hold all work from its real answer.
+  if (missingProcedure) await levels.refresh(current.apiUrl);
 
   // Rows the filter held back never drain here, so they are not "ahead of" a
   // new mutation and must not keep it queued — see `pendingSyncCount`.

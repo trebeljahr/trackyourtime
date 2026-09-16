@@ -17,6 +17,7 @@ import {
   type DetailedEntry,
 } from "@starter/core";
 import { getTrackYourTime, type ProjectWithStats } from "./lib/api.js";
+import { CompatibilityMenuBarSection } from "./components/compatibility-banner.js";
 import { BRAND_MARK } from "./lib/brand.js";
 import {
   formatClock,
@@ -39,6 +40,7 @@ import {
   favoriteFor,
   loadTimerSnapshot,
 } from "./lib/timer-data.js";
+import { useServerLevel } from "./lib/server-level.js";
 import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
 import {
@@ -120,6 +122,8 @@ export default function MenuBar(): React.JSX.Element | null {
   // every stop already, so polling `entries.current` underneath it would ask
   // a question that has been answered.
   useWatchRunning(running?.id ?? null, ticking && !synced, revalidate, WATCH_MS);
+  // The command runs every minute; the refresh inside is throttled per origin.
+  const { banner } = useServerLevel();
 
   if (signedOut) {
     return (
@@ -133,7 +137,9 @@ export default function MenuBar(): React.JSX.Element | null {
     );
   }
 
-  if (!running && !isLoading && hideWhenIdle) return null;
+  // A version problem is shown even when idle items are hidden: it is why
+  // nothing else here will work.
+  if (!running && !isLoading && hideWhenIdle && banner === null) return null;
 
   const elapsed = running ? entryDurationSec(running, now) : 0;
   const clock = formatMenuBarClock(elapsed);
@@ -231,6 +237,9 @@ export default function MenuBar(): React.JSX.Element | null {
               )}`
       }
     >
+      {/* First: while one side is too old nothing below works as it should. */}
+      <CompatibilityMenuBarSection banner={banner} />
+
       {running ? (
         <MenuBarExtra.Section title={label}>
           {/* Same clock as the title, spelled out rather than abbreviated. */}

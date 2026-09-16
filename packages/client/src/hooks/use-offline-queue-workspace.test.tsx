@@ -432,3 +432,84 @@ describe("a server without the procedure", () => {
     );
   });
 });
+
+describe("a server older than the build that queued the row", () => {
+  const levels = async () => {
+    const serverLevel = await import("@/lib/server-level");
+    const { createServerLevelCache, API_LEVEL } = await import("@starter/core");
+    const { getAbsoluteApiOrigin } = await import("@/lib/api-origin");
+    const cache = createServerLevelCache({
+      check: async () => ({ ok: false, problem: "unreachable", message: "offline" }),
+    });
+    serverLevel.__setServerLevelCacheForTests(cache);
+    const at = (apiLevel: number): void =>
+      cache.record({ origin: getAbsoluteApiOrigin(), apiLevel, minClientApiLevel: null, release: null });
+    return { at, API_LEVEL, reset: () => serverLevel.__setServerLevelCacheForTests(null) };
+  };
+
+  it("holds the row without sending it, and sends it once the server reports enough", async () => {
+    const { at, API_LEVEL, reset } = await levels();
+    try {
+      await offline.enqueueOffline("entries.start", start("needs a newer server"), "temp-1", A.id);
+      listAnswer = async () => [A, B];
+      at(API_LEVEL - 1);
+
+      const { result } = renderQueue();
+      await act(async () => {
+        await result.current.flush();
+      });
+      expect(sent).toEqual([]);
+      const kept = await offline.getOfflineQueue().list();
+      expect(kept.map((row) => [row.apiLevel, row.hold?.reason ?? null])).toEqual([
+        [API_LEVEL, "server-too-old"],
+      ]);
+      expect(offline.getHeldCount()).toBe(1);
+      expect(toastError).not.toHaveBeenCalled();
+
+      // The server was updated: released at once, not an hour later.
+      at(API_LEVEL);
+      await act(async () => {
+        await result.current.flush();
+      });
+      expect(sent.map((call) => call.input.description)).toEqual(["needs a newer server"]);
+      expect(await offline.getOfflineQueue().size()).toBe(0);
+    } finally {
+      reset();
+    }
+  });
+
+  it("holds, rather than drops, a 400 on a row of a higher level than the server", async () => {
+    const { at, API_LEVEL, reset } = await levels();
+    try {
+      await offline.enqueueOffline("entries.start", start("new field"), "temp-1", A.id);
+      listAnswer = async () => [A, B];
+      // The level is learned only after the row was judged: rows are read
+      // against the level known at flush start, so pretend the server is
+      // current, then refuse the field it does not know as a 400.
+      const rows = await offline.getOfflineQueue().list();
+      const row = rows[0]!;
+      await offline.getOfflineQueue().clear();
+      const storage = window.localStorage;
+      storage.setItem(
+        "trackyourtime.offline-queue",
+        JSON.stringify({ v: 1, data: [{ ...row, apiLevel: API_LEVEL + 1 }] }),
+      );
+      offline.__resetOfflineQueueForTests();
+      at(API_LEVEL);
+      failNext.set(
+        "entries.start:new field",
+        Object.assign(new Error("Invalid input"), { data: { code: "BAD_REQUEST", httpStatus: 400 } }),
+      );
+
+      const { result } = renderQueue();
+      await act(async () => {
+        await result.current.flush();
+      });
+      expect(toastError).not.toHaveBeenCalled();
+      const kept = await offline.getOfflineQueue().list();
+      expect(kept.map((it) => it.hold?.reason ?? null)).toEqual(["server-too-old"]);
+    } finally {
+      reset();
+    }
+  });
+});

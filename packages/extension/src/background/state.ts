@@ -13,6 +13,7 @@
  */
 import {
   describeServerVersion,
+  MIN_SERVER_API_LEVEL,
   mergeQuickStarts,
   ownEntries,
   sameServerOrigin,
@@ -21,7 +22,11 @@ import {
   type TimeEntry,
 } from "@starter/core";
 import { loadServerInfo } from "../lib/config";
-import type { ActivitySnapshot, BackgroundState } from "../lib/messaging";
+import type {
+  ActivitySnapshot,
+  BackgroundState,
+  ServerCompatibility,
+} from "../lib/messaging";
 import { setActivityScope } from "./activity/capture";
 import { hasServerAccess } from "../lib/server-access";
 import { fetchClients, fetchProjects, fetchTags, fetchTasks } from "./catalog";
@@ -50,6 +55,7 @@ import {
   getCachedServerInfo,
   getCachedTasks,
   getCachedTodaySec,
+  getServerLevels,
   getActiveWorkspaceId,
   getKnownUserId,
   getKnownWorkspaces,
@@ -88,8 +94,20 @@ const QUICK_START_LIMIT = 5;
  */
 type ServerFacts = Pick<
   BackgroundState,
-  "apiUrl" | "webUrl" | "serverAccess" | "serverVersion" | "pendingSync"
+  "apiUrl" | "webUrl" | "serverAccess" | "serverVersion" | "pendingSync" | "compatibility"
 >;
+
+/** What the level cache knows about `apiUrl`, for the version banner. */
+export const resolveCompatibility = (apiUrl: string): ServerCompatibility => {
+  const levels = getServerLevels();
+  const known = levels.get(apiUrl);
+  return {
+    refusal: levels.compatibility(apiUrl),
+    release: known?.release ?? null,
+    apiLevel: known?.apiLevel ?? null,
+    minServerApiLevel: MIN_SERVER_API_LEVEL,
+  };
+};
 
 /**
  * The version line: the live /api/health answer when there is one, else what
@@ -125,6 +143,8 @@ const resolveServerFacts = async (
   serverAccess: await hasServerAccess(apiUrl, chrome.permissions),
   serverVersion: await resolveServerVersion(apiUrl),
   pendingSync: await pendingSyncCount(),
+  // After `resolveWebUrl`, whose health read records the level.
+  compatibility: resolveCompatibility(apiUrl),
 });
 
 /**

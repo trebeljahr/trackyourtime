@@ -19,6 +19,7 @@ import type { DescriptionSuggestion } from "@starter/core";
 import {
   ensureReady,
   getCachedDescriptions,
+  getServerLevels,
   setCachedDescriptions,
   type CachedDescriptions,
 } from "./runtime";
@@ -58,6 +59,16 @@ export async function searchDescriptions(query: string): Promise<void> {
 
   const current = await ensureReady();
   if (!current.session) return;
+
+  // Gating a feature on the server (docs/versioning.md → "Gating a feature on
+  // the server"): ask the level cache whether the server has the capability,
+  // never a release number. A server that lacks it answers an empty list, so
+  // the field simply offers nothing — no request, no error. An unknown level
+  // counts as supported; a failed read is silent anyway.
+  if (!getServerLevels().supports(current.apiUrl, "entries.descriptions")) {
+    setCachedDescriptions({ query: search, rows: [], fetchedAt: Date.now() });
+    return;
+  }
 
   try {
     const rows = await current.api.query<DescriptionSuggestion[]>(

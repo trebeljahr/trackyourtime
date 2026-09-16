@@ -4,6 +4,7 @@ import * as React from "react";
 import type { DescriptionSuggestion } from "@starter/core";
 
 import { trpc } from "@/lib/trpc";
+import { useServerSupports } from "@/lib/server-level";
 
 /**
  * How long typing settles before the server is asked. A request per keystroke
@@ -45,9 +46,12 @@ export const useDescriptionSuggestions = (
     return () => clearTimeout(timer);
   }, [query]);
 
+  // Gated on the server's API level (docs/versioning.md → "Gating a feature
+  // on the server"): a server without the procedure is never asked.
+  const supported = useServerSupports("entries.descriptions");
   const result = trpc.entries.descriptions.useQuery(
     { search: debounced === "" ? undefined : debounced, limit: DESCRIPTION_LIMIT },
-    { enabled, staleTime: 60_000, retry: false },
+    { enabled: enabled && supported, staleTime: 60_000, retry: false },
   );
 
   return React.useMemo(

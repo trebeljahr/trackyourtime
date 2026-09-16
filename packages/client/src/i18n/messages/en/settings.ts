@@ -291,6 +291,11 @@ export const settings = {
         description:
           "{count, plural, one {# change on this device needs a feature your server does not have.} other {# changes on this device need a feature your server does not have.}} Ask your admin to update the server — they are sent after that. Or discard them here.",
       },
+      serverTooOld: {
+        title: "Your server is older than this app",
+        description:
+          "Your server is older than this app; {count, plural, one {this change} other {these # changes}} will send once it's updated. Ask your admin to update the server, or discard them here.",
+      },
       confirm:
         "This deletes work that no server has ever received. It cannot be recovered. Update the app or the server instead if it should be kept.",
     },

@@ -204,6 +204,17 @@ export const shell: Translation<typeof source> = {
       "{host} ist ein Track-Your-Time-Server, akzeptiert aber noch keine Anmeldungen aus dieser App. Wer den Server betreibt, muss TRUST_STORE_APPS=true setzen oder capacitor://localhost und https://localhost zu TRUSTED_ORIGINS hinzufügen.",
     creatingOn: "Das Konto wird auf <server>{label}</server> erstellt.",
     change: "Server wechseln",
+    serverTooOld:
+      "{host} läuft mit einem API-Level ({level}), das diese App nicht nutzen kann. Diese App braucht Level {min} oder höher. Bitte die Administration des Servers, ihn zu aktualisieren.",
+    appTooOld: "{host} braucht eine neuere Version dieser App. Aktualisiere die App und versuche es dann erneut.",
+  },
+  versionBanner: {
+    serverTooOld:
+      "Dieser Server läuft mit v{release} (API-Level {level}). Diese App braucht Level {min} oder höher. Bitte deine Server-Administration, ihn zu aktualisieren.",
+    serverTooOldUnknownRelease:
+      "Dieser Server läuft mit einer älteren Version (API-Level {level}). Diese App braucht Level {min} oder höher. Bitte deine Server-Administration, ihn zu aktualisieren.",
+    howToUpdate: "So aktualisierst du einen Server",
+    clientTooOld: "Diese App ist zu alt für diesen Server. Aktualisiere die App.",
   },
   serverProblems: {
     empty: "Gib die Adresse deines Servers ein.",

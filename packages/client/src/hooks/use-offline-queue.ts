@@ -12,6 +12,7 @@ import { toast } from "@/components/ui/sonner";
 import { translate } from "@/i18n/translate";
 import { OFFLINE_QUEUED_MUTATION } from "@/lib/query-client";
 import { trpc } from "@/lib/trpc";
+import { currentServerApiLevel, refreshServerLevel } from "@/lib/server-level";
 import {
   applyWorkspaceList,
   registerWorkspaceListRefetch,
@@ -294,6 +295,7 @@ export const useOfflineQueue = (): OfflineQueueState => {
     let stale = 0;
     let heldNow = 0;
     let blocked = false;
+    let levelStale = false;
 
     // One map for the whole flush: a start and the stop that ends it are
     // queued as a pair, and the stop becomes targetable the instant the start
@@ -328,6 +330,9 @@ export const useOfflineQueue = (): OfflineQueueState => {
            */
           const outcome = await classifyReplayOutcome(error, mutation, {
             isTransportFailure: isNetworkError,
+            // A 400 on a row of a higher API level than the server's is the
+            // server not knowing a field yet: held, not dropped.
+            serverApiLevel: currentServerApiLevel(),
             // Applied without the adoption step (`takeWorkspaceListFor`):
             // that needs the queue this flush holds.
             stillMember: async (workspaceId) => {
@@ -343,12 +348,19 @@ export const useOfflineQueue = (): OfflineQueueState => {
             if (outcome.reason === "stale-stop") stale += 1;
             else rejected += 1;
           }
-          if (outcome.kind === "hold") heldNow += 1;
+          if (outcome.kind === "hold") {
+            heldNow += 1;
+            // The server lacks a procedure: its level may be older than this
+            // cache believes. Asked again, so the next flush (and the banner)
+            // judge by what it says now.
+            if (outcome.reason === "unknown-procedure") levelStale = true;
+          }
           return flushVerdictFor(outcome, error);
         }
       }, { memberWorkspaceIds: members, retryHeld });
 
       setAuthBlocked(blocked);
+      if (levelStale) void refreshServerLevel();
 
       /*
        * Say something when a row is lost.

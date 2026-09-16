@@ -241,6 +241,13 @@ extension to the Chrome Web Store only when its store secrets are set.
   `/api/health` reports the server's `apiLevel`, `minClientApiLevel` and
   `commit`. A client that declares an API level the server no longer serves
   gets a `CLIENT_TOO_OLD` refusal. `docs/versioning.md` describes the rules.
+- The web app, the phone apps, the browser extension and Raycast show a
+  banner when their server is too old for them, with a link to the upgrade
+  guide, or when they are too old for their server. The phone app's and the
+  extension's server pickers refuse such a server.
+- Offline changes queued by a newer app wait for an older server to be
+  updated instead of being sent to it. They are listed with that reason and
+  sent once the server reports a new enough API level.
 - Browser sessions last 7 days. Sessions held by the extension, Raycast and
   the native shells last 30 days.
 - Delete your account from Settings → Account. A workspace you are alone in

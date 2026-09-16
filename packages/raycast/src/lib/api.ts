@@ -9,6 +9,7 @@ import {
   ApiError,
   buildOptimisticEntry,
   buildQuickStartInput,
+  CLIENT_TOO_OLD,
   createApiClient,
   createTempId,
   decorateEntry,
@@ -72,6 +73,7 @@ import {
   type OfflineOverlay,
 } from "./overlay.js";
 import { apiUrl } from "./preferences.js";
+import { noteClientTooOld } from "./server-level.js";
 import { loadTimerEcho, noteTimerEcho } from "./storage.js";
 
 export { NotSignedInError, StillSyncingError };
@@ -1094,8 +1096,9 @@ export async function getTrackYourTime(): Promise<TrackYourTime> {
   // Every command builds a client per load, so a switch made in another
   // command reaches this one on its next read.
   let workspaceId = await activeWorkspaceId();
-  const client = createApiClient({
-    baseUrl: apiUrl(),
+  const origin = apiUrl();
+  const raw = createApiClient({
+    baseUrl: origin,
     token: session.token,
     clientId: CLIENT_ID,
     clientVersion: APP_VERSION,
@@ -1103,6 +1106,25 @@ export async function getTrackYourTime(): Promise<TrackYourTime> {
     // names the one it was made in, and keeps it.
     workspaceId: () => workspaceId,
   });
+
+  // Every request this extension makes passes through here, so this is where
+  // a refusal of this build's API level is noticed — once, for every command,
+  // including the offline replay. It shows as the "update the app" banner
+  // rather than as a generic failure (docs/versioning.md → "Refusals").
+  const noting = async <T>(request: Promise<T>): Promise<T> => {
+    try {
+      return await request;
+    } catch (error) {
+      if (error instanceof ApiError && error.versionRefusal === CLIENT_TOO_OLD) {
+        await noteClientTooOld(origin);
+      }
+      throw error;
+    }
+  };
+  const client: ApiClient = {
+    query: (path, input) => noting(raw.query(path, input)),
+    mutate: (path, input) => noting(raw.mutate(path, input)),
+  };
 
   return wrap(
     client,

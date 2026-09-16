@@ -24,6 +24,9 @@ const steps = (pending: number) => {
       tick: vi.fn(() => {
         calls.push("tick");
       }),
+      refreshLevel: vi.fn(async () => {
+        calls.push("level");
+      }),
       pending: vi.fn(async () => {
         calls.push("pending");
         return pending;
@@ -56,7 +59,7 @@ describe("runResume", () => {
     const { calls, steps: s } = steps(2);
     await runResume(s);
 
-    expect(calls).toEqual(["reconnect", "tick", "pending", "flush"]);
+    expect(calls).toEqual(["reconnect", "tick", "level", "pending", "flush"]);
     // Not merely reordered — not run at all. The flush invalidates entries
     // itself once it has applied something, so an extra refetch here could
     // only race it back to the pre-flush state.
@@ -67,7 +70,7 @@ describe("runResume", () => {
     const { calls, steps: s } = steps(0);
     await runResume(s);
 
-    expect(calls).toEqual(["reconnect", "tick", "pending", "invalidate"]);
+    expect(calls).toEqual(["reconnect", "tick", "level", "pending", "invalidate"]);
     expect(s.flush).not.toHaveBeenCalled();
   });
 
@@ -86,7 +89,39 @@ describe("runResume", () => {
     await Promise.resolve();
     expect(calls).toContain("tick");
 
+    // The flush starts a few microtasks later, after the level read settles.
+    await vi.waitFor(() => expect(s.flush).toHaveBeenCalled());
     release();
     await done;
+  });
+
+  it("waits for the server's API level before a flush, never before an invalidate", async () => {
+    const flushing = steps(1);
+    let releaseLevel = (): void => undefined;
+    flushing.steps.refreshLevel.mockImplementation(
+      () => new Promise<void>((resolve) => {
+        releaseLevel = resolve;
+      }),
+    );
+    const run = runResume(flushing.steps);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(flushing.steps.flush).not.toHaveBeenCalled();
+    releaseLevel();
+    await run;
+    expect(flushing.steps.flush).toHaveBeenCalledTimes(1);
+
+    const idle = steps(0);
+    idle.steps.refreshLevel.mockImplementation(() => new Promise<void>(() => undefined));
+    await runResume(idle.steps);
+    expect(idle.steps.invalidateCurrent).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed level read never blocks the flush", async () => {
+    const { steps: s } = steps(1);
+    s.refreshLevel.mockImplementation(async () => {
+      throw new Error("offline");
+    });
+    await runResume(s);
+    expect(s.flush).toHaveBeenCalledTimes(1);
   });
 });

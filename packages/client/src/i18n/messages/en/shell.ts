@@ -211,6 +211,21 @@ export const shell = {
       "{host} is a Track Your Time server, but it does not accept sign-ins from this app yet. Its administrator needs to set TRUST_STORE_APPS=true, or add capacitor://localhost and https://localhost to TRUSTED_ORIGINS.",
     creatingOn: "Creating an account on <server>{label}</server>.",
     change: "Change server",
+    serverTooOld:
+      "{host} runs an API level ({level}) this app cannot use. This app needs level {min} or higher. Ask the server's administrator to update it.",
+    appTooOld: "{host} needs a newer version of this app. Update the app, then try again.",
+  },
+  /**
+   * The persistent banner when this app and its server cannot work together
+   * (docs/versioning.md). Shown after mount only.
+   */
+  versionBanner: {
+    serverTooOld:
+      "This server runs v{release} (API level {level}). This app needs level {min} or higher. Ask your server admin to update.",
+    serverTooOldUnknownRelease:
+      "This server runs an older version (API level {level}). This app needs level {min} or higher. Ask your server admin to update.",
+    howToUpdate: "How to update a server",
+    clientTooOld: "This app is too old for this server. Update the app.",
   },
   /**
    * Why a typed server address or the server behind it cannot be used. Keyed by

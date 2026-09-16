@@ -55,6 +55,8 @@ import {
   WorkspaceSwitcher,
 } from "@/components/workspace-switcher";
 import { useNativeLifecycle } from "@/hooks/use-native-lifecycle";
+import { VersionBanner } from "@/components/version-banner";
+import { refreshServerLevel } from "@/lib/server-level";
 import { useRunningEntry, useSync } from "@/hooks/use-sync";
 import { OfflineQueueProvider } from "@/providers/offline-queue-provider";
 import { useFormatSettings } from "@/lib/format";
@@ -339,6 +341,11 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
   // Resume/pause for the native shells. A no-op on web, where nothing ever
   // calls the handlers it registers.
   useNativeLifecycle();
+  // App start: learn what the server in use speaks (docs/versioning.md). A
+  // resume asks again in `useNativeLifecycle`.
+  React.useEffect(() => {
+    void refreshServerLevel();
+  }, []);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [lastPath, setLastPath] = React.useState(pathname);
 
@@ -462,6 +469,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
+          <VersionBanner />
           <header
             className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-border bg-background/95 px-3 backdrop-blur md:px-6"
             data-testid="app-header"

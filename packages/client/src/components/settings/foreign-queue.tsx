@@ -76,6 +76,10 @@ const HELD_KEYS = {
     title: "foreignQueue.held.unknownProcedure.title",
     description: "foreignQueue.held.unknownProcedure.description",
   },
+  "server-too-old": {
+    title: "foreignQueue.held.serverTooOld.title",
+    description: "foreignQueue.held.serverTooOld.description",
+  },
 } as const satisfies Record<HoldReason, { title: string; description: string }>;
 
 /**

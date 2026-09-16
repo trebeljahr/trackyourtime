@@ -23,6 +23,10 @@ export const popup = {
       title: "{count, plural, one {# change} other {# changes}} your server doesn’t support yet",
       hint: "Your server doesn’t support these changes yet. Ask your admin to update it — they are sent after that. Or discard them here.",
     },
+    waitingServerUpdate: {
+      title: "{count, plural, one {# change} other {# changes}} waiting for a server update",
+      hint: "Your server is older than this app; these changes will send once it's updated",
+    },
     discardHintWaiting: "This deletes work that no server has received. It cannot be recovered.",
     leftWorkspace: "a workspace you left",
     untitled: "(no description)",
@@ -36,6 +40,15 @@ export const popup = {
       remove: "Delete an entry in {workspace}",
       other: "A change in {workspace}",
     },
+  },
+  /** The banner above every screen when this app and the server do not fit. */
+  version: {
+    serverTooOld:
+      "This server runs v{release} (API level {level}). This app needs level {min} or higher. Ask your server admin to update.",
+    serverTooOldNoRelease:
+      "This server runs an older version (API level {level}). This app needs level {min} or higher. Ask your server admin to update.",
+    howToUpdate: "How to update",
+    clientTooOld: "This app is too old for this server. Update the app.",
   },
   actions: {
     cancel: "Cancel",
@@ -118,6 +131,10 @@ export const popup = {
       "{server} is a Track Your Time server, but it cannot reach its database right now. Try again in a minute.",
     unsentChanges:
       "Some changes have not reached the server in use yet. Switching servers signs you out, and the extension discards them.",
+    serverTooOld:
+      "{server} runs API level {level}. This app needs level {min} or higher. Ask the server admin to update it.",
+    serverTooOldUnknown:
+      "{server} runs an older version than this app needs. Ask the server admin to update it.",
     serverEmpty: "Enter your server's address.",
     serverInvalid: "“{input}” is not a web address. It looks like https://track.example.com.",
     serverInsecure:

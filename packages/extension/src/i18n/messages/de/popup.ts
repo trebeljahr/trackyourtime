@@ -16,6 +16,10 @@ export const popup: Translation<typeof source> = {
       title: "{count, plural, one {# Änderung wird} other {# Änderungen werden}} von deinem Server noch nicht unterstützt",
       hint: "Dein Server unterstützt diese Änderungen noch nicht. Bitte deinen Admin, ihn zu aktualisieren – danach werden sie gesendet. Oder verwirf sie hier.",
     },
+    waitingServerUpdate: {
+      title: "{count, plural, one {# Änderung wartet} other {# Änderungen warten}} auf ein Server-Update",
+      hint: "Dein Server ist älter als diese App. Diese Änderungen werden gesendet, sobald er aktualisiert ist.",
+    },
     discardHintWaiting: "Damit löschst du Arbeit, die kein Server erhalten hat. Sie lässt sich nicht wiederherstellen.",
     leftWorkspace: "einen verlassenen Arbeitsbereich",
     untitled: "(ohne Beschreibung)",
@@ -29,6 +33,14 @@ export const popup: Translation<typeof source> = {
       remove: "Einen Eintrag in {workspace} löschen",
       other: "Eine Änderung in {workspace}",
     },
+  },
+  version: {
+    serverTooOld:
+      "Dieser Server läuft mit v{release} (API-Level {level}). Diese App braucht Level {min} oder höher. Bitte den Admin deines Servers, ihn zu aktualisieren.",
+    serverTooOldNoRelease:
+      "Dieser Server läuft mit einer älteren Version (API-Level {level}). Diese App braucht Level {min} oder höher. Bitte den Admin deines Servers, ihn zu aktualisieren.",
+    howToUpdate: "So wird aktualisiert",
+    clientTooOld: "Diese App ist zu alt für diesen Server. Aktualisiere die App.",
   },
   actions: {
     cancel: "Abbrechen",
@@ -114,6 +126,10 @@ export const popup: Translation<typeof source> = {
       "{server} ist ein Track-Your-Time-Server, erreicht seine Datenbank gerade aber nicht. Versuch es in einer Minute noch einmal.",
     unsentChanges:
       "Einige Änderungen haben den aktuellen Server noch nicht erreicht. Ein Serverwechsel meldet dich ab, und die Erweiterung verwirft diese Änderungen.",
+    serverTooOld:
+      "{server} läuft mit API-Level {level}. Diese App braucht Level {min} oder höher. Bitte den Admin des Servers, ihn zu aktualisieren.",
+    serverTooOldUnknown:
+      "{server} läuft mit einer älteren Version, als diese App braucht. Bitte den Admin des Servers, ihn zu aktualisieren.",
     serverEmpty: "Gib die Adresse deines Servers ein.",
     serverInvalid: "„{input}“ ist keine Webadresse. Eine Webadresse sieht so aus: https://track.example.com.",
     serverInsecure:

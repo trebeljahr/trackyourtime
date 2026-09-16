@@ -24,9 +24,11 @@ import {
   projectIcon,
 } from "./lib/format.js";
 import { useApi } from "./lib/hooks.js";
+import { useServerLevel } from "./lib/server-level.js";
 import { ownOnly, resolveUserId } from "./lib/timer-data.js";
 import { webLink } from "./lib/preferences.js";
 import { refreshMenuBar, showFailureToast } from "./lib/ui.js";
+import { CompatibilityListSection } from "./components/compatibility-banner.js";
 import { EditEntry } from "./components/edit-entry.js";
 import { LogTime } from "./components/log-time.js";
 import { SignedOutView } from "./components/signed-out.js";
@@ -147,6 +149,8 @@ export default function Entries(): React.JSX.Element {
   const tagNames = new Map(
     (tags.data ?? []).map((tag) => [tag.id, tag.name] as const),
   );
+  // Also the command-start refresh of the server's API level.
+  const { banner } = useServerLevel();
 
   if (signedOut) return <SignedOutView />;
 
@@ -209,6 +213,8 @@ export default function Entries(): React.JSX.Element {
         </ActionPanel>
       }
     >
+      <CompatibilityListSection banner={banner} />
+
       <List.EmptyView
         icon={Icon.Clock}
         title="No entries yet"

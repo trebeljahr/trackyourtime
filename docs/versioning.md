@@ -167,6 +167,77 @@ A request that declares no level is a client from before the handshake, and is
 always served. The status is 412, not 400: the offline queue drops a row on a
 permanent status, and a version refusal is never a reason to delete queued time.
 
+### Gating a feature on the server
+
+A client never offers a feature its server cannot answer. It asks the server's
+**declared API level**, never its release.
+
+**The capability map.** `REQUIRES_API_LEVEL` in
+`packages/shared/src/capabilities.ts` names every capability a client gates on,
+with the lowest server level that has it. Everything that existed when the map
+was introduced is level 1. `serverSupports(capability, serverApiLevel)` is the
+one check. An unknown level (`null`) answers true: hiding every feature until a
+health read lands would flash the screen, and a write the server turns out not
+to know is held by the offline queue rather than lost. Level 0 has nothing.
+
+**The level cache.** `createServerLevelCache` in
+`packages/core/src/server-level.ts` remembers, per server origin, what
+`/api/health` said: `apiLevel`, `minClientApiLevel`, `release`, and whether a
+request was refused `CLIENT_TOO_OLD`. A failed read keeps what was known. Each
+client refreshes it at the same moments:
+
+| Moment | Web app and phone shells | Extension | Raycast |
+| --- | --- | --- | --- |
+| App start | `AppShell` mount | `reload()`; a cold worker start at most every 15 minutes | command start, at most every 10 minutes |
+| Resume | `use-native-lifecycle.ts`, after the tick and before the flush | — | — |
+| Server switch | the picker records its `checkServer` result | `setServer` records it | new origin, new entry |
+| `unknown-procedure` hold | after the flush | after the flush | before the flush returns |
+
+Storage: `localStorage` in the web app and the phone shells (a cache; eviction
+costs one health read), `chrome.storage.local` in the extension, `LocalStorage`
+in Raycast, all under `trackyourtime.server-levels` (the versioned envelope).
+
+Read it through the client's helper: `useServerSupports` /
+`serverSupportsNow` (`lib/server-level.ts`) in the web app, the worker's cache
+in the extension, `useServerLevel().supports` in Raycast. The description
+autocomplete (`entries.descriptions`) is gated this way in all three, as the
+reference use.
+
+**Adding a capability.**
+
+1. Add the procedure, field, enum value or sync event kind on the server.
+2. Bump `API_LEVEL` and add its `API_LEVEL_CHANGES` row.
+3. Add the capability to `REQUIRES_API_LEVEL` at the new level. `server-level.test.ts`
+   in core fails when a level has no capability, or a capability is above
+   `API_LEVEL`.
+4. Gate every client surface that uses it on `serverSupports`. Hide or disable
+   the control; never let it fail with a generic error.
+5. Do not raise `MIN_SERVER_API_LEVEL` for it. A floor is for a change a client
+   cannot work without at all.
+
+**Queued rows.** Core's `enqueue` stamps every row with the writing build's
+`API_LEVEL` (`QueuedMutation.apiLevel`, optional; a row without it is of
+unknown level). When the server's level is known and lower, the flush holds
+the row `server-too-old` before sending it (`serverLevelHold`), and a 400 on
+such a row is held rather than dropped (`classifyReplayOutcome` with
+`serverApiLevel`). The hold ends the moment the cache reports a level high
+enough (`holdBlocksReplay` with `serverApiLevel`), and on its hourly clock when
+the level is unknown. The row is stamped with the build's level, not the
+level its op needs, so a bump holds a newer client's queued rows against a
+lagging server until it is updated — the safe side of "skew never deletes user
+data".
+
+**Too-old banners.** `compatibility(origin)` answers `SERVER_TOO_OLD` (level
+below `MIN_SERVER_API_LEVEL`) or `CLIENT_TOO_OLD` (the server's floor is above
+this build, or it refused a request that way). The web app shell, the
+extension popup and the Raycast views show a banner that does not go away
+until the condition does: the server's release, level and the minimum with a
+link to the self-hosting guide's Upgrading section, or "Update the app". The
+web banner renders nothing in the prerender and on the hydrating render
+(`useServerCompatibility`). The server pickers (`components/server-picker.tsx`,
+the extension's `setServer`) refuse a server in either state, beside the
+`originTrusted` check.
+
 ### The release version
 
 The root `package.json` `version` is the single source of truth.

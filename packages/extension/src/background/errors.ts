@@ -7,16 +7,18 @@
  * token, a password, or a raw auth response.
  */
 import { ApiError, AuthError } from "@starter/core";
-import type { BackgroundResponse } from "../lib/messaging";
+import type { BackgroundResponse, ErrorDetails } from "../lib/messaging";
 
 /** A failure the worker itself decided on, rather than one the server sent. */
 export class BackgroundError extends Error {
   readonly code: string;
+  readonly details: ErrorDetails | undefined;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, details?: ErrorDetails) {
     super(message);
     this.name = "BackgroundError";
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -63,7 +65,9 @@ export const toErrorResponse = (error: unknown): BackgroundResponse => {
   }
 
   if (error instanceof BackgroundError) {
-    return { ok: false, code: error.code, message: error.message };
+    return error.details === undefined
+      ? { ok: false, code: error.code, message: error.message }
+      : { ok: false, code: error.code, message: error.message, details: error.details };
   }
 
   if (isUnreachable(error)) {

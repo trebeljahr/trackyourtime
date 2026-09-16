@@ -1987,6 +1987,13 @@ union that will grow. Rules that fail quietly if broken:
   `unknown-procedure` is written with `at` and asked again after
   `HELD_RETRY_MS` (one hour). The web app also asks again on the first flush
   of a document.
+- **`server-too-old` is decided by the server's level, not the clock.** Every
+  row is stamped `apiLevel` (the writing build's `API_LEVEL`) by core's
+  `enqueue`. A flush holds a row before sending it when the server's known
+  level is lower (`serverLevelHold`), and a 400 on such a row is a hold, not a
+  drop. `holdBlocksReplay` releases the hold the moment the level cache
+  reports enough. A row with no stamp, or a server of unknown level, is sent as
+  before. docs/versioning.md → "Gating a feature on the server".
 - **Holds follow the temp-id chain** (`chainOf: tempIdOf` on `flush`,
   `heldReasons` for counts). A stop that is replayed without its held start
   ends whatever runs on the server.

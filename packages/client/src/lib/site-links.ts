@@ -16,6 +16,8 @@ export const REPO_URL = "https://github.com/trebeljahr/trackyourtime";
  */
 export const DOCS_URL = "https://trackyourtime.dev/docs/";
 export const SELF_HOSTING_URL = `${DOCS_URL}self-hosting/`;
+/** Where a "your server is too old" banner sends a person. */
+export const SELF_HOSTING_UPGRADING_URL = `${SELF_HOSTING_URL}#upgrading`;
 export const API_DOCS_URL = `${DOCS_URL}api/`;
 /** Every route, with a link to the OpenAPI document (`/docs/openapi.json`). */
 export const API_REFERENCE_URL = `${DOCS_URL}api/reference/`;

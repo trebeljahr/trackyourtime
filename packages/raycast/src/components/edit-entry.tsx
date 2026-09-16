@@ -11,6 +11,7 @@ import type { DetailedEntry } from "@starter/core";
 import { useState } from "react";
 import { getTrackYourTime } from "../lib/api.js";
 import { refreshMenuBar, showFailureToast } from "../lib/ui.js";
+import { useServerLevel } from "../lib/server-level.js";
 import { DescriptionPicker } from "./description-picker.js";
 import {
   NONE,
@@ -57,6 +58,10 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
   const [submitting, setSubmitting] = useState(false);
 
   const catalog = useEntryCatalog();
+  // Gated on the server's declared API level, never its release: a store
+  // build is often newer than a self-hosted server. docs/versioning.md →
+  // "Gating a feature on the server".
+  const offersDescriptions = useServerLevel().supports("entries.descriptions");
 
   if (catalog.signedOut) return <SignedOutView />;
 
@@ -108,24 +113,26 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
             icon={Icon.Check}
             onSubmit={submit}
           />
-          <Action.Push
-            title="Pick a Past Description…"
-            icon={Icon.MagnifyingGlass}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
-            target={
-              <DescriptionPicker
-                projectId={projectId === NONE ? null : projectId}
-                onPick={setDescription}
-                onAdopt={(suggestion) => {
-                  setDescription(suggestion.description);
-                  setProjectId(orNone(suggestion.projectId));
-                  setTaskId(orNone(suggestion.taskId));
-                  setTagIds([...suggestion.tagIds]);
-                  setBillable(suggestion.billable);
-                }}
-              />
-            }
-          />
+          {offersDescriptions ? (
+            <Action.Push
+              title="Pick a Past Description…"
+              icon={Icon.MagnifyingGlass}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+              target={
+                <DescriptionPicker
+                  projectId={projectId === NONE ? null : projectId}
+                  onPick={setDescription}
+                  onAdopt={(suggestion) => {
+                    setDescription(suggestion.description);
+                    setProjectId(orNone(suggestion.projectId));
+                    setTaskId(orNone(suggestion.taskId));
+                    setTagIds([...suggestion.tagIds]);
+                    setBillable(suggestion.billable);
+                  }}
+                />
+              }
+            />
+          ) : null}
           {catalogActions(catalog, {
             onProject: setProjectId,
             onTask: setTaskId,

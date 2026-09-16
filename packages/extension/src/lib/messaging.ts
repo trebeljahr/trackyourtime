@@ -27,6 +27,7 @@ import type {
   Task,
   TimeEntry,
   UpdateSettingsInput,
+  VersionRefusal,
   WorkspaceSummary,
 } from "@starter/core";
 import type {
@@ -399,8 +400,25 @@ export type PopupToBackground =
  */
 export type SessionSource = "web" | "password";
 
+/**
+ * Whether this build and the server in use can work together, and what the
+ * server said about itself — for the popup's version banner.
+ */
+export type ServerCompatibility = {
+  /** Which side is too old, or null when both fit or it is not known yet. */
+  refusal: VersionRefusal | null;
+  /** The server's release, e.g. "0.3.1", when it said. */
+  release: string | null;
+  /** The server's API level, or null when not known yet. */
+  apiLevel: number | null;
+  /** The lowest server level this build works with (`MIN_SERVER_API_LEVEL`). */
+  minServerApiLevel: number;
+};
+
 export type BackgroundState = {
   apiUrl: string;
+  /** See {@link ServerCompatibility}. Present signed in and signed out. */
+  compatibility: ServerCompatibility;
   /**
    * Whether Chrome currently lets the extension reach `apiUrl`.
    *
@@ -552,9 +570,15 @@ export type BackgroundState = {
   heldSync: QueuedMutationSummary[];
 };
 
+/**
+ * Values a refusal carries for the popup's translated sentence — the server's
+ * level in a `SERVER_TOO_OLD`, say — since the worker's `message` is English.
+ */
+export type ErrorDetails = Readonly<Record<string, string | number | null>>;
+
 export type BackgroundResponse =
   | { ok: true; state: BackgroundState }
-  | { ok: false; code: string; message: string };
+  | { ok: false; code: string; message: string; details?: ErrorDetails };
 
 const errorResponse = (code: string, message: string): BackgroundResponse => ({
   ok: false,

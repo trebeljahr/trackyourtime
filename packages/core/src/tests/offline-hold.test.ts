@@ -365,7 +365,7 @@ test("a stored hold with a reason this build does not know is dropped on read", 
     JSON.stringify({
       v: 1,
       data: [
-        { ...row({ id: "a" }), hold: { reason: "server-too-old", at: "2026-09-14T09:00:00Z" } },
+        { ...row({ id: "a" }), hold: { reason: "some-future-reason", at: "2026-09-14T09:00:00Z" } },
         { ...row({ id: "b" }), hold: { reason: "unknown-op", at: "2026-09-14T09:00:00Z" } },
         { ...row({ id: "c" }), hold: { reason: "unknown-procedure", at: "2026-09-14T09:00:00Z" } },
       ],

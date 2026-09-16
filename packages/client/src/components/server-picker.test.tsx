@@ -84,6 +84,8 @@ const found = (overrides: Record<string, unknown> = {}) => ({
     commit: null,
     webUrl: OWN,
     originTrusted: true,
+    apiLevel: 1,
+    minClientApiLevel: 1,
     ...overrides,
   },
 });
@@ -189,6 +191,36 @@ describe("the login page on a phone", () => {
 
     expect(await screen.findByTestId("server-picker-error")).toHaveTextContent(
       "TRUST_STORE_APPS=true",
+    );
+    expect(switchServer).not.toHaveBeenCalled();
+  });
+
+  it("refuses a server whose API level is below what this app needs, and says what to do", async () => {
+    checkServer.mockResolvedValue(found({ apiLevel: 0 }));
+    await openPicker();
+    fireEvent.click(screen.getByTestId("server-picker-own"));
+    fireEvent.change(screen.getByTestId("server-picker-address"), {
+      target: { value: OWN },
+    });
+    fireEvent.click(screen.getByTestId("server-picker-save"));
+
+    expect(await screen.findByTestId("server-picker-error")).toHaveTextContent(
+      "track.example.com runs an API level (0) this app cannot use. This app needs level 1 or higher.",
+    );
+    expect(switchServer).not.toHaveBeenCalled();
+  });
+
+  it("refuses a server that no longer serves this app's API level", async () => {
+    checkServer.mockResolvedValue(found({ minClientApiLevel: 99 }));
+    await openPicker();
+    fireEvent.click(screen.getByTestId("server-picker-own"));
+    fireEvent.change(screen.getByTestId("server-picker-address"), {
+      target: { value: OWN },
+    });
+    fireEvent.click(screen.getByTestId("server-picker-save"));
+
+    expect(await screen.findByTestId("server-picker-error")).toHaveTextContent(
+      "track.example.com needs a newer version of this app.",
     );
     expect(switchServer).not.toHaveBeenCalled();
   });

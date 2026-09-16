@@ -19,6 +19,7 @@
  * so a new server-side code still says something true.
  */
 import type { PopupT } from "../i18n/use-t";
+import type { ErrorDetails } from "../lib/messaging";
 
 import { serverHost, TWO_FACTOR_UNSUPPORTED, type ServerInputProblem } from "@starter/core";
 
@@ -115,12 +116,33 @@ const fixedMessage = (code: string, t: PopupT, server: string): string | null =>
   }
 };
 
+/**
+ * A server below this build's API floor, named with the level it reported
+ * (`details` from the worker). Without the numbers it is still the right
+ * sentence, only less specific.
+ */
+const serverTooOldMessage = (
+  server: string,
+  details: ErrorDetails | undefined,
+  t: PopupT,
+): string => {
+  const level = details?.apiLevel;
+  const min = details?.minApiLevel;
+  if (typeof level === "number" && typeof min === "number") {
+    return t("errors.serverTooOld", { server, level: String(level), min: String(min) });
+  }
+  return t("errors.serverTooOldUnknown", { server });
+};
+
 export function describeError(
   code: string,
   message: string,
   apiUrl: string,
   t: PopupT,
+  details?: ErrorDetails,
 ): string {
+  if (code === "SERVER_TOO_OLD") return serverTooOldMessage(serverHost(apiUrl), details, t);
+
   if (CREDENTIAL_CODES.has(code)) return t("errors.credentials");
 
   if (code === "NO_SESSION_TOKEN") return t("errors.noSessionToken");

@@ -22,6 +22,7 @@ import {
   describeQueuedMutation,
   heldReasons,
   holdBlocksReplay,
+  serverLevelHold,
   isForeignTo,
   isForeignWorkspace,
   isPermanentRejectionStatus,
@@ -69,6 +70,7 @@ export type {
   OfflineUpdateInput,
 } from "@starter/core";
 
+import { currentServerApiLevel } from "@/lib/server-level";
 import {
   preferencesStorage,
   shouldUseNativeStorage,
@@ -482,8 +484,11 @@ export const hasReplayableRows = async (
   if ((await refreshPendingCount()) > 0) return true;
   const against = owner ?? lastOwner;
   const rows = await getOfflineQueue().list();
+  const serverApiLevel = currentServerApiLevel();
   return rows.some(
-    (row) => !isElsewhere(row, against) && !holdBlocksReplay(row, options),
+    (row) =>
+      !isElsewhere(row, against) &&
+      !holdBlocksReplay(row, { ...options, serverApiLevel }),
   );
 };
 
@@ -580,12 +585,19 @@ export const flushOfflineQueue = async (
   const members =
     options.memberWorkspaceIds ?? getKnownWorkspaceIds() ?? new Set<string>();
   const now = Date.now();
+  // Read once: every row of one flush is judged against the same server.
+  const serverApiLevel = currentServerApiLevel();
   const result = await getOfflineQueue().flush(
     async (row) => {
       const decoded = decodeOfflineMutation(row);
       // A row this build cannot read was written by a newer one. It is held,
       // not dropped — the filter below already keeps it from getting here.
       if (decoded === null) return { hold: "unknown-op" };
+      // A server known to be older than the build that queued the row is not
+      // sent it at all: an input field it does not know would be stripped or
+      // refused. Held until the server reports a level high enough.
+      const tooOld = serverLevelHold(row, serverApiLevel);
+      if (tooOld !== null) return { hold: tooOld };
       return runner(decoded, { createdAt: row.createdAt });
     },
     {
@@ -593,7 +605,11 @@ export const flushOfflineQueue = async (
         isReplayableBy(row, owner) &&
         isOnThisServer(row) &&
         isReplayableIn(row, members) &&
-        !holdBlocksReplay(row, { now, retryHeld: options.retryHeld }),
+        !holdBlocksReplay(row, {
+          now,
+          retryHeld: options.retryHeld,
+          serverApiLevel,
+        }),
       // A start and the stop that ends it share a temp id: when one is held
       // the other waits with it.
       chainOf: tempIdOf,

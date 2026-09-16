@@ -31,6 +31,7 @@ import {
   isTransportFailure as isTransportFailureCore,
   OFFLINE_QUEUE_STORAGE_KEY,
   replayOfflineMutation,
+  serverLevelHold,
   type FlushResult,
   type HoldReason,
   type OfflineOp,
@@ -47,6 +48,7 @@ import { NotSignedInError } from "./errors.js";
 import { getStoredUserId } from "./auth.js";
 import { raycastStorage } from "./storage.js";
 import { apiUrl } from "./preferences.js";
+import { knownServerApiLevel, refreshServerLevel } from "./server-level.js";
 import {
   activeWorkspaceId,
   knownWorkspaces,
@@ -303,6 +305,11 @@ export const heldCopy = (
         title: `${changes} your server doesn’t support yet`,
         subtitle: "Ask your admin to update the server — they are sent after that. Or discard them",
       };
+    case "server-too-old":
+      return {
+        title: `${changes} waiting for a server update`,
+        subtitle: "Your server is older than this app; these changes will send once it's updated",
+      };
     case null:
       return {
         title: `${changes} waiting for an update`,
@@ -456,6 +463,11 @@ export async function flushOffline(
   const resolved: ReplayIdMap = new Map();
   let refused = 0;
   let stale = 0;
+  // What this Mac last learned about the server's API level (null: never
+  // asked). A row queued by a build of a higher level is held rather than sent
+  // to a server that would strip or refuse the fields it does not know.
+  const serverApiLevel = await knownServerApiLevel(apiUrl());
+  let metUnknownProcedure = false;
 
   const result = await offline.flush(
     async (row) => {
@@ -463,6 +475,10 @@ export async function flushOffline(
       // A row this build cannot read was written by a newer one: held, not
       // dropped. The filter already keeps it from getting here.
       if (decoded === null) return { hold: "unknown-op" };
+      // Decided before sending: the server is known to be older than the
+      // build that queued this row.
+      const levelHold = serverLevelHold(row, serverApiLevel);
+      if (levelHold !== null) return { hold: levelHold };
       try {
         await replayOfflineMutation(mutators, NO_IDLE_WATCHER, decoded, {
           createdAt: row.createdAt,
@@ -479,7 +495,11 @@ export async function flushOffline(
         const outcome = await classifyReplayOutcome(error, decoded, {
           isTransportFailure,
           stillMember,
+          serverApiLevel,
         });
+        if (outcome.kind === "hold" && outcome.reason === "unknown-procedure") {
+          metUnknownProcedure = true;
+        }
         if (outcome.kind === "drop") {
           if (outcome.reason === "stale-stop") stale += 1;
           else refused += 1;
@@ -494,12 +514,16 @@ export async function flushOffline(
         isReplayableIn(row, memberWorkspaceIds) &&
         // Waits for its hold to end: a newer build, or an hour since the
         // server last said it lacks the procedure.
-        !holdBlocksReplay(row),
+        !holdBlocksReplay(row, { serverApiLevel }),
       // A start and the stop that ends it share a temp id: when one is held
       // the other waits with it.
       chainOf: tempIdOf,
     },
   );
+
+  // The server lacks a procedure this build sends: its level is worth asking
+  // again now, so the banner and the next flush's preflight hold are current.
+  if (metUnknownProcedure) await refreshServerLevel(apiUrl(), { force: true });
 
   return { ...result, refused, stale, resolved };
 }
