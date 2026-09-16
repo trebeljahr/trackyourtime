@@ -23,6 +23,7 @@ COPY packages/client packages/client
 COPY docs-site docs-site
 COPY scripts/llms scripts/llms
 COPY scripts/docs scripts/docs
+COPY scripts/write-version-json.mjs scripts/write-version-json.mjs
 
 # Next.js inlines NEXT_PUBLIC_* into the browser bundle at BUILD time —
 # runtime env on the deployed container has no effect on browser code.
@@ -42,7 +43,11 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 
 ARG COMMIT_SHA
-ENV COMMIT_SHA=$COMMIT_SHA
+# NEXT_PUBLIC_BUILD_COMMIT is the bundle's own copy of the commit, compared
+# against /version.json by an open tab to notice a newer deploy
+# (packages/client/src/lib/deploy-version.ts). Empty disables that check.
+ENV COMMIT_SHA=$COMMIT_SHA \
+    NEXT_PUBLIC_BUILD_COMMIT=$COMMIT_SHA
 
 RUN pnpm --filter @starter/shared run build
 RUN pnpm --filter @starter/core run build
@@ -69,10 +74,10 @@ RUN test -n "$NEXT_PUBLIC_API_URL" \
 # carries no lastmod (docs-site/docusaurus.config.ts explains).
 RUN node scripts/docs/build-into-client.mjs
 
-# Stamp the commit next to the export so the deployed artefact can be asked
-# what it is. Served as /version.json by serve.mjs like any other static file.
-RUN printf '{"commit":"%s","apiUrl":"%s"}\n' "$COMMIT_SHA" "$NEXT_PUBLIC_API_URL" \
-      > packages/client/out/version.json
+# Stamp the commit and release version next to the export so the deployed
+# artefact can be asked what it is: CI polls it after a deploy, and open tabs
+# poll it to offer a reload. serve.mjs sends it with no-cache.
+RUN node scripts/write-version-json.mjs packages/client/out/version.json
 
 # ── Stage 3: Production runtime ─────────────────────────────────────
 FROM node:24-bookworm-slim AS runtime

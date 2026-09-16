@@ -61,12 +61,22 @@ COPY packages/client packages/client
 ARG NEXT_PUBLIC_API_URL=""
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
+# The release commit. Stamped into /version.json and into the bundle, where an
+# open tab compares the two to offer a reload after an upgrade
+# (packages/client/src/lib/deploy-version.ts). Empty — a local
+# `docker compose build` — writes an empty commit and turns that check off.
+ARG COMMIT_SHA=""
+ENV COMMIT_SHA=$COMMIT_SHA \
+    NEXT_PUBLIC_BUILD_COMMIT=$COMMIT_SHA
+COPY scripts/write-version-json.mjs scripts/write-version-json.mjs
+
 # Same order as the root `build:client` script — @starter/core is a real
 # runtime dependency of the client and resolves through its dist/, so it has
 # to be compiled before Next resolves the import.
 RUN pnpm --filter @starter/shared run build \
  && pnpm --filter @starter/core run build \
- && pnpm --filter @starter/client run build
+ && pnpm --filter @starter/client run build \
+ && node scripts/write-version-json.mjs packages/client/out/version.json
 
 # ── Stage 3: Static runtime ──────────────────────────────────────────
 FROM caddy:2.11-alpine AS runtime
@@ -94,13 +104,16 @@ RUN addgroup -S app && adduser -S -G app app \
 #     export, and nothing in the app depends on the status.
 # The hashed build output under /_next/static is content-addressed, so it can
 # be cached forever; nothing else here may be, or a deploy would leave stale
-# HTML pointing at chunks that no longer exist.
+# HTML pointing at chunks that no longer exist. /version.json is marked
+# no-cache outright, because open tabs poll it to notice an upgrade.
 RUN printf '%s\n' \
   ':8080 {' \
   '	root * /srv' \
   '	encode zstd gzip' \
   '	@immutable path /_next/static/*' \
   '	header @immutable Cache-Control "public, max-age=31536000, immutable"' \
+  '	@version path /version.json' \
+  '	header @version Cache-Control "no-cache"' \
   '	try_files {path} {path}/index.html /404.html' \
   '	file_server' \
   '}' > /etc/caddy/Caddyfile

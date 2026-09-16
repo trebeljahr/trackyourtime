@@ -237,6 +237,19 @@ export const shell = {
     home: "Go to the home page",
     report: "Followed a link from Track Your Time itself? <link>Tell us</link> so we can fix it.",
   },
+  /** The notice a web tab shows after a newer build was deployed. */
+  update: {
+    available: "A new version of Track Your Time is available.",
+    reload: "Reload",
+  },
+  /** app/global-error.tsx and app/app/error.tsx. */
+  errorPage: {
+    title: "This page stopped working",
+    body: "Something went wrong while showing this page. Reload to try again.",
+    chunkBody: "Track Your Time was updated while this page was open. Reload to get the new version.",
+    reload: "Reload",
+    retry: "Try again",
+  },
   ui: {
     combobox: {
       placeholder: "Select…",

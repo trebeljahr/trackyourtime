@@ -225,6 +225,17 @@ export const shell: Translation<typeof source> = {
     home: "Zur Startseite",
     report: "Bist du einem Link in Track Your Time selbst gefolgt? <link>Sag uns Bescheid</link>, damit wir ihn reparieren.",
   },
+  update: {
+    available: "Eine neue Version von Track Your Time ist verfügbar.",
+    reload: "Neu laden",
+  },
+  errorPage: {
+    title: "Diese Seite funktioniert nicht mehr",
+    body: "Beim Anzeigen dieser Seite ist ein Fehler aufgetreten. Lade sie neu, um es noch einmal zu versuchen.",
+    chunkBody: "Track Your Time wurde aktualisiert, während diese Seite offen war. Lade sie neu, um die neue Version zu bekommen.",
+    reload: "Neu laden",
+    retry: "Erneut versuchen",
+  },
   ui: {
     combobox: {
       placeholder: "Auswählen …",

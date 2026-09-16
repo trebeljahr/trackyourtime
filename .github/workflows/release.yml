@@ -345,8 +345,12 @@ jobs:
           # NEXT_PUBLIC_WS_URL is deliberately absent: it is read nowhere in
           # the source, and offering the knob would send anyone debugging a
           # WebSocket problem down a dead end.
+          #
+          # COMMIT_SHA stamps /version.json and the bundle, so an open tab can
+          # offer a reload after the operator upgrades.
           build-args: |
             NEXT_PUBLIC_API_URL=
+            COMMIT_SHA=${{ needs.prepare.outputs.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: ${{ needs.prepare.outputs.push == 'true' && format('type=image,name=ghcr.io/{0}-client-selfhost,push-by-digest=true,name-canonical=true,push=true', env.IMAGE_OWNER_REPO) || 'type=cacheonly' }}
           provenance: ${{ needs.prepare.outputs.push == 'true' && 'mode=max' || 'false' }}

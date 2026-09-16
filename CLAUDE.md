@@ -1948,6 +1948,23 @@ The client image serves the static export: `output: "export"` leaves no
 The E2E suite runs that same file, so the deployed and tested servers cannot
 drift apart.
 
+**An open tab outlives a deploy, and its chunks do not.** Each image replaces
+every hashed chunk, so a tab opened before a deploy 404s the first time it
+lazy-loads a route. Two web-only answers, both started after mount in
+`components/deploy-recovery.tsx` and skipped in `next dev` and every shell:
+
+- `/version.json` (`scripts/write-version-json.mjs`: `commit`, `version`,
+  `apiUrl`) is served `no-cache` by `serve.mjs` and the self-host Caddyfile.
+  On focus or visibility, at most every five minutes, the tab compares its
+  `commit` with `NEXT_PUBLIC_BUILD_COMMIT` (both Dockerfiles set it from
+  `COMMIT_SHA`; empty disables the check) and shows a Reload toast. The reload
+  is never automatic, and waits for writes in flight (`reloadWhenIdle`), since
+  `lib/offline.ts` does not queue a write that fails during unload.
+- A failed chunk or dynamic import (`lib/chunk-reload.ts`, from window events
+  and from `app/global-error.tsx` / `app/app/error.tsx`) reloads ONCE per 60s,
+  guarded in `sessionStorage`; after that the error screen's button is the way
+  out. Keep that guard: without it a broken server is a reload loop.
+
 **The docs site is served from the client image, at
 `https://trackyourtime.dev/docs/`.** `packages/client/Dockerfile` runs
 `scripts/docs/build-into-client.mjs` after the client build: it builds

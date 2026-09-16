@@ -3,6 +3,7 @@ import { TRPCProvider } from "@/providers/trpc-provider";
 import { AuthProvider } from "@/providers/auth-provider";
 import { MobileBridgeLoader } from "@/mobile/MobileBridgeLoader";
 import { Toaster } from "@/components/ui/sonner";
+import { DeployRecovery } from "@/components/deploy-recovery";
 import { OG_IMAGE } from "@/lib/page-metadata";
 import { LocaleRoot } from "@/i18n/locale-root";
 import { LOCALE_SCRIPT, NATIVE_SHELL_SCRIPT, THEME_SCRIPT } from "./pre-paint";
@@ -87,6 +88,7 @@ export default function RootLayout({
         <MobileBridgeLoader />
         <LocaleRoot>
           <TRPCProvider>
+            <DeployRecovery />
             <AuthProvider>{children}</AuthProvider>
           </TRPCProvider>
         </LocaleRoot>

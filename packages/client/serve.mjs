@@ -134,12 +134,15 @@ function splitOnce(value, separator) {
  * under `/docs/assets/`, where Docusaurus puts its hashed JS, CSS and images
  * (`/docs/img/` is copied from `static/` unhashed and keeps the hour). HTML
  * must not be, or a deploy leaves browsers pointing at chunk names that no
- * longer exist.
+ * longer exist. Nor may `/version.json`: an open tab polls it to learn that a
+ * deploy happened (lib/deploy-version.ts), and an hour-old cached answer would
+ * hide the deploy for exactly the hour its chunks are already gone.
  */
 function cacheControl(urlPath, file) {
   if (urlPath.startsWith("/_next/static/") || urlPath.startsWith("/docs/assets/")) {
     return "public, max-age=31536000, immutable";
   }
+  if (urlPath === "/version.json") return "no-cache";
   if (extname(file) === ".html") return "no-cache";
   return "public, max-age=3600";
 }
