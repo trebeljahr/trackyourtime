@@ -1,0 +1,182 @@
+# Cross-version compatibility, in both directions, against the previous
+# stable release (the newest `vX.Y.Z` tag).
+#
+#   new-client-old-server   this checkout's compat suite against the previous
+#                           release's server image, pulled anonymously and
+#                           started from that tag's docker-compose.selfhost.yml.
+#   old-client-new-server   the previous release's compat suite, built from
+#                           that tag in a subdirectory, against a server image
+#                           built from this checkout.
+#
+# The suite (packages/core/src/compat/) signs up, starts, stops and creates
+# entries, and flushes an offline queue with a row for a procedure no server
+# has, asserting that row is held and never dropped. Its entry point,
+# `COMPAT_API_URL=… node packages/core/dist/compat/run.js`, is a contract every
+# later release relies on — docs/versioning.md → Cross-version CI.
+#
+# Each direction skips with a notice, never a failure: the first while no
+# release tag exists, the second while no tag contains the suite yet. Every
+# stack is its own compose project with its own volumes and database, and
+# nothing is pushed or published.
+
+name: compat
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: compat-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  SERVER_IMAGE_REPO: ghcr.io/trebeljahr/trackyourtime-server
+  SUITE_ENTRY: packages/core/src/compat/run.ts
+
+jobs:
+  previous:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.find.outputs.tag }}
+      has-suite: ${{ steps.find.outputs.has-suite }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every tag, to find the newest release.
+          fetch-depth: 0
+
+      - id: find
+        run: |
+          set -euo pipefail
+          tag="$(git tag -l 'v*' | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V | tail -n 1)"
+          has_suite=false
+          if [ -z "$tag" ]; then
+            echo "::notice title=compat skipped::No stable vX.Y.Z tag exists yet, so there is no previous release to test against."
+          elif git cat-file -e "$tag:$SUITE_ENTRY" 2>/dev/null; then
+            has_suite=true
+          else
+            echo "::notice title=old clients skipped::$tag predates the compat suite ($SUITE_ENTRY), so its clients cannot be tested against this server yet."
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "has-suite=$has_suite" >> "$GITHUB_OUTPUT"
+          echo "Previous release: ${tag:-none} (suite: $has_suite)"
+
+  new-client-old-server:
+    needs: previous
+    if: needs.previous.outputs.tag != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TAG: ${{ needs.previous.outputs.tag }}
+      COMPAT_PROJECT: compat-old-server-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The compose file the release shipped with, so the old server runs
+      # with its own environment. Checked out beside, never over, this one.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.previous.outputs.tag }}
+          path: previous-release
+          sparse-checkout: |
+            docker-compose.selfhost.yml
+          sparse-checkout-cone-mode: false
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Build the suite from this checkout
+        run: |
+          pnpm install --frozen-lockfile --filter "@starter/core..."
+          pnpm --filter "@starter/core..." run build
+
+      - name: Start the previous release's server
+        env:
+          COMPAT_COMPOSE_FILE: previous-release/docker-compose.selfhost.yml
+          COMPAT_SERVER_IMAGE: ${{ env.SERVER_IMAGE_REPO }}:${{ needs.previous.outputs.tag }}
+          COMPAT_PULL: anonymous
+        run: |
+          set -euo pipefail
+          scripts/compat-server.sh up | tee "$RUNNER_TEMP/up.log"
+          grep '^COMPAT_API_URL=' "$RUNNER_TEMP/up.log" | tail -n 1 >> "$GITHUB_ENV"
+
+      - name: This checkout's suite against ${{ needs.previous.outputs.tag }}
+        run: node packages/core/dist/compat/run.js
+
+      - name: Stop the stack
+        if: always()
+        env:
+          COMPAT_LOGS: ${{ job.status == 'failure' && '1' || '' }}
+        run: scripts/compat-server.sh down
+
+  old-client-new-server:
+    needs: previous
+    if: needs.previous.outputs.has-suite == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      TAG: ${{ needs.previous.outputs.tag }}
+      COMPAT_PROJECT: compat-new-server-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.previous.outputs.tag }}
+          path: previous-release
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the server image from this checkout
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/server/Dockerfile
+          load: true
+          push: false
+          tags: trackyourtime-server:compat
+          cache-from: type=gha,scope=compat-server
+          cache-to: type=gha,mode=max,scope=compat-server
+
+      - name: Start this checkout's server
+        env:
+          COMPAT_COMPOSE_FILE: docker-compose.selfhost.yml
+          COMPAT_SERVER_IMAGE: trackyourtime-server:compat
+          COMPAT_PULL: never
+        run: |
+          set -euo pipefail
+          scripts/compat-server.sh up | tee "$RUNNER_TEMP/up.log"
+          grep '^COMPAT_API_URL=' "$RUNNER_TEMP/up.log" | tail -n 1 >> "$GITHUB_ENV"
+
+      # The tag's own pnpm pin and Node version: it is built the way that
+      # release was built.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: previous-release/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: previous-release/.nvmrc
+
+      - name: Build ${{ needs.previous.outputs.tag }}'s suite
+        working-directory: previous-release
+        run: |
+          pnpm install --frozen-lockfile --filter "@starter/core..."
+          pnpm --filter "@starter/core..." run build
+
+      - name: ${{ needs.previous.outputs.tag }}'s suite against this server
+        working-directory: previous-release
+        run: node packages/core/dist/compat/run.js
+
+      - name: Stop the stack
+        if: always()
+        env:
+          COMPAT_LOGS: ${{ job.status == 'failure' && '1' || '' }}
+        run: scripts/compat-server.sh down
