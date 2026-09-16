@@ -9,7 +9,8 @@ import {
   getNativeToken,
   setNativeToken,
 } from "@/lib/native-session";
-import { ACCOUNT_DELETION_PASSWORD_REQUIRED } from "@starter/shared";
+import { ACCOUNT_DELETION_PASSWORD_REQUIRED, versionHeaders } from "@starter/shared";
+import { APP_VERSION } from "@/lib/app-version";
 import {
   discardDeletedAccountQueue,
   sealOfflineQueueOwner,
@@ -106,6 +107,11 @@ export const authClient = createAuthClient({
      */
     onRequest: (context) => {
       context.headers.set("x-trackyourtime-client", clientHeader());
+      // Stamps the release on the session this sign-in creates, for
+      // Settings → Devices.
+      for (const [name, value] of Object.entries(versionHeaders(APP_VERSION))) {
+        context.headers.set(name, value);
+      }
       return context;
     },
     /**

@@ -21,6 +21,7 @@ import {
 import { passwordResetEmail } from "../services/transactional-email.js";
 import { preferredLocale } from "../services/user-locale.js";
 import { DEVICE_FLOW_CLIENT_IDS } from "./client-label.js";
+import { versionFieldsForNewSession } from "./client-version.js";
 import { createPersonalWorkspace } from "./personal-workspace.js";
 import {
   clientKindForNewSession,
@@ -223,6 +224,25 @@ export async function initAuth(): Promise<void> {
           defaultValue: "unknown",
           input: false,
         },
+        /**
+         * The newest app release (`x-trackyourtime-client-version`) and API
+         * level (`x-trackyourtime-api-level`) seen using this session, for
+         * Settings → Devices. Never required and no default: every session
+         * created before the handshake has neither, and must keep validating.
+         * Stamped at creation below and moved forward on use by
+         * `recordSessionClientVersion` (trpc/context.ts). Cosmetic, like
+         * `client`.
+         */
+        clientVersion: {
+          type: "string",
+          required: false,
+          input: false,
+        },
+        clientApiLevel: {
+          type: "number",
+          required: false,
+          input: false,
+        },
       },
     },
 
@@ -331,6 +351,9 @@ export async function initAuth(): Promise<void> {
               data: {
                 ...session,
                 client,
+                ...versionFieldsForNewSession(
+                  context?.headers ?? context?.request?.headers ?? null,
+                ),
                 expiresAt: expiryForNewSession(context),
               },
             };
@@ -359,6 +382,19 @@ export async function initAuth(): Promise<void> {
       },
     },
   });
+}
+
+/**
+ * Write a newer client version onto a session row, through better-auth's own
+ * adapter so its hooks and any secondary storage see the change. The update
+ * hook leaves it alone: it moves no `expiresAt`.
+ */
+export async function writeSessionClientVersion(
+  sessionToken: string,
+  update: { clientVersion: string; clientApiLevel?: number },
+): Promise<void> {
+  const context = await getAuth().$context;
+  await context.internalAdapter.updateSession(sessionToken, update);
 }
 
 export function getAuth() {

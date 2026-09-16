@@ -1,5 +1,7 @@
 import {
+  API_LEVEL,
   isSyncMessage,
+  parseClientVersion,
   SESSION_REVOKED_CLOSE_CODE,
   type ServerToClientMessage,
   type SyncEvent,
@@ -50,6 +52,12 @@ export type SyncClientOptions = {
    * so nothing has to un-latch this one.
    */
   onSessionRevoked?: () => void;
+  /**
+   * This build's release. Sent, with the API level, as the `clientVersion` and
+   * `apiLevel` query parameters: a browser WebSocket cannot set headers, and
+   * the subprotocol is the bearer token's. Neither is a secret.
+   */
+  clientVersion?: string;
   /** Injectable for Node tests and non-DOM hosts. */
   WebSocketImpl?: typeof WebSocket;
   minBackoffMs?: number;
@@ -88,6 +96,24 @@ const subprotocols = (
 };
 
 /**
+ * `url` with the handshake's query parameters. The server routes on the path
+ * alone, so an older server ignores them. A URL that does not parse is
+ * returned unchanged, and the constructor reports it as before.
+ */
+export const withVersionQuery = (url: string, clientVersion: string | undefined): string => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  parsed.searchParams.set("apiLevel", String(API_LEVEL));
+  const version = parseClientVersion(clientVersion);
+  if (version !== null) parsed.searchParams.set("clientVersion", version);
+  return parsed.toString();
+};
+
+/**
  * WebSocket subscription to the signed-in user's sync room.
  *
  * Reconnects with jittered exponential backoff and never throws on a
@@ -100,12 +126,14 @@ export const createSyncClient = ({
   onStatus,
   token,
   onSessionRevoked,
+  clientVersion,
   WebSocketImpl,
   minBackoffMs = 1000,
   maxBackoffMs = 30_000,
 }: SyncClientOptions): SyncClient => {
   const SocketCtor =
     WebSocketImpl ?? (globalThis as { WebSocket?: typeof WebSocket }).WebSocket;
+  const socketUrl = withVersionQuery(url, clientVersion);
 
   let socket: WebSocket | null = null;
   let status: SyncStatus = "closed";
@@ -172,8 +200,8 @@ export const createSyncClient = ({
     try {
       const protocols = subprotocols(token);
       created = protocols
-        ? new SocketCtor(url, protocols)
-        : new SocketCtor(url);
+        ? new SocketCtor(socketUrl, protocols)
+        : new SocketCtor(socketUrl);
       socket = created;
     } catch {
       socket = null;

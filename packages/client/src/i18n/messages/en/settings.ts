@@ -7,6 +7,15 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const settings = {
+  about: {
+    /** The release of the app on this screen, from the root package.json. */
+    appVersion: "Track Your Time {version}",
+    /** Shown when a build carries no version, which only a dev build does. */
+    appVersionUnknown: "Track Your Time (development build)",
+    apiLevel: "API level {level}",
+    server: "Server: {version}, API level {level}",
+    serverUnknown: "Server: version unknown",
+  },
   page: {
     title: "Settings",
     description:
@@ -248,6 +257,8 @@ export const settings = {
       actions: "Actions",
     },
     current: "This device",
+    /** Beside a device's name: the app release it last used this session with. */
+    clientVersion: "· {version}",
     justNow: "Just now",
     revoke: {
       title: "Sign out {name}?",

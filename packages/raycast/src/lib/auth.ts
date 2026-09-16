@@ -8,6 +8,7 @@ import {
 import { clearCache } from "./local-cache.js";
 import { clearEveryOverlay } from "./overlay.js";
 import { apiUrl } from "./preferences.js";
+import { APP_VERSION } from "./version.js";
 
 /**
  * Where the session token lives.
@@ -111,7 +112,7 @@ export async function signOut(): Promise<void> {
   if (token && server) {
     // Revoked where it was issued — which, after the API URL preference has
     // moved, is not the server every other call now goes to.
-    await signOutSession({ baseUrl: server, clientId: CLIENT_ID }, token);
+    await signOutSession({ baseUrl: server, clientId: CLIENT_ID, clientVersion: APP_VERSION }, token);
   }
   await LocalStorage.removeItem(TOKEN_KEY);
   await LocalStorage.removeItem(EMAIL_KEY);

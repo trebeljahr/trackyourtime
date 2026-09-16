@@ -65,7 +65,9 @@ import {
   type TimeEntry,
   type ResolvedSettings,
   type VersionedSpec,
+  readHealthVersion,
 } from "@starter/core";
+import { APP_VERSION } from "../lib/app-version";
 import { chromeStorage, localStorageArea } from "../lib/chrome-storage";
 import type { PopupView, SessionSource } from "../lib/messaging";
 import {
@@ -723,6 +725,7 @@ const buildRuntime = async (): Promise<Runtime> => {
       baseUrl: apiUrl,
       token: session?.token,
       clientId: EXTENSION_CLIENT_ID,
+      clientVersion: APP_VERSION,
       // Read per request: a switch changes it under a live client. An input
       // that already names a workspace — a replayed queue row — keeps it.
       workspaceId: getActiveWorkspaceId,
@@ -990,6 +993,7 @@ const connectSync = (current: Runtime): void => {
   sync = createSyncClient({
     url,
     token: current.session.token,
+    clientVersion: APP_VERSION,
     onStatus: setSyncStatus,
     onEvent: (event, originId, eventWorkspaceId) => {
       // Our own write, already applied locally — re-applying a stale copy of
@@ -1393,14 +1397,12 @@ export async function resolveWebUrl(): Promise<string | null> {
     if (typeof webUrl !== "string" || webUrl.trim() === "") return null;
     cachedWebUrl = webUrl.trim();
     const record = body as Record<string, unknown>;
-    const text = (value: unknown): string | null =>
-      typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-    // The same fields core's `checkServer` reads — `version` is the commit —
-    // taken from a response this worker was fetching anyway.
+    // The same fields core's `checkServer` reads, through the same reader —
+    // `apiLevel` (0 when absent), and `commit` falling back to the old
+    // `version` — taken from a response this worker was fetching anyway.
     cachedServerInfo = {
       origin: current.apiUrl,
-      release: text(record.release),
-      commit: text(record.version),
+      ...readHealthVersion(record),
       webUrl: cachedWebUrl,
       originTrusted:
         typeof record.originTrusted === "boolean" ? record.originTrusted : null,

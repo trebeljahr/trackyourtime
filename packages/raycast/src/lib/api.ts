@@ -36,6 +36,7 @@ import {
   type ResolvedSettings,
 } from "@starter/core";
 import { CLIENT_ID, getOriginId, getStoredSession } from "./auth.js";
+import { APP_VERSION } from "./version.js";
 import { NotSignedInError, StillSyncingError } from "./errors.js";
 import {
   cachedBillableDefault,
@@ -1097,6 +1098,7 @@ export async function getTrackYourTime(): Promise<TrackYourTime> {
     baseUrl: apiUrl(),
     token: session.token,
     clientId: CLIENT_ID,
+    clientVersion: APP_VERSION,
     // Filled into every input that names no workspace. A replayed queue row
     // names the one it was made in, and keeps it.
     workspaceId: () => workspaceId,

@@ -28,6 +28,7 @@ import { getNativeToken } from "@/lib/native-session";
 import { revokeThisDevice } from "@/lib/revoke-this-device";
 import { writeRunningMirror } from "@/lib/running-mirror";
 import { trpc } from "@/lib/trpc";
+import { APP_VERSION } from "@/lib/app-version";
 
 /**
  * Per-tab identity echoed back on every SyncEvent this tab caused, so the
@@ -234,6 +235,7 @@ export const useSync = (): SyncStatus => {
       // A getter, so a reconnect re-reads it rather than re-offering the
       // token this closure was created with.
       token: () => getNativeToken() ?? undefined,
+      clientVersion: APP_VERSION,
       onStatus: setStatus,
       /*
        * The server closed us with 4401: this device's session no longer

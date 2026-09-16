@@ -4,7 +4,7 @@ import cors from "cors";
 import morgan from "morgan";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { toNodeHandler } from "better-auth/node";
-import { MAX_IMPORT_BYTES } from "@starter/shared";
+import { API_LEVEL, MAX_IMPORT_BYTES, MIN_CLIENT_API_LEVEL } from "@starter/shared";
 import { getAuth } from "./auth/auth.js";
 import { appRouter } from "./trpc/router.js";
 import { createContext } from "./trpc/context.js";
@@ -21,6 +21,28 @@ import { env, getTrustedOrigins } from "./config/env.js";
  */
 const IMPORT_BODY_LIMIT = `${Math.ceil((MAX_IMPORT_BYTES * 2) / 1_000_000)}mb`;
 
+/**
+ * CORS for every route. Exported so a test can drive the exact options.
+ *
+ * No `allowedHeaders` on purpose: the cors package then reflects whatever a
+ * trusted origin's preflight asks for, which is how `x-trackyourtime-client`,
+ * `x-trackyourtime-client-version` and `x-trackyourtime-api-level` get through
+ * without a list that every new header would have to be added to. Trust is
+ * decided by `origin`, never by header names.
+ */
+export function corsOptions(trustedOrigins: string[]): cors.CorsOptions {
+  return {
+    origin: trustedOrigins.length > 0 ? trustedOrigins : false,
+    credentials: true,
+    /**
+     * The bearer plugin hands a non-cookie client its session token on
+     * `set-auth-token`. A cross-origin caller (the browser extension) can
+     * only read that header if it is explicitly exposed.
+     */
+    exposedHeaders: ["set-auth-token"],
+  };
+}
+
 export function createApp() {
   const app = express();
 
@@ -31,19 +53,7 @@ export function createApp() {
   app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
   // ── 0. CORS — must be before all route handlers so preflight works ─
-  const trustedOrigins = getTrustedOrigins();
-  app.use(
-    cors({
-      origin: trustedOrigins.length > 0 ? trustedOrigins : false,
-      credentials: true,
-      /**
-       * The bearer plugin hands a non-cookie client its session token on
-       * `set-auth-token`. A cross-origin caller (the browser extension) can
-       * only read that header if it is explicitly exposed.
-       */
-      exposedHeaders: ["set-auth-token"],
-    }),
-  );
+  app.use(cors(corsOptions(getTrustedOrigins())));
 
   // ── 1. better-auth — BEFORE express.json() ────────────────────────
   // better-auth handles its own body parsing. Mounting express.json()
@@ -134,6 +144,12 @@ export function createApp() {
       // address somebody typed.
       service: "trackyourtime",
       release: env.RELEASE,
+      // The version handshake (docs/versioning.md). `apiLevel` is what this
+      // server speaks; `minClientApiLevel` is the lowest level a client may
+      // declare and still be served. A client reads an absent `apiLevel` as
+      // 0 — a server from before the handshake.
+      apiLevel: API_LEVEL,
+      minClientApiLevel: MIN_CLIENT_API_LEVEL,
       // Whether the Origin that asked may sign in here, or null when the
       // request carried none (curl, Raycast). Lets a client say "add this
       // origin to TRUSTED_ORIGINS" instead of failing later with a bare 403.
@@ -151,6 +167,10 @@ export function createApp() {
       // until it matches the commit it just pushed — without it, a deploy that
       // silently kept the previous container reported success everywhere.
       // Empty for a locally-run server, which has no build commit.
+      commit: env.COMMIT_SHA,
+      // The same commit under its original, misleading name. Kept because
+      // released clients and scripts/verify-release-images.sh read it; new
+      // readers use `commit`. Never repurpose it as the release number.
       version: env.COMMIT_SHA,
       timestamp: new Date().toISOString(),
     });

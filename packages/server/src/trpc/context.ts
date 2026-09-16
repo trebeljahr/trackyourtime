@@ -1,5 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
-import { getAuth } from "../auth/auth.js";
+import { getAuth, writeSessionClientVersion } from "../auth/auth.js";
+import { recordSessionClientVersion } from "../auth/client-version.js";
 import { fromNodeHeaders } from "better-auth/node";
 
 /**
@@ -43,6 +44,13 @@ export async function createContext({ req, res }: CreateExpressContextOptions) {
   });
 
   if (session?.user) {
+    // Moves Settings → Devices forward when a newer build uses this session.
+    // Not awaited: a stale label is the whole cost of a failed write.
+    void recordSessionClientVersion(
+      (session as { session?: Parameters<typeof recordSessionClientVersion>[0] }).session,
+      req.headers,
+      writeSessionClientVersion,
+    );
     const usedBearer = /^Bearer\s+\S/i.test(req.headers.authorization ?? "");
     return {
       req,

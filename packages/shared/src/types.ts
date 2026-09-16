@@ -648,6 +648,14 @@ export type DeviceSession = {
   expiresAt: string;
   /** True for the session making the request — it cannot be revoked blindly. */
   current: boolean;
+  /**
+   * The newest app release this session was seen running, e.g. "0.3.1", or
+   * null for a session no client has declared a version on (every session
+   * created before the version handshake, and third-party callers).
+   */
+  clientVersion: string | null;
+  /** The API level that client declared, or null alongside `clientVersion`. */
+  apiLevel: number | null;
 };
 
 // ── invoicing ────────────────────────────────────────────────────────

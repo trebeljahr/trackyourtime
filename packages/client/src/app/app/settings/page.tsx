@@ -9,6 +9,7 @@ import { ImportHistory } from "@/components/data/import-history";
 import { ImportPanel } from "@/components/data/import-panel";
 import { MoveServerPanel } from "@/components/data/move-server-panel";
 import { ApiTokensPanel } from "@/components/settings/api-tokens";
+import { AppVersionInfo } from "@/components/settings/app-version";
 import { DevicesPanel } from "@/components/settings/devices";
 import { ForeignQueuePanel } from "@/components/settings/foreign-queue";
 import { WebhooksPanel } from "@/components/settings/webhooks";
@@ -142,6 +143,8 @@ export default function SettingsPage() {
           <AccountSettings onShowExport={() => setTab("data")} />
         </TabsContent>
       </Tabs>
+
+      <AppVersionInfo />
     </div>
   );
 }

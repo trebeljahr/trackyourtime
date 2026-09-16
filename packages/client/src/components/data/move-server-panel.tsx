@@ -26,6 +26,7 @@ import {
 } from "@starter/shared";
 
 import { Button } from "@/components/ui/button";
+import { APP_VERSION } from "@/lib/app-version";
 import {
   Card,
   CardContent,
@@ -164,7 +165,12 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
 
   const targetClient = React.useCallback(
     (server: ServerInfo, token: string) => {
-      const api = createApiClient({ baseUrl: server.origin, token, clientId });
+      const api = createApiClient({
+        baseUrl: server.origin,
+        token,
+        clientId,
+        clientVersion: APP_VERSION,
+      });
       const target: MoveTarget = {
         countEntries: async () =>
           (await api.query<WorkspaceExportInfo>("data.exportInfo", {})).entries,

@@ -31,6 +31,7 @@ import {
 import { getTrackYourTime } from "../lib/api.js";
 import { adoptUnownedHere } from "../lib/offline.js";
 import { describeFailure, refreshMenuBar } from "../lib/ui.js";
+import { APP_VERSION } from "../lib/version.js";
 
 /**
  * RFC 8628 device flow.
@@ -64,7 +65,7 @@ export function SignIn(): React.JSX.Element {
         return;
       }
 
-      const options = { baseUrl: apiUrl(), clientId: CLIENT_ID } as const;
+      const options = { baseUrl: apiUrl(), clientId: CLIENT_ID, clientVersion: APP_VERSION } as const;
 
       try {
         const authorization = await startDeviceAuthorization(options);

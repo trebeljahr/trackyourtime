@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { BUILD_TARGETS, buildManifest, type BuildMode } from "./manifest.config";
+import { BUILD_TARGETS, RELEASE_VERSION, buildManifest, type BuildMode } from "./manifest.config";
 
 const fromHere = (relative: string): string =>
   fileURLToPath(new URL(relative, import.meta.url));
@@ -60,6 +60,10 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_API_URL": JSON.stringify(
         process.env.VITE_API_URL ?? target.apiUrl,
       ),
+      // The release this bundle is, for the version handshake and the account
+      // screen. From the root package.json via manifest.config.ts, so the
+      // manifest and the bundle cannot name two different versions.
+      "import.meta.env.VITE_APP_VERSION": JSON.stringify(RELEASE_VERSION),
     },
     build: {
       outDir: target.outDir,

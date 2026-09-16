@@ -120,6 +120,8 @@ test("a Track Your Time server is recognised and describes itself", async () => 
     commit: "1a2b3c4d5e6f",
     webUrl: "https://track.example.com",
     originTrusted: true,
+    apiLevel: 0,
+    minClientApiLevel: null,
   });
   assert.equal(describeServerVersion(result.server), "Track Your Time 0.1.0 (1a2b3c4)");
 });

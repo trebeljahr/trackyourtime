@@ -263,6 +263,14 @@ export function DevicesPanel(): React.JSX.Element {
                         <span className="flex items-center gap-2">
                           <Icon className="size-4 shrink-0 text-muted-foreground" />
                           {device.name}
+                          {device.clientVersion ? (
+                            <span
+                              className="whitespace-nowrap text-xs font-normal text-muted-foreground"
+                              data-testid="device-client-version"
+                            >
+                              {t("devices.clientVersion", { version: device.clientVersion })}
+                            </span>
+                          ) : null}
                           {device.current ? (
                             <Badge
                               variant="secondary"

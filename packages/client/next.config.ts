@@ -1,5 +1,37 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 import type { NextConfig } from "next";
+
+/**
+ * The release every client build reports, from the ROOT package.json — the
+ * single source of truth for the version (docs/versioning.md).
+ *
+ * Found by walking up from the working directory rather than by a fixed
+ * relative path, because `next build` is run from `packages/client` by the
+ * scripts and from elsewhere by hand. Throws when nothing is found: a bundle
+ * that cannot say which version it is would send no handshake at all.
+ */
+function readRootVersion(): string {
+  let dir = process.cwd();
+  for (;;) {
+    const candidate = join(dir, "package.json");
+    if (existsSync(candidate)) {
+      const parsed = JSON.parse(readFileSync(candidate, "utf8")) as {
+        name?: unknown;
+        version?: unknown;
+      };
+      if (parsed.name === "trackyourtime" && typeof parsed.version === "string") {
+        return parsed.version;
+      }
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      throw new Error("[next.config] root package.json (name \"trackyourtime\") not found");
+    }
+    dir = parent;
+  }
+}
 
 // Relative asset paths are required only by the shells that load the exported
 // client off a file:// document, where there is no server and no root to be
@@ -35,6 +67,9 @@ const devOrigins = ["127.0.0.1", "localhost", ...(process.env.NEXT_DEV_ORIGINS?.
 
 const baseConfig: NextConfig = {
   output: "export",
+  // Inlined into every bundle: the web image, the phone apps and the desktop
+  // shells. Read by `lib/app-version.ts`.
+  env: { NEXT_PUBLIC_APP_VERSION: readRootVersion() },
   ...(isDev ? { allowedDevOrigins: devOrigins } : {}),
   ...(useRelativeAssetPrefix && !isDev ? { assetPrefix: "./" } : {}),
   trailingSlash: true,

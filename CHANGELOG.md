@@ -234,6 +234,13 @@ extension to the Chrome Web Store only when its store secrets are set.
   code you approve in a signed-in browser.
 - Settings → Devices lists every signed-in session and signs any of them out.
   A signed-out device also loses its live connection within a minute.
+- Settings → Devices shows the app version each device last used. Settings
+  in the web app and Settings → Account in the browser extension show the
+  app's own version.
+- Every client sends its version and API level to the server, and
+  `/api/health` reports the server's `apiLevel`, `minClientApiLevel` and
+  `commit`. A client that declares an API level the server no longer serves
+  gets a `CLIENT_TOO_OLD` refusal. `docs/versioning.md` describes the rules.
 - Browser sessions last 7 days. Sessions held by the extension, Raycast and
   the native shells last 30 days.
 - Delete your account from Settings → Account. A workspace you are alone in

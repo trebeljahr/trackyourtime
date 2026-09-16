@@ -1913,6 +1913,29 @@ What fails quietly if it is changed:
   revalidates the instant the sync socket connects — the earliest and clearest
   proof available that the network is back.
 
+### Client/server version handshake
+
+Self-hosted servers lag, store clients lead, desktop builds and open tabs trail.
+`docs/versioning.md` → "Client and server compatibility" is the contract; the
+names other code depends on are `API_LEVEL`, `API_LEVEL_CHANGES`,
+`MIN_CLIENT_API_LEVEL`, `CLIENT_TOO_OLD` / `SERVER_TOO_OLD` (`@starter/shared`),
+`MIN_SERVER_API_LEVEL` (`@starter/core`), the headers
+`x-trackyourtime-client-version` / `x-trackyourtime-api-level`, and `apiLevel`
+on `/api/health`. Rules that fail quietly if broken:
+
+- **Bump `API_LEVEL` whenever a tRPC procedure, input field, enum value or sync
+  event kind is added**, with a row in `API_LEVEL_CHANGES`.
+- **No header is legacy, never level 0.** The floor refuses only a request that
+  declares a lower level, as 412 (`data.versionRefusal` / `problems/client-too-old`)
+  — never a status the offline queue drops. `health.*` is never refused.
+- **`x-trackyourtime-client` is untouched** by the handshake: it drives device
+  labels and session windows.
+- **Never add the handshake headers to `/api/health`**: a custom header forces a
+  preflight that an untrusted origin fails, which reads as "unreachable".
+- **The root `package.json` version is the one version.** The web export and the
+  extension read it at build time; the other copies are checked by
+  `scripts/lib/version-sync.test.mjs`.
+
 ### Held queue rows and the queue format
 
 A queued row that this build or this server cannot handle is **held**: kept,

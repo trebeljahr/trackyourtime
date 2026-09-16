@@ -126,6 +126,12 @@ export function DevicesSection({
                 {/* Built server-side by `describeClient`, so it is rendered
                     as-is rather than re-derived from the user agent here. */}
                 {device.name}
+                {device.clientVersion !== null ? (
+                  <span className="device__hint" data-testid={`device-version-${device.id}`}>
+                    {" "}
+                    · {device.clientVersion}
+                  </span>
+                ) : null}
                 {device.current ? (
                   <span className="device__badge">{t("devices.thisBrowser")}</span>
                 ) : null}

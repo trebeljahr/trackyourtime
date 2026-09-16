@@ -5,6 +5,22 @@ import {
   workspaceIdFromInput,
 } from "../auth/workspace.js";
 import { EinvoiceFillRefusedError, EinvoiceNotReadyError } from "../services/einvoice/errors.js";
+import { CLIENT_TOO_OLD_MESSAGE, versionRefusalFor } from "../auth/client-version.js";
+import type { VersionRefusal } from "@starter/shared";
+
+/**
+ * Carried as a `TRPCError`'s cause so the formatter below can put the refusal
+ * code on the wire as `data.versionRefusal`.
+ */
+export class VersionRefusalError extends Error {
+  readonly refusal: VersionRefusal;
+
+  constructor(refusal: VersionRefusal) {
+    super(CLIENT_TOO_OLD_MESSAGE);
+    this.name = "VersionRefusalError";
+    this.refusal = refusal;
+  }
+}
 
 const t = initTRPC.context<Context>().create({
   errorFormatter({ shape, error }) {
@@ -20,19 +36,52 @@ const t = initTRPC.context<Context>().create({
         // A fill refusal with nothing to list, as a stable code to translate.
         einvoiceFillRefusal:
           error.cause instanceof EinvoiceFillRefusedError ? error.cause.code : null,
+        // `CLIENT_TOO_OLD` when the request declared an API level below this
+        // server's floor, null on every other error. A stable code, so every
+        // client can say "update the app" without reading the message.
+        versionRefusal:
+          error.cause instanceof VersionRefusalError ? error.cause.refusal : null,
       },
     };
   },
 });
 
 export const router = t.router;
-export const publicProcedure = t.procedure;
+
+/**
+ * The client API-level floor, on every procedure but `health.*`.
+ *
+ * `health.check` stays answerable to any client so a refused one can still
+ * learn the server's level and say which side needs updating. A request that
+ * declares no level is a pre-handshake client and passes (see
+ * `versionRefusalFor`).
+ *
+ * PRECONDITION_FAILED (412), deliberately: the offline queue drops a row on a
+ * permanent status (400/403/404/409/410/422), and version skew must never
+ * delete somebody's queued time. A 412 keeps the row for the build that can
+ * send it.
+ */
+const versionFloor = t.middleware(({ ctx, path, next }) => {
+  if (!path.startsWith("health.")) {
+    const refusal = versionRefusalFor(ctx.req?.headers);
+    if (refusal !== null) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: CLIENT_TOO_OLD_MESSAGE,
+        cause: new VersionRefusalError(refusal),
+      });
+    }
+  }
+  return next();
+});
+
+export const publicProcedure = t.procedure.use(versionFloor);
 
 /**
  * Protected procedure — throws UNAUTHORIZED if no session exists.
  * Narrows the context type so `ctx.session` and `ctx.user` are non-null.
  */
-export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
+export const protectedProcedure = publicProcedure.use(async ({ ctx, next }) => {
   if (!ctx.session || !ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }

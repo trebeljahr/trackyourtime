@@ -4,6 +4,13 @@ import type { settings as source } from "../en/settings";
 
 /** German `settings`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const settings: Translation<typeof source> = {
+  about: {
+    appVersion: "Track Your Time, Version {version}",
+    appVersionUnknown: "Track Your Time (Entwicklungs-Build)",
+    apiLevel: "API-Level {level}",
+    server: "Server: {version}, API-Level {level}",
+    serverUnknown: "Server: Version unbekannt",
+  },
   page: {
     title: "Einstellungen",
     description:
@@ -242,6 +249,7 @@ export const settings: Translation<typeof source> = {
       actions: "Aktionen",
     },
     current: "Dieses Gerät",
+    clientVersion: "· {version}",
     justNow: "Gerade eben",
     revoke: {
       title: "{name} abmelden?",

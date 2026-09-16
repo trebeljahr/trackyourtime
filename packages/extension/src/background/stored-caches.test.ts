@@ -192,6 +192,8 @@ describe("the server info", () => {
     commit: "abc",
     webUrl: null,
     originTrusted: true,
+    apiLevel: 2,
+    minClientApiLevel: 1,
   };
 
   test("round trips through the envelope and reads the bare record", async () => {
@@ -202,6 +204,17 @@ describe("the server info", () => {
 
     await local().set({ "trackyourtime.server-info": JSON.stringify(info) });
     expect(await loadServerInfo()).toEqual(info);
+  });
+
+  test("a record from before the version handshake reads as a level 0 server", async () => {
+    const { loadServerInfo } = await config();
+    const { apiLevel: _level, minClientApiLevel: _floor, ...legacy } = info;
+    void _level;
+    void _floor;
+    await local().set({
+      "trackyourtime.server-info": JSON.stringify({ v: 1, data: legacy }),
+    });
+    expect(await loadServerInfo()).toEqual({ ...legacy, apiLevel: 0, minClientApiLevel: null });
   });
 
   test("a newer build's record is a miss", async () => {

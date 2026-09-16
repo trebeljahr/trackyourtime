@@ -458,6 +458,8 @@ export const popup = {
   },
   account: {
     signedInAs: "Signed in as",
+    /** This extension's own release, from the root package.json. */
+    appVersion: "Track Your Time extension {version}",
     sharedSession:
       "Signed in with the web app’s session — signing out here signs out Track Your Time in this browser too.",
     changeServer: "Change server…",

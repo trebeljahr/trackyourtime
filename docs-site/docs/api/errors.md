@@ -42,6 +42,7 @@ Each `type` is `https://trackyourtime.dev/problems/` plus one of:
 | `not-found` | 404 | No such resource in this token's workspace. |
 | `no-such-route` | 404 | No route matches that method and path. |
 | `conflict` | 409 | The write collides with existing data — a duplicate name, an entry already invoiced. |
+| `client-too-old` | 412 | The request sent `x-trackyourtime-api-level` below the lowest level this server serves. Update the client. A request without that header is never refused this way. |
 | `payload-too-large` | 413 | The request body exceeds what the route accepts. |
 | `rate-limited` | 429 | See [Rate limits](./rate-limits.md). |
 | `internal-error` | 500 | Something broke on the server. |

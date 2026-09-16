@@ -90,6 +90,16 @@ const readServerInfo = (value: unknown): ServerInfo | null => {
     origin,
     release: textOrNull(record.release),
     commit: textOrNull(record.commit),
+    // Absent from records written before the handshake: level 0 and no floor,
+    // which is exactly what such a server reported.
+    apiLevel:
+      typeof record.apiLevel === "number" && Number.isInteger(record.apiLevel) && record.apiLevel >= 0
+        ? record.apiLevel
+        : 0,
+    minClientApiLevel:
+      typeof record.minClientApiLevel === "number" && Number.isInteger(record.minClientApiLevel)
+        ? record.minClientApiLevel
+        : null,
     webUrl: textOrNull(record.webUrl),
     originTrusted:
       typeof record.originTrusted === "boolean" ? record.originTrusted : null,

@@ -453,6 +453,7 @@ export const popup: Translation<typeof source> = {
   },
   account: {
     signedInAs: "Angemeldet als",
+    appVersion: "Erweiterung, Version {version}",
     sharedSession:
       "Mit der Sitzung der Web-App angemeldet – wenn du dich hier abmeldest, wird Track Your Time auch in diesem Browser abgemeldet.",
     changeServer: "Server wechseln …",

@@ -22,6 +22,7 @@ import {
 import { getStoredSession } from "./auth.js";
 import { apiUrl } from "./preferences.js";
 import { activeWorkspaceId } from "./workspace.js";
+import { APP_VERSION } from "./version.js";
 
 /**
  * Whether an event changes what the timer surfaces show. Catalog renames and
@@ -95,6 +96,7 @@ export function useSyncRevalidate(
       const created = createSyncClient({
         url,
         token: session.token,
+        clientVersion: APP_VERSION,
         onEvent: (event, _originId, eventWorkspaceId) => {
           if (!affectsTimer(event)) return;
           if (eventWorkspaceId === undefined) {

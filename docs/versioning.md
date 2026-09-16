@@ -1,5 +1,138 @@
 # Versioning
 
+## Client and server compatibility
+
+### Three clocks
+
+A client and the server it talks to are almost never the same release.
+
+- **Self-hosted servers lag.** An operator upgrades when they get to it, often
+  months after a release.
+- **Store clients lead.** The browser extension, Raycast and the phone apps
+  update themselves, so they are often newer than the server they talk to.
+- **Some clients trail.** A desktop build or a browser tab left open across a
+  deploy is often older than the server.
+
+A release number cannot answer "do these two understand each other?". Each side
+therefore declares an **API level**, and each side names the lowest level of
+the other that it still works with.
+
+### Principles
+
+1. **Additive only.** A release adds procedures, input fields, enum values and
+   sync event kinds. It does not change what an existing one means.
+2. **Removals wait.** A procedure or field that is going away stays for at
+   least one minor release after the release that stopped using it.
+3. **Skew never deletes user data.** A write that a server or a build cannot
+   handle is held, never dropped. See "User-data stores hold, never drop"
+   below, and the held rows in CLAUDE.md.
+4. **Gate on the declared API level.** Never on a release number, a commit or a
+   user agent.
+5. **Fail loudly, with a way out.** A refusal names which side is too old and
+   what to update. It never shows as a generic network error.
+
+### The API level
+
+`API_LEVEL` in `packages/shared/src/api-level.ts` is an integer. It names the
+set of tRPC procedures, input fields, enum values and sync event kinds a build
+knows. `API_LEVEL_CHANGES` beside it lists what each level added.
+
+**Bump `API_LEVEL` whenever a tRPC procedure, an input field, an enum value or a
+sync event kind is added.** Add a row to `API_LEVEL_CHANGES` in the same commit.
+Never lower the level. The server tests check that the table ends at
+`API_LEVEL` and skips no level.
+
+Level 0 is every server and client released before the handshake. They send
+no level and report none.
+
+Two floors:
+
+| Constant | Where | Meaning |
+| --- | --- | --- |
+| `MIN_CLIENT_API_LEVEL` | `@starter/shared` | The lowest client level the server serves. |
+| `MIN_SERVER_API_LEVEL` | `@starter/core` | The lowest server level the web app, the phone apps, the extension and Raycast work with. |
+
+Raise a floor only with a change that cannot work without it. Raising
+`MIN_SERVER_API_LEVEL` past what the oldest supported self-hosted release reports
+locks those servers out of every store client at once.
+
+### The header contract
+
+Every first-party client sends two headers on every API request:
+
+| Header | Value |
+| --- | --- |
+| `x-trackyourtime-client-version` | The client's release, e.g. `0.3.1`. |
+| `x-trackyourtime-api-level` | The client's `API_LEVEL`, e.g. `1`. |
+
+- The web app sends them from the tRPC link (`lib/trpc.ts`) and the better-auth
+  client (`lib/auth-client.ts`). Core's `createApiClient` and the
+  `session-auth.ts` helpers send them for the extension, Raycast and the
+  move-server panel. The MCP server sends them on `/api/v1`.
+- The sync socket cannot set headers, and its subprotocol carries the bearer
+  token. It sends the same values as the `clientVersion` and `apiLevel` query
+  parameters. The server routes on the path, so an older server ignores them.
+- `x-trackyourtime-client` is unchanged. It decides the device label and the
+  session window, and an unknown value reads as `unknown`.
+- Never send the handshake headers to `/api/health` on a server that has not
+  said it trusts the caller's origin. A custom header makes the browser send a
+  preflight, and an untrusted origin's preflight fails. `checkServer` sends
+  none.
+- CORS reflects the headers a trusted origin asks for, so a new header needs no
+  server change (`corsOptions` in `app.ts`).
+
+The server records the version and level on the session row (`clientVersion`,
+`clientApiLevel`, both optional). It stamps them when the session is created,
+and moves them forward when a newer release uses the session. It never moves
+them back, because every tab of a browser shares one cookie. Settings → Devices
+shows the version beside the device name.
+
+### What the server reports
+
+`/api/health` and tRPC `health.check` return:
+
+| Field | Value |
+| --- | --- |
+| `release` | The server's release, from its package.json. |
+| `apiLevel` | The server's `API_LEVEL`. |
+| `minClientApiLevel` | The server's `MIN_CLIENT_API_LEVEL`. |
+| `commit` | The commit the image was built from, or `""`. |
+| `version` | The same commit. Kept for released clients and `scripts/verify-release-images.sh`; new readers use `commit`. |
+
+Core's `checkServer` reads `apiLevel` as 0 when it is absent.
+`serverCompatibility` answers `SERVER_TOO_OLD`, `CLIENT_TOO_OLD` or `null`.
+
+### Refusals
+
+A request that declares an API level below `MIN_CLIENT_API_LEVEL` is refused:
+
+- tRPC: `PRECONDITION_FAILED` (412) with `data.versionRefusal: "CLIENT_TOO_OLD"`.
+  Core's `ApiError.versionRefusal` carries it. `health.*` is never refused, so
+  the client can still learn the server's level.
+- REST: 412 `application/problem+json` with type
+  `https://trackyourtime.dev/problems/client-too-old`. The OpenAPI document is
+  never refused.
+
+A request that declares no level is a client from before the handshake, and is
+always served. The status is 412, not 400: the offline queue drops a row on a
+permanent status, and a version refusal is never a reason to delete queued time.
+
+### The release version
+
+The root `package.json` `version` is the single source of truth.
+
+- The Next export (web, Capacitor, Electron, Tauri) reads it in
+  `next.config.ts` and inlines it as `NEXT_PUBLIC_APP_VERSION`
+  (`lib/app-version.ts`).
+- The browser extension reads it in `manifest.config.ts` for the manifest, and
+  `vite.config.ts` bakes it in as `VITE_APP_VERSION`.
+- Hand-kept copies: every `packages/*/package.json` that has a version,
+  `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`,
+  `packages/raycast/src/lib/version.ts` (a Raycast Store submission has no root
+  package.json), `packages/mcp/src/server.ts`, iOS `MARKETING_VERSION` and
+  Android `versionName`. `scripts/lib/version-sync.test.mjs` fails when any of
+  them disagrees with the root.
+
 ## Client storage
 
 Every client persists values on the device: Capacitor Preferences and

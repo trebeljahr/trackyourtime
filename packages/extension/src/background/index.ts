@@ -31,6 +31,7 @@ import type {
   BackgroundResponse,
   PopupToBackground,
 } from "../lib/messaging";
+import { APP_VERSION } from "../lib/app-version";
 import { hasServerAccess } from "../lib/server-access";
 import { watchWebSession } from "../lib/web-session";
 import {
@@ -190,7 +191,7 @@ const isPopupMessage = (value: unknown): value is PopupToBackground =>
 const signIn = async (email: string, password: string): Promise<void> => {
   const current = await ensureReady();
   const issued = await signInWithPassword(
-    { baseUrl: current.apiUrl, clientId: EXTENSION_CLIENT_ID },
+    { baseUrl: current.apiUrl, clientId: EXTENSION_CLIENT_ID, clientVersion: APP_VERSION },
     { email, password },
   );
   await adoptSession({
@@ -211,7 +212,7 @@ const signOut = async (): Promise<void> => {
   if (token !== null) {
     try {
       await signOutSession(
-        { baseUrl: current.apiUrl, clientId: EXTENSION_CLIENT_ID },
+        { baseUrl: current.apiUrl, clientId: EXTENSION_CLIENT_ID, clientVersion: APP_VERSION },
         token,
       );
     } catch {
@@ -298,7 +299,7 @@ const setServer = async (
     if (token !== null && current.sessionSource === "password") {
       try {
         await signOutSession(
-          { baseUrl: current.apiUrl, clientId: EXTENSION_CLIENT_ID },
+          { baseUrl: current.apiUrl, clientId: EXTENSION_CLIENT_ID, clientVersion: APP_VERSION },
           token,
         );
       } catch {

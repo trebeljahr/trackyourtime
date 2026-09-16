@@ -20,6 +20,7 @@ export default defineConfig({
     // A port nothing listens on: a test that forgets to stub `fetch` fails
     // fast instead of reaching a real server.
     "import.meta.env.VITE_API_URL": JSON.stringify("http://127.0.0.1:9"),
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify("9.8.7"),
   },
   resolve: {
     alias: [

@@ -16,6 +16,7 @@ import {
 import { fromNodeHeaders } from "better-auth/node";
 import { getAuth } from "../../auth/auth.js";
 import { describeClient, normalizeClientKind } from "../../auth/client-label.js";
+import { parseApiLevel, parseClientVersion } from "@starter/shared";
 import { publishToUser } from "../../ws/sync.js";
 import { protectedProcedure, router } from "../trpc.js";
 
@@ -29,6 +30,8 @@ type RawSession = {
   ipAddress?: unknown;
   userAgent?: unknown;
   client?: unknown;
+  clientVersion?: unknown;
+  clientApiLevel?: unknown;
 };
 
 const asString = (value: unknown): string | null =>
@@ -44,7 +47,7 @@ const asIso = (value: unknown): string => {
 };
 
 /** Project one raw session into the wire shape. Drops `token` by construction. */
-function toDeviceSession(raw: RawSession, currentToken: string | null): DeviceSession {
+export function toDeviceSession(raw: RawSession, currentToken: string | null): DeviceSession {
   const userAgent = asString(raw.userAgent);
   const client: ClientKind = normalizeClientKind(raw.client);
   const token = asString(raw.token);
@@ -58,6 +61,8 @@ function toDeviceSession(raw: RawSession, currentToken: string | null): DeviceSe
     updatedAt: asIso(raw.updatedAt),
     expiresAt: asIso(raw.expiresAt),
     current: token !== null && currentToken !== null && token === currentToken,
+    clientVersion: parseClientVersion(raw.clientVersion),
+    apiLevel: parseApiLevel(raw.clientApiLevel),
   };
 }
 

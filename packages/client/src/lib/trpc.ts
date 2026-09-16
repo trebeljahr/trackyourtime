@@ -1,6 +1,6 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { httpBatchLink, type TRPCLink } from "@trpc/client";
-import { withWorkspaceId } from "@starter/core";
+import { versionHeaders, withWorkspaceId } from "@starter/core";
 import type { AppRouter } from "@starter/server/trpc";
 import { isNative } from "@/mobile/bridge";
 import { getNativeToken } from "@/lib/native-session";
@@ -10,6 +10,7 @@ import {
   isActiveWorkspaceReady,
   whenActiveWorkspaceReady,
 } from "@/lib/active-workspace";
+import { APP_VERSION } from "@/lib/app-version";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -145,6 +146,10 @@ export function getTRPCClient() {
           const token = getNativeToken();
           return {
             "x-trackyourtime-client": isNative() ? "trackyourtime-mobile" : "web",
+            // The version handshake (docs/versioning.md). Additive: the
+            // client kind above is unchanged, because it decides the device
+            // label and the session window.
+            ...versionHeaders(APP_VERSION),
             ...(token ? { authorization: `Bearer ${token}` } : {}),
           };
         },

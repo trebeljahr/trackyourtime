@@ -19,6 +19,26 @@
  * worker and Raycast share one definition of "a usable server".
  */
 
+import {
+  API_LEVEL,
+  CLIENT_TOO_OLD,
+  parseApiLevel,
+  SERVER_TOO_OLD,
+  type VersionRefusal,
+} from "@starter/shared";
+
+/**
+ * The lowest server API level the first-party clients (web, phone, extension,
+ * Raycast) work with. A server reporting less is refused with
+ * `SERVER_TOO_OLD` rather than half-working. Level 0 is a server from before
+ * the handshake, which reports no level at all.
+ *
+ * Raise it only together with a client change that cannot work without the
+ * newer server, and never past what the oldest supported self-hosted release
+ * reports — see docs/versioning.md.
+ */
+export const MIN_SERVER_API_LEVEL = 1;
+
 /** The hosted service's API origin. */
 export const CLOUD_API_ORIGIN = "https://api.trackyourtime.dev";
 
@@ -146,6 +166,16 @@ export type ServerInfo = {
    * say — an older server, or a caller with no Origin (Raycast, Node).
    */
   originTrusted: boolean | null;
+  /**
+   * The API level the server speaks. 0 for a server released before the
+   * version handshake, which reports none.
+   */
+  apiLevel: number;
+  /**
+   * The lowest client API level it serves, or null when it did not say (a
+   * pre-handshake server serves every client that sends no level).
+   */
+  minClientApiLevel: number | null;
 };
 
 export type ServerCheckProblem = "unreachable" | "not-trackyourtime" | "unhealthy";
@@ -240,13 +270,49 @@ export async function checkServer(
     ok: true,
     server: {
       origin,
-      release: text(body.release),
-      commit: text(body.version),
+      ...readHealthVersion(body),
       webUrl: text(body.webUrl),
       originTrusted: typeof body.originTrusted === "boolean" ? body.originTrusted : null,
     },
   };
 }
+
+/**
+ * The version fields of a `/api/health` body.
+ *
+ * `commit` is read from `commit`, then from `version`: servers before the
+ * handshake reported the commit as `version`, and newer ones send both.
+ * Shared with the extension's own health read, so the two cannot disagree.
+ */
+export const readHealthVersion = (
+  body: Readonly<Record<string, unknown>>,
+): Pick<ServerInfo, "release" | "commit" | "apiLevel" | "minClientApiLevel"> => ({
+  release: text(body.release),
+  commit: text(body.commit) ?? text(body.version),
+  apiLevel: parseApiLevel(body.apiLevel) ?? 0,
+  minClientApiLevel: parseApiLevel(body.minClientApiLevel),
+});
+
+/**
+ * Whether this build and a server can work together, or which side is too old.
+ *
+ * `SERVER_TOO_OLD` when the server's level is below {@link MIN_SERVER_API_LEVEL};
+ * `CLIENT_TOO_OLD` when the server's floor is above this build's `API_LEVEL`.
+ * Both are loud answers with a way out — update the server, update the app —
+ * never a reason to delete anything stored on the device.
+ */
+export const serverCompatibility = (
+  server: Pick<ServerInfo, "apiLevel" | "minClientApiLevel">,
+  levels: { clientApiLevel?: number; minServerApiLevel?: number } = {},
+): VersionRefusal | null => {
+  const minServer = levels.minServerApiLevel ?? MIN_SERVER_API_LEVEL;
+  const clientLevel = levels.clientApiLevel ?? API_LEVEL;
+  if (server.apiLevel < minServer) return SERVER_TOO_OLD;
+  if (server.minClientApiLevel !== null && clientLevel < server.minClientApiLevel) {
+    return CLIENT_TOO_OLD;
+  }
+  return null;
+};
 
 /** "Track Your Time 0.1.0 (1a2b3c4)", or as much of that as the server said. */
 export const describeServerVersion = (server: ServerInfo): string => {

@@ -20,6 +20,7 @@
  * platform's real secret storage (Keychain, `chrome.storage.session`, the
  * Raycast password store) — never a plain config file.
  */
+import { versionHeaders } from "@starter/shared";
 
 /** Which client is signing in. Labels the row in Settings → Devices. */
 export type ClientId =
@@ -59,6 +60,11 @@ export type SessionAuthOptions = {
   baseUrl: string;
   /** Identifies this client to the server. */
   clientId: ClientId;
+  /**
+   * This build's release, stamped on the session it creates so Settings →
+   * Devices can name it ("Raycast · 0.3.1"). Sent with the API level.
+   */
+  clientVersion?: string;
   fetchImpl?: typeof fetch;
 };
 
@@ -144,6 +150,7 @@ async function issueSession(
     headers: {
       "content-type": "application/json",
       [CLIENT_HEADER]: options.clientId,
+      ...versionHeaders(options.clientVersion),
     },
     body: JSON.stringify(payload),
   });
@@ -216,6 +223,7 @@ export async function startDeviceAuthorization(
     headers: {
       "content-type": "application/json",
       [CLIENT_HEADER]: options.clientId,
+      ...versionHeaders(options.clientVersion),
     },
     body: JSON.stringify({ client_id: options.clientId }),
   });
@@ -290,6 +298,7 @@ export async function pollForDeviceSession(
       headers: {
         "content-type": "application/json",
         [CLIENT_HEADER]: options.clientId,
+        ...versionHeaders(options.clientVersion),
       },
       body: JSON.stringify({
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
@@ -350,6 +359,7 @@ export async function signOutSession(
         "content-type": "application/json",
         authorization: `Bearer ${token}`,
         [CLIENT_HEADER]: options.clientId,
+        ...versionHeaders(options.clientVersion),
       },
       body: "{}",
     });

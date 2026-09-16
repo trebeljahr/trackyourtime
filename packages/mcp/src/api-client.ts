@@ -7,6 +7,7 @@
 // encoding the server's schema-directed coercion expects, and turning every
 // failure into a sentence a person can act on.
 
+import { versionHeaders } from "@starter/shared/api-level";
 import type { McpConfig } from "./config.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -124,12 +125,17 @@ export class RestClient {
   private readonly token: string;
   private readonly fetchImpl: FetchLike;
   private readonly userAgent: string;
+  private readonly clientVersion: string | undefined;
 
-  constructor(config: McpConfig, options: { fetch?: FetchLike; userAgent?: string } = {}) {
+  constructor(
+    config: McpConfig,
+    options: { fetch?: FetchLike; userAgent?: string; clientVersion?: string } = {},
+  ) {
     this.base = `${config.apiUrl}/api/v1`;
     this.token = config.token;
     this.fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
     this.userAgent = options.userAgent ?? "trackyourtime-mcp";
+    this.clientVersion = options.clientVersion;
   }
 
   get baseUrl(): string {
@@ -146,6 +152,9 @@ export class RestClient {
       Authorization: `Bearer ${this.token}`,
       Accept: "application/json, application/problem+json",
       "User-Agent": this.userAgent,
+      // The version handshake (docs/versioning.md): the server refuses a
+      // declared level below its floor with problems/client-too-old.
+      ...versionHeaders(this.clientVersion),
     };
     let body: string | undefined;
     if (options.body !== undefined) {

@@ -9,6 +9,7 @@
 import { TRPCError } from "@trpc/server";
 import type { Response } from "express";
 import { ZodError } from "zod";
+import { CLIENT_TOO_OLD_MESSAGE } from "../../auth/client-version.js";
 
 /**
  * Problem `type` URIs are documentation URLs, not endpoints — a client that
@@ -42,6 +43,7 @@ const TITLES: Readonly<Record<number, string>> = {
   403: "Forbidden",
   404: "Not Found",
   409: "Conflict",
+  412: "Precondition Failed",
   413: "Payload Too Large",
   429: "Too Many Requests",
   500: "Internal Server Error",
@@ -223,4 +225,21 @@ export function moneyVisibilityProblem(): ApiProblemError {
     403,
     "This response would span other members' time, and this token may not see what it is worth. Grant `canViewOthersMoney` to the member who owns it and mint a new token.",
   );
+}
+
+/**
+ * The request declared an API level below this server's floor
+ * (`x-trackyourtime-api-level` < `MIN_CLIENT_API_LEVEL`).
+ *
+ * 412 with its own slug, the REST twin of tRPC's `data.versionRefusal:
+ * "CLIENT_TOO_OLD"`. Not 400: a client that retries queued work treats 400 as
+ * "never send this again", and version skew must never delete anybody's data.
+ */
+export function clientTooOldProblem(instance: string): Problem {
+  return problem({
+    slug: "client-too-old",
+    status: 412,
+    detail: CLIENT_TOO_OLD_MESSAGE,
+    instance,
+  });
 }

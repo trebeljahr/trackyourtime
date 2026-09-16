@@ -35,17 +35,24 @@ Tag rules:
 - `latest` moves only when this is the newest stable release overall.
 - A prerelease such as `v0.2.0-rc.1` gets its exact tag and nothing else.
 
-The server image reports its commit in `/api/health` as `version`.
+The server image reports its commit in `/api/health` as `commit`, and as
+`version` for older readers.
 
 ## Steps
 
 1. **Set the version, date the changelog, then push `main`.** Set
    `"version"` in the root `package.json` to `X.Y.Z`. It is the one version
-   number. `/version.json` and the browser extension's manifest read it, and
-   `pnpm build:mobile` fails until the iOS `MARKETING_VERSION` and the Android
-   `versionName` match it. `extension-release.yml` fails before it uploads
-   anything when the manifest does not match the tag, because the Chrome Web
-   Store refuses a version that is not higher than the published one.
+   number. `/version.json`, the web bundle and the browser extension's
+   manifest read it, and `pnpm build:mobile` fails until the iOS
+   `MARKETING_VERSION` and the Android `versionName` match it. The other
+   hand-kept copies (Tauri, Raycast, the MCP server, the workspace
+   `package.json` files) fail `pnpm run test:unit` until they match:
+   `scripts/lib/version-sync.test.mjs` names each one. `extension-release.yml`
+   fails before it uploads anything when the manifest does not match the tag,
+   because the Chrome Web Store refuses a version that is not higher than the
+   published one. If the release added a tRPC procedure, input field, enum
+   value or sync event kind, `API_LEVEL` must already be bumped
+   (`docs/versioning.md`).
 
    In `CHANGELOG.md`, rename `## [Unreleased]` to
    `## [X.Y.Z] - <release date>`, rewrite its opening

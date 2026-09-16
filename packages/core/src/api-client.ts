@@ -1,3 +1,5 @@
+import { CLIENT_TOO_OLD, versionHeaders, type VersionRefusal } from "@starter/shared";
+
 /**
  * Thin caller over the tRPC HTTP endpoints, for clients that cannot use the
  * tRPC React bindings — the planned Raycast extension and Chrome extension.
@@ -7,12 +9,25 @@
 export class ApiError extends Error {
   readonly code: string;
   readonly httpStatus: number;
+  /**
+   * `CLIENT_TOO_OLD` when the server refused this build's declared API level
+   * (`data.versionRefusal`), null for every other error. The status is 412,
+   * which is not a permanent rejection, so a queued row refused this way is
+   * kept for the build that can send it.
+   */
+  readonly versionRefusal: VersionRefusal | null;
 
-  constructor(message: string, code: string, httpStatus: number) {
+  constructor(
+    message: string,
+    code: string,
+    httpStatus: number,
+    versionRefusal: VersionRefusal | null = null,
+  ) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.httpStatus = httpStatus;
+    this.versionRefusal = versionRefusal;
   }
 }
 
@@ -93,6 +108,11 @@ export type ApiClientOptions = {
   token?: string;
   /** Names this client in Settings → Devices. Cosmetic, never a permission. */
   clientId?: string;
+  /**
+   * This build's release, e.g. `0.3.1`, sent as `x-trackyourtime-client-version`
+   * beside the API level. Shown in Settings → Devices; never a permission.
+   */
+  clientVersion?: string;
   fetchImpl?: typeof fetch;
   /**
    * The workspace this client is pointed at, read per request.
@@ -140,7 +160,7 @@ export type ApiClient = {
 
 type TrpcEnvelope = {
   result?: { data?: unknown };
-  error?: { message?: string; data?: { code?: string } };
+  error?: { message?: string; data?: { code?: string; versionRefusal?: unknown } };
 };
 
 const unwrap = (body: unknown, httpStatus: number): unknown => {
@@ -152,7 +172,8 @@ const unwrap = (body: unknown, httpStatus: number): unknown => {
     throw new ApiError(
       envelope.error.message ?? "Request failed",
       envelope.error.data?.code ?? "INTERNAL_SERVER_ERROR",
-      httpStatus
+      httpStatus,
+      envelope.error.data?.versionRefusal === CLIENT_TOO_OLD ? CLIENT_TOO_OLD : null
     );
   }
   return envelope.result?.data;
@@ -162,6 +183,7 @@ export const createApiClient = ({
   baseUrl,
   token,
   clientId,
+  clientVersion,
   fetchImpl,
   workspaceId,
 }: ApiClientOptions): ApiClient => {
@@ -173,7 +195,10 @@ export const createApiClient = ({
   }
 
   const headers = (): Record<string, string> => {
-    const base: Record<string, string> = { "content-type": "application/json" };
+    const base: Record<string, string> = {
+      "content-type": "application/json",
+      ...versionHeaders(clientVersion),
+    };
     if (token) base.authorization = `Bearer ${token}`;
     if (clientId) base["x-trackyourtime-client"] = clientId;
     return base;

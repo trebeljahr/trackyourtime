@@ -9,7 +9,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * sent before this existed. No `authorization` key, `credentials: "include"`,
  * and the same client label. That is the whole non-regression argument for
  * touching a file every screen in the app goes through, so it gets a test.
+ *
+ * The version handshake is the one deliberate change to that request: two
+ * headers, `x-trackyourtime-client-version` and `x-trackyourtime-api-level`,
+ * on every call (docs/versioning.md). They are spelled out below rather than
+ * matched loosely, so a third header cannot slip in unnoticed.
  */
+import { API_LEVEL } from "@starter/shared";
+
+const VERSION_HEADERS = {
+  "x-trackyourtime-client-version": "9.8.7",
+  "x-trackyourtime-api-level": String(API_LEVEL),
+};
 
 type LinkOptions = {
   url: string;
@@ -40,6 +51,7 @@ const loadLink = async (options: {
   vi.doMock("@/lib/native-session", () => ({
     getNativeToken: () => options.token,
   }));
+  vi.doMock("@/lib/app-version", () => ({ APP_VERSION: "9.8.7" }));
 
   const { getTRPCClient } = await import("@/lib/trpc");
   getTRPCClient();
@@ -77,7 +89,7 @@ describe("tRPC link on the web", () => {
     const link = await loadLink({ native: false, token: null });
     const headers = link.headers();
 
-    expect(headers).toEqual({ "x-trackyourtime-client": "web" });
+    expect(headers).toEqual({ "x-trackyourtime-client": "web", ...VERSION_HEADERS });
     expect("authorization" in headers).toBe(false);
   });
 
@@ -102,6 +114,7 @@ describe("tRPC link on native", () => {
 
     expect(link.headers()).toEqual({
       "x-trackyourtime-client": "trackyourtime-mobile",
+      ...VERSION_HEADERS,
       authorization: "Bearer session-token",
     });
   });
@@ -122,6 +135,28 @@ describe("tRPC link on native", () => {
 
     expect(init.credentials).toBe("include");
     expect("authorization" in link.headers()).toBe(false);
+  });
+});
+
+describe("version handshake", () => {
+  it("never sends an empty or malformed version, but still declares the level", async () => {
+    vi.resetModules();
+    vi.doMock("@trpc/client", () => ({ httpBatchLink: (opts: LinkOptions) => opts }));
+    vi.doMock("@trpc/react-query", () => ({
+      createTRPCReact: () => ({ createClient: (config: { links: LinkOptions[] }) => config }),
+    }));
+    vi.doMock("@/mobile/bridge", () => ({ isNative: () => false }));
+    vi.doMock("@/lib/native-session", () => ({ getNativeToken: () => null }));
+    vi.doMock("@/lib/app-version", () => ({ APP_VERSION: "" }));
+    const { getTRPCClient } = await import("@/lib/trpc");
+    const config = getTRPCClient() as unknown as { links: LinkOptions[] };
+    const link = config.links[1];
+    if (!link) throw new Error("no http link");
+    expect(link.headers()).toEqual({
+      "x-trackyourtime-client": "web",
+      "x-trackyourtime-api-level": String(API_LEVEL),
+    });
+    vi.doUnmock("@/lib/app-version");
   });
 });
 

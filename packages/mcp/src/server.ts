@@ -10,6 +10,7 @@ import { describeError } from "./format.js";
 import { registerTools } from "./tools.js";
 
 export const SERVER_NAME = "trackyourtime";
+/** Hand-kept; `scripts/lib/version-sync.test.mjs` fails when it drifts from the root package.json. */
 export const SERVER_VERSION = "0.1.0";
 
 const INSTRUCTIONS = [
@@ -62,6 +63,7 @@ export async function createServer(
   const client = new RestClient(config, {
     fetch: options.fetch,
     userAgent: `${SERVER_NAME}-mcp/${SERVER_VERSION}`,
+    clientVersion: SERVER_VERSION,
   });
   const probe = await probeScopes(client);
   const server = new McpServer(

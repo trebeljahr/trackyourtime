@@ -19,7 +19,13 @@ import {
   type ApiHandler,
   type PublicApiHandler,
 } from "./auth.js";
-import { ApiProblemError, problemFromTRPCError, sendProblem } from "./problem.js";
+import {
+  ApiProblemError,
+  clientTooOldProblem,
+  problemFromTRPCError,
+  sendProblem,
+} from "./problem.js";
+import { versionRefusalFor } from "../../auth/client-version.js";
 import { API_ROUTES, type ApiRoute } from "./routes-table.js";
 import { entryHandlers } from "./routes/entries.js";
 import { catalogHandlers } from "./routes/catalog.js";
@@ -122,6 +128,16 @@ function mount(router: Router, route: ApiRoute): void {
 
 export function registerApiV1Routes(app: Express): void {
   const router = Router();
+
+  // The client API-level floor, ahead of every route and ahead of token
+  // authentication: a client too old to understand the answers is told so
+  // before anything else. A request that declares no level — most integrators
+  // — is never refused here. The OpenAPI document stays readable.
+  router.use((req: Request, res: Response, next) => {
+    if (req.method === "GET" && req.path === "/openapi.json") return next();
+    if (versionRefusalFor(req.headers) === null) return next();
+    sendProblem(res, clientTooOldProblem(req.originalUrl));
+  });
 
   // Mounted in table order, which is load-bearing: `/entries/current` must be
   // registered before `/entries/:id`, or Express matches the parameterised
