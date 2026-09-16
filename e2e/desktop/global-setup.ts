@@ -76,6 +76,15 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       env: { ...process.env, NEXT_PUBLIC_API_URL: API_ORIGIN },
     });
     if (build.status !== 0) throw new Error("scripts/build-desktop.mjs failed");
+  } else {
+    // The export is reused, but main and preload are always re-bundled: they
+    // take a second, and a reused electron/dist runs every spec against the
+    // main process as it was before the change under test.
+    const bundle = spawnSync(process.execPath, [join(REPO_ROOT, "scripts/build-desktop.mjs"), "--electron-only"], {
+      cwd: REPO_ROOT,
+      stdio: "inherit",
+    });
+    if (bundle.status !== 0) throw new Error("scripts/build-desktop.mjs --electron-only failed");
   }
 
   // 3. MongoDB.
