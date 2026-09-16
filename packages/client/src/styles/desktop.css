@@ -68,3 +68,27 @@ html.electron[data-platform="darwin"] body:not(:has([data-window-drag]))::before
 html.electron[data-platform="darwin"] body:not(:has([data-window-drag])) :is(a, button, input, select, textarea, label, [role="button"], [role="combobox"]) {
   -webkit-app-region: no-drag;
 }
+
+/*
+ * Overlays. Electron builds the drag region from `app-region` styles alone,
+ * in document order, and ignores stacking: a dialog, menu or popover rendered
+ * into a portal over the header is NOT subtracted from the header's drag
+ * region, so its clicks would move the window instead (a tall dialog reaches
+ * 1rem from the top, its close button inside the header's 3.5rem). So every
+ * overlay opts out, and while a modal holds the page (Radix's scroll lock
+ * marks <body> with `data-scroll-locked`) the header, the brand row and the
+ * login strip stand down entirely, so a click on the backdrop closes the
+ * dialog rather than dragging the window. Specificity matches or beats the
+ * drag rules above; these come last.
+ */
+html.electron :is([role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]) {
+  -webkit-app-region: no-drag;
+}
+
+html.electron[data-platform] body[data-scroll-locked] :is([data-window-drag], [data-window-inset]) {
+  -webkit-app-region: no-drag;
+}
+
+html.electron[data-platform="darwin"] body[data-scroll-locked]::before {
+  -webkit-app-region: no-drag;
+}

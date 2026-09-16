@@ -107,6 +107,33 @@ test("an unknown path shows the 404 page with a 404 status", async () => {
   await expect(page.getByTestId("not-found")).toBeVisible();
 });
 
+test("an open dialog is never under a window drag region", async () => {
+  ({ app, page } = await launchApp());
+  await expectAt(page, /\/login\//);
+  await attachSessionCookie(app, await createAccountCookie());
+  await page.goto(`${APP_ORIGIN}/app/track/`);
+  const header = page.getByTestId("app-header");
+  await expect(header).toBeVisible();
+
+  // Electron builds the drag region from app-region styles alone, in document
+  // order, ignoring stacking: a portal-rendered dialog that overlaps the
+  // header (a tall one reaches 1rem from the top) would have its clicks
+  // swallowed as window drags unless it opts out and the header stands down.
+  const region = (locator: ReturnType<Page["locator"]>): Promise<string> =>
+    locator.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region"));
+  expect(await region(header)).toBe("drag");
+
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  const dialog = page.getByRole("dialog");
+  await expect(page.getByTestId("command-palette-input")).toBeVisible();
+  expect(await region(dialog)).toBe("no-drag");
+  expect(await region(header)).toBe("no-drag");
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => region(header)).toBe("drag");
+});
+
 test("HTML is served with the CSP and nosniff", async () => {
   ({ app, page } = await launchApp());
   await expectAt(page, /\/login\//);
