@@ -59,37 +59,32 @@ German label for it. Nothing to translate here.
 ## Full description
 
 Plain text, as the store renders it. Upper-case lines are section headings.
-Rewritten 2026-09-16 with the English listing: problem first, no permission list
-(the Privacy tab carries it).
+Rewritten 2026-09-16 with the English listing: the product's positioning first
+(free, open source, your data where you choose), no permission list (the Privacy
+tab carries it).
 
-> Die Stunden, die du vergisst zu erfassen, sind die Stunden, die du nicht abrechnest. Track Your Time legt deinen Timer in die Chrome-Symbolleiste, dorthin, wo deine Arbeit ohnehin passiert. Ein Klick startet ihn.
+> Track Your Time ist kostenlose Open-Source-Zeiterfassung für Freelancer und kleine Teams, die nach Stunden abrechnen. Diese Erweiterung legt den Timer in deine Chrome-Symbolleiste. Ein Klick startet ihn, und das Symbol zeigt, wie lange er schon läuft.
 >
-> Kostenlos für alle, ohne Bezahlversion. Open Source.
+> KOSTENLOS, OHNE EINSCHRÄNKUNGEN
+> Es gibt keine Bezahlversion, weder jetzt noch später, und keine Premium-Stufe. Jede Funktion steckt in jeder Installation, auch in der gehosteten Version. Der Code ist Open Source unter der AGPL-3.0 und entsteht öffentlich auf GitHub.
 >
-> EIN KLICK, UND DIE ZEIT LÄUFT
-> Klick auf das Symbol, und der Timer läuft. Das Symbol zeigt, wie lange schon. So fällt dir auch ein Timer auf, den du vergessen hast zu stoppen. Die Arbeit von heute ist meist die von gestern. Starte sie aus deinen letzten Einträgen neu, oder hefte an, was du jeden Tag machst.
+> DEINE DATEN LIEGEN, WO DU WILLST
+> Eine Zeiterfassung weiß, wer deine Kunden sind, was du ihnen berechnest und wie du jeden Arbeitstag verbringst. Das liegt auf trackyourtime.dev oder auf einem Server, den du selbst betreibst. Es ist in beiden Fällen dieselbe App, und die Erweiterung funktioniert mit beiden: Wähle unter dem Anmeldeformular „Server wechseln“. Alles exportierst du jederzeit als JSON oder CSV.
 >
-> HOL DIR DIE STUNDEN ZURÜCK, DIE DU NIE GESTOPPT HAST
-> Vergessen, den Timer vor einem Anruf zu starten? Trag die Zeit hinterher nach. Geh frühere Tage durch und korrigiere, was nicht stimmt, bevor du abrechnest.
+> EIN TIMER, DER MITHÄLT
+> Die Arbeit von heute ist meist die von gestern. Starte sie aus deinen letzten Einträgen neu, oder hefte an, was du jeden Tag machst. Tipp die ersten Buchstaben einer Beschreibung, und die Erweiterung schlägt vor, was du schon benutzt hast. Projekt und Schlagwörter vom letzten Mal kann sie gleich mit übernehmen.
 >
-> Oder schalte die Aktivitätserfassung ein. Die Erweiterung merkt sich, welche Website du vor dir hattest, und schlägt später Einträge für die Lücken in deinem Tag vor. Jeden Vorschlag nimmst du an, bearbeitest ihn oder verwirfst ihn. Gespeichert wird der Name der Website, nicht ihr Inhalt. Nichts verlässt deinen Computer, bevor du einen Vorschlag annimmst.
+> Bricht im Zug die Verbindung ab, erfasst du einfach weiter. Die Erweiterung speichert deine Änderungen und sendet sie, sobald du wieder online bist. Stoppst du hier einen Timer, zeigt die Web-App ihn sofort als gestoppt.
 >
-> WENIGER TIPPEN
-> Tipp eine Beschreibung ein, und die Erweiterung schlägt vor, was du schon benutzt hast, auch vor Monaten. Wählst du einen Vorschlag, kann sie Projekt und Schlagwörter vom letzten Mal gleich übernehmen.
->
-> ERFASST WEITER, AUCH WENN DAS WLAN STREIKT
-> Im Zug oder im Flugzeug arbeitest du einfach weiter. Die Erweiterung speichert deine Änderungen und sendet sie, sobald du wieder online bist. Stoppst du hier einen Timer, ist er auch in der Web-App und auf deinen anderen Geräten gestoppt.
->
-> KEINE ZWEITE ANMELDUNG
 > Du bist in Chrome schon bei Track Your Time angemeldet? Dann nutzt die Erweiterung diese Anmeldung. Kein zusätzliches Passwort, kein API-Token zum Kopieren.
 >
+> DIE STUNDEN, DIE DU VERGESSEN HAST
+> Trag die Zeit für einen Anruf nach, den du nicht gestoppt hast, oder korrigiere einen früheren Tag, bevor du abrechnest. Oder schalte die Aktivitätserfassung ein. Die Erweiterung merkt sich, welche Website du vor dir hattest, und schlägt Einträge für die Lücken in deinem Tag vor. Sie speichert den Namen der Website, nicht ihren Inhalt, und nichts verlässt deinen Computer, bevor du einen Vorschlag annimmst.
+>
 > VON DEN STUNDEN ZUR RECHNUNG
-> Die Erweiterung ist der schnelle Weg hinein. Die Web-App macht aus deinen Stunden Berichte nach Kunde, Projekt oder Person und Rechnungen als PDF oder E-Rechnung. Lade dein Team ein. Jede Person sieht nur ihre eigene Zeit, bis du mehr freigibst.
+> Die Web-App macht aus deinen Stunden Berichte nach Kunde, Projekt, Tätigkeit oder Person. Rechnungen erstellt sie als PDF oder als E-Rechnung im Format ZUGFeRD oder XRechnung. Lade dein Team ein. Jede Person sieht nur ihre eigene Zeit, bis du mehr freigibst.
 >
-> GEHOSTET ODER AUF DEINEM EIGENEN SERVER
-> Nutze trackyourtime.dev, oder betreibe Track Your Time auf deinem eigenen Server. Es ist in beiden Fällen dieselbe Open-Source-App. Wähle unter dem Anmeldeformular „Server wechseln“, und Chrome fragt nach Zugriff auf genau diese eine Website.
->
-> Eine Einschränkung: Nutzt dein Konto die Zwei-Faktor-Authentifizierung, melde dich zuerst in Chrome in der Web-App an. Das Anmeldeformular im Pop-up kann den zweiten Code nicht abfragen.
+> Eine Einschränkung: Nutzt dein Konto die Zwei-Faktor-Authentifizierung, melde dich zuerst in Chrome in der Web-App an. Das Anmeldeformular im Pop-up kann den Code nicht abfragen.
 
 ## Screenshot captions
 
