@@ -28,8 +28,113 @@ Execution order for the first build: Stage 0 → 1 (+ Tauri removal) → 2 + 3 �
 
 ## Implementation notes
 
-None yet. Stage 0 writes the first ones; every later stage adds what its own
-text got wrong.
+Every stage adds what its own text got wrong. Newest stage last.
+
+### Stage 0 — spike (2026-09-16)
+
+Run on macOS arm64, Electron 42.1.0, electron-builder 26.8.1, against a
+production-mode API (`NODE_ENV=production`, own `mongod`, random ports). Spike
+code lived in the session scratchpad and is not committed. Step 5 (hatchkit
+`--dry-run`) was **not** done here; it is a separate task and open question 7
+stays with it.
+
+**Verdict: the risky assumption holds. Bearer `fetch` and a `bearer.`
+WebSocket from a privileged `app://-` document work with a correct CORS answer,
+and fail without one. No main-process `net` proxy is needed; Stages 2 and 4
+stand as written.**
+
+Step 3, what was observed (throwaway main: `registerSchemesAsPrivileged` with
+`standard, secure, supportFetchAPI, corsEnabled, stream`; a `protocol.handle`
+page at `app://-/index.html`; `sandbox: true`, `contextIsolation: true`;
+headers read both with `session.webRequest.onBeforeSendHeaders` and by a Node
+echo server):
+
+- `location.origin === "app://-"` and `isSecureContext === true`.
+- API with `TRUSTED_ORIGINS=app://-`: `POST /api/auth/sign-in/email` from the
+  page with `credentials: "omit"` → 200, and `set-auth-token` is readable (it
+  is in the server's `exposedHeaders`). Every request, preflight included, sent
+  `Origin: app://-`, `Sec-Fetch-Site: cross-site`, `Sec-Fetch-Mode: cors` and
+  **no `Cookie`**. `GET /api/trpc/entries.current` and `POST
+  /api/trpc/entries.start` with `Authorization: Bearer <token>` and
+  `x-trackyourtime-client` → 200 with data, after a preflight the `cors`
+  package answered by reflecting the requested headers. Without the header →
+  401. So better-auth's forced origin check (triggered by the `Sec-Fetch-*`
+  headers) accepts `app://-` exactly like any other trusted origin.
+- `new WebSocket("ws://…/api/ws", ["bearer." + encodeURIComponent(token)])`
+  → open, the server echoed the subprotocol, still open after 2 s. The upgrade
+  carried `Origin: app://-` and no cookie (echo server). A bad token → closed.
+- Negative controls, so the positives are not vacuous: an echo endpoint with no
+  `Access-Control-Allow-Origin` → `TypeError: Failed to fetch` (Chromium
+  enforces CORS for the custom origin); the same API restarted **without**
+  `app://-` in `TRUSTED_ORIGINS` → every fetch fails CORS and the server logs
+  `[ws] upgrade refused: untrusted origin app://-`.
+- `corsEnabled` is **not** needed for outgoing requests (same results with it
+  off). It governs requests *to* `app://`; keep it for workers/fonts, but do not
+  expect it to be what makes the API reachable.
+- **Trap:** the raw `set-auth-token` value (`<id>.<base64 signature>=`)
+  is not a valid subprotocol token — the `WebSocket` constructor throws
+  `SyntaxError` synchronously. `@starter/core`'s `sync-client.ts` already
+  `encodeURIComponent`s it and `ws/auth.ts` decodes it; anything new that
+  builds a subprotocol by hand must do the same.
+- `webRequest.onBeforeSendHeaders` did not report the `ws://` upgrade in this
+  setup; use the server side to inspect upgrade headers.
+
+Step 1, `RELATIVE_ASSET_PREFIX=1 NEXT_PUBLIC_API_URL=… pnpm electron:preview`:
+
+- **The packaging step itself fails** before anything can be run:
+  `Application entry file "index.js" … was not found in this archive`. The root
+  `package.json` has no `main`, and electron-builder packs the root. The asar is
+  still written (so step 2 could measure it). To go on, the spike re-ran
+  `electron-builder --dir -c.extraMetadata.main=electron/main.js`. Stage 1's
+  `electron-builder.config.mjs` must set `extraMetadata.main` (to
+  `electron/dist/main.js`).
+- electron-builder **downloaded its own Electron zip** (118 MB) instead of
+  using `node_modules/electron`, and on this Mac **auto-discovered and signed
+  with a local "Developer ID Application" identity** even for `--dir`
+  (notarization skipped). A preview build should set
+  `CSC_IDENTITY_AUTO_DISCOVERY=false` (or `mac.identity: null` for `--dir`) so it
+  is fast and identical on every machine; Stage 6 turns signing on explicitly.
+- `/` renders from `file://` (screenshot: landing page, but the root-absolute
+  `/marketing/popup.png` hero image is broken — `file:///marketing/popup.png`
+  not found). Within about a second `ShellEntryRedirect` does
+  `router.replace("/app/track")`, whose RSC fetch goes to
+  `file:///app/track/index.txt` → `ERR_FILE_NOT_FOUND`, Next falls back to a
+  browser navigation to `file:///app/track/`, and the window ends on
+  `chrome-error://chromewebdata/`, blank. **A packaged build today never shows
+  anything but a blank error page.** `/app/track/`, `/app/reports/` and
+  `/login/` are unreachable (each hard navigation stays on the error page).
+- Sign-in, tried from the held `file://` landing document: **403
+  `MISSING_OR_NULL_ORIGIN`** ("Missing or null Origin"), not `INVALID_ORIGIN` as
+  the plan predicted — better-auth distinguishes a null origin from an untrusted
+  one. Same conclusion: no trust-list entry can fix `file://`.
+
+Step 2, the asar of that build: 10.8 MB, 1,029 entries; 8.87 MB is
+`packages/client/out`, **1.69 MB is `node_modules`: all ten `@capacitor/*`
+packages (`android`, `ios`, `app`, `core`, `keyboard`, `network`,
+`preferences`, `screen-orientation`, `splash-screen`, `status-bar`) plus
+`@aparajita/capacitor-secure-storage`**; the rest is `electron/main.js`,
+`preload.js`, `package.json`. The `.app` is 278 MB. This is the "before" figure
+for Stage 1's bundle.
+
+Step 4: the classification table under "Split `isNative()`" now holds the
+verified call sites. One change of meaning from the guess: the running-timer
+mirror is wanted on Electron too (with a `localStorage` store).
+
+Tooling facts for Stage 1:
+
+- Confirmed: `pnpm-workspace.yaml` `allowBuilds` has no `electron`, so a fresh
+  `pnpm install` never runs Electron's postinstall and `node_modules/electron`
+  has no binary. This worktree's binary was extracted by hand from
+  `~/Library/Caches/electron`; Stage 1 must add `electron: true` (and check CI).
+- Playwright's `_electron.launch({ executablePath })` drives the packaged
+  `.app` binary fine. `electronApplication.evaluate` runs in the main process
+  **without** `require` (a `ReferenceError`), so use the modules passed in as
+  the first argument.
+- `firstWindow()` resolves after the shell redirect has already happened; a
+  test that wants the pre-redirect document must intercept navigation first.
+- A production API from `packages/server` with `NODE_ENV=production … node
+  --import tsx src/index.ts` needs `SCHEDULER_ENABLED=false` only to keep logs
+  quiet; with no mail transport, sign-up needs no email verification.
 
 ## Where it stands
 
@@ -150,19 +255,21 @@ above).
 
 ### Split `isNative()` by what each caller actually means.
 
-20 files call `isNative()`. They mean one of three different things, and
-Electron wants only some of them:
+`isNative()` (and the helpers built on it: `useIsNative`,
+`shouldUseNativeStorage`, `isAppShell`) is read in 20 files. They mean one of
+three different things, and Electron wants only some of them. **Verified in
+Stage 0 by reading every call site (2026-09-16):**
 
-| Meaning | New predicate | Capacitor | Electron | Call sites (current) |
+| Meaning | New predicate | Capacitor | Electron | Call sites (verified) |
 | --- | --- | --- | --- | --- |
-| Phone UI (tab bar, `html.cap`, back button, splash, status bar) | `isCapacitor()` | yes | **no** | `mobile-tab-bar`, `bridge`, `app-shell`, `pre-paint`, `tracker-bar` (verify) |
-| Token-auth shell (bearer, server picker, client header, entry source, Google/2FA gating, signed-in redirect) | `isTokenShell()` | yes | yes | `native-session`, `api-origin`, `trpc`, `auth-client`, `entry-source`, `login/page`, `google-sign-in-button`, `signed-in-redirect`, `workspace-switcher` (verify) |
-| Durable storage / radio network truth | `isCapacitor()` | yes | no — Chromium `localStorage` in `userData` is not evicted, `navigator.onLine` is usable on desktop | `preferences-storage`, `running-mirror`, `offline`, `network`, `query-client` |
+| Phone UI | `isCapacitor()` | yes | **no** | `mobile/bridge.ts` (`initMobile`: splash, status bar, orientation, back button, lifecycle); `components/tracker/tracker-bar.tsx` (`autoFocus={!isNative()}` — a desktop keeps focus-on-mount); `app/pre-paint.ts` `NATIVE_SHELL_SCRIPT` (reads `window.Capacitor` directly, not `isNative()`; stays as is, `html.electron` is a separate script); `components/reports/export-menu.tsx` `canDownloadFiles()` (reads `window.Capacitor` directly; Electron can download — confirm the default save dialog in Stage 1). `mobile-tab-bar`, `app-shell` and `workspace-switcher` only *mention* `isNative()` in comments and branch on nothing. |
+| Token-auth shell | `isTokenShell()` (or `clientId()` / `entrySource()`) | yes | yes | `lib/native-session.ts` (token store — backend differs, see Stage 2b); `lib/trpc.ts` (bearer + `credentials: "omit"` → `isTokenShell()`; client header → `clientId()`); `lib/auth-client.ts` (`clientHeader` → `clientId()`; rebasing fetch wrapper → `isTokenShell()`); `lib/entry-source.ts` → `entrySource()`; `lib/api-origin.ts` (server choice; storage is Preferences on Capacitor, `localStorage` on Electron); `app/login/page.tsx` (two-factor unsupported message); `components/server-picker.tsx` and `components/data/move-server-panel.tsx` via `useIsNative` (the latter hardcodes `"trackyourtime-mobile"` → `clientId()`); `lib/app-shell-host.ts` `isAppShell()` — already true in Electron via `"electronAPI" in window`, consumed by `google-sign-in-button.tsx` and `marketing/shell-entry-redirect.tsx`; becomes `isTokenShell()` once Tauri is gone. Indirect, through `native-session`: `app/app/layout.tsx` (`hasStoredToken`), `hooks/use-sync.ts`, `providers/auth-provider.tsx`, `invite/invite-acceptance.tsx`, `lib/server-switch.ts`, `lib/revoke-this-device.ts`. There is no `signed-in-redirect`; the survey meant `shell-entry-redirect`. |
+| Durable storage / radio network truth / phone battery | `isCapacitor()` | yes | no — Chromium `localStorage` in `userData` is not evicted, `navigator.onLine` is usable on desktop | `mobile/preferences-storage.ts` `shouldUseNativeStorage()` → consumed by `lib/offline.ts` (queue store) and `lib/active-workspace.ts` (workspace choice, including its sync-hydrate-on-web path); `mobile/network.ts` (`@capacitor/network`); `lib/query-client.ts` (bounded retries are a battery rule; the `onlineManager` feed comes from `network.ts`); `lib/offline.ts` `watchDocumentUnload` (the web teardown latch is right on Electron: `pagehide` fires on quit and reload, not on hide-on-close). |
+| **Changed from the guess:** running-timer mirror | `isTokenShell()` for the behaviour, `isCapacitor()` for the backing store | yes (Preferences) | yes (`localStorage`) | `lib/running-mirror.ts`, seeded from `mobile/MobileBridgeLoader.tsx`. It exists for the cold *offline* launch with a stored token, which a laptop opened on a train has exactly as a phone does: `app/app/layout.tsx` keeps the token user in, the query never answers, and without the mirror the running clock is blank. Only the store is phone-specific. Stage 2 moves the seed call out of the Capacitor-only loader. |
 
 `isNative()` is deleted, not aliased, so no call site keeps an ambiguous
 meaning. `lib/shell.ts` owns all three predicates plus `clientId()` and
-`entrySource()`. Each file is classified by reading it in Stage 0; the table's
-last column is the survey's starting guess.
+`entrySource()`.
 
 **Why not just make `isNative()` true in Electron:** it would put the phone tab
 bar, 16px fields and top-anchored dialogs on a 1280px window, and route the
