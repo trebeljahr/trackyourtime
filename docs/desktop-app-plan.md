@@ -222,6 +222,69 @@ production-mode API with its own `mongod`, and by `pnpm test:e2e:desktop`
   window geometry and was abandoned), Windows and Linux at runtime, and
   `canDownloadFiles()`'s save dialog in Electron (the plan table's Stage 1 item).
 
+### Stage 1 — review (2026-09-17)
+
+An adversarial pass over `26ab6f0..6d2c91e`, run on macOS arm64 with Node
+24.14.1. Re-checked, not taken on trust: `pnpm test:e2e:desktop` (16 specs; 15
+pass and the clipboard spec is skipped locally, see below), `pnpm test:electron`
+(37), `pnpm typecheck`, `pnpm run test:client` (1210). A fresh
+`pnpm electron:preview`, driven headless over `--remote-debugging-port`, opened
+on `app://-/login/` with `ELECTRON_DEV_URL` set (so it was ignored), showed the
+404 page with status 404, answered `/..%2f..%2fpackage.json` with 400, and
+reloaded in place. Fuses were read back from the macOS binary. Cross-built
+`--linux --win --x64 --dir` on the Mac: both asars hold the same 497 entries
+with no `node_modules` or Capacitor, and both binaries carry the same fuse wire.
+That checks the packaging only; neither was run.
+
+Defects found and fixed:
+
+- **`mailto:` links did nothing.** The navigation guard handed only http(s)
+  to the OS, and the support page's contact address (linked from the 404 page)
+  is a `mailto:`. `isOsHandledUrl` in `trust.ts` adds `mailto:` and nothing
+  else. The spec stubs `shell.openExternal` so no mail client opens.
+- **`win.maximize()` shows a hidden window** (Electron's docs say so). It ran
+  straight after construction, so a profile last closed maximised showed an
+  unpainted window before `ready-to-show`. It also made a headless launch
+  visible. Maximise now waits for `ready-to-show`. Headless never restores the
+  maximised or fullscreen state, and a spec seeds both.
+- **The profile directory came from package.json.** Electron derives
+  `userData` from `productName`, else `name`. A `productName` added later would
+  have moved every installed app to an empty profile and stranded its offline
+  queue. The unpackaged `dev:desktop` also shared the installed app's profile,
+  so it shared the single-instance lock: with the installed app open,
+  `dev:desktop` exited at once and printed nothing. `profile.ts` pins
+  `trackyourtime` for a packaged app and `trackyourtime-dev` for an unpackaged
+  run. A second instance now logs why it exits.
+- **The clipboard spec writes the real system clipboard** and can restore
+  only its text, so it would lose a copied image or file on a developer's Mac.
+  It runs on CI, or locally with `DESKTOP_E2E_CLIPBOARD=1`.
+
+Checked and found sound: the path resolver (encoded `..`, `%5c`, NUL, malformed
+escapes, foreign hosts, drive-letter segments caught by the root prefix
+check), IPC sender checks (the preload never reaches subframes, and a dev URL
+counts only when unpackaged and http(s)), the permission handlers, the web CSP
+(the web has none, so the extra pre-paint script cannot break it), hydration
+(both markers are on `<html>`, which already suppresses the warning) and
+leftover Tauri references (only history remains: CHANGELOG, release notes,
+`mobile-app-plan.md`).
+
+Left for later stages:
+
+- **CSP `connect-src` is narrower than `isLoopbackHost`.** It allows plain
+  http/ws for `localhost` and `127.0.0.1` only. The server picker also accepts
+  `[::1]`, `*.localhost` and other `127.x` addresses, and those would be blocked.
+  CSP host sources cannot express IPv6 literals or IP ranges, so Stage 2 has to
+  choose between `http:`/`ws:` and a narrower picker on desktop.
+- **A second launch may not bring the app forward on macOS.** `revealWindow`
+  calls `show()` and `focus()` without `app.focus({ steal: true })`. Checking
+  that needs a visible window, so it was not run.
+- **A Linux AppImage with `sandbox: true`** hits the same Ubuntu 24.04 AppArmor
+  user-namespace restriction the CI job lifts with `sysctl`. End users cannot
+  lift it that way, so Stage 6 must ship an AppArmor profile or a deb.
+- Still not run: a real window drag, the traffic lights on screen, Windows and
+  Linux at runtime, and the CI `desktop` job itself (including the clipboard
+  spec under xvfb, which is new on CI).
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**
