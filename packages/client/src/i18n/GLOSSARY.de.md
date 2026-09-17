@@ -199,3 +199,7 @@ produce them from the locale.
 | badge (Dock, taskbar) | Kennzeichen | |
 | global shortcut | Tastenkürzel | the same word as in-app; „global“ only when the difference matters |
 | modifier key | Sondertaste | Strg, Alt, Umschalt, ⌘ |
+| update (of the app) | Update | plural „Updates“; the verb is „aktualisieren“ |
+| Restart to update | Neu starten und aktualisieren | tray item and button |
+| download page | Download-Seite | |
+| copy (an installed app) | Installation | never „Kopie“ |

@@ -1058,5 +1058,28 @@ export const settings: Translation<typeof source> = {
         delete: "Entf",
       },
     },
+    updates: {
+      title: "Updates",
+      version: "Version {version}",
+      check: "Nach Updates suchen",
+      restart: "Neu starten und aktualisieren",
+      status: {
+        idle: "Track Your Time sucht beim Start und alle 6 Stunden nach Updates.",
+        upToDate: "Du hast die neueste Version. Zuletzt gesucht: {when}.",
+        checking: "Suche nach Updates …",
+        downloading: "Version {version} wird geladen …",
+        downloadingPercent: "Version {version} wird geladen ({percent}) …",
+        ready: "Version {version} ist bereit. Sie wird installiert, wenn du Track Your Time beendest oder jetzt neu startest.",
+        error: "Die Suche nach Updates ist fehlgeschlagen. Track Your Time versucht es in ein paar Stunden noch einmal.",
+      },
+      disabled: {
+        store: "Updates für diese Installation kommen aus dem Store, über den du sie installiert hast.",
+        sandbox: "Updates für diese Installation kommen aus dem Snap Store oder von Flathub, je nachdem, woher sie stammt.",
+        "package-manager": "Diese Installation aktualisiert sich nicht selbst. Installiere das neue Paket von der Download-Seite, oder nutze das AppImage, das sich selbst aktualisiert.",
+        "no-feed": "Dieser Build aktualisiert sich nicht selbst. Neue Versionen gibt es auf der Download-Seite.",
+        unpackaged: "Ein Entwicklungs-Build aktualisiert sich nicht selbst.",
+        "turned-off": "Updates sind auf diesem Computer ausgeschaltet.",
+      },
+    },
   },
 };

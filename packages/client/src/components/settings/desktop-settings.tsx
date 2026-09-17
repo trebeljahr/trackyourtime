@@ -20,6 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { DesktopUpdatesCard } from "@/components/settings/desktop-updates";
 import { SettingRow } from "@/components/settings/setting-row";
 import { useT } from "@/i18n/use-t";
 import {
@@ -354,6 +355,8 @@ export function DesktopSettingsPanel(): React.JSX.Element | null {
           })}
         </CardContent>
       </Card>
+
+      <DesktopUpdatesCard />
     </>
   );
 }

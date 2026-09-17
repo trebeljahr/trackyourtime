@@ -290,6 +290,7 @@ export const shell: Translation<typeof source> = {
       idleTooltip: "Track Your Time: kein Timer läuft",
       unsent: "{count, plural, one {# Änderung noch nicht gesendet} other {# Änderungen noch nicht gesendet}}",
       runningBadge: "Timer läuft",
+      restartToUpdate: "Neu starten und aktualisieren",
     },
     quitUnsent: {
       title: "{count, plural, one {# Änderung ist noch nicht gesendet} other {# Änderungen sind noch nicht gesendet}}",

@@ -294,3 +294,33 @@ test("a runaway prompt posts a notification while hidden, and its click opens th
   expect(update.snapshot.loginItem).toBe("enabled");
   expect(await hook<boolean>("return hook.badge()")).toBe(true);
 });
+
+test("an update waits for the person: Restart to update in the tray and Settings, never on its own", async () => {
+  const { page } = await signedInWithRecent("Updates");
+
+  // Headless runs a memory updater (electron/src/updater.ts): no network.
+  await clickTray("settings");
+  await page.waitForURL(/\/app\/settings\/?\?tab=desktop$/);
+  await expect(page.getByTestId("settings-desktop-updates")).toHaveAttribute("data-status", "idle");
+  await page.getByTestId("desktop-update-check").click();
+  await expect.poll(() => hook<number>("return hook.update.checks()")).toBe(1);
+  expect((await trayMenu()).some((item) => item.type === "item" && item.id === "restart-to-update")).toBe(false);
+
+  await hook("hook.update.dispatch(arg)", { kind: "available", version: "9.9.9" });
+  await expect(page.getByTestId("desktop-update-status")).toContainText("9.9.9");
+  await hook("hook.update.dispatch(arg)", { kind: "downloaded", version: "9.9.9" });
+  await expect(page.getByTestId("settings-desktop-updates")).toHaveAttribute("data-status", "ready");
+  await expect
+    .poll(async () => (await trayMenu()).some((item) => item.type === "item" && item.id === "restart-to-update"))
+    .toBe(true);
+
+  // Downloaded, announced, and nothing restarted.
+  await page.waitForTimeout(1_000);
+  expect(await hook<number>("return hook.update.installs()")).toBe(0);
+
+  // The tray item and the button each install exactly once when clicked.
+  await clickTray("restart-to-update");
+  expect(await hook<number>("return hook.update.installs()")).toBe(1);
+  await page.getByTestId("desktop-update-restart").click();
+  await expect.poll(() => hook<number>("return hook.update.installs()")).toBe(2);
+});

@@ -1086,5 +1086,29 @@ export const settings = {
         delete: "Delete",
       },
     },
+    /** Stage 7: the updater's status. The app never restarts for an update by itself. */
+    updates: {
+      title: "Updates",
+      version: "Version {version}",
+      check: "Check for updates",
+      restart: "Restart to update",
+      status: {
+        idle: "Track Your Time checks for updates when it starts and every 6 hours.",
+        upToDate: "You have the latest version. Last checked {when}.",
+        checking: "Checking for updates…",
+        downloading: "Downloading version {version}…",
+        downloadingPercent: "Downloading version {version} ({percent})…",
+        ready: "Version {version} is ready. It installs when you quit Track Your Time, or when you restart now.",
+        error: "Couldn’t check for updates. Track Your Time tries again in a few hours.",
+      },
+      disabled: {
+        store: "Updates for this copy come from the store you installed it from.",
+        sandbox: "Updates for this copy come from the Snap Store or Flathub, wherever you installed it from.",
+        "package-manager": "This copy doesn’t update itself. Install the new package from the download page, or use the AppImage, which updates itself.",
+        "no-feed": "This build doesn’t update itself. Get new versions from the download page.",
+        unpackaged: "A development build doesn’t update itself.",
+        "turned-off": "Updates are turned off on this computer.",
+      },
+    },
   },
 } as const;

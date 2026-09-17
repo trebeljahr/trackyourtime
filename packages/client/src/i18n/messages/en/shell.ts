@@ -310,6 +310,7 @@ export const shell = {
       idleTooltip: "Track Your Time: no timer running",
       unsent: "{count, plural, one {# change not sent yet} other {# changes not sent yet}}",
       runningBadge: "Timer running",
+      restartToUpdate: "Restart to update",
     },
     quitUnsent: {
       title: "{count, plural, one {# change is not sent yet} other {# changes are not sent yet}}",

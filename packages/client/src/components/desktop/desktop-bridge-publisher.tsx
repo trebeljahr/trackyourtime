@@ -83,6 +83,7 @@ export function buildDesktopTimerState(input: {
       quitUnsentBody: t("desktop.quitUnsent.body"),
       quitUnsentButton: t("desktop.quitUnsent.button"),
       runningBadge: t("desktop.tray.runningBadge"),
+      restartToUpdate: t("desktop.tray.restartToUpdate"),
     },
   };
 }
