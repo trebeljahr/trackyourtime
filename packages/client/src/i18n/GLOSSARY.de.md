@@ -194,3 +194,8 @@ produce them from the locale.
 - Time: 24-hour, "14:05" — "Uhr" only in running text ("um 14:05 Uhr").
 - Weeks start on Monday by default.
 - Durations: "1:30:00", "1,50 h", "1 h 30 min".
+| system tray (Windows/Linux) | Infobereich | macOS keeps „Menüleiste“ |
+| open at login | beim Anmelden öffnen | macOS setting: „Anmeldeobjekte“ |
+| badge (Dock, taskbar) | Kennzeichen | |
+| global shortcut | Tastenkürzel | the same word as in-app; „global“ only when the difference matters |
+| modifier key | Sondertaste | Strg, Alt, Umschalt, ⌘ |
