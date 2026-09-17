@@ -51,6 +51,22 @@ export function isExternalWebUrl(url: string): boolean {
 }
 
 /**
+ * A URL a link in the app may hand to the OS when it would leave the app:
+ * http(s) for the browser, and `mailto:` for the mail client — the support and
+ * privacy pages (reached from the 404 page) link a contact address, and
+ * without this the click did nothing at all. Nothing else: `file:`, custom
+ * schemes and the like can launch arbitrary handlers.
+ */
+export function isOsHandledUrl(url: string): boolean {
+  if (isExternalWebUrl(url)) return true;
+  try {
+    return new URL(url).protocol === "mailto:";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The web permissions the app's own documents are granted. Everything else —
  * camera, microphone, geolocation, MIDI, clipboard *read*, … — is denied, and
  * nothing is granted to any other document.

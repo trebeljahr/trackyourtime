@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { isAppUrl, isExternalWebUrl, isPermissionGranted, isTrustedSenderUrl } from "./trust.ts";
+import { isAppUrl, isExternalWebUrl, isOsHandledUrl, isPermissionGranted, isTrustedSenderUrl } from "./trust.ts";
 
 describe("isTrustedSenderUrl", () => {
   it("trusts the app's own origin", () => {
@@ -76,6 +76,20 @@ describe("isPermissionGranted", () => {
     for (const url of ["https://example.com/", "data:text/html,x", "about:blank", "", null]) {
       assert.equal(isPermissionGranted("clipboard-sanitized-write", url, null), false, String(url));
       assert.equal(isPermissionGranted("notifications", url, null), false, String(url));
+    }
+  });
+});
+
+describe("isOsHandledUrl", () => {
+  it("hands web and mail links to the OS", () => {
+    assert.equal(isOsHandledUrl("https://trackyourtime.dev/docs/"), true);
+    assert.equal(isOsHandledUrl("http://localhost:5159/"), true);
+    assert.equal(isOsHandledUrl("mailto:support@example.com"), true);
+  });
+
+  it("refuses every other scheme", () => {
+    for (const url of ["file:///etc/hosts", "app://-/", "javascript:alert(1)", "data:text/html,x", "smb://host/share", "x-apple.systempreferences:", "not a url"]) {
+      assert.equal(isOsHandledUrl(url), false, url);
     }
   });
 });

@@ -2,10 +2,11 @@
  * The Electron security baseline, applied to every webContents the app ever
  * creates rather than to the one window we know about.
  *
- * - Navigation stays on the app's own origin. An http(s) link that would leave
- *   it opens in the person's browser instead; anything else is dropped.
- * - `window.open` never creates an Electron window. http(s) goes to the OS
- *   browser, and nothing else goes anywhere.
+ * - Navigation stays on the app's own origin. An http(s) or mailto: link that
+ *   would leave it goes to the OS (browser, mail client); anything else is
+ *   dropped.
+ * - `window.open` never creates an Electron window. http(s) and mailto: go to
+ *   the OS, and nothing else goes anywhere.
  * - `<webview>` is refused outright.
  * - Every permission request (camera, geolocation, clipboard-read, …) is
  *   denied, except notifications and clipboard writes from the app's own
@@ -17,10 +18,10 @@
 
 import { app, session, shell, type WebContents } from "electron";
 
-import { isExternalWebUrl, isPermissionGranted, isTrustedSenderUrl } from "./trust.ts";
+import { isOsHandledUrl, isPermissionGranted, isTrustedSenderUrl } from "./trust.ts";
 
 function openExternally(url: string): void {
-  if (!isExternalWebUrl(url)) return;
+  if (!isOsHandledUrl(url)) return;
   shell.openExternal(url).catch((err: unknown) => {
     console.warn("[security] openExternal failed:", err);
   });

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
 
@@ -209,6 +209,13 @@ test("navigation off the app origin and permission requests are denied", async (
 });
 
 test("the permission lockdown leaves clipboard copy working", async () => {
+  // This writes the machine's real clipboard. Only its text can be put back,
+  // so a copied image, file or rich text on a developer's machine would be
+  // lost — run it on CI, or locally on request.
+  test.skip(
+    !process.env.CI && process.env.DESKTOP_E2E_CLIPBOARD !== "1",
+    "writes the system clipboard; set DESKTOP_E2E_CLIPBOARD=1 to run it locally",
+  );
   ({ app, page } = await launchApp());
   await expectAt(page, /\/login\//);
   // Invite links, API tokens and 2FA backup codes are copied with
@@ -343,4 +350,52 @@ test("a second launch on the same profile exits and leaves the first running", a
   expect(code).toBe(0);
   expect(await page.evaluate(() => location.origin)).toBe(APP_ORIGIN);
   expect(app.windows()).toHaveLength(1);
+});
+
+test("a mailto: link is handed to the OS, not dropped", async () => {
+  ({ app, page } = await launchApp());
+  await expectAt(page, /\/login\//);
+  const before = page.url();
+  // The 404 page links to /support/, whose contact address is a mailto: link.
+  // Stub the OS hand-off first, so a test run never opens a mail client.
+  const stubbed = await app.evaluate(({ shell }) => {
+    const g = globalThis as { __opened?: string[] };
+    g.__opened = [];
+    shell.openExternal = async (url: string) => {
+      g.__opened?.push(url);
+    };
+    return shell.openExternal.toString().includes("__opened");
+  });
+  expect(stubbed).toBe(true);
+
+  await page.evaluate(() => {
+    const anchor = document.createElement("a");
+    anchor.href = "mailto:support@example.com";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  });
+  await expect
+    .poll(() => app.evaluate(() => (globalThis as { __opened?: string[] }).__opened ?? []))
+    .toEqual(["mailto:support@example.com"]);
+  expect(page.url()).toBe(before);
+});
+
+test("a profile last closed maximised or fullscreen still launches hidden in headless mode", async () => {
+  // BrowserWindow.maximize() shows a hidden window, so restoring the saved
+  // state before ready-to-show put a window on screen before the page painted.
+  const userDataDir = freshUserDataDir();
+  writeFileSync(
+    join(userDataDir, "window-state.json"),
+    JSON.stringify({ bounds: { x: 40, y: 40, width: 1000, height: 700 }, maximized: true, fullscreen: true }),
+  );
+  ({ app, page } = await launchApp(userDataDir));
+  await expectAt(page, /\/login\//);
+  // Give a stray show or fullscreen transition time to happen.
+  await page.waitForTimeout(1000);
+  const state = await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    return { visible: win.isVisible(), fullscreen: win.isFullScreen(), focused: BrowserWindow.getFocusedWindow() !== null };
+  });
+  expect(state).toEqual({ visible: false, fullscreen: false, focused: false });
 });

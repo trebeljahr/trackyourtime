@@ -70,7 +70,8 @@ export function createMainWindow(options: {
     ...(isMac
       ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 16, y: 20 } }
       : { autoHideMenuBar: true }),
-    fullscreen: saved.fullscreen === true,
+    // Never in headless: a fullscreen window cannot stay hidden.
+    fullscreen: saved.fullscreen === true && !options.headless,
     webPreferences: {
       preload: options.preload,
       sandbox: true,
@@ -86,10 +87,15 @@ export function createMainWindow(options: {
     ...(options.headless ? { skipTaskbar: true } : {}),
   });
 
-  if (saved.maximized) win.maximize();
-
+  // `maximize()` also SHOWS a hidden window (Electron's docs say so), so it
+  // waits for ready-to-show: called right after construction it put the
+  // window on screen before the page painted — the flash `show: false`
+  // exists to prevent — and made a headless launch on a profile that was
+  // last closed maximised visible.
   win.once("ready-to-show", () => {
-    if (!win.isDestroyed() && !options.headless) win.show();
+    if (win.isDestroyed() || options.headless) return;
+    if (saved.maximized) win.maximize();
+    win.show();
   });
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
