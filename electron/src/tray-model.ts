@@ -35,6 +35,7 @@ export const FALLBACK_TRAY_LABELS: DesktopTrayLabels = {
   quitUnsentBody: "They are kept on this computer and sent the next time Track Your Time starts.",
   quitUnsentButton: "Quit",
   runningBadge: "Timer running",
+  restartToUpdate: "Restart to update",
 };
 
 export const MAX_TRAY_RECENTS = 5;
@@ -131,15 +132,22 @@ export type TrayMenuItem =
  * the unsent count when non-zero, Open, Settings, Quit. Signed out (or before
  * any state arrived): Open and Quit.
  *
+ * With a downloaded update, "Restart to update" sits above Quit in either
+ * menu: the person picks the moment, the app never restarts by itself.
+ *
  * Item ids are what `tray.ts` hands back on a click: `stop`, `start`,
- * `continue:<key>`, `open`, `settings`, `quit`.
+ * `continue:<key>`, `open`, `settings`, `restart-to-update`, `quit`.
  */
-export function trayMenuModel(state: DesktopTimerState | null): TrayMenuItem[] {
+export function trayMenuModel(state: DesktopTimerState | null, options: { updateReady?: boolean } = {}): TrayMenuItem[] {
   const labels = state?.labels ?? FALLBACK_TRAY_LABELS;
+  const restart: TrayMenuItem[] = options.updateReady
+    ? [{ type: "item", id: "restart-to-update", label: labels.restartToUpdate, enabled: true }]
+    : [];
   if (state === null || !state.signedIn) {
     return [
       { type: "item", id: "open", label: labels.open, enabled: true },
       { type: "separator" },
+      ...restart,
       { type: "item", id: "quit", label: labels.quit, enabled: true },
     ];
   }
@@ -171,6 +179,7 @@ export function trayMenuModel(state: DesktopTimerState | null): TrayMenuItem[] {
   items.push({ type: "item", id: "open", label: labels.open, enabled: true });
   items.push({ type: "item", id: "settings", label: labels.settings, enabled: true });
   items.push({ type: "separator" });
+  items.push(...restart);
   items.push({ type: "item", id: "quit", label: labels.quit, enabled: true });
   return items;
 }

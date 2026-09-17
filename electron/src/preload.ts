@@ -16,6 +16,7 @@ import {
   type DesktopCommand,
   type DesktopIdlePayload,
   type DesktopSettingsSnapshot,
+  type DesktopUpdateSnapshot,
 } from "../../packages/shared/src/desktop-bridge.ts";
 
 const bridge: DesktopBridge = {
@@ -59,6 +60,18 @@ const bridge: DesktopBridge = {
     suspendShortcuts: (suspended) => ipcRenderer.invoke(DESKTOP_IPC.desktopSuspendShortcuts, suspended),
     showWindow: () => ipcRenderer.invoke(DESKTOP_IPC.desktopShowWindow),
     notify: (notice) => ipcRenderer.invoke(DESKTOP_IPC.desktopNotify, notice),
+    updates: {
+      getStatus: () => ipcRenderer.invoke(DESKTOP_IPC.updateGetStatus),
+      onStatus: (listener) => {
+        const handler = (_event: unknown, snapshot: DesktopUpdateSnapshot): void => listener(snapshot);
+        ipcRenderer.on(DESKTOP_IPC.updateStatusChanged, handler);
+        return () => {
+          ipcRenderer.removeListener(DESKTOP_IPC.updateStatusChanged, handler);
+        };
+      },
+      check: () => ipcRenderer.invoke(DESKTOP_IPC.updateCheck),
+      restart: () => ipcRenderer.invoke(DESKTOP_IPC.updateRestart),
+    },
   },
 
   /*

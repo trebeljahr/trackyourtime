@@ -220,6 +220,41 @@ export function targetChannelProblem(channel, builderArgs) {
   return null;
 }
 
+/** Where direct downloads are published and where their updater looks (Stage 7). */
+export const UPDATE_FEED = Object.freeze({
+  provider: "github",
+  owner: "trebeljahr",
+  repo: "trackyourtime",
+  // electron-builder only ever uploads into a draft; a person publishes it,
+  // and publishing is what makes installed apps see the release.
+  releaseType: "draft",
+});
+
+/**
+ * The electron-builder `publish` value for a build, which decides whether the
+ * app gets an `app-update.yml` (and the release a `latest*.yml`) at all.
+ *
+ * - mac and win: only when signed. Squirrel.Mac refuses to install into an
+ *   unsigned app, and an `-unsigned` test build must never replace itself
+ *   with a release.
+ * - linux: always. Nothing on Linux is signed; the AppImage is the only one
+ *   of its packages that updates itself, and the app decides that at runtime
+ *   (`electron/src/updater-model.ts`) because electron-builder writes the same
+ *   file into the deb, rpm and snap.
+ * - mas, win-store and local builds: never.
+ *
+ * Always `null`, never `undefined`, when there is no feed: with `publish`
+ * unset, electron-builder guesses a GitHub feed whenever GH_TOKEN or
+ * GITHUB_TOKEN is in the environment — which it is on every CI runner.
+ *
+ * @returns {typeof UPDATE_FEED | null}
+ */
+export function updateFeedFor({ channel, unsigned }) {
+  if (channel === "linux") return UPDATE_FEED;
+  if ((channel === "mac" || channel === "win") && !unsigned) return UPDATE_FEED;
+  return null;
+}
+
 /**
  * Artifact names, one place. electron-builder expands `${version}` and
  * `${arch}`; `desktop-manifests.mjs` fills the same shapes with real values to

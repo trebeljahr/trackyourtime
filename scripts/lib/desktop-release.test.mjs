@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  updateFeedFor,
+  UPDATE_FEED,
   ALL_SIGNING_VARS,
   MANIFEST_FAMILIES,
   manifestArtifacts,
@@ -196,5 +198,47 @@ describe("manifests", () => {
         }
       }
     }
+  });
+});
+
+describe("updateFeedFor", () => {
+  it("gives signed direct downloads and every Linux build a GitHub feed", () => {
+    assert.equal(updateFeedFor({ channel: "mac", unsigned: false }), UPDATE_FEED);
+    assert.equal(updateFeedFor({ channel: "win", unsigned: false }), UPDATE_FEED);
+    assert.equal(updateFeedFor({ channel: "linux", unsigned: true }), UPDATE_FEED);
+    assert.equal(UPDATE_FEED.releaseType, "draft");
+  });
+
+  it("is null, not undefined, for everything else", () => {
+    for (const input of [
+      { channel: "mac", unsigned: true },
+      { channel: "win", unsigned: true },
+      { channel: "mas", unsigned: false },
+      { channel: "win-store", unsigned: false },
+      { channel: "local", unsigned: true },
+      { channel: undefined, unsigned: false },
+    ]) {
+      assert.strictEqual(updateFeedFor(input), null, JSON.stringify(input));
+    }
+  });
+
+  it("is what the electron-builder config publishes", async () => {
+    const load = async (env) => {
+      const saved = { ...process.env };
+      Object.assign(process.env, env);
+      try {
+        const url = new URL(`../../electron-builder.config.mjs?${JSON.stringify(env)}`, import.meta.url);
+        return (await import(url.href)).default;
+      } finally {
+        for (const key of Object.keys(env)) {
+          if (key in saved) process.env[key] = saved[key];
+          else delete process.env[key];
+        }
+      }
+    };
+    assert.deepEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "mac", TRACKYOURTIME_UNSIGNED: "" })).publish, UPDATE_FEED);
+    assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "mac", TRACKYOURTIME_UNSIGNED: "1" })).publish, null);
+    assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "mas", TRACKYOURTIME_UNSIGNED: "" })).publish, null);
+    assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "", TRACKYOURTIME_UNSIGNED: "" })).publish, null);
   });
 });

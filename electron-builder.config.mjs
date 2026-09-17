@@ -1,4 +1,4 @@
-import { artifactPatterns } from "./scripts/lib/desktop-release.mjs";
+import { artifactPatterns, updateFeedFor } from "./scripts/lib/desktop-release.mjs";
 
 /*
  * Set by scripts/build-desktop.mjs from the signing secrets
@@ -7,6 +7,8 @@ import { artifactPatterns } from "./scripts/lib/desktop-release.mjs";
  */
 const unsigned = process.env.TRACKYOURTIME_UNSIGNED === "1";
 const names = artifactPatterns({ unsigned });
+/** Set by build-desktop.mjs (`builderEnvFor`); "local" without --channel. */
+const channel = process.env.TRACKYOURTIME_DESKTOP_CHANNEL;
 const env = (name) => {
   const value = process.env[name]?.trim();
   return value ? value : undefined;
@@ -52,6 +54,12 @@ const config = {
     // whatever `files` lists; this is what keeps them out.
     "!node_modules/**",
   ],
+  // The update feed (Stage 7): GitHub Releases for signed mac and win builds
+  // and for Linux, `null` for everything else. Explicitly null — left
+  // undefined, electron-builder guesses a GitHub feed from GH_TOKEN.
+  // build-desktop.mjs always passes --publish never; the release workflow
+  // uploads to a draft release itself.
+  publish: updateFeedFor({ channel, unsigned }),
   asar: true,
   // Nothing native is packed, so there is nothing to rebuild.
   npmRebuild: false,

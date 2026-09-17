@@ -28,7 +28,7 @@ import {
 
 export interface TrayView {
   /** Redraw from state; cheap to call every second (the menu is rebuilt only when it changed). */
-  update: (state: DesktopTimerState | null, nowMs: number) => void;
+  update: (state: DesktopTimerState | null, nowMs: number, updateReady: boolean) => void;
   destroy: () => void;
 }
 
@@ -66,9 +66,9 @@ export function createElectronTray(options: {
   let lastTooltip = "";
 
   return {
-    update: (state, nowMs) => {
+    update: (state, nowMs, updateReady) => {
       if (tray.isDestroyed()) return;
-      const model = trayMenuModel(state);
+      const model = trayMenuModel(state, { updateReady });
       const menuKey = JSON.stringify(model);
       if (menuKey !== lastMenu) {
         lastMenu = menuKey;

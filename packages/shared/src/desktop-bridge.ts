@@ -112,6 +112,8 @@ export interface DesktopTrayLabels {
   quitUnsentButton: string;
   /** Accessible description of the Windows taskbar overlay. */
   runningBadge: string;
+  /** The tray item shown once an update is downloaded (Stage 7). */
+  restartToUpdate: string;
 }
 
 /** What the tray, a global shortcut or a notification asks the renderer to do. */
@@ -193,6 +195,58 @@ export interface DesktopSettingsUpdate {
   refused: DesktopShortcutStatus[];
 }
 
+/**
+ * Why this copy of the app does not update itself (Stage 7,
+ * `electron/src/updater-model.ts`).
+ *
+ * - `store`: the Mac App Store or the Microsoft Store replaces the app.
+ * - `sandbox`: Snap or Flatpak, whose store replaces it.
+ * - `package-manager`: a deb, rpm or tar.gz install, which the system's
+ *   package manager (or the person) upgrades.
+ * - `no-feed`: a build with no update feed — every unsigned macOS or Windows
+ *   build, and any local build.
+ * - `unpackaged`: a development run.
+ * - `turned-off`: `TRACKYOURTIME_DISABLE_UPDATES=1`, for managed machines.
+ */
+export type DesktopUpdateDisabledReason =
+  | "store"
+  | "sandbox"
+  | "package-manager"
+  | "no-feed"
+  | "unpackaged"
+  | "turned-off";
+
+export type DesktopUpdateStatus =
+  | { kind: "disabled"; reason: DesktopUpdateDisabledReason }
+  /** Nothing in progress. `lastCheckedAt` is null before the first check answered. */
+  | { kind: "idle"; lastCheckedAt: string | null }
+  | { kind: "checking"; lastCheckedAt: string | null }
+  /** `percent` is null until the first progress event. */
+  | { kind: "downloading"; version: string; percent: number | null }
+  /** Downloaded: installed when the app quits, or now on "Restart to update". */
+  | { kind: "ready"; version: string }
+  /** The last check or download failed; the next scheduled check tries again. */
+  | { kind: "error"; lastCheckedAt: string | null };
+
+export interface DesktopUpdateSnapshot {
+  /** The running app's version (`app.getVersion()`). */
+  currentVersion: string;
+  status: DesktopUpdateStatus;
+}
+
+/**
+ * The updater, as Settings → Desktop sees it. Nothing here restarts the app on
+ * its own: `restart` is only ever called from a click on "Restart to update".
+ */
+export interface DesktopUpdates {
+  getStatus: () => Promise<DesktopUpdateSnapshot>;
+  onStatus: (listener: (snapshot: DesktopUpdateSnapshot) => void) => () => void;
+  /** Checks now; resolves with the snapshot once the check has started. */
+  check: () => Promise<DesktopUpdateSnapshot>;
+  /** Quits and installs a downloaded update. Resolves false when none is ready. */
+  restart: () => Promise<boolean>;
+}
+
 /** The desktop-app surface beyond auth: tray, shortcuts, settings, attention. */
 export interface DesktopShell {
   publishTimerState: (state: DesktopTimerState) => Promise<void>;
@@ -205,6 +259,8 @@ export interface DesktopShell {
   showWindow: () => Promise<void>;
   /** Posts only when the window is hidden or not focused; resolves whether it did. */
   notify: (notice: DesktopNotice) => Promise<boolean>;
+  /** Auto-update (Stage 7). Optional so an older preload is still a valid bridge. */
+  updates?: DesktopUpdates;
 }
 
 /**
@@ -259,12 +315,17 @@ export const DESKTOP_IPC = {
   desktopSuspendShortcuts: "desktop:shortcuts-suspend",
   desktopShowWindow: "desktop:window-show",
   desktopNotify: "desktop:notify",
+  updateGetStatus: "update:status",
+  updateCheck: "update:check",
+  updateRestart: "update:restart",
   /** main → renderer push, not an invoke. */
   idleState: "idle:state",
   /** main → renderer push. */
   desktopCommand: "desktop:command",
   /** main → renderer push. */
   desktopSettingsChanged: "desktop:settings-changed",
+  /** main → renderer push. */
+  updateStatusChanged: "update:status-changed",
 } as const;
 
 export type DesktopIpcChannel = (typeof DESKTOP_IPC)[keyof typeof DESKTOP_IPC];

@@ -2,7 +2,8 @@
  * Stages 4 and 5 of docs/desktop-app-plan.md, wired together: the tray, the
  * global shortcuts, Settings → Desktop, open at login, notifications for
  * prompts a hidden window would swallow, the running badge and the notice on
- * quitting with unsent changes.
+ * quitting with unsent changes. Stage 7 adds the updater's status, "Restart to
+ * update" in the tray, and the IPC Settings → Desktop reads it through.
  *
  * The renderer owns the timer (the socket, the offline queue, the locale);
  * this process draws what it publishes and sends commands back. Nothing here
@@ -12,6 +13,8 @@
  * with the OS, no notification posted, no dialog, no badge and no login item.
  * Each of those is recorded instead on `globalThis.__trackYourTimeDesktop`
  * (`DesktopTestHook`), which a Playwright `app.evaluate` reads and drives.
+ * The updater is a memory stand-in there (updater.ts): no network, and a
+ * restart is counted instead of quitting.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -36,6 +39,7 @@ import {
   type DesktopSettingsUpdate,
   type DesktopTimerState,
   type DesktopTrayLabels,
+  type DesktopUpdateSnapshot,
 } from "../../packages/shared/src/desktop-bridge.ts";
 import type { DesktopShortcutAction } from "../../packages/shared/src/desktop-shortcuts.ts";
 import { applySettingsPatch, readDesktopSettings, writeDesktopSettings } from "./desktop-settings.ts";
@@ -50,6 +54,9 @@ import {
 import { distributionChannel, loginItemMechanism } from "./distribution.ts";
 import { createMemoryRegistrar, createShortcutManager, type ShortcutRegistrar } from "./shortcuts.ts";
 import { createElectronTray, type TrayView } from "./tray.ts";
+import { installUpdater } from "./updater.ts";
+import type { UpdaterEvent } from "./updater-model.ts";
+import { markQuitting } from "./window.ts";
 import {
   FALLBACK_TRAY_LABELS,
   parseNotice,
@@ -86,6 +93,14 @@ export interface DesktopTestHook {
   badge: () => boolean;
   reveals: () => number;
   commands: DesktopCommand[];
+  update: {
+    snapshot: () => DesktopUpdateSnapshot;
+    /** Feed an updater event, as electron-updater would. */
+    dispatch: (event: UpdaterEvent) => void;
+    /** How many times something asked to quit and install. */
+    installs: () => number;
+    checks: () => number;
+  };
 }
 
 export interface DesktopController {
@@ -234,9 +249,22 @@ export function installDesktop(options: {
     }
   };
 
+  // ── updates (Stage 7, updater.ts) ────────────────────────────────────
+  const updates = installUpdater({
+    headless,
+    onChange: (current) => {
+      redraw();
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send(DESKTOP_IPC.updateStatusChanged, current);
+      }
+    },
+    beforeInstall: markQuitting,
+  });
+  const updateReady = (): boolean => updates.controller.snapshot().status.kind === "ready";
+
   // ── tray, badge, ticking clock ───────────────────────────────────────
   const redraw = (): void => {
-    tray?.update(drawnState(), Date.now());
+    tray?.update(drawnState(), Date.now(), updateReady());
   };
 
   const syncTray = (): void => {
@@ -292,7 +320,8 @@ export function installDesktop(options: {
     else if (id === "settings") {
       reveal();
       send({ kind: "open-settings" });
-    } else if (id === "quit") app.quit();
+    } else if (id === "restart-to-update") updates.controller.restart();
+    else if (id === "quit") app.quit();
   };
 
   // ── settings ─────────────────────────────────────────────────────────
@@ -402,6 +431,11 @@ export function installDesktop(options: {
     }
   });
 
+  handle(DESKTOP_IPC.updateGetStatus, () => updates.controller.snapshot());
+  handle(DESKTOP_IPC.updateCheck, () => updates.controller.check());
+  // Only ever from a click on "Restart to update" (desktop-updates.tsx).
+  handle(DESKTOP_IPC.updateRestart, () => updates.controller.restart());
+
   handle(DESKTOP_IPC.desktopShowWindow, () => {
     reveal();
   });
@@ -445,6 +479,7 @@ export function installDesktop(options: {
   });
 
   app.on("will-quit", () => {
+    updates.controller.dispose();
     shortcuts.dispose();
     tray?.destroy();
     tray = null;
@@ -459,7 +494,7 @@ export function installDesktop(options: {
     const hook: DesktopTestHook = {
       state: () => state,
       settings: () => settings,
-      trayMenu: () => (settings.showInTray ? trayMenuModel(drawnState()) : null),
+      trayMenu: () => (settings.showInTray ? trayMenuModel(drawnState(), { updateReady: updateReady() }) : null),
       trayTitle: (nowMs = Date.now()) => trayTitle(drawnState(), nowMs, platform),
       trayTooltip: (nowMs = Date.now()) => trayTooltip(drawnState(), nowMs),
       clickTray: onTrayItem,
@@ -480,6 +515,12 @@ export function installDesktop(options: {
       badge: () => badgeOn,
       reveals: () => reveals,
       commands,
+      update: {
+        snapshot: () => updates.controller.snapshot(),
+        dispatch: (event) => updates.controller.dispatch(event),
+        installs: () => updates.memory?.installs ?? 0,
+        checks: () => updates.memory?.checks ?? 0,
+      },
     };
     (globalThis as Record<string, unknown>)[DESKTOP_TEST_HOOK] = hook;
   }

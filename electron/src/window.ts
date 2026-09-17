@@ -21,6 +21,16 @@ app.on("before-quit", () => {
   quitting = true;
 });
 
+/**
+ * The app is about to quit for an update. On macOS Squirrel closes every
+ * window BEFORE `before-quit` fires, so without this the close handler below
+ * would hide the window, cancel the close and leave "Restart to update" doing
+ * nothing (Electron's autoUpdater docs, `quitAndInstall`).
+ */
+export function markQuitting(): void {
+  quitting = true;
+}
+
 function statePath(): string {
   return path.join(app.getPath("userData"), "window-state.json");
 }

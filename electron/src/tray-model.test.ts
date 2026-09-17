@@ -76,6 +76,18 @@ describe("trayMenuModel", () => {
     assert.ok(labels.includes("(no description)"));
   });
 
+  it("offers Restart to update above Quit only once an update is downloaded", () => {
+    const ids = (state: DesktopTimerState | null, updateReady: boolean): string[] =>
+      trayMenuModel(state, { updateReady }).flatMap((item) => (item.type === "item" ? [item.id] : []));
+    assert.equal(ids(running, false).includes("restart-to-update"), false);
+    assert.deepEqual(ids(running, true).slice(-2), ["restart-to-update", "quit"]);
+    assert.deepEqual(ids(null, true), ["open", "restart-to-update", "quit"]);
+    const item = trayMenuModel({ ...running, labels: { ...running.labels, restartToUpdate: "Neu starten" } }, { updateReady: true }).find(
+      (candidate) => candidate.type === "item" && candidate.id === "restart-to-update",
+    );
+    assert.equal(item?.type === "item" ? item.label : null, "Neu starten");
+  });
+
   it("idle with nothing queued: no Stop and no unsent line", () => {
     const ids = trayMenuModel({ ...running, running: null, unsent: 0 }).map((item) =>
       item.type === "item" ? item.id : item.type,
