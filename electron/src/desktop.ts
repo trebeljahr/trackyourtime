@@ -43,9 +43,11 @@ import { handle } from "./ipc.ts";
 import {
   createLinuxLoginItem,
   createMemoryLoginItem,
+  createUnsupportedLoginItem,
   HIDDEN_LAUNCH_ARG,
   type LoginItemBackend,
 } from "./login-item.ts";
+import { distributionChannel, loginItemMechanism } from "./distribution.ts";
 import { createMemoryRegistrar, createShortcutManager, type ShortcutRegistrar } from "./shortcuts.ts";
 import { createElectronTray, type TrayView } from "./tray.ts";
 import {
@@ -188,26 +190,40 @@ export function installDesktop(options: {
   const shortcuts = createShortcutManager(registrar, onShortcut);
 
   // ── open at login ────────────────────────────────────────────────────
+  // Per distribution channel (distribution.ts): the Microsoft Store and
+  // Flatpak have no reachable mechanism and say so in Settings.
+  const loginMechanism = loginItemMechanism(
+    distributionChannel({
+      platform,
+      isPackaged: options.isPackaged,
+      mas: process.mas === true,
+      windowsStore: process.windowsStore === true,
+      env: process.env,
+    }),
+    { execPath: process.execPath, env: process.env, snapCommand: "trackyourtime" },
+  );
   const loginItem: LoginItemBackend =
     headless || !options.isPackaged
       ? createMemoryLoginItem()
-      : platform === "linux"
-        ? createLinuxLoginItem({ exec: process.env.APPIMAGE ?? process.execPath, name: "Track Your Time" })
-        : {
-            status: (): DesktopLoginItemStatus => {
-              const current = app.getLoginItemSettings(platform === "win32" ? { args: [HIDDEN_LAUNCH_ARG] } : undefined);
-              if (platform === "darwin") {
-                if (current.status === "requires-approval") return "requires-approval";
-                if (current.status === "enabled") return "enabled";
-              }
-              return current.openAtLogin ? "enabled" : "disabled";
-            },
-            set: (enabled) => {
-              app.setLoginItemSettings(
-                platform === "win32" ? { openAtLogin: enabled, args: [HIDDEN_LAUNCH_ARG] } : { openAtLogin: enabled },
-              );
-            },
-          };
+      : loginMechanism.kind === "unsupported"
+        ? createUnsupportedLoginItem()
+        : loginMechanism.kind === "xdg-autostart"
+          ? createLinuxLoginItem({ exec: loginMechanism.exec, name: "Track Your Time" })
+          : {
+              status: (): DesktopLoginItemStatus => {
+                const current = app.getLoginItemSettings(platform === "win32" ? { args: [HIDDEN_LAUNCH_ARG] } : undefined);
+                if (platform === "darwin") {
+                  if (current.status === "requires-approval") return "requires-approval";
+                  if (current.status === "enabled") return "enabled";
+                }
+                return current.openAtLogin ? "enabled" : "disabled";
+              },
+              set: (enabled) => {
+                app.setLoginItemSettings(
+                  platform === "win32" ? { openAtLogin: enabled, args: [HIDDEN_LAUNCH_ARG] } : { openAtLogin: enabled },
+                );
+              },
+            };
   if (headless || !options.isPackaged) loginItem.set(settings.openAtLogin);
 
   const loginStatus = (): DesktopLoginItemStatus => {

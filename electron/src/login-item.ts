@@ -1,6 +1,9 @@
 /*
  * Open at login.
  *
+ * Which of the backends below applies is decided per distribution channel in
+ * `distribution.ts` (the Microsoft Store and Flatpak have none).
+ *
  * macOS and Windows go through `app.setLoginItemSettings`. Linux has no such
  * API in Electron, so the app writes the XDG autostart entry itself:
  * `~/.config/autostart/trackyourtime.desktop`, pointing at the AppImage when
@@ -41,6 +44,14 @@ export function createMemoryLoginItem(): LoginItemBackend & { enabled: boolean }
     },
   };
   return item;
+}
+
+/** A channel with no way to open at login (distribution.ts); Settings disables the row. */
+export function createUnsupportedLoginItem(): LoginItemBackend {
+  return {
+    status: (): DesktopLoginItemStatus => "unsupported",
+    set: (): void => {},
+  };
 }
 
 /** A value for a desktop entry's Exec key, quoted per the XDG spec. */
