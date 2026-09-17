@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { DownloadPage, downloadMetadata } from "@/components/marketing/pages/download-page";
 import { ExtensionPage, extensionMetadata } from "@/components/marketing/pages/extension-page";
 import { LandingPage, landingMetadata } from "@/components/marketing/pages/landing-page";
 import { MobilePage, mobileMetadata } from "@/components/marketing/pages/mobile-page";
@@ -17,6 +18,7 @@ const PAGES = [
   { name: "extension", Page: ExtensionPage, meta: extensionMetadata, title: "Your timer, one click away" },
   { name: "raycast", Page: RaycastPage, meta: raycastMetadata, title: "Track time without leaving the keyboard" },
   { name: "mobile", Page: MobilePage, meta: mobileMetadata, title: "Track time wherever the work happens" },
+  { name: "download", Page: DownloadPage, meta: downloadMetadata, title: "Start the timer from any app on your computer" },
 ] as const;
 
 describe("public pages in English", () => {
@@ -46,6 +48,16 @@ describe("public pages in English", () => {
     // next/link drops the trailing slash outside a Next build.
     expect(html).toMatch(/href="\/de\/privacy\/?"/);
     expect(html).toMatch(/href="\/login\/?"/);
+  });
+
+  it("offers no desktop download that does not exist", () => {
+    const html = renderToStaticMarkup(<DownloadPage locale="en" />);
+    // Every channel is null in lib/site-links.ts until a release or a store is live.
+    expect(html).toContain("No version is released yet");
+    expect(html).not.toMatch(/data-testid="download-(mac|windows|linux|homebrew|macAppStore|microsoftStore|flathub|snapStore)"/);
+    expect(html.match(/data-testid="download-pending-/g)).toHaveLength(8);
+    expect(html).toContain("⌥⇧⌘Space");
+    expect(renderToStaticMarkup(<DownloadPage locale="de" />)).toContain("Strg+Alt+Umschalt+Leertaste");
   });
 
   it("describes the preview image in the page's language", () => {

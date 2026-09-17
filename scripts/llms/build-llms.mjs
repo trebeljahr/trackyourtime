@@ -89,6 +89,11 @@ const WEB_PAGES = [
     url: `${WEB_URL}/mobile/`,
     description: "Track billable time on an iPhone or Android phone without signal, against the hosted service or your own server. Changes sync when the connection returns.",
   },
+  {
+    title: "Desktop app",
+    url: `${WEB_URL}/download/`,
+    description: "The desktop app for macOS, Windows and Linux: the timer in the menu bar or system tray, a shortcut that works in any app, and tracking that continues offline. No version is released yet.",
+  },
 ];
 
 /** @param {string} id */

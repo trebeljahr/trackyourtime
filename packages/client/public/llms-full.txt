@@ -43,6 +43,10 @@ Point a domain at a Linux server with Docker, clone the repository, copy `.env.s
 
 - [E-invoices (XRechnung and ZUGFeRD)](https://trackyourtime.dev/docs/e-invoices.md): Send an invoice as XRechnung XML or as a ZUGFeRD PDF with the invoice data inside. Complete your business profile, add your client's billing details and fix what the check reports.
 
+## Apps
+
+- [Desktop app](https://trackyourtime.dev/docs/desktop.md): Install the Track Your Time desktop app on macOS, Windows or Linux, sign in to the hosted service or your own server, and learn how each version updates.
+
 ## AI assistants
 
 - [MCP server](https://trackyourtime.dev/docs/mcp.md): Start and stop timers, log time, list entries, manage clients, projects, tasks and tags, and summarise hours from Claude or any MCP client, on the hosted service or your own server.
@@ -60,6 +64,7 @@ Point a domain at a Linux server with Docker, clone the repository, copy `.env.s
 - [Chrome extension](https://trackyourtime.dev/extension/): Start and stop the timer from the Chrome toolbar, add time you forgot, get entry suggestions from browsing activity, and keep tracking when the connection drops.
 - [Raycast extension](https://trackyourtime.dev/raycast/): Start and stop the timer with a hotkey, and see it running in the Mac menu bar.
 - [iPhone and Android](https://trackyourtime.dev/mobile/): Track billable time on an iPhone or Android phone without signal, against the hosted service or your own server. Changes sync when the connection returns.
+- [Desktop app](https://trackyourtime.dev/download/): The desktop app for macOS, Windows and Linux: the timer in the menu bar or system tray, a shortcut that works in any app, and tracking that continues offline. No version is released yet.
 
 ## Optional
 
@@ -1670,6 +1675,7 @@ origins to the trusted list:
 | iOS app | `capacitor://localhost` |
 | Android app | `https://localhost` |
 | Chrome extension from the Web Store | `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` |
+| Desktop app | `app://-` |
 | Raycast extension | None. Raycast sends no `Origin`. |
 
 To accept sign-ins from your own web app only, set `TRUST_STORE_APPS=false` in

@@ -27,6 +27,7 @@ export const marketing: Translation<typeof source> = {
       chrome: "Chrome",
       raycast: "Raycast",
       mobile: "iPhone & Android",
+      desktop: "Desktop",
       docs: "Doku",
     },
     logIn: "Anmelden",
@@ -37,6 +38,7 @@ export const marketing: Translation<typeof source> = {
       chromeExtension: "Chrome-Erweiterung",
       raycastExtension: "Raycast-Erweiterung",
       mobile: "iPhone und Android",
+      desktop: "Desktop-App",
       sourceCode: "Quellcode",
       docs: "Dokumentation",
       apiDocs: "REST-API",
@@ -444,6 +446,52 @@ export const marketing: Translation<typeof source> = {
     selfHost: {
       title: "Du nutzt einen eigenen Server?",
       body: "Die Apps verbinden sich mit trackyourtime.dev, bis du einen anderen Server wählst. Wähle auf dem Anmeldebildschirm „Server wechseln“ und gib die Adresse deines Servers ein. Die App prüft, ob der Server antwortet, bevor sie deine Wahl speichert.",
+    },
+  },
+
+  download: {
+    meta: {
+      title: "Desktop-App für macOS, Windows und Linux",
+      description:
+        "Starte und stoppe deinen Timer über die Menüleiste, den Infobereich oder ein Tastenkürzel in jeder App. Erfasst auch offline weiter. Kostenlos und Open Source.",
+    },
+    hero: {
+      eyebrow: "Track Your Time für macOS, Windows und Linux",
+      title: "Starte den Timer aus jeder App auf deinem Computer",
+      body: "Drück {mac} auf dem Mac oder {other} unter Windows und Linux, und der Timer startet oder stoppt. Du wechselst kein Fenster und brauchst dafür keinen offenen Browser-Tab.",
+      downloads: "Zu den Downloads",
+      createAccount: "Kostenloses Konto erstellen",
+    },
+    tray: {
+      title: "Die laufende Zeit in der Menüleiste",
+      body: "Auf dem Mac steht die laufende Zeit in der Menüleiste. Unter Windows und Linux ändert sich das Symbol im Infobereich, solange ein Timer läuft. Öffne sein Menü, um den Timer zu stoppen, einen deiner letzten fünf Einträge fortzusetzen oder einen neuen zu starten.",
+      close: "Schließt du das Fenster auf dem Mac oder unter Windows, läuft Track Your Time im Hintergrund weiter. Timer und Änderungen werden weiter synchronisiert.",
+    },
+    away: {
+      title: "Merkt, wenn du weg bist",
+      body: "Schalte die Inaktivitätserkennung ein, und die Desktop-App merkt, wenn niemand deinen Computer benutzt, egal in welcher App du warst. Kommst du zurück, fragt sie, was mit der Zeit passieren soll, in der du weg warst. Ist das Fenster ausgeblendet, sagt dir eine Mitteilung Bescheid.",
+    },
+    shortcuts: {
+      title: "Tastenkürzel nach deiner Wahl",
+      body: "Vier Aktionen können ein Tastenkürzel bekommen: Timer starten oder stoppen, neuen Timer starten, Fenster zeigen oder ausblenden und die Befehlspalette öffnen. Nur die erste hat von Anfang an eines. Ändere oder entferne jedes davon unter Einstellungen → Desktop. Nutzt eine andere App ein Tastenkürzel schon, sagen dir die Einstellungen das.",
+    },
+    offline: {
+      title: "Erfasst weiter, wenn die Verbindung abbricht",
+      body: "Starte und stoppe Timer ohne Verbindung, über das Menü, das Tastenkürzel oder das Fenster. Die App behält deine Änderungen auf deinem Computer und sendet sie, sobald die Verbindung zurück ist.",
+      signIn: "Melde dich mit deinem Passwort an, oder über deinen Browser, wenn dein Konto Zwei-Faktor-Authentifizierung oder Google nutzt. Du nutzt einen eigenen Server? Wähle ihn auf dem Anmeldebildschirm.",
+    },
+    channels: {
+      title: "Downloads",
+      notYet: "Noch ist keine Version veröffentlicht, deshalb gibt es heute nichts zum Herunterladen. Du kannst die App aus dem Quellcode bauen. Die <docs>Anleitung für die Desktop-App</docs> nennt die Schritte.",
+      intro: "Wähle dein System. Die <docs>Anleitung für die Desktop-App</docs> erklärt, wie sich jede Version installiert und aktualisiert.",
+      mac: { name: "macOS (Apple Silicon und Intel)", pending: "Noch nicht veröffentlicht", get: "Von GitHub herunterladen" },
+      windows: { name: "Windows", pending: "Noch nicht veröffentlicht", get: "Von GitHub herunterladen" },
+      linux: { name: "Linux (AppImage, deb oder rpm)", pending: "Noch nicht veröffentlicht", get: "Von GitHub herunterladen" },
+      homebrew: { name: "Homebrew", pending: "Noch nicht in Homebrew", get: "Mit Homebrew installieren" },
+      macAppStore: { name: "Mac App Store", pending: "Noch nicht im Mac App Store", get: "Im Mac App Store laden" },
+      microsoftStore: { name: "Microsoft Store", pending: "Noch nicht im Microsoft Store", get: "Im Microsoft Store laden" },
+      flathub: { name: "Flathub", pending: "Noch nicht auf Flathub", get: "Auf Flathub laden" },
+      snapStore: { name: "Snap Store", pending: "Noch nicht im Snap Store", get: "Im Snap Store laden" },
     },
   },
 

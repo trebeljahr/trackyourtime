@@ -6,6 +6,7 @@ const sidebars: SidebarsConfig = {
     "choosing-a-self-hosted-time-tracker",
     "self-hosting",
     "e-invoices",
+    "desktop",
     "mcp",
     {
       type: "category",

@@ -11,10 +11,11 @@ const NAV = [
   { href: "/extension/", label: "chrome" },
   { href: "/raycast/", label: "raycast" },
   { href: "/mobile/", label: "mobile" },
+  { href: "/download/", label: "desktop" },
 ] as const;
 
 /**
- * The chrome around every public page: a header with the three client pages
+ * The chrome around every public page: a header with the client pages
  * and the docs, and a footer with the legal and developer links.
  *
  * The docs links are plain `<a>`: /docs/ is a separate Docusaurus build copied
@@ -78,6 +79,7 @@ export function MarketingShell({
             <li><Link href={href("/extension/")} className="hover:text-foreground">{t("shell.footer.chromeExtension")}</Link></li>
             <li><Link href={href("/raycast/")} className="hover:text-foreground">{t("shell.footer.raycastExtension")}</Link></li>
             <li><Link href={href("/mobile/")} className="hover:text-foreground">{t("shell.footer.mobile")}</Link></li>
+            <li><Link href={href("/download/")} className="hover:text-foreground">{t("shell.footer.desktop")}</Link></li>
           </ul>
           <ul className="space-y-2">
             <li><a href={REPO_URL} className="hover:text-foreground">{t("shell.footer.sourceCode")}</a></li>

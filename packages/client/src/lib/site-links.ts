@@ -22,6 +22,8 @@ export const API_DOCS_URL = `${DOCS_URL}api/`;
 /** Every route, with a link to the OpenAPI document (`/docs/openapi.json`). */
 export const API_REFERENCE_URL = `${DOCS_URL}api/reference/`;
 export const MCP_DOCS_URL = `${DOCS_URL}mcp/`;
+/** How to build, install and update the desktop app (docs-site/docs/desktop.md). */
+export const DESKTOP_DOCS_URL = `${DOCS_URL}desktop/`;
 export const ISSUES_URL = `${REPO_URL}/issues`;
 export const CONTACT_EMAIL = "ricotrebeljahr@gmail.com";
 
@@ -50,4 +52,34 @@ export const STORES: Record<StoreId, StoreListing> = {
   raycast: { url: null },
   appStore: { url: null },
   googlePlay: { url: null },
+};
+
+/**
+ * Where each desktop build can be downloaded. `null` until it really can:
+ * the direct downloads until a release is PUBLISHED on GitHub (a draft does
+ * not count), a store until it approves the listing. The /download page reads
+ * `null` as "not released yet" and says so, like `STORES`.
+ *
+ * When a release is published, the three direct entries become
+ * `https://github.com/trebeljahr/trackyourtime/releases/latest`.
+ */
+export type DesktopDownloadId =
+  | "mac"
+  | "windows"
+  | "linux"
+  | "homebrew"
+  | "macAppStore"
+  | "microsoftStore"
+  | "flathub"
+  | "snapStore";
+
+export const DESKTOP_DOWNLOADS: Record<DesktopDownloadId, StoreListing> = {
+  mac: { url: null },
+  windows: { url: null },
+  linux: { url: null },
+  homebrew: { url: null },
+  macAppStore: { url: null },
+  microsoftStore: { url: null },
+  flathub: { url: null },
+  snapStore: { url: null },
 };

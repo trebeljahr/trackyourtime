@@ -36,6 +36,7 @@ export const DOC_SECTIONS = [
     ids: ["intro", "choosing-a-self-hosted-time-tracker", "self-hosting"],
   },
   { title: "Invoicing", ids: ["e-invoices"] },
+  { title: "Apps", ids: ["desktop"] },
   { title: "AI assistants", ids: ["mcp"] },
   { title: "REST API", ids: ["api/overview", "api/authentication", "api/errors"] },
 ];

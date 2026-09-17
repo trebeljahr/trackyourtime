@@ -1,5 +1,5 @@
 /**
- * English `marketing` messages — the SOURCE catalog for the public pages (landing, privacy, support, extension, raycast, mobile) and their metadata. Rendered at BUILD time in both locales — see i18n/marketing.ts.
+ * English `marketing` messages — the SOURCE catalog for the public pages (landing, privacy, support, extension, raycast, mobile, download) and their metadata. Rendered at BUILD time in both locales — see i18n/marketing.ts.
  *
  * Add keys here first (grouped by component or screen, camelCase), then the
  * same keys in ../de/marketing.ts: `tsc` fails until both agree. ICU syntax:
@@ -28,6 +28,7 @@ export const marketing = {
       chrome: "Chrome",
       raycast: "Raycast",
       mobile: "iPhone & Android",
+      desktop: "Desktop",
       docs: "Docs",
     },
     logIn: "Log in",
@@ -38,6 +39,7 @@ export const marketing = {
       chromeExtension: "Chrome extension",
       raycastExtension: "Raycast extension",
       mobile: "iPhone and Android",
+      desktop: "Desktop app",
       sourceCode: "Source code",
       docs: "Documentation",
       apiDocs: "REST API",
@@ -448,6 +450,57 @@ export const marketing = {
     selfHost: {
       title: "Using your own server?",
       body: "The apps connect to trackyourtime.dev until you pick another server. On the sign-in screen, choose Change server and enter your server’s address. The app checks that the server answers before it saves your choice.",
+    },
+  },
+
+  /**
+   * /download/: the desktop app. Only what the app does today, and a channel
+   * is "not released yet" until `DESKTOP_DOWNLOADS` in lib/site-links.ts has
+   * its address. Shortcuts are passed in, never written here.
+   */
+  download: {
+    meta: {
+      title: "Desktop app for macOS, Windows and Linux",
+      description:
+        "Start and stop your timer from the menu bar, the system tray or a keyboard shortcut in any app. Keeps tracking offline. Free and open source.",
+    },
+    hero: {
+      eyebrow: "Track Your Time for macOS, Windows and Linux",
+      title: "Start the timer from any app on your computer",
+      body: "Press {mac} on a Mac, or {other} on Windows and Linux, and the timer starts or stops. You don’t switch windows, and you don’t keep a browser tab open for it.",
+      downloads: "See the downloads",
+      createAccount: "Create a free account",
+    },
+    tray: {
+      title: "The running time in your menu bar",
+      body: "On a Mac, the running time sits in the menu bar. On Windows and Linux, the tray icon changes while a timer runs. Open its menu to stop the timer, pick up one of your last five entries, or start a new one.",
+      close: "Close the window on a Mac or on Windows, and Track Your Time keeps running in the background. Your timer and your changes keep syncing.",
+    },
+    away: {
+      title: "It notices when you step away",
+      body: "Turn on idle detection, and the desktop app notices when nobody uses your computer, whatever app you were in. When you come back, it asks what to do with the time you were away. If the window is hidden, a notification tells you.",
+    },
+    shortcuts: {
+      title: "Shortcuts you choose",
+      body: "Four actions can have a shortcut: start or stop the timer, start a new timer, show or hide the window, and open the command palette. Only the first one has a shortcut from the start. Change or clear any of them in Settings → Desktop. If another app already uses a shortcut, Settings tells you.",
+    },
+    offline: {
+      title: "Keeps tracking when the connection drops",
+      body: "Start and stop timers with no connection, from the menu, the shortcut or the window. The app keeps your changes on your computer and sends them when the connection comes back.",
+      signIn: "Sign in with your password, or with your browser if your account uses two-factor authentication or Google. Using your own server? Choose it on the sign-in screen.",
+    },
+    channels: {
+      title: "Downloads",
+      notYet: "No version is released yet, so there’s nothing to download today. You can build the app from source. The <docs>desktop guide</docs> lists the steps.",
+      intro: "Pick your system. The <docs>desktop guide</docs> explains how each version installs and updates.",
+      mac: { name: "macOS (Apple silicon and Intel)", pending: "Not released yet", get: "Download from GitHub" },
+      windows: { name: "Windows", pending: "Not released yet", get: "Download from GitHub" },
+      linux: { name: "Linux (AppImage, deb or rpm)", pending: "Not released yet", get: "Download from GitHub" },
+      homebrew: { name: "Homebrew", pending: "Not in Homebrew yet", get: "Install with Homebrew" },
+      macAppStore: { name: "Mac App Store", pending: "Not in the Mac App Store yet", get: "Get it from the Mac App Store" },
+      microsoftStore: { name: "Microsoft Store", pending: "Not in the Microsoft Store yet", get: "Get it from the Microsoft Store" },
+      flathub: { name: "Flathub", pending: "Not on Flathub yet", get: "Get it on Flathub" },
+      snapStore: { name: "Snap Store", pending: "Not in the Snap Store yet", get: "Get it from the Snap Store" },
     },
   },
 
