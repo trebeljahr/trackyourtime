@@ -253,6 +253,9 @@ built, and the rules that fail quietly if broken:
   created, and one is without it), and `openInOs` (`external.ts`) records URLs
   on `globalThis.__trackYourTimeOpenedExternally` and stdout instead of opening
   them. A spec that needs the approval URL reads it from there.
+  A headless launch with no `TRACKYOURTIME_USER_DATA_DIR` uses
+  `<profile>-headless`, never the installed app's profile: the mock keychain
+  cannot decrypt its `session.bin`, and the store deletes what it cannot decrypt.
 - **The harness proves auth from the server side.** `e2e/desktop/record-requests.mjs`
   is preloaded into the harness APIs and logs every request's origin, client,
   auth scheme and whether a Cookie was present; the harness's own Node calls
