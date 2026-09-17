@@ -8,7 +8,7 @@ const replace = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 
 const shell = vi.hoisted(() => ({ value: false }));
-vi.mock("@/lib/app-shell-host", () => ({ isAppShell: () => shell.value }));
+vi.mock("@/lib/shell", () => ({ isTokenShell: () => shell.value }));
 
 describe("ShellEntryRedirect", () => {
   afterEach(cleanup);

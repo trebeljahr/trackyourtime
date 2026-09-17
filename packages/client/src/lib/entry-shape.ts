@@ -21,7 +21,7 @@ import {
   type ShapeableTask,
 } from "@starter/core";
 import type { DetailedEntry, TimeEntry } from "@starter/shared";
-import { entrySource } from "@/lib/entry-source";
+import { entrySource } from "@/lib/shell";
 
 export type { OptimisticEntryArgs, ProjectFacts, ShapeableProject, ShapeableTask };
 

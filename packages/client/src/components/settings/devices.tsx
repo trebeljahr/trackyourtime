@@ -46,6 +46,48 @@ import { useFormat, type LocaleFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { userErrorMessage } from "@/lib/error-message";
+import { useIsElectron } from "@/hooks/use-shell";
+
+/**
+ * Said in the desktop app when its session token is NOT written to disk:
+ * Electron's `safeStorage` had no real encryption to offer (Linux with no
+ * keyring), so the main process keeps the token in memory rather than store a
+ * credential under obfuscation (`electron/src/secure-store.ts`). Without this
+ * note, being signed out at every launch would look like a bug.
+ *
+ * Asked after mount only: the bridge does not exist while prerendering.
+ */
+export function DesktopTokenStorageNote(): React.JSX.Element | null {
+  const desktop = useIsElectron();
+  const t = useT("settings");
+  const [backend, setBackend] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!desktop) return;
+    let cancelled = false;
+    void window.electronAPI?.secureStore
+      .status()
+      .then((status) => {
+        if (!cancelled) setBackend(status.persistent ? null : status.backend);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [desktop]);
+
+  if (!desktop || backend === null) return null;
+  return (
+    <div
+      className="rounded-md border border-border bg-muted/50 p-3 text-sm"
+      role="status"
+      data-testid="desktop-token-not-persisted"
+    >
+      <p className="font-medium">{t("devices.tokenNotPersisted.title")}</p>
+      <p className="text-muted-foreground">{t("devices.tokenNotPersisted.body", { backend })}</p>
+    </div>
+  );
+}
 
 const CLIENT_ICONS: Record<ClientKind, typeof Laptop> = {
   web: Globe,
@@ -226,6 +268,7 @@ export function DevicesPanel(): React.JSX.Element {
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">
+        <DesktopTokenStorageNote />
         {devicesQuery.isLoading ? (
           <div className="space-y-2" data-testid="devices-loading">
             <Skeleton className="h-10 w-full" />

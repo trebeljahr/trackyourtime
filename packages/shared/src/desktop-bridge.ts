@@ -24,6 +24,37 @@ export interface DesktopIdlePayload {
 }
 
 /**
+ * Where the session token is kept, as the main process reports it.
+ *
+ * `persistent: false` means the token lives in the main process's memory only
+ * and the next launch starts signed out: Electron's `safeStorage` had no real
+ * encryption to offer (Linux with no keyring, where the backend is
+ * `basic_text` — obfuscation with a hardcoded key). Writing a credential there
+ * would look secure and not be, so the app refuses and says so instead.
+ */
+export interface DesktopSecureStoreStatus {
+  persistent: boolean;
+  /**
+   * `safeStorage.getSelectedStorageBackend()` on Linux ("gnome_libsecret",
+   * "kwallet5", "basic_text", …); "keychain" on macOS, "dpapi" on Windows,
+   * "unavailable" when encryption is not available at all.
+   */
+  backend: string;
+}
+
+/**
+ * The session token store, backed by `safeStorage` in the main process. The
+ * renderer never sees the file or the key; it hands a token over and asks
+ * for it back.
+ */
+export interface DesktopSecureStore {
+  getToken: () => Promise<string | null>;
+  setToken: (token: string) => Promise<DesktopSecureStoreStatus>;
+  deleteToken: () => Promise<void>;
+  status: () => Promise<DesktopSecureStoreStatus>;
+}
+
+/**
  * `window.electronAPI`. Guard every use: the same export also runs in a
  * browser, an installed PWA and the Capacitor shells, where it is undefined.
  */
@@ -47,6 +78,9 @@ export interface DesktopBridge {
    */
   getIdleState?: () => Promise<DesktopIdlePayload>;
   onIdleState?: (listener: (payload: DesktopIdlePayload) => void) => () => void;
+
+  /** The bearer session token's home (Stage 2). */
+  secureStore: DesktopSecureStore;
 }
 
 /**
@@ -59,6 +93,10 @@ export const DESKTOP_IPC = {
   setFullscreen: "window:setFullscreen",
   isFullscreen: "window:isFullscreen",
   getIdle: "idle:get",
+  tokenGet: "secure-store:get",
+  tokenSet: "secure-store:set",
+  tokenDelete: "secure-store:delete",
+  tokenStatus: "secure-store:status",
   /** main → renderer push, not an invoke. */
   idleState: "idle:state",
 } as const;

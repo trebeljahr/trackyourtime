@@ -41,7 +41,9 @@ const hydrateWith = (next: string | null): void => {
   publish();
 };
 
-vi.mock("@/mobile/bridge", () => ({ isNative: () => true }));
+vi.mock("@/lib/shell", async () =>
+  (await import("@/lib/shell-mock")).mockShellModule(() => "capacitor"),
+);
 
 vi.mock("@/lib/native-session", () => ({
   getNativeToken: () => token,

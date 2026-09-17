@@ -250,6 +250,11 @@ export const settings = {
     description:
       "Everything signed in as you. Sign in from the desktop app, the mobile app, Raycast or a browser extension and it appears here — there is nothing to copy or paste.",
     revokeOthers: "Sign out others",
+    /** Desktop app on a system with no keyring: the token is not written to disk. */
+    tokenNotPersisted: {
+      title: "You sign in again each time the app starts",
+      body: "This computer has no keyring to encrypt the sign-in with (storage: {backend}), so the desktop app keeps it in memory only. Install and unlock a keyring such as GNOME Keyring or KWallet to stay signed in.",
+    },
     empty: {
       title: "No other devices",
       description: "Sign in from another app and it will show up here.",
@@ -942,7 +947,7 @@ export const settings = {
     check: "Check server",
     sameServer: "That is {here}, the server this workspace is already on.",
     untrustedApp:
-      "{host} does not accept sign-ins from this app yet. Its administrator needs to set TRUST_STORE_APPS=true, or add capacitor://localhost and https://localhost to TRUSTED_ORIGINS.",
+      "{host} does not accept sign-ins from this app yet. Its administrator needs to set TRUST_STORE_APPS=true, or add {origins} to TRUSTED_ORIGINS.",
     signInHint: "Sign in to your account on {server}. The data is copied into that account's workspace.",
     signUpHint: "Create an account on {server} to copy the data into.",
     toSignUp: "No account there yet? Create one",

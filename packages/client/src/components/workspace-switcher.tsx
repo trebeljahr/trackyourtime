@@ -38,7 +38,7 @@ export const useActiveWorkspace = (): ActiveWorkspaceSnapshot =>
  *
  * Rendered in the header cluster on every platform and hidden — by rendering
  * nothing — for a person in one workspace, which is nearly everyone. It never
- * branches on `isNative()`: the prerender and the first client render both
+ * branches on `isCapacitor()`: the prerender and the first client render both
  * see no list (`getServerActiveWorkspaceSnapshot`), so the served HTML and the
  * hydrated tree agree on every host.
  *

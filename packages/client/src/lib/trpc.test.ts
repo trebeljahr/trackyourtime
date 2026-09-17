@@ -31,6 +31,7 @@ type LinkOptions = {
 const loadLink = async (options: {
   native: boolean;
   token: string | null;
+  shell?: "web" | "capacitor" | "electron";
 }): Promise<LinkOptions> => {
   vi.resetModules();
 
@@ -47,7 +48,9 @@ const loadLink = async (options: {
       createClient: (config: unknown) => config,
     }),
   }));
-  vi.doMock("@/mobile/bridge", () => ({ isNative: () => options.native }));
+  vi.doMock("@/lib/shell", async () =>
+    (await import("@/lib/shell-mock")).mockShellModule(() => options.shell ?? (options.native ? "capacitor" : "web")),
+  );
   vi.doMock("@/lib/native-session", () => ({
     getNativeToken: () => options.token,
   }));
@@ -145,7 +148,9 @@ describe("version handshake", () => {
     vi.doMock("@trpc/react-query", () => ({
       createTRPCReact: () => ({ createClient: (config: { links: LinkOptions[] }) => config }),
     }));
-    vi.doMock("@/mobile/bridge", () => ({ isNative: () => false }));
+    vi.doMock("@/lib/shell", async () =>
+      (await import("@/lib/shell-mock")).mockShellModule(() => "web"),
+    );
     vi.doMock("@/lib/native-session", () => ({ getNativeToken: () => null }));
     vi.doMock("@/lib/app-version", () => ({ APP_VERSION: "" }));
     const { getTRPCClient } = await import("@/lib/trpc");
@@ -157,6 +162,25 @@ describe("version handshake", () => {
       "x-trackyourtime-api-level": String(API_LEVEL),
     });
     vi.doUnmock("@/lib/app-version");
+  });
+});
+
+describe("tRPC link in the desktop app", () => {
+  it("names the desktop app and carries the bearer token", async () => {
+    const link = await loadLink({ native: false, shell: "electron", token: "desktop-token" });
+
+    expect(link.headers()).toEqual({
+      "x-trackyourtime-client": "trackyourtime-desktop",
+      ...VERSION_HEADERS,
+      authorization: "Bearer desktop-token",
+    });
+  });
+
+  it("sends no cookie once a token is doing the work", async () => {
+    const link = await loadLink({ native: false, shell: "electron", token: "desktop-token" });
+    const init = await capturedInit(link);
+
+    expect(init.credentials).toBe("omit");
   });
 });
 

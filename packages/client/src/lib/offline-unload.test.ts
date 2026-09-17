@@ -15,7 +15,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const isNative = vi.fn(() => false);
-vi.mock("@/mobile/bridge", () => ({ isNative: () => isNative() }));
+vi.mock("@/lib/shell", async () =>
+  (await import("@/lib/shell-mock")).mockShellModule(() => (isNative() ? "capacitor" : "web")),
+);
 
 const {
   __resetDocumentUnloadForTests,

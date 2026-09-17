@@ -44,7 +44,7 @@ export const THEME_SCRIPT = `(function(){try{var c=localStorage.getItem("trackyo
  * `document.documentElement` exists while <head> is being parsed, so this can
  * run there — earlier than a <body> script could. Capacitor's native bridge is
  * injected as a document-start WKUserScript, so `window.Capacitor` is already
- * there — the same assumption `isNative()` in bridge.ts has always made.
+ * there — the same assumption `isCapacitor()` in lib/shell.ts makes.
  */
 export const NATIVE_SHELL_SCRIPT = `(function(){try{var c=window.Capacitor;if(!c||!c.isNativePlatform||!c.isNativePlatform())return;var r=document.documentElement;r.classList.add("cap");r.setAttribute("data-platform",c.getPlatform?c.getPlatform():"unknown");}catch(e){}})();`;
 

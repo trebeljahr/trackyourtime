@@ -14,11 +14,12 @@ import {
 import { AuthHeader } from "@/components/auth-header";
 import { NativeServerPicker } from "@/components/server-picker";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import { BrowserSignIn } from "@/components/browser-sign-in";
 import {
   TwoFactorChallenge,
   type ChallengeOutcome,
 } from "@/components/two-factor-challenge";
-import { isNative } from "@/mobile/bridge";
+import { isElectron, isTokenShell } from "@/lib/shell";
 import { useT } from "@/i18n/use-t";
 import { translate } from "@/i18n/translate";
 import { authErrorMessage } from "@/lib/auth-error-message";
@@ -94,11 +95,18 @@ export default function LoginPage() {
         setError(authErrorMessage(result.error, "login"));
       } else if (isTwoFactorChallenge(result.data)) {
         // No session exists yet, and no token was issued.
-        if (isNative()) {
-          // The challenge is a cookie a WKWebView cannot send to the API, so
-          // the step could never succeed there; saying so beats a code field
-          // that always answers "invalid".
-          setError(translate("shell")("auth.twoFactor.nativeUnsupported"));
+        if (isTokenShell()) {
+          // The challenge is a cookie a WKWebView — or the desktop app, which
+          // never sends one — cannot send to the API, so the step could never
+          // succeed there; saying so beats a code field that always answers
+          // "invalid". The desktop app has a way through: the browser.
+          setError(
+            translate("shell")(
+              isElectron()
+                ? "auth.twoFactor.desktopUseBrowser"
+                : "auth.twoFactor.nativeUnsupported",
+            ),
+          );
         } else {
           setStep("two-factor");
         }
@@ -116,6 +124,14 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  /** The desktop app's browser sign-in stored a token; finish like the form does. */
+  async function handleBrowserSignIn() {
+    await getSession();
+    router.replace(
+      safeNextFromSearch(window.location.search) ?? POST_AUTH_REDIRECT,
+    );
   }
 
   async function handleChallenge(outcome: ChallengeOutcome) {
@@ -220,6 +236,9 @@ export default function LoginPage() {
             {loading ? t("auth.login.submitting") : t("auth.login.submit")}
           </button>
         </form>
+
+        {/* Renders nothing outside the desktop app. */}
+        <BrowserSignIn onSignedIn={handleBrowserSignIn} />
 
         <GoogleSignInButton />
 

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/mobile/bridge", () => ({ isNative: () => true }));
+vi.mock("@/lib/shell", async () =>
+  (await import("@/lib/shell-mock")).mockShellModule(() => "capacitor"),
+);
 
 const { createServerSwitch } = await import("./server-switch");
 

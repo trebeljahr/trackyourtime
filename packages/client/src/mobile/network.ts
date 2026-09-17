@@ -22,7 +22,7 @@
  * The plugin is imported lazily; the web bundle never pulls it in.
  */
 
-import { isNative } from "./bridge";
+import { isCapacitor } from "@/lib/shell";
 
 type Listener = () => void;
 
@@ -78,7 +78,7 @@ export const startNetworkWatch = (): void => {
   if (watchStarted) return;
   watchStarted = true;
   bindWindow();
-  if (!isNative()) return;
+  if (!isCapacitor()) return;
 
   void (async () => {
     try {

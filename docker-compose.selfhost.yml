@@ -138,9 +138,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
 
       # Accept sign-ins from the store-installed clients with no extra step:
-      # the iOS and Android apps (capacitor://localhost, https://localhost)
-      # and the Chrome Web Store extension (its pinned chrome-extension://
-      # id). Each of them lets a person type in this server's address, and
+      # the iOS and Android apps (capacitor://localhost, https://localhost),
+      # the desktop app (app://-) and the Chrome Web Store extension (its
+      # pinned chrome-extension:// id). Each of them lets a person type in this server's address, and
       # without their origins in the trust list every sign-in from them is
       # refused with 403 INVALID_ORIGIN before the password is checked. Set
       # it to false to accept the web app only.

@@ -29,6 +29,13 @@ const bridge: DesktopBridge = {
 
   getIdleState: () => ipcRenderer.invoke(DESKTOP_IPC.getIdle),
 
+  secureStore: {
+    getToken: () => ipcRenderer.invoke(DESKTOP_IPC.tokenGet),
+    setToken: (token) => ipcRenderer.invoke(DESKTOP_IPC.tokenSet, token),
+    deleteToken: () => ipcRenderer.invoke(DESKTOP_IPC.tokenDelete),
+    status: () => ipcRenderer.invoke(DESKTOP_IPC.tokenStatus),
+  },
+
   /*
    * The listener is wrapped so the renderer never receives the
    * IpcRendererEvent, which would leak `sender` across the context bridge.

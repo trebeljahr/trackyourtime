@@ -3,7 +3,7 @@ import {
   deviceAuthorizationClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
-import { isNative } from "@/mobile/bridge";
+import { clientId, isElectron, isTokenShell } from "@/lib/shell";
 import {
   clearNativeToken,
   getNativeToken,
@@ -60,25 +60,37 @@ function resolveAuthBaseUrl(): string {
 
 /**
  * How this client names itself in Settings → Devices. Read per request rather
- * than captured at module scope: Capacitor injects `window.Capacitor` before
- * the app's scripts run, but module evaluation order is not something to
- * stake a session label on.
+ * than captured at module scope: the shells inject their globals before the
+ * app's scripts run, but module evaluation order is not something to stake a
+ * session label on.
  */
-const clientHeader = (): string => (isNative() ? "trackyourtime-mobile" : "web");
+const clientHeader = (): string => clientId();
 
 /**
  * The fetch every auth call goes through.
  *
  * On web it is the global `fetch`, called exactly as better-fetch would have
- * called it. On the phone apps `baseURL` above is only the build's default
- * server, so the request waits for the stored server choice and is rebased
- * onto it (`lib/api-origin.ts`) — the auth client is built once at module
- * scope, long before the choice is read, and cannot be rebuilt per server.
+ * called it. In the phone and desktop apps `baseURL` above is only the build's
+ * default server, so the request waits for the stored server choice and is
+ * rebased onto it (`lib/api-origin.ts`) — the auth client is built once at
+ * module scope, long before the choice is read, and cannot be rebuilt per
+ * server.
+ *
+ * The desktop app also never sends or accepts a cookie here. Its identity is
+ * the bearer token; better-fetch's default `credentials: "include"` would let
+ * a sign-in response drop the API's session cookie into Electron's cookie jar,
+ * which — unlike WKWebView's — allows third-party cookies, and from then on
+ * the WebSocket upgrade and any credentialed request would carry it beside
+ * the token. A second, silent credential is exactly what makes a broken
+ * bearer path look like it works.
  */
 const authFetch: typeof fetch = (input, init) => {
-  if (!isNative() || input instanceof Request) return fetch(input, init);
+  if (!isTokenShell() || input instanceof Request) return fetch(input, init);
+  const sent: RequestInit | undefined = isElectron()
+    ? { ...init, credentials: "omit" }
+    : init;
   return whenApiOriginReady().then(() =>
-    fetch(rebaseApiUrl(String(input)), init),
+    fetch(rebaseApiUrl(String(input)), sent),
   );
 };
 

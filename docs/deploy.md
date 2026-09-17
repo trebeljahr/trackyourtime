@@ -275,9 +275,9 @@ pnpm run extension:id prod
 Two ways to trust the store clients on this deployment, in the **server app's
 env fields in Coolify**:
 
-- `TRUST_STORE_APPS=true` — trusts `capacitor://localhost`, `https://localhost`
-  and `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` together, from
-  code. The self-host compose file sets this by default.
+- `TRUST_STORE_APPS=true` — trusts `capacitor://localhost`, `https://localhost`,
+  `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` and the desktop app's
+  `app://-` together, from code. The self-host compose file sets this by default.
 - or list them in `TRUSTED_ORIGINS`, comma-separated, if this deployment's
   trust list should stay spelled out by hand.
 

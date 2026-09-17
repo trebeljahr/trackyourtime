@@ -221,8 +221,8 @@ export const env = {
   // and list it here instead.
   TRUSTED_ORIGINS: getOptional("TRUSTED_ORIGINS"),
   // Trust the store-distributed clients — the iOS and Android apps
-  // (capacitor://localhost, https://localhost) and the Chrome Web Store
-  // extension, whose id is pinned in @starter/shared's store-clients.ts. Those
+  // (capacitor://localhost, https://localhost), the desktop app (app://-) and
+  // the Chrome Web Store extension, whose id is pinned in @starter/shared's store-clients.ts. Those
   // builds let a person choose any server, so a self-hosted server has to
   // accept them without anyone editing TRUSTED_ORIGINS; the self-host compose
   // file defaults this to true. Off unless set, so the hosted deploy's trust

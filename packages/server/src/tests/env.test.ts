@@ -158,9 +158,13 @@ test("store apps sit beside TRUSTED_ORIGINS, never replace it", () => {
   );
 });
 
-test("the phone apps' two document origins are what the store list trusts", () => {
+test("the phone and desktop apps' document origins are what the store list trusts", () => {
   assert.ok(STORE_APP_ORIGINS.includes("capacitor://localhost"));
   assert.ok(STORE_APP_ORIGINS.includes("https://localhost"));
+  // The Electron app's privileged scheme (electron/src/protocol.ts). Written
+  // out rather than imported from DESKTOP_APP_ORIGIN, so a change to that
+  // constant fails here instead of silently moving what servers trust.
+  assert.ok(STORE_APP_ORIGINS.includes("app://-"));
   assert.ok(
     STORE_APP_ORIGINS.includes(`chrome-extension://${STORE_EXTENSION_ID}`),
   );

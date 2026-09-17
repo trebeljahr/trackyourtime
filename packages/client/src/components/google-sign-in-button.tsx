@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { isAppShell } from "@/lib/app-shell-host";
+import { isElectron, isTokenShell } from "@/lib/shell";
 import { POST_AUTH_REDIRECT, signIn, webCallbackUrl } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { useT } from "@/i18n/use-t";
@@ -33,8 +33,9 @@ export function googleAvailability(input: {
 
 const NOTES = {
   shell: "auth.google.shellNote",
+  desktop: "auth.google.desktopNote",
   unconfigured: "auth.google.unconfiguredNote",
-} as const satisfies Partial<Record<GoogleAvailability, string>>;
+} as const;
 
 /**
  * "Continue with Google", on /login and /signup.
@@ -47,12 +48,14 @@ const NOTES = {
 export function GoogleSignInButton(): React.JSX.Element {
   const [mounted, setMounted] = React.useState(false);
   const [shell, setShell] = React.useState(false);
+  const [desktop, setDesktop] = React.useState(false);
   const [starting, setStarting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const t = useT("shell");
 
   React.useEffect(() => {
-    setShell(isAppShell());
+    setShell(isTokenShell());
+    setDesktop(isElectron());
     setMounted(true);
   }, []);
 
@@ -68,7 +71,11 @@ export function GoogleSignInButton(): React.JSX.Element {
     googleEnabled: health.data?.authConfig.googleEnabled,
   });
   const noteKey =
-    availability === "shell" || availability === "unconfigured" ? NOTES[availability] : null;
+    availability === "shell"
+      ? NOTES[desktop ? "desktop" : "shell"]
+      : availability === "unconfigured"
+        ? NOTES.unconfigured
+        : null;
   const note = noteKey ? t(noteKey) : null;
 
   const start = async (): Promise<void> => {

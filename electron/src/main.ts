@@ -14,7 +14,7 @@
  */
 
 import path from "node:path";
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, safeStorage, shell } from "electron";
 
 import { DESKTOP_APP_ORIGIN, DESKTOP_IPC } from "../../packages/shared/src/desktop-bridge.ts";
 import { isHeadless } from "./headless.ts";
@@ -23,6 +23,7 @@ import { configureIpcTrust, handle } from "./ipc.ts";
 import { installApplicationMenu } from "./menu.ts";
 import { userDataDir } from "./profile.ts";
 import { handleAppScheme, registerAppScheme } from "./protocol.ts";
+import { createSecureStore, platformBackend, sessionFileAt, type SecureStore } from "./secure-store.ts";
 import { installSecurity } from "./security.ts";
 import { isExternalWebUrl } from "./trust.ts";
 import { createMainWindow, revealWindow, writeWindowState } from "./window.ts";
@@ -55,7 +56,21 @@ app.setPath(
  * activating it; it is set before ready so the first frame never activates.
  */
 const headless = isHeadless();
-if (headless && process.platform === "darwin") app.setActivationPolicy("accessory");
+if (headless && process.platform === "darwin") {
+  app.setActivationPolicy("accessory");
+  /*
+   * And no Keychain. Chromium's OSCrypt (cookie encryption, and safeStorage
+   * behind the session token) otherwise reads or creates "<name> Safe
+   * Storage" in the login keychain, and macOS may answer a binary whose
+   * signature differs from the item's creator (a rebuilt ad-hoc signed app)
+   * with a system password prompt, which takes focus. The mock keychain is a
+   * fixed in-process key: encryption still round-trips, so a headless run
+   * exercises the same store, but its ciphertext is only readable by another
+   * headless run. Measured: with the switch no Keychain item is created, and
+   * without it one is.
+   */
+  app.commandLine.appendSwitch("use-mock-keychain");
+}
 
 /*
  * One instance per profile. Two would each hold a socket and both write the
@@ -111,6 +126,35 @@ function start(): void {
     const win = BrowserWindow.fromWebContents(event.sender);
     return !!win && !win.isDestroyed() && win.isFullScreen();
   });
+
+  /*
+   * The session token (secure-store.ts). Created on first use, which is after
+   * ready: on Linux safeStorage cannot answer before then.
+   */
+  let secureStore: SecureStore | null = null;
+  const tokens = (): SecureStore => {
+    secureStore ??= createSecureStore(
+      {
+        isAvailable: () => safeStorage.isEncryptionAvailable(),
+        backend: () =>
+          process.platform === "linux" ? safeStorage.getSelectedStorageBackend() : platformBackend(process.platform),
+        encrypt: (plain) => safeStorage.encryptString(plain),
+        decrypt: (cipher) => safeStorage.decryptString(cipher),
+      },
+      sessionFileAt(app.getPath("userData")),
+    );
+    return secureStore;
+  };
+
+  handle(DESKTOP_IPC.tokenGet, () => tokens().getToken());
+  handle(DESKTOP_IPC.tokenSet, (_event, token: unknown) => {
+    if (typeof token !== "string") return tokens().status();
+    return tokens().setToken(token);
+  });
+  handle(DESKTOP_IPC.tokenDelete, () => {
+    tokens().deleteToken();
+  });
+  handle(DESKTOP_IPC.tokenStatus, () => tokens().status());
 
   handle(DESKTOP_IPC.openExternal, async (_event, url: unknown) => {
     if (typeof url !== "string" || !isExternalWebUrl(url)) return false;

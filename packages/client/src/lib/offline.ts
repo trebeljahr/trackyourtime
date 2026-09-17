@@ -76,7 +76,7 @@ import {
   shouldUseNativeStorage,
 } from "@/mobile/preferences-storage";
 import { getNetworkOnline } from "@/mobile/network";
-import { isNative } from "@/mobile/bridge";
+import { isCapacitor } from "@/lib/shell";
 import {
   getAbsoluteApiOrigin,
   getDefaultAbsoluteApiOrigin,
@@ -101,7 +101,7 @@ import {
  * left in `localStorage`, once — otherwise the change of address would itself
  * lose every queued row.
  *
- * `shouldUseNativeStorage()` is `isNative()`, a synchronous read of
+ * `shouldUseNativeStorage()` is `isCapacitor()`, a synchronous read of
  * `window.Capacitor` that the native bridge injects before any app code runs.
  * That is what makes it safe for `getOfflineQueue()` to memoise below: the
  * branch is decidable on the very first call, so there is no window in which
@@ -755,7 +755,7 @@ export const isDocumentUnloading = (): boolean => documentUnloading;
 
 export const watchDocumentUnload = (): void => {
   if (unwatchUnload !== null || typeof window === "undefined") return;
-  if (isNative()) return;
+  if (isCapacitor()) return;
 
   const onHide = (event: PageTransitionEvent): void => {
     if (event.persisted) return;

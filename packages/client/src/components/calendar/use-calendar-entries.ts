@@ -30,7 +30,7 @@ import {
   type HistoryStep,
   type StepBody,
 } from "./calendar-history";
-import { entrySource } from "@/lib/entry-source";
+import { entrySource } from "@/lib/shell";
 import { ownEntries, useViewerId } from "@/components/tracker/own-entries";
 import { userErrorMessage } from "@/lib/error-message";
 

@@ -534,7 +534,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
         {/*
           Rendered on every platform and hidden with `display: none` unless
           `html.cap` is set — see components/mobile-tab-bar.tsx for why a
-          runtime `isNative()` branch would be wrong under `output: "export"`.
+          runtime `isCapacitor()` branch would be wrong under `output: "export"`.
         */}
         <MobileTabBar
           pathname={pathname}

@@ -23,7 +23,9 @@ const sendVerificationEmail = vi.fn(async (_args: unknown) => ({ data: { status:
 let native = false;
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
-vi.mock("@/mobile/bridge", () => ({ isNative: () => native }));
+vi.mock("@/lib/shell", async () =>
+  (await import("@/lib/shell-mock")).mockShellModule(() => (native ? "capacitor" : "web")),
+);
 vi.mock("@/components/google-sign-in-button", () => ({ GoogleSignInButton: () => null }));
 vi.mock("@/lib/auth-client", () => ({
   signIn: { email: (args: unknown) => signInEmail(args) },

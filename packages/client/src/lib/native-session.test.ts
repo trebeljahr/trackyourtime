@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * The Keychain-backed session token.
@@ -29,9 +29,11 @@ const load = async (options: {
   const keychain = new Map(Object.entries(options.keychain ?? {}));
   const preferences = new Map(Object.entries(options.preferences ?? {}));
 
-  vi.doMock("@/mobile/bridge", () => ({
-    isNative: () => options.native ?? true,
-  }));
+  vi.doMock("@/lib/shell", async () =>
+    (await import("@/lib/shell-mock")).mockShellModule(() =>
+      (options.native ?? true) ? "capacitor" : "web",
+    ),
+  );
   vi.doMock("@aparajita/capacitor-secure-storage", () => ({
     SecureStorage: {
       setSynchronize: async () => undefined,
@@ -137,7 +139,9 @@ describe("hydrateNativeSession on native", () => {
 
   it("survives a Keychain that cannot be read", async () => {
     vi.resetModules();
-    vi.doMock("@/mobile/bridge", () => ({ isNative: () => true }));
+    vi.doMock("@/lib/shell", async () =>
+      (await import("@/lib/shell-mock")).mockShellModule(() => "capacitor"),
+    );
     vi.doMock("@aparajita/capacitor-secure-storage", () => ({
       SecureStorage: {
         setSynchronize: async () => undefined,
@@ -174,7 +178,9 @@ describe("a plugin handle that behaves like a thenable", () => {
     // implements: no resolve, no reject, and an app frozen behind a splash
     // screen that never auto-hides. This is that shape, in a test.
     vi.resetModules();
-    vi.doMock("@/mobile/bridge", () => ({ isNative: () => true }));
+    vi.doMock("@/lib/shell", async () =>
+      (await import("@/lib/shell-mock")).mockShellModule(() => "capacitor"),
+    );
     vi.doMock("@aparajita/capacitor-secure-storage", () => {
       const backing = new Map<string, string>([[TOKEN_KEY, "stored-token"]]);
       const impl: Record<string, unknown> = {
@@ -213,6 +219,69 @@ describe("a plugin handle that behaves like a thenable", () => {
     ]);
 
     expect(module.getNativeToken()).toBe("stored-token");
+  });
+});
+
+describe("the desktop app's token store", () => {
+  const loadDesktop = async (stored: string | null) => {
+    vi.resetModules();
+    const calls: string[] = [];
+    let file = stored;
+    const secureStore = {
+      getToken: async () => {
+        calls.push("get");
+        return file;
+      },
+      setToken: async (token: string) => {
+        calls.push(`set:${token}`);
+        file = token;
+        return { persistent: true, backend: "keychain" };
+      },
+      deleteToken: async () => {
+        calls.push("delete");
+        file = null;
+      },
+      status: async () => ({ persistent: true, backend: "keychain" }),
+    };
+    vi.stubGlobal("window", { electronAPI: { isDesktop: true, secureStore } });
+    vi.doMock("@/lib/shell", async () =>
+      (await import("@/lib/shell-mock")).mockShellModule(() => "electron"),
+    );
+    // Neither Capacitor plugin may be touched in the desktop app.
+    vi.doMock("@aparajita/capacitor-secure-storage", () => {
+      throw new Error("the Keychain plugin was loaded in the desktop app");
+    });
+    vi.doMock("@capacitor/preferences", () => {
+      throw new Error("Preferences was loaded in the desktop app");
+    });
+    const module = await import("@/lib/native-session");
+    return { module, calls, file: () => file };
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("hydrates from the main process, with no fresh-install wipe", async () => {
+    const { module, calls } = await loadDesktop("desktop-token");
+
+    await module.hydrateNativeSession();
+
+    expect(module.getNativeToken()).toBe("desktop-token");
+    expect(calls).toEqual(["get"]);
+  });
+
+  it("hands a new token to the main process and deletes it on sign-out", async () => {
+    const { module, calls, file } = await loadDesktop(null);
+
+    await module.hydrateNativeSession();
+    await module.setNativeToken("issued");
+    expect(file()).toBe("issued");
+
+    await module.clearNativeToken();
+    expect(module.getNativeToken()).toBeNull();
+    expect(file()).toBeNull();
+    expect(calls).toEqual(["get", "set:issued", "delete"]);
   });
 });
 

@@ -8,7 +8,12 @@ import { createTimerStore } from "@starter/core";
 import type { TimeEntry } from "@starter/shared";
 
 const isNative = vi.fn(() => true);
-vi.mock("@/mobile/bridge", () => ({ isNative: () => isNative() }));
+const desktop = { value: false };
+vi.mock("@/lib/shell", async () =>
+  (await import("@/lib/shell-mock")).mockShellModule(() =>
+    desktop.value ? "electron" : isNative() ? "capacitor" : "web",
+  ),
+);
 
 const {
   __resetRunningMirrorForTests,
@@ -58,6 +63,7 @@ const fakeStorage = () => ({
 });
 
 beforeEach(() => {
+  desktop.value = false;
   isNative.mockReturnValue(true);
   window.localStorage.clear();
   backing = new Map();
@@ -142,6 +148,21 @@ describe("the mirror", () => {
       backing.set("trackyourtime.running-entry", JSON.stringify({ v: 1, data }));
       expect(await readRunningMirror()).toBeNull();
     }
+  });
+
+  it("lives in localStorage in the desktop app, where the profile is not evicted", async () => {
+    // The real store, not the injected one: the desktop app must not go
+    // through Capacitor Preferences, whose web fallback prefixes its keys.
+    __resetRunningMirrorForTests(null);
+    desktop.value = true;
+    await writeRunningMirror(running);
+    expect(
+      JSON.parse(window.localStorage.getItem("trackyourtime.running-entry") ?? "null"),
+    ).toEqual({ v: 1, data: running });
+
+    const timerStore = createTimerStore();
+    await seedRunningFromMirror(timerStore);
+    expect(timerStore.getState().running?.id).toBe("e1");
   });
 
   it("is inert on web", async () => {

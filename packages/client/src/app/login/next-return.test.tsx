@@ -34,7 +34,9 @@ vi.mock("@/lib/auth-client", () => ({
   POST_AUTH_REDIRECT: "/app/track",
 }));
 vi.mock("@/components/google-sign-in-button", () => ({ GoogleSignInButton: () => null }));
-vi.mock("@/mobile/bridge", () => ({ isNative: () => false }));
+vi.mock("@/lib/shell", async () =>
+  (await import("@/lib/shell-mock")).mockShellModule(() => "web"),
+);
 
 const { default: LoginPage } = await import("./page");
 const { default: SignupPage } = await import("../signup/page");

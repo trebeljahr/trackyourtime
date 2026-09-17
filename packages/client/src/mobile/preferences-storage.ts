@@ -15,7 +15,7 @@
  * credentials there.
  *
  * The plugin is loaded lazily so the web bundle never pulls a Capacitor
- * package in, and the whole module is inert unless `isNative()`.
+ * package in, and the whole module is inert unless `isCapacitor()`.
  */
 
 import {
@@ -25,7 +25,7 @@ import {
   webStorage,
 } from "@starter/core";
 
-import { isNative } from "./bridge";
+import { isCapacitor } from "@/lib/shell";
 
 /**
  * The single marker builds up to 2026-09-15 wrote, once for every store at
@@ -236,9 +236,9 @@ export const preferencesStorage = ({
 /**
  * True when Preferences-backed storage should be used at all.
  *
- * `isNative()` is a synchronous read of `window.Capacitor`, which the native
+ * `isCapacitor()` is a synchronous read of `window.Capacitor`, which the native
  * bridge injects at document start — before any application code runs. That
  * matters because `getOfflineQueue()` memoises its storage on the first call:
  * the branch has to be right the first time, and an async probe would not be.
  */
-export const shouldUseNativeStorage = (): boolean => isNative();
+export const shouldUseNativeStorage = (): boolean => isCapacitor();

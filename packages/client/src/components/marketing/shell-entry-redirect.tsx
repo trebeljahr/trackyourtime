@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-import { isAppShell } from "@/lib/app-shell-host";
+import { isTokenShell } from "@/lib/shell";
 
 /**
  * Sends the native and desktop shells from `/` into the app.
@@ -22,7 +22,7 @@ export function ShellEntryRedirect(): null {
   const router = useRouter();
 
   useEffect(() => {
-    if (isAppShell()) router.replace("/app/track");
+    if (isTokenShell()) router.replace("/app/track");
   }, [router]);
 
   return null;

@@ -20,6 +20,8 @@ import {
  */
 
 const native = { value: false };
+/** Overrides `native` with the desktop app when set. */
+const desktop = { value: false };
 const checkServer = vi.fn();
 const switchServer = vi.fn(async () => "switched" as const);
 
@@ -27,7 +29,11 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
 }));
 
-vi.mock("@/mobile/bridge", () => ({ isNative: () => native.value }));
+vi.mock("@/lib/shell", async () =>
+  (await import("@/lib/shell-mock")).mockShellModule(() =>
+    desktop.value ? "electron" : native.value ? "capacitor" : "web",
+  ),
+);
 
 vi.mock("@/lib/auth-client", () => ({
   signIn: { email: vi.fn() },
@@ -92,6 +98,7 @@ const found = (overrides: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   native.value = false;
+  desktop.value = false;
   checkServer.mockReset();
   switchServer.mockClear();
   __resetApiOriginForTests();
@@ -116,10 +123,46 @@ describe("the login page on web", () => {
     expect(web).not.toContain("server-picker");
   });
 
+  it("prerenders the same HTML for the desktop app too", () => {
+    const web = renderToString(<LoginPage />);
+    desktop.value = true;
+    const app = renderToString(<LoginPage />);
+
+    expect(app).toBe(web);
+    expect(web).not.toContain("browser-sign-in");
+  });
+
   it("never shows a server choice in a browser, even after hydration", async () => {
     render(<LoginPage />);
     await waitFor(() => expect(screen.getByTestId("login-submit")).toBeTruthy());
     expect(screen.queryByTestId("server-picker")).toBeNull();
+  });
+});
+
+describe("the login page in the desktop app", () => {
+  it("offers the server choice and the browser sign-in after hydration", async () => {
+    desktop.value = true;
+    render(<LoginPage />);
+    await waitFor(() => expect(screen.getByTestId("server-picker-toggle")).toBeEnabled());
+    expect(screen.getByTestId("browser-sign-in")).toBeTruthy();
+  });
+
+  it("names the desktop app's origin when a server does not trust it", async () => {
+    checkServer.mockResolvedValue(found({ originTrusted: false }));
+    desktop.value = true;
+    render(<LoginPage />);
+    await waitFor(() => expect(screen.getByTestId("server-picker-toggle")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("server-picker-toggle"));
+    fireEvent.click(screen.getByTestId("server-picker-own"));
+    fireEvent.change(screen.getByTestId("server-picker-address"), {
+      target: { value: OWN },
+    });
+    fireEvent.click(screen.getByTestId("server-picker-save"));
+
+    const error = await screen.findByTestId("server-picker-error");
+    expect(error).toHaveTextContent("app://-");
+    expect(error).not.toHaveTextContent("capacitor://localhost");
+    expect(switchServer).not.toHaveBeenCalled();
   });
 });
 

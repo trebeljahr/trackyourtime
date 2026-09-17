@@ -140,6 +140,9 @@ export const shell = {
       signingInAs: "Signing in as {email}",
       nativeUnsupported:
         "This account uses two-factor authentication, which the app does not support yet. Sign in on the web app instead.",
+      /** The desktop app can: through the browser, below the form. */
+      desktopUseBrowser:
+        "This account uses two-factor authentication. Use Sign in with your browser to sign in to the desktop app.",
       totpLabel: "Authentication code",
       backupLabel: "Backup code",
       totpHint: "Enter the 6-digit code from your authenticator app.",
@@ -156,8 +159,25 @@ export const shell = {
     google: {
       continue: "Continue with Google",
       shellNote: "Google sign-in works on the web app only. Use your email and password here.",
+      desktopNote:
+        "Google sign-in does not work inside the desktop app. Use Sign in with your browser, then choose Google there.",
       unconfiguredNote: "Google sign-in is not set up on this server.",
       couldNotStart: "Google sign-in could not start",
+    },
+    /** The desktop app's device-flow sign-in (the browser approves the app). */
+    browserSignIn: {
+      start: "Sign in with your browser",
+      hint: "For accounts with two-factor authentication or Google sign-in.",
+      starting: "Starting…",
+      waitingTitle: "Approve this app in your browser",
+      waiting:
+        "Your browser opened a page that asks you to approve this device. Check that the page shows this code:",
+      reopen: "Open the page again",
+      cancel: "Cancel",
+      denied:
+        "The sign-in was declined in the browser. Try again, or sign in with your email and password.",
+      expired: "The code expired before it was approved. Start again.",
+      failed: "The browser sign-in could not start. Check your connection and try again.",
     },
     revoked: {
       title: "You were signed out",
@@ -208,7 +228,7 @@ export const shell = {
     checking: "Checking…",
     use: "Use this server",
     untrusted:
-      "{host} is a Track Your Time server, but it does not accept sign-ins from this app yet. Its administrator needs to set TRUST_STORE_APPS=true, or add capacitor://localhost and https://localhost to TRUSTED_ORIGINS.",
+      "{host} is a Track Your Time server, but it does not accept sign-ins from this app yet. Its administrator needs to set TRUST_STORE_APPS=true, or add {origins} to TRUSTED_ORIGINS.",
     creatingOn: "Creating an account on <server>{label}</server>.",
     change: "Change server",
     serverTooOld:

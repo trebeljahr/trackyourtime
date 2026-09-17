@@ -29,7 +29,7 @@ import {
 } from "@/lib/offline";
 import { OFFLINE_QUEUED_MUTATION } from "@/lib/query-client";
 import { trpc } from "@/lib/trpc";
-import { entrySource } from "@/lib/entry-source";
+import { entrySource } from "@/lib/shell";
 import { refusalMessageKey } from "./refusal-message";
 import { userErrorMessage } from "@/lib/error-message";
 

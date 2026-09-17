@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
  *
  * It is rendered unconditionally and hidden with `hidden` (display: none),
  * which styles/native.css undoes under `html.cap`. Returning `null` on
- * `!isNative()` instead would be a hydration mismatch: `output: "export"`
+ * `!isCapacitor()` instead would be a hydration mismatch: `output: "export"`
  * prerenders every page in Node, where `window.Capacitor` cannot exist, so
  * the served HTML has the bar and the native hydration would not.
  */

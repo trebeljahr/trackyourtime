@@ -58,7 +58,8 @@ async function start(): Promise<void> {
       // changes nothing — and an origin missing from it is answered with
       // `403 INVALID_ORIGIN` before the password is even checked, which reads
       // like a credentials problem. The native shells depend on
-      // `capacitor://localhost` and `https://localhost` being in here.
+      // `capacitor://localhost` and `https://localhost` being in here, the
+      // desktop app on `app://-`.
       console.log(
         `[server] Trusted origins: ${getTrustedOrigins().join(", ") || "(none)"}`,
       );

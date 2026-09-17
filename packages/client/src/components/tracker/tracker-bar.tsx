@@ -34,7 +34,7 @@ import { useRunningEntry } from "@/hooks/use-sync";
 import { formatDurationFor } from "@/i18n/format";
 import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
-import { isNative } from "@/mobile/bridge";
+import { isCapacitor } from "@/lib/shell";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -307,11 +307,11 @@ export function TrackerBar(): React.JSX.Element {
              read, before they had done anything. Focus-on-mount is a
              keyboard-first affordance and a phone has no keyboard to be first
              with. Evaluated at render rather than baked in: under
-             `output: "export"` the prerender runs in Node where `isNative()`
+             `output: "export"` the prerender runs in Node where `isCapacitor()`
              is false, but React never serialises `autoFocus` into the markup
              — it focuses imperatively on mount — so the native value is the
              one that decides. */
-          autoFocus={!isNative()}
+          autoFocus={!isCapacitor()}
           className="min-w-0 flex-1 basis-48"
           inputClassName="h-10 border-0 bg-transparent px-2 text-base shadow-none focus-visible:ring-0"
           testId="tracker-description"

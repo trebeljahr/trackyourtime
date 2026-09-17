@@ -30,22 +30,38 @@
 import {
   decodeVersioned,
   encodeVersioned,
+  memoryStorage,
   readRunningEntryLeniently,
+  webStorage,
   type KeyValueStorage,
   type TimerStore,
   type VersionedSpec,
 } from "@starter/core";
 import type { TimeEntry } from "@starter/shared";
 
-import { isNative } from "@/mobile/bridge";
+import { isCapacitor, isTokenShell } from "@/lib/shell";
 import { preferencesStorage } from "@/mobile/preferences-storage";
 
 const MIRROR_KEY = "trackyourtime.running-entry";
 
 let storage: KeyValueStorage | null = null;
 
+/*
+ * Capacitor Preferences on the phones, where WKWebView evicts `localStorage`;
+ * `localStorage` in the Electron shell, where nothing evicts it and there is
+ * no Preferences plugin.
+ */
+const resolveStorage = (): KeyValueStorage => {
+  if (isCapacitor()) return preferencesStorage();
+  try {
+    return webStorage(window.localStorage);
+  } catch {
+    return memoryStorage();
+  }
+};
+
 const store = (): KeyValueStorage => {
-  storage ??= preferencesStorage();
+  storage ??= resolveStorage();
   return storage;
 };
 
@@ -83,7 +99,7 @@ const parseMirrored = (raw: string | null): TimeEntry | null =>
 export const writeRunningMirror = async (
   entry: TimeEntry | null,
 ): Promise<void> => {
-  if (!isNative()) return;
+  if (!isTokenShell()) return;
   provisional = false;
   if (entry === null || entry.end !== null) {
     await store().removeItem(MIRROR_KEY);
@@ -94,7 +110,7 @@ export const writeRunningMirror = async (
 
 /** Read the mirror back. Null on web, and whenever it holds nothing usable. */
 export const readRunningMirror = async (): Promise<TimeEntry | null> => {
-  if (!isNative()) return null;
+  if (!isTokenShell()) return null;
   return parseMirrored(await store().getItem(MIRROR_KEY));
 };
 
@@ -110,7 +126,7 @@ export const readRunningMirror = async (): Promise<TimeEntry | null> => {
 export const seedRunningFromMirror = async (
   timerStore: TimerStore,
 ): Promise<TimeEntry | null> => {
-  if (!isNative()) return null;
+  if (!isTokenShell()) return null;
 
   const entry = await readRunningMirror();
   if (entry === null) return null;

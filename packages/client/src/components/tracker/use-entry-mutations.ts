@@ -44,7 +44,7 @@ import {
   type OfflineStopInput,
   type OfflineUpdateInput,
 } from "@/lib/offline";
-import { entrySource } from "@/lib/entry-source";
+import { entrySource } from "@/lib/shell";
 import { userErrorMessage } from "@/lib/error-message";
 
 /**

@@ -19,7 +19,9 @@ const useQuery = vi.fn((_input: unknown, options: { enabled: boolean }) => ({
 }));
 const social = vi.fn(async (_args: unknown) => ({ data: { url: "https://accounts.example" }, error: null }));
 
-vi.mock("@/mobile/bridge", () => ({ isNative: () => native }));
+vi.mock("@/lib/shell", async () =>
+  (await import("@/lib/shell-mock")).mockShellModule(() => (native ? "capacitor" : "web")),
+);
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     health: {

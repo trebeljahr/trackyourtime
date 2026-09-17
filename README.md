@@ -164,9 +164,9 @@ better-auth validates the `Origin` header on sign-in whenever the request carrie
 
 - `chrome-extension://<id>` — a browser extension you built yourself (`pnpm run extension:id prod` prints it)
 - `capacitor://localhost,https://localhost` — the iOS and Android apps
-- `app://-` — Electron via a custom protocol (`file://` sends `Origin: null` and cannot be trusted with credentials)
+- `app://-` — the desktop app, which serves its bundle from that privileged scheme (`file://` would send `Origin: null`, which cannot be trusted with credentials)
 
-Or set `TRUST_STORE_APPS=true`, which trusts the iOS and Android apps and the Chrome Web Store extension (its id is pinned in `packages/shared/src/store-clients.ts`) in one switch. `docker-compose.selfhost.yml` defaults it to `true`, so the store builds, once they exist, can sign in to a self-hosted server with nothing to configure. The extension asks Chrome for no access to any website, so every request it sends is a cross-origin request: without this trust it cannot sign in, sync or send an entry.
+Or set `TRUST_STORE_APPS=true`, which trusts the iOS and Android apps, the desktop app and the Chrome Web Store extension (its id is pinned in `packages/shared/src/store-clients.ts`) in one switch. `docker-compose.selfhost.yml` defaults it to `true`, so the store builds, once they exist, can sign in to a self-hosted server with nothing to configure. The extension asks Chrome for no access to any website, so every request it sends is a cross-origin request: without this trust it cannot sign in, sync or send an entry.
 
 Raycast and CLI clients need nothing here — their requests carry neither `Origin` nor `Sec-Fetch-*`. What guards them is the device flow plus the client-id allowlist in `packages/server/src/auth/client-label.ts`.
 

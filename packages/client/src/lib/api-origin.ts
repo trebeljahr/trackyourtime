@@ -9,13 +9,14 @@
  * Nothing on web reads storage, awaits anything or rewrites a URL, so a web
  * request is byte-identical to what it was before this module existed.
  *
- * **On the phone apps it is the person's choice.** A store-installed app is one
- * build for everyone, so the baked-in `NEXT_PUBLIC_API_URL` is only the
- * default: the login screen can point the app at any Track Your Time server,
- * and that choice is stored in Capacitor Preferences — app-container data iOS
- * does not evict, unlike WKWebView's `localStorage` (see
- * `mobile/preferences-storage.ts`). Not the Keychain: an address is not a
- * credential, and unlike the token it should NOT outlive a reinstall.
+ * **In the phone and desktop apps it is the person's choice.** A store-installed
+ * app is one build for everyone, so the baked-in `NEXT_PUBLIC_API_URL` is only
+ * the default: the login screen can point the app at any Track Your Time
+ * server. On the phone that choice is stored in Capacitor Preferences —
+ * app-container data iOS does not evict, unlike WKWebView's `localStorage`
+ * (see `mobile/preferences-storage.ts`). In the desktop app it is plain
+ * `localStorage`, which the Chromium profile keeps. Never the secure token
+ * store: an address is not a credential.
  *
  * Every client built at module scope keeps its build-time URL — the tRPC link,
  * better-auth's `baseURL` — and each request is rebased onto the chosen origin
@@ -28,9 +29,9 @@
  * can make the served HTML disagree with hydration.
  */
 
-import { sameServerOrigin } from "@starter/core";
+import { memoryStorage, sameServerOrigin, webStorage, type KeyValueStorage } from "@starter/core";
 
-import { isNative } from "@/mobile/bridge";
+import { isCapacitor, isTokenShell } from "@/lib/shell";
 import { preferencesStorage } from "@/mobile/preferences-storage";
 
 /** Preferences key holding the chosen server. Absent means the build default. */
@@ -97,7 +98,7 @@ export const getServerApiOriginSnapshot = (): ApiOriginSnapshot => SERVER_SNAPSH
  * `NEXT_PUBLIC_API_URL` (`scripts/build-mobile.mjs` refuses).
  */
 export const getApiOrigin = (): string =>
-  isNative() && choice !== null ? choice.origin : getDefaultApiOrigin();
+  isTokenShell() && choice !== null ? choice.origin : getDefaultApiOrigin();
 
 /** {@link getApiOrigin}, resolved against the page when it is empty. */
 export const getAbsoluteApiOrigin = (): string => {
@@ -117,15 +118,15 @@ export const getDefaultAbsoluteApiOrigin = (): string => {
     : window.location.origin;
 };
 
-/** True when native and pointed somewhere other than the build default. */
+/** True in a token shell pointed somewhere other than the build default. */
 export const isUsingChosenServer = (): boolean =>
-  isNative() &&
+  isTokenShell() &&
   choice !== null &&
   !sameServerOrigin(choice.origin, getDefaultApiOrigin());
 
 /** The chosen server's web app, when one was picked and it said where. */
 export const getChosenWebUrl = (): string | null =>
-  isNative() ? (choice?.webUrl ?? null) : null;
+  isTokenShell() ? (choice?.webUrl ?? null) : null;
 
 /**
  * Point a URL built against the default origin at the chosen one.
@@ -145,7 +146,20 @@ export const rebaseApiUrl = (url: string): string => {
 
 // ── hydration ────────────────────────────────────────────────────────
 
-const storage = (): ReturnType<typeof preferencesStorage> => preferencesStorage();
+let backing: KeyValueStorage | null = null;
+const storage = (): KeyValueStorage => {
+  if (backing !== null) return backing;
+  if (isCapacitor()) {
+    backing = preferencesStorage();
+  } else {
+    try {
+      backing = webStorage(window.localStorage);
+    } catch {
+      backing = memoryStorage();
+    }
+  }
+  return backing;
+};
 
 const decodeChoice = (raw: string | null): ServerChoice | null => {
   if (raw === null || raw === "") return null;
@@ -177,7 +191,7 @@ let hydration: Promise<void> | null = null;
 let saved = false;
 
 const runHydration = async (): Promise<void> => {
-  if (!isNative()) {
+  if (!isTokenShell()) {
     ready = true;
     publish();
     return;
@@ -219,7 +233,7 @@ export const hydrateApiOrigin = (): Promise<void> => {
  * name — callers there skip it entirely rather than await it.
  */
 export const whenApiOriginReady = (): Promise<void> =>
-  isNative() ? hydrateApiOrigin() : Promise.resolve();
+  isTokenShell() ? hydrateApiOrigin() : Promise.resolve();
 
 // ── writes ───────────────────────────────────────────────────────────
 
@@ -232,7 +246,7 @@ export const whenApiOriginReady = (): Promise<void> =>
  * `switchServer` in `lib/server-switch.ts`, which calls this.
  */
 export const saveServerChoice = async (next: ServerChoice | null): Promise<void> => {
-  if (!isNative()) return;
+  if (!isTokenShell()) return;
   const normalized =
     next === null || sameServerOrigin(next.origin, getDefaultApiOrigin())
       ? null
@@ -257,5 +271,6 @@ export const __resetApiOriginForTests = (): void => {
   ready = false;
   saved = false;
   hydration = null;
+  backing = null;
   snapshot = { choice: null, ready: false };
 };

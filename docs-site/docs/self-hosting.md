@@ -1501,6 +1501,7 @@ origins to the trusted list:
 | iOS app | `capacitor://localhost` |
 | Android app | `https://localhost` |
 | Chrome extension from the Web Store | `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` |
+| Desktop app | `app://-` |
 | Raycast extension | None. Raycast sends no `Origin`. |
 
 To accept sign-ins from your own web app only, set `TRUST_STORE_APPS=false` in

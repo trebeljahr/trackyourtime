@@ -2,7 +2,7 @@ import { createTRPCReact } from "@trpc/react-query";
 import { httpBatchLink, type TRPCLink } from "@trpc/client";
 import { CLIENT_TOO_OLD, versionHeaders, withWorkspaceId } from "@starter/core";
 import type { AppRouter } from "@starter/server/trpc";
-import { isNative } from "@/mobile/bridge";
+import { clientId, isTokenShell } from "@/lib/shell";
 import { getNativeToken } from "@/lib/native-session";
 import { rebaseApiUrl, whenApiOriginReady } from "@/lib/api-origin";
 import {
@@ -143,21 +143,21 @@ export function getTRPCClient() {
       httpBatchLink({
         url: `${process.env.NEXT_PUBLIC_API_URL || ""}/api/trpc`,
         /**
-         * The native shells authenticate with a bearer token, not a cookie: a
-         * `capacitor://localhost` document is cross-site to the API whatever
-         * SameSite says. With no token — every web request — this is exactly
+         * The phone and desktop shells authenticate with a bearer token, not a
+         * cookie: a `capacitor://localhost` or `app://-` document is cross-site
+         * to the API whatever SameSite says. With no token — every web request — this is exactly
          * `credentials: "include"` and no `authorization` header, which
          * `src/lib/trpc.test.ts` asserts rather than assumes.
          */
         fetch(url, options) {
-          if (!isNative()) {
+          if (!isTokenShell()) {
             const token = getNativeToken();
             return fetch(url, {
               ...options,
               credentials: token ? "omit" : "include",
             }).then(watchVersionRefusal);
           }
-          // The phone apps choose their server at runtime (`lib/api-origin.ts`).
+          // The token shells choose their server at runtime (`lib/api-origin.ts`).
           // The link above keeps the build-time URL; the request is rebased
           // here, and only once the stored choice has been read, so nothing
           // can leave for a server the person has already moved away from.
@@ -182,7 +182,7 @@ export function getTRPCClient() {
         headers: () => {
           const token = getNativeToken();
           return {
-            "x-trackyourtime-client": isNative() ? "trackyourtime-mobile" : "web",
+            "x-trackyourtime-client": clientId(),
             // The version handshake (docs/versioning.md). Additive: the
             // client kind above is unchanged, because it decides the device
             // label and the session window.

@@ -241,6 +241,10 @@ export const settings: Translation<typeof source> = {
     description:
       "Alles, was mit deinem Konto angemeldet ist. Melde dich in der Desktop-App, der Mobil-App, in Raycast oder einer Browsererweiterung an, und sie erscheint hier – du musst nichts kopieren oder einfügen.",
     revokeOthers: "Andere abmelden",
+    tokenNotPersisted: {
+      title: "Du meldest dich bei jedem Start der App neu an",
+      body: "Dieser Computer hat keinen Schlüsselbund, mit dem die Anmeldung verschlüsselt werden kann (Speicher: {backend}). Die Desktop-App behält sie deshalb nur im Arbeitsspeicher. Installiere und entsperre einen Schlüsselbund wie GNOME Keyring oder KWallet, um angemeldet zu bleiben.",
+    },
     empty: {
       title: "Keine anderen Geräte",
       description: "Melde dich in einer anderen App an, dann erscheint sie hier.",
@@ -910,7 +914,7 @@ export const settings: Translation<typeof source> = {
     check: "Server prüfen",
     sameServer: "Das ist {here}, der Server, auf dem dieser Arbeitsbereich schon liegt.",
     untrustedApp:
-      "{host} akzeptiert noch keine Anmeldungen aus dieser App. Wer den Server betreibt, muss TRUST_STORE_APPS=true setzen oder capacitor://localhost und https://localhost zu TRUSTED_ORIGINS hinzufügen.",
+      "{host} akzeptiert noch keine Anmeldungen aus dieser App. Wer den Server betreibt, muss TRUST_STORE_APPS=true setzen oder {origins} zu TRUSTED_ORIGINS hinzufügen.",
     signInHint:
       "Melde dich mit deinem Konto auf {server} an. Die Daten werden in den Arbeitsbereich dieses Kontos kopiert.",
     signUpHint: "Erstelle ein Konto auf {server}, in das die Daten kopiert werden.",

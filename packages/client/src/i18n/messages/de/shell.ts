@@ -134,6 +134,8 @@ export const shell: Translation<typeof source> = {
       signingInAs: "Anmeldung als {email}",
       nativeUnsupported:
         "Dieses Konto nutzt Zwei-Faktor-Authentifizierung, die die App noch nicht unterstützt. Melde dich stattdessen in der Web-App an.",
+      desktopUseBrowser:
+        "Dieses Konto nutzt Zwei-Faktor-Authentifizierung. Melde dich in der Desktop-App mit „Mit deinem Browser anmelden“ an.",
       totpLabel: "Bestätigungscode",
       backupLabel: "Backup-Code",
       totpHint: "Gib den 6-stelligen Code aus deiner Authenticator-App ein.",
@@ -152,8 +154,25 @@ export const shell: Translation<typeof source> = {
       continue: "Weiter mit Google",
       shellNote:
         "Die Anmeldung mit Google funktioniert nur in der Web-App. Melde dich hier mit E-Mail und Passwort an.",
+      desktopNote:
+        "Die Anmeldung mit Google funktioniert nicht direkt in der Desktop-App. Wähle „Mit deinem Browser anmelden“ und dort Google.",
       unconfiguredNote: "Die Anmeldung mit Google ist auf diesem Server nicht eingerichtet.",
       couldNotStart: "Die Anmeldung mit Google konnte nicht starten",
+    },
+    browserSignIn: {
+      start: "Mit deinem Browser anmelden",
+      hint: "Für Konten mit Zwei-Faktor-Authentifizierung oder Anmeldung mit Google.",
+      starting: "Wird gestartet …",
+      waitingTitle: "Bestätige diese App in deinem Browser",
+      waiting:
+        "Dein Browser hat eine Seite geöffnet, auf der du dieses Gerät bestätigst. Prüfe, ob die Seite diesen Code zeigt:",
+      reopen: "Seite erneut öffnen",
+      cancel: "Abbrechen",
+      denied:
+        "Die Anmeldung wurde im Browser abgelehnt. Versuch es noch einmal oder melde dich mit E-Mail und Passwort an.",
+      expired: "Der Code ist abgelaufen, bevor er bestätigt wurde. Starte noch einmal.",
+      failed:
+        "Die Anmeldung im Browser konnte nicht starten. Prüfe deine Verbindung und versuch es noch einmal.",
     },
     revoked: {
       title: "Du wurdest abgemeldet",
@@ -201,7 +220,7 @@ export const shell: Translation<typeof source> = {
     checking: "Wird geprüft …",
     use: "Diesen Server verwenden",
     untrusted:
-      "{host} ist ein Track-Your-Time-Server, akzeptiert aber noch keine Anmeldungen aus dieser App. Wer den Server betreibt, muss TRUST_STORE_APPS=true setzen oder capacitor://localhost und https://localhost zu TRUSTED_ORIGINS hinzufügen.",
+      "{host} ist ein Track-Your-Time-Server, akzeptiert aber noch keine Anmeldungen aus dieser App. Wer den Server betreibt, muss TRUST_STORE_APPS=true setzen oder {origins} zu TRUSTED_ORIGINS hinzufügen.",
     creatingOn: "Das Konto wird auf <server>{label}</server> erstellt.",
     change: "Server wechseln",
     serverTooOld:

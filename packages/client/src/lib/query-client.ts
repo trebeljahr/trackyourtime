@@ -8,7 +8,7 @@ import {
   isForbiddenError,
   isNotFoundError,
 } from "@/lib/offline";
-import { isNative } from "@/mobile/bridge";
+import { isCapacitor } from "@/lib/shell";
 import { getNetworkOnline, subscribeNetwork } from "@/mobile/network";
 
 /**
@@ -53,7 +53,8 @@ export const clearAppQueryCache = async (): Promise<void> => {
 };
 
 export const createAppQueryClient = (): QueryClient => {
-  const native = isNative();
+  // Bounded, backed-off retries are a battery rule: the phone only.
+  const native = isCapacitor();
 
   appQueryClient = new QueryClient({
     queryCache: new QueryCache({

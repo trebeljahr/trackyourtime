@@ -22,8 +22,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useApiOrigin } from "@/hooks/use-api-origin";
-import { useIsNative } from "@/hooks/use-is-native";
+import { useIsTokenShell } from "@/hooks/use-shell";
 import { getApiOrigin, getDefaultApiOrigin } from "@/lib/api-origin";
+import { shellTrustedOrigins } from "@/lib/shell";
 import { refreshPendingCount } from "@/lib/offline";
 import { getServerLevelCache } from "@/lib/server-level";
 import { switchServer } from "@/lib/server-switch";
@@ -32,12 +33,12 @@ import { useT } from "@/i18n/use-t";
 import type { Translator } from "@/i18n/translator";
 
 /**
- * Which server the phone app signs in to.
+ * Which server the phone or desktop app signs in to.
  *
  * Renders NOTHING on web, and nothing on the first client render anywhere —
- * `useIsNative` hydrates as the web tree — so the login page served to a
+ * `useIsTokenShell` hydrates as the web tree — so the login page served to a
  * browser is exactly the page it was. The web app talks to the server it was
- * built for; only a store-installed phone app has a choice to make.
+ * built for; only an installed phone or desktop app has a choice to make.
  *
  * The choice is checked before it is saved: the address has to parse, plain
  * http is refused off this device, the server has to answer as Track Your Time
@@ -56,7 +57,10 @@ const defaultLabel = (origin: string, t: Translator<"shell">): string =>
 
 /** Why a reachable server still cannot be used from this app. */
 export const untrustedMessage = (server: ServerInfo, t: Translator<"shell">): string =>
-  t("serverPicker.untrusted", { host: serverHost(server.origin) });
+  t("serverPicker.untrusted", {
+    host: serverHost(server.origin),
+    origins: shellTrustedOrigins(),
+  });
 
 /**
  * Why a reachable, trusted server still cannot be used by this build, or null.
@@ -81,7 +85,7 @@ export const incompatibleMessage = (
 };
 
 export function NativeServerPicker(): React.JSX.Element | null {
-  const native = useIsNative();
+  const native = useIsTokenShell();
   const { choice, ready } = useApiOrigin();
 
   if (!native) return null;
@@ -291,12 +295,12 @@ function ServerPickerBody({
 }
 
 /**
- * The server named on the sign-up screen, on native only — an account is
- * created on one specific server, and on a phone that is a choice the person
- * made, so it is said before they give it their email.
+ * The server named on the sign-up screen, in the phone and desktop apps only —
+ * an account is created on one specific server, and there that is a choice the
+ * person made, so it is said before they give it their email.
  */
 export function NativeServerNote(): React.JSX.Element | null {
-  const native = useIsNative();
+  const native = useIsTokenShell();
   const { ready } = useApiOrigin();
   const t = useT("shell");
   if (!native) return null;

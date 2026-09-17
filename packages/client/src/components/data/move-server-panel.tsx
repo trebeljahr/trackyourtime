@@ -45,7 +45,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { canDownloadFiles } from "@/components/reports/export-menu";
-import { useIsNative } from "@/hooks/use-is-native";
+import { useIsTokenShell } from "@/hooks/use-shell";
+import { clientId as shellClientId, shellTrustedOrigins } from "@/lib/shell";
 import { getAbsoluteApiOrigin } from "@/lib/api-origin";
 import { downloadBlob } from "@/lib/download";
 import {
@@ -138,14 +139,16 @@ export function MoveServerPanel(): React.JSX.Element {
 }
 
 function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
-  const native = useIsNative();
+  const native = useIsTokenShell();
   const t = useT("settings");
   const ts = useT("shell");
   const tc = useT("common");
   const utils = trpc.useUtils();
   const currentOrigin = getAbsoluteApiOrigin();
   const here = serverLabel(currentOrigin);
-  const clientId: ClientId = native ? "trackyourtime-mobile" : "web";
+  // Read after mount (`native` is false during hydration), so a shell names
+  // itself on the target server and the web app stays "web".
+  const clientId: ClientId = native ? shellClientId() : "web";
 
   const [step, setStep] = React.useState<Step>({ kind: "target" });
   const [error, setError] = React.useState<string | null>(null);
@@ -231,7 +234,12 @@ function MoveServerDialog({ onClose }: { onClose: () => void }): React.JSX.Eleme
       }
       if (result.server.originTrusted === false) {
         if (native) {
-          setError(t("moveServer.untrustedApp", { host: serverHost(origin) }));
+          setError(
+            t("moveServer.untrustedApp", {
+              host: serverHost(origin),
+              origins: shellTrustedOrigins(),
+            }),
+          );
           return;
         }
         setStep({ kind: "file", server: result.server, reason: "untrusted" });
