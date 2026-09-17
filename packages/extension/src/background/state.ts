@@ -28,7 +28,12 @@ import type {
   ServerCompatibility,
 } from "../lib/messaging";
 import { setActivityScope } from "./activity/capture";
-import { hasServerAccess } from "../lib/server-access";
+import {
+  isLivePendingDeviceAuth,
+  loadDeviceSignInError,
+  loadPendingDeviceAuth,
+} from "../lib/device-auth-store";
+import { attemptPendingDeviceSignIn } from "./device-sign-in";
 import { fetchClients, fetchProjects, fetchTags, fetchTasks } from "./catalog";
 import {
   cachedEntryPage,
@@ -41,7 +46,7 @@ import {
   ensureReady,
   ensureSyncConnected,
   entriesAreStale,
-  forgetSession,
+  forgetRejectedSession,
   getActiveView,
   getCachedDescriptions,
   getCachedDevices,
@@ -68,6 +73,7 @@ import {
   peekRunning,
   queuedRowCount,
   resolveEmail,
+  resolveOriginTrusted,
   resolveRunning,
   resolveSettings,
   resolveWebUrl,
@@ -89,12 +95,12 @@ const QUICK_START_LIMIT = 5;
  * What every snapshot says about the server itself, signed in or not.
  *
  * Kept apart from the account half because the sign-in screen needs all of
- * it: which server it is about to sign in to, whether Chrome still lets the
- * extension reach it, and how much queued work a switch would throw away.
+ * it: which server it is about to sign in to, whether that server trusts this
+ * extension's origin, and how much queued work a switch would throw away.
  */
 type ServerFacts = Pick<
   BackgroundState,
-  "apiUrl" | "webUrl" | "serverAccess" | "serverVersion" | "pendingSync" | "compatibility"
+  "apiUrl" | "webUrl" | "originTrusted" | "serverVersion" | "pendingSync" | "compatibility"
 >;
 
 /** What the level cache knows about `apiUrl`, for the version banner. */
@@ -140,7 +146,7 @@ const resolveServerFacts = async (
 ): Promise<ServerFacts> => ({
   apiUrl,
   webUrl,
-  serverAccess: await hasServerAccess(apiUrl, chrome.permissions),
+  originTrusted: await resolveOriginTrusted(apiUrl),
   serverVersion: await resolveServerVersion(apiUrl),
   pendingSync: await pendingSyncCount(),
   // After `resolveWebUrl`, whose health read records the level.
@@ -159,11 +165,33 @@ const signedOutFacts = async (
   pendingSync: await queuedRowCount(),
 });
 
+/**
+ * The popup's own device sign-in, as the sign-in screen shows it: the user
+ * code while it waits, and why the last one ended. A device authorization the
+ * web app started is not the popup's to show.
+ */
+type DeviceSignInFacts = Pick<BackgroundState, "pendingDeviceAuth" | "deviceSignInError">;
+
+const resolveDeviceSignIn = async (apiUrl: string): Promise<DeviceSignInFacts> => {
+  const pending = await loadPendingDeviceAuth();
+  return {
+    pendingDeviceAuth:
+      pending !== null &&
+      pending.purpose === "manual" &&
+      isLivePendingDeviceAuth(pending, apiUrl, Date.now())
+        ? { userCode: pending.userCode, expiresAt: pending.expiresAt }
+        : null,
+    deviceSignInError: await loadDeviceSignInError(),
+  };
+};
+
 const signedOutState = (
   facts: ServerFacts,
   activity: ActivitySnapshot,
+  device: DeviceSignInFacts = { pendingDeviceAuth: null, deviceSignInError: null },
 ): BackgroundState => ({
   ...facts,
+  ...device,
   signedIn: false,
   sessionSource: null,
   email: null,
@@ -244,16 +272,27 @@ export const fetchTodaySec = async (
 };
 
 export async function buildState(): Promise<BackgroundState> {
-  const current = await ensureReady();
+  let current = await ensureReady();
   // Resolved even when signed out: "Open Track Your Time" is exactly what someone
   // with no session reaches for, so the menu must work before sign-in.
   const webUrl = await resolveWebUrl();
   if (!current.session) {
+    // The popup opening is one of the wake-ups a device sign-in finishes on:
+    // the approval may have landed while the worker was stopped.
+    const pending = await loadPendingDeviceAuth();
+    if (pending !== null) {
+      await attemptPendingDeviceSignIn().catch(() => null);
+      current = await ensureReady();
+    }
+  }
+  if (!current.session) {
     return signedOutState(
       await signedOutFacts(current.apiUrl, webUrl),
       await resolveActivitySnapshot("tracker"),
+      await resolveDeviceSignIn(current.apiUrl),
     );
   }
+  const session = current.session;
 
   // Opening the popup is the moment someone is looking at the status, so it is
   // the moment a dead socket should be retried — waiting up to 30 seconds for
@@ -326,8 +365,8 @@ export async function buildState(): Promise<BackgroundState> {
   // `localRead`, not `softRead`: `resolveSettings` swallows its own failure and
   // answers null, so wrapping it in the reachability probe would report the
   // server as answering on every failure. Read before the parallel batch
-  // because it is what names the user for a session borrowed from the web
-  // app, and the day total counts only that user's time.
+  // because it is what names the user for a session whose record has no user,
+  // and the day total counts only that user's time.
   const settings = await localRead(resolveSettings, getCachedSettings());
   const userId = getKnownUserId();
   const [
@@ -341,7 +380,7 @@ export async function buildState(): Promise<BackgroundState> {
     recents,
     idle,
   ] = await Promise.all([
-    localRead(resolveEmail, current.session.email),
+    localRead(resolveEmail, session.email),
     softRead(() => fetchProjects(current.api), getCachedProjects() ?? []),
     softRead(() => fetchClients(current.api), getCachedClients() ?? []),
     softRead(() => fetchTags(current.api), getCachedTags() ?? []),
@@ -383,9 +422,9 @@ export async function buildState(): Promise<BackgroundState> {
   if (unauthorized) {
     // The token was revoked from Settings → Devices, or it simply expired.
     // Clearing it locally is what makes the popup offer sign-in again instead
-    // of looping on an error the user cannot act on. The web app's cookie is
-    // left alone: an expired token is not a request to sign the browser out.
-    await forgetSession();
+    // of looping on an error the user cannot act on. No sign-out marker: an
+    // expired token is not a request to sign the web app out.
+    await forgetRejectedSession();
     return signedOutState(
       await signedOutFacts(current.apiUrl, webUrl),
       await resolveActivitySnapshot("tracker"),
@@ -396,6 +435,8 @@ export async function buildState(): Promise<BackgroundState> {
     ...(await resolveServerFacts(current.apiUrl, webUrl)),
     signedIn: true,
     sessionSource: current.sessionSource,
+    pendingDeviceAuth: null,
+    deviceSignInError: null,
     email,
     running,
     projects,

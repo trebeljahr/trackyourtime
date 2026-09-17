@@ -20,6 +20,11 @@ export const popup: Translation<typeof source> = {
       title: "{count, plural, one {# Änderung wartet} other {# Änderungen warten}} auf ein Server-Update",
       hint: "Dein Server ist älter als diese App. Diese Änderungen werden gesendet, sobald er aktualisiert ist.",
     },
+    otherAccount: {
+      title: "{count, plural, one {# Änderung} other {# Änderungen}} von einem anderen Konto",
+      hint: "Ein anderes Konto hat diese Änderungen in diesem Browser in die Warteschlange gestellt, bevor es sich abgemeldet hat. Sie werden erst gesendet, wenn sich dieses Konto hier wieder anmeldet. Oder verwirf sie hier.",
+      workspace: "den Arbeitsbereich eines anderen Kontos",
+    },
     discardHintWaiting: "Damit löschst du Arbeit, die kein Server erhalten hat. Sie lässt sich nicht wiederherstellen.",
     leftWorkspace: "einen verlassenen Arbeitsbereich",
     untitled: "(ohne Beschreibung)",
@@ -95,7 +100,7 @@ export const popup: Translation<typeof source> = {
     invalidEmail: "Das sieht nicht nach einer E-Mail-Adresse aus.",
     emailNotVerified: "Bestätige deine E-Mail-Adresse, bevor du dich anmeldest.",
     twoFactorUnsupported:
-      "Dieses Konto nutzt Zwei-Faktor-Authentifizierung, und die kann die Erweiterung nicht abschließen. Melde dich zuerst in diesem Browser in der Web-App an – die Erweiterung nutzt dann diese Sitzung.",
+      "Dieses Konto nutzt Zwei-Faktor-Authentifizierung. Nutze „Mit der Web-App anmelden“.",
     noFetch: "Dieser Browser konnte die Anfrage nicht senden.",
     notSignedIn: "Melde dich zuerst an.",
     stillSyncing: "Dieser Eintrag ist noch nicht beim Server angekommen. Versuch es gleich noch einmal.",
@@ -115,10 +120,13 @@ export const popup: Translation<typeof source> = {
     activityUnavailable:
       "Die Aktivitätserfassung hat noch kein Konto, dem sie etwas zuordnen kann. Versuch es gleich noch einmal.",
     suggestionTracked: "Diese Zeit ist schon erfasst oder ausgeblendet.",
-    serverAccessMissing:
-      "Chrome hat der Erweiterung keinen Zugriff auf {server} gegeben, deshalb kann sie diesen Server nicht erreichen.",
-    serverAccessRefused:
-      "Chrome hat der Erweiterung keinen Zugriff auf {server} gegeben, deshalb kann sie diesen Server nicht erreichen.",
+    originNotTrusted:
+      "{server} nimmt keine Anfragen von dieser Erweiterung an. Bitte den Admin, TRUST_STORE_APPS=true zu setzen oder {origin} zu TRUSTED_ORIGINS hinzuzufügen.",
+    deviceUrlInvalid:
+      "Der Server hat eine Bestätigungsseite geschickt, die die Erweiterung nicht öffnet. Die Webadresse des Servers muss https:// verwenden.",
+    deviceDenied: "Die Anmeldung wurde in der Web-App abgelehnt.",
+    deviceExpired: "Der Code ist abgelaufen, bevor ihn jemand bestätigt hat. Starte neu.",
+    deviceFailed: "Die Anmeldung wurde nicht abgeschlossen. Starte neu.",
     serverUnreachable: "{server} ist nicht erreichbar. Prüfe die Adresse und ob der Server läuft.",
     notTrackYourTime:
       "{server} hat geantwortet, ist aber kein Track-Your-Time-Server. Gib die Adresse ein, unter der du Track Your Time öffnest.",
@@ -171,10 +179,6 @@ export const popup: Translation<typeof source> = {
     discardAndSwitch: "Verwerfen und wechseln",
     unsentHint:
       "{count, plural, one {# Änderung hat {server} noch nicht erreicht. Ein Serverwechsel meldet dich ab, und die Erweiterung verwirft diese Änderung.} other {# Änderungen haben {server} noch nicht erreicht. Ein Serverwechsel meldet dich ab, und die Erweiterung verwirft diese Änderungen.}}",
-    accessLost: "Chrome lässt die Erweiterung {host} nicht mehr erreichen.",
-    accessLostRefused:
-      "Chrome lässt die Erweiterung {host} nicht mehr erreichen. Der Zugriff wurde nicht erlaubt, deshalb kann die Erweiterung den Server weiterhin nicht erreichen.",
-    allowAccess: "Zugriff erlauben",
   },
   suggestions: {
     title: "Vorschläge",
@@ -265,6 +269,14 @@ export const popup: Translation<typeof source> = {
     signingInTo: "Anmeldung bei",
     changeServer: "Server wechseln",
     keepServer: "Abbrechen",
+    or: "oder",
+    withWebApp: "Mit der Web-App anmelden",
+    withWebAppHint: "Öffnet Track Your Time in einem neuen Tab. Funktioniert mit Zwei-Faktor-Authentifizierung.",
+    deviceTitle: "Diesen Browser bestätigen",
+    deviceWaiting: "Bestätige die Anmeldung im geöffneten Tab. Dort steht dieser Code:",
+    deviceCancel: "Abbrechen",
+    openWebApp: "Track Your Time öffnen",
+    openWebAppHint: "Dort schon angemeldet? Die Erweiterung meldet sich an, sobald die Seite geöffnet ist.",
   },
   section: {
     saved: "Gespeichert",
@@ -458,25 +470,27 @@ export const popup: Translation<typeof source> = {
     signOutBrowserTitle: "Diesen Browser abmelden?",
     signOutDeviceTitle: "Dieses Gerät abmelden?",
     sharedSessionHint:
-      "Diese Sitzung teilt sich die Erweiterung mit der Web-App. Wenn du dich hier abmeldest, wird Track Your Time auch in diesem Browser abgemeldet.",
+      "Über die Web-App angemeldet. Wenn du dich hier abmeldest, wirst du auch bei Track Your Time in diesem Browser abgemeldet, sobald du es das nächste Mal öffnest.",
     signOutBrowserHint: "Die Erweiterung vergisst ihre Sitzung, und du meldest dich neu an.",
     signOutDeviceHint:
       "{name} synchronisiert sofort nicht mehr und muss sich neu anmelden. Nichts, was dort schon erfasst wurde, geht verloren.",
     signOutOthers: "Andere Geräte abmelden",
     signOutOthersTitle: "Alle anderen Geräte abmelden?",
     signOutOthersHint: "Dieser Browser bleibt angemeldet. Alle anderen Geräte müssen sich neu anmelden.",
+    signOutOthersSharedHint:
+      "Alle anderen Geräte müssen sich neu anmelden, auch Track Your Time in diesem Browser. Die Erweiterung ist darüber angemeldet und wird deshalb ebenfalls abgemeldet.",
     signOutOthersConfirm: "Abmelden",
   },
   account: {
     signedInAs: "Angemeldet als",
     appVersion: "Erweiterung, Version {version}",
     sharedSession:
-      "Mit der Sitzung der Web-App angemeldet – wenn du dich hier abmeldest, wird Track Your Time auch in diesem Browser abgemeldet.",
+      "Über die Web-App in diesem Browser angemeldet. Wenn du dich in der Web-App abmeldest, wird auch die Erweiterung abgemeldet.",
     changeServer: "Server wechseln …",
     keepServer: "Diesen Server behalten",
     signOutTitle: "Abmelden?",
     signOutSharedHint:
-      "Diese Sitzung teilt sich die Erweiterung mit der Web-App, deshalb wird Track Your Time auch in diesem Browser abgemeldet.",
+      "Wenn du dich hier abmeldest, wirst du auch bei Track Your Time in diesem Browser abgemeldet, sobald du es das nächste Mal öffnest.",
     signOutHint: "Alles bereits Erfasste bleibt erhalten. Melde dich wieder an, um weiter zu erfassen.",
   },
 };

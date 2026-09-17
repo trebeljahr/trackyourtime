@@ -12,6 +12,7 @@
  */
 import {
   ApiError,
+  checkServer,
   classifyReplayOutcome,
   CLIENT_TOO_OLD,
   createApiClient,
@@ -31,8 +32,10 @@ import {
   flushVerdictFor,
   heldReasons,
   holdBlocksReplay,
+  isForeignTo,
   isHeldByWorkspace,
   isQueuedOn,
+  isReplayableBy,
   isReplayableIn,
   OFFLINE_QUEUE_STORAGE_KEY,
   resolveActiveWorkspaceId,
@@ -48,7 +51,6 @@ import {
   withWorkspaceId,
   type OfflineMutation,
   type QueuedMutation,
-  type QueuedMutationSummary,
   type WorkspaceSummary,
   type ApiClient,
   type Client,
@@ -74,24 +76,32 @@ import {
   type ResolvedSettings,
   type VersionedSpec,
   readHealthVersion,
+  sameServerOrigin,
+  signOutSession,
 } from "@starter/core";
 import { APP_VERSION } from "../lib/app-version";
 import { chromeStorage, localStorageArea } from "../lib/chrome-storage";
-import type { PopupView, SessionSource } from "../lib/messaging";
+import type { HeldSyncRow, PopupView } from "../lib/messaging";
 import {
   DEFAULT_API_URL,
   EXTENSION_CLIENT_ID,
   loadApiUrl,
   loadServerInfo,
+  saveServerInfo,
   syncUrlFrom,
 } from "../lib/config";
+import {
+  clearPendingDeviceAuth,
+  DEVICE_AUTH_ALARM,
+} from "../lib/device-auth-store";
 import {
   clearSession,
   loadSession,
   saveSession,
+  type SessionInput,
+  type SessionSource,
   type StoredSession,
 } from "../lib/session";
-import { clearWebSessionCookie, readWebSessionToken } from "../lib/web-session";
 import {
   clearWorkspaceChoice,
   loadWorkspaceChoice,
@@ -112,9 +122,10 @@ export type Runtime = {
   apiUrl: string;
   session: StoredSession | null;
   /**
-   * Whether `session` was adopted from the web app's cookie or created by this
-   * extension's own password sign-in. It decides what sign-out has to tear
-   * down, and it is never persisted — it is re-derived on every rebuild.
+   * How `session` came to be (`lib/session.ts`): linked from the web app, or
+   * signed in to on purpose with a password or the device flow. It decides
+   * whether the web app's sign-in and sign-out reach it. Stored with the
+   * session, so a rebuilt worker knows it.
    */
   sessionSource: SessionSource | null;
   api: ApiClient;
@@ -260,9 +271,9 @@ let cachedWebUrl: string | null = null;
 let cachedServerInfo: ServerInfo | null = null;
 
 /**
- * The signed-in address. A password sign-in returns it, but a session adopted
- * from the web app's cookie carries only the token — so for that path it has
- * to be asked for, once, rather than left blank in the popup's footer.
+ * The signed-in address. A password sign-in returns it and the device flow
+ * stores it from `get-session`; a session whose record has none (a lookup that
+ * failed at sign-in) asks once rather than leaving the popup's footer blank.
  */
 let cachedEmail: string | null = null;
 
@@ -271,8 +282,8 @@ let queue: OfflineQueue | null = null;
 /**
  * Who this worker is signed in as, once anything has said.
  *
- * A password sign-in knows at once; a session borrowed from the web app's
- * cookie carries only a token, so this is filled from `settings.get`. Kept
+ * A stored session usually knows at once; one whose user lookup failed at
+ * sign-in carries only a token, so this is filled from `settings.get`. Kept
  * apart from `cachedSettings`, which a workspace switch or a reconnect drops:
  * the person does not change when the workspace does, and a socket event
  * arriving in that gap still has to be told apart from a colleague's.
@@ -465,11 +476,14 @@ export async function enqueueOffline<K extends OfflineOp>(
   //
   // And with the workspace it was made in, so a switch before the network
   // returns cannot file it somewhere else — `flushQueue` replays it there.
+  //
+  // And with the account that made it. The queue survives a web-app sign-out
+  // and a web-app account switch, so the next account must not replay it.
   const { apiUrl } = await ensureReady();
   await getOfflineQueue().enqueue(
     op,
     payload,
-    undefined,
+    getKnownUserId() ?? undefined,
     apiUrl,
     (workspaceId === undefined ? getActiveWorkspaceId() : workspaceId) ??
       undefined,
@@ -799,21 +813,8 @@ const buildRuntime = async (): Promise<Runtime> => {
     loadWorkspaceChoice(),
   ]);
 
-  // The web app's cookie wins when the extension has nothing of its own: that
-  // is what makes signing in on the web sign the toolbar in too, with no form
-  // and no second credential. A password session, once created, is kept —
-  // re-adopting the cookie under it would silently switch which session the
-  // user is on.
-  let session = stored;
-  let sessionSource: SessionSource | null = stored ? "password" : null;
-
-  if (!session) {
-    const webToken = await readWebSessionToken(apiUrl);
-    if (webToken !== null) {
-      session = { token: webToken, userId: null, email: null };
-      sessionSource = "web";
-    }
-  }
+  const session = stored;
+  const sessionSource: SessionSource | null = stored?.source ?? null;
 
   const next: Runtime = {
     apiUrl,
@@ -1187,7 +1188,73 @@ export async function ensureSyncConnected(): Promise<void> {
  */
 export const noteServerReachable = (reachable: boolean): void => {
   serverReachable = reachable;
+  if (reachable) {
+    noteOriginTrusted();
+    return;
+  }
+  void probeOriginTrust().catch(() => undefined);
 };
+
+// ── is this extension's origin trusted? ──────────────────────────────
+
+/**
+ * The floor between two {@link probeOriginTrust} health checks.
+ *
+ * A popup open on a dead network fails a read every three seconds; one health
+ * check a minute is plenty to tell "offline" apart from "not trusted".
+ */
+const ORIGIN_PROBE_INTERVAL_MS = 60_000;
+let lastOriginProbeAt = 0;
+
+/**
+ * Whether the server trusts this extension's origin, as last reported.
+ *
+ * Every request the extension makes is a CORS request, and a server whose
+ * trust list lacks `chrome-extension://<id>` refuses them in a way `fetch`
+ * reports as a bare `TypeError` — exactly what a dead network looks like. The
+ * offline queue would then wait forever behind a "no connection" that is
+ * really a setting. So a transport failure re-asks `/api/health`, which
+ * answers any origin (`Access-Control-Allow-Origin: *`) and says
+ * `originTrusted` for the one asking.
+ */
+const probeOriginTrust = async (): Promise<void> => {
+  const now = Date.now();
+  if (now - lastOriginProbeAt < ORIGIN_PROBE_INTERVAL_MS) return;
+  lastOriginProbeAt = now;
+  const current = await ensureReady();
+  const check = await checkServer(current.apiUrl);
+  // Unreachable, or not answering as Track Your Time: that IS offline, and
+  // says nothing about trust.
+  if (!check.ok) return;
+  if (!sameServerOrigin(current.apiUrl, runtime?.apiUrl ?? "")) return;
+  cachedServerInfo = check.server;
+  if (check.server.webUrl !== null) cachedWebUrl = check.server.webUrl;
+  await saveServerInfo(check.server);
+};
+
+/**
+ * A request just got through, which no untrusted origin's does: a stored
+ * `originTrusted: false` from before the server was fixed is no longer true.
+ */
+const noteOriginTrusted = (): void => {
+  if (cachedServerInfo?.originTrusted !== false) return;
+  cachedServerInfo = { ...cachedServerInfo, originTrusted: true };
+  void saveServerInfo(cachedServerInfo).catch(() => undefined);
+};
+
+/**
+ * `false` when the server said it does not trust this extension's origin,
+ * `true` when it said it does, `null` when nothing has said (an older server,
+ * or no answer yet). Read from the live health answer, else from the check
+ * that chose the server — but only if either is about the server in use.
+ */
+export async function resolveOriginTrusted(apiUrl: string): Promise<boolean | null> {
+  const live = cachedServerInfo;
+  if (live !== null && sameServerOrigin(live.origin, apiUrl)) return live.originTrusted;
+  const stored = await loadServerInfo().catch(() => null);
+  if (stored !== null && sameServerOrigin(stored.origin, apiUrl)) return stored.originTrusted;
+  return null;
+}
 
 export const isServerReachable = (): boolean => serverReachable;
 
@@ -1202,19 +1269,35 @@ const isLeftWorkspaceRow = (row: QueuedMutation): boolean =>
   isHeldByWorkspace(row, workspaceChoice.workspaces);
 
 /**
- * Every held row and why: a left workspace (`hold: null` in the summary), or
- * a `HoldReason` from core — written by a newer build, or needing a procedure
- * the server does not have — with the temp-id chain that depends on it.
+ * True when a row was queued by a different account than the one signed in.
+ *
+ * The queue outlives a web-app sign-out and a web-app account switch, so the
+ * rows of the account before are still on disk under the next one. They are
+ * held — never replayed under somebody else's token, never dropped on their
+ * own. Nobody known yet means nothing is foreign: the next read names the
+ * user, and nothing is flushed before then.
+ */
+const isOtherAccountRow = (row: QueuedMutation): boolean => {
+  const me = getKnownUserId();
+  return me !== null && isForeignTo(row, me);
+};
+
+/**
+ * Every held row and why: another account's (`other-account`), a left
+ * workspace's (`hold: null` in the summary), or a `HoldReason` from core —
+ * written by a newer build, or needing a procedure the server does not have —
+ * with the temp-id chain that depends on it.
  */
 const heldRowsIn = (
   rows: readonly QueuedMutation[],
-): Map<string, QueuedMutationSummary["hold"]> => {
-  const held = new Map<string, QueuedMutationSummary["hold"]>();
+): Map<string, HeldSyncRow["hold"]> => {
+  const held = new Map<string, HeldSyncRow["hold"]>();
+  const own = rows.filter((row) => !isOtherAccountRow(row));
   // A `server-too-old` hold ends the moment the server reports a level high
   // enough — the same test the flush's filter makes — so a row about to be
   // sent is not listed as held, nor left out of the pending count.
   const serverApiLevel = runtime === null ? null : serverApiLevelOf(runtime.apiUrl);
-  const current = rows
+  const current = own
     .filter((row) => !isLeftWorkspaceRow(row))
     .map((row) => {
       if (row.hold?.reason !== "server-too-old" || serverApiLevel === null) return row;
@@ -1225,7 +1308,8 @@ const heldRowsIn = (
   for (const [id, reason] of heldReasons(current)) {
     held.set(id, reason);
   }
-  for (const row of rows) if (isLeftWorkspaceRow(row)) held.set(row.id, null);
+  for (const row of own) if (isLeftWorkspaceRow(row)) held.set(row.id, null);
+  for (const row of rows) if (isOtherAccountRow(row)) held.set(row.id, "other-account");
   return held;
 };
 
@@ -1249,11 +1333,10 @@ export const queuedRowCount = (): Promise<number> => getOfflineQueue().size();
 
 /**
  * Rows held here, described by name: `hold` null for a left workspace's row,
- * else why it cannot be sent yet.
+ * `other-account` for a row another account queued, else why it cannot be
+ * sent yet.
  */
-export type HeldQueuedRow = QueuedMutationSummary;
-
-export async function listHeldRows(): Promise<HeldQueuedRow[]> {
+export async function listHeldRows(): Promise<HeldSyncRow[]> {
   const rows = await getOfflineQueue().list();
   const held = heldRowsIn(rows);
   return rows
@@ -1491,8 +1574,8 @@ export const invalidateRecents = (): void => {
 /**
  * The signed-in address, from better-auth's own session endpoint.
  *
- * Only ever needed for a cookie-adopted session; a password sign-in already
- * knows it. Returns null rather than throwing — a footer with no address is a
+ * Only needed for a session whose record has no address; a password or
+ * device sign-in already stored one. Returns null rather than throwing — a footer with no address is a
  * cosmetic loss, not a reason to fail the snapshot.
  */
 export async function resolveEmail(): Promise<string | null> {
@@ -1622,40 +1705,75 @@ export async function resolveRunning(): Promise<TimeEntry | null> {
 
 // ── session lifecycle ────────────────────────────────────────────────
 
-export async function adoptSession(session: StoredSession): Promise<void> {
+export async function adoptSession(session: SessionInput): Promise<void> {
   await saveSession(session);
   await reload();
 }
 
-/**
- * React to the web app's session cookie appearing or disappearing.
- *
- * Appearing signs the toolbar in, but only if it has no password session of
- * its own to displace. Disappearing signs it out — but only when the session
- * it is holding IS the web one, or signing out of the web app would also kick
- * an unrelated password session that is still perfectly valid.
- */
-export async function onWebSessionChanged(token: string | null): Promise<void> {
-  const current = await ensureReady();
-
-  if (token === null) {
-    if (current.sessionSource !== "web") return;
-    await clearSession();
-    await reload();
-    await renderBadge(null);
-    return;
+/** Revoke `session` on `apiUrl`, best effort. */
+const revokeOnServer = async (apiUrl: string, token: string): Promise<void> => {
+  try {
+    await signOutSession(
+      { baseUrl: apiUrl, clientId: EXTENSION_CLIENT_ID, clientVersion: APP_VERSION },
+      token,
+    );
+  } catch {
+    // Best effort: dropping the local copy is what signs this browser out.
   }
+};
 
-  if (current.sessionSource === "password") return;
-  if (current.session?.token === token) return;
-
+/**
+ * Leave a session that was linked to the web app, KEEPING the offline queue.
+ *
+ * Shared by a web-app sign-out and a web-app account switch. Both are the web
+ * app changing its mind about who is signed in, which says nothing about the
+ * work queued here: those rows are owner-stamped and stay held for their
+ * account. What goes is everything that describes the session being left —
+ * the token (revoked on the server, since it is a session row of the
+ * extension's own), the optimistic timer and rows, the idle watcher's claim
+ * and the workspace choice. Activity capture needs nothing: its scope is
+ * per account, and the next account's scope clears the rows of every other.
+ */
+const leaveLinkedSession = async (current: Runtime): Promise<void> => {
+  // While the token still works, so what this account queued reaches its
+  // own account rather than waiting to be held.
+  await flushQueue().catch(() => undefined);
+  if (current.session !== null) {
+    await revokeOnServer(current.apiUrl, current.session.token);
+  }
+  await forgetOptimisticRunning();
+  await clearOptimisticEntries();
+  await resetIdleWatcher();
+  await clearWorkspaceChoice();
+  workspaceChoice = emptyWorkspaceChoice();
   await clearSession();
   await reload();
-  await refreshBadgeFromCache();
+};
+
+/**
+ * The web app signed out, and the extension's session was linked to it: sign
+ * the extension out too, as the shared cookie used to. A session signed in to
+ * on purpose (`password`, `device`) is left alone, as it always was.
+ */
+export async function signOutLinkedWebSession(): Promise<boolean> {
+  const current = await ensureReady();
+  if (current.session === null || current.sessionSource !== "web") return false;
+  await leaveLinkedSession(current);
+  await renderBadge(null);
+  return true;
+}
+
+/**
+ * The web app switched accounts while the extension was linked to the old
+ * one. The old session is left like a web sign-out; linking the new account
+ * is the bridge's next step.
+ */
+export async function switchLinkedAccount(): Promise<boolean> {
+  return signOutLinkedWebSession();
 }
 
 /** Repaint the badge from whatever the rebuilt runtime now knows. */
-const refreshBadgeFromCache = async (): Promise<void> => {
+export const refreshBadgeFromCache = async (): Promise<void> => {
   try {
     await renderBadge(await resolveRunning());
   } catch {
@@ -1670,9 +1788,7 @@ const refreshBadgeFromCache = async (): Promise<void> => {
  * In both cases the token is worthless, and keeping it would only produce more
  * 401s on every subsequent poll.
  */
-export async function forgetSession(
-  options: { clearWebCookie?: boolean } = {},
-): Promise<void> {
+export async function forgetSession(): Promise<void> {
   // The queue is only meaningful under the token that authorized it. Replaying
   // one account's queued start under the next account's token would write that
   // work into the wrong account, and `flushQueue` runs on sign-in, on bootstrap
@@ -1696,15 +1812,42 @@ export async function forgetSession(
   await clearWorkspaceChoice();
   workspaceChoice = emptyWorkspaceChoice();
 
-  // Deliberate on an explicit sign-out: signing out is synced, so the web app's
-  // cookie goes too. NOT done when the server merely rejected the token — that
-  // is an expired session, and deleting the cookie would sign the web app out
-  // of a session it may still be able to refresh.
-  if (options.clearWebCookie === true) {
-    const current = runtime;
-    if (current) await clearWebSessionCookie(current.apiUrl);
+  // A device authorization still waiting would sign straight back in.
+  await clearPendingDeviceAuth();
+  try {
+    await chrome.alarms.clear(DEVICE_AUTH_ALARM);
+  } catch {
+    /* no alarm, or no alarms API in this context */
   }
 
+  await clearSession();
+  await reload();
+  await renderBadge(null);
+}
+
+/**
+ * The server refused the stored token (a 401).
+ *
+ * A session linked to the web app is dropped the way a web sign-out drops it —
+ * KEEPING the offline queue — because a linked session is now a row of its
+ * own that the web app's "Sign out other devices" or a password change
+ * revokes, and the bridge links the extension straight back in. Clearing the
+ * queue there would lose tracked time over something that was never a
+ * sign-out of this browser. The rows are owner-stamped, so no other account
+ * replays them. Every other session is forgotten whole, as before.
+ */
+export async function forgetRejectedSession(): Promise<void> {
+  const current = await ensureReady();
+  if (current.session === null || current.sessionSource !== "web") {
+    await forgetSession();
+    return;
+  }
+  // The token is dead: nothing to flush with and nothing to revoke.
+  await forgetOptimisticRunning();
+  await clearOptimisticEntries();
+  await resetIdleWatcher();
+  await clearWorkspaceChoice();
+  workspaceChoice = emptyWorkspaceChoice();
   await clearSession();
   await reload();
   await renderBadge(null);
@@ -1776,6 +1919,15 @@ export async function flushQueue(): Promise<number> {
   const levels = getServerLevels();
   let serverApiLevel = levels.apiLevel(current.apiUrl);
   let missingProcedure = false;
+
+  // Whose rows these may be. Nobody known means nothing is sent: a row
+  // replayed under the wrong account files one person's time in another's
+  // workspace. Rows from before the owner stamp are this account's — the
+  // queue is cleared on every explicit sign-out, so no other account can have
+  // left unstamped rows behind.
+  const me = getKnownUserId() ?? (await resolveSettings())?.userId ?? null;
+  if (me === null) return pendingSyncCount();
+  await offline.adoptUnowned(me, (row) => isQueuedOn(row, current.apiUrl, DEFAULT_API_URL));
 
   const result = await offline.flush(
     async (row) => {
@@ -1850,6 +2002,8 @@ export async function flushQueue(): Promise<number> {
       // never meant for.
       filter: (row) =>
         isQueuedOn(row, current.apiUrl, DEFAULT_API_URL) &&
+        // Another account's row is held for that account.
+        isReplayableBy(row, me) &&
         // A row for a workspace this person has left is held in place: not
         // replayed there, not replayed anywhere else, not dropped.
         isReplayableIn(row, memberIds) &&

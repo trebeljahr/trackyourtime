@@ -3,10 +3,9 @@
  * saw.
  *
  * The extension's OWN choice, in `chrome.storage.local`. It never follows the
- * session's `activeOrganizationId`, and that is the point: the toolbar often
- * borrows the web app's session cookie, and the session holds ONE active
- * workspace for everything signed in with it. A switch in the web app would
- * otherwise silently retarget the next start pressed here. Every request
+ * session's `activeOrganizationId`, and that is the point: the session holds
+ * ONE active workspace for everything signed in with it, and a switch made
+ * elsewhere would otherwise silently retarget the next start pressed here. Every request
  * names the workspace explicitly instead (`createApiClient`'s `workspaceId`
  * getter in `background/runtime.ts`).
  *

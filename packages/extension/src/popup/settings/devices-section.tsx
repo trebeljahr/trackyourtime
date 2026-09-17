@@ -208,7 +208,7 @@ export function DevicesSection({
       {confirm !== null && confirm.kind === "others" ? (
         <ConfirmPanel
           title={t("devices.signOutOthersTitle")}
-          hint={t("devices.signOutOthersHint")}
+          hint={t(sharedSession ? "devices.signOutOthersSharedHint" : "devices.signOutOthersHint")}
           confirmLabel={t("devices.signOutOthersConfirm")}
           danger
           busy={busy}

@@ -22,6 +22,17 @@ import type { PopupT } from "../i18n/use-t";
 import type { ErrorDetails } from "../lib/messaging";
 
 import { serverHost, TWO_FACTOR_UNSUPPORTED, type ServerInputProblem } from "@starter/core";
+import type { DeviceSignInError } from "../lib/messaging";
+
+/**
+ * This extension's own origin, as a server admin types it into
+ * TRUSTED_ORIGINS. Read at call time, so a test without `chrome` still gets a
+ * sentence.
+ */
+export const extensionOrigin = (): string => {
+  const id = (globalThis as { chrome?: { runtime?: { id?: unknown } } }).chrome?.runtime?.id;
+  return typeof id === "string" && id !== "" ? `chrome-extension://${id}` : "chrome-extension://…";
+};
 
 const CREDENTIAL_CODES: ReadonlySet<string> = new Set([
   "INVALID_EMAIL_OR_PASSWORD",
@@ -68,10 +79,10 @@ const fixedMessage = (code: string, t: PopupT, server: string): string | null =>
       return t("errors.activityPermission");
     case "SUGGESTION_ALREADY_TRACKED":
       return t("errors.suggestionTracked");
-    case "SERVER_ACCESS_MISSING":
-      return t("errors.serverAccessMissing", { server });
-    case "SERVER_ACCESS_REFUSED":
-      return t("errors.serverAccessRefused", { server });
+    case "ORIGIN_NOT_TRUSTED":
+      return t("errors.originNotTrusted", { server, origin: extensionOrigin() });
+    case "DEVICE_URL_INVALID":
+      return t("errors.deviceUrlInvalid");
     case "SERVER_UNREACHABLE":
       return t("errors.serverUnreachable", { server });
     case "NOT_TRACKYOURTIME":
@@ -187,5 +198,17 @@ export function describeServerInput(
       }
       return t("errors.serverInsecure", { host });
     }
+  }
+}
+
+/** Why the popup's own device sign-in ended, in the popup's language. */
+export function describeDeviceSignInError(error: DeviceSignInError, t: PopupT): string {
+  switch (error) {
+    case "denied":
+      return t("errors.deviceDenied");
+    case "expired":
+      return t("errors.deviceExpired");
+    case "failed":
+      return t("errors.deviceFailed");
   }
 }

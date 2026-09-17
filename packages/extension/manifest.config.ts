@@ -11,11 +11,21 @@
  *
  * The default is only where a build starts. Track Your Time can be self-hosted,
  * and the Chrome Web Store build is one bundle for everybody, so the popup lets
- * a person pick any server and asks Chrome for access to that one host at the
- * moment they pick it (`optional_host_permissions`, `src/lib/server-access.ts`).
- * The required `host_permissions` stay narrow — only the build's own default —
- * because that is the line Chrome shows at install time.
+ * a person pick any server.
+ *
+ * No build asks for host access or cookies. Every request the extension makes
+ * is an ordinary CORS request, which the server answers because the
+ * extension's `chrome-extension://<id>` origin is in its trust list
+ * (`TRUST_STORE_APPS` / `TRUSTED_ORIGINS`) — the same trust sign-in already
+ * needed. What the cookie used to do, following the web app's sign-in, is the
+ * web app ↔ extension bridge now: `externally_connectable` lets the build's
+ * first-party web origins message the extension (`src/background/bridge.ts`).
+ * That key is not a permission and shows no install warning.
  */
+import {
+  extensionBridgeMatchPatterns,
+  type ExtensionBridgeTarget,
+} from "@starter/shared/extension-bridge";
 import { STORE_EXTENSION_KEY } from "@starter/shared/store-clients";
 import rootPackage from "../../package.json" with { type: "json" };
 
@@ -34,23 +44,12 @@ export type BuildTarget = {
    */
   nameMessage: "extName" | "extNameDev";
   /**
-   * Hosts the extension may talk to from the moment it is installed. Narrow on
-   * purpose: this is the line Chrome shows the user at install time, and
-   * `https://*\/*` there reads as "every site you visit" for something that
-   * talks to exactly one server.
+   * Which web origins may message this build (`externally_connectable`), and
+   * which the worker's bridge accepts. Baked into the bundle as
+   * `VITE_BRIDGE_TARGET`, so the manifest and the runtime check cannot name
+   * two different lists.
    */
-  hostPermissions: string[];
-  /**
-   * Hosts the extension may ASK for later, one at a time, from a click.
-   *
-   * Broad because a self-hosted server can live on any name, and a manifest
-   * cannot list names nobody has chosen yet. Declaring a pattern here grants
-   * nothing: Chrome shows no warning for it at install, and the extension only
-   * ever requests the single `https://<host>/*` a person typed into the server
-   * picker. Chrome only accepts `permissions.request` for patterns covered by
-   * this list, so it is also the ceiling on what the popup can ask for.
-   */
-  optionalHostPermissions: string[];
+  bridgeTarget: ExtensionBridgeTarget;
   /**
    * The public key pinned when `EXTENSION_KEY` is not set, or undefined to let
    * the id follow the load path.
@@ -66,11 +65,8 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
     apiUrl: "http://localhost:5159",
     name: "Track Your Time (dev)",
     nameMessage: "extNameDev",
-    hostPermissions: ["http://localhost/*", "http://127.0.0.1/*"],
-    // Only https: a development build already holds both loopback hosts, and
-    // this is what lets it exercise the self-hosted path — the request, the
-    // prompt, the revocation — against a real https server.
-    optionalHostPermissions: ["https://*/*"],
+    // Any port on either loopback name: a worktree's client port is random.
+    bridgeTarget: "development",
     // No key. The dev id is derived from the load path, and `scripts/dev.mjs`
     // derives the same id to put in the dev server's TRUSTED_ORIGINS. Pinning
     // the store key here would give the dev build the store build's id — the
@@ -96,17 +92,9 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
     apiUrl: "https://api.trackyourtime.dev",
     name: "Track Your Time",
     nameMessage: "extName",
-    hostPermissions: ["https://api.trackyourtime.dev/*"],
-    // Any https host, for a self-hosted server, plus the two loopback names
-    // over plain http for someone running one on the same machine. Plain http
-    // anywhere else is refused before Chrome is ever asked
-    // (`normalizeServerInput`), because it would send the password in the
-    // clear — so no `http://*/*` here either.
-    optionalHostPermissions: [
-      "https://*/*",
-      "http://localhost/*",
-      "http://127.0.0.1/*",
-    ],
+    // Only the hosted web app. A self-hosted web app lives on a domain no
+    // manifest can list; those servers use password or device sign-in.
+    bridgeTarget: "production",
     // The Web Store key, so the id every self-hosted server trusts by default
     // (`STORE_EXTENSION_ID`) is the id this build actually gets — unpacked,
     // uploaded, or installed from the store.
@@ -200,19 +188,20 @@ export function buildManifest(
       service_worker: "background.js",
       type: "module",
     },
-    // `cookies` is what lets the extension read the web app's better-auth
-    // session and sign in without a second form — for an optional host too,
-    // once it has been granted. `idle` is the only way to learn that the
-    // person has walked away — a service worker sees no input events of its
-    // own.
-    permissions: ["storage", "alarms", "cookies", "idle"],
+    // `idle` is the only way to learn that the person has walked away — a
+    // service worker sees no input events of its own. No `cookies` and no host
+    // permissions: see the header.
+    permissions: ["storage", "alarms", "idle"],
     // Requested only when somebody turns on Settings → Activity, from that
     // click — never at install. `tabs` is what exposes a tab's URL and title
     // to activity capture, and Chrome words it as reading browsing history,
     // which nobody who has not asked for capture should be shown.
     optional_permissions: ["tabs"],
-    host_permissions: target.hostPermissions,
-    optional_host_permissions: target.optionalHostPermissions,
+    // The first-party web app may message the extension, so signing in there
+    // signs the toolbar in too. No `ids`: other extensions cannot connect.
+    externally_connectable: {
+      matches: extensionBridgeMatchPatterns(target.bridgeTarget),
+    },
     icons: {
       "16": "icons/16.png",
       "32": "icons/32.png",

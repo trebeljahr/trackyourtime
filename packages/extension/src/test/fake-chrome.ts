@@ -77,11 +77,16 @@ export function createFakeChrome() {
   const granted = new Set<string>();
   const alarms = new Map<string, chrome.alarms.Alarm>();
   const badge = { text: "" };
+  const created: string[] = [];
 
   const api = {
     runtime: {
       id: "fake-extension-id",
       onMessage: fakeEvent<(message: unknown, sender: unknown, respond: (r: unknown) => void) => boolean>(),
+      /** A page's `chrome.runtime.sendMessage(<id>, …)`; drive it with `control.sendExternal`. */
+      onMessageExternal: fakeEvent<
+        (message: unknown, sender: chrome.runtime.MessageSender, respond: (r: unknown) => void) => boolean | undefined
+      >(),
       onInstalled: fakeEvent<() => void>(),
       onStartup: fakeEvent<() => void>(),
       sendMessage: async () => undefined,
@@ -91,9 +96,13 @@ export function createFakeChrome() {
       session: storageArea(),
     },
     permissions: {
+      // API permissions only. The extension declares no host permissions, so
+      // a request that names origins is never granted.
       contains: async (request: chrome.permissions.Permissions) =>
+        (request.origins ?? []).length === 0 &&
         (request.permissions ?? []).every((permission) => granted.has(permission)),
       request: async (request: chrome.permissions.Permissions) => {
+        if ((request.origins ?? []).length > 0) return false;
         for (const permission of request.permissions ?? []) granted.add(permission);
         return true;
       },
@@ -110,6 +119,11 @@ export function createFakeChrome() {
           .filter((tab) => info.active === undefined || tab.active === info.active)
           .filter((tab) => info.windowId === undefined || tab.windowId === info.windowId)
           .map((tab) => ({ ...tab })),
+      /** Needs no permission in Chrome. Recorded in `control.created`. */
+      create: async (properties: { url?: string }) => {
+        created.push(properties.url ?? "");
+        return { id: tabs.length + created.length, windowId: 1, active: true, incognito: false };
+      },
       onActivated: fakeEvent<(info: { tabId: number; windowId: number }) => void>(),
       onUpdated: fakeEvent<(tabId: number, changeInfo: { url?: string; title?: string; status?: string }, tab: FakeTab) => void>(),
     },
@@ -140,11 +154,6 @@ export function createFakeChrome() {
       queryState: async () => "active",
       onStateChanged: fakeEvent<(state: string) => void>(),
     },
-    cookies: {
-      get: async () => null,
-      remove: async () => null,
-      onChanged: fakeEvent<(change: unknown) => void>(),
-    },
     action: {
       setBadgeText: async (details: { text: string }) => {
         badge.text = details.text;
@@ -160,6 +169,22 @@ export function createFakeChrome() {
     granted,
     alarms,
     badge,
+    /** URLs passed to `tabs.create`, in order. */
+    created,
+    /**
+     * Deliver a message from a web page, the way Chrome does for
+     * `externally_connectable`, and resolve with the reply — `undefined` when
+     * no listener answered.
+     */
+    sendExternal(message: unknown, sender: chrome.runtime.MessageSender): Promise<unknown> {
+      return new Promise((resolve) => {
+        let open = false;
+        for (const listener of api.runtime.onMessageExternal.listeners) {
+          if (listener(message, sender, resolve) === true) open = true;
+        }
+        if (!open) setTimeout(() => resolve(undefined), 0);
+      });
+    },
     /** Open (or replace) the one active tab of window 1. */
     showTab(tab: Partial<FakeTab> & { url: string }): FakeTab {
       const windowId = tab.windowId ?? 1;

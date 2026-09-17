@@ -9,6 +9,7 @@
  * therefore only a default, and the popup's server picker overrides it into
  * `chrome.storage.local`.
  */
+import type { ExtensionBridgeTarget } from "@starter/shared/extension-bridge";
 import {
   decodeVersioned,
   encodeVersioned,
@@ -41,6 +42,23 @@ const buildTimeApiUrl = ((): string => {
 })();
 
 export const DEFAULT_API_URL: string = buildTimeApiUrl;
+
+/**
+ * Which web origins this build's bridge accepts messages from, injected by
+ * vite.config.ts from the same build target the manifest's
+ * `externally_connectable` was generated from.
+ *
+ * No fallback, for the reason the API URL has none: a production bundle that
+ * silently accepted `http://localhost` would be a widened trust list nobody
+ * chose.
+ */
+export const BRIDGE_TARGET: ExtensionBridgeTarget = ((): ExtensionBridgeTarget => {
+  const configured: unknown = import.meta.env.VITE_BRIDGE_TARGET;
+  if (configured === "development" || configured === "production") return configured;
+  throw new Error(
+    "No bridge target was baked into this build — see `define` in vite.config.ts.",
+  );
+})();
 
 export const API_URL_STORAGE_KEY = "trackyourtime.api-url";
 

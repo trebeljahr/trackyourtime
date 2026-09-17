@@ -36,8 +36,10 @@ import type {
 } from "@starter/core/activity/index";
 import type { ActivitySettings } from "../background/activity/settings";
 import type { ActivityStorageProblem } from "../background/activity/store";
+import type { DeviceSignInError } from "./device-auth-store";
+import type { SessionSource } from "./session";
 
-export type { ActivityRule, ActivitySettings, ActivitySuggestion };
+export type { ActivityRule, ActivitySettings, ActivitySuggestion, DeviceSignInError, SessionSource };
 
 /**
  * Which of the popup's surfaces is on screen.
@@ -137,6 +139,14 @@ export type PopupToBackground =
   | { type: "state:get" }
   | { type: "auth:sign-in"; email: string; password: string }
   | { type: "auth:sign-out" }
+  /**
+   * "Sign in with the web app": start a device authorization, open its
+   * approval page in a tab, and wait for it. Works for any server, and for an
+   * account with two-factor authentication, which a password cannot complete.
+   */
+  | { type: "auth:device-start" }
+  /** Stop waiting for the device authorization the popup started. */
+  | { type: "auth:device-cancel" }
   | {
       type: "timer:start";
       description: string;
@@ -191,11 +201,9 @@ export type PopupToBackground =
   /**
    * Use a different Track Your Time server.
    *
-   * The popup has already asked Chrome for access to the host, from the click
-   * — the worker cannot, because a service worker never holds a user gesture.
-   * The worker re-validates everything anyway (the address, the grant, and
-   * that a Track Your Time server answers at it), because anything can send
-   * this message.
+   * The worker re-validates everything the popup checked (the address, and
+   * that a Track Your Time server answers at it and trusts this extension's
+   * origin), because anything can send this message.
    *
    * Moving to another server signs out of the old one, and the extension's
    * sign-out discards its offline queue. `discardUnsent` is the person having
@@ -391,14 +399,24 @@ export type PopupToBackground =
   | { type: "queue:discard-held"; id: string };
 
 /**
- * Where the current session came from.
+ * A queued change held here rather than sent, and why.
  *
- * `web` means it was adopted from the web app's cookie, which is what makes
- * signing in on one side sign in on the other. The popup shows this, because
- * "sign out" means something different depending on it: on a shared session it
- * signs the web app out too.
+ * `hold` is core's own `HoldReason`, `null` for a workspace this person has
+ * left, or `other-account` for a change another account queued in this
+ * browser — the queue outlives a web-app sign-out and account switch, and
+ * those rows must never replay under the next account.
  */
-export type SessionSource = "web" | "password";
+export type HeldSyncRow = Omit<QueuedMutationSummary, "hold"> & {
+  hold: QueuedMutationSummary["hold"] | "other-account";
+};
+
+/** The device authorization the popup is waiting on, as much as it may see. */
+export type PendingDeviceSignIn = {
+  /** The code the person checks on the approval page. */
+  userCode: string;
+  /** Epoch ms. */
+  expiresAt: number;
+};
 
 /**
  * Whether this build and the server in use can work together, and what the
@@ -420,15 +438,15 @@ export type BackgroundState = {
   /** See {@link ServerCompatibility}. Present signed in and signed out. */
   compatibility: ServerCompatibility;
   /**
-   * Whether Chrome currently lets the extension reach `apiUrl`.
+   * Whether the server trusts this extension's origin, as it last said.
    *
-   * A granted optional host can be taken away at `chrome://extensions` at any
-   * moment, and nothing about a failed request says that was why — it looks
-   * exactly like a dead network. Reported on its own so the popup can say the
-   * true thing and offer the one button that fixes it, on the signed-in and the
-   * signed-out screens alike.
+   * Every request the extension makes is a CORS request, and an untrusted
+   * origin's requests fail exactly like a dead network. `false` is the server
+   * saying so, and the popup says the true thing — which setting to change —
+   * on the signed-in and the signed-out screens alike. `null` is "not said"
+   * (an older server, or no answer yet), which is never treated as a refusal.
    */
-  serverAccess: boolean;
+  originTrusted: boolean | null;
   /**
    * "Track Your Time 0.1.0 (1a2b3c4)" for the server in use, or null when it
    * has not said. Read from its `/api/health`, or remembered from the check
@@ -439,6 +457,13 @@ export type BackgroundState = {
   webUrl: string | null;
   signedIn: boolean;
   sessionSource: SessionSource | null;
+  /**
+   * The device authorization the popup's "Sign in with the web app" started,
+   * while it waits. Null otherwise, and never the device code itself.
+   */
+  pendingDeviceAuth: PendingDeviceSignIn | null;
+  /** Why the last popup-started device sign-in ended without a session. */
+  deviceSignInError: DeviceSignInError | null;
   email: string | null;
   running: TimeEntry | null;
   projects: Project[];
@@ -477,8 +502,8 @@ export type BackgroundState = {
   /**
    * Mutations waiting to be replayed. Zero on a healthy connection.
    *
-   * Counted on the signed-out snapshot too: a web-app sign-out drops the
-   * borrowed session without clearing the queue, and switching servers from
+   * Counted on the signed-out snapshot too: a web-app sign-out ends the
+   * linked session without clearing the queue, and switching servers from
    * the sign-in screen would discard those rows — the picker has to know
    * there are some before it can ask.
    */
@@ -562,12 +587,12 @@ export type BackgroundState = {
   activeWorkspaceId: string | null;
   /**
    * Queued changes held here — for a workspace this person no longer belongs
-   * to (`hold: null`), or for a `HoldReason` (a newer build wrote them, or the
+   * to (`hold: null`), for another account (`other-account`), or for a `HoldReason` (a newer build wrote them, or the
    * server lacks the procedure they need) — never sent while held, never
    * dropped on their own, and NOT in `pendingSync`. Each names its workspace
    * when the name is still known.
    */
-  heldSync: QueuedMutationSummary[];
+  heldSync: HeldSyncRow[];
 };
 
 /**

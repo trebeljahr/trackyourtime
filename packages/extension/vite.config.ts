@@ -21,8 +21,8 @@ const resolveMode = (mode: string): BuildMode => {
 /**
  * Writes the manifest for the target being built.
  *
- * Generated rather than copied, because name, host permissions and the pinned
- * key all differ per target — a static public/manifest.json could only ever
+ * Generated rather than copied, because name, `externally_connectable` and the
+ * pinned key all differ per target — a static public/manifest.json could only ever
  * describe one of them.
  */
 const manifestPlugin = (mode: BuildMode): Plugin => ({
@@ -53,7 +53,7 @@ export default defineConfig(({ mode }) => {
     publicDir: "public",
     define: {
       // Baked in as the default API origin, overridable at runtime from the
-      // popup within the build's host permissions. Passed as a define rather
+      // popup's server picker. Passed as a define rather
       // than through a .env file because `.env.development` and
       // `.env.production` are gitignored on this machine, which would leave a
       // fresh clone with no URL in the bundle and no error to say so.
@@ -64,6 +64,9 @@ export default defineConfig(({ mode }) => {
       // screen. From the root package.json via manifest.config.ts, so the
       // manifest and the bundle cannot name two different versions.
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(RELEASE_VERSION),
+      // Which web origins the bridge accepts messages from — the same target
+      // the manifest's `externally_connectable` was generated from.
+      "import.meta.env.VITE_BRIDGE_TARGET": JSON.stringify(target.bridgeTarget),
     },
     build: {
       outDir: target.outDir,

@@ -29,7 +29,7 @@ import {
 import { forgetRoute, loadRoute, rememberRoute } from "./route-memory";
 import { Screens } from "./screens";
 import { rememberTheme } from "./theme";
-import { ServerAccessNotice } from "./server-access-notice";
+import { OriginNotTrustedNotice } from "./origin-not-trusted-notice";
 import { VersionBanner } from "./version-banner";
 import { applyLocalePreference, useT } from "../i18n/use-t";
 import { SignInScreen } from "./sign-in-screen";
@@ -388,9 +388,15 @@ export function App(): JSX.Element {
     [],
   );
 
-  const refreshState = useCallback((): void => {
-    void send({ type: "state:get" });
-  }, [send]);
+  const startDeviceSignIn = useCallback(
+    (): Promise<boolean> => send({ type: "auth:device-start" }),
+    [send],
+  );
+
+  const cancelDeviceSignIn = useCallback(
+    (): Promise<boolean> => send({ type: "auth:device-cancel" }),
+    [send],
+  );
 
   const createTag = useCallback(
     (name: string): Promise<boolean> => send({ type: "tag:create", name }),
@@ -699,9 +705,7 @@ export function App(): JSX.Element {
   return (
     <div className="popup">
       <VersionBanner compatibility={state.compatibility} t={t} />
-      {!state.serverAccess ? (
-        <ServerAccessNotice apiUrl={state.apiUrl} onAnswered={refreshState} />
-      ) : null}
+      {state.originTrusted === false ? <OriginNotTrustedNotice apiUrl={state.apiUrl} /> : null}
       {state.signedIn ? (
         <Screens
           route={topOf(stack)}
@@ -832,9 +836,14 @@ export function App(): JSX.Element {
         <SignInScreen
           apiUrl={state.apiUrl}
           serverVersion={state.serverVersion}
+          webUrl={state.webUrl}
           pendingSync={state.pendingSync}
+          pendingDeviceAuth={state.pendingDeviceAuth}
+          deviceSignInError={state.deviceSignInError}
           error={error}
           onSignIn={signIn}
+          onStartDeviceSignIn={startDeviceSignIn}
+          onCancelDeviceSignIn={cancelDeviceSignIn}
           onSetServer={setServer}
         />
       )}

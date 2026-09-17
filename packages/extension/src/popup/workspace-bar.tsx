@@ -1,6 +1,7 @@
 import { useState, type JSX } from "react";
-import type { QueuedMutationSummary, WorkspaceSummary } from "@starter/core";
+import type { WorkspaceSummary } from "@starter/core";
 import type { ExtensionTranslator } from "../i18n";
+import type { HeldSyncRow } from "../lib/messaging";
 import { ConfirmPanel } from "./confirm-panel";
 
 /**
@@ -61,15 +62,19 @@ export function WorkspacePicker({
 }
 
 export type HeldQueueProps = {
-  rows: QueuedMutationSummary[];
+  rows: HeldSyncRow[];
   onDiscard: (id: string) => Promise<boolean>;
   t: ExtensionTranslator<"popup">;
 };
 
-/** Which group a held row is shown in: a left workspace, or a `HoldReason`. */
-type HeldGroup = "left" | NonNullable<QueuedMutationSummary["hold"]>;
+/**
+ * Which group a held row is shown in: another account's, a left workspace's,
+ * or a `HoldReason`.
+ */
+type HeldGroup = "left" | NonNullable<HeldSyncRow["hold"]>;
 
 const GROUP_ORDER: readonly HeldGroup[] = [
+  "other-account",
   "left",
   "server-too-old",
   "unknown-procedure",
@@ -79,6 +84,10 @@ const GROUP_ORDER: readonly HeldGroup[] = [
 /** Catalog keys per group. A new `HoldReason` is a type error here. */
 const GROUP_KEYS = {
   left: { title: "workspace.heldTitle", hint: "workspace.heldHint" },
+  "other-account": {
+    title: "workspace.otherAccount.title",
+    hint: "workspace.otherAccount.hint",
+  },
   "unknown-op": { title: "workspace.waitingNewer.title", hint: "workspace.waitingNewer.hint" },
   "unknown-procedure": {
     title: "workspace.waitingServer.title",
@@ -106,10 +115,13 @@ export function HeldQueue({ rows, onDiscard, t }: HeldQueueProps): JSX.Element |
   const [busy, setBusy] = useState(false);
   if (rows.length === 0) return null;
 
-  const workspaceOf = (row: QueuedMutationSummary): string =>
-    row.workspaceName ?? t("workspace.leftWorkspace");
+  const workspaceOf = (row: HeldSyncRow): string =>
+    row.workspaceName ??
+    (row.hold === "other-account"
+      ? t("workspace.otherAccount.workspace")
+      : t("workspace.leftWorkspace"));
 
-  const label = (row: QueuedMutationSummary): string => {
+  const label = (row: HeldSyncRow): string => {
     const what = row.description?.trim() ? row.description : t("workspace.untitled");
     const values = { description: what, workspace: workspaceOf(row) };
     switch (row.op) {
@@ -129,7 +141,7 @@ export function HeldQueue({ rows, onDiscard, t }: HeldQueueProps): JSX.Element |
     }
   };
 
-  const groupOf = (row: QueuedMutationSummary): HeldGroup => row.hold ?? "left";
+  const groupOf = (row: HeldSyncRow): HeldGroup => row.hold ?? "left";
 
   return (
     <>
@@ -147,7 +159,7 @@ export function HeldQueue({ rows, onDiscard, t }: HeldQueueProps): JSX.Element |
                     <ConfirmPanel
                       title={label(row)}
                       hint={
-                        group === "left"
+                        group === "left" || group === "other-account"
                           ? t("workspace.discardHint", { workspace: workspaceOf(row) })
                           : t("workspace.discardHintWaiting")
                       }

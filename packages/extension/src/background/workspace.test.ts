@@ -468,3 +468,40 @@ test("an application NOT_FOUND in a workspace the person is still in drops the r
   expect(await getOfflineQueue().size()).toBe(0);
   expect(await listHeldRows()).toHaveLength(0);
 });
+
+// ── whose rows ───────────────────────────────────────────────────────
+
+test("every queued row names the account that queued it", async () => {
+  await resolveWorkspaces();
+  await enqueueOffline("entries.start", startInput("mine"), "tmp_1");
+  expect((await getOfflineQueue().list())[0]?.owner).toBe(ME);
+});
+
+test("another account's rows are held for it: never sent, not pending, discardable", async () => {
+  await resolveWorkspaces();
+  await getOfflineQueue().enqueue(
+    "entries.start",
+    { input: startInput("somebody else's"), tempId: "tmp_1" },
+    COLLEAGUE,
+    "http://127.0.0.1:9",
+    A,
+  );
+  server.calls = [];
+
+  expect(await flushQueue()).toBe(0);
+  expect(server.calls.some((call) => call.path === "entries.start")).toBe(false);
+  expect(await pendingSyncCount()).toBe(0);
+  const [held] = await listHeldRows();
+  expect(held?.hold).toBe("other-account");
+  expect(await discardHeldRow(held?.queueId ?? "")).toBe(true);
+  expect(await getOfflineQueue().size()).toBe(0);
+});
+
+test("rows from before the owner stamp are claimed by the account that flushes them", async () => {
+  await resolveWorkspaces();
+  await getOfflineQueue().enqueue("entries.start", { input: startInput("legacy"), tempId: "tmp_1" });
+  server.calls = [];
+
+  expect(await flushQueue()).toBe(0);
+  expect(server.calls.some((call) => call.path === "entries.start")).toBe(true);
+});

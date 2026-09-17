@@ -21,6 +21,7 @@ export default defineConfig({
     // fast instead of reaching a real server.
     "import.meta.env.VITE_API_URL": JSON.stringify("http://127.0.0.1:9"),
     "import.meta.env.VITE_APP_VERSION": JSON.stringify("9.8.7"),
+    "import.meta.env.VITE_BRIDGE_TARGET": JSON.stringify("development"),
   },
   resolve: {
     alias: [

@@ -1,35 +1,25 @@
 /**
  * Switching the server the extension talks to, as plain functions.
  *
- * Kept out of the picker component so the one ordering rule that matters can
- * be tested without React or a DOM: Chrome only honours
- * `chrome.permissions.request` inside the click that asked for it, and the
- * click's user gesture does not survive an `await`. So, in this order and with
- * nothing awaited before the second step:
+ * Kept out of the picker component so it can be tested without React or a
+ * DOM. Two steps:
  *
- *   1. `normalizeServerInput` — synchronous, and stops a typo before Chrome is
- *      asked about a host nobody meant.
- *   2. `requestServerAccess` — calls `permissions.request` before returning.
- *   3. Only then the worker, which checks the server over the network and
- *      does the actual switch.
+ *   1. `normalizeServerInput` — synchronous, and stops a typo before anything
+ *      is sent anywhere.
+ *   2. The worker, which checks the server over the network (that it answers
+ *      as Track Your Time, and trusts this extension's origin) and does the
+ *      actual switch.
  *
- * A server can be refused at step 3 after access was granted at step 2 — it is
- * not running, or it is not Track Your Time. The grant is then handed back,
- * so a failed attempt does not leave a standing permission for a host the
- * extension never uses.
+ * There is no Chrome permission step. The extension holds no host access at
+ * all: every request is a CORS request the server answers because it trusts
+ * the extension's origin, so there is nothing to ask Chrome for and nothing to
+ * give back when a server is refused.
  */
 import {
   normalizeServerInput,
   sameServerOrigin,
-  serverHost,
   type ServerInputProblem,
 } from "@starter/core";
-import {
-  requestServerAccess,
-  releaseServerAccess,
-  sharesServerAccess,
-  type PermissionsApi,
-} from "../lib/server-access";
 
 /**
  * The worker's answer to `config:set-server`.
@@ -47,11 +37,6 @@ export const UNSENT_CHANGES_CODE = "UNSENT_CHANGES";
 export type SwitchServerOptions = {
   /** What the person typed, or the default server's origin. */
   input: string;
-  /** The server in use right now. */
-  currentApiUrl: string;
-  /** The server this build was made for. Its access is never released. */
-  defaultApiUrl: string;
-  permissions: PermissionsApi;
   /** Hand the validated origin to the worker. */
   send: (origin: string) => Promise<SetServerOutcome>;
 };
@@ -60,25 +45,17 @@ export type SwitchServerResult =
   | { ok: true; origin: string }
   | {
       ok: false;
-      /** Which step stopped it: the address, Chrome, or the worker. */
-      stage: "input" | "access" | "server";
+      /** Which step stopped it: the address, or the worker. */
+      stage: "input" | "server";
       code: string;
       message: string;
       /** What was wrong with the address, when `stage` is "input". */
       problem?: ServerInputProblem;
     };
 
-/**
- * Run the switch.
- *
- * `async`, but the permission request happens before its first `await`, which
- * makes it part of the synchronous call — the test pins that.
- */
+/** Run the switch. */
 export async function switchServer({
   input,
-  currentApiUrl,
-  defaultApiUrl,
-  permissions,
   send,
 }: SwitchServerOptions): Promise<SwitchServerResult> {
   const parsed = normalizeServerInput(input);
@@ -93,33 +70,8 @@ export async function switchServer({
   }
   const { origin } = parsed;
 
-  // Nothing may be awaited above this line.
-  const access = await requestServerAccess(origin, permissions);
-  if (access === "refused") {
-    return {
-      ok: false,
-      stage: "access",
-      code: "SERVER_ACCESS_REFUSED",
-      message: `Chrome did not give the extension access to ${serverHost(origin)}, so it cannot reach that server.`,
-    };
-  }
-
   const outcome = await send(origin);
   if (outcome.ok) return { ok: true, origin };
-
-  // Compared as permission patterns, not as origins: `https://a.example` and
-  // `https://a.example:8443` are two servers but ONE grant, and releasing the
-  // failed one would take access away from the one in use.
-  const inUse =
-    sharesServerAccess(origin, currentApiUrl) ||
-    sharesServerAccess(origin, defaultApiUrl);
-  // A refusal over unsent changes is a question, not a verdict on the server:
-  // the person is about to be asked, and answering yes retries with the same
-  // host. Releasing here would put a second Chrome prompt behind that yes.
-  if (!inUse && outcome.code !== UNSENT_CHANGES_CODE) {
-    await releaseServerAccess(origin, permissions);
-  }
-
   return {
     ok: false,
     stage: "server",
@@ -128,13 +80,7 @@ export async function switchServer({
   };
 }
 
-/**
- * What a submit should do before anything is asked of Chrome.
- *
- * Synchronous for the same reason as {@link switchServer}: the picker calls it
- * inside the submit handler and, for `"switch"`, calls `switchServer` straight
- * after — still inside the gesture.
- */
+/** What a submit should do before anything is sent to the worker. */
 export type SwitchPlan =
   | { kind: "invalid"; message: string; problem: ServerInputProblem }
   /** Queued changes would be discarded. Ask first; the confirm click switches. */

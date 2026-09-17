@@ -22,14 +22,21 @@ the repo rather than in `.env.development` / `.env.production` — those two
 filenames are commonly gitignored, which would make a fresh clone build an
 extension with no URL in it and no error to say so.
 
-Each target gets its own name (`Track Your Time` vs `Track Your Time (dev)`) and its own
-permissions, so the two can be installed side by side:
+Each target gets its own name (`Track Your Time` vs `Track Your Time (dev)`), so
+the two can be installed side by side. Neither asks for host access or cookies:
 
 | | development (`dist/`) | production (`dist-prod/`) |
 |---|---|---|
-| `host_permissions` (granted at install) | `http://localhost/*`, `http://127.0.0.1/*` | `https://api.trackyourtime.dev/*` |
-| `optional_host_permissions` (asked for per server) | `https://*/*` | `https://*/*`, `http://localhost/*`, `http://127.0.0.1/*` |
+| `permissions` | `storage`, `alarms`, `idle` | `storage`, `alarms`, `idle` |
+| `optional_permissions` (asked for from Settings → Activity) | `tabs` | `tabs` |
+| `externally_connectable.matches` | `http://localhost/*`, `http://127.0.0.1/*` | `https://trackyourtime.dev/*` |
+| `host_permissions`, `optional_host_permissions`, `cookies` | none | none |
 | `key` | none — id follows the load path | the Web Store key (`STORE_EXTENSION_KEY`) |
+
+`externally_connectable` is generated from `extensionBridgeMatchPatterns` in
+`@starter/shared/extension-bridge`, and the same target is baked into the
+bundle as `VITE_BRIDGE_TARGET`, so the manifest and the worker's own origin
+check cannot disagree. `manifest.test.ts` pins all of it.
 
 `VITE_API_URL=… pnpm --filter @starter/extension run build` still overrides the
 default URL for a one-off build.
@@ -43,65 +50,65 @@ Account shows the server, its version and the same control. The picker offers
 "Track Your Time cloud" (in a development build: "Default (localhost:5159)")
 or "My own server" with an address field.
 
-Choosing a server runs in this order, and the order is load-bearing:
+Choosing a server runs in two steps:
 
 1. **The address is checked in the popup** (`normalizeServerInput` from
    `@starter/core`): no scheme means https, a pasted page URL keeps only its
    origin, and plain http is refused for anything but localhost.
-2. **Chrome is asked for that one host** (`src/lib/server-access.ts`),
-   `https://<host>/*` with no port, straight from the click. Chrome only shows
-   the prompt inside a user gesture, and the gesture ends at the first
-   `await` — so nothing is awaited before this step (`src/popup/switch-server.ts`,
-   pinned by its test).
-3. **The worker checks it again** (`config:set-server`): the address, the
-   grant, and `GET <origin>/api/health` through `checkServer`, which has to
-   answer as a working Track Your Time server. Nothing changes unless all
-   three pass. If the worker refuses, the popup gives the new grant back, so a
-   typo or a server that is down does not leave a standing permission behind.
+2. **The worker checks it again** (`config:set-server`): the address, and
+   `GET <origin>/api/health` through `checkServer`, which has to answer as a
+   working Track Your Time server that trusts this extension's origin
+   (`originTrusted`). A server that says `false` is refused with
+   `ORIGIN_NOT_TRUSTED`; one too old to say is let through. Nothing changes
+   unless every check passes.
 
-Moving to a **different** server signs out of the old one. A password session
-the extension created is revoked on the old server; a session borrowed from the
-web app's cookie is not, because that tab is still using it. The extension's
-sign-out then drops its offline queue, as it always has, so a switch with
-unsent changes first shows a confirm naming how many will be discarded — and
-the worker refuses the switch with `UNSENT_CHANGES` unless that confirm was
-answered, so a popup whose count is a poll behind cannot discard work silently.
+There is no Chrome prompt: the extension holds no host access, so there is
+nothing to request and nothing to give back.
+
+Moving to a **different** server signs out of the old one, and the session is
+revoked there whichever way it was signed in — every session is the
+extension's own row. The extension's sign-out then drops its offline queue, as
+it always has, so a switch with unsent changes first shows a confirm naming
+how many will be discarded — and the worker refuses the switch with
+`UNSENT_CHANGES` unless that confirm was answered, so a popup whose count is a
+poll behind cannot discard work silently.
 
 Queued rows are stamped with the server they were made against, and the flush
 only replays rows for the server in use (`isQueuedOn`).
 
-### When Chrome takes access away
+### When the server does not trust the extension
 
-Anyone can remove a site's access at `chrome://extensions`. The worker listens
-for `chrome.permissions.onRemoved` (and `onAdded`) and rebuilds, and every
-snapshot carries `serverAccess`. While it is false the popup shows "Chrome no
-longer lets the extension reach <host>." above every screen, signed in or out,
-with an **Allow access** button that asks again from the click. Without it a
-revoked grant would look exactly like being offline.
-
-The web app's cookie is still borrowed for a self-hosted server: the `cookies`
-permission covers granted optional hosts the same as required ones.
+Every request the extension makes — tRPC, better-auth, `/api/health` — is an
+ordinary CORS request, answered only when `chrome-extension://<id>` is in the
+server's trust list (`TRUST_STORE_APPS=true`, or the origin in
+`TRUSTED_ORIGINS`). A refused request fails in `fetch` exactly like a dead
+network, so on a transport failure the worker re-asks `/api/health` (which
+answers any origin) at most once a minute. When it says `originTrusted: false`,
+every snapshot carries it and the popup shows a notice above every screen
+naming both settings and this extension's origin. Queued changes stay queued;
+nothing is dropped. The first request that gets through clears the notice.
 
 ### Chrome Web Store permission justification
 
-`host_permissions` lists only `https://api.trackyourtime.dev/*`, the hosted
-API the extension uses by default. `optional_host_permissions` lists
-`https://*/*`, `http://localhost/*` and `http://127.0.0.1/*` because Track Your
-Time is open source and people run their own server on a domain the extension
-cannot know in advance. None of these are granted at install. The extension
-requests exactly one host, `https://<server>/*`, only when the person types
-that server's address into the extension's server picker and clicks to use it,
-and only for that server. It never requests access to sites the person browses,
-has no content scripts, and does not read or change any web page. Plain http is
-accepted for localhost only, for someone running the server on the same
-machine.
+The extension requests `storage`, `alarms` and `idle`, plus the optional `tabs`.
+It requests no host permissions and no `cookies` permission, has no content
+scripts, and does not read or change any web page.
 
-`optional_permissions` lists `tabs`, for activity capture. It is not granted at
-install and is requested only when the person turns on Settings → Activity,
-from that click. With it the extension reads the hostname (and, behind a
-second opt-in, the title) of the active tab so it can suggest time entries.
-What it reads stays in the browser's IndexedDB on that device; it is never
-sent anywhere, and only an entry the person accepts reaches the server.
+- `storage` keeps the server address, the offline queue and the session token
+  (the token in memory-only session storage).
+- `alarms` keeps the toolbar badge and queued changes going while Chrome has
+  stopped the background worker.
+- `idle` notices when the person has walked away from a running timer.
+- `tabs` (optional) is for activity capture. It is not granted at install and
+  is requested only when the person turns on Settings → Activity, from that
+  click. With it the extension reads the hostname (and, behind a second
+  opt-in, the title) of the active tab so it can suggest time entries. What it
+  reads stays in the browser's IndexedDB on that device; it is never sent
+  anywhere, and only an entry the person accepts reaches the server.
+
+`externally_connectable` lists `https://trackyourtime.dev/*`. It is not a
+permission: it lets trackyourtime.dev tell the extension that you signed in or
+out there, so the extension can sign itself in or out to match.
 
 ### Production ids and TRUSTED_ORIGINS
 
@@ -131,10 +138,13 @@ The development build pins no key: its id follows the load path, and
 
 ## The server has to trust this extension's origin
 
-Sign-in answers `403 {"code":"INVALID_ORIGIN"}` until it does, before the
-password is even looked at. better-auth force-validates the `Origin` header on
-any request carrying `Sec-Fetch-*` headers — which every real browser fetch
-does — so the extension's origin has to be in the server's `TRUSTED_ORIGINS`.
+Every request the extension makes is a CORS request, so nothing works until
+the server trusts `chrome-extension://<id>` — the popup says so (see
+[When the server does not trust the extension](#when-the-server-does-not-trust-the-extension)).
+Sign-in in particular answers `403 {"code":"INVALID_ORIGIN"}` before the
+password is even looked at: better-auth force-validates the `Origin` header on
+any request carrying `Sec-Fetch-*` headers, which every real browser fetch
+does.
 
 An unpacked extension has no signing key, so Chrome derives its id from the
 absolute path it was loaded from. That makes the id stable for a directory and
@@ -237,18 +247,69 @@ reload.
 default. In a git worktree it picks a **random port** instead, so open the
 popup, choose **Change server → My own server** and paste the API origin the
 dev script printed (for example `localhost:51590`). It is stored in
-`chrome.storage.local` and survives rebuilds. The development build already
-holds `http://localhost/*`, so there is no Chrome prompt for it.
+`chrome.storage.local` and survives rebuilds. There is no Chrome prompt; the dev
+server has to trust the extension's origin, which `pnpm run dev` arranges.
 
 ## Sign-in
 
-Email and password, entered in the popup. The resulting better-auth session
-token is kept in `chrome.storage.session` — memory-only, so it never touches
-disk and is gone after a browser restart. Signing in again is the intended
-cost of that; do not move the token to `chrome.storage.local`.
+Three ways in, on the sign-in screen:
 
-The session appears in Settings → Devices as `trackyourtime-extension` and can be
-revoked from there, which kills both the HTTP and the WebSocket path.
+- **Email and password**, for any server. An account with two-factor
+  authentication cannot finish here (`TWO_FACTOR_UNSUPPORTED`), and the popup
+  points it at the next option.
+- **Sign in with the web app**: the RFC 8628 device flow
+  (`src/background/device-sign-in.ts`), for any server and for two-factor
+  accounts. The approval page (`/app/device?user_code=…`) opens in a tab, the
+  popup shows the code it shows, and the worker finishes on its own after the
+  popup closes: the pending authorization is kept in `chrome.storage.session`,
+  and an alarm, the popup opening or any other wake-up makes one token
+  exchange. It never long-polls — MV3 stops the worker mid-wait.
+- **Follow the web app** (below), on the hosted service. Production builds also
+  offer **Open Track Your Time** on the sign-in screen, because opening the web
+  app is what links the extension.
+
+Every session token is kept in `chrome.storage.session` — memory-only, so it
+never touches disk and is gone after a browser restart. For a session linked to
+the web app, the next Track Your Time tab signs the extension back in; otherwise
+signing in again is the intended cost. Do not move the token to
+`chrome.storage.local`. The stored session records how it was signed in
+(`web`, `password` or `device`).
+
+Every session appears in Settings → Devices as `trackyourtime-extension` and can
+be revoked from there, which kills both the HTTP and the WebSocket path.
+
+### Following the web app's sign-in
+
+The web app messages the extension through `externally_connectable` — after
+mount, on the web only, by the pinned extension id — and
+`src/background/bridge.ts` answers. The protocol is
+`@starter/shared/extension-bridge`; the extension never initiates.
+
+- **Web sign-in, extension signed out:** the extension starts a device
+  authorization and replies with the user code; the page approves it with its
+  own session and says so; the extension fetches its own token, checks with
+  `get-session` that it belongs to the user the page named, and keeps it
+  (source `web`). No token crosses the bridge.
+- **Web sign-out:** an extension linked to the web app signs out too, revokes
+  its own session and keeps its offline queue.
+- **Web account switch:** the old linked session is left the same way, and the
+  new account is linked. The old account's queued rows stay, held for that
+  account (every row is stamped with its owner), and are listed with a discard.
+- **Extension sign-out:** revokes the session and leaves a marker in
+  `chrome.storage.local`. The next `sync` from a web tab of the same person, on
+  the same server, whose session began before the sign-out, is answered with
+  `sign-out-web`, and the page signs out. Markers expire after seven days.
+  It also blocks linking: no web session that began before the sign-out links
+  the extension again, whoever it belongs to and however old, until somebody
+  signs in.
+- A `password` or `device` session is never displaced by the web app, in
+  either direction.
+- A message is accepted only from a tab's top-level page (not a frame, not an
+  incognito tab, not another extension) whose origin
+  is in the build's allowlist and is the web app of the server the extension
+  points at, and only about that server. A message never changes the server,
+  workspace, queue or settings. A self-hosted web app on its own domain cannot
+  message the store extension; use password or device sign-in there.
 
 ## Icons
 

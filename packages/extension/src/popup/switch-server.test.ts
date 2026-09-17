@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PermissionsApi } from "../lib/server-access";
 import {
   planServerSwitch,
   switchServer,
@@ -8,12 +7,6 @@ import {
 } from "./switch-server";
 
 const CLOUD = "https://api.trackyourtime.dev";
-
-const fakePermissions = (granted = true): PermissionsApi => ({
-  request: vi.fn(async () => granted),
-  contains: vi.fn(async () => granted),
-  remove: vi.fn(async () => true),
-});
 
 const accepting = (): ((origin: string) => Promise<SetServerOutcome>) =>
   vi.fn(async () => ({ ok: true }) as const);
@@ -25,145 +18,50 @@ const rejecting = (
   vi.fn(async () => ({ ok: false, code, message }) as const);
 
 describe("switchServer", () => {
-  it("requests access synchronously, before any microtask runs", () => {
-    const permissions = fakePermissions();
+  it("sends the normalized origin, not what was typed", async () => {
     const send = accepting();
-
-    const pending = switchServer({
-      input: "track.example.com",
-      currentApiUrl: CLOUD,
-      defaultApiUrl: CLOUD,
-      permissions,
-      send,
-    });
-
-    // Nothing has been awaited yet: a user gesture would still be active here.
-    expect(permissions.request).toHaveBeenCalledTimes(1);
-    expect(permissions.request).toHaveBeenCalledWith({
-      origins: ["https://track.example.com/*"],
-    });
-    expect(send).not.toHaveBeenCalled();
-    return pending;
+    const result = await switchServer({ input: "track.example.com/track/", send });
+    expect(send).toHaveBeenCalledWith("https://track.example.com");
+    expect(result).toEqual({ ok: true, origin: "https://track.example.com" });
   });
 
-  it("stops on an invalid address without asking Chrome", async () => {
-    const permissions = fakePermissions();
+  it("stops on an invalid address without asking the worker", async () => {
     const send = accepting();
-    const result = await switchServer({
-      input: "http://track.example.com",
-      currentApiUrl: CLOUD,
-      defaultApiUrl: CLOUD,
-      permissions,
-      send,
-    });
-    expect(result).toMatchObject({ ok: false, stage: "input" });
-    expect(permissions.request).not.toHaveBeenCalled();
+    const result = await switchServer({ input: "http://track.example.com", send });
+    expect(result).toMatchObject({ ok: false, stage: "input", problem: "insecure" });
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("refused access sends nothing to the worker and says why", async () => {
-    const permissions = fakePermissions(false);
-    const send = accepting();
+  it("asks nothing of Chrome — the extension holds no host access to request", async () => {
+    const request = vi.spyOn(chrome.permissions, "request");
+    await switchServer({ input: "https://track.example.com", send: accepting() });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("passes the worker's refusal through with its code", async () => {
     const result = await switchServer({
       input: "https://track.example.com",
-      currentApiUrl: CLOUD,
-      defaultApiUrl: CLOUD,
-      permissions,
-      send,
+      send: rejecting("ORIGIN_NOT_TRUSTED", "track.example.com does not trust this extension."),
     });
     expect(result).toEqual({
       ok: false,
-      stage: "access",
-      code: "SERVER_ACCESS_REFUSED",
-      message:
-        "Chrome did not give the extension access to track.example.com, so it cannot reach that server.",
-    });
-    expect(send).not.toHaveBeenCalled();
-    expect(permissions.remove).not.toHaveBeenCalled();
-  });
-
-  it("releases a fresh grant when the worker rejects the server", async () => {
-    const permissions = fakePermissions();
-    const send = rejecting();
-    const result = await switchServer({
-      input: "https://track.example.com/track",
-      currentApiUrl: CLOUD,
-      defaultApiUrl: CLOUD,
-      permissions,
-      send,
-    });
-    expect(send).toHaveBeenCalledWith("https://track.example.com");
-    expect(result).toMatchObject({
-      ok: false,
       stage: "server",
-      code: "SERVER_UNREACHABLE",
-      message: "Could not reach track.example.com.",
-    });
-    expect(permissions.remove).toHaveBeenCalledWith({
-      origins: ["https://track.example.com/*"],
+      code: "ORIGIN_NOT_TRUSTED",
+      message: "track.example.com does not trust this extension.",
     });
   });
 
-  it("keeps the grant when the worker accepts", async () => {
-    const permissions = fakePermissions();
+  it("reports unsent changes as a code the picker can ask about", async () => {
     const result = await switchServer({
       input: "https://track.example.com",
-      currentApiUrl: CLOUD,
-      defaultApiUrl: CLOUD,
-      permissions,
-      send: accepting(),
-    });
-    expect(result).toEqual({ ok: true, origin: "https://track.example.com" });
-    expect(permissions.remove).not.toHaveBeenCalled();
-  });
-
-  it("never releases the server already in use when a re-check fails", async () => {
-    const permissions = fakePermissions();
-    await switchServer({
-      input: "https://track.example.com",
-      currentApiUrl: "https://track.example.com",
-      defaultApiUrl: CLOUD,
-      permissions,
-      send: rejecting(),
-    });
-    expect(permissions.remove).not.toHaveBeenCalled();
-  });
-
-  it("does not release another port on the host in use — it is the same grant", async () => {
-    const permissions = fakePermissions();
-    await switchServer({
-      input: "https://track.example.com:8443",
-      currentApiUrl: "https://track.example.com",
-      defaultApiUrl: CLOUD,
-      permissions,
-      send: rejecting(),
-    });
-    expect(permissions.remove).not.toHaveBeenCalled();
-  });
-
-  it("never releases the build's default server", async () => {
-    const permissions = fakePermissions();
-    await switchServer({
-      input: CLOUD,
-      currentApiUrl: "https://track.example.com",
-      defaultApiUrl: CLOUD,
-      permissions,
-      send: rejecting(),
-    });
-    expect(permissions.remove).not.toHaveBeenCalled();
-  });
-
-  it("keeps the grant while the person is asked about unsent changes", async () => {
-    const permissions = fakePermissions();
-    const result = await switchServer({
-      input: "https://track.example.com",
-      currentApiUrl: CLOUD,
-      defaultApiUrl: CLOUD,
-      permissions,
       send: rejecting(UNSENT_CHANGES_CODE, "2 changes have not reached…"),
     });
     expect(result).toMatchObject({ ok: false, code: UNSENT_CHANGES_CODE });
-    expect(permissions.remove).not.toHaveBeenCalled();
+  });
+
+  it("an unreachable server is the server stage", async () => {
+    const result = await switchServer({ input: "https://track.example.com", send: rejecting() });
+    expect(result).toMatchObject({ ok: false, stage: "server", code: "SERVER_UNREACHABLE" });
   });
 });
 

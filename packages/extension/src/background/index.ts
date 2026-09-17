@@ -25,18 +25,22 @@ import {
   type ServerCheckProblem,
 } from "@starter/core";
 import {
-  DEFAULT_API_URL,
   EXTENSION_CLIENT_ID,
   saveApiUrl,
   saveServerInfo,
 } from "../lib/config";
+import { DEVICE_AUTH_ALARM } from "../lib/device-auth-store";
+import {
+  clearLinkBlock,
+  clearSignOutMarker,
+  saveLinkBlock,
+  saveSignOutMarker,
+} from "../lib/sign-out-marker";
 import type {
   BackgroundResponse,
   PopupToBackground,
 } from "../lib/messaging";
 import { APP_VERSION } from "../lib/app-version";
-import { hasServerAccess } from "../lib/server-access";
-import { watchWebSession } from "../lib/web-session";
 import {
   activityIdleChanged,
   applyActivitySettings,
@@ -51,6 +55,7 @@ import {
   removeActivityRuleFor,
 } from "./activity/suggestions";
 import { renderBadge } from "./badge";
+import { registerBridgeListener } from "./bridge";
 import {
   createClient,
   createTag,
@@ -58,6 +63,11 @@ import {
   createTask,
 } from "./catalog";
 import { searchDescriptions } from "./descriptions";
+import {
+  attemptPendingDeviceSignIn,
+  cancelDeviceSignIn,
+  startDeviceSignIn,
+} from "./device-sign-in";
 import { listDevices, revokeDevice, revokeOtherDevices } from "./devices";
 import {
   acceptSuggestion,
@@ -81,10 +91,11 @@ import {
   ensureReady,
   ensureSyncConnected,
   flushQueue,
+  forgetRejectedSession,
   forgetSession,
   getServerLevels,
+  getKnownUserId,
   isUnauthorized,
-  onWebSessionChanged,
   peekRunning,
   queuedRowCount,
   switchWorkspace,
@@ -98,15 +109,6 @@ import { buildState } from "./state";
 import { startTimer, stopTimer, updateRunning } from "./timer";
 
 const BADGE_ALARM = "trackyourtime.badge";
-
-/**
- * Last API URL the worker resolved, for the cookie listener's domain check.
- *
- * The listener is registered before any await, so it cannot read the stored
- * URL itself; every `ensureReady` refreshes this, and until the first one runs
- * the built-in default is the right guess.
- */
-let lastKnownApiUrl: string = DEFAULT_API_URL;
 
 /** The floor Chrome enforces on periodic alarms. */
 const BADGE_PERIOD_MINUTES = 0.5;
@@ -131,12 +133,16 @@ const ensureBadgeAlarm = async (): Promise<void> => {
 
 const refreshBadge = async (): Promise<void> => {
   const current = await ensureReady();
-  lastKnownApiUrl = current.apiUrl;
   await ensureBadgeAlarm();
 
   if (!current.session) {
-    await renderBadge(null);
-    return;
+    // A device sign-in waiting on an approval that landed while the worker
+    // was stopped finishes here at the latest.
+    await attemptPendingDeviceSignIn().catch(() => null);
+    if (!(await ensureReady()).session) {
+      await renderBadge(null);
+      return;
+    }
   }
 
   // The socket is the only thing that pushes another device's work here, and
@@ -165,7 +171,7 @@ const refreshBadge = async (): Promise<void> => {
     await renderBadge(await resolveRunning());
   } catch (error) {
     if (isUnauthorized(error)) {
-      await forgetSession();
+      await forgetRejectedSession();
       return;
     }
     // Offline: keep painting what the cache last knew rather than blanking a
@@ -198,20 +204,35 @@ const signIn = async (email: string, password: string): Promise<void> => {
     { baseUrl: current.apiUrl, clientId: EXTENSION_CLIENT_ID, clientVersion: APP_VERSION },
     { email, password },
   );
+  // A password sign-in replaces a device sign-in the popup was waiting on.
+  await cancelDeviceSignIn();
   await adoptSession({
     token: issued.token,
     userId: issued.userId,
     // better-auth echoes the address back; fall back to what was typed so the
     // popup always has something to show under "signed in as".
     email: issued.email ?? email,
+    source: "password",
   });
+  await clearSignOutMarker();
+  await clearLinkBlock();
   await refreshBadge();
   await flushQueue();
 };
 
+/**
+ * Sign the extension out on purpose.
+ *
+ * Revokes the extension's own session on the server, whichever way it was
+ * signed in, then leaves a marker so the web app — of this person, on this
+ * server — signs out too the next time a tab of it talks to the extension
+ * (`lib/sign-out-marker.ts`). That is the cookie's old "sign out in one place,
+ * sign out in both", narrowed to the same person.
+ */
 const signOut = async (): Promise<void> => {
   const current = await ensureReady();
   const token = current.session?.token ?? null;
+  const userId = current.session?.userId ?? getKnownUserId();
 
   if (token !== null) {
     try {
@@ -226,9 +247,14 @@ const signOut = async (): Promise<void> => {
     }
   }
 
-  // Signing out is synced on purpose: the cookie goes with the session, so the
-  // web app does not keep rendering as signed in against something revoked.
-  await forgetSession({ clearWebCookie: true });
+  const at = Date.now();
+  if (userId !== null) {
+    await saveSignOutMarker({ userId, apiOrigin: current.apiUrl, at });
+  }
+  // Whoever it was, and even when nobody could say: no web session from
+  // before this moment signs the extension straight back in.
+  await saveLinkBlock({ apiOrigin: current.apiUrl, at });
+  await forgetSession();
 };
 
 /** The worker's code for each way `checkServer` can refuse a server. */
@@ -242,21 +268,18 @@ const SERVER_CHECK_CODES: Readonly<Record<ServerCheckProblem, string>> = {
  * Point the extension at another Track Your Time server.
  *
  * Everything the popup already checked is checked again, because anything can
- * send this message: the address, the Chrome grant, and — over the network,
- * which only the worker waits for — that what answers is a working Track Your
- * Time server. Nothing is changed until all three pass, so a typo or a server
- * that is down leaves the extension exactly where it was.
+ * send this message: the address, and — over the network, which only the
+ * worker waits for — that what answers is a working Track Your Time server
+ * that trusts this extension's origin. Nothing is changed until all of that
+ * passes, so a typo or a server that is down leaves the extension exactly
+ * where it was.
  *
  * Moving to a DIFFERENT server ends the session on the old one, because a
- * token is only meaningful to the server that issued it:
+ * token is only meaningful to the server that issued it. Every session is the
+ * extension's own row now, whichever way it was signed in, so it is revoked on
+ * the old server rather than left in that account's Settings → Devices.
  *
- *  - A password session this extension created is signed out on the old
- *    server, so it does not sit in that account's Settings → Devices forever.
- *  - A session borrowed from the web app's cookie is NOT revoked. It is the
- *    web app's session; the person is still using that server in a tab, and
- *    moving the toolbar elsewhere is no request to sign the tab out.
- *
- * Either way `forgetSession` then drops the local copy and, with it, the
+ * `forgetSession` then drops the local copy and, with it, the
  * offline queue — the extension's standing sign-out rule. That is why unsent
  * changes need `discardUnsent`: the popup asks first, and a snapshot one poll
  * behind cannot answer for a queue that has grown since.
@@ -273,18 +296,18 @@ const setServer = async (
   const { origin } = parsed;
   const host = serverHost(origin);
 
-  // Before the network check, not after: without the grant, the check below
-  // is not a question about the server at all.
-  if (!(await hasServerAccess(origin, chrome.permissions))) {
-    throw new BackgroundError(
-      "SERVER_ACCESS_MISSING",
-      `Chrome has not given the extension access to ${host}, so it cannot reach that server.`,
-    );
-  }
-
   const check = await checkServer(origin);
   if (!check.ok) {
     throw new BackgroundError(SERVER_CHECK_CODES[check.problem], check.message);
+  }
+  // Every request the extension makes is a CORS request, so a server that
+  // does not trust this origin would look offline forever. `null` is a server
+  // too old to say, which is let through.
+  if (check.server.originTrusted === false) {
+    throw new BackgroundError(
+      "ORIGIN_NOT_TRUSTED",
+      `${host} does not trust this extension. Its admin sets TRUST_STORE_APPS=true, or adds chrome-extension://${chrome.runtime.id} to TRUSTED_ORIGINS.`,
+    );
   }
 
   // What the check learned about the server's level is worth keeping even
@@ -324,7 +347,7 @@ const setServer = async (
     }
 
     const token = current.session?.token ?? null;
-    if (token !== null && current.sessionSource === "password") {
+    if (token !== null) {
       try {
         await signOutSession(
           { baseUrl: current.apiUrl, clientId: EXTENSION_CLIENT_ID, clientVersion: APP_VERSION },
@@ -336,30 +359,16 @@ const setServer = async (
       }
     }
 
-    // No `clearWebCookie`: the cookie belongs to the old server's web app, and
-    // leaving that server is not signing out of it.
+    // No sign-out marker: leaving a server is not signing out of its web app.
+    // And any marker for the old server has nothing to say about the new one.
     await forgetSession();
+    await clearSignOutMarker();
   }
 
   await saveApiUrl(origin);
   await saveServerInfo(check.server);
   // The URL is baked into both the api client and the socket at construction,
   // so the only way to retarget them is to build new ones.
-  await reload();
-  await refreshBadge();
-};
-
-/**
- * Chrome's grant for the server in use changed — taken away at
- * `chrome://extensions`, or given back from the popup's notice.
- *
- * Rebuilding is the whole response. It closes a socket to a host the extension
- * may no longer reach, drops caches read while it could, and re-reads the web
- * app's cookie, which `chrome.cookies` only hands over for a host the
- * extension holds. The snapshot reports the access itself, live, so the popup
- * needs nothing else from here.
- */
-const onServerAccessChanged = async (): Promise<void> => {
   await reload();
   await refreshBadge();
 };
@@ -381,6 +390,10 @@ const apply = async (message: PopupToBackground): Promise<void> => {
       return signIn(message.email, message.password);
     case "auth:sign-out":
       return signOut();
+    case "auth:device-start":
+      return startDeviceSignIn();
+    case "auth:device-cancel":
+      return cancelDeviceSignIn();
     case "timer:start":
       // `startTimer` answers with the entry it opened; `apply` reports state
       // through the fresh snapshot instead, so the value is dropped here.
@@ -556,7 +569,7 @@ const handle = async (message: unknown): Promise<BackgroundResponse> => {
   if (!isPopupMessage(message)) return badMessage;
 
   try {
-    lastKnownApiUrl = (await ensureReady()).apiUrl;
+    await ensureReady();
     await apply(message);
     // Every success carries the full fresh snapshot, built after the mutation
     // landed, so the popup never has to guess what its own action did.
@@ -568,7 +581,7 @@ const handle = async (message: unknown): Promise<BackgroundResponse> => {
       // the dead token in storage and the popup rendering as signed in — every
       // further press failing the same way. Dropping it here returns the
       // signed-out snapshot, which puts the sign-in form back.
-      await forgetSession();
+      await forgetRejectedSession();
       return { ok: true, state: await buildState() };
     }
     return toErrorResponse(error);
@@ -592,21 +605,12 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 });
 
 /**
- * The web app signing in or out, seen through its session cookie.
+ * The web app telling the extension who is signed in there.
  *
- * Registered at module scope like the rest: this is the event that makes the
- * toolbar follow the web app, and it commonly arrives at a worker that is
- * asleep, so the listener has to exist before any handler starts awaiting.
- *
- * The API URL is read lazily through `ensureReady` rather than captured here,
- * because at registration time the worker has not loaded it yet.
+ * Module scope like the rest: a page's message is an event that wakes a
+ * stopped worker, and the listener has to exist before that delivery.
  */
-watchWebSession(
-  () => lastKnownApiUrl,
-  (token) => {
-    void onWebSessionChanged(token).catch(() => undefined);
-  },
-);
+registerBridgeListener();
 
 /**
  * The idle signal itself.
@@ -634,27 +638,17 @@ chrome.idle.onStateChanged.addListener((state) => {
   })().catch(() => undefined);
 });
 
-/**
- * Host access being removed or granted.
- *
- * Module scope like the rest: removing a site's access at
- * `chrome://extensions` is an event that commonly reaches a sleeping worker.
- * Filtered to changes that carry origins, so an unrelated API permission
- * changing does not rebuild anything.
- */
-const onPermissionsChanged = (permissions: chrome.permissions.Permissions): void => {
-  if ((permissions.origins?.length ?? 0) === 0) return;
-  void onServerAccessChanged().catch(() => undefined);
-};
-
-chrome.permissions.onRemoved.addListener(onPermissionsChanged);
-chrome.permissions.onAdded.addListener(onPermissionsChanged);
 // Tab, window-focus, heartbeat, prune and permission listeners for activity
 // capture. Registered unconditionally and synchronously like the rest; every
 // handler checks that capture is on before it records anything.
 registerActivityListeners();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === DEVICE_AUTH_ALARM) {
+    // A popup-started device sign-in, kept going while the worker sleeps.
+    void attemptPendingDeviceSignIn().catch(() => null);
+    return;
+  }
   if (alarm.name !== BADGE_ALARM) return;
   // Nothing is waiting on this, so it swallows its own failure: the alarm
   // fires again in 30 seconds regardless.

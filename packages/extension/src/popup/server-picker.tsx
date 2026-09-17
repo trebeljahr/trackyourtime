@@ -3,7 +3,7 @@ import { sameServerOrigin } from "@starter/core";
 import { DEFAULT_API_URL } from "../lib/config";
 import { defaultServerLabel, describeServer } from "../lib/server-label";
 import { ConfirmPanel } from "./confirm-panel";
-import { describeError, describeServerInput } from "./errors";
+import { describeServerInput } from "./errors";
 import { useT, type PopupT } from "../i18n/use-t";
 import {
   planServerSwitch,
@@ -42,11 +42,6 @@ const unsentHint = (pending: number, apiUrl: string, t: PopupT): string =>
  * opens the field. In a development build the first choice is named by its
  * host, since calling a laptop "cloud" would be false.
  *
- * The submit handler is where Chrome's permission prompt comes from, so it
- * must not `await` anything before `switchServer` has asked — see
- * `switch-server.ts`. The confirm panel's button is a click of its own, which
- * is why a switch that needs confirming can still ask Chrome from there.
- *
  * Reachable from the signed-out screen as well as Settings → Account: a person
  * who cannot reach their server has to change it BEFORE a sign-in can work.
  */
@@ -66,18 +61,12 @@ export function ServerPicker({
   const [problem, setProblem] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
 
-  /**
-   * Switch to `origin`. Called straight from a click — the submit or the
-   * confirm — with nothing awaited first.
-   */
+  /** Switch to `origin`, from the submit or the confirm. */
   const run = (origin: string, discardUnsent: boolean): void => {
     setBusy(true);
     setProblem(null);
     void switchServer({
       input: origin,
-      currentApiUrl: apiUrl,
-      defaultApiUrl: DEFAULT_API_URL,
-      permissions: chrome.permissions,
       send: (validated) => onSetServer(validated, discardUnsent),
     }).then((result) => {
       setBusy(false);
@@ -96,9 +85,7 @@ export function ServerPicker({
       setProblem(
         result.stage === "input" && result.problem !== undefined
           ? describeServerInput(result.problem, origin, t)
-          : result.stage === "access"
-            ? describeError(result.code, result.message, origin, t)
-            : result.message,
+          : result.message,
       );
     });
   };

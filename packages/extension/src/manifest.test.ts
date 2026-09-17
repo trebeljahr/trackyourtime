@@ -6,15 +6,24 @@ import {
   manifestVersionFields,
 } from "../manifest.config";
 
+/** What the store listing may ask for, and nothing more, in every build. */
+const expectNoHostAccess = (manifest: Record<string, unknown>): void => {
+  expect(manifest).not.toHaveProperty("host_permissions");
+  expect(manifest).not.toHaveProperty("optional_host_permissions");
+  expect(manifest.permissions).toEqual(["storage", "alarms", "idle"]);
+  expect(manifest.permissions).not.toContain("cookies");
+  expect(manifest.optional_permissions).toEqual(["tabs"]);
+};
+
 describe("production manifest", () => {
-  it("requires only the hosted API and offers any server as optional", () => {
-    const manifest = buildManifest("production", {});
-    expect(manifest.host_permissions).toEqual(["https://api.trackyourtime.dev/*"]);
-    expect(manifest.optional_host_permissions).toEqual([
-      "https://*/*",
-      "http://localhost/*",
-      "http://127.0.0.1/*",
-    ]);
+  it("asks for no host access and no cookies", () => {
+    expectNoHostAccess(buildManifest("production", {}));
+  });
+
+  it("lets only the hosted web app message the extension", () => {
+    expect(buildManifest("production", {}).externally_connectable).toEqual({
+      matches: ["https://trackyourtime.dev/*"],
+    });
   });
 
   it("pins the Web Store key by default", () => {
@@ -39,13 +48,16 @@ describe("development manifest", () => {
     expect(buildManifest("development", { EXTENSION_KEY: "k" }).key).toBe("k");
   });
 
-  it("holds loopback and can ask for an https server", () => {
-    const manifest = buildManifest("development", {});
-    expect(manifest.host_permissions).toEqual([
-      "http://localhost/*",
-      "http://127.0.0.1/*",
-    ]);
-    expect(manifest.optional_host_permissions).toEqual(["https://*/*"]);
+  it("asks for no host access and no cookies", () => {
+    expectNoHostAccess(buildManifest("development", {}));
+  });
+
+  it("lets a local web app on any port message the extension, and no other extension", () => {
+    const connectable = buildManifest("development", {}).externally_connectable;
+    expect(connectable).toEqual({
+      matches: ["http://localhost/*", "http://127.0.0.1/*"],
+    });
+    expect(connectable).not.toHaveProperty("ids");
   });
 });
 

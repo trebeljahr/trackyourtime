@@ -27,6 +27,12 @@ export const popup = {
       title: "{count, plural, one {# change} other {# changes}} waiting for a server update",
       hint: "Your server is older than this app; these changes will send once it's updated",
     },
+    /** Rows another account queued in this browser, held for that account. */
+    otherAccount: {
+      title: "{count, plural, one {# change} other {# changes}} from another account",
+      hint: "Another account queued these in this browser before it signed out. They are sent only when that account signs in here again. Or discard them here.",
+      workspace: "another account’s workspace",
+    },
     discardHintWaiting: "This deletes work that no server has received. It cannot be recovered.",
     leftWorkspace: "a workspace you left",
     untitled: "(no description)",
@@ -103,7 +109,7 @@ export const popup = {
     invalidEmail: "That does not look like an email address.",
     emailNotVerified: "Verify your email address before signing in.",
     twoFactorUnsupported:
-      "This account uses two-factor authentication, which the extension cannot complete. Sign in to the web app in this browser first — the extension then uses that session.",
+      "This account uses two-factor authentication. Use Sign in with the web app.",
     noFetch: "This browser could not make the request.",
     notSignedIn: "Sign in first.",
     stillSyncing: "That entry has not reached the server yet. Try again in a moment.",
@@ -121,9 +127,17 @@ export const popup = {
     activityPermissionFailed: "Could not ask Chrome for access to tabs.",
     activityUnavailable: "Activity capture has no account to file under yet. Try again in a moment.",
     suggestionTracked: "That time is already tracked or dismissed.",
-    /** `server` is the host the extension was trying to reach. */
-    serverAccessMissing: "Chrome has not given the extension access to {server}, so it cannot reach that server.",
-    serverAccessRefused: "Chrome did not give the extension access to {server}, so it cannot reach that server.",
+    /**
+     * `server` is the host the extension was trying to reach; `origin` is this
+     * extension's `chrome-extension://…` origin, for the admin to copy.
+     */
+    originNotTrusted:
+      "{server} does not accept requests from this extension. Ask its admin to set TRUST_STORE_APPS=true, or to add {origin} to TRUSTED_ORIGINS.",
+    deviceUrlInvalid:
+      "The server sent an approval page the extension will not open. The server’s web address has to use https://.",
+    deviceDenied: "The sign-in was declined in the web app.",
+    deviceExpired: "The code expired before anyone approved it. Start again.",
+    deviceFailed: "The sign-in did not finish. Start again.",
     serverUnreachable: "Could not reach {server}. Check the address, and that the server is running.",
     notTrackYourTime:
       "{server} answered, but it is not a Track Your Time server. Enter the address you open Track Your Time at.",
@@ -177,10 +191,6 @@ export const popup = {
     discardAndSwitch: "Discard and switch",
     unsentHint:
       "{count, plural, one {# change has not reached {server} yet. Switching servers signs you out, and the extension discards it.} other {# changes have not reached {server} yet. Switching servers signs you out, and the extension discards them.}}",
-    accessLost: "Chrome no longer lets the extension reach {host}.",
-    accessLostRefused:
-      "Chrome no longer lets the extension reach {host}. Access was not given, so the extension still cannot reach it.",
-    allowAccess: "Allow access",
   },
   suggestions: {
     title: "Suggestions",
@@ -270,6 +280,14 @@ export const popup = {
     signingInTo: "Signing in to",
     changeServer: "Change server",
     keepServer: "Cancel",
+    or: "or",
+    withWebApp: "Sign in with the web app",
+    withWebAppHint: "Opens Track Your Time in a new tab. Works with two-factor authentication.",
+    deviceTitle: "Approve this browser",
+    deviceWaiting: "Approve the sign-in in the tab that opened. It shows this code:",
+    deviceCancel: "Cancel",
+    openWebApp: "Open Track Your Time",
+    openWebAppHint: "Already signed in there? The extension signs in when the page opens.",
   },
   section: {
     saved: "Saved",
@@ -464,13 +482,16 @@ export const popup = {
     signOutBrowserTitle: "Sign this browser out?",
     signOutDeviceTitle: "Sign this device out?",
     sharedSessionHint:
-      "This session is shared with the web app, so signing out here signs out Track Your Time in this browser too.",
+      "Signed in through the web app. Signing out here also signs you out of Track Your Time in this browser the next time you open it.",
     signOutBrowserHint: "The extension forgets its session and you sign in again.",
     signOutDeviceHint:
       "{name} stops syncing immediately and has to sign in again. Nothing it already tracked is lost.",
     signOutOthers: "Sign out other devices",
     signOutOthersTitle: "Sign every other device out?",
     signOutOthersHint: "This browser stays signed in. Everything else has to sign in again.",
+    /** The extension is linked to the web app, whose own session in this browser is one of the others. */
+    signOutOthersSharedHint:
+      "Every other device has to sign in again, and so does Track Your Time in this browser. The extension is signed in through it, so the extension signs out too.",
     signOutOthersConfirm: "Sign them out",
   },
   account: {
@@ -478,12 +499,12 @@ export const popup = {
     /** This extension's own release, from the root package.json. */
     appVersion: "Track Your Time extension {version}",
     sharedSession:
-      "Signed in with the web app’s session — signing out here signs out Track Your Time in this browser too.",
+      "Signed in through the web app in this browser. Signing out of the web app signs the extension out too.",
     changeServer: "Change server…",
     keepServer: "Keep this server",
     signOutTitle: "Sign out?",
     signOutSharedHint:
-      "This session is shared with the web app, so Track Your Time signs out in this browser too.",
+      "Signing out here also signs you out of Track Your Time in this browser the next time you open it.",
     signOutHint: "Anything already tracked is kept. You sign in again to keep tracking.",
   },
 } as const;
