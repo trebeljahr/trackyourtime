@@ -843,6 +843,77 @@ Not run, and why:
   check).
 - The `markQuitting` path on a real Squirrel.Mac update.
 
+### Stage 7 — review (2026-09-17)
+
+No Electron binary was launched in this review either, for the same reason, so
+the headless update spec is still unrun. Everything else was re-checked from
+the source and from the suites that need no Electron.
+
+Re-run here, on Node 24.14.1: `pnpm test:electron` (111 before the fix below,
+112 after), `scripts/lib/desktop-release.test.mjs` (34), `pnpm run test:client`
+(134 files, 1259 tests), `pnpm typecheck`, `scripts/lib/llms.test.mjs`,
+`pnpm build:client` (it prerenders `/download/` and `/de/download/`, with the
+hreflang pair and eight "not released yet" rows in the HTML) and
+`pnpm build:docs` (which is what would fail on a broken docs link).
+`node scripts/build-desktop.mjs --electron-only` rebuilds `main.js` at 663 KB
+whose only non-builtin `require` is `electron`, and
+`scripts/desktop-release-draft.mjs` was run over a synthetic six-leg artifact
+tree: it attached the mac zip/dmg and their feed, the AppImage, the deb and
+`latest-linux.yml`, and left out the `-unsigned` Windows installer (with the
+warning), the pkg and the snap.
+
+Checked against the dependency, not just the docs, because each of these is a
+claim the docs make:
+
+- `electron-updater`'s `GitHubProvider` resolves `releases/latest`, which is
+  the latest **published**, non-prerelease release — drafts are invisible, as
+  the docs say. `releaseType` in `app-update.yml` is never read by the
+  updater; it only tells electron-builder's publisher what to create.
+- `Provider.getCustomChannelName` appends `-linux` plus an arch suffix, so an
+  arm64 Linux copy really asks for `latest-linux-arm64.yml` — the name
+  `FEED_FILES` and the matrix both use.
+- `app-builder-lib`'s `updateInfoBuilder` suffixes the update-info file by
+  arch on Linux only and merges the files of several arches built in one run
+  into one task, so the mac leg's single `--arm64 --x64` invocation yields one
+  `latest-mac.yml` naming both zips.
+- The previous run's `release/linux-arm64-unpacked/resources/app-update.yml`
+  is on disk with `provider: github`, `releaseType: draft` and
+  `updaterCacheDirName: trackyourtime-updater` (the name the Homebrew cask
+  zaps), and the unsigned `release/mac-arm64` app has no such file — the
+  build-time gate on a real package, in both directions.
+- `release.yml` creates no GitHub Release, so the two workflows a `v*` tag
+  starts cannot collide over the draft.
+
+One defect found and fixed:
+
+- **A headless run checked for updates on a timer.** `installUpdater` gave the
+  memory updater the real scheduler, so 30 s into any headless launch a check
+  fired that no event ever answers: the status latched at "checking", which
+  `mayCheck` then refuses to leave. The new spec asserts `data-status="idle"`
+  and `checks() === 1` after its own click, so it would have failed on a launch
+  that took over 30 s to reach the click — and the Settings card would have
+  been stuck showing "Checking for updates…" in every other headless run.
+  `createUpdateController` now takes `autoCheck`, `updater.ts` passes
+  `!headless`, and two tests pin it (one drives a controller with `autoCheck:
+  false`, one greps `updater.ts`, beside the existing `quitAndInstall` grep).
+- **The /download page spells the default shortcut out as prose** in four
+  variants, with nothing tying them to `DEFAULT_DESKTOP_SHORTCUTS` or to the
+  key names Settings renders. `pages.test.tsx` now compares each variant with
+  `formatAccelerator(DEFAULT_DESKTOP_SHORTCUTS["toggle-timer"], …)` over the
+  English and German settings catalogs; changing the binding or a key's name
+  fails the test instead of leaving a wrong shortcut on a public page
+  (checked by breaking the page's string).
+
+Not defects, checked and left alone: the updater loads `electron-updater`
+during `installDesktop`, and a throw there would take the window with it — but
+nothing in `MacUpdater`/`NsisUpdater`'s constructor reads the config, and the
+policy already proves `app-update.yml` exists. The copy's "close the window
+and it keeps running" names macOS and Windows only, which matches
+`defaultDesktopSettings` (`closeHides` is true on win32, false on Linux).
+`releasePlan` treats every Linux leg as having a feed although the leg's mode
+is `unsigned`, which is right: Linux artifact names carry no `-unsigned`
+suffix.
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**
