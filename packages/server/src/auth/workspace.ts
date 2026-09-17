@@ -3,8 +3,8 @@
 // The rule (Stage 0, decision 3): an explicit `workspaceId` on the input ALWAYS
 // wins; the session's active organization is only the default. Session-implicit
 // scope is a footgun for the clients that cannot re-read it — a Raycast menu
-// bar that has been open for three days, and a browser extension borrowing the
-// web app's cookie without controlling it.
+// bar that has been open for three days, and a browser extension that follows
+// the web app's sign-in without controlling it.
 import type { Visibility } from "@starter/shared";
 import {
   WorkspaceMember,

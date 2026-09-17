@@ -267,6 +267,78 @@ export type PollOptions = {
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/** The answer to one `/device/token` exchange that did not end the flow. */
+export type DeviceTokenResult =
+  | { status: "approved"; session: IssuedSession }
+  | { status: "pending" }
+  | { status: "slow-down" };
+
+/**
+ * Exchange the device code for a session ONCE.
+ *
+ * `pending` and `slow-down` are the RFC 8628 answers that mean "ask again
+ * later"; everything else the server refuses with is terminal and thrown as
+ * `AuthError` with the RFC's own code (`access_denied`, `expired_token`, …).
+ * A client whose process can be stopped between two polls (a browser
+ * extension's service worker) calls this from whatever wakes it, instead of
+ * holding a {@link pollForDeviceSession} loop open.
+ */
+export async function requestDeviceToken(
+  options: SessionAuthOptions,
+  deviceCode: string,
+): Promise<DeviceTokenResult> {
+  const doFetch = resolveFetch(options.fetchImpl);
+
+  const response = await doFetch(authUrl(options.baseUrl, "/device/token"), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      [CLIENT_HEADER]: options.clientId,
+      ...versionHeaders(options.clientVersion),
+    },
+    body: JSON.stringify({
+      grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+      device_code: deviceCode,
+      client_id: options.clientId,
+    }),
+  });
+
+  const body = await readJson(response);
+
+  if (response.ok) {
+    // The device grant returns the session token as `access_token`, in the
+    // OAuth shape. The header is checked first only because a future
+    // better-auth may start setting it here too.
+    const token =
+      response.headers.get(SESSION_TOKEN_HEADER) ?? asString(body.access_token);
+    if (!token) {
+      throw new AuthError(
+        "Device approved but no session token was returned",
+        "NO_SESSION_TOKEN",
+      );
+    }
+    // better-auth's `/device/token` carries no user today; a caller that
+    // needs the account asks `get-session` with the token.
+    const user =
+      typeof body.user === "object" && body.user !== null
+        ? (body.user as Record<string, unknown>)
+        : {};
+    return {
+      status: "approved",
+      session: { token, userId: asString(user.id), email: asString(user.email) },
+    };
+  }
+
+  const error = asString(body.error) ?? `HTTP_${response.status}`;
+  if (error === "authorization_pending") return { status: "pending" };
+  if (error === "slow_down") return { status: "slow-down" };
+
+  throw new AuthError(
+    asString(body.error_description) ?? "Device authorization failed",
+    error,
+  );
+}
+
 /**
  * Poll until the user approves the code, then return the session.
  *
@@ -279,7 +351,6 @@ export async function pollForDeviceSession(
   deviceCode: string,
   poll: PollOptions = {},
 ): Promise<IssuedSession> {
-  const doFetch = resolveFetch(options.fetchImpl);
   const sleep = poll.sleepImpl ?? defaultSleep;
   const deadline = Date.now() + (poll.timeoutSeconds ?? 600) * 1000;
 
@@ -293,56 +364,10 @@ export async function pollForDeviceSession(
       throw new AuthError("Timed out waiting for approval", "EXPIRED_TOKEN");
     }
 
-    const response = await doFetch(authUrl(options.baseUrl, "/device/token"), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        [CLIENT_HEADER]: options.clientId,
-        ...versionHeaders(options.clientVersion),
-      },
-      body: JSON.stringify({
-        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-        device_code: deviceCode,
-        client_id: options.clientId,
-      }),
-    });
-
-    const body = await readJson(response);
-
-    if (response.ok) {
-      // The device grant returns the session token as `access_token`, in the
-      // OAuth shape. The header is checked first only because a future
-      // better-auth may start setting it here too.
-      const token =
-        response.headers.get(SESSION_TOKEN_HEADER) ?? asString(body.access_token);
-      if (!token) {
-        throw new AuthError(
-          "Device approved but no session token was returned",
-          "NO_SESSION_TOKEN",
-        );
-      }
-      const user =
-        typeof body.user === "object" && body.user !== null
-          ? (body.user as Record<string, unknown>)
-          : {};
-      return { token, userId: asString(user.id), email: asString(user.email) };
-    }
-
-    const error = asString(body.error) ?? `HTTP_${response.status}`;
-    if (error === "authorization_pending") {
-      await sleep(intervalMs);
-      continue;
-    }
-    if (error === "slow_down") {
-      intervalMs += 5000;
-      await sleep(intervalMs);
-      continue;
-    }
-
-    throw new AuthError(
-      asString(body.error_description) ?? "Device authorization failed",
-      error,
-    );
+    const result = await requestDeviceToken(options, deviceCode);
+    if (result.status === "approved") return result.session;
+    if (result.status === "slow-down") intervalMs += 5000;
+    await sleep(intervalMs);
   }
 }
 

@@ -201,8 +201,8 @@ export const parseWorkspaceChoice = (raw: string | null): StoredWorkspaceChoice 
  * `choice` if it was recorded for this server and account, else an empty one.
  *
  * A null on either side of a comparison is "not recorded", which matches
- * anything: a client that has no account id yet (a session borrowed from the
- * web app's cookie) must still be able to use the choice it made.
+ * anything: a client that has no account id yet (a session whose user the
+ * server has not named yet) must still be able to use the choice it made.
  */
 export const workspaceChoiceFor = (
   choice: StoredWorkspaceChoice,
