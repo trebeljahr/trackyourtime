@@ -1,138 +1,263 @@
 name: Desktop Release
 
-# Manual dispatch only (Actions -> Desktop Release -> Run workflow); a `v*` tag
-# does not start it — see the note under `on:`. Each platform job builds an
-# Electron app (scripts/build-desktop.mjs + electron-builder.config.mjs), uploads it as an Actions artifact, and pushes it to itch.io via
-# butler when ITCH_API_KEY / ITCH_USER / ITCH_GAME are set as repo secrets.
-# Nothing it produces is code-signed.
+# Builds every desktop artifact in one matrix, one leg per distribution channel
+# (docs/desktop-app-plan.md, Stage 6; docs/deploy.md → "Desktop release"):
+#
+#   mac        Developer ID dmg + zip, arm64 and x64, hardened runtime, notarized
+#   mas        Mac App Store pkg, universal, sandboxed
+#   win        NSIS installer, x64 + arm64 in one exe
+#   win-store  AppX for the Microsoft Store (Partner Center signs it)
+#   linux-x64  AppImage, deb, rpm, tar.gz (Flathub's input) and snap
+#   linux-arm64 the same on an arm64 runner (snapcraft cannot cross-build)
+#
+# Signing follows the Android rule: no secrets for a channel builds an artifact
+# whose file name says -unsigned; a complete set signs and the signature is
+# verified; anything in between fails the leg before the export is built
+# (scripts/lib/desktop-release.mjs, resolveSigning). A Mac App Store build
+# without its secrets packages the .app to check the config and uploads
+# nothing, since there is no unsigned pkg to submit; a Microsoft Store build
+# without its Partner Center identity is skipped with a notice.
+#
+# Artifacts go to the run's Actions artifacts only. Publishing a GitHub Release
+# and the updater feed is Stage 7; store uploads are manual.
 
 on:
-  # No `push: tags` trigger, on purpose. v0.1.0 ships the two self-host images
-  # (release.yml) and nothing else: no desktop build is claimed as released,
-  # and neither an itch.io key nor a macOS/Windows signing identity exists on
-  # this repo. Left on the tag, this workflow would have put three red jobs
-  # next to the release, for artifacts nobody was going to download.
-  #
-  # Before adding `push: { tags: ["v*"] }` back above workflow_dispatch:
-  #   - decide how the builds are distributed: itch.io needs the ITCH_API_KEY,
-  #     ITCH_USER and ITCH_GAME secrets; GitHub Releases would need
-  #     `permissions: contents: write` AND dropping `--publish never` below
-  #   - sign them: a macOS Developer ID certificate plus notarization
-  #     credentials (electron-builder reads CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID,
-  #     APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID) and a Windows certificate
-  #     (WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD), exposed to the Package step —
-  #     unsigned builds are blocked by Gatekeeper and flagged by SmartScreen
-  #   - the butler push tags `--userversion` from GITHUB_REF_NAME, which is the
-  #     tag on a tag run but the branch name ("main") on a dispatch
-  #   - run a dispatch of this workflow green on all three legs first
+  # No `push: tags` trigger yet. Add `push: { tags: ["v*"] }` when a signed
+  # dispatch has gone green on every leg. build-desktop.mjs already refuses a
+  # tag that does not match package.json's version.
   workflow_dispatch:
 
-# The API origin the static export is built against.
-#
-# A repo VARIABLE with a literal fallback, not a secret — an API origin is not
-# one, and reading it as one was worse than merely wrong: `secrets.NEXT_PUBLIC_API_URL`
-# is not set on this repo, so it expanded to the empty string and every `v*`
-# tag would have packaged an app built against nothing. Next inlines
-# NEXT_PUBLIC_* at build time, so that binary cannot be retargeted after the
-# fact — it is downloaded, installed, and permanently talks to no API.
-#
-# The main pipeline shipped exactly this for months and settled on the form
-# below in 33f4683 (a `vars.` read that silently produced empty-API images,
-# plus a literal fallback so an unset variable cannot do it again). Same read
-# here, so the two cannot drift apart.
+permissions:
+  contents: read
+
+# The API origin the static export is built against: a repo VARIABLE with a
+# literal fallback, never a secret (an unset secret expands to "" and would ship
+# an app that talks to no API). Same read as build-and-deploy.yml.
 env:
   NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
 
 jobs:
   build:
+    name: ${{ matrix.channel }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            target: mac
-            artifact-glob: "release/*.zip"
-            butler-channel: mac
-          - os: windows-latest
-            target: win
-            artifact-glob: "release/*.exe"
-            butler-channel: win
-          - os: ubuntu-latest
-            target: linux
-            artifact-glob: "release/*.AppImage"
-            butler-channel: linux
+          - channel: mac
+            signing-channel: mac
+            os: macos-latest
+            builder: --mac dmg zip --arm64 --x64
+            artifacts: |
+              release/*.dmg
+              release/*.zip
+              release/*.blockmap
+          - channel: mas
+            signing-channel: mas
+            os: macos-latest
+            builder: --mac mas --universal
+            artifacts: |
+              release/*.pkg
+          - channel: win
+            signing-channel: win
+            os: windows-latest
+            builder: --win nsis --x64 --arm64
+            artifacts: |
+              release/*.exe
+              release/*.blockmap
+          - channel: win-store
+            signing-channel: win-store
+            os: windows-latest
+            builder: --win appx --x64 --arm64
+            artifacts: |
+              release/*.appx
+          - channel: linux-x64
+            signing-channel: linux
+            os: ubuntu-24.04
+            builder: --linux AppImage deb rpm tar.gz snap --x64
+            artifacts: |
+              release/*.AppImage
+              release/*.deb
+              release/*.rpm
+              release/*.tar.gz
+              release/*.snap
+          - channel: linux-arm64
+            signing-channel: linux
+            os: ubuntu-24.04-arm
+            builder: --linux AppImage deb rpm tar.gz snap --arm64
+            artifacts: |
+              release/*.AppImage
+              release/*.deb
+              release/*.rpm
+              release/*.tar.gz
+              release/*.snap
 
     runs-on: ${{ matrix.os }}
 
-    # Job-level rather than step-level, so the butler `if:` guards below can see
-    # it. A step's own `env:` is not in scope for that step's `if:`, so with the
-    # key declared only on the steps they were skipped even with the secret set.
+    # Job-level, so step `if:` guards can read them (a step's own `env:` is not
+    # in scope for its `if:`). Each channel sees only its own certificate:
+    # electron-builder reads CSC_LINK for both Apple channels, and the two are
+    # different certificates. Names on the right are the GitHub secrets
+    # (docs/deploy.md → "Desktop release" → secrets).
     env:
-      ITCH_API_KEY: ${{ secrets.ITCH_API_KEY }}
+      CSC_LINK: ${{ matrix.channel == 'mac' && secrets.MAC_CSC_LINK || matrix.channel == 'mas' && secrets.MAS_CSC_LINK || '' }}
+      CSC_KEY_PASSWORD: ${{ matrix.channel == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || matrix.channel == 'mas' && secrets.MAS_CSC_KEY_PASSWORD || '' }}
+      # The App Store Connect API key the iOS release uses notarizes too. It is
+      # decoded to a file below; APPLE_API_KEY is that file's path.
+      APPLE_API_KEY_BASE64: ${{ matrix.channel == 'mac' && secrets.APPLE_API_KEY_BASE64 || '' }}
+      APPLE_API_KEY_ID: ${{ matrix.channel == 'mac' && secrets.APPLE_API_KEY_ID || '' }}
+      APPLE_API_ISSUER: ${{ matrix.channel == 'mac' && secrets.APPLE_API_ISSUER_ID || '' }}
+      APPLE_TEAM_ID: ${{ matrix.channel == 'mas' && secrets.APPLE_TEAM_ID || '' }}
+      MAS_PROVISIONING_PROFILE_BASE64: ${{ matrix.channel == 'mas' && secrets.MAS_PROVISIONING_PROFILE_BASE64 || '' }}
+      WIN_CSC_LINK: ${{ matrix.channel == 'win' && secrets.WIN_CSC_LINK || '' }}
+      WIN_CSC_KEY_PASSWORD: ${{ matrix.channel == 'win' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+      AZURE_TENANT_ID: ${{ matrix.channel == 'win' && secrets.AZURE_TENANT_ID || '' }}
+      AZURE_CLIENT_ID: ${{ matrix.channel == 'win' && secrets.AZURE_CLIENT_ID || '' }}
+      AZURE_CLIENT_SECRET: ${{ matrix.channel == 'win' && secrets.AZURE_CLIENT_SECRET || '' }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ matrix.channel == 'win' && secrets.AZURE_TRUSTED_SIGNING_ENDPOINT || '' }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ matrix.channel == 'win' && secrets.AZURE_TRUSTED_SIGNING_ACCOUNT || '' }}
+      AZURE_TRUSTED_SIGNING_PROFILE: ${{ matrix.channel == 'win' && secrets.AZURE_TRUSTED_SIGNING_PROFILE || '' }}
+      AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ matrix.channel == 'win' && secrets.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME || '' }}
+      # Not secrets: Partner Center shows them on the product identity page.
+      WINDOWS_STORE_IDENTITY_NAME: ${{ vars.WINDOWS_STORE_IDENTITY_NAME }}
+      WINDOWS_STORE_PUBLISHER: ${{ vars.WINDOWS_STORE_PUBLISHER }}
+      WINDOWS_STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.WINDOWS_STORE_PUBLISHER_DISPLAY_NAME }}
 
     steps:
       - uses: actions/checkout@v4
 
-      # No `version:` input. pnpm/action-setup@v4 reads `packageManager` from
-      # the root package.json, and an explicit `version: 11` next to
-      # "pnpm@11.1.2" is not treated as compatible: the action throws
-      # "Multiple versions of pnpm specified" and every leg died here.
+      # No `version:` input: pnpm/action-setup reads `packageManager`.
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
         with:
+          # Node 26's electron download leaves a truncated binary (CLAUDE.md).
           node-version: 24
           cache: pnpm
 
+      - name: Decode the Apple key files
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          if [ -n "$APPLE_API_KEY_BASE64" ]; then
+            printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+            echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$MAS_PROVISIONING_PROFILE_BASE64" ]; then
+            printf '%s' "$MAS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/embedded.provisionprofile"
+            echo "MAS_PROVISIONING_PROFILE=$RUNNER_TEMP/embedded.provisionprofile" >> "$GITHUB_ENV"
+          fi
+
+      # Decides signed / unsigned / store before anything slow runs, with the
+      # same function build-desktop.mjs calls. A partial set fails here.
+      - name: Check the signing secrets
+        id: signing
+        shell: bash
+        run: node scripts/desktop-signing-mode.mjs ${{ matrix.signing-channel }}
+
       - name: Install deps
+        if: steps.signing.outputs.mode != 'skip'
         run: pnpm install --frozen-lockfile
 
-      # One script, the same one `pnpm electron:build` runs: it builds the
-      # desktop export (packages/client/out-desktop), checks that
-      # NEXT_PUBLIC_API_URL reached the bundle and that no HTML uses a relative
-      # "./_next" prefix, bundles electron/src into electron/dist, generates
-      # build/icon.icns / icon.ico when they are missing (they are gitignored),
-      # runs electron-builder, and then lists the app.asar and fails on
-      # anything but the bundle, the export and package.json. Calling
-      # electron-builder directly here skipped that last check, so a release
-      # could ship @capacitor/* or other stray files unnoticed.
-      #
-      # `--publish never` is passed by the script. With GH_TOKEN set,
-      # electron-builder would otherwise publish on its own and try to create
-      # a GitHub release, which this repo's read-only token answers with a 403.
-      # The artifacts reach users through upload-artifact and butler below.
-      - name: Build and package the desktop app
-        run: node scripts/build-desktop.mjs --package --${{ matrix.target }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # rpm builds need rpmbuild; the snap target needs snapcraft (LXD is not
+      # used: electron-builder builds from its prebuilt template).
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+          sudo snap install snapcraft --classic
+
+      # One script, the same one `pnpm electron:build` runs: export into
+      # out-desktop (API URL asserted in a chunk), bundle electron/src,
+      # icons, electron-builder with --publish never, then the asar listing
+      # (no @capacitor, nothing stray) and the version inside every package
+      # against package.json (and, on a tag, the tag against package.json).
+      - name: Build and package
+        if: steps.signing.outputs.mode != 'skip'
+        shell: bash
+        run: node scripts/build-desktop.mjs --channel ${{ matrix.signing-channel }} --package ${{ matrix.builder }}
+
+      # An unsigned leg must say so in every file a person could download, and a
+      # signed leg must not: the names come from TRACKYOURTIME_UNSIGNED, which
+      # build-desktop.mjs sets from the same decision as above.
+      - name: Check the artifact names match the signing
+        if: steps.signing.outputs.mode == 'signed' || steps.signing.outputs.mode == 'unsigned'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(release/*.dmg release/*.zip release/*.exe release/*.pkg)
+          if [ "${{ matrix.signing-channel }}" = "linux" ]; then exit 0; fi
+          [ ${#files[@]} -gt 0 ] || [ "${{ matrix.channel }}" = "mas" ] || { echo "::error::No installer was written."; exit 1; }
+          for f in "${files[@]}"; do
+            case "$f" in
+              *-unsigned.*) [ "${{ steps.signing.outputs.mode }}" = "unsigned" ] || { echo "::error::$f is named unsigned in a signed build"; exit 1; } ;;
+              *) [ "${{ steps.signing.outputs.mode }}" = "signed" ] || { echo "::error::$f is not named -unsigned but nothing signed it"; exit 1; } ;;
+            esac
+          done
+
+      # ── Signature verification ─────────────────────────────────────
+      - name: Verify the Developer ID signature and notarization
+        if: matrix.channel == 'mac' && steps.signing.outputs.mode == 'signed'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in release/mac*/"Track Your Time.app"; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign -d --entitlements - "$app" | grep -q "com.apple.security.cs.allow-jit"
+            codesign -dv "$app" 2>&1 | grep -q "flags=0x10000(runtime)"
+            spctl --assess --type execute --verbose=2 "$app"
+            xcrun stapler validate "$app"
+          done
+          # The dmg itself is not signed (electron-builder's dmg.sign defaults
+          # to false); what Gatekeeper checks is the stapled app inside it.
+
+      - name: Verify the Mac App Store signature
+        if: matrix.channel == 'mas' && steps.signing.outputs.mode == 'signed'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in release/mas*/"Track Your Time.app"; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign -d --entitlements - "$app" | grep -q "com.apple.security.app-sandbox"
+            codesign -d --entitlements - "$app" | grep -q "$APPLE_TEAM_ID.com.trebeljahr.trackyourtime"
+            test -f "$app/Contents/embedded.provisionprofile"
+          done
+          ls release/*.pkg
+          for pkg in release/*.pkg; do pkgutil --check-signature "$pkg"; done
+
+      - name: Verify the Windows signature
+        if: matrix.channel == 'win' && steps.signing.outputs.mode == 'signed'
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -Last 1
+          if (-not $signtool) { throw "signtool.exe not found" }
+          $files = @(Get-ChildItem release -Filter *.exe) + @(Get-ChildItem release -Recurse -Filter "Track Your Time.exe")
+          foreach ($f in $files) {
+            & $signtool.FullName verify /pa /v $f.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool verify failed for $($f.FullName)" }
+          }
+
+      # ── Checksums and upload ───────────────────────────────────────
+      - name: Write checksums
+        if: steps.signing.outputs.mode != 'skip'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          cd release
+          files=(*.dmg *.zip *.pkg *.exe *.appx *.AppImage *.deb *.rpm *.tar.gz *.snap)
+          if [ ${#files[@]} -gt 0 ]; then
+            if command -v sha256sum >/dev/null; then sha256sum "${files[@]}"; else shasum -a 256 "${files[@]}"; fi > SHA256SUMS-${{ matrix.channel }}.txt
+            cat SHA256SUMS-${{ matrix.channel }}.txt
+          fi
 
       - name: Upload artifacts
+        if: steps.signing.outputs.mode != 'skip'
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-${{ matrix.target }}
-          path: ${{ matrix.artifact-glob }}
-
-      - name: Install butler (itch.io)
-        if: env.ITCH_API_KEY != ''
-        shell: bash
-        run: |
-          case "${{ matrix.os }}" in
-            macos-latest)  URL=https://broth.itch.ovh/butler/darwin-amd64/LATEST/archive/default ;;
-            ubuntu-latest) URL=https://broth.itch.ovh/butler/linux-amd64/LATEST/archive/default ;;
-            windows-latest) URL=https://broth.itch.ovh/butler/windows-amd64/LATEST/archive/default ;;
-          esac
-          curl -L -o butler.zip "$URL"
-          unzip butler.zip -d butler-bin
-          echo "$PWD/butler-bin" >> "$GITHUB_PATH"
-
-      - name: Push to itch.io
-        if: env.ITCH_API_KEY != ''
-        shell: bash
-        env:
-          BUTLER_API_KEY: ${{ secrets.ITCH_API_KEY }}
-          ITCH_USER: ${{ secrets.ITCH_USER }}
-          ITCH_GAME: ${{ secrets.ITCH_GAME }}
-        run: |
-          ARTIFACT=$(ls ${{ matrix.artifact-glob }} | head -n1)
-          butler push "$ARTIFACT" "$ITCH_USER/$ITCH_GAME:${{ matrix.butler-channel }}" \
-            --userversion "${GITHUB_REF_NAME#v}"
+          name: desktop-${{ matrix.channel }}-${{ steps.signing.outputs.mode }}
+          path: |
+            ${{ matrix.artifacts }}
+            release/SHA256SUMS-${{ matrix.channel }}.txt
+          # A Mac App Store build without its secrets writes no pkg.
+          if-no-files-found: ${{ matrix.channel == 'mas' && steps.signing.outputs.mode == 'unsigned' && 'ignore' || 'error' }}

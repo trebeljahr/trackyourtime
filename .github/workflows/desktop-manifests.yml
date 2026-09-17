@@ -1,0 +1,86 @@
+name: Desktop Manifests
+
+# The package-manager bump after a desktop release is PUBLISHED on GitHub:
+# renders the Homebrew cask, the winget manifests and the Flathub manifest from
+# that release's real files (scripts/desktop-manifests.mjs) and uploads them as
+# an artifact. When the tap is configured it also commits the cask there.
+# winget and Flathub stay manual pull requests (docs/deploy.md → "Desktop
+# release" → Homebrew, winget, Flathub).
+#
+# Run it from the release tag (Use workflow from → Tags → vX.Y.Z): the version
+# is that checkout's package.json, and the refusal below keeps a branch run from
+# rendering manifests for a version the tag does not carry.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    env:
+      # Variable: the tap repository, e.g. "<owner>/homebrew-tap". Secret: a
+      # fine-grained token with contents write on that repository only.
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Refuse anything but a matching tag
+        shell: bash
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if [ "$GITHUB_REF_TYPE" != "tag" ] || [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Run this from the tag v$version (got $GITHUB_REF_TYPE $GITHUB_REF_NAME)."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      # A draft release is not downloadable by the URLs the manifests contain,
+      # so a draft is refused rather than rendered.
+      - name: Download the published release files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)
+          if [ "$draft" != "false" ]; then echo "::error::$GITHUB_REF_NAME is a draft; publish it first."; exit 1; fi
+          mkdir -p release-files
+          gh release download "$GITHUB_REF_NAME" --dir release-files \
+            --pattern "TrackYourTime-$VERSION-mac-*.dmg" \
+            --pattern "TrackYourTime-Setup-$VERSION.exe" \
+            --pattern "TrackYourTime-$VERSION-linux-*.tar.gz"
+          ls -l release-files
+
+      - name: Render the manifests
+        run: node scripts/desktop-manifests.mjs --artifacts release-files --out manifests
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-manifests-${{ github.ref_name }}
+          path: manifests/
+
+      - name: Commit the cask to the tap
+        if: env.HOMEBREW_TAP_REPO != '' && env.HOMEBREW_TAP_TOKEN != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" tap
+          mkdir -p tap/Casks
+          cp manifests/homebrew/track-your-time.rb tap/Casks/track-your-time.rb
+          cd tap
+          if git diff --quiet -- Casks/track-your-time.rb && [ -z "$(git status --porcelain)" ]; then
+            echo "The tap already has this cask."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/track-your-time.rb
+          git commit -m "track-your-time $VERSION"
+          git push
