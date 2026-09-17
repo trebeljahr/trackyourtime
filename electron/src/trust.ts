@@ -16,9 +16,13 @@ export function isAppUrl(url: string | null | undefined): boolean {
   }
 }
 
-/** Same origin as the dev server `dev:desktop` loads, when there is one. */
+/**
+ * Same origin as the dev server `dev:desktop` loads, when there is one. Only
+ * an http(s) dev URL counts: file:, data: and about: URLs all share the opaque
+ * origin "null", so comparing origins alone would trust every one of them.
+ */
 export function isDevUrl(url: string | null | undefined, devUrl: string | null): boolean {
-  if (!url || !devUrl) return false;
+  if (!url || !devUrl || !isExternalWebUrl(devUrl)) return false;
   try {
     return new URL(url).origin === new URL(devUrl).origin;
   } catch {

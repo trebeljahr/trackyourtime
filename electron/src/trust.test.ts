@@ -31,6 +31,16 @@ describe("isTrustedSenderUrl", () => {
     assert.equal(isTrustedSenderUrl("http://127.0.0.1:7130/", "http://localhost:7130"), false);
   });
 
+  it("never lets a dev URL without a real origin trust opaque documents", () => {
+    // file:, data: and about: all have the opaque origin "null"; comparing
+    // origins alone made ELECTRON_DEV_URL=file:///… trust every data: frame.
+    for (const devUrl of ["file:///tmp/index.html", "data:text/html,x", "about:blank", "not a url"]) {
+      for (const url of ["data:text/html,<p>hi</p>", "about:blank", "file:///etc/hosts"]) {
+        assert.equal(isTrustedSenderUrl(url, devUrl), false, `${url} with dev ${devUrl}`);
+      }
+    }
+  });
+
   it("is not fooled by look-alike URLs", () => {
     assert.equal(isAppUrl("app://-.evil.com/"), false);
     assert.equal(isAppUrl("app://-@evil/"), false);
