@@ -47,6 +47,9 @@ app.setPath(
   userDataDir({
     appData: app.getPath("appData"),
     isPackaged: app.isPackaged,
+    // Never the installed app's profile: headless runs on the mock keychain,
+    // where that profile's session.bin cannot decrypt (profile.ts).
+    headless: isHeadless(),
     override: process.env.TRACKYOURTIME_USER_DATA_DIR,
   }),
 );

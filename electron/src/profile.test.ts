@@ -21,4 +21,18 @@ describe("userDataDir", () => {
     }
     assert.equal(userDataDir({ appData, isPackaged: true, override: "" }), path.join(appData, "trackyourtime"));
   });
+
+  it("never lets a headless run open the installed app's profile", () => {
+    // Headless uses the mock keychain: the real session.bin would not decrypt
+    // and would be deleted, signing the person out.
+    assert.equal(
+      userDataDir({ appData, isPackaged: true, headless: true }),
+      path.join(appData, "trackyourtime-headless"),
+    );
+    assert.equal(
+      userDataDir({ appData, isPackaged: false, headless: true }),
+      path.join(appData, "trackyourtime-dev-headless"),
+    );
+    assert.equal(userDataDir({ appData, isPackaged: true, headless: true, override: "/tmp/p" }), path.resolve("/tmp/p"));
+  });
 });
