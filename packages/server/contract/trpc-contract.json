@@ -1,5 +1,5 @@
 {
-  "apiLevel": 1,
+  "apiLevel": 2,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -3698,6 +3698,19 @@
         "type": "object"
       },
       "type": "mutation"
+    },
+    "settings.updateNotice": {
+      "input": {
+        "properties": {
+          "workspaceId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "query"
     },
     "tags.create": {
       "input": {

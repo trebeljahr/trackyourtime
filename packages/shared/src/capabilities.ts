@@ -31,6 +31,8 @@ export const REQUIRES_API_LEVEL = {
   workspaces: 1,
   /** ZUGFeRD and XRechnung exports (`invoices.export*`). */
   "invoices.einvoice": 1,
+  /** `settings.updateNotice`, the opt-in "vX.Y.Z is available" line in Settings. */
+  "settings.updateNotice": 2,
 } as const satisfies Readonly<Record<string, number>>;
 
 export type Capability = keyof typeof REQUIRES_API_LEVEL;

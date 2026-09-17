@@ -915,7 +915,9 @@ docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js
 
 The tool uses the server's own configuration and databases. It opens no port
 and makes no request outside your stack. It sends no telemetry and does not
-check for updates. Anyone who can run `docker compose exec` on the server can
+check for updates. `doctor` prints the server's release, API level and schema
+version, and, when the [update notice](#optional-integrations) is on, the
+newest release the server last found. Anyone who can run `docker compose exec` on the server can
 use it, so protect SSH access to the server.
 
 | Command | Effect |
@@ -1451,6 +1453,15 @@ expects four services.
 PDFs and returns them directly. It builds CSV and JSON exports in memory, and
 imports arrive in the request body. There is no bucket to provision, so do not
 set up MinIO for this. The server reads no `S3_*` or `AWS_*` variables.
+
+**Update notice.** Off by default, and off means the server makes no request
+to GitHub. Set `TRACKYOURTIME_UPDATE_CHECK=true` in `.env`, then run `up -d`. Once a day the server then reads the public release list
+at `https://api.github.com/repos/trebeljahr/trackyourtime/releases`. The
+request carries the server's release number in its `User-Agent` and nothing
+else. When a newer stable release exists, workspace owners and admins see
+"vX.Y.Z is available" at the bottom of Settings, with links to its release
+notes and to [Upgrading](#upgrading), and `doctor` shows it too. Nothing is
+downloaded or installed: you upgrade by hand, as below.
 
 **Sentry.** Set `SENTRY_DSN` to send server errors to any Sentry-protocol
 endpoint, including a self-hosted GlitchTip. Unset, nothing is reported and no

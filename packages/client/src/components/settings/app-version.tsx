@@ -6,6 +6,7 @@ import { API_LEVEL } from "@starter/shared";
 import { useActiveWorkspace } from "@/components/members/use-active-workspace";
 import { useT } from "@/i18n/use-t";
 import { APP_VERSION } from "@/lib/app-version";
+import { useServerSupports } from "@/lib/server-level";
 import { SELF_HOSTING_URL } from "@/lib/site-links";
 import { trpc } from "@/lib/trpc";
 
@@ -29,7 +30,9 @@ export function AppVersionInfo(): React.JSX.Element {
   });
   const server = health.data;
   const { workspace } = useActiveWorkspace();
-  const mayUpgrade = workspace?.role === "owner" || workspace?.role === "admin";
+  const serverHasNotice = useServerSupports("settings.updateNotice");
+  const mayUpgrade =
+    serverHasNotice && (workspace?.role === "owner" || workspace?.role === "admin");
   const notice = trpc.settings.updateNotice.useQuery(undefined, {
     enabled: mayUpgrade,
     staleTime: 60 * 60 * 1000,
