@@ -151,7 +151,10 @@ before this change still connects wherever `/ws` is still routed.
    - `FRONTEND_URL=https://trackyourtime.dev` — the web app, and the CORS
      allow-list entry. The browser client is cross-origin again, so this is
      what makes its calls pass preflight at all.
-   - `TRUSTED_ORIGINS` — plus the extension's `chrome-extension://<id>`.
+   - `TRUSTED_ORIGINS` — plus the extension's `chrome-extension://<id>`, or
+     `TRUST_STORE_APPS=true`. The extension has no host permissions, so
+     every request it makes is a CORS request. Without this entry the store
+     extension cannot sign in, sync or send a single entry.
 
    `.env.production` is a local convenience only — it is what
    `NODE_ENV=production pnpm --filter @starter/server start` reads — and it is
@@ -233,8 +236,13 @@ both set on the server app. Register
   Runtime env cannot change them; rebuilding the image is the only way. Both
   are **origins**, with no `/api` on the end — the client appends the path.
 - `packages/extension/manifest.config.ts` — the extension's DEFAULT production
-  server and its required `host_permissions`. A person can pick another server
-  in the popup, so this is where a fresh install starts, not the only host.
+  server. The manifest has no `host_permissions`; its `externally_connectable`
+  lists the web app's origin (`https://trackyourtime.dev/*`, from
+  `EXTENSION_BRIDGE_PRODUCTION_WEB_ORIGINS` in `@starter/shared`), which is how
+  a sign-in on the web app reaches the extension. Moving the web app's domain
+  therefore needs a new extension release too. A person can pick another
+  server in the popup, so this is where a fresh install starts, not the only
+  host.
 - `packages/raycast/src/lib/preferences.ts` — the Raycast extension's
   `apiUrl` / `webUrl` defaults (and the placeholders in its `package.json`).
 - `.github/workflows/mobile-release.yml` — `NEXT_PUBLIC_API_URL` is baked into
@@ -272,6 +280,20 @@ env fields in Coolify**:
   code. The self-host compose file sets this by default.
 - or list them in `TRUSTED_ORIGINS`, comma-separated, if this deployment's
   trust list should stay spelled out by hand.
+
+**This is a release prerequisite for the extension.** The extension has no
+host permissions, so every request it makes (tRPC, REST, auth) is a CORS
+request, and the server answers CORS only for trusted origins. Set the
+trust before the first store release, then check it:
+
+```bash
+curl -s -H 'Origin: chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi' \
+  https://api.trackyourtime.dev/api/health
+```
+
+The JSON must say `"originTrusted": true`. If the trust goes missing later,
+the popup shows a notice that names `TRUST_STORE_APPS`, and the extension
+keeps its unsent changes until the server trusts it again.
 
 Either way, the variable goes into Coolify. Not into `packages/server/.env.production` — that file is
 untracked here and never reaches the image (step 3), so a value written there

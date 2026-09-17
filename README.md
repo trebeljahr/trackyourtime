@@ -121,7 +121,7 @@ Everything is scoped to a workspace. A person can belong to several, and a works
 - **Rates are per project, not per person.** An entry takes its project's rate, else the workspace default, so everyone on a project bills at the same rate.
 - **No client portal or shared reports.** A client cannot sign in or open a link to follow a project. Send them a report or an invoice as a PDF.
 - **No Firefox extension and no desktop app.** The extension is Chrome MV3 only; see the Electron and Tauri rows above.
-- **Two-factor sign-in does not work in the phone apps or the extension's own sign-in form.** The second step needs a cookie those clients cannot send. Raycast's device flow is unaffected, because the approval happens in a browser. Google sign-in is web-only too.
+- **Two-factor sign-in does not work in the phone apps or the extension's password form.** The second step needs a cookie those clients cannot send. The extension's "Sign in with the web app" button and Raycast use the device flow instead, where you approve the sign-in in a browser. Google sign-in is web-only too.
 - **Time off, PTO, holidays, absence.** No model and no screen, so nothing computes capacity or utilization.
 - **Notifications** are one reminder email per runaway timer. No web push and no digests.
 - **Avatar upload.** The server stores no files. `avatarUrl` is a field with no upload path behind it.
@@ -168,7 +168,7 @@ better-auth validates the `Origin` header on sign-in whenever the request carrie
 - `app://-` — Electron via a custom protocol (`file://` sends `Origin: null` and cannot be trusted with credentials)
 - `tauri://localhost` and `http://tauri.localhost` — Tauri on macOS/Linux and Windows
 
-Or set `TRUST_STORE_APPS=true`, which trusts the iOS and Android apps and the Chrome Web Store extension (its id is pinned in `packages/shared/src/store-clients.ts`) in one switch. `docker-compose.selfhost.yml` defaults it to `true`, so the store builds, once they exist, can sign in to a self-hosted server with nothing to configure.
+Or set `TRUST_STORE_APPS=true`, which trusts the iOS and Android apps and the Chrome Web Store extension (its id is pinned in `packages/shared/src/store-clients.ts`) in one switch. `docker-compose.selfhost.yml` defaults it to `true`, so the store builds, once they exist, can sign in to a self-hosted server with nothing to configure. The extension asks Chrome for no access to any website, so every request it sends is a cross-origin request: without this trust it cannot sign in, sync or send an entry.
 
 Raycast and CLI clients need nothing here — their requests carry neither `Origin` nor `Sec-Fetch-*`. What guards them is the device flow plus the client-id allowlist in `packages/server/src/auth/client-label.ts`.
 

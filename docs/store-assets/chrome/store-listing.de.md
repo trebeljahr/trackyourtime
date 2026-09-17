@@ -17,9 +17,11 @@ all day, bills by the hour, and forgets to start the timer or to stop it.
   Open a production build with the account language set to „Deutsch“ and check
   every screen before this listing goes live. A German listing for a popup
   that renders English is a claim the reader disproves on the first click.
-  Known gap: a two-factor account that uses the popup's own sign-in form gets
-  core's English `TWO_FACTOR_UNSUPPORTED` sentence, which `popup/errors.ts`
-  does not translate.
+  Check the new sign-in strings too: the „Mit der Web-App anmelden“ button
+  (`signIn.withWebApp`), the waiting view with the code, and the
+  `TWO_FACTOR_UNSUPPORTED` message, which now points a two-factor account at
+  that button. The listing quotes the button label, so it must match
+  `messages/de/popup.ts` word for word.
 - **Screenshots.** `screenshot-*.png` beside this file are English captures.
   Capture German ones (account language „Deutsch“) for the German listing, or
   leave the English ones and drop the „Sprache“ line from EINSTELLUNGEN.
@@ -30,10 +32,23 @@ all day, bills by the hour, and forgets to start the timer or to stop it.
   optional `tabs` permission. It is activity capture, requested from the click
   that turns it on (see BERECHTIGUNGEN). The data disclosures must cover the
   sites and, when switched on, page titles that capture keeps on the device.
+- **No host access to justify.** The manifest declares `storage`, `alarms`
+  and `idle`, plus the optional `tabs`. It has no `host_permissions`, no
+  `optional_host_permissions` and no `cookies`. `externally_connectable`
+  (`https://trackyourtime.dev/*`) is not a permission and shows no install
+  warning; if the dashboard asks, it lets trackyourtime.dev tell the extension
+  that you signed in or out there. Nothing about the extension reads a website.
 - Everything the English listing lists as a precondition applies unchanged:
   the production build pins `STORE_EXTENSION_KEY` unless `EXTENSION_KEY`
   overrides it, and the hosted server must trust that id (`TRUST_STORE_APPS=true`
-  or the id in `TRUSTED_ORIGINS`, set in Coolify).
+  or the id in `TRUSTED_ORIGINS`, set in Coolify). Without host permissions
+  that trust covers every request the extension makes, not only sign-in:
+  check `originTrusted: true` with the curl in `docs/deploy.md` →
+  TRUSTED_ORIGINS before submitting.
+- **The browser-restart line below depends on an open decision.** The
+  extension keeps its token in `chrome.storage.session`, so after Chrome
+  restarts it is signed out until a trackyourtime.dev tab loads. If that
+  changes before release, delete the sentence.
 
 ## Name — 75 character limit
 
@@ -76,7 +91,7 @@ tab carries it).
 >
 > Bricht im Zug die Verbindung ab, erfasst du einfach weiter. Die Erweiterung speichert deine Änderungen und sendet sie, sobald du wieder online bist. Stoppst du hier einen Timer, zeigt die Web-App ihn sofort als gestoppt.
 >
-> Du bist in Chrome schon bei Track Your Time angemeldet? Dann nutzt die Erweiterung diese Anmeldung. Kein zusätzliches Passwort, kein API-Token zum Kopieren.
+> Du bist auf trackyourtime.dev angemeldet? Dann meldet sich die Erweiterung von selbst an, und sie meldet sich ab, wenn du dich dort abmeldest. Kein zusätzliches Passwort, kein API-Token zum Kopieren. Für deinen eigenen Server meldest du dich mit Passwort an oder wählst „Mit der Web-App anmelden“ und bestätigst den Code dort. Das klappt auch mit Zwei-Faktor-Authentifizierung.
 >
 > DIE STUNDEN, DIE DU VERGESSEN HAST
 > Trag die Zeit für einen Anruf nach, den du nicht gestoppt hast, oder korrigiere einen früheren Tag, bevor du abrechnest. Oder schalte die Aktivitätserfassung ein. Die Erweiterung merkt sich, welche Website du vor dir hattest, und schlägt Einträge für die Lücken in deinem Tag vor. Sie speichert den Namen der Website, nicht ihren Inhalt, und nichts verlässt deinen Computer, bevor du einen Vorschlag annimmst.
@@ -84,7 +99,7 @@ tab carries it).
 > VON DEN STUNDEN ZUR RECHNUNG
 > Die Web-App macht aus deinen Stunden Berichte nach Kunde, Projekt, Tätigkeit oder Person. Rechnungen erstellt sie als PDF oder als E-Rechnung im Format ZUGFeRD oder XRechnung. Lade dein Team ein. Jede Person sieht nur ihre eigene Zeit, bis du mehr freigibst.
 >
-> Eine Einschränkung: Nutzt dein Konto die Zwei-Faktor-Authentifizierung, melde dich zuerst in Chrome in der Web-App an. Das Anmeldeformular im Pop-up kann den Code nicht abfragen.
+> Eine Einschränkung: Nach einem Neustart von Chrome ist die Erweiterung abgemeldet, bis du trackyourtime.dev öffnest. Das Pop-up hat dafür einen Knopf.
 
 ## Screenshot captions
 
@@ -95,7 +110,7 @@ Same order as the English files in this directory.
 3. `screenshot-3-entries` — „Bearbeite, wiederhole oder lösche jeden Eintrag“
 4. `screenshot-4-web-app` — „Berichte und Rechnungen findest du einen Klick entfernt in der Web-App“
 
-## Claims checked against the code (2026-09-14)
+## Claims checked against the code (2026-09-14, sign-in rows 2026-09-17)
 
 | Claim | Where it is true |
 | --- | --- |
@@ -110,16 +125,17 @@ Same order as the English files in this directory.
 | Rules file a site under a project | `popup/suggestions-screen.tsx` (`suggestions.alwaysFile`) |
 | Incognito tabs and excluded sites never recorded | `background/activity/capture.ts` (`tab.incognito`), `popup/settings/activity-section.tsx` |
 | Sign-in form in the popup | `popup/sign-in-screen.tsx` |
-| Popup form cannot complete two-factor | `packages/core/src/session-auth.ts` (`TWO_FACTOR_UNSUPPORTED`) |
+| Two-factor accounts sign in with „Mit der Web-App anmelden“ (device flow); the password form cannot complete two-factor | `background/device-sign-in.ts`, `popup/sign-in-screen.tsx`; `packages/core/src/session-auth.ts` (`TWO_FACTOR_UNSUPPORTED`) |
 | Badge refreshed every 30 seconds | `background/index.ts` (`BADGE_PERIOD_MINUTES = 0.5`) |
-| Reuses the web app's session cookie | `lib/web-session.ts` (`cookies` permission) |
+| Signs in and out with trackyourtime.dev | `background/bridge.ts` (`externally_connectable`, `@starter/shared/extension-bridge`); `packages/client/src/components/extension-bridge.tsx` |
+| Signed out after a Chrome restart until trackyourtime.dev loads; popup button opens it | `lib/session.ts` (`chrome.storage.session`), `popup/sign-in-screen.tsx` (`open-web-app`) |
 | Offline queue, cleared on sign-out | `background/runtime.ts` (`getOfflineQueue().clear()` in `forgetSession`) |
 | Live sync | `background/runtime.ts` (`createSyncClient`) |
 | Invite by email as member or admin, colleagues' time and money hidden until granted | `packages/client/src/components/members/`, `packages/server/src/services/membership/` |
 | Popup lists only the person's own entries | `background/entries.ts` (`ownOnly`) |
 | Workspace picker, independent of the web app; offline rows keep their workspace | `popup/workspace-bar.tsx`, `lib/workspace-choice.ts`, `QueuedMutation.workspaceId` |
 | Settings listed, incl. language; which are workspace-wide and owner/admin only | `popup/settings/*.tsx`, `packages/server/src/trpc/routers/settings.ts` (`WORKSPACE_FIELDS`) |
-| Permissions, optional `tabs`, per-host access for another server | `packages/extension/manifest.config.ts`, `lib/server-access.ts` |
+| Permissions `storage`, `alarms`, `idle`, optional `tabs`; no host access, no cookies | `packages/extension/manifest.config.ts`, `src/manifest.test.ts` |
 | Store build works with a self-hosted server | `popup/server-picker.tsx`; `docker-compose.selfhost.yml` defaults `TRUST_STORE_APPS` to `true` |
 
 Deliberately left out: any price, „kostenlos“, beta wording, install counts, and

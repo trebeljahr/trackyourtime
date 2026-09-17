@@ -52,20 +52,23 @@ material for the Chrome Web Store and Google Play.
 **Would have to be built.** Store listings, review, signing for iOS, and a
 release process per store. Blocked more by paperwork than by code.
 
-### Two-factor sign-in in the phone apps and the extension
+### Two-factor sign-in in the phone apps and the extension's password form
 
 **Exists.** better-auth's `twoFactor` plugin with TOTP and backup codes, and a
-second step on `/login` in the web app.
+second step on `/login` in the web app. The extension signs a two-factor
+account in through the device flow: "Sign in with the web app" in the popup,
+or automatically when the person is signed in on trackyourtime.dev.
 
 **Missing.** The second step is a signed cookie, and a WKWebView or extension
 `fetch` can neither read `set-cookie` nor send `Cookie`. So `/login` in the
 native shells shows `NATIVE_TWO_FACTOR_UNSUPPORTED`, and `signInWithPassword`
 in `@starter/core` throws `TWO_FACTOR_UNSUPPORTED`. An account with two-factor
-on cannot sign in there.
+on cannot sign in on the phone, or through the extension's password form.
 
 **Would have to be built.** A header that carries the challenge — an after-hook
 that copies it out of the cookie and a before-hook that turns it back into
-one — plus the second-step UI in both clients. The test in
+one — plus the second-step UI in both clients. Or, for the phone, the device
+flow the extension already uses. The test in
 `tests/two-factor-integration.test.ts` already forwards the cookie by hand, so
 the flow itself is proven.
 

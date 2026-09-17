@@ -835,8 +835,10 @@ configured, so registration without a mail provider needs no mail.
 **Two-factor authentication** is in the app: **Settings → Account →
 Two-factor authentication**. It uses an authenticator app (TOTP) and ten
 single-use backup codes. After it is on, every web sign-in asks for a code.
-The mobile app and the browser extension cannot sign in to an account with
-two-factor authentication yet; they show an error instead. Devices that are
+The mobile app cannot sign in to an account with two-factor authentication
+yet. It shows an error instead. The browser extension's password form has the
+same limit. Its **Sign in with the web app** button works, because you approve
+the sign-in in a browser that already passed the second step. Devices that are
 already signed in stay signed in. The Raycast client pairs through a browser
 that is already signed in, so it is not affected. Turning it off needs the
 password. If a person loses both the app and the backup codes, nobody on the
@@ -1504,6 +1506,11 @@ origins to the trusted list:
 To accept sign-ins from your own web app only, set `TRUST_STORE_APPS=false` in
 `.env`.
 
+The Chrome extension needs this trust for every request, not only for sign-in.
+It asks Chrome for no access to any website. So its calls to your server are
+ordinary cross-origin requests, and the browser blocks them unless your server
+trusts the extension.
+
 **What every client checks before it saves your address.** It calls
 `https://track.example.com/api/health` and shows the release the server
 reports. It refuses, with a plain message:
@@ -1513,26 +1520,36 @@ reports. It refuses, with a plain message:
 - a server that cannot reach its database,
 - `http://` on any host except `localhost`.
 
-The phone apps also refuse a server that does not trust them yet, and name the
-setting to change. Under a single domain, enter the bare app origin,
+The phone apps and the browser extension also refuse a server that does not
+trust them yet, and name the setting to change. Under a single domain, enter the bare app origin,
 `https://track.example.com`, not an `api.` subdomain.
 
 ### Browser extension
 
 1. Open the popup and choose **Change server** below the sign-in form.
 2. Choose **My own server**, enter `https://track.example.com`, and confirm.
-3. Chrome asks to let the extension read and change data on
-   `track.example.com`. Allow it. The grant covers that one host. The extension
-   asks for no other host, and has no access to any site until you choose a
-   server.
-4. Sign in.
+   Chrome shows no permission prompt. The extension has no access to any
+   website, yours included.
+3. Sign in. There are two ways:
+   - Enter your email and password in the popup.
+   - Choose **Sign in with the web app**. A tab opens your server's
+     `/app/device` page with a code filled in. Sign in there if you need to,
+     and approve the code. The popup then signs in by itself. Use this for an
+     account with two-factor authentication.
+
+**The extension does not follow your web app's sign-in.** On the hosted
+service at trackyourtime.dev, signing in on the web app also signs in the
+extension. That link works only for the web app address built into the
+extension, so a self-hosted web app cannot use it. Sign in to the extension
+once with one of the two ways above.
 
 **Switching servers signs the extension out** of the old server. If its offline
 queue holds unsent changes, the popup shows how many and discards them only
 after you confirm. The extension's queue belongs to its session.
 
-**If you remove the extension's site access** at `chrome://extensions`, the
-popup says so and offers **Allow access**.
+**If your server stops trusting the extension**, for example after you set
+`TRUST_STORE_APPS=false`, the popup says so and names the setting. The
+extension keeps its unsent changes until the server accepts it again.
 
 **An extension you built yourself.** `pnpm run build:extension:prod` pins the
 store key by default, so an unpacked `dist-prod/` has the store id and needs no

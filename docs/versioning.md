@@ -238,6 +238,32 @@ web banner renders nothing in the prerender and on the hydrating render
 the extension's `setServer`) refuse a server in either state, beside the
 `originTrusted` check.
 
+### The extension bridge
+
+The web app and the browser extension exchange messages through Chrome's
+`externally_connectable` (CLAUDE.md, "Web app ↔ extension bridge"). These
+messages never reach the server, so `API_LEVEL` does not cover them. A web
+deploy and a store update land on different days, so the two ends can differ
+by a release in either direction.
+
+- Every message carries `v`, `EXTENSION_BRIDGE_VERSION` in
+  `@starter/shared/extension-bridge`, beside its `channel` and `kind`.
+- The extension answers a request with a `v` outside
+  `EXTENSION_BRIDGE_SUPPORTED_VERSIONS` with `unsupported`, and does nothing
+  else. `decodeExtensionBridgeReply` reads `unsupported` at any version, so
+  both an older and a newer extension can say so.
+- The decoders keep known fields only and refuse everything else as
+  `malformed`: an unknown request `kind` gets no reply, and a reply with an
+  unknown `kind`, action type, ignore reason or device status is dropped. The
+  web app then behaves as if no extension were installed, which is always
+  safe, because the bridge only ever adds a sign-in or a sign-out.
+- An added optional field is not a bump. An added `kind`, action type,
+  reason or status is not a bump either, provided "the other end ignores
+  it" is an acceptable outcome for a release.
+- Bump `EXTENSION_BRIDGE_VERSION` when a field changes meaning or an existing
+  exchange changes shape. Keep the old version in the supported list for as
+  long as released builds of the other end still send it.
+
 ## Release numbers
 
 A release is a `vX.Y.Z` tag (`docs/releasing.md`). Its number says what a

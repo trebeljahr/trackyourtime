@@ -200,6 +200,39 @@ listing, the privacy answers and the distribution settings are dashboard work.
 After a visibility change in the dashboard, publish once by hand. Until then
 the API cannot publish.
 
+### Server trust and permissions
+
+The hosted server must trust the store extension before any release reaches
+users. The extension has no host permissions, so every request it sends is a
+CORS request. The server answers CORS only for trusted origins. In the server
+app's env fields in Coolify, set `TRUST_STORE_APPS=true`, or add
+`chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` to `TRUSTED_ORIGINS`.
+Then check the answer:
+
+```bash
+curl -s -H 'Origin: chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi' \
+  https://api.trackyourtime.dev/api/health
+```
+
+The JSON must contain `"originTrusted": true`. See
+[deploy.md → TRUSTED_ORIGINS](./deploy.md#trusted_origins).
+
+The dashboard's Privacy tab asks for a reason per permission. The manifest
+declares these, and `packages/extension/src/manifest.test.ts` fails if the
+list changes:
+
+| Permission | Justification |
+|---|---|
+| `storage` | Keeps the session, settings, the server address and changes made offline until they are sent. |
+| `alarms` | Updates the running time on the toolbar badge every 30 seconds, checks a pending "Sign in with the web app" approval, and runs activity capture's once-a-minute check when capture is on. |
+| `idle` | Detects when you leave the computer with a timer running, so the extension can ask what to do with that time. |
+| `tabs` (optional) | Activity capture only. Requested from the click that turns it on. Records which website is in front, on the device. |
+
+The manifest has no `host_permissions`, no `optional_host_permissions` and no
+`cookies`. `externally_connectable` lists `https://trackyourtime.dev/*`. It is
+not a permission and Chrome shows no install warning for it. It lets the
+Track Your Time web app tell the extension that you signed in or out there.
+
 ### What a run does
 
 1. Builds `pnpm run build:extension:prod` (`packages/extension/dist-prod`).
