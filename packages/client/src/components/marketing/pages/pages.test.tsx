@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_DESKTOP_SHORTCUTS } from "@starter/shared";
 
 import { DownloadPage, downloadMetadata } from "@/components/marketing/pages/download-page";
 import { ExtensionPage, extensionMetadata } from "@/components/marketing/pages/extension-page";
@@ -8,6 +9,9 @@ import { MobilePage, mobileMetadata } from "@/components/marketing/pages/mobile-
 import { PrivacyPage, privacyMetadata } from "@/components/marketing/pages/privacy-page";
 import { RaycastPage, raycastMetadata } from "@/components/marketing/pages/raycast-page";
 import { SupportPage, supportMetadata } from "@/components/marketing/pages/support-page";
+import { settings as deSettings } from "@/i18n/messages/de/settings";
+import { settings as enSettings } from "@/i18n/messages/en/settings";
+import { formatAccelerator, type KeyWords } from "@/lib/desktop-shell";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: () => undefined }) }));
 
@@ -56,8 +60,19 @@ describe("public pages in English", () => {
     expect(html).toContain("No version is released yet");
     expect(html).not.toMatch(/data-testid="download-(mac|windows|linux|homebrew|macAppStore|microsoftStore|flathub|snapStore)"/);
     expect(html.match(/data-testid="download-pending-/g)).toHaveLength(8);
-    expect(html).toContain("⌥⇧⌘Space");
-    expect(renderToStaticMarkup(<DownloadPage locale="de" />)).toContain("Strg+Alt+Umschalt+Leertaste");
+  });
+
+  // The page spells the default shortcut out as prose, so nothing else would
+  // notice if the binding or a key's name changed under it.
+  it("names the default shortcut the way the app itself shows it", () => {
+    const shown = (platform: string, keys: KeyWords): string =>
+      formatAccelerator(DEFAULT_DESKTOP_SHORTCUTS["toggle-timer"]!, platform, keys);
+    const en = renderToStaticMarkup(<DownloadPage locale="en" />);
+    expect(en).toContain(shown("darwin", enSettings.desktop.shortcuts.keys));
+    expect(en).toContain(shown("win32", enSettings.desktop.shortcuts.keys));
+    const de = renderToStaticMarkup(<DownloadPage locale="de" />);
+    expect(de).toContain(shown("darwin", deSettings.desktop.shortcuts.keys));
+    expect(de).toContain(shown("win32", deSettings.desktop.shortcuts.keys));
   });
 
   it("describes the preview image in the page's language", () => {
