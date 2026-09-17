@@ -45,6 +45,8 @@ export function writeWindowState(patch: WindowState): void {
 export function createMainWindow(options: {
   preload: string;
   dev: boolean;
+  /** Tests and agents: never shown, never focused (see headless.ts). */
+  headless?: boolean;
 }): BrowserWindow {
   const isMac = process.platform === "darwin";
   const saved = readWindowState();
@@ -77,13 +79,17 @@ export function createMainWindow(options: {
       webSecurity: true,
       devTools: options.dev,
       spellcheck: true,
+      // A hidden window is throttled like a background tab; headless runs
+      // still need its timers and its paint.
+      ...(options.headless ? { backgroundThrottling: false } : {}),
     },
+    ...(options.headless ? { skipTaskbar: true } : {}),
   });
 
   if (saved.maximized) win.maximize();
 
   win.once("ready-to-show", () => {
-    if (!win.isDestroyed()) win.show();
+    if (!win.isDestroyed() && !options.headless) win.show();
   });
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;

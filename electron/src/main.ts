@@ -17,6 +17,7 @@ import path from "node:path";
 import { app, BrowserWindow, shell } from "electron";
 
 import { DESKTOP_APP_ORIGIN, DESKTOP_IPC } from "../../packages/shared/src/desktop-bridge.ts";
+import { isHeadless } from "./headless.ts";
 import { startIdleMonitor } from "./idle.ts";
 import { configureIpcTrust, handle } from "./ipc.ts";
 import { installApplicationMenu } from "./menu.ts";
@@ -39,6 +40,14 @@ const isDev = devUrl !== null;
  */
 const userDataOverride = process.env.TRACKYOURTIME_USER_DATA_DIR;
 if (userDataOverride) app.setPath("userData", path.resolve(userDataOverride));
+
+/*
+ * Headless (tests, agents): never show, focus or activate anything. On macOS
+ * the accessory policy keeps the app out of the Dock and stops launch from
+ * activating it; it is set before ready so the first frame never activates.
+ */
+const headless = isHeadless();
+if (headless && process.platform === "darwin") app.setActivationPolicy("accessory");
 
 /*
  * One instance per profile. Two would each hold a socket and both write the
@@ -66,6 +75,7 @@ function start(): void {
   let mainWindow: BrowserWindow | null = null;
 
   const showMain = (): void => {
+    if (headless) return;
     if (mainWindow && !mainWindow.isDestroyed()) {
       revealWindow(mainWindow);
     } else if (app.isReady()) {
@@ -104,7 +114,7 @@ function start(): void {
   });
 
   function openWindow(): BrowserWindow {
-    const win = createMainWindow({ preload, dev: isDev });
+    const win = createMainWindow({ preload, dev: isDev, headless });
     win.on("closed", () => {
       if (mainWindow === win) mainWindow = null;
     });
@@ -117,6 +127,10 @@ function start(): void {
   }
 
   app.whenReady().then(() => {
+    if (headless && process.platform === "darwin") {
+      app.setActivationPolicy("accessory");
+      app.dock?.hide();
+    }
     if (!devUrl) handleAppScheme(exportDir);
     installApplicationMenu(isDev);
     startIdleMonitor();

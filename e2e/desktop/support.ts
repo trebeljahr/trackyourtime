@@ -40,6 +40,9 @@ export function launchEnv(userDataDir: string): Record<string, string> {
   // binary into plain Node and the launch hangs.
   delete env.ELECTRON_RUN_AS_NODE;
   env.TRACKYOURTIME_USER_DATA_DIR = userDataDir;
+  // Never show, focus or activate a window while tests run on somebody's
+  // machine (electron/src/headless.ts).
+  env.TRACKYOURTIME_HEADLESS = "1";
   return env;
 }
 

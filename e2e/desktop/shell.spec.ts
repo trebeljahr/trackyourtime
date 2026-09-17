@@ -275,6 +275,23 @@ test("a generated file reaches the download manager", async () => {
   expect(page.url()).toBe(before);
 });
 
+test("a test launch never shows a window, a Dock icon or takes focus", async () => {
+  ({ app, page } = await launchApp());
+  await expectAt(page, /\/login\//);
+  const state = await app.evaluate(({ app: electronApp, BrowserWindow }) => {
+    const wins = BrowserWindow.getAllWindows();
+    return {
+      windows: wins.length,
+      visible: wins.some((w) => w.isVisible()),
+      focused: BrowserWindow.getFocusedWindow() !== null,
+      dock: process.platform === "darwin" ? electronApp.dock?.isVisible() ?? false : false,
+    };
+  });
+  expect(state).toEqual({ windows: 1, visible: false, focused: false, dock: false });
+  // A hidden window still paints, which is what every screenshot relies on.
+  expect((await page.screenshot()).byteLength).toBeGreaterThan(1000);
+});
+
 test("DevTools cannot be opened and the menu has no reload or inspector", async () => {
   ({ app, page } = await launchApp());
   await expectAt(page, /\/login\//);

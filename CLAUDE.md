@@ -218,6 +218,13 @@ built, and the rules that fail quietly if broken:
   `styles/desktop.css`: `[data-window-drag]` (the app header) is the drag region,
   and on macOS `[data-window-inset]` (the sidebar brand row) clears the traffic
   lights of the title-bar-less window. Never `html.cap` — that means phone.
+- **Tests and agents run headless: `TRACKYOURTIME_HEADLESS=1`**
+  (`electron/src/headless.ts`). The window is never shown or focused, and on
+  macOS the app uses the accessory activation policy with no Dock icon, so a
+  launch never steals focus or flashes across the screen of whoever is using
+  the machine. Hidden windows still paint, so Playwright screenshots work.
+  `e2e/desktop/support.ts` sets it on every launch and a spec asserts it.
+  Launch the packaged binary with it too; never `open` the `.app`.
 - **One instance per profile** (`requestSingleInstanceLock`); a second launch
   focuses the first and exits. `TRACKYOURTIME_USER_DATA_DIR` moves the profile
   (and the lock) — the harness uses it.
