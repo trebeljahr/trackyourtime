@@ -14,6 +14,7 @@ import {
   launchApp,
   launchEnv,
   navDestinations,
+  openedExternally,
   signInThroughForm,
 } from "./support";
 
@@ -357,16 +358,15 @@ test("a mailto: link is handed to the OS, not dropped", async () => {
   await expectAt(page, /\/login\//);
   const before = page.url();
   // The 404 page links to /support/, whose contact address is a mailto: link.
-  // Stub the OS hand-off first, so a test run never opens a mail client.
-  const stubbed = await app.evaluate(({ shell }) => {
-    const g = globalThis as { __opened?: string[] };
-    g.__opened = [];
-    shell.openExternal = async (url: string) => {
-      g.__opened?.push(url);
+  // Headless, the OS hand-off is recorded instead of opening a mail client
+  // (electron/src/external.ts). A stub of shell.openExternal would never be
+  // reached: nothing calls it while headless.
+  // And it really is never called: a trap replaces it for the whole spec.
+  await app.evaluate(({ shell }) => {
+    shell.openExternal = async () => {
+      throw new Error("shell.openExternal called in a headless launch");
     };
-    return shell.openExternal.toString().includes("__opened");
   });
-  expect(stubbed).toBe(true);
 
   await page.evaluate(() => {
     const anchor = document.createElement("a");
@@ -376,7 +376,7 @@ test("a mailto: link is handed to the OS, not dropped", async () => {
     anchor.remove();
   });
   await expect
-    .poll(() => app.evaluate(() => (globalThis as { __opened?: string[] }).__opened ?? []))
+    .poll(() => openedExternally(app))
     .toEqual(["mailto:support@example.com"]);
   expect(page.url()).toBe(before);
 });

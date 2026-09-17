@@ -14,9 +14,10 @@
  */
 
 import path from "node:path";
-import { app, BrowserWindow, safeStorage, shell } from "electron";
+import { app, BrowserWindow, safeStorage } from "electron";
 
 import { DESKTOP_APP_ORIGIN, DESKTOP_IPC } from "../../packages/shared/src/desktop-bridge.ts";
+import { openInOs } from "./external.ts";
 import { isHeadless } from "./headless.ts";
 import { startIdleMonitor } from "./idle.ts";
 import { configureIpcTrust, handle } from "./ipc.ts";
@@ -159,7 +160,7 @@ function start(): void {
   handle(DESKTOP_IPC.openExternal, async (_event, url: unknown) => {
     if (typeof url !== "string" || !isExternalWebUrl(url)) return false;
     try {
-      await shell.openExternal(url);
+      await openInOs(url);
       return true;
     } catch {
       return false;

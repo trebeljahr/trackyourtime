@@ -7,7 +7,7 @@ import {
   createAccount,
   enableTwoFactor,
   launchApp,
-  stubOpenExternal,
+  openedExternally,
   trpcCall,
   webSession,
   type Account,
@@ -18,7 +18,8 @@ import {
  *
  * The approving browser is the harness's web session for the same account
  * (support.ts): it claims and approves the code exactly as /app/device does.
- * shell.openExternal is stubbed, so no real browser ever opens.
+ * A headless launch never opens the real browser (electron/src/external.ts);
+ * it records the URL, which the specs read.
  */
 
 let app: ElectronApplication | null = null;
@@ -34,7 +35,7 @@ async function atLogin(): Promise<{ page: Page; opened: () => Promise<string[]>;
   const since = Date.now();
   const launched = await launchApp();
   app = launched.app;
-  const opened = await stubOpenExternal(launched.app);
+  const opened = (): Promise<string[]> => openedExternally(launched.app);
   await launched.page.waitForURL(/\/login\//);
   await launched.page.getByTestId("browser-sign-in").waitFor();
   return { page: launched.page, opened, since };

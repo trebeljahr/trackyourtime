@@ -239,16 +239,14 @@ export function apiRequests(since = 0, log = process.env.DESKTOP_E2E_REQUEST_LOG
     .filter((entry) => entry.at >= since);
 }
 
-/** Replace shell.openExternal so a spec never opens the machine's browser; returns the read-back. */
-export async function stubOpenExternal(app: ElectronApplication): Promise<() => Promise<string[]>> {
-  await app.evaluate(({ shell }) => {
-    const g = globalThis as { __opened?: string[] };
-    g.__opened = [];
-    shell.openExternal = async (url: string) => {
-      g.__opened?.push(url);
-    };
-  });
-  return () => app.evaluate(() => (globalThis as { __opened?: string[] }).__opened ?? []);
+/**
+ * What the app handed to the OS browser or mail client. Headless launches
+ * never open anything (electron/src/external.ts); they record it here.
+ */
+export function openedExternally(app: ElectronApplication): Promise<string[]> {
+  return app.evaluate(
+    () => (globalThis as { __trackYourTimeOpenedExternally?: string[] }).__trackYourTimeOpenedExternally ?? [],
+  );
 }
 
 /** RFC 6238 from an otpauth:// URI, what an authenticator app computes. */

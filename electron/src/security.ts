@@ -16,13 +16,15 @@
  * DevTools in menu.ts, and the fuses in electron-builder.config.mjs.
  */
 
-import { app, session, shell, type WebContents } from "electron";
+import { app, session, type WebContents } from "electron";
+
+import { openInOs } from "./external.ts";
 
 import { isOsHandledUrl, isPermissionGranted, isTrustedSenderUrl } from "./trust.ts";
 
 function openExternally(url: string): void {
   if (!isOsHandledUrl(url)) return;
-  shell.openExternal(url).catch((err: unknown) => {
+  openInOs(url).catch((err: unknown) => {
     console.warn("[security] openExternal failed:", err);
   });
 }
