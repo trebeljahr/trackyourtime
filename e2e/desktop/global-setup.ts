@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -102,35 +102,67 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     await waitFor(() => portInUse(port), `mongod on ${port}`, 30_000);
   }
 
-  // 4. The API, production-shaped, trusting the app's origin.
+  // 4. The APIs, production-shaped, trusting the app's origin. Every request
+  //    they receive is logged (record-requests.mjs), so a spec can prove from
+  //    the server side what the app sent — in particular that no Cookie ever
+  //    arrived. The second API is another server the app can be pointed at
+  //    (the server picker), with its own database.
   if (await portInUse(API_PORT)) {
     throw new Error(`Port ${API_PORT} is taken. Set DESKTOP_E2E_API_PORT to a free port (the export is rebuilt for it).`);
   }
-  const api = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
-    cwd: join(REPO_ROOT, "packages/server"),
-    stdio: ["ignore", "inherit", "inherit"],
-    env: {
-      ...process.env,
-      NODE_ENV: "production",
-      PORT: String(API_PORT),
-      MONGODB_URI: mongoUri,
-      REDIS_URL: "",
-      BETTER_AUTH_SECRET: "desktop-e2e-secret-desktop-e2e-secret",
-      BETTER_AUTH_URL: API_ORIGIN,
-      FRONTEND_URL: "http://127.0.0.1:1",
-      TRUSTED_ORIGINS: "app://-",
-      SCHEDULER_ENABLED: "false",
-    },
-  });
+  const logDir = mkdtempSync(join(tmpdir(), "tyt-desktop-e2e-requests-"));
+  const requestLog = join(logDir, "api.jsonl");
+  const secondRequestLog = join(logDir, "second-api.jsonl");
+  writeFileSync(requestLog, "");
+  writeFileSync(secondRequestLog, "");
+  const secondPort = await freePort();
+  const secondOrigin = `http://127.0.0.1:${secondPort}`;
+  const secondMongo = new URL(mongoUri);
+  secondMongo.pathname = "/trackyourtime-desktop-e2e-second";
+  const secondMongoUri = secondMongo.toString();
+
+  const startApi = (port: number, origin: string, database: string, log: string): ChildProcess =>
+    spawn(process.execPath, ["--import", "tsx", "--import", join(__dirname, "record-requests.mjs"), "src/index.ts"], {
+      cwd: join(REPO_ROOT, "packages/server"),
+      stdio: ["ignore", "inherit", "inherit"],
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        PORT: String(port),
+        MONGODB_URI: database,
+        REDIS_URL: "",
+        BETTER_AUTH_SECRET: "desktop-e2e-secret-desktop-e2e-secret",
+        BETTER_AUTH_URL: origin,
+        FRONTEND_URL: "http://127.0.0.1:1",
+        TRUSTED_ORIGINS: "app://-",
+        SCHEDULER_ENABLED: "false",
+        DESKTOP_E2E_REQUEST_LOG: log,
+      },
+    });
+  const api = startApi(API_PORT, API_ORIGIN, mongoUri, requestLog);
+  const secondApi = startApi(secondPort, secondOrigin, secondMongoUri, secondRequestLog);
   await waitFor(
     async () => (await fetch(`${API_ORIGIN}/api/health`)).ok,
     `the API on ${API_ORIGIN}`,
     60_000,
   );
+  await waitFor(
+    async () => (await fetch(`${secondOrigin}/api/health`)).ok,
+    `the second API on ${secondOrigin}`,
+    60_000,
+  );
+
+  // Read by the specs (support.ts); workers inherit this process's env.
+  process.env.DESKTOP_E2E_REQUEST_LOG = requestLog;
+  process.env.DESKTOP_E2E_SECOND_API = secondOrigin;
+  process.env.DESKTOP_E2E_SECOND_REQUEST_LOG = secondRequestLog;
+  process.env.DESKTOP_E2E_MONGODB_URI = mongoUri;
 
   return async () => {
     await stop(api);
+    await stop(secondApi);
     await stop(mongod);
     if (dbPath) rmSync(dbPath, { recursive: true, force: true });
+    rmSync(logDir, { recursive: true, force: true });
   };
 }

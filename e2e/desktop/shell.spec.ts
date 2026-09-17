@@ -7,14 +7,14 @@ import {
   APP_ORIGIN,
   MAIN_JS,
   PRELOAD_JS,
-  attachSessionCookie,
   collectPageProblems,
-  createAccountCookie,
+  createAccount,
   electronExecutable,
   freshUserDataDir,
   launchApp,
   launchEnv,
   navDestinations,
+  signInThroughForm,
 } from "./support";
 
 /*
@@ -60,7 +60,7 @@ test("opens on app://- and moves from / into the app", async () => {
 test("every NAV_SECTIONS destination renders, by click and by hard load", async () => {
   ({ app, page } = await launchApp());
   await expectAt(page, /\/login\//);
-  await attachSessionCookie(app, await createAccountCookie());
+  await signInThroughForm(page, await createAccount());
   const problems = collectPageProblems(page);
 
   await page.goto(`${APP_ORIGIN}/app/track/`);
@@ -92,7 +92,7 @@ test("every NAV_SECTIONS destination renders, by click and by hard load", async 
 test("a reload on a deep route renders it again", async () => {
   ({ app, page } = await launchApp());
   await expectAt(page, /\/login\//);
-  await attachSessionCookie(app, await createAccountCookie());
+  await signInThroughForm(page, await createAccount());
   await page.goto(`${APP_ORIGIN}/app/reports/`);
   await expect(page.getByTestId("nav-reports")).toHaveAttribute("aria-current", "page");
 
@@ -113,7 +113,7 @@ test("an unknown path shows the 404 page with a 404 status", async () => {
 test("an open dialog is never under a window drag region", async () => {
   ({ app, page } = await launchApp());
   await expectAt(page, /\/login\//);
-  await attachSessionCookie(app, await createAccountCookie());
+  await signInThroughForm(page, await createAccount());
   await page.goto(`${APP_ORIGIN}/app/track/`);
   const header = page.getByTestId("app-header");
   await expect(header).toBeVisible();
