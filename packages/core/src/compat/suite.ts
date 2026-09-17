@@ -23,7 +23,7 @@ import {
   tempIdOf,
   type StoredOfflinePayload,
 } from "../offline-ops.js";
-import { createOfflineQueue, type QueuedMutation } from "../offline-queue.js";
+import { createOfflineQueue, type FlushVerdict, type QueuedMutation } from "../offline-queue.js";
 import {
   classifyReplayOutcome,
   flushVerdictFor,
@@ -320,7 +320,7 @@ async function refusedChecks(api: ApiClient, pass: (line: string) => void): Prom
 function replayRunner(
   api: ApiClient,
   outcomes: { op: string; outcome: ReplayOutcome }[],
-): (row: QueuedMutation) => Promise<void | { hold: "unknown-op" | "unknown-procedure" }> {
+): (row: QueuedMutation) => Promise<void | FlushVerdict> {
   const mutators = new Proxy({} as OfflineReplayMutators, {
     get: (_target, op: string) => (input: unknown) => api.mutate(op, input),
   });
