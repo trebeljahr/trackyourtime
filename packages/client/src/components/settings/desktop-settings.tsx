@@ -295,7 +295,11 @@ export function DesktopSettingsPanel(): React.JSX.Element | null {
                     </span>
                   ) : (
                     <kbd
-                      className="rounded-md border border-border bg-muted px-2 py-1 font-mono text-sm"
+                      className={
+                        bound
+                          ? "rounded-md border border-border bg-muted px-2 py-1 font-mono text-sm"
+                          : "px-2 py-1 text-sm text-muted-foreground"
+                      }
                       data-testid={`desktop-shortcut-value-${action}`}
                       data-accelerator={bound ?? ""}
                       data-registered={status?.registered ? "true" : "false"}

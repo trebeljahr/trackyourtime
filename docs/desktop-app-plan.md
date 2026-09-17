@@ -417,6 +417,146 @@ the shell and sign-in specs again after the fix below (21 pass).
   sign-in refreshes `useAuth().user` through `AuthProvider`'s per-token refetch;
   `app://-` is trusted only through `TRUST_STORE_APPS` and dev.
 
+### Stages 4 and 5 — tray, global shortcuts, login item, attention (2026-09-17)
+
+Run on macOS arm64, Node 24.14.1, Electron 42.1.0. Verified by
+`pnpm test:e2e:desktop` (31 pass, clipboard skipped as before; six new specs in
+`tray.spec.ts`, and the idle spec now also checks its notification), a negative
+control (the main process dropping the unsent count made the offline spec fail
+with 2 expected, 0 received), `pnpm test:electron` (83), core (107), the client
+suite (133 files, 1252 tests), `pnpm typecheck`, and the web Playwright specs
+`command-palette`, `mobile-shell`, `smoke` and `timer` (40 pass, own `mongod`).
+A packaged `pnpm electron:preview`, launched headless and driven over CDP
+against its own API, passed 9 checks: the bridge's `desktop` surface, the default
+shortcut registered before sign-in, Settings → Desktop showing `⌥⇧⌘Space`,
+recording suspending every registration, a recorded `Control+Alt+N` saved to
+`desktop-settings.json` and registered, `notify` accepted from a hidden window,
+and `tray-labels.json` written from the renderer. The asar holds
+`electron/dist/tray/` (11 icons, 511 entries).
+
+**Where it lives.** Main: `desktop.ts` wires everything; `tray-model.ts`
+(menu, clock, tooltip, IPC payload parsing), `shortcuts.ts`,
+`desktop-settings.ts` and `login-item.ts` are pure and unit-tested; `tray.ts` is
+the Electron binding. Renderer: `components/desktop/desktop-bridge-publisher.tsx`
+(mounted in `AppShell`), `components/settings/desktop-settings.tsx`,
+`lib/desktop-shell.ts` (key recorder, accelerator display, `notifyDesktop`).
+Contract: `DesktopShell` in `desktop-bridge.ts`, the action registry and
+accelerator grammar in `packages/shared/src/desktop-shortcuts.ts`. The toggle
+decision is `decideTimerToggle` in `@starter/core` (`timer-toggle.ts`), and
+Raycast's `toggle-timer` calls it in the same change.
+
+**The default shortcut: `CommandOrControl+Alt+Shift+Space`** (⌥⇧⌘Space on a
+Mac, Ctrl+Alt+Shift+Space elsewhere), bound to "Start or stop the timer" only;
+the other three actions ship unbound. How it was chosen:
+
+- One or two modifiers are where every common binding lives, so three were a
+  given. A letter plus Option on a Mac types a character, which a global
+  shortcut would take away from every text field, so Command had to be in it.
+- `…+T` (for timer) was the first candidate and is out: Ctrl+Alt+Shift+T is
+  JetBrains' "Refactor This" on Windows and Linux (checked against JetBrains'
+  keymap documentation).
+- Space with one or two modifiers is taken everywhere: Spotlight ⌘Space, Finder
+  search ⌥⌘Space, input sources ⌃Space/⌃⌥Space, the character viewer ⌃⌘Space
+  (Apple's shortcut list, fetched), Alfred and Raycast ⌥Space, PowerToys Run
+  Alt+Space, Windows input switching Win+Space, GNOME Super+Space, VS Code and
+  JetBrains Ctrl+Shift+Space. Apple's list has no Command-Option-Shift-Space; a
+  search found only one niche Windows audio app (DAISY Tobi) using
+  Ctrl+Shift+Alt+Space. Browsers, Slack and terminals bind nothing with three
+  modifiers and Space as far as their documented defaults go.
+- Residual risks, stated rather than hidden: on Windows, Ctrl+Alt is AltGr, and
+  a layout that maps AltGr+Shift+Space to a character would lose it; KDE lets
+  users bind anything; and registration on Linux under Wayland (outside
+  XWayland) is not expected to work at all in Electron 42. In each case the
+  failure is the one Settings shows, never a silent one.
+
+What the stage text got wrong or left out:
+
+- **Headless creates none of it.** No `Tray`, no `globalShortcut.register` (an
+  in-memory registrar), no `Notification`, no dialog, no badge, no
+  `setLoginItemSettings` (a memory login item, also for any unpackaged run, so a
+  test never registers `node_modules/electron` as a login item). Each is
+  recorded on `globalThis.__trackYourTimeDesktop`, which the specs drive: tray
+  clicks, shortcut triggers, a chord "taken" by another app, notification
+  clicks. `revealWindow` itself now returns early in headless, as a second
+  guard.
+- **Notifications go through the main process, not the renderer's
+  `Notification` API.** Text still comes from the catalogs (the renderer sends
+  it), but a renderer notification cannot be suppressed in headless runs, and
+  its click cannot show a hidden window without IPC anyway. The main process
+  posts only when the window is hidden, minimised or not focused, replaces a
+  notice with the same tag, and on click shows the window and sends
+  `open-prompt`, which routes to `/app/track`.
+- **The idle and runaway guards are still mounted by the tracker bar.** A window
+  closed while on Reports raises neither the prompt nor its notification until
+  `/app/track` mounts again. Moving the guards into the shell changes the web
+  app too, so it was left for a decision. The runaway notification is sent only
+  for the `flagged` action (a question about a timer still running).
+- **`backgroundThrottling: false` for every window, not only headless.** The
+  hidden renderer owns the socket, the queue and the tray state, and Chromium's
+  intensive throttling would hold a hidden page's timers to once a minute. The
+  publisher also coalesces through React effects, not `requestAnimationFrame`,
+  which does not run in a hidden window.
+- **The tray has no clock in its menu**, only in the macOS title and the
+  Windows/Linux tooltip: rebuilding a context menu every second closes it on
+  Windows. Linux AppIndicator shows no tooltip, so Linux shows no running time;
+  the running icon variant is the signal there.
+- **The tray's labels are remembered** (`userData/tray-labels.json`), so a
+  German tray stays German before sign-in; a first launch shows English
+  fallbacks from `tray-model.ts`.
+- **Close button:** macOS always hides. Windows defaults to hide (the tray is
+  always there), Linux defaults to quit, because GNOME without the
+  AppIndicator extension shows no tray icon and Electron cannot detect that. The
+  plan's "detect and fall back" is not possible; the default is the fallback.
+  Hiding also requires the tray setting to be on.
+- **Open at login:** Linux has no Electron API, so `login-item.ts` writes
+  `~/.config/autostart/trackyourtime.desktop` (the AppImage path from
+  `$APPIMAGE`). Windows and Linux launch with `--hidden` and stay in the tray
+  when it is on; a second instance launched with `--hidden` does not bring the
+  window forward. macOS 13+ registers through SMAppService, which passes no
+  arguments, so a Mac opens its window at login. `requires-approval` is shown in
+  Settings. A stored preference is not re-applied at launch, so removing the
+  item in System Settings is respected.
+- **Recording a shortcut unregisters all of them** (`suspendShortcuts`), because
+  macOS delivers a registered global chord to its handler and never to the
+  page. They come back on save, Escape, leaving the page, a renderer reload or
+  crash, or after 60 s.
+- **A binding is refused before saving** when it does not parse (a bare key,
+  Shift plus a key, an unknown key) or repeats another action's chord on this
+  platform; a chord `register` returns false for is saved and reported as taken.
+  Keys are read from `KeyboardEvent.code`, not `key`, so Option on a Mac and
+  non-US layouts record the physical key Electron expects. Option-only chords
+  on a Mac show a warning.
+- **Quit with unsent changes** is an informational box with one button, shown
+  once per quit and skipped on OS shutdown (`powerMonitor` `shutdown`). The e2e
+  spec emits `before-quit` rather than quitting, to read the record.
+- **Running badge:** macOS `dock.setBadge("●")`, Windows a taskbar overlay
+  (`overlay-running.png`), nothing on Linux (the Settings row is hidden there).
+- **Icons** are generated by `scripts/icons-brand.mjs` into
+  `electron/assets/tray/` (committed) and copied to `electron/dist/tray/` by
+  `build-desktop.mjs`, which fails without them. The macOS template icons
+  change shape when running (a closed ring with a filled centre), since a
+  template image cannot carry colour.
+- The toggle continues the newest *recent combination* (`entries.recent`,
+  author-scoped) inside Raycast's 7-day window, through `startQuickStart`, so it
+  works offline from the cached list. Raycast continues the newest own *entry*;
+  both pick the same work.
+
+Not run, and why:
+
+- **Anything visible:** a real tray icon or menu, a real global shortcut press,
+  a posted notification and its click, the Dock badge, the quit dialog. Each
+  needs a non-headless launch on a machine someone is using. The handlers they
+  reach were driven through the test hook.
+- **Open at login surviving a reboot** (the stage's macOS acceptance): needs a
+  real login item and a reboot.
+- **Windows and Linux at runtime**: tray click behaviour, `.ico` rendering,
+  AppIndicator, the autostart file on a real session, Wayland shortcuts, the
+  taskbar overlay. The Linux autostart writer is unit-tested only.
+- **Stage 5 "on macOS and Windows"**: the four attention paths were verified
+  headless on macOS through the hook; none were seen on screen, and nothing ran
+  on Windows.
+- The CI `desktop` job (still never run).
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**

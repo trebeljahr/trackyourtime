@@ -231,9 +231,21 @@ built, and the rules that fail quietly if broken:
   never shares the installed app's lock or offline queue), never derived from
   package.json. `TRACKYOURTIME_USER_DATA_DIR` moves it (and the lock) — the
   harness uses it.
-- **Closing the window hides it on macOS only.** Windows and Linux quit on close
-  until the tray exists (plan Stage 4); a hidden window with no tray is an app
-  nobody can reach.
+- **Closing the window hides it** on macOS always, and on Windows and Linux
+  only while the tray is on and "Keep running when the window is closed" is
+  (default on for Windows, off for Linux, where GNOME may show no tray icon).
+- **The tray and global shortcuts are views of renderer state** (plan Stages 4
+  and 5, `electron/src/desktop.ts`). `DesktopBridgePublisher` in `AppShell`
+  publishes the timer, recents, unsent count and translated labels; commands
+  come back and run through `useEntryMutations`. Headless runs create no tray,
+  register no OS shortcut, post no notification and touch no login item: each
+  is recorded on `globalThis.__trackYourTimeDesktop` for the specs. Shortcut
+  actions and the accelerator grammar are in
+  `packages/shared/src/desktop-shortcuts.ts`, with one default
+  (`CommandOrControl+Alt+Shift+Space`, toggle timer; reasoning in the plan). The
+  toggle rule is `decideTimerToggle` in core, shared with Raycast's
+  `toggle-timer`. Tray icons come from `pnpm icons:brand` into
+  `electron/assets/tray/`.
 - **The desktop app signs in with the phone's bearer path, never a cookie.**
   `lib/shell.ts` splits the old `isNative()` into `isCapacitor()` (phone UI,
   Preferences storage, the radio), `isElectron()` and `isTokenShell()` (either:
