@@ -21,6 +21,7 @@ import { isHeadless } from "./headless.ts";
 import { startIdleMonitor } from "./idle.ts";
 import { configureIpcTrust, handle } from "./ipc.ts";
 import { installApplicationMenu } from "./menu.ts";
+import { userDataDir } from "./profile.ts";
 import { handleAppScheme, registerAppScheme } from "./protocol.ts";
 import { installSecurity } from "./security.ts";
 import { isExternalWebUrl } from "./trust.ts";
@@ -34,12 +35,19 @@ const devUrl = !app.isPackaged && process.env.ELECTRON_DEV_URL ? process.env.ELE
 const isDev = devUrl !== null;
 
 /*
- * A separate profile directory, for the e2e harness and for running a second
- * copy on purpose. It moves the single-instance lock with it, which is why it
- * has to be applied before the lock is requested.
+ * The profile directory (profile.ts): pinned by name, separate for unpackaged
+ * runs, and movable with TRACKYOURTIME_USER_DATA_DIR for the e2e harness or a
+ * second copy on purpose. It carries the single-instance lock, which is why it
+ * has to be set before the lock is requested.
  */
-const userDataOverride = process.env.TRACKYOURTIME_USER_DATA_DIR;
-if (userDataOverride) app.setPath("userData", path.resolve(userDataOverride));
+app.setPath(
+  "userData",
+  userDataDir({
+    appData: app.getPath("appData"),
+    isPackaged: app.isPackaged,
+    override: process.env.TRACKYOURTIME_USER_DATA_DIR,
+  }),
+);
 
 /*
  * Headless (tests, agents): never show, focus or activate anything. On macOS
@@ -55,6 +63,7 @@ if (headless && process.platform === "darwin") app.setActivationPolicy("accessor
  * (which comes to the front) and exits.
  */
 if (!app.requestSingleInstanceLock()) {
+  console.log(`[main] another instance holds ${app.getPath("userData")}; handing over to it`);
   app.exit(0);
 } else {
   start();

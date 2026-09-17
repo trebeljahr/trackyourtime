@@ -226,8 +226,11 @@ built, and the rules that fail quietly if broken:
   `e2e/desktop/support.ts` sets it on every launch and a spec asserts it.
   Launch the packaged binary with it too; never `open` the `.app`.
 - **One instance per profile** (`requestSingleInstanceLock`); a second launch
-  focuses the first and exits. `TRACKYOURTIME_USER_DATA_DIR` moves the profile
-  (and the lock) — the harness uses it.
+  focuses the first and exits. The profile is pinned by name in `profile.ts`
+  (`trackyourtime` packaged, `trackyourtime-dev` unpackaged, so `dev:desktop`
+  never shares the installed app's lock or offline queue), never derived from
+  package.json. `TRACKYOURTIME_USER_DATA_DIR` moves it (and the lock) — the
+  harness uses it.
 - **Closing the window hides it on macOS only.** Windows and Linux quit on close
   until the tray exists (plan Stage 4); a hidden window with no tray is an app
   nobody can reach.
