@@ -55,7 +55,7 @@ import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 
 import { ensureElectron } from "./ensure-electron.mjs";
-import { builderEnvFor, masEntitlementsPlist, resolveSigning, tagMismatch } from "./lib/desktop-release.mjs";
+import { builderEnvFor, masEntitlementsPlist, resolveSigning, tagMismatch, targetChannelProblem } from "./lib/desktop-release.mjs";
 import { describeChildFailure } from "./lib/child-failure.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -129,6 +129,8 @@ let signing = null;
 if (shouldPackage) {
   const mismatch = tagMismatch({ refType: process.env.GITHUB_REF_TYPE, refName: process.env.GITHUB_REF_NAME, version: rootVersion });
   if (mismatch) fail(mismatch);
+  const targetProblem = targetChannelProblem(channel, builderArgs);
+  if (targetProblem) fail(targetProblem);
   if (channel) {
     try {
       signing = resolveSigning(channel, process.env);

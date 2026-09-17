@@ -72,6 +72,32 @@ export const ALL_SIGNING_VARS = Object.freeze([
   ...new Set([...Object.values(SIGNING_SETS).flat(2), "APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "CSC_NAME"]),
 ]);
 
+/**
+ * What electron-builder signs or notarizes with on its own, whatever the
+ * config says: a certificate (`WIN_CSC_LINK` falls back to `CSC_LINK`, so an
+ * Apple p12 in the shell is picked up by a Windows build too), the Azure
+ * endpoint the config's `azureSignOptions` is gated on, and every notarization
+ * credential. Stripped from an unsigned build, or its `-unsigned` name would
+ * be a lie. The team id stays: an unsigned Mac App Store build still checks
+ * the entitlements and Info.plist it names.
+ */
+export const SIGNING_CREDENTIAL_VARS = Object.freeze([
+  "CSC_LINK",
+  "CSC_KEY_PASSWORD",
+  "CSC_NAME",
+  "CSC_INSTALLER_LINK",
+  "CSC_INSTALLER_KEY_PASSWORD",
+  "WIN_CSC_LINK",
+  "WIN_CSC_KEY_PASSWORD",
+  "AZURE_TRUSTED_SIGNING_ENDPOINT",
+  "APPLE_API_KEY",
+  "APPLE_API_KEY_ID",
+  "APPLE_API_ISSUER",
+  "APPLE_ID",
+  "APPLE_APP_SPECIFIC_PASSWORD",
+  "APPLE_KEYCHAIN_PROFILE",
+]);
+
 /** A GitHub secret that is not set expands to "", which is also unset. */
 function isSet(env, name) {
   return typeof env[name] === "string" && env[name].trim() !== "";
@@ -136,6 +162,7 @@ export function builderEnvFor(channel, env, signing) {
   const next = { ...env, TRACKYOURTIME_DESKTOP_CHANNEL: channel };
   delete next.TRACKYOURTIME_UNSIGNED;
   if (signing.mode === "unsigned") {
+    for (const name of SIGNING_CREDENTIAL_VARS) delete next[name];
     next.CSC_IDENTITY_AUTO_DISCOVERY = "false";
     next.TRACKYOURTIME_UNSIGNED = "1";
   }
@@ -148,6 +175,49 @@ export function builderEnvFor(channel, env, signing) {
     next.CSC_IDENTITY_AUTO_DISCOVERY = "false";
   }
   return next;
+}
+
+/**
+ * The Microsoft Store identity is present in full, absent in full, or a typo.
+ * The release workflow skips a Store leg only when it is absent: a partial
+ * identity is somebody trying to publish, and skipping it would look like
+ * success with no package.
+ */
+export function windowsStoreIdentityState(env) {
+  const present = WINDOWS_STORE_IDENTITY.filter((name) => isSet(env, name)).length;
+  return present === 0 ? "absent" : present === WINDOWS_STORE_IDENTITY.length ? "complete" : "partial";
+}
+
+/**
+ * electron-builder's target names among the arguments after `--package`
+ * (`--mac dmg zip --arm64` → dmg, zip). Flags and their `=` values are skipped.
+ */
+function builderTargets(builderArgs) {
+  return builderArgs.filter((arg) => !arg.startsWith("-")).map((arg) => arg.split(":")[0].toLowerCase());
+}
+
+/**
+ * An AppX is only ever built by the win-store channel, and that channel builds
+ * nothing else. Built any other way, electron-builder fills the identity with
+ * placeholders (`CN=ms`, the package name) and writes a package that looks
+ * like a Store upload; and the Store channel names nothing `-unsigned`, so an
+ * nsis installer built under it would carry a signed build's name.
+ *
+ * @returns {string | null} the refusal, or null
+ */
+export function targetChannelProblem(channel, builderArgs) {
+  const targets = builderTargets(builderArgs);
+  const appx = targets.filter((t) => t === "appx");
+  if (channel === "win-store") {
+    if (appx.length === 0 || appx.length !== targets.length) {
+      return `The win-store channel builds the AppX only (--win appx); got: ${targets.join(" ") || "no target"}.`;
+    }
+    return null;
+  }
+  if (appx.length > 0) {
+    return "An AppX needs the Partner Center identity: build it with --channel win-store (docs/deploy.md → Desktop release).";
+  }
+  return null;
 }
 
 /**

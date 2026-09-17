@@ -679,6 +679,45 @@ Unrelated failure seen in passing: `scripts/lib/llms.test.mjs` fails on
 "llms-full.txt is up to date" under Node 24 and 26. It reads the docs site,
 which this stage does not touch; `pnpm llms:emit` regenerates it.
 
+Review of Stage 6 (2026-09-17). No Electron binary launched and no dmg built.
+Three defects were confirmed against app-builder-lib 26.8.1's source and fixed
+with tests (`desktop-release.test.mjs`, now 26):
+
+- **An `-unsigned` build could still be signed.** `builderEnvFor` switched
+  keychain discovery off but kept `CSC_LINK`. electron-builder signs with an
+  explicit certificate whatever the discovery flag says, and its Windows
+  packager falls back from `WIN_CSC_LINK` to `CSC_LINK`
+  (`platformPackager.getCscLink`), so a Developer ID p12 in the shell went into
+  a `--channel win` build named `-unsigned`. Unsigned builds now drop
+  `SIGNING_CREDENTIAL_VARS`: certificates, the Azure endpoint and the
+  notarization credentials. `APPLE_TEAM_ID` stays for the MAS config check.
+  Re-run: `CSC_LINK=/nonexistent.p12 build-desktop.mjs --reuse-export --package
+  --mac zip --arm64` exits 0 with an ad-hoc signature
+  (`flags=0x10002(adhoc,runtime)`), version 0.1.0 in the asar and Info.plist.
+- **An AppX could be built with placeholder identity.** `--win appx` without
+  `--channel win-store` reaches `computePublisherName`, which answers `CN=ms`,
+  and the identity name falls back to the package name. It is also named
+  `-store` like a real upload. And `--channel win-store --win nsis` would have
+  named an unsigned installer as a signed one. `targetChannelProblem` refuses
+  both before the export.
+- **A partial Store identity was skipped, not failed.** The signing-mode
+  script turned every win-store error into `skip`. Now only a leg with none of
+  the three variables is skipped (`windowsStoreIdentityState`).
+
+Checked and left alone: MAS entitlements match Electron's MAS guide (no
+`cs.allow-jit` needed without hardened runtime). `notarize: true` is ignored
+for mas (`if (!isMas)` in macPackager). The NSIS uninstaller is unlinked from
+`release/`. The linux tar.gz has one top-level folder, which Flathub's default
+`strip-components: 1` removes. The secret names match `mobile-release.yml`, and
+`build/icon.png` is tracked at 512×512.
+
+Not verified: **snap on linux-arm64.** electron-builder uses its prebuilt snap
+template only for x64 and armv7l (`isUseTemplateApp` in `targets/snap.js`).
+On arm64 it runs snapcraft, which usually wants LXD or Multipass, so the
+workflow comment "LXD is not used" is true only for x64. The leg may fail
+until it passes `--destructive-mode` or drops snap on arm64. The first
+dispatch will show which.
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**

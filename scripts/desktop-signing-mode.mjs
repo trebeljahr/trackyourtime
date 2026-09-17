@@ -7,12 +7,12 @@
  * Writes `mode=signed|unsigned|store|skip` to $GITHUB_OUTPUT when set. Uses
  * the same `resolveSigning` build-desktop.mjs calls, so the workflow's verify
  * steps and the build can never disagree. A partial secret set exits 1; a
- * Microsoft Store leg without its Partner Center identity is `skip`, since a
+ * Microsoft Store leg with none of its Partner Center identity is `skip`, since a
  * repo that does not publish to the Store has nothing to fix.
  */
 import { appendFileSync } from "node:fs";
 
-import { resolveSigning } from "./lib/desktop-release.mjs";
+import { resolveSigning, windowsStoreIdentityState } from "./lib/desktop-release.mjs";
 
 const channel = process.argv[2];
 let mode;
@@ -20,7 +20,9 @@ try {
   mode = resolveSigning(channel, process.env).mode;
 } catch (err) {
   const message = (err instanceof Error ? err.message : String(err)).split("\n")[0];
-  if (channel !== "win-store") {
+  // Only a Store leg with no identity at all is skipped; a partial one is a
+  // typo in a repo that does publish to the Store, and fails like any other.
+  if (channel !== "win-store" || windowsStoreIdentityState(process.env) !== "absent") {
     console.log(`::error::${message}`);
     process.exit(1);
   }

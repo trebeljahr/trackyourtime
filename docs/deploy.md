@@ -505,8 +505,10 @@ Every leg follows the Android rule above:
 - **No secrets for a channel:** the leg still builds. Every dmg, zip and exe
   has `-unsigned` in its file name. A `mas` leg without secrets packages the
   `.app` to check the config and uploads nothing, because no unsigned pkg can
-  be submitted. A `win-store` leg without the three identity variables is
-  skipped with a notice.
+  be submitted. A `win-store` leg with none of the three identity variables
+  is skipped with a notice; with one or two of them it fails.
+  An unsigned build also drops every certificate and notarization variable
+  before electron-builder runs, so nothing named `-unsigned` is ever signed.
 - **A complete set:** the leg signs, then verifies the signature. The checks
   are `codesign --verify --deep --strict`, `spctl --assess` and
   `stapler validate` for the Developer ID app, `pkgutil --check-signature` and
@@ -520,6 +522,10 @@ is unit-tested. The same function runs in `scripts/build-desktop.mjs`, so a
 local `--channel` build refuses in the same way. The API key and team id are
 shared with the iOS release, so they do not start signing on their own. Only
 the certificate does.
+
+An AppX is built only with `--channel win-store`, and that channel builds
+nothing else. Outside it electron-builder fills the identity with `CN=ms` and
+the package name, so `build-desktop.mjs` refuses before anything is built.
 
 Artifacts go to the run's Actions artifacts, with a `SHA256SUMS-<leg>.txt`
 file. Nothing is published: the GitHub Release and the updater feed come in

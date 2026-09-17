@@ -11,9 +11,12 @@ import {
   expandArtifactName,
   masEntitlementsPlist,
   resolveSigning,
+  SIGNING_CREDENTIAL_VARS,
   SIGNING_SETS,
   tagMismatch,
+  targetChannelProblem,
   WINDOWS_STORE_IDENTITY,
+  windowsStoreIdentityState,
 } from "./desktop-release.mjs";
 
 const all = (names, value = "x") => Object.fromEntries(names.map((n) => [n, value]));
@@ -79,10 +82,48 @@ describe("builderEnvFor", () => {
     assert.equal(env.TRACKYOURTIME_UNSIGNED, undefined);
   });
 
+  it("strips every credential electron-builder would sign with on its own from an unsigned build", () => {
+    // WIN_CSC_LINK falls back to CSC_LINK in electron-builder, so a Developer ID
+    // p12 in the shell used to sign a Windows build still named -unsigned.
+    const env = builderEnvFor("win", { ...all(SIGNING_CREDENTIAL_VARS), APPLE_TEAM_ID: "T" }, resolveSigning("win", { CSC_LINK: "x" }));
+    for (const name of SIGNING_CREDENTIAL_VARS) assert.equal(env[name], undefined, name);
+    assert.equal(env.APPLE_TEAM_ID, "T");
+    assert.equal(env.TRACKYOURTIME_UNSIGNED, "1");
+  });
+
   it("strips every signing variable from a Store package build", () => {
     const env = builderEnvFor("win-store", all(ALL_SIGNING_VARS), { mode: "store" });
     for (const name of ALL_SIGNING_VARS) assert.equal(env[name], undefined, name);
     assert.equal(env.TRACKYOURTIME_UNSIGNED, undefined);
+  });
+});
+
+describe("windowsStoreIdentityState", () => {
+  it("tells absent from partial, so only absent is skipped", () => {
+    assert.equal(windowsStoreIdentityState({}), "absent");
+    assert.equal(windowsStoreIdentityState(all(WINDOWS_STORE_IDENTITY, "")), "absent");
+    assert.equal(windowsStoreIdentityState({ WINDOWS_STORE_PUBLISHER: "CN=x" }), "partial");
+    assert.equal(windowsStoreIdentityState(all(WINDOWS_STORE_IDENTITY)), "complete");
+  });
+});
+
+describe("targetChannelProblem", () => {
+  it("refuses an AppX outside the win-store channel, where electron-builder invents CN=ms", () => {
+    assert.match(targetChannelProblem(null, ["--win", "appx", "--x64"]), /--channel win-store/);
+    assert.match(targetChannelProblem("win", ["--win", "nsis", "AppX:arm64"]), /--channel win-store/);
+  });
+
+  it("refuses anything but an AppX in the win-store channel, which names nothing -unsigned", () => {
+    assert.match(targetChannelProblem("win-store", ["--win", "nsis", "--x64"]), /AppX only/);
+    assert.match(targetChannelProblem("win-store", ["--win", "appx", "nsis"]), /AppX only/);
+    assert.match(targetChannelProblem("win-store", ["--dir"]), /AppX only/);
+  });
+
+  it("accepts the workflow's own invocations", () => {
+    assert.equal(targetChannelProblem("win-store", ["--win", "appx", "--x64", "--arm64"]), null);
+    assert.equal(targetChannelProblem("win", ["--win", "nsis", "--x64", "--arm64"]), null);
+    assert.equal(targetChannelProblem("mac", ["--mac", "dmg", "zip", "--arm64", "--x64"]), null);
+    assert.equal(targetChannelProblem(null, ["--dir"]), null);
   });
 });
 
