@@ -87,30 +87,22 @@ jobs:
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
-      # One script builds the desktop export (packages/client/out-desktop), checks
-      # that NEXT_PUBLIC_API_URL reached the bundle and that no HTML uses a
-      # relative "./_next" prefix, and bundles electron/src into electron/dist.
-      # The app serves that export from the privileged app://- scheme, so the
-      # assets are root-absolute like the web build's.
-      - name: Build the desktop export and main process
-        run: node scripts/build-desktop.mjs
-
-      # build/icon.icns and build/icon.ico are generated from build/icon.png and
-      # gitignored as such (.gitignore: "source of truth is build/icon.png"), but
-      # electron-builder.config.mjs names all three. Without this
-      # step a mac or windows packaging run fails on a missing icon; linux uses
-      # the .png directly and needs nothing, so this is a no-op there.
-      - name: Generate desktop icons
-        run: pnpm icons:desktop
-
-      # `--publish never`, explicitly. With GH_TOKEN set, electron-builder
-      # publishes on its own: on a tag (or a dispatch) it picks the github
-      # provider and tries to create a release, which this repo's read-only
-      # workflow token answers with a 403 — a red job after a good build. The
-      # artifacts reach users through upload-artifact and butler below, never
-      # through electron-builder.
-      - name: Package (electron-builder)
-        run: pnpm exec electron-builder --config electron-builder.config.mjs --${{ matrix.target }} --publish never
+      # One script, the same one `pnpm electron:build` runs: it builds the
+      # desktop export (packages/client/out-desktop), checks that
+      # NEXT_PUBLIC_API_URL reached the bundle and that no HTML uses a relative
+      # "./_next" prefix, bundles electron/src into electron/dist, generates
+      # build/icon.icns / icon.ico when they are missing (they are gitignored),
+      # runs electron-builder, and then lists the app.asar and fails on
+      # anything but the bundle, the export and package.json. Calling
+      # electron-builder directly here skipped that last check, so a release
+      # could ship @capacitor/* or other stray files unnoticed.
+      #
+      # `--publish never` is passed by the script. With GH_TOKEN set,
+      # electron-builder would otherwise publish on its own and try to create
+      # a GitHub release, which this repo's read-only token answers with a 403.
+      # The artifacts reach users through upload-artifact and butler below.
+      - name: Build and package the desktop app
+        run: node scripts/build-desktop.mjs --package --${{ matrix.target }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
