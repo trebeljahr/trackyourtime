@@ -13,7 +13,9 @@ import { contextBridge, ipcRenderer } from "electron";
 import {
   DESKTOP_IPC,
   type DesktopBridge,
+  type DesktopCommand,
   type DesktopIdlePayload,
+  type DesktopSettingsSnapshot,
 } from "../../packages/shared/src/desktop-bridge.ts";
 
 const bridge: DesktopBridge = {
@@ -34,6 +36,29 @@ const bridge: DesktopBridge = {
     setToken: (token) => ipcRenderer.invoke(DESKTOP_IPC.tokenSet, token),
     deleteToken: () => ipcRenderer.invoke(DESKTOP_IPC.tokenDelete),
     status: () => ipcRenderer.invoke(DESKTOP_IPC.tokenStatus),
+  },
+
+  desktop: {
+    publishTimerState: (state) => ipcRenderer.invoke(DESKTOP_IPC.desktopPublishState, state),
+    onCommand: (listener) => {
+      const handler = (_event: unknown, command: DesktopCommand): void => listener(command);
+      ipcRenderer.on(DESKTOP_IPC.desktopCommand, handler);
+      return () => {
+        ipcRenderer.removeListener(DESKTOP_IPC.desktopCommand, handler);
+      };
+    },
+    getSettings: () => ipcRenderer.invoke(DESKTOP_IPC.desktopSettingsGet),
+    updateSettings: (patch) => ipcRenderer.invoke(DESKTOP_IPC.desktopSettingsUpdate, patch),
+    onSettingsChanged: (listener) => {
+      const handler = (_event: unknown, snapshot: DesktopSettingsSnapshot): void => listener(snapshot);
+      ipcRenderer.on(DESKTOP_IPC.desktopSettingsChanged, handler);
+      return () => {
+        ipcRenderer.removeListener(DESKTOP_IPC.desktopSettingsChanged, handler);
+      };
+    },
+    suspendShortcuts: (suspended) => ipcRenderer.invoke(DESKTOP_IPC.desktopSuspendShortcuts, suspended),
+    showWindow: () => ipcRenderer.invoke(DESKTOP_IPC.desktopShowWindow),
+    notify: (notice) => ipcRenderer.invoke(DESKTOP_IPC.desktopNotify, notice),
   },
 
   /*

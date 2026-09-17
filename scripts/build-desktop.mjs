@@ -33,7 +33,7 @@
  *      the root `dependencies` would otherwise pull in.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -220,7 +220,14 @@ await esbuild({ ...common, entryPoints: ["electron/src/main.ts"], outfile: "elec
 // The preload runs sandboxed, where `require` knows only Electron's renderer
 // modules — so everything else has to be inlined, and it is.
 await esbuild({ ...common, entryPoints: ["electron/src/preload.ts"], outfile: "electron/dist/preload.js" });
-console.log(`    electron/dist/main.js, electron/dist/preload.js (Electron ${electronVersion})`);
+// The tray icons (scripts/icons-brand.mjs) sit beside the bundle, where
+// electron/src/desktop.ts looks for them in both a packaged and an unpackaged run.
+const trayIcons = resolve(repoRoot, "electron/assets/tray");
+if (!existsSync(join(trayIcons, "trayTemplate.png"))) {
+  fail("No tray icons in electron/assets/tray. Run: pnpm icons:brand");
+}
+cpSync(trayIcons, join(electronDist, "tray"), { recursive: true });
+console.log(`    electron/dist/main.js, electron/dist/preload.js, electron/dist/tray/ (Electron ${electronVersion})`);
 
 // ── 3. Package ───────────────────────────────────────────────────────
 

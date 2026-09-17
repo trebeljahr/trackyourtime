@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app, BrowserWindow, nativeTheme, screen } from "electron";
 
+import { isHeadless } from "./headless.ts";
 import {
   MIN_SIZE,
   backgroundColorFor,
@@ -47,6 +48,14 @@ export function createMainWindow(options: {
   dev: boolean;
   /** Tests and agents: never shown, never focused (see headless.ts). */
   headless?: boolean;
+  /** False for a login-item launch that stays in the tray. */
+  showOnReady?: boolean;
+  /**
+   * Whether the close button hides rather than quits (desktop.ts): always on
+   * macOS, and on Windows and Linux while the tray is on and the person has
+   * not chosen to quit on close.
+   */
+  hideOnClose?: () => boolean;
 }): BrowserWindow {
   const isMac = process.platform === "darwin";
   const saved = readWindowState();
@@ -80,9 +89,12 @@ export function createMainWindow(options: {
       webSecurity: true,
       devTools: options.dev,
       spellcheck: true,
-      // A hidden window is throttled like a background tab; headless runs
-      // still need its timers and its paint.
-      ...(options.headless ? { backgroundThrottling: false } : {}),
+      // A hidden window is throttled like a background tab, and this one is
+      // hidden most of the day: its renderer owns the socket, the offline
+      // queue and the state the tray draws (Stage 4), and Chromium's
+      // intensive throttling would hold its timers to once a minute after
+      // five hidden minutes. Headless runs also need its paint.
+      backgroundThrottling: false,
     },
     ...(options.headless ? { skipTaskbar: true } : {}),
   });
@@ -93,7 +105,7 @@ export function createMainWindow(options: {
   // exists to prevent — and made a headless launch on a profile that was
   // last closed maximised visible.
   win.once("ready-to-show", () => {
-    if (win.isDestroyed() || options.headless) return;
+    if (win.isDestroyed() || options.headless || options.showOnReady === false) return;
     if (saved.maximized) win.maximize();
     win.show();
   });
@@ -122,12 +134,12 @@ export function createMainWindow(options: {
       maximized: win.isMaximized(),
       fullscreen: win.isFullScreen() || win.isSimpleFullScreen(),
     });
-    // macOS: closing the window hides it and the app keeps running (the Dock
-    // icon brings it back), so the renderer — which owns the socket, the
-    // offline queue and the running timer — stays alive. Windows and Linux
-    // quit on close until the tray exists (Stage 4): a hidden window with no
-    // tray would be an app nobody can reach or quit.
-    if (isMac && !quitting) {
+    // Closing the window hides it and the app keeps running, so the renderer
+    // — which owns the socket, the offline queue and the running timer —
+    // stays alive. macOS always (the Dock icon brings it back); Windows and
+    // Linux while the tray is there to bring it back (desktop.ts).
+    const hide = options.hideOnClose ? options.hideOnClose() : isMac;
+    if (hide && !quitting) {
       event.preventDefault();
       if (win.isFullScreen()) {
         win.once("leave-full-screen", () => win.hide());
@@ -142,8 +154,11 @@ export function createMainWindow(options: {
 }
 
 export function revealWindow(win: BrowserWindow): void {
-  if (win.isDestroyed()) return;
+  if (win.isDestroyed() || isHeadless()) return;
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
+  // A tray click or a global shortcut arrives while another app is in front;
+  // on macOS `focus()` alone leaves this app behind it.
+  if (process.platform === "darwin") app.focus({ steal: true });
 }

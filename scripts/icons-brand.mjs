@@ -208,3 +208,61 @@ await emit(
     await Promise.all([16, 32, 48].map(async (size) => ({ size, png: await render(tile, size) }))),
   ),
 );
+
+/*
+ * The desktop app's tray icons (electron/assets/tray, copied beside the main
+ * bundle by scripts/build-desktop.mjs), idle and running.
+ *
+ * macOS takes a *template* image: black on transparent, which the menu bar
+ * tints for light and dark itself — so the mark is drawn bare, without the
+ * indigo tile, and the running variant closes the ring and fills the centre
+ * instead of adding a colour macOS would strip. The `Template` suffix is what
+ * tells Electron; `@2x` is picked up for Retina.
+ *
+ * Windows (`.ico`, 16 and 32) and Linux (22 and 44 PNG, the AppIndicator
+ * sizes) draw in colour on backgrounds nobody controls, so they use the tile,
+ * and the running variant adds the red dot the web header pulses while a
+ * timer runs. `overlay-running.png` is the Windows taskbar overlay badge.
+ */
+const trayTemplateIdle = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="22" fill="none" stroke="#000" stroke-opacity="0.35" stroke-width="9"/>
+  <path d="M32 10A22 22 0 1 1 12.95 43" fill="none" stroke="#000" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="32" cy="32" r="6" fill="#000"/>
+</svg>`);
+const trayTemplateRunning = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="22" fill="none" stroke="#000" stroke-width="9"/>
+  <circle cx="32" cy="32" r="11" fill="#000"/>
+</svg>`);
+const RUNNING_RED = "#DC2626";
+const tileRunning = Buffer.from(
+  tile
+    .toString("utf8")
+    .replace(
+      "</svg>",
+      `<circle cx="51" cy="13" r="12" fill="${RUNNING_RED}" stroke="#FFFFFF" stroke-width="4"/></svg>`,
+    ),
+);
+const overlayRunning = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="26" fill="${RUNNING_RED}" stroke="#FFFFFF" stroke-width="8"/>
+</svg>`);
+
+const trayDir = "electron/assets/tray";
+for (const [name, svg] of [
+  ["trayTemplate", trayTemplateIdle],
+  ["trayRunningTemplate", trayTemplateRunning],
+]) {
+  await emit(`${trayDir}/${name}.png`, await render(svg, 16));
+  await emit(`${trayDir}/${name}@2x.png`, await render(svg, 32));
+}
+for (const [name, svg] of [
+  ["tray", tile],
+  ["tray-running", tileRunning],
+]) {
+  await emit(`${trayDir}/${name}.png`, await render(svg, 22));
+  await emit(`${trayDir}/${name}@2x.png`, await render(svg, 44));
+  await emit(
+    `${trayDir}/${name}.ico`,
+    icoFromPngs(await Promise.all([16, 32].map(async (size) => ({ size, png: await render(svg, size) })))),
+  );
+}
+await emit(`${trayDir}/overlay-running.png`, await render(overlayRunning, 16));

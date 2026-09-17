@@ -17,10 +17,12 @@ import path from "node:path";
 import { app, BrowserWindow, safeStorage } from "electron";
 
 import { DESKTOP_APP_ORIGIN, DESKTOP_IPC } from "../../packages/shared/src/desktop-bridge.ts";
+import { installDesktop, type DesktopController } from "./desktop.ts";
 import { openInOs } from "./external.ts";
 import { isHeadless } from "./headless.ts";
 import { startIdleMonitor } from "./idle.ts";
 import { configureIpcTrust, handle } from "./ipc.ts";
+import { isHiddenLaunch } from "./login-item.ts";
 import { installApplicationMenu } from "./menu.ts";
 import { userDataDir } from "./profile.ts";
 import { handleAppScheme, registerAppScheme } from "./protocol.ts";
@@ -101,6 +103,8 @@ function start(): void {
   const preload = path.join(__dirname, "preload.js");
 
   let mainWindow: BrowserWindow | null = null;
+  /** Tray, shortcuts, desktop settings, notifications (desktop.ts); set once ready. */
+  let desktop: DesktopController | null = null;
 
   const showMain = (): void => {
     if (headless) return;
@@ -111,7 +115,10 @@ function start(): void {
     }
   };
 
-  app.on("second-instance", showMain);
+  // A login-item launch while the app already runs changes nothing on screen.
+  app.on("second-instance", (_event, argv) => {
+    if (!isHiddenLaunch(argv)) showMain();
+  });
 
   handle(DESKTOP_IPC.quit, () => {
     app.quit();
@@ -170,8 +177,17 @@ function start(): void {
     }
   });
 
-  function openWindow(): BrowserWindow {
-    const win = createMainWindow({ preload, dev: isDev, headless });
+  function openWindow(options: { show?: boolean } = {}): BrowserWindow {
+    const win = createMainWindow({
+      preload,
+      dev: isDev,
+      headless,
+      showOnReady: options.show ?? true,
+      hideOnClose: () => (desktop ? desktop.hideOnClose() : process.platform === "darwin"),
+    });
+    // A reload or a crashed renderer cannot finish recording a shortcut.
+    win.webContents.on("did-start-loading", () => desktop?.rendererReset());
+    win.webContents.on("render-process-gone", () => desktop?.rendererReset());
     win.on("closed", () => {
       if (mainWindow === win) mainWindow = null;
     });
@@ -191,7 +207,17 @@ function start(): void {
     if (!devUrl) handleAppScheme(exportDir);
     installApplicationMenu(isDev);
     startIdleMonitor();
-    mainWindow = openWindow();
+    desktop = installDesktop({
+      headless,
+      platform: process.platform,
+      userData: app.getPath("userData"),
+      // Copied beside the bundle by scripts/build-desktop.mjs.
+      iconDir: path.join(__dirname, "tray"),
+      isPackaged: app.isPackaged,
+      mainWindow: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null),
+      reveal: showMain,
+    });
+    mainWindow = openWindow({ show: !desktop.launchHidden(process.argv) });
 
     // macOS: the Dock icon brings back a window hidden by its close button.
     app.on("activate", showMain);
