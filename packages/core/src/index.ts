@@ -25,5 +25,6 @@ export * from "./timer-echo.js";
 export * from "./versioned-storage.js";
 export * from "./stored-entry.js";
 export * from "./stored-catalog.js";
+export * from "./timer-toggle.js";
 export * from "./workspace-context.js";
 export * from "./activity/index.js";

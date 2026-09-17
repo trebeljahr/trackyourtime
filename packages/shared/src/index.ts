@@ -26,3 +26,4 @@ export * from "./api-level.js";
 export * from "./capabilities.js";
 export * from "./desktop-bridge.js";
 export * from "./extension-bridge.js";
+export * from "./desktop-shortcuts.js";

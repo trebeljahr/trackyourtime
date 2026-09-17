@@ -7,6 +7,7 @@
  * disagreeing about which entries count as recent or where the day starts.
  */
 import {
+  RECENT_TIMER_DAYS,
   entryDurationSec,
   isOwnEntry,
   isTempId,
@@ -27,8 +28,8 @@ import { pendingCounts } from "./offline.js";
 import { loadTimerEcho } from "./storage.js";
 import { activeWorkspaceId, workspaceNameLookup } from "./workspace.js";
 
-/** How far back the "continue" shortlist looks. */
-export const RECENT_DAYS = 7;
+/** How far back the "continue" shortlist looks — core's, shared with the desktop toggle. */
+export const RECENT_DAYS = RECENT_TIMER_DAYS;
 
 export type TimerSnapshot = {
   running: DetailedEntry | null;

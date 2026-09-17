@@ -28,6 +28,7 @@ export { createSyncClient } from "./core/sync-client.js";
 export { resolveSyncUrl } from "./core/sync-url.js";
 export { readTimerEcho, reconcileRunning, writeTimerEcho } from "./core/timer-echo.js";
 export type { TimerEcho } from "./core/timer-echo.js";
+export { RECENT_TIMER_DAYS, decideTimerToggle } from "./core/timer-toggle.js";
 export { decodeVersioned, encodeVersioned } from "./core/versioned-storage.js";
 export type { VersionedSpec } from "./core/versioned-storage.js";
 export { isHeldByWorkspace, isOwnEntry, parseWorkspaceChoice, resolveActiveWorkspaceId, syncEventReach, withWorkspaceList, workspaceChoiceFor, workspaceNameIn, workspaceScopedKey } from "./core/workspace-context.js";

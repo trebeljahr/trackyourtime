@@ -12,6 +12,8 @@
  * this file may touch Node, Electron or the DOM.
  */
 
+import type { DesktopShortcutAction, DesktopShortcutBindings } from "./desktop-shortcuts.js";
+
 /** The OS platforms the shell reports, as Node's `process.platform` spells them. */
 export type DesktopPlatform = "darwin" | "win32" | "linux";
 
@@ -55,6 +57,157 @@ export interface DesktopSecureStore {
 }
 
 /**
+ * What the tray, the dock badge and the quit notice draw, published by the
+ * renderer (`components/desktop/desktop-bridge-publisher.tsx`) whenever it
+ * changes. The renderer owns the timer, the queue and the locale; the main
+ * process only draws this and ticks the clock from `startedAt`.
+ */
+export interface DesktopTimerState {
+  /** False on the way out of the signed-in app: the tray keeps Open and Quit only. */
+  signedIn: boolean;
+  running: DesktopRunningTimer | null;
+  /** Up to five recent combinations to continue, newest first. */
+  recents: DesktopRecent[];
+  /** Mutations this account queued that no server has seen yet. */
+  unsent: number;
+  /** Every string the main process shows, already translated. */
+  labels: DesktopTrayLabels;
+}
+
+export interface DesktopRunningTimer {
+  description: string;
+  /** ISO start of the running entry; the tray ticks from it. */
+  startedAt: string;
+  projectName: string | null;
+  /** `#rrggbb`, or null for no project. */
+  projectColor: string | null;
+}
+
+export interface DesktopRecent {
+  /** `quickStartKey` — what a `continue` command names. */
+  key: string;
+  label: string;
+  hint: string | null;
+}
+
+/**
+ * The main process has no catalog of its own, so every word it draws arrives
+ * here. Strings with a count are formatted by the renderer (ICU plurals).
+ */
+export interface DesktopTrayLabels {
+  stop: string;
+  startTimer: string;
+  recentHeading: string;
+  open: string;
+  settings: string;
+  quit: string;
+  noDescription: string;
+  /** Tooltip with no timer running. */
+  idleTooltip: string;
+  /** "3 unsent changes", or "" when there are none. */
+  unsent: string;
+  /** The notice shown when quitting with unsent changes. */
+  quitUnsentTitle: string;
+  quitUnsentBody: string;
+  quitUnsentButton: string;
+  /** Accessible description of the Windows taskbar overlay. */
+  runningBadge: string;
+}
+
+/** What the tray, a global shortcut or a notification asks the renderer to do. */
+export type DesktopCommand =
+  | { kind: "stop" }
+  /** Stop, else continue the newest recent entry, else `compose`. */
+  | { kind: "toggle" }
+  | { kind: "continue"; key: string }
+  /** Go to the tracker with the description focused. The window is already shown. */
+  | { kind: "compose" }
+  | { kind: "open-palette" }
+  | { kind: "open-settings" }
+  /** A notification was clicked: go where that prompt is. */
+  | { kind: "open-prompt"; prompt: DesktopNoticeKind };
+
+export type DesktopNoticeKind = "idle" | "runaway";
+
+/** A system notification for a prompt the hidden window would otherwise swallow. */
+export interface DesktopNotice {
+  kind: DesktopNoticeKind;
+  title: string;
+  body: string;
+  /** Replaces an earlier notice with the same tag instead of stacking. */
+  tag: string;
+}
+
+/** Per-device desktop preferences, kept by the main process in `userData`. */
+export interface DesktopSettings {
+  openAtLogin: boolean;
+  /** Tray icon (the menu bar item on macOS). */
+  showInTray: boolean;
+  /** Windows and Linux: the close button hides to the tray instead of quitting. */
+  closeHides: boolean;
+  /** macOS Dock badge / Windows taskbar overlay while a timer runs. Off by default. */
+  runningBadge: boolean;
+  shortcuts: DesktopShortcutBindings;
+}
+
+export type DesktopSettingsPatch = Partial<Omit<DesktopSettings, "shortcuts">> & {
+  shortcuts?: Partial<DesktopShortcutBindings>;
+};
+
+/**
+ * Why a binding is not active. `invalid` and `duplicate` are refused before
+ * saving; `taken` is saved (it may free up later) but `globalShortcut.register`
+ * returned false — another application or the OS holds the chord.
+ */
+export type DesktopShortcutProblem = "invalid" | "duplicate" | "taken";
+
+export interface DesktopShortcutStatus {
+  action: DesktopShortcutAction;
+  accelerator: string | null;
+  registered: boolean;
+  problem: DesktopShortcutProblem | null;
+  /** For `duplicate`: the action already holding the chord. */
+  conflictsWith?: DesktopShortcutAction;
+}
+
+export type DesktopLoginItemStatus = "enabled" | "disabled" | "requires-approval" | "unsupported";
+
+export interface DesktopSettingsSnapshot {
+  settings: DesktopSettings;
+  shortcuts: DesktopShortcutStatus[];
+  /** True while Settings is recording a key and every shortcut is unregistered. */
+  shortcutsSuspended: boolean;
+  /** What the OS reports, which can differ from the preference (macOS approval). */
+  loginItem: DesktopLoginItemStatus;
+  capabilities: {
+    /** The close button's behaviour is a choice (not on macOS, where close always hides). */
+    closeHides: boolean;
+    /** A running badge exists on this platform (macOS, Windows). */
+    runningBadge: boolean;
+  };
+}
+
+export interface DesktopSettingsUpdate {
+  snapshot: DesktopSettingsSnapshot;
+  /** Bindings in the patch that were refused and not saved. */
+  refused: DesktopShortcutStatus[];
+}
+
+/** The desktop-app surface beyond auth: tray, shortcuts, settings, attention. */
+export interface DesktopShell {
+  publishTimerState: (state: DesktopTimerState) => Promise<void>;
+  onCommand: (listener: (command: DesktopCommand) => void) => () => void;
+  getSettings: () => Promise<DesktopSettingsSnapshot>;
+  updateSettings: (patch: DesktopSettingsPatch) => Promise<DesktopSettingsUpdate>;
+  onSettingsChanged: (listener: (snapshot: DesktopSettingsSnapshot) => void) => () => void;
+  /** While recording a key: unregister every global shortcut so the press reaches the page. */
+  suspendShortcuts: (suspended: boolean) => Promise<void>;
+  showWindow: () => Promise<void>;
+  /** Posts only when the window is hidden or not focused; resolves whether it did. */
+  notify: (notice: DesktopNotice) => Promise<boolean>;
+}
+
+/**
  * `window.electronAPI`. Guard every use: the same export also runs in a
  * browser, an installed PWA and the Capacitor shells, where it is undefined.
  */
@@ -81,6 +234,9 @@ export interface DesktopBridge {
 
   /** The bearer session token's home (Stage 2). */
   secureStore: DesktopSecureStore;
+
+  /** Tray, global shortcuts, desktop settings and notifications (Stages 4 and 5). */
+  desktop: DesktopShell;
 }
 
 /**
@@ -97,8 +253,18 @@ export const DESKTOP_IPC = {
   tokenSet: "secure-store:set",
   tokenDelete: "secure-store:delete",
   tokenStatus: "secure-store:status",
+  desktopPublishState: "desktop:timer-state",
+  desktopSettingsGet: "desktop:settings-get",
+  desktopSettingsUpdate: "desktop:settings-update",
+  desktopSuspendShortcuts: "desktop:shortcuts-suspend",
+  desktopShowWindow: "desktop:window-show",
+  desktopNotify: "desktop:notify",
   /** main → renderer push, not an invoke. */
   idleState: "idle:state",
+  /** main → renderer push. */
+  desktopCommand: "desktop:command",
+  /** main → renderer push. */
+  desktopSettingsChanged: "desktop:settings-changed",
 } as const;
 
 export type DesktopIpcChannel = (typeof DESKTOP_IPC)[keyof typeof DESKTOP_IPC];

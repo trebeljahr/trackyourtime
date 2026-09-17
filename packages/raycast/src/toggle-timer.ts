@@ -1,5 +1,5 @@
 import { LaunchType, launchCommand, showHUD } from "@raycast/api";
-import { toQuickStart } from "./vendor/index.js";
+import { decideTimerToggle, toQuickStart } from "./vendor/index.js";
 import { getTrackYourTime } from "./lib/api.js";
 import { pendingCounts } from "./lib/offline.js";
 import { formatDurationShort, isoDaysAgo } from "./lib/format.js";
@@ -61,7 +61,9 @@ export default async function ToggleTimer(): Promise<void> {
     }
 
     // The same window the Timer view and the menu bar call "recent", so the
-    // entry a hotkey resumes is the one those surfaces show at the top.
+    // entry a hotkey resumes is the one those surfaces show at the top. The
+    // decision is core's `decideTimerToggle`, which the desktop app's global
+    // shortcut uses too.
     //
     // Several rows rather than one, and only this person's: in a shared
     // workspace the newest entry can be a colleague's, and the hotkey resumes
@@ -71,12 +73,20 @@ export default async function ToggleTimer(): Promise<void> {
       to: new Date().toISOString(),
       limit: 20,
     });
-    const last = ownOnly(entries, await resolveUserId()).find((entry) => entry.end !== null);
+    const decision = decideTimerToggle({
+      running: false,
+      candidates: ownOnly(entries, await resolveUserId()),
+      startOf: (entry) => entry.start,
+      isFinished: (entry) => entry.end !== null,
+      nowMs: Date.now(),
+      days: RECENT_DAYS,
+    });
 
-    if (!last) {
+    if (decision.kind !== "continue") {
       await launchCommand({ name: "timer", type: LaunchType.UserInitiated });
       return;
     }
+    const last = decision.candidate;
 
     const started = await api.continue(last.id, toQuickStart(last));
     await refreshMenuBar();
