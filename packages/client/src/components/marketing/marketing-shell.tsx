@@ -39,8 +39,7 @@ export function MarketingShell({
   const t = marketingT(locale);
   const href = (target: string): string => localizedPath(locale, target);
   return (
-    <FixedLocale locale={locale}>
-    <div data-marketing className="flex min-h-screen flex-col">
+    <FixedLocale locale={locale} data-marketing="" className="flex min-h-screen flex-col">
       <header className="border-b">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
           <Link href={href("/")} className="inline-flex items-center gap-2" data-testid="marketing-home">
@@ -90,7 +89,6 @@ export function MarketingShell({
           <LanguageSwitch locale={locale} path={path} />
         </div>
       </footer>
-    </div>
     </FixedLocale>
   );
 }

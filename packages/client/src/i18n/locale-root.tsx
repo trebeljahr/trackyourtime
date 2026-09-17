@@ -55,17 +55,26 @@ export function LocaleRoot({ children }: { children: React.ReactNode }): React.J
  * The `lang` attribute scopes the language for screen readers and search
  * engines even where <html lang> says otherwise, and `data-locale-fixed`
  * exempts the subtree from the pre-paint gate, which it does not need.
+ *
+ * The wrapper is a real box, never `display: contents`, because it is the
+ * first DOM node of every public page. On a client-side navigation Next's
+ * layout router scrolls to that node, and it skips any node whose rect is all
+ * zeros — a `contents` box has no rect, so the new page kept the previous
+ * page's scroll position. Callers style the box through `className`.
  */
 export function FixedLocale({
   locale,
+  className,
   children,
+  ...rest
 }: {
   locale: ClientLocale;
+  className?: string;
   children: React.ReactNode;
-}): React.JSX.Element {
+} & { [data: `data-${string}`]: string | undefined }): React.JSX.Element {
   return (
     <FixedLocaleContext.Provider value={locale}>
-      <div data-locale-fixed="" lang={locale} style={{ display: "contents" }}>
+      <div {...rest} data-locale-fixed="" lang={locale} className={className}>
         {children}
       </div>
     </FixedLocaleContext.Provider>
