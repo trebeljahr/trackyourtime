@@ -11,7 +11,8 @@
  *     Flatpak's /app) or fights the store. Stage 7's electron-updater must ask
  *     `selfUpdates` and stay off everywhere it answers false. A Homebrew cask
  *     installs the same Developer ID build as the website, so it cannot be told
- *     apart here and does self-update; the cask says `auto_updates true`.
+ *     apart here and does self-update; once Stage 7 ships the updater, the cask
+ *     must say `auto_updates true` (it does not yet, because nothing updates).
  *     deb and rpm are left to the package manager too (electron-builder writes
  *     `resources/package-type` into both, which is how electron-updater itself
  *     tells them apart; reading it is Stage 7's job).

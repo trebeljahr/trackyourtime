@@ -266,3 +266,25 @@ for (const [name, svg] of [
   );
 }
 await emit(`${trayDir}/overlay-running.png`, await render(overlayRunning, 16));
+
+/*
+ * The Microsoft Store package's tiles (electron-builder's `appx` target reads
+ * build/appx/). Without them electron-builder silently ships its own sample
+ * tiles — a grey placeholder square on the Start menu of every Store install.
+ * Names and sizes are the ones AppxTarget maps; the wide tile is the mark
+ * centred on the brand ground, which is also the manifest's backgroundColor.
+ */
+for (const [name, size] of [
+  ["StoreLogo", 50],
+  ["Square44x44Logo", 44],
+  ["Square150x150Logo", 150],
+]) {
+  await emit(`build/appx/${name}.png`, await render(tile, size));
+}
+await emit(
+  "build/appx/Wide310x150Logo.png",
+  await sharp({ create: { width: 310, height: 150, channels: 4, background: BRAND_INDIGO } })
+    .composite([{ input: await render(tile, 120), gravity: "centre" }])
+    .png({ compressionLevel: 9 })
+    .toBuffer(),
+);

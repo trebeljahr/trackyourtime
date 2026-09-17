@@ -20,6 +20,8 @@ release/
 build/icon.icns
 build/icon.ico
 build/icons/
+# Per-build entitlements (scripts/build-desktop.mjs; they name the Apple team)
+build/generated/
 
 # Release signing material. CI decodes ANDROID_KEYSTORE_BASE64 to this path
 # (.github/workflows/mobile-release.yml) and android/app/build.gradle signs with

@@ -8,6 +8,15 @@
  *   node scripts/build-desktop.mjs --electron-only        # bundle main/preload only
  *   node scripts/build-desktop.mjs --package --dir        # + unpacked app (electron:preview)
  *   node scripts/build-desktop.mjs --package --mac zip    # + anything electron-builder takes
+ *   node scripts/build-desktop.mjs --channel mac --package --mac dmg zip --arm64 --x64
+ *   node scripts/build-desktop.mjs --reuse-export --channel mas --package --mac mas --universal
+ *
+ * `--channel <mac|mas|win|win-store|linux>` is how a release is built (the
+ * workflow always passes it): the signing secrets for that channel are
+ * checked first, and a partial set refuses (scripts/lib/desktop-release.mjs).
+ * Without --channel every package is unsigned and named -unsigned.
+ * `--reuse-export` packages the export already in out-desktop instead of
+ * building it again (its target API is printed from .build-target.json).
  *
  * Why each check exists:
  *
@@ -31,9 +40,14 @@
  *   5. After packaging, the asar is listed and must contain only the bundle,
  *      the export and package.json — in particular no `@capacitor/*`, which
  *      the root `dependencies` would otherwise pull in.
+ *
+ *   6. After packaging, the version inside every asar (and every .app's
+ *      Info.plist on macOS) must be the root package.json's, and on a tag run
+ *      the tag must be v<that version>. A release named 0.2.0 that reports
+ *      0.1.0 would never be offered its own update.
  */
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +55,7 @@ import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 
 import { ensureElectron } from "./ensure-electron.mjs";
+import { builderEnvFor, masEntitlementsPlist, resolveSigning, tagMismatch } from "./lib/desktop-release.mjs";
 import { describeChildFailure } from "./lib/child-failure.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -52,10 +67,20 @@ const outPath = resolve(repoRoot, "packages/client", DESKTOP_OUT_DIR);
 const electronDist = resolve(repoRoot, "electron/dist");
 
 const args = process.argv.slice(2);
-const electronOnly = args.includes("--electron-only");
 const packageIndex = args.indexOf("--package");
 const shouldPackage = packageIndex !== -1;
+const ownArgs = shouldPackage ? args.slice(0, packageIndex) : args;
 const builderArgs = shouldPackage ? args.slice(packageIndex + 1) : [];
+const electronOnly = ownArgs.includes("--electron-only");
+const reuseExport = ownArgs.includes("--reuse-export");
+const channelIndex = ownArgs.indexOf("--channel");
+const channel = channelIndex === -1 ? null : ownArgs[channelIndex + 1];
+if (channelIndex !== -1 && (!channel || channel.startsWith("--"))) {
+  // Checked before anything is built: a typo here must not cost an export.
+  console.error("\n  build:desktop — --channel needs a value: mac, mas, win, win-store or linux.\n");
+  process.exit(1);
+}
+const rootVersion = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).version;
 
 function fail(message) {
   console.error(`\n  build:desktop — ${message}\n`);
@@ -66,12 +91,12 @@ function step(message) {
   console.log(`\n  ${message}`);
 }
 
-function run(command, cmdArgs, env = {}) {
+function run(command, cmdArgs, env = {}, baseEnv = process.env) {
   const result = spawnSync(command, cmdArgs, {
     cwd: repoRoot,
     stdio: ["inherit", "inherit", "pipe"],
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...baseEnv, ...env },
     shell: process.platform === "win32",
   });
   const stderr = result.stderr ?? "";
@@ -98,9 +123,33 @@ function walk(dir, predicate, hits = []) {
   return hits;
 }
 
+// ── 0. Release preflight ─────────────────────────────────────────────
+
+let signing = null;
+if (shouldPackage) {
+  const mismatch = tagMismatch({ refType: process.env.GITHUB_REF_TYPE, refName: process.env.GITHUB_REF_NAME, version: rootVersion });
+  if (mismatch) fail(mismatch);
+  if (channel) {
+    try {
+      signing = resolveSigning(channel, process.env);
+    } catch (err) {
+      fail(err instanceof Error ? err.message : String(err));
+    }
+    step(`Channel ${channel}: ${signing.mode}${signing.set ? ` (${signing.set.join(", ")})` : ""}`);
+  } else {
+    signing = { mode: "unsigned" };
+  }
+}
+
 // ── 1. Export ────────────────────────────────────────────────────────
 
-if (!electronOnly) {
+if (reuseExport && !electronOnly) {
+  const target = join(outPath, ".build-target.json");
+  if (!existsSync(target)) fail(`--reuse-export: no earlier export in ${outPath} (no .build-target.json).`);
+  step(`Reusing the export in ${relative(repoRoot, outPath)} (built against ${JSON.parse(readFileSync(target, "utf8")).apiUrl})`);
+}
+
+if (!electronOnly && !reuseExport) {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (!apiUrl) {
     fail(
@@ -238,28 +287,40 @@ if (shouldPackage) {
   // dev:desktop run node_modules/electron — make sure it is really there.
   ensureElectron();
 
-  const isDir = builderArgs.includes("--dir");
   const icons = process.platform === "win32" ? ["build/icon.ico"] : process.platform === "darwin" ? ["build/icon.icns"] : [];
   if (icons.some((icon) => !existsSync(resolve(repoRoot, icon)))) {
     step("Generating desktop icons (build/icon.png → icns/ico)");
     run("pnpm", ["icons:desktop"]);
   }
 
+  // The Mac App Store entitlements name the team, so they are written per
+  // build. Written for every package (electron-builder reads them only for
+  // mas), so the config never points at a file that is not there.
+  const generated = resolve(repoRoot, "build/generated");
+  mkdirSync(generated, { recursive: true });
+  writeFileSync(
+    join(generated, "entitlements.mas.plist"),
+    masEntitlementsPlist({ teamId: process.env.APPLE_TEAM_ID ?? "", appId: "com.trebeljahr.trackyourtime" }),
+  );
+
   step(`electron-builder ${builderArgs.join(" ")}`.trim());
-  run("pnpm", ["exec", "electron-builder", "--config", "electron-builder.config.mjs", "--publish", "never", ...builderArgs], {
-    // A preview is unsigned on every machine. Without this, electron-builder
-    // finds a local "Developer ID Application" identity on its own and signs
-    // even a --dir build, which is slow and differs per machine. Signing is
-    // switched on explicitly by the release workflow (Stage 6).
-    ...(isDir && process.env.CSC_IDENTITY_AUTO_DISCOVERY === undefined
-      ? { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
-      : {}),
-  });
+  // Without a channel, and for any unsigned channel, keychain identity
+  // discovery is off: otherwise electron-builder finds a local "Developer ID
+  // Application" identity on its own and signs even a --dir build, which is
+  // slow and differs per machine. Signing only ever comes from a channel's
+  // complete secret set.
+  const builderEnv = builderEnvFor(channel ?? "local", process.env, signing);
+  // release/ keeps whatever earlier runs left (another channel's unpacked
+  // app, an old dmg). Only what this run wrote is checked: a stale folder
+  // must neither pass for this build nor fail it.
+  const packagedSince = Date.now() - 2000;
+  run("pnpm", ["exec", "electron-builder", "--config", "electron-builder.config.mjs", "--publish", "never", ...builderArgs], {}, builderEnv);
 
   step("Verifying the asar");
   const releaseDir = resolve(repoRoot, "release");
-  const asars = existsSync(releaseDir) ? walk(releaseDir, (f) => f.endsWith(`${sep}app.asar`)) : [];
-  if (!asars.length) fail(`No app.asar under ${releaseDir}.`);
+  const fresh = (file) => statSync(file).mtimeMs >= packagedSince;
+  const asars = existsSync(releaseDir) ? walk(releaseDir, (f) => f.endsWith(`${sep}app.asar`) && fresh(f)) : [];
+  if (!asars.length) fail(`No app.asar written under ${releaseDir} by this run.`);
   const asarLib = createRequire(require.resolve("app-builder-lib/package.json", { paths: [require.resolve("electron-builder/package.json")] }))(
     "@electron/asar",
   );
@@ -271,7 +332,39 @@ if (shouldPackage) {
     if (capacitor.length) fail(`${relative(repoRoot, asar)} contains Capacitor:\n    ${capacitor.slice(0, 5).join("\n    ")}`);
     if (files.length) fail(`${relative(repoRoot, asar)} contains unexpected entries:\n    ${files.slice(0, 10).join("\n    ")}`);
     const bytes = statSync(asar).size;
-    console.log(`    ${relative(repoRoot, asar)}: ${entries.length} entries, ${(bytes / 1e6).toFixed(1)} MB, no node_modules`);
+    const packedVersion = JSON.parse(asarLib.extractFile(asar, "package.json").toString("utf8")).version;
+    if (packedVersion !== rootVersion) {
+      fail(`${relative(repoRoot, asar)} reports version ${packedVersion}; package.json says ${rootVersion}.`);
+    }
+    console.log(`    ${relative(repoRoot, asar)}: ${entries.length} entries, ${(bytes / 1e6).toFixed(1)} MB, no node_modules, version ${packedVersion}`);
+  }
+
+  if (process.platform === "darwin") {
+    const apps = readdirSync(releaseDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .flatMap((d) => readdirSync(join(releaseDir, d.name)).filter((n) => n.endsWith(".app")).map((n) => join(releaseDir, d.name, n)))
+      .filter((appPath) => fresh(join(appPath, "Contents/Resources/app.asar")));
+    const plistValue = (appPath, key) => {
+      const out = spawnSync("plutil", ["-extract", key, "raw", join(appPath, "Contents/Info.plist")], { encoding: "utf8" });
+      return out.status === 0 ? out.stdout.trim() : null;
+    };
+    for (const appPath of apps) {
+      const bundleVersion = plistValue(appPath, "CFBundleShortVersionString");
+      if (bundleVersion !== rootVersion) {
+        fail(`${relative(repoRoot, appPath)} has CFBundleShortVersionString "${bundleVersion}"; package.json says ${rootVersion}.`);
+      }
+      // A Mac App Store build: the keys electron-builder only takes from
+      // mac.extendInfo (electron-builder.config.mjs) must have arrived.
+      if (/[\\/]mas(-dev)?(-[a-z0-9]+)?$/.test(dirname(appPath))) {
+        const encryption = plistValue(appPath, "ITSAppUsesNonExemptEncryption");
+        if (encryption !== "false") fail(`${relative(repoRoot, appPath)} lacks ITSAppUsesNonExemptEncryption=false.`);
+        const team = process.env.APPLE_TEAM_ID?.trim();
+        if (signing?.mode === "signed" && plistValue(appPath, "ElectronTeamID") !== team) {
+          fail(`${relative(repoRoot, appPath)} has no ElectronTeamID ${team}; the sandboxed app could not open its IPC channels.`);
+        }
+      }
+      console.log(`    ${relative(repoRoot, appPath)}: CFBundleShortVersionString ${bundleVersion}`);
+    }
   }
 }
 
