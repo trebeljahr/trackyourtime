@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
 
 import {
@@ -9,6 +11,7 @@ import {
   collectPageProblems,
   createAccountCookie,
   electronExecutable,
+  freshUserDataDir,
   launchApp,
   launchEnv,
   navDestinations,
@@ -235,6 +238,41 @@ test("the permission lockdown leaves clipboard copy working", async () => {
   } finally {
     await app.evaluate(({ clipboard }, text) => clipboard.writeText(text), previous);
   }
+});
+
+test("a generated file reaches the download manager", async () => {
+  ({ app, page } = await launchApp());
+  await expectAt(page, /\/login\//);
+  const before = page.url();
+  // lib/download.ts: a blob: URL on an <a download>, which is how CSV, PDF and
+  // invoice exports leave the app. It must become a download, not a navigation
+  // the security handlers refuse. The save path is set here, so no dialog opens.
+  const dir = freshUserDataDir();
+  await app.evaluate(
+    ({ session }, saveDir) => {
+      const g = globalThis as { __downloads?: string[] };
+      g.__downloads = [];
+      session.defaultSession.once("will-download", (_event, item) => {
+        item.setSavePath(`${saveDir}/${item.getFilename()}`);
+        item.once("done", (_e, state) => g.__downloads?.push(`${item.getFilename()}:${state}`));
+      });
+    },
+    dir,
+  );
+  await page.evaluate(() => {
+    const url = URL.createObjectURL(new Blob(["a,b\n1,2\n"], { type: "text/csv" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "report.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  });
+  await expect
+    .poll(() => app.evaluate(() => (globalThis as { __downloads?: string[] }).__downloads ?? []))
+    .toEqual(["report.csv:completed"]);
+  expect(readFileSync(join(dir, "report.csv"), "utf8")).toBe("a,b\n1,2\n");
+  expect(page.url()).toBe(before);
 });
 
 test("DevTools cannot be opened and the menu has no reload or inspector", async () => {
