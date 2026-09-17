@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  feedProblems,
+  releasePlan,
   updateFeedFor,
   UPDATE_FEED,
   ALL_SIGNING_VARS,
@@ -240,5 +242,65 @@ describe("updateFeedFor", () => {
     assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "mac", TRACKYOURTIME_UNSIGNED: "1" })).publish, null);
     assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "mas", TRACKYOURTIME_UNSIGNED: "" })).publish, null);
     assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "", TRACKYOURTIME_UNSIGNED: "" })).publish, null);
+  });
+});
+
+describe("releasePlan", () => {
+  const signed = [
+    { channel: "mac", mode: "signed", files: ["a/TrackYourTime-0.2.0-mac-arm64.dmg", "a/TrackYourTime-0.2.0-mac-arm64.zip", "a/TrackYourTime-0.2.0-mac-arm64.zip.blockmap", "a/latest-mac.yml", "a/SHA256SUMS-mac.txt"] },
+    { channel: "mas", mode: "signed", files: ["b/TrackYourTime-0.2.0-mas-universal.pkg"] },
+    { channel: "win", mode: "signed", files: ["c/TrackYourTime-Setup-0.2.0.exe", "c/TrackYourTime-Setup-0.2.0.exe.blockmap", "c/latest.yml"] },
+    { channel: "win-store", mode: "store", files: ["d/TrackYourTime-0.2.0-x64-store.appx"] },
+    { channel: "linux-x64", mode: "unsigned", files: ["e/TrackYourTime-0.2.0-linux-x86_64.AppImage", "e/trackyourtime_0.2.0_amd64.deb", "e/trackyourtime_0.2.0_amd64.snap", "e/latest-linux.yml"] },
+  ];
+
+  it("attaches downloads and feeds, never store packages or per-leg checksums", () => {
+    const plan = releasePlan(signed);
+    assert.deepEqual(plan.problems, []);
+    assert.deepEqual(plan.warnings, []);
+    assert.deepEqual(plan.feeds, ["a/latest-mac.yml", "c/latest.yml", "e/latest-linux.yml"]);
+    assert.equal(plan.upload.some((f) => /\.(pkg|appx|snap)$|SHA256SUMS/.test(f)), false);
+    assert.ok(plan.upload.includes("e/trackyourtime_0.2.0_amd64.deb"));
+  });
+
+  it("leaves unsigned mac and win files off the release page and says so", () => {
+    const plan = releasePlan([
+      { channel: "mac", mode: "unsigned", files: ["a/TrackYourTime-0.2.0-mac-arm64-unsigned.dmg"] },
+      signed[4],
+    ]);
+    assert.deepEqual(plan.problems, []);
+    assert.equal(plan.upload.some((f) => f.includes("unsigned")), false);
+    assert.match(plan.warnings[0], /mac was built unsigned/);
+  });
+
+  it("refuses a leg with a feed that did not bring it, and a release with nothing to attach", () => {
+    assert.match(releasePlan([{ ...signed[2], files: ["c/TrackYourTime-Setup-0.2.0.exe"] }]).problems[0], /win leg has no latest\.yml/);
+    const empty = releasePlan([{ channel: "mas", mode: "signed", files: ["b/x.pkg"] }]);
+    assert.match(empty.problems.at(-1), /Nothing to attach/);
+  });
+});
+
+describe("feedProblems", () => {
+  const attached = new Map([["TrackYourTime-0.2.0-mac-arm64.zip", { sha512: "abc", size: 10 }]]);
+
+  it("accepts a feed whose files are attached with matching checksums", () => {
+    assert.deepEqual(feedProblems([{ name: "latest-mac.yml", feed: { files: [{ url: "TrackYourTime-0.2.0-mac-arm64.zip", sha512: "abc", size: 10 }] } }], attached), []);
+  });
+
+  it("names a missing file, a checksum and a size mismatch, and an empty feed", () => {
+    const problems = feedProblems(
+      [
+        { name: "latest-mac.yml", feed: { files: [{ url: "TrackYourTime-0.2.0-mac-x64.zip", sha512: "abc" }] } },
+        { name: "latest-mac.yml", feed: { files: [{ url: "TrackYourTime-0.2.0-mac-arm64.zip", sha512: "zzz" }] } },
+        { name: "latest-mac.yml", feed: { files: [{ url: "TrackYourTime-0.2.0-mac-arm64.zip", sha512: "abc", size: 11 }] } },
+        { name: "latest.yml", feed: {} },
+      ],
+      attached,
+    );
+    assert.equal(problems.length, 4);
+    assert.match(problems[0], /not attached/);
+    assert.match(problems[1], /sha512/);
+    assert.match(problems[2], /size/);
+    assert.match(problems[3], /no files/);
   });
 });

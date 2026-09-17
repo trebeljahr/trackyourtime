@@ -19,8 +19,14 @@ cask "track-your-time" do
     strategy :github_latest
   end
 
-  # Electron 42 needs macOS 12. Add `auto_updates true` in the same change that
-  # ships the in-app updater (Stage 7); until then brew is what upgrades it.
+  # The cask installs the same Developer ID build as the download page, and
+  # that build updates itself from GitHub Releases (electron/src/updater.ts).
+  # `auto_updates true` tells brew so: `brew upgrade` leaves it alone unless
+  # run with --greedy, instead of replacing an app that already moved on. The
+  # tap still gets each new version (desktop-manifests.yml), so a fresh
+  # `brew install` gets the current release.
+  auto_updates true
+  # Electron 42 needs macOS 12.
   depends_on macos: ">= :monterey"
 
   app "Track Your Time.app"

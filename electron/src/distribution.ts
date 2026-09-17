@@ -8,14 +8,14 @@
  *   - **Updates.** A store (Mac App Store, Microsoft Store, Snap Store,
  *     Flathub) replaces the app itself; an in-app updater there either cannot
  *     write to its own bundle (MAS sandbox, MSIX, a read-only squashfs, a
- *     Flatpak's /app) or fights the store. Stage 7's electron-updater must ask
- *     `selfUpdates` and stay off everywhere it answers false. A Homebrew cask
- *     installs the same Developer ID build as the website, so it cannot be told
- *     apart here and does self-update; once Stage 7 ships the updater, the cask
- *     must say `auto_updates true` (it does not yet, because nothing updates).
- *     deb and rpm are left to the package manager too (electron-builder writes
- *     `resources/package-type` into both, which is how electron-updater itself
- *     tells them apart; reading it is Stage 7's job).
+ *     Flatpak's /app) or fights the store. The updater (`updater-model.ts`,
+ *     `updaterPolicy`) stays off everywhere `selfUpdates` answers false. A
+ *     Homebrew cask installs the same Developer ID build as the website, so it
+ *     cannot be told apart here and does update itself; the cask says
+ *     `auto_updates true`. deb, rpm and tar.gz are all `linux-package`, left
+ *     to the package manager or the person. electron-builder's
+ *     `resources/package-type` would tell them apart, but none of the three
+ *     updates itself, so nothing reads it.
  *
  *   - **Open at login.** See `loginItemMechanism`.
  *

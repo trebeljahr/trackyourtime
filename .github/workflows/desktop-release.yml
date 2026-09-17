@@ -18,13 +18,17 @@ name: Desktop Release
 # nothing, since there is no unsigned pkg to submit; a Microsoft Store build
 # without its Partner Center identity is skipped with a notice.
 #
-# Artifacts go to the run's Actions artifacts only. Publishing a GitHub Release
-# and the updater feed is Stage 7; store uploads are manual.
+# A dispatch keeps everything as Actions artifacts. A `v*` tag also runs the
+# `draft-release` job (Stage 7): it attaches the signed downloads and their
+# update feeds (latest-mac.yml, latest.yml, latest-linux*.yml) to a DRAFT
+# GitHub Release. Nothing is published here. Installed apps only see a release
+# once a person publishes the draft, because electron-updater reads the latest
+# PUBLISHED release. Store uploads stay manual.
 
 on:
-  # No `push: tags` trigger yet. Add `push: { tags: ["v*"] }` when a signed
-  # dispatch has gone green on every leg. build-desktop.mjs already refuses a
-  # tag that does not match package.json's version.
+  # build-desktop.mjs refuses a tag that does not match package.json's version.
+  push:
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -51,6 +55,7 @@ jobs:
               release/*.dmg
               release/*.zip
               release/*.blockmap
+              release/latest-mac.yml
           - channel: mas
             signing-channel: mas
             os: macos-latest
@@ -64,6 +69,7 @@ jobs:
             artifacts: |
               release/*.exe
               release/*.blockmap
+              release/latest.yml
           - channel: win-store
             signing-channel: win-store
             os: windows-latest
@@ -80,6 +86,7 @@ jobs:
               release/*.rpm
               release/*.tar.gz
               release/*.snap
+              release/latest-linux.yml
           - channel: linux-arm64
             signing-channel: linux
             os: ubuntu-24.04-arm
@@ -90,6 +97,7 @@ jobs:
               release/*.rpm
               release/*.tar.gz
               release/*.snap
+              release/latest-linux-arm64.yml
 
     runs-on: ${{ matrix.os }}
 
@@ -261,3 +269,68 @@ jobs:
             release/SHA256SUMS-${{ matrix.channel }}.txt
           # A Mac App Store build without its secrets writes no pkg.
           if-no-files-found: ${{ matrix.channel == 'mas' && steps.signing.outputs.mode == 'unsigned' && 'ignore' || 'error' }}
+
+  # ── Draft GitHub Release (tags only) ─────────────────────────────────
+  # Runs only when every leg succeeded. scripts/desktop-release-draft.mjs
+  # decides what is attached (lib/desktop-release.mjs → releasePlan): signed
+  # mac and win downloads, every Linux download, and each feed, after checking
+  # that every file a feed names is attached with the sha512 and size it
+  # states. `-unsigned` files and store packages are never attached; an
+  # unsigned mac or win leg is a warning on the run, so the person publishing
+  # sees which platform is missing. A release that is already published is
+  # never touched: a new build needs a new tag.
+  draft-release:
+    name: draft release
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # For electron-updater's js-yaml, which reads the feeds as the app does.
+      - name: Install deps
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: artifacts
+
+      - name: Collect the release files
+        run: node scripts/desktop-release-draft.mjs --artifacts artifacts --out release-files
+
+      - name: Refuse a release that is already published
+        shell: bash
+        run: |
+          if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != "true" ]; then
+              echo "::error::$TAG is already published. Tag a new version instead of rebuilding a published release."
+              exit 1
+            fi
+            echo "exists=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Create or update the draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          if [ "${exists:-}" = "true" ]; then
+            gh release upload "$TAG" release-files/* --clobber
+          else
+            printf 'Track Your Time %s.\n\nSee CHANGELOG.md for what changed. Publishing this release offers it to every installed copy that updates itself.\n' "$version" > notes.md
+            gh release create "$TAG" release-files/* --draft --verify-tag --title "Track Your Time $version" --notes-file notes.md
+          fi
+          echo "Draft: $(gh release view "$TAG" --json url --jq .url)"

@@ -375,3 +375,94 @@ export function renderManifestTemplate(template, values) {
   if (missing.size) throw new Error(`No value for ${[...missing].map((k) => `{{${k}}}`).join(", ")}.`);
   return out;
 }
+
+/**
+ * The update feed file each release leg must carry, when it carries one: what
+ * electron-updater asks for on that platform (`latest-mac.yml` holds both mac
+ * architectures, `latest.yml` the one NSIS installer, and Linux names its
+ * architecture unless it is x64). Keyed by the workflow's matrix `channel`.
+ */
+export const FEED_FILES = Object.freeze({
+  mac: "latest-mac.yml",
+  win: "latest.yml",
+  "linux-x64": "latest-linux.yml",
+  "linux-arm64": "latest-linux-arm64.yml",
+});
+
+/** Files that go to a store or stay a CI artifact, never onto the release page. */
+const STORE_ONLY = /\.(pkg|appx|snap)$/;
+
+/**
+ * What goes into the draft GitHub Release for a tag, from the legs the matrix
+ * built (`desktop-<channel>-<mode>` artifacts).
+ *
+ * - An `-unsigned` file is never attached: a release page is where people
+ *   download from, and the updater would offer nothing for it anyway. The
+ *   leg's absence is a warning, so a person publishing the draft sees which
+ *   platform has no download this time.
+ * - Store packages (pkg, appx, snap) stay CI artifacts for a manual upload.
+ * - Per-leg checksum files are replaced by one over what is attached.
+ * - A leg that has a feed (signed mac and win, every Linux leg) must bring
+ *   its feed file. Without it installed apps would never see this release,
+ *   and nothing else would say so.
+ *
+ * @param {{ channel: string, mode: string, files: string[] }[]} legs
+ * @returns {{ upload: string[], feeds: string[], warnings: string[], problems: string[] }}
+ */
+export function releasePlan(legs) {
+  const upload = [];
+  const feeds = [];
+  const warnings = [];
+  const problems = [];
+  for (const leg of legs) {
+    const feedFile = FEED_FILES[leg.channel];
+    const hasFeed = feedFile !== undefined && (leg.channel.startsWith("linux") || leg.mode === "signed");
+    if ((leg.channel === "mac" || leg.channel === "win") && leg.mode !== "signed") {
+      warnings.push(`${leg.channel} was built unsigned: the draft has no ${leg.channel === "mac" ? "macOS" : "Windows"} download and no update for it.`);
+    }
+    for (const file of leg.files) {
+      const name = file.split("/").pop();
+      if (/-unsigned\./.test(name) || STORE_ONLY.test(name) || /^SHA256SUMS/.test(name)) continue;
+      if (/^latest.*\.yml$/.test(name)) {
+        if (hasFeed && name === feedFile) feeds.push(file);
+        continue;
+      }
+      upload.push(file);
+    }
+    if (hasFeed && !leg.files.some((file) => file.split("/").pop() === feedFile)) {
+      problems.push(`The ${leg.channel} leg has no ${feedFile}; installed apps would never be offered this release.`);
+    }
+  }
+  if (upload.length === 0) problems.push("Nothing to attach: every leg was unsigned, a store package, or empty.");
+  return { upload, feeds, warnings, problems };
+}
+
+/**
+ * Every file a feed names must be attached, with the size and sha512 the feed
+ * states, or the updater downloads it, rejects the checksum and reports an
+ * error to every installed app.
+ *
+ * @param {{ name: string, feed: { files?: { url: string, sha512: string, size?: number }[] } }[]} feeds
+ * @param {Map<string, { sha512: string, size: number }>} attached  by file name
+ * @returns {string[]} problems
+ */
+export function feedProblems(feeds, attached) {
+  const problems = [];
+  for (const { name, feed } of feeds) {
+    const files = Array.isArray(feed?.files) ? feed.files : [];
+    if (files.length === 0) problems.push(`${name} lists no files.`);
+    for (const entry of files) {
+      // electron-updater's GitHub provider replaces spaces with dashes.
+      const fileName = String(entry.url).replace(/ /g, "-");
+      const actual = attached.get(fileName);
+      if (!actual) {
+        problems.push(`${name} names ${fileName}, which is not attached.`);
+      } else if (actual.sha512 !== entry.sha512) {
+        problems.push(`${name}: the sha512 of ${fileName} does not match the attached file.`);
+      } else if (typeof entry.size === "number" && entry.size !== actual.size) {
+        problems.push(`${name}: the size of ${fileName} does not match the attached file.`);
+      }
+    }
+  }
+  return problems;
+}

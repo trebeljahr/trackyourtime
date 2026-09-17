@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { DesktopUpdateSnapshot, DesktopUpdateStatus } from "../../packages/shared/src/desktop-bridge.ts";
-import type { DistributionChannel } from "./distribution.ts";
+import { selfUpdates, type DistributionChannel } from "./distribution.ts";
 import {
   createUpdateController,
   DISABLE_UPDATES_ENV,
@@ -39,6 +39,13 @@ describe("updaterPolicy", () => {
       // electron-builder writes app-update.yml into deb, rpm and snap builds
       // too, so the feed alone must never switch updates on.
       assert.deepEqual(updaterPolicy({ channel, hasFeed: true, env: {} }), { enabled: false, reason }, channel);
+    }
+  });
+
+  it("agrees with selfUpdates for every channel", () => {
+    const channels: DistributionChannel[] = ["mac-app-store", "mac-direct", "windows-store", "windows-direct", "snap", "flatpak", "appimage", "linux-package", "unpackaged"];
+    for (const channel of channels) {
+      assert.equal(updaterPolicy({ channel, hasFeed: true, env: {} }).enabled, selfUpdates(channel), channel);
     }
   });
 
@@ -242,5 +249,24 @@ describe("createUpdateController", () => {
     const { controller, scheduler } = setup();
     controller.dispose();
     assert.equal(scheduler.cleared, 2);
+  });
+});
+
+describe("no forced restart, in the source", () => {
+  it("calls quitAndInstall in one place, and restart only from a tray click or the Settings button", async () => {
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const dir = new URL(".", import.meta.url);
+    const sources = readdirSync(dir)
+      .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+      .map((name) => ({ name, text: readFileSync(new URL(name, dir), "utf8") }));
+    const callers = (pattern: RegExp): string[] =>
+      sources.flatMap(({ name, text }) => (text.match(pattern) ?? []).map(() => name));
+    assert.deepEqual(callers(/\.quitAndInstall\(/g), ["updater-model.ts"]);
+    // desktop.ts: the tray's "restart-to-update" item and the update:restart
+    // IPC handler, which only the "Restart to update" button invokes.
+    assert.deepEqual(callers(/controller\.restart\(\)/g), ["desktop.ts", "desktop.ts"]);
+    const desktop = sources.find(({ name }) => name === "desktop.ts")!.text;
+    assert.match(desktop, /id === "restart-to-update"\) updates\.controller\.restart\(\)/);
+    assert.match(desktop, /DESKTOP_IPC\.updateRestart, \(\) => updates\.controller\.restart\(\)/);
   });
 });
