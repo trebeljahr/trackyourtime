@@ -572,6 +572,113 @@ jsdom's; this is not caused by this branch. A re-run of the harness should
 wait until Rico agrees to it. Also check whether macOS shows a Dock icon for
 the unpackaged `Electron.app` before `main.js` sets the accessory policy.
 
+### Stage 6 — packaging and signing for every channel (2026-09-17)
+
+Run on macOS arm64, Node 24.14.1, electron-builder 26.8.1. **No Electron
+binary was launched in this stage**, headless or otherwise. Rico had asked
+again that agents stop starting Electron sessions, which take focus and
+flicker. Packaging only runs `codesign`, the fuse flip and zip. The dmg was
+not rebuilt either, because building one attaches a disk image on the desktop.
+The dmg from the interrupted earlier run of this stage was checked with
+`hdiutil verify`, which mounts nothing.
+
+Verified locally:
+
+- `build-desktop.mjs --reuse-export --channel mac --package --mac zip --arm64`
+  exits 0. It writes `TrackYourTime-0.1.0-mac-arm64-unsigned.zip`, and the app
+  is ad-hoc signed with `flags=0x10002(adhoc,runtime)` (hardened runtime on).
+  The entitlements are exactly `cs.allow-jit` and
+  `cs.allow-unsigned-executable-memory`. The asar has 512 entries (9.2 MB), no
+  `node_modules`, and version 0.1.0 in both the asar and Info.plist.
+- `--channel mas --package --mac mas --arm64` exits 0 and writes
+  `release/mas-arm64/Track Your Time.app` without signing (`identity: null`).
+  The asar check matches the mac build, `ITSAppUsesNonExemptEncryption` is
+  `false`, and the generated `entitlements.mas.plist` has the sandbox, network
+  client and user-selected files, with no app group because no team id is set.
+- `scripts/lib/desktop-release.test.mjs`: 21 tests, covering signing
+  decisions, names, the tag check, MAS entitlements and the manifest
+  placeholders. `pnpm test:electron`: 93 tests. `actionlint` passes on
+  `desktop-release.yml` and `desktop-manifests.yml`.
+- `desktop-manifests.mjs` was run over stand-in files. The cask passes
+  `ruby -c`, the winget and Flathub YAML parse, and the metainfo passes
+  `xmllint`. A missing release file refuses and lists every name it wanted.
+
+What the stage text got wrong or left out:
+
+- **mac is split per architecture, mas is universal.** Each dmg is half the
+  size of a universal one, and the Homebrew cask picks the right one by
+  architecture. App Store Connect takes one binary per build.
+- **The API key does not trigger signing.** Notarization uses the App Store
+  Connect key that `mobile-release.yml` already reads, and the MAS app group
+  uses the team id. If either counted as "a secret is set", a repo that ships
+  the phone app would fail the desktop legs as partial.
+  `SIGNING_TRIGGERS` makes only the certificate (and, for mas, the profile)
+  start a set.
+- **An unsigned MAS build has no pkg.** electron-builder's ad-hoc fallback
+  fails under `@electron/osx-sign`, because a `-` identity has no team to
+  derive `ElectronTeamID` from. `productbuild` also needs the installer
+  identity. So an unsigned mas leg checks the config and uploads nothing.
+- **`mas.extendInfo` is silently dropped** by app-builder-lib 26.8.1, so the
+  store keys live in `mac.extendInfo`, and `build-desktop.mjs` checks that they
+  reached the mas Info.plist.
+- **The dmg is not signed or notarized itself.** electron-builder's `dmg.sign`
+  defaults to false. The stapled app inside is what Gatekeeper checks, and the
+  workflow verifies that app, not the dmg.
+- **Windows certificate files are mostly history.** New OV and EV
+  certificates have lived on HSMs since 2023 and cannot be exported as a pfx.
+  Azure Trusted Signing is the realistic route, and its eligibility has to be
+  checked for Rico's country. `WIN_CSC_LINK` stays as an alternative, and
+  `resolveSigning` refuses both routes set at once.
+- **Microsoft Store identity is never defaulted.** The three values are
+  repository variables, and without them the `win-store` leg is skipped with
+  a notice rather than failed. A repo that does not publish to the Store has
+  nothing to fix.
+- **Linux: AppImage, deb, rpm, tar.gz, snap. No electron-builder flatpak.**
+  electron-builder's `flatpak` target builds a local single-file bundle, but
+  Flathub builds from a manifest in its own repository. So
+  `packaging/flatpak/` repackages the release tar.gz on
+  `org.electronjs.Electron2.BaseApp` 25.08, using zypak. Flathub reviewers may
+  ask for a source build instead (`flatpak-node-generator`), which is not done.
+  Snap is built by electron-builder with `password-manager-service` for
+  safeStorage (not auto-connected) and `autoStart`. arm64 Linux runs on an
+  arm64 runner, because snapcraft does not cross-build.
+- **No apt or rpm repository.** The deb and rpm files are downloads, so the
+  package manager does not update them. `distribution.ts` still leaves updates
+  to the package manager for those files. Stage 7 must decide whether they
+  self-update, or say on the download page that they do not.
+- **Manifests are rendered from a published release**, not written at build
+  time. The checksums must be of the files people download, and a draft's
+  URLs do not resolve. `desktop-manifests.yml` refuses a run from anything but
+  the `v<version>` tag and refuses a draft. It commits the cask to the tap only
+  when `HOMEBREW_TAP_REPO` and `HOMEBREW_TAP_TOKEN` are set. winget and Flathub
+  stay manual pull requests.
+- **The cask does not say `auto_updates true` yet.** Nothing updates itself
+  until Stage 7, and `brew upgrade` skips casks that claim to update
+  themselves.
+- **itch.io is gone** from the workflow, and so is the butler step.
+
+Not run, and why:
+
+- **Any signed or notarized build, and the verification steps.** There are no
+  credentials on this machine or on the repo. The steps were linted, not run.
+- **The workflow itself** (never dispatched, so no runner was used), including
+  Windows NSIS and AppX, Linux AppImage, deb, rpm and snap, and the arm64
+  runner.
+- **The Windows and Linux packages on this Mac.** `win-unpacked` and
+  `linux-unpacked` exist from the interrupted earlier run, but the installers
+  need their own OS (makeappx, rpmbuild, snapcraft).
+- **Launching any package** (Gatekeeper on a clean Mac, SmartScreen): this
+  needs a visible launch, which was not done.
+- **The stage acceptance** (a notarized dmg opening on a clean Mac without a
+  warning, and a signed exe that SmartScreen does not flag as unsigned). This
+  waits on the certificates.
+- `appstreamcli validate`, `desktop-file-validate`, `winget validate` and
+  `brew audit` are not installed here.
+
+Unrelated failure seen in passing: `scripts/lib/llms.test.mjs` fails on
+"llms-full.txt is up to date" under Node 24 and 26. It reads the docs site,
+which this stage does not touch; `pnpm llms:emit` regenerates it.
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**
