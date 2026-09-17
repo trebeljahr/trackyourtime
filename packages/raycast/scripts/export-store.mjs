@@ -8,8 +8,9 @@
  * `package-lock.json` from npm (never pnpm), the Raycast template's scripts,
  * and no build output (`publish` copies `dist/` if it is there).
  *
- * It never publishes. Publishing is `npm run publish` inside the exported
- * directory, run by a person — see the procedure printed at the end.
+ * It never publishes. Publishing is `npx @raycast/api@latest publish` inside
+ * the exported directory, run by a person — see the procedure printed at the
+ * end and packages/raycast/PUBLISHING.md.
  *
  * Usage:
  *   node scripts/export-store.mjs [outDir] [options]
@@ -189,7 +190,10 @@ export const STORE_PRETTIERIGNORE = `# Copied from the Track Your Time repositor
 src/vendor
 `;
 
-/** Kept across re-exports: the copy's own git history, and the install. */
+/**
+ * Kept across re-exports: the install, and a `.git` if someone made one (never
+ * deleted silently; the export warns about it instead).
+ */
 const KEEP = new Set([".git", "node_modules", "package-lock.json"]);
 
 /** The Raycast extension template's scripts, verbatim. */
@@ -457,13 +461,25 @@ export function exportStore(opts) {
   }
   for (const w of warnings) console.warn(`warning: ${w}`);
 
+  // `publish` needs only to run inside some git work tree with nothing
+  // uncommitted; it commits and tags in its own clone of the raycast/extensions
+  // fork, never here. The default out dir is gitignored inside the monorepo,
+  // which satisfies both and lets the PR link back to this repository.
+  const ownRepo = fs.existsSync(path.join(outDir, ".git"));
+  const inWorkTree =
+    spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: outDir, encoding: "utf8" }).stdout?.trim() ===
+    "true";
+  if (ownRepo) {
+    warnings.push(
+      `${outDir} has its own .git, so publish reads that repository instead of the monorepo. Remove it unless you meant that.`,
+    );
+    console.warn(`warning: ${warnings.at(-1)}`);
+  }
   console.log(`
 Next steps (run by hand; this script never publishes):
-  cd ${outDir}
-  git init && git add -A && git commit -m "Export ${pkg.name}"   # first export only; later: git add -A && git commit
-  npm run lint
-  npm run build        # note: replaces Raycast's installed dev copy of ${pkg.name}
-  npm run publish      # GitHub login, then a draft PR to raycast/extensions
+  git status           # publish refuses while this repository has uncommitted or untracked files
+  cd ${outDir}${inWorkTree ? "" : `\n  git init && git add -A && git commit -m "Export ${pkg.name}"   # ${outDir} is not in a git repository, and publish needs one`}
+  npx @raycast/api@latest publish   # GitHub login, then a draft PR to raycast/extensions
 `);
   return { outDir, packageJson: storePkg };
 }

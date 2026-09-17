@@ -1,6 +1,6 @@
 # Publishing the Raycast extension
 
-This file is for maintainers and is not part of the store copy. The extension is developed in the Track Your Time monorepo, in `packages/raycast`. The store copy is exported from there and published from the export, never from the monorepo.
+This file is for maintainers and is not part of the store copy. The extension is developed in the Track Your Time monorepo, in `packages/raycast`. The store copy is exported into `packages/raycast/store`, a gitignored folder, and published from there.
 
 **The code under `src/vendor/` is generated.** `scripts/vendor-core.mjs` copies it from `packages/core` and `packages/shared`, because the store installs the extension with `npm ci` and cannot resolve workspace packages. Never edit `src/vendor/`. Change `packages/core` or `packages/shared`, then run `pnpm vendor:raycast`. `scripts/vendor-core.test.mjs` fails when the copy is out of date.
 
@@ -16,18 +16,15 @@ This file is for maintainers and is not part of the store copy. The extension is
 
    The export also changes three things in the copy only. `src/lib/local-defaults.ts` is set to `false`, so `npm run dev` in the export uses the hosted service when **API URL** and **Web App URL** are empty. The headers of the files under `src/vendor/`, `.prettierignore` and the comment in `eslint.config.js` no longer name monorepo scripts.
 
-2. Commit the export in its own git repository. `publish` requires a clean work tree and writes a tag into it:
+2. Commit your work in the monorepo, then publish from the export directory:
 
    ```bash
+   git status                         # must show nothing to commit
    cd packages/raycast/store
-   git init && git add -A && git commit -m "Export trackyourtime-raycast"   # later exports: git add -A && git commit
+   npx @raycast/api@latest publish
    ```
 
-3. Publish from the export directory:
-
-   ```bash
-   npx @raycast/api@latest publish   # still in packages/raycast/store
-   ```
+   No separate git repository is needed. `publish` checks two things: that it runs inside a git work tree, and that `git status` shows no changed or untracked files. `packages/raycast/store` is a gitignored folder of the monorepo, so both hold once the monorepo is committed. `publish` copies the folder, without `.git`, `node_modules` and `raycast-env.d.ts`, into its own clone of the `raycast/extensions` fork in Raycast's config directory. It commits, tags and pushes there, never in the monorepo. It also sends the monorepo's `origin` URL and commit, so the store listing links to this repository. If you export to a directory outside any git repository, run `git init` and commit there first. The export prints that step when it applies.
 
    It signs in to GitHub and opens a draft pull request against `raycast/extensions`. Before you mark the pull request ready for review, add this to its description:
 
@@ -36,13 +33,15 @@ This file is for maintainers and is not part of the store copy. The extension is
    - Sign-in: run **Timer**, choose **Sign In to Track Your Time**, and approve the code on the page that opens in the browser.
    - `src/vendor/` is copied from the Track Your Time repository, where the other Track Your Time clients use the same code. Changes to it belong there.
 
-4. If a reviewer changes the pull request, pull the changes into the export before the next publish:
+3. If a reviewer changes the pull request, `publish` refuses until you pull those changes. **Never run `pull-contributions` inside the monorepo.** It runs `git pull` and `git merge` in the directory it starts in, which puts merge commits on the monorepo's branch. Pull into a throwaway repository instead:
 
    ```bash
-   (cd packages/raycast/store && npx @raycast/api@latest pull-contributions)   # from the monorepo root
+   tmp=$(mktemp -d) && rsync -a --exclude node_modules --exclude .git packages/raycast/store/ "$tmp/"
+   (cd "$tmp" && git init -q && git add -A && git commit -qm export && npx @raycast/api@latest pull-contributions)
+   diff -ru -x .git -x node_modules packages/raycast/store "$tmp"
    ```
 
-   Then port the changes into `packages/raycast` by hand. Port changes under `src/vendor/` into `packages/core` or `packages/shared` instead, and run `pnpm vendor:raycast`.
+   Port the diff into `packages/raycast` by hand, then export and publish again. Port changes under `src/vendor/` into `packages/core` or `packages/shared` instead, and run `pnpm vendor:raycast`.
 
 For local development, run `pnpm dev:raycast` from the monorepo root. Under `ray develop`, empty **API URL** and **Web App URL** use `http://localhost:5159` and `http://localhost:3392`.
 

@@ -1769,13 +1769,17 @@ imports, or every command bundle carries their schemas. The allowlist is
   (template scripts, npm `package-lock.json`, no `dist/`); `publish` in the
   monorepo package is a guard that exits. The store requires `license: "MIT"`
   and a real Raycast `author`, which `--license`/`--author` set on the copy
-  only — both are decisions, not defaults. Then, by hand, in the export:
-  its own `git init` and commit (publish needs a clean work tree and writes a
-  tag there — never the monorepo), `npx @raycast/api@latest publish`. Reviewer
-  edits come back with `npx @raycast/api@latest pull-contributions` in the
-  export and are ported into `packages/raycast` by hand, anything under
-  `src/vendor/` into core or shared; `pull-contributions` merges, so it never
-  runs in the monorepo. The steps are in `packages/raycast/PUBLISHING.md`,
+  only — both are decisions, not defaults. Then, by hand, with the monorepo
+  committed: `npx @raycast/api@latest publish` in `packages/raycast/store`.
+  No separate repository: `publish` (checked in `@raycast/api` 2.4.1) only
+  requires a git work tree with a clean `git status`, which a gitignored
+  folder of a committed monorepo is; it commits, tags and pushes in its own
+  clone of the fork, and sends this repo's `origin` and commit as the source
+  link. `pull-contributions` is different — it runs `git pull`/`git merge` in
+  its working directory, so it never runs in the monorepo: run it in a
+  throwaway `git init` copy of the export, and port the diff into
+  `packages/raycast` by hand, anything under `src/vendor/` into core or
+  shared. The steps are in `packages/raycast/PUBLISHING.md`,
   which the export does not copy: the README is the store page, and
   `export-store.mjs` refuses one that mentions pnpm, `packages/` or
   `src/vendor`.
