@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
+# One NSIS installer carries x64 and arm64 (electron-builder combines them), so
+# both entries name the same file. Per-user, like electron-builder's one-click
+# default: no elevation prompt.
+PackageIdentifier: Trebeljahr.TrackYourTime
+PackageVersion: {{version}}
+InstallerType: nullsoft
+Scope: user
+InstallModes:
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+ReleaseDate: {{release_date}}
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/trebeljahr/trackyourtime/releases/download/v{{version}}/TrackYourTime-Setup-{{version}}.exe
+    InstallerSha256: {{sha256_win_nsis}}
+  - Architecture: arm64
+    InstallerUrl: https://github.com/trebeljahr/trackyourtime/releases/download/v{{version}}/TrackYourTime-Setup-{{version}}.exe
+    InstallerSha256: {{sha256_win_nsis}}
+ManifestType: installer
+ManifestVersion: 1.9.0

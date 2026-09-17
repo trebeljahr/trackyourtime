@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+PackageIdentifier: Trebeljahr.TrackYourTime
+PackageVersion: {{version}}
+PackageLocale: en-US
+Publisher: Rico Trebeljahr
+PublisherUrl: https://github.com/trebeljahr
+PublisherSupportUrl: https://github.com/trebeljahr/trackyourtime/issues
+PackageName: Track Your Time
+PackageUrl: https://trackyourtime.dev/
+License: AGPL-3.0-or-later
+LicenseUrl: https://github.com/trebeljahr/trackyourtime/blob/main/LICENSE
+ShortDescription: Free, open-source time tracking for freelancers and small teams who bill by the hour.
+Moniker: trackyourtime
+Tags:
+  - time-tracking
+  - timer
+  - invoicing
+  - open-source
+ReleaseNotesUrl: https://github.com/trebeljahr/trackyourtime/releases/tag/v{{version}}
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

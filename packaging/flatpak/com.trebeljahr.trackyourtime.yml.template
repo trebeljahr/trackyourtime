@@ -1,0 +1,66 @@
+# Flathub manifest. Rendered by `node scripts/desktop-manifests.mjs` and
+# committed to the flathub/com.trebeljahr.trackyourtime repository, which is
+# where Flathub builds from — never built by this repo's CI.
+#
+# It repackages the release's linux tar.gz rather than building from source:
+# the app is a static export plus Electron, and rebuilding the Next.js export
+# offline inside flatpak-builder would need every npm dependency vendored as a
+# source. Flathub accepts prebuilt Electron apps built on
+# org.electronjs.Electron2.BaseApp when the project is open source.
+app-id: com.trebeljahr.trackyourtime
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: "25.08"
+command: trackyourtime
+separate-locales: false
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # System notifications for the idle and runaway prompts (Stage 5).
+  - --talk-name=org.freedesktop.Notifications
+  # The tray icon (StatusNotifierItem).
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # safeStorage keeps the session token in the Secret Service; without it the
+  # app keeps the token in memory only and says so in Settings → Devices.
+  - --talk-name=org.freedesktop.secrets
+modules:
+  - name: trackyourtime
+    buildsystem: simple
+    build-commands:
+      - cp -a app /app/trackyourtime
+      - install -Dm755 trackyourtime.sh /app/bin/trackyourtime
+      - install -Dm644 com.trebeljahr.trackyourtime.desktop /app/share/applications/com.trebeljahr.trackyourtime.desktop
+      - install -Dm644 com.trebeljahr.trackyourtime.metainfo.xml /app/share/metainfo/com.trebeljahr.trackyourtime.metainfo.xml
+      - install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/com.trebeljahr.trackyourtime.png
+    sources:
+      - type: archive
+        only-arches:
+          - x86_64
+        url: https://github.com/trebeljahr/trackyourtime/releases/download/v{{version}}/TrackYourTime-{{version}}-linux-x64.tar.gz
+        sha256: {{sha256_linux_x64_targz}}
+        dest: app
+      - type: archive
+        only-arches:
+          - aarch64
+        url: https://github.com/trebeljahr/trackyourtime/releases/download/v{{version}}/TrackYourTime-{{version}}-linux-arm64.tar.gz
+        sha256: {{sha256_linux_arm64_targz}}
+        dest: app
+      - type: script
+        dest-filename: trackyourtime.sh
+        commands:
+          - export TMPDIR="$XDG_RUNTIME_DIR/app/$FLATPAK_ID"
+          # zypak gives Chromium's sandbox a way to work inside Flatpak's.
+          - exec zypak-wrapper /app/trackyourtime/trackyourtime "$@"
+      - type: file
+        path: com.trebeljahr.trackyourtime.desktop
+      - type: file
+        path: com.trebeljahr.trackyourtime.metainfo.xml
+      - type: file
+        url: https://raw.githubusercontent.com/trebeljahr/trackyourtime/v{{version}}/build/icon.png
+        sha256: {{sha256_icon_png}}
+        dest-filename: icon.png

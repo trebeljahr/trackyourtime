@@ -1,0 +1,35 @@
+# Homebrew cask for the Developer ID build. Rendered by
+# `node scripts/desktop-manifests.mjs` from a release's signed dmgs; never
+# edited by hand in the tap. docs/deploy.md → "Desktop release" → Homebrew.
+cask "track-your-time" do
+  arch arm: "arm64", intel: "x64"
+
+  version "{{version}}"
+  sha256 arm:   "{{sha256_mac_arm64_dmg}}",
+         intel: "{{sha256_mac_x64_dmg}}"
+
+  url "https://github.com/trebeljahr/trackyourtime/releases/download/v#{version}/TrackYourTime-#{version}-mac-#{arch}.dmg",
+      verified: "github.com/trebeljahr/trackyourtime/"
+  name "Track Your Time"
+  desc "Open-source time tracker"
+  homepage "https://trackyourtime.dev/"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  # Electron 42 needs macOS 12. Add `auto_updates true` in the same change that
+  # ships the in-app updater (Stage 7); until then brew is what upgrades it.
+  depends_on macos: ">= :monterey"
+
+  app "Track Your Time.app"
+
+  zap trash: [
+    "~/Library/Application Support/trackyourtime",
+    "~/Library/Caches/com.trebeljahr.trackyourtime",
+    "~/Library/Logs/Track Your Time",
+    "~/Library/Preferences/com.trebeljahr.trackyourtime.plist",
+    "~/Library/Saved Application State/com.trebeljahr.trackyourtime.savedState",
+  ]
+end

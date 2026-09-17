@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppStream metadata for Flathub (and any software centre that reads it).
+  Rendered by `node scripts/desktop-manifests.mjs`. Flathub requires at least
+  one screenshot: add a <screenshots> block pointing at a committed capture of
+  /app/track before the first submission — none exists yet (README).
+-->
+<component type="desktop-application">
+  <id>com.trebeljahr.trackyourtime</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <name>Track Your Time</name>
+  <summary>Free, open-source time tracking</summary>
+  <developer id="com.trebeljahr">
+    <name>Rico Trebeljahr</name>
+  </developer>
+  <description>
+    <p>Free, open-source time tracking for freelancers and small teams who bill by the hour.</p>
+    <p>Start a timer from the window or the tray. It keeps counting without a connection and sends your changes when the connection comes back. Stop it on your phone or in the browser, and the desktop app shows it stopped.</p>
+    <p>At the end of the month, the hours become a report, a PDF invoice, or a ZUGFeRD or XRechnung e-invoice. There is no paid plan. Use the hosted version at trackyourtime.dev, or point the app at your own server.</p>
+  </description>
+  <launchable type="desktop-id">com.trebeljahr.trackyourtime.desktop</launchable>
+  <url type="homepage">https://trackyourtime.dev/</url>
+  <url type="bugtracker">https://github.com/trebeljahr/trackyourtime/issues</url>
+  <url type="vcs-browser">https://github.com/trebeljahr/trackyourtime</url>
+  <branding>
+    <color type="primary" scheme_preference="light">#c7d2fe</color>
+    <color type="primary" scheme_preference="dark">#4f46e5</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="{{version}}" date="{{release_date}}">
+      <url type="details">https://github.com/trebeljahr/trackyourtime/releases/tag/v{{version}}</url>
+    </release>
+  </releases>
+</component>
