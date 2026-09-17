@@ -29,7 +29,7 @@ import { handleAppScheme, registerAppScheme } from "./protocol.ts";
 import { createSecureStore, platformBackend, sessionFileAt, type SecureStore } from "./secure-store.ts";
 import { installSecurity } from "./security.ts";
 import { isExternalWebUrl } from "./trust.ts";
-import { createMainWindow, revealWindow, writeWindowState } from "./window.ts";
+import { createMainWindow, revealWindow } from "./window.ts";
 
 /*
  * A packaged app ignores ELECTRON_DEV_URL: honoring it would let anything that
@@ -122,20 +122,6 @@ function start(): void {
 
   handle(DESKTOP_IPC.quit, () => {
     app.quit();
-  });
-
-  handle(DESKTOP_IPC.setFullscreen, (event, wantFullscreen: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win || win.isDestroyed()) return false;
-    const on = wantFullscreen === true;
-    win.setFullScreen(on);
-    writeWindowState({ fullscreen: on });
-    return on;
-  });
-
-  handle(DESKTOP_IPC.isFullscreen, (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    return !!win && !win.isDestroyed() && win.isFullScreen();
   });
 
   /*

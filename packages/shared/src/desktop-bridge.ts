@@ -277,8 +277,6 @@ export interface DesktopBridge {
    */
   platform: DesktopPlatform | (string & {});
   quit: () => Promise<void>;
-  setFullscreen: (on: boolean) => Promise<boolean>;
-  isFullscreen: () => Promise<boolean>;
   openExternal: (url: string) => Promise<boolean>;
 
   /**
@@ -302,8 +300,6 @@ export interface DesktopBridge {
 export const DESKTOP_IPC = {
   quit: "app:quit",
   openExternal: "app:openExternal",
-  setFullscreen: "window:setFullscreen",
-  isFullscreen: "window:isFullscreen",
   getIdle: "idle:get",
   tokenGet: "secure-store:get",
   tokenSet: "secure-store:set",

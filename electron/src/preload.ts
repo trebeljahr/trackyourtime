@@ -25,9 +25,6 @@ const bridge: DesktopBridge = {
 
   quit: () => ipcRenderer.invoke(DESKTOP_IPC.quit),
 
-  setFullscreen: (on) => ipcRenderer.invoke(DESKTOP_IPC.setFullscreen, on),
-  isFullscreen: () => ipcRenderer.invoke(DESKTOP_IPC.isFullscreen),
-
   openExternal: (url) => ipcRenderer.invoke(DESKTOP_IPC.openExternal, url),
 
   getIdleState: () => ipcRenderer.invoke(DESKTOP_IPC.getIdle),
