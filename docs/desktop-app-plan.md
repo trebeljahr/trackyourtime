@@ -718,6 +718,131 @@ workflow comment "LXD is not used" is true only for x64. The leg may fail
 until it passes `--destructive-mode` or drops snap on arm64. The first
 dispatch will show which.
 
+### Stage 7 — auto-update, the draft release and /download (2026-09-17)
+
+Run on macOS arm64, Node 24.14.1, electron-builder 26.8.1, electron-updater
+6.8.9. **No Electron binary was launched in this stage**, headless or
+otherwise: Rico asked again that agents stop starting Electron sessions,
+which take focus and flicker on his screen. Everything below was checked
+without one.
+
+Verified locally:
+
+- `pnpm test:electron`: 111 tests, 17 of them new in `updater-model.test.ts`.
+  They cover which channels update, the status after each updater event, a
+  check on launch and every 6 hours, no restart when an update is downloaded,
+  a restart only when one is ready, and a grep that keeps `quitAndInstall` to
+  one call site and `controller.restart()` to the tray item and the IPC
+  handler. `tray-model.test.ts` covers the "Restart to update" item.
+- `scripts/lib/*.test.mjs`: 82 tests, including `updateFeedFor` (which is what
+  the builder config really publishes), `releasePlan` and `feedProblems`.
+- `pnpm typecheck` passes. `pnpm run test:client`: 134 files, 1259 tests,
+  including `desktop-updates.test.tsx` and the /download page in
+  `pages.test.tsx`. ESLint on the changed client files is clean.
+  `pnpm build:docs` passes and `pnpm build:client` passes. The build prerenders
+  `/download/` and `/de/download/`, and the sitemap lists the page.
+- `electron/dist/main.js` bundles electron-updater (663 KB, and the only
+  require left that is not built in is `electron`). No `node_modules` is packed.
+- **The feed files were written by a real package.** `build-desktop.mjs
+  --reuse-export --channel linux --package --linux AppImage --arm64` (no
+  launch) wrote `latest-linux-arm64.yml` and put `app-update.yml` (provider
+  github, owner trebeljahr, repo trackyourtime, releaseType draft,
+  `updaterCacheDirName: trackyourtime-updater`) into the app's resources, with
+  `--publish never`. The feed's sha512 and size match the AppImage.
+- **A local stand-in for GitHub Releases** (scratchpad `local-feed.cjs`) was
+  read by electron-updater's own `GitHubProvider` in plain Node. It served an
+  atom feed, `releases/latest` and that real feed with the version line changed
+  to 0.1.1. The provider resolved 0.1.1, semver says it is newer than 0.1.0,
+  the download URL was `…/releases/download/v0.1.1/<AppImage>`, and the sha512
+  and size matched the file. With no published release the provider failed
+  (`ERR_XML_MISSED_ELEMENT`), so a draft is invisible to installed apps.
+- `scripts/desktop-release-draft.mjs` was run over that output plus an
+  unsigned mac zip. It attached the AppImage and its feed, left the
+  `-unsigned` zip out with a warning, and wrote `SHA256SUMS.txt`. With one
+  character of the feed's sha512 changed, it failed and wrote nothing.
+- `actionlint` passes on `desktop-release.yml`.
+
+What the stage text got wrong or left out:
+
+- **`publish` must be `null`, not left out.** With no `publish` in the config,
+  electron-builder guesses a GitHub feed whenever `GH_TOKEN` or `GITHUB_TOKEN`
+  is set (`resolvePublishConfigurations` in app-builder-lib), which it is on
+  every Actions runner. Every unsigned and store build would then ship an
+  `app-update.yml`. `updateFeedFor` returns `null` explicitly, and a test loads
+  the real config to check it.
+- **`--publish never` still writes the feeds.** `app-update.yml` is written in
+  `onAfterPack` from the publish config, and `latest*.yml` in
+  `awaitTasks`, whatever the publish flag says. So the build never uploads,
+  and the release job uploads the files the build wrote. electron-builder never
+  needs a token.
+- **Two gates, on purpose.** Build time decides whether a feed exists: signed
+  mac and win builds, and every Linux build, because Linux has nothing to sign
+  and the AppImage must update. Run time decides whether this copy uses it
+  (`updaterPolicy`), because electron-builder writes the same `app-update.yml`
+  into the deb, rpm and snap. A copy without the file shows "no-feed" and never
+  loads electron-updater.
+- **deb and rpm do not update themselves.** electron-updater 6 has
+  `DebUpdater` and `RpmUpdater`, which install the new package with `pkexec`
+  (a root password prompt). No apt or rpm repository exists, and a password
+  prompt from a time tracker is the wrong surprise, so both stay
+  `package-manager`. The docs and Settings say to install the new package or
+  use the AppImage.
+- **Squirrel.Mac closes windows before `before-quit`.** Electron's
+  `autoUpdater.quitAndInstall` closes every window first. The macOS close
+  handler hides the window unless `quitting` is set, which happens in
+  `before-quit`, so it would have cancelled the close and "Restart to update"
+  would have done nothing. `markQuitting()` in `window.ts` runs right before
+  `quitAndInstall`. This is read from Electron's documentation and has not been
+  seen on a real update.
+- **The first check waits 30 seconds**, not "on launch". It avoids racing the
+  window, the socket and a network that is still coming up after login.
+- **A downloaded update stays "ready"** through later checks and their errors.
+  It is still on disk and still installs on quit, and a failed check 6 hours
+  later must not take the button away.
+- **Headless runs a memory updater.** It has no network and records restarts
+  instead of quitting, and `__trackYourTimeDesktop.update` drives it. A
+  headless spec (`tray.spec.ts`, the last test) covers the Settings card, the
+  tray item and "no restart on download". It was written in this stage and has
+  **not been run**.
+- **`TRACKYOURTIME_DISABLE_UPDATES=1`** turns the updater off. That is for
+  managed machines, and it is documented.
+- **The draft release is a separate job, not electron-builder's publisher.**
+  Six legs publishing into one draft race each other, and electron-builder's
+  GitHub publisher can create duplicate drafts. The `draft-release` job runs
+  once after every leg passes. It never attaches `-unsigned` files, pkg, appx
+  or snap files, and it checks every feed against the attached files. It
+  refuses a tag whose release is already published.
+- **The workflow now runs on `v*` tags.** Stage 6 said to wait for a green
+  signed dispatch first. A tag builds a draft only, and with no certificates
+  the mac and win legs are unsigned. The draft then holds Linux files only,
+  with warnings. A failing leg (the arm64 snap is the likely one) blocks the
+  draft until "Re-run failed jobs" passes. `release.yml` runs on the same tag.
+- **The Homebrew cask says `auto_updates true`**, and zaps
+  `trackyourtime-updater` and the ShipIt cache. `brew upgrade` skips it
+  without `--greedy`, and the tap still gets each version.
+- **Routes:** the page is `/download/` (and `/de/download/`), beside the other
+  public pages. Every channel's address is `DESKTOP_DOWNLOADS` in
+  `lib/site-links.ts`, all `null` today, so each one says "not released yet".
+  The copy claims only what runs today. Idle detection is named as a setting
+  to turn on, because it is off by default. Closing the window keeps the app
+  running on macOS and Windows only, because Linux quits by default. Updates are
+  described in the docs, not on the marketing page, since no release exists.
+
+Not run, and why:
+
+- **Any Electron launch.** That includes the new headless spec, the existing
+  harness and a packaged `electron:preview`. Rico asked that no Electron
+  sessions be started.
+- **The stage acceptance.** Installing 0.1.0 from a published release,
+  publishing 0.1.1, seeing the offer and the install on quit, on macOS and on
+  the AppImage. It needs two signed, published releases and a visible app,
+  and Squirrel.Mac refuses unsigned and ad-hoc signed apps. The closest checks
+  are the provider resolution and the feed checks above.
+- **The tag run of the workflow**, and so the `draft-release` job on a runner,
+  and Windows NSIS updates (`latest.yml`, `elevate.exe`, the publisher name
+  check).
+- The `markQuitting` path on a real Squirrel.Mac update.
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**
