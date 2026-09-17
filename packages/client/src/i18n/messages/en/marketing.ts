@@ -229,10 +229,10 @@ export const marketing = {
       storage:
         "The extension stores your session token and any unsent changes in Chrome’s extension storage on your computer.",
       cookies:
-        "The <strong>cookies</strong> permission reads one cookie: the Track Your Time web app’s session cookie, so you do not sign in twice. The extension reads no other cookie.",
+        "The extension has no <strong>cookies</strong> permission and reads no cookies. When you are signed in at trackyourtime.dev, that page tells the extension through Chrome’s extension messaging. The extension then gets a session of its own from the server. You can sign it out in Settings → Devices.",
       idle: "The <strong>idle</strong> permission tells the extension that the computer is idle or locked. The extension uses it only to ask what to do with idle time. It does not send idle state anywhere.",
       server:
-        "The extension sends your data to api.trackyourtime.dev. You can pick your own server in the popup instead. Chrome then asks you to allow access to that one server, and your data goes there. This policy does not cover that server.",
+        "The extension sends your data to api.trackyourtime.dev. You can pick your own server in the popup instead, and your data then goes there. This policy does not cover that server.",
       tabs: "The optional <strong>tabs</strong> permission is for activity capture. Chrome asks for it only when you turn on Settings → Activity. It lets the extension read the address and title of the active tab. The extension never reads what is on a page, and it runs no code inside the pages you visit.",
       activity:
         "With activity capture on, the extension stores the site name of the active tab in the browser’s IndexedDB on your computer. It stores the page title only if you also switch on page titles. It deletes activity after 14 days, or after the period you set. It never records incognito tabs or the sites you exclude.",
@@ -295,7 +295,7 @@ export const marketing = {
       extensionSignIn: {
         term: "The Chrome extension asks me to sign in, but I am signed in to the web app",
         detail:
-          "Open the web app at trackyourtime.dev in the same Chrome profile, then open the popup again. The extension reads the session of that profile only.",
+          "Open the web app at trackyourtime.dev in the same Chrome profile, then open the popup again. The page tells the extension that you are signed in, and the extension signs in within a few seconds. This works only in that profile, and only when the extension uses trackyourtime.dev.",
       },
       raycastConnect: {
         term: "How do I connect the Raycast extension?",
@@ -365,15 +365,15 @@ export const marketing = {
     },
     login: {
       title: "No second login",
-      body: "Already logged in to Track Your Time in Chrome? The extension uses that login. There’s no extra password and no API key to copy.",
+      body: "Logged in at trackyourtime.dev in Chrome? The extension logs in too. There’s no extra password and no API key to copy. Log out of the web app, and the extension logs out with it.",
     },
     selfHost: {
       title: "Using your own server?",
-      body: "The extension connects to trackyourtime.dev until you pick another server. Choose Change server below the sign-in form and enter your server’s address. Chrome then asks for access to that one site. The <guide>self-hosting guide</guide> has the details.",
+      body: "The extension connects to trackyourtime.dev until you pick another server. Choose Change server below the sign-in form and enter your server’s address. Then sign in with your password, or approve the extension in your server’s web app. The <guide>self-hosting guide</guide> has the details.",
     },
     permissions: {
       title: "What the extension can access",
-      login: "Your Track Your Time login, so you don't have to sign in twice.",
+      login: "A login of its own, set up for you when you are logged in at trackyourtime.dev.",
       idle: "Whether your computer is idle, so it can ask what to do with the time you were away.",
       storage: "Storage on your computer, for changes made while you were offline.",
       server: "The Track Your Time server you sign in to.",

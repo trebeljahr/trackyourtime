@@ -50,7 +50,8 @@ import {
   parsePs,
   watcherFailureIn,
 } from "./lib/dev-watchers.mjs";
-import { extensionOrigin } from "./lib/extension-id.mjs";
+import { readStoreExtensionId } from "./lib/chrome-web-store.mjs";
+import { extensionId } from "./lib/extension-id.mjs";
 import { terminateGroup } from "./lib/process-group.mjs";
 
 const fixedMode = process.argv.includes("--fixed");
@@ -294,12 +295,27 @@ if (existsSync(lockFile)) {
 // derive it instead of asking a human to run `pnpm run extension:id` and paste
 // the result into an env file; the id is a fact about the path, not a secret.
 //
-// Only in dev, and only this one id. In production the extension's origin comes
-// from a pinned key and belongs in `.env.production`, where it is reviewed —
+// Only in dev. In production the extension's origin comes from a pinned key
+// and belongs in the server app's env in Coolify, where it is reviewed —
 // nothing here writes to that.
-const devExtensionOrigin = extensionOrigin(
-  resolve(repoRoot, "packages/extension/dist"),
+//
+// The store id is trusted too: an unpacked `dist-prod` carries the pinned
+// store key, so pointing it at this server otherwise fails every request as
+// CORS. (Its bridge still accepts only https://trackyourtime.dev, so it does
+// not follow this dev web app's sign-in — by design.)
+const devExtensionId = extensionId(resolve(repoRoot, "packages/extension/dist")).id;
+const storeExtensionId = readStoreExtensionId(
+  resolve(repoRoot, "packages/shared/src/store-clients.ts"),
 );
+const devExtensionOrigins = [
+  `chrome-extension://${devExtensionId}`,
+  `chrome-extension://${storeExtensionId}`,
+];
+// The ids the dev web app messages over the extension bridge
+// (`packages/client/src/lib/extension-bridge-transport.ts`). Without it the web
+// app only knows the store id, and the unpacked build of this checkout would
+// never hear that somebody signed in.
+const bridgeExtensionIds = [devExtensionId, storeExtensionId].join(",");
 // The Capacitor shells' document origins. A native WKWebView/WebView serves the
 // bundled app from capacitor://localhost (iOS) or https://localhost (Android),
 // and better-auth force-validates Origin whenever a request carries Sec-Fetch-*
@@ -331,7 +347,7 @@ const trustedOrigins = [
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
-  devExtensionOrigin,
+  ...devExtensionOrigins,
   ...capacitorOrigins,
 ];
 
@@ -349,7 +365,8 @@ if (includeDocs) {
 console.log(`  Server:   http://${WEB_HOST}:${apiPort}`);
 console.log(`  Database: ${mongoUri}`);
 console.log(`  Next dir: packages/client/${nextDistDir}`);
-console.log(`  Trusts:   ${trustedOrigins.join(", ")}\n`);
+console.log(`  Trusts:   ${trustedOrigins.join(", ")}`);
+console.log(`  Bridge:   extension ids ${bridgeExtensionIds}\n`);
 
 if (dryRun) process.exit(0);
 
@@ -370,6 +387,7 @@ const clientEnv = [
   `NEXT_PUBLIC_API_URL=http://${WEB_HOST}:${apiPort}`,
   `NEXT_PUBLIC_WS_URL=ws://${WEB_HOST}:${apiPort}`,
   `NEXT_DIST_DIR=${nextDistDir}`,
+  `NEXT_PUBLIC_EXTENSION_IDS=${bridgeExtensionIds}`,
 ].join(" ");
 
 const serverEnv = [

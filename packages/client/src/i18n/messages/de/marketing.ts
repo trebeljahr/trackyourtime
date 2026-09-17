@@ -226,10 +226,10 @@ export const marketing: Translation<typeof source> = {
       storage:
         "Die Erweiterung speichert dein Sitzungstoken und noch nicht gesendete Änderungen im Erweiterungsspeicher von Chrome auf deinem Computer.",
       cookies:
-        "Die Berechtigung <strong>cookies</strong> liest ein einziges Cookie: das Sitzungscookie der Web-App von Track Your Time, damit du dich nicht zweimal anmelden musst. Andere Cookies liest die Erweiterung nicht.",
+        "Die Erweiterung hat keine Berechtigung <strong>cookies</strong> und liest keine Cookies. Bist du auf trackyourtime.dev angemeldet, teilt die Seite das der Erweiterung über die Erweiterungsnachrichten von Chrome mit. Die Erweiterung bekommt dann vom Server eine eigene Sitzung. Du kannst sie unter Einstellungen → Geräte abmelden.",
       idle: "Die Berechtigung <strong>idle</strong> meldet der Erweiterung, dass der Computer inaktiv oder gesperrt ist. Die Erweiterung nutzt das nur, um zu fragen, was mit der inaktiven Zeit passieren soll. Den Inaktivitätsstatus sendet sie nirgendwohin.",
       server:
-        "Die Erweiterung sendet deine Daten an api.trackyourtime.dev. Im Popup kannst du stattdessen deinen eigenen Server wählen. Chrome fragt dich dann, ob die Erweiterung auf diesen einen Server zugreifen darf, und deine Daten gehen dorthin. Für diesen Server gilt diese Erklärung nicht.",
+        "Die Erweiterung sendet deine Daten an api.trackyourtime.dev. Im Popup kannst du stattdessen deinen eigenen Server wählen, und deine Daten gehen dann dorthin. Für diesen Server gilt diese Erklärung nicht.",
       tabs: "Die optionale Berechtigung <strong>tabs</strong> dient der Aktivitätserfassung. Chrome fragt nur danach, wenn du Einstellungen → Aktivität einschaltest. Mit ihr liest die Erweiterung die Adresse und den Titel des aktiven Tabs. Den Inhalt einer Seite liest die Erweiterung nie, und in den Seiten, die du besuchst, führt sie keinen Code aus.",
       activity:
         "Ist die Aktivitätserfassung an, speichert die Erweiterung den Namen der Website im aktiven Tab in der IndexedDB des Browsers auf deinem Computer. Den Seitentitel speichert sie nur, wenn du auch Seitentitel einschaltest. Sie löscht die Aktivität nach 14 Tagen oder nach dem Zeitraum, den du einstellst. Inkognito-Tabs und Websites, die du ausschließt, erfasst sie nie.",
@@ -292,7 +292,7 @@ export const marketing: Translation<typeof source> = {
       extensionSignIn: {
         term: "Die Chrome-Erweiterung will eine Anmeldung, dabei bin ich in der Web-App angemeldet",
         detail:
-          "Öffne die Web-App auf trackyourtime.dev im selben Chrome-Profil und öffne dann das Pop-up erneut. Die Erweiterung liest nur die Sitzung dieses Profils.",
+          "Öffne die Web-App auf trackyourtime.dev im selben Chrome-Profil und öffne dann das Pop-up erneut. Die Seite teilt der Erweiterung mit, dass du angemeldet bist, und die Erweiterung meldet sich innerhalb weniger Sekunden an. Das klappt nur in diesem Profil und nur, wenn die Erweiterung trackyourtime.dev nutzt.",
       },
       raycastConnect: {
         term: "Wie verbinde ich die Raycast-Erweiterung?",
@@ -362,15 +362,15 @@ export const marketing: Translation<typeof source> = {
     },
     login: {
       title: "Keine zweite Anmeldung",
-      body: "Du bist in Chrome schon bei Track Your Time angemeldet? Dann nutzt die Erweiterung diese Anmeldung. Kein zusätzliches Passwort, kein API-Token zum Kopieren.",
+      body: "Du bist in Chrome auf trackyourtime.dev angemeldet? Dann meldet sich die Erweiterung auch an. Kein zusätzliches Passwort, kein API-Token zum Kopieren. Meldest du dich in der Web-App ab, meldet sich die Erweiterung mit ab.",
     },
     selfHost: {
       title: "Du nutzt einen eigenen Server?",
-      body: "Die Erweiterung verbindet sich mit trackyourtime.dev, bis du einen anderen Server wählst. Wähle unter dem Anmeldeformular „Server wechseln“ und gib die Adresse deines Servers ein. Chrome fragt dann nach Zugriff auf genau diese eine Website. Details stehen in der <guide>Anleitung zum Selbsthosten</guide>.",
+      body: "Die Erweiterung verbindet sich mit trackyourtime.dev, bis du einen anderen Server wählst. Wähle unter dem Anmeldeformular „Server wechseln“ und gib die Adresse deines Servers ein. Melde dich dann mit deinem Passwort an, oder bestätige die Erweiterung in der Web-App deines Servers. Details stehen in der <guide>Anleitung zum Selbsthosten</guide>.",
     },
     permissions: {
       title: "Worauf die Erweiterung zugreifen kann",
-      login: "Deine Anmeldung bei Track Your Time, damit du dich nicht zweimal anmelden musst.",
+      login: "Eine eigene Anmeldung, die für dich eingerichtet wird, wenn du auf trackyourtime.dev angemeldet bist.",
       idle: "Ob dein Computer inaktiv ist, damit sie fragen kann, was mit der Zeit passieren soll, in der du weg warst.",
       storage: "Speicher auf deinem Computer, für Änderungen, die du offline gemacht hast.",
       server: "Der Track-Your-Time-Server, bei dem du angemeldet bist.",

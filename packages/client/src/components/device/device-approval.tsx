@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { translate } from "@/i18n/translate";
 import { useT } from "@/i18n/use-t";
-import { authClient } from "@/lib/auth-client";
+import { decideDeviceCode, type DeviceAuthError } from "@/lib/device-approve";
 import { trpc } from "@/lib/trpc";
 
 type Outcome =
@@ -27,15 +27,6 @@ type Outcome =
   | { kind: "approved" }
   | { kind: "denied" }
   | { kind: "error"; message: string };
-
-/**
- * better-auth returns `{ data, error }` rather than throwing. The device
- * endpoints report the RFC 8628 code in `error.error`, with the human string
- * in `error_description`.
- */
-type AuthResult = {
-  error?: { error?: string; error_description?: string; message?: string } | null;
-};
 
 /** RFC 8628 error code → catalog key. */
 const ERROR_KEYS = {
@@ -50,10 +41,10 @@ const isKnownError = (code: string): code is keyof typeof ERROR_KEYS =>
   Object.hasOwn(ERROR_KEYS, code);
 
 /** Called when the error happens, so it reads the language active right then. */
-const readError = (result: AuthResult, fallback: string): string => {
-  const code = result.error?.error;
+const readError = (error: DeviceAuthError, fallback: string): string => {
+  const code = error.error;
   if (code && isKnownError(code)) return translate("settings")(ERROR_KEYS[code]);
-  return result.error?.error_description ?? result.error?.message ?? fallback;
+  return error.error_description ?? error.message ?? fallback;
 };
 
 /**
@@ -82,52 +73,30 @@ export function DeviceApproval(): React.JSX.Element {
     const userCode = parsed.data.userCode;
     setOutcome({ kind: "working" });
 
-    try {
-      // better-auth requires the code to be *claimed* by a signed-in session
-      // (`GET /device?user_code=…`) before it will accept an approve or deny.
-      // Approving without it fails with `invalid_request`, which reads to the
-      // user like a mistyped code — so claim first and report a bad code once.
-      const claim = (await authClient.device({
-        query: { user_code: userCode },
-      })) as AuthResult;
-      if (claim.error) {
-        setOutcome({
-          kind: "error",
-          message: readError(claim, translate("settings")("device.errors.claimFailed")),
-        });
-        return;
-      }
-
-      const result = (
-        action === "approve"
-          ? await authClient.device.approve({ userCode })
-          : await authClient.device.deny({ userCode })
-      ) as AuthResult;
-
-      if (result.error) {
-        setOutcome({
-          kind: "error",
-          message: readError(
-            result,
-            translate("settings")(
-              action === "approve"
-                ? "device.errors.approveFailed"
-                : "device.errors.denyFailed",
-            ),
-          ),
-        });
-        return;
-      }
-
+    const result = await decideDeviceCode(userCode, action);
+    if (result.ok) {
       setOutcome({ kind: action === "approve" ? "approved" : "denied" });
       // The newly paired client is now a device — refresh the settings list.
       void utils.devices.list.invalidate();
-    } catch {
+      return;
+    }
+    if (result.stage === "network") {
       setOutcome({
         kind: "error",
         message: translate("settings")("device.errors.network"),
       });
+      return;
     }
+    const fallback =
+      result.stage === "claim"
+        ? "device.errors.claimFailed"
+        : action === "approve"
+          ? "device.errors.approveFailed"
+          : "device.errors.denyFailed";
+    setOutcome({
+      kind: "error",
+      message: readError(result.error, translate("settings")(fallback)),
+    });
   };
 
   if (outcome.kind === "approved" || outcome.kind === "denied") {

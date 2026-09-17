@@ -147,6 +147,18 @@ function cacheControl(urlPath, file) {
   return "public, max-age=3600";
 }
 
+/**
+ * No page of the app may be framed by another site. Beyond clickjacking, a
+ * cross-site frame gets no session cookie (SameSite=Lax), so the app inside it
+ * believes nobody is signed in — and the extension bridge would pass that on
+ * to the browser extension as a sign-out. The bridge also refuses frames on
+ * both ends; this header is the defence in depth.
+ */
+const NO_FRAMING = {
+  "content-security-policy": "frame-ancestors 'none'",
+  "x-frame-options": "DENY",
+};
+
 const server = createServer((req, res) => {
   const method = req.method ?? "GET";
   if (method !== "GET" && method !== "HEAD") {
@@ -178,6 +190,7 @@ const server = createServer((req, res) => {
     res.writeHead(404, {
       "content-type": has404 ? MIME[".html"] : MIME[".txt"],
       "cache-control": "no-cache",
+      ...NO_FRAMING,
     });
     if (method === "HEAD") {
       res.end();
@@ -195,6 +208,7 @@ const server = createServer((req, res) => {
     // The export is same-origin static assets only; nothing here should be
     // framed or sniffed into another type.
     "x-content-type-options": "nosniff",
+    ...NO_FRAMING,
   });
 
   // HEAD must carry the headers and no body — piping would send one.
