@@ -3,6 +3,7 @@
  * better-auth device flow, `get-session`, `sign-out`, and a tRPC surface that
  * answers every query with the membership list or null.
  */
+import { API_LEVEL, MIN_CLIENT_API_LEVEL } from "@starter/shared";
 import { vi } from "vitest";
 
 export type DeviceTokenAnswer = "pending" | "approved" | "denied" | "expired" | "slow";
@@ -72,6 +73,9 @@ export const installFakeAuthServer = (server: FakeAuthServer): void => {
           service: "trackyourtime",
           webUrl: server.webUrl,
           originTrusted: server.originTrusted,
+          // A current server, so no queued row is held as `server-too-old`.
+          apiLevel: API_LEVEL,
+          minClientApiLevel: MIN_CLIENT_API_LEVEL,
         });
       }
       if (path === "/api/auth/device/code") {

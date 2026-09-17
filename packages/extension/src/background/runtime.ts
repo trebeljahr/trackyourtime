@@ -76,7 +76,6 @@ import {
   type ResolvedSettings,
   type VersionedSpec,
   readHealthVersion,
-  sameServerOrigin,
   signOutSession,
 } from "@starter/core";
 import { APP_VERSION } from "../lib/app-version";

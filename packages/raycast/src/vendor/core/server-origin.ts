@@ -11,9 +11,8 @@
  *
  *  - {@link normalizeServerInput}, synchronously, for what can be known from
  *    the string alone — that it is a URL, and that plain http is only used
- *    for this machine. Synchronous on purpose: the browser extension has to
- *    ask Chrome for the host permission inside the click that chose the
- *    server, and a user gesture does not survive an `await`.
+ *    for this machine. Synchronous, so a form can refuse a bad address
+ *    before any request leaves.
  *  - {@link checkServer}, over the network, for what only the server can
  *    say — that it answers, and that what answers is Track Your Time.
  *
