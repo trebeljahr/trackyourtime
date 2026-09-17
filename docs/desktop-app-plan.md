@@ -389,6 +389,34 @@ Not run, and why:
   window, and the CI `desktop` job (still never run; it now needs a second API
   database, derived from `MONGODB_URI`).
 
+### Stages 2 and 3 — review (2026-09-17)
+
+Re-read every former `isNative()` call site, the token store, the auth and tRPC
+fetches, the device-flow component and the trust-list change. Re-ran on Node
+24.14.1: `pnpm typecheck`, `pnpm run test:client` (130 files, 1229 tests),
+`pnpm test:electron` (47), the server `env.test.ts` (13) and the full
+`pnpm test:e2e:desktop` with a rebuilt export (25 pass, clipboard skipped), then
+the shell and sign-in specs again after the fix below (21 pass).
+
+- **Fixed: a headless launch could sign the installed app's user out.** Headless
+  appends `use-mock-keychain`, and `secure-store.ts` deletes a `session.bin` that
+  does not decrypt. With no `TRACKYOURTIME_USER_DATA_DIR`, a headless packaged
+  run (how agents verify builds) opened the real `trackyourtime` profile, failed
+  to decrypt the Keychain-encrypted token and deleted it, and would have flushed
+  that person's offline queue from an invisible window. Headless now defaults to
+  `<profile>-headless` (`profile.ts`, unit-tested); an explicit override still
+  wins, so the harness is unchanged.
+- **Node 26 breaks the client suite** (localStorage undefined in 18 files, 123
+  tests) independently of this branch; Node 24 passes it. Same Node as the
+  Electron install note.
+- Checked and left as is: web requests are unchanged (`trpc.ts`/`auth-client.ts`
+  take the old path when `!isTokenShell()`); `set-auth-token` is written only when
+  truthy and the main store ignores `""`; `basic_text`/`unknown`/unavailable never
+  read or write `session.bin`; the device flow stops on cancel and unmount (the
+  sleep rejects on abort and every await re-checks the signal); a browser
+  sign-in refreshes `useAuth().user` through `AuthProvider`'s per-token refetch;
+  `app://-` is trusted only through `TRUST_STORE_APPS` and dev.
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**
