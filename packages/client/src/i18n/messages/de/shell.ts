@@ -278,4 +278,23 @@ export const shell: Translation<typeof source> = {
       description: "Suche nach einem Befehl, um ihn auszuführen.",
     },
   },
+  desktop: {
+    tray: {
+      stop: "Timer stoppen",
+      startTimer: "Timer starten …",
+      recentHeading: "Fortsetzen",
+      open: "Track Your Time öffnen",
+      settings: "Einstellungen …",
+      quit: "Track Your Time beenden",
+      noDescription: "(keine Beschreibung)",
+      idleTooltip: "Track Your Time: kein Timer läuft",
+      unsent: "{count, plural, one {# Änderung noch nicht gesendet} other {# Änderungen noch nicht gesendet}}",
+      runningBadge: "Timer läuft",
+    },
+    quitUnsent: {
+      title: "{count, plural, one {# Änderung ist noch nicht gesendet} other {# Änderungen sind noch nicht gesendet}}",
+      body: "Sie bleiben auf diesem Computer. Track Your Time sendet sie beim nächsten Start, sobald der Server erreichbar ist.",
+      button: "Beenden",
+    },
+  },
 };

@@ -165,4 +165,13 @@ export const tracker = {
     heldDescription:
       "Your server doesn’t support them yet. They are kept, and sent after the server is updated.",
   },
+  /** System notifications the desktop app posts while its window is hidden. */
+  desktopNotice: {
+    idleTitle: "You were away for {span}",
+    lockedTitle: "Your screen was locked for {span}",
+    idleBody: "Your timer is still running. Open Track Your Time to keep or discard that time.",
+    runawayTitle: "This timer ran for {ran}",
+    runawayBody: "“{description}” is still running. Open Track Your Time to keep or correct it.",
+    runawayBodyNoDescription: "Your timer is still running. Open Track Your Time to keep or correct it.",
+  },
 } as const;

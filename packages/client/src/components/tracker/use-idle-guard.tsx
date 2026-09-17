@@ -15,7 +15,9 @@ import { toast } from "@/components/ui/sonner";
 import { useIdleSignal, type IdleReading } from "@/hooks/use-idle-signal";
 import { useRunningEntry } from "@/hooks/use-sync";
 import { useFormatSettings } from "@/lib/format";
+import { notifyDesktop } from "@/lib/desktop-shell";
 import { idleWatcher } from "@/lib/idle-watcher";
+import { translate } from "@/i18n/translate";
 import { trpc } from "@/lib/trpc";
 
 /** Toast id, so a second reading replaces the prompt instead of stacking one. */
@@ -101,6 +103,18 @@ export const useIdleGuard = (): void => {
               duration: Number.POSITIVE_INFINITY,
             }
           );
+          // The desktop app may be hidden in the tray, where a toast is seen
+          // by nobody. The main process posts this only while the window is
+          // hidden or behind another app; a click brings it back here.
+          notifyDesktop({
+            kind: "idle",
+            tag: IDLE_TOAST_ID,
+            title: translate("tracker")(
+              plan.pending.signal === "locked" ? "desktopNotice.lockedTitle" : "desktopNotice.idleTitle",
+              { span: fmt.durationShort(plan.pending.idleSec) }
+            ),
+            body: translate("tracker")("desktopNotice.idleBody"),
+          });
           return;
 
         case "truncate":

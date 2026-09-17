@@ -9,6 +9,10 @@ import {
   TRACKER_LIST_INPUT,
   type EntryMutations,
 } from "@/components/tracker/use-entry-mutations";
+import { notifyDesktop } from "@/lib/desktop-shell";
+import { formatDurationShortFor } from "@/i18n/format";
+import { getActiveLocale } from "@/i18n/locale-store";
+import { translate } from "@/i18n/translate";
 import { trpc } from "@/lib/trpc";
 import { isOwnEntry, useViewerId } from "@/components/tracker/own-entries";
 
@@ -103,6 +107,24 @@ export const useRunawayGuard = (mutations: EntryMutations): void => {
           duration: Infinity,
         },
       );
+
+      // Only the flag that is still a question about a running timer; `cap`
+      // and `stop` already acted, and their prompt can wait for the window.
+      if (mark.action === "flagged") {
+        const tr = translate("tracker");
+        const description = entry.description.trim();
+        notifyDesktop({
+          kind: "runaway",
+          tag: toastId(entry.id),
+          title: tr("desktopNotice.runawayTitle", {
+            ran: formatDurationShortFor(mark.elapsedSec, getActiveLocale()),
+          }),
+          body:
+            description === ""
+              ? tr("desktopNotice.runawayBodyNoDescription")
+              : tr("desktopNotice.runawayBody", { description }),
+        });
+      }
     }
   }, [marked]);
 };

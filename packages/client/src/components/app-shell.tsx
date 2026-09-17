@@ -42,6 +42,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DesktopBridgePublisher } from "@/components/desktop/desktop-bridge-publisher";
 import { ThemeSync } from "@/components/theme-sync";
 import {
   CommandPalette,
@@ -365,6 +366,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
     [],
   );
   useCommandPaletteShortcut(togglePalette);
+  const openPalette = React.useCallback((): void => setPaletteOpen(true), []);
   const paletteSections = useVisibleNavSections(NAV_SECTIONS);
   const openPaletteFromDrawer = React.useCallback((): void => {
     // The drawer goes first, so the two overlays never stack and back closes
@@ -547,6 +549,9 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
           onOpenChange={setPaletteOpen}
           sections={paletteSections}
         />
+
+        {/* The desktop app's tray and global shortcuts. Inert on the web. */}
+        <DesktopBridgePublisher onOpenPalette={openPalette} />
       </div>
     </TooltipProvider>
   );

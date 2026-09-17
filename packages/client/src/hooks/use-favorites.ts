@@ -19,7 +19,7 @@ import { userErrorMessage } from "@/lib/error-message";
 export const QUICK_START_LIMIT = 6;
 
 /** How far back the recents query looks, and how many it may return. */
-const RECENT_INPUT = { limit: QUICK_START_LIMIT, days: 30 };
+export const RECENT_INPUT = { limit: QUICK_START_LIMIT, days: 30 };
 
 export type QuickStarts = {
   items: QuickStartItem[];

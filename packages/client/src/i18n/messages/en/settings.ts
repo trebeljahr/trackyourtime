@@ -34,6 +34,7 @@ export const settings = {
       devices: "Devices",
       integrations: "Integrations",
       account: "Account",
+      desktop: "Desktop",
     },
   },
   toasts: {
@@ -1006,6 +1007,84 @@ export const settings = {
       stay: "Stay on {here}",
       switch: "Switch this device to {there}",
       openTarget: "Open {host}",
+    },
+  },
+  /** Settings → Desktop, rendered only in the desktop app. Per computer. */
+  desktop: {
+    app: {
+      title: "Desktop app",
+      description: "How the app behaves on this computer. These settings apply to this computer only.",
+    },
+    openAtLogin: {
+      title: "Open at login",
+      description: "Start Track Your Time when you sign in to this computer.",
+      requiresApproval: "macOS needs your approval. Allow Track Your Time in System Settings → General → Login Items.",
+      unsupported: "This system does not let the app open itself at login.",
+    },
+    tray: {
+      titleMac: "Show the timer in the menu bar",
+      titleOther: "Show the timer in the system tray",
+      description: "The running time, and a menu to stop, continue or start a timer.",
+    },
+    closeHides: {
+      title: "Keep running when the window is closed",
+      description: "The close button hides the window, and the timer keeps syncing. Quit from the tray menu.",
+      needsTray: "Needs the timer in the system tray.",
+    },
+    runningBadge: {
+      titleMac: "Dock badge while a timer runs",
+      titleWindows: "Taskbar badge while a timer runs",
+      description: "A red dot on the app icon while a timer runs.",
+    },
+    shortcuts: {
+      title: "Keyboard shortcuts",
+      description: "These work in every app, even when the window is closed.",
+      actions: {
+        "toggle-timer": {
+          title: "Start or stop the timer",
+          description: "Stops the running timer. With none running, continues the newest entry of the last 7 days, or opens a new one.",
+        },
+        "new-timer": {
+          title: "New timer",
+          description: "Opens the app with the description field ready to type.",
+        },
+        "toggle-window": {
+          title: "Show or hide the window",
+          description: "Brings the app to the front, or hides it when it is already in front.",
+        },
+        "open-palette": {
+          title: "Command palette",
+          description: "Opens the app with the command palette.",
+        },
+      },
+      notSet: "Not set",
+      change: "Change",
+      set: "Set",
+      recording: "Press the shortcut…",
+      recordingHint: "Hold {modifiers} and press a key. Esc cancels.",
+      modifiersMac: "⌘, ⌃ or ⌥",
+      modifiersOther: "{ctrl}, {alt} or {super}",
+      cancel: "Cancel",
+      clear: "Clear",
+      reset: "Reset to {shortcut}",
+      problems: {
+        taken: "Another app or the system already uses {shortcut}. Choose a different one.",
+        invalid: "{shortcut} cannot be used. Hold at least one modifier key and press a letter, number or function key.",
+        duplicate: "{shortcut} is already set for “{action}”.",
+      },
+      optionWarning: "On a Mac, ⌥ with a key types a special character. While this shortcut is set, you cannot type that character.",
+      keys: {
+        ctrl: "Ctrl",
+        alt: "Alt",
+        shift: "Shift",
+        win: "Win",
+        super: "Super",
+        space: "Space",
+        enter: "Enter",
+        escape: "Esc",
+        backspace: "Backspace",
+        delete: "Delete",
+      },
     },
   },
 } as const;

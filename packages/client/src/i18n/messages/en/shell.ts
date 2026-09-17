@@ -297,4 +297,24 @@ export const shell = {
       description: "Search for a command to run.",
     },
   },
+  /** The desktop app's tray menu and quit notice, drawn by the main process. */
+  desktop: {
+    tray: {
+      stop: "Stop timer",
+      startTimer: "Start timer…",
+      recentHeading: "Continue",
+      open: "Open Track Your Time",
+      settings: "Settings…",
+      quit: "Quit Track Your Time",
+      noDescription: "(no description)",
+      idleTooltip: "Track Your Time: no timer running",
+      unsent: "{count, plural, one {# change not sent yet} other {# changes not sent yet}}",
+      runningBadge: "Timer running",
+    },
+    quitUnsent: {
+      title: "{count, plural, one {# change is not sent yet} other {# changes are not sent yet}}",
+      body: "They stay on this computer. Track Your Time sends them the next time it starts and reaches the server.",
+      button: "Quit",
+    },
+  },
 } as const;

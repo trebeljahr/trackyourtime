@@ -17,7 +17,11 @@ import { BillingSettings } from "@/components/settings/billing-settings";
 import { GeneralSettings } from "@/components/settings/general-settings";
 import { IdleSettingsPanel } from "@/components/settings/idle-settings";
 import { MaxDurationSettingsPanel } from "@/components/settings/max-duration-settings";
+import { DesktopSettingsPanel } from "@/components/settings/desktop-settings";
 import { useWorkspaceSettings } from "@/components/settings/use-workspace-settings";
+import { SETTINGS_TAB_EVENT } from "@/components/desktop/desktop-bridge-publisher";
+import { useIsElectron } from "@/hooks/use-shell";
+import { isElectron } from "@/lib/shell";
 import { WorkspaceTab } from "@/components/settings/workspace-tab";
 import { useLocale } from "@/i18n/locale-store";
 import { useT } from "@/i18n/use-t";
@@ -36,12 +40,19 @@ const TABS = [
 
 const TAB_VALUES = new Set<string>(TABS);
 
+/** Only in the desktop app, and only after hydration (the prerender is the web's). */
+const DESKTOP_TAB = "desktop";
+
+const isTab = (value: string): boolean => TAB_VALUES.has(value) || (value === DESKTOP_TAB && isElectron());
+
 export default function SettingsPage() {
   // One controller for the whole screen: General, Billing, Idle and Limits
   // all write through the same optimistic `settings.update` path.
   const t = useT("settings");
   const controller = useWorkspaceSettings();
   const [tab, setTab] = React.useState("general");
+  const electron = useIsElectron();
+  const tabs: readonly string[] = electron ? [...TABS, DESKTOP_TAB] : TABS;
 
   // `?tab=data` so anything that wants to send somebody here — the empty
   // tracker's "import your history" — can land on the right panel. Read from
@@ -49,7 +60,14 @@ export default function SettingsPage() {
   // the whole page into a Suspense boundary under the static export.
   React.useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
-    if (requested && TAB_VALUES.has(requested)) setTab(requested);
+    if (requested && isTab(requested)) setTab(requested);
+    // The desktop tray's Settings item, while this page is already open.
+    const onRequest = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      if (typeof detail === "string" && isTab(detail)) setTab(detail);
+    };
+    window.addEventListener(SETTINGS_TAB_EVENT, onRequest);
+    return () => window.removeEventListener(SETTINGS_TAB_EVENT, onRequest);
   }, []);
 
   // The tab list scrolls sideways on a phone, and a longer language pushes a
@@ -84,13 +102,13 @@ export default function SettingsPage() {
           className="w-full justify-start overflow-x-auto"
           data-testid="settings-tabs"
         >
-          {TABS.map((value) => (
+          {tabs.map((value) => (
             <TabsTrigger
               key={value}
               value={value}
               data-testid={`settings-tab-${value}`}
             >
-              {t(`page.tabs.${value}`)}
+              {t(`page.tabs.${value as (typeof TABS)[number] | typeof DESKTOP_TAB}`)}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -142,6 +160,11 @@ export default function SettingsPage() {
         <TabsContent value="account" data-testid="settings-panel-account">
           <AccountSettings onShowExport={() => setTab("data")} />
         </TabsContent>
+        {electron ? (
+          <TabsContent value={DESKTOP_TAB} className="space-y-6" data-testid="settings-panel-desktop">
+            <DesktopSettingsPanel />
+          </TabsContent>
+        ) : null}
       </Tabs>
 
       <AppVersionInfo />

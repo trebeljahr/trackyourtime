@@ -28,6 +28,7 @@ export const settings: Translation<typeof source> = {
       devices: "Geräte",
       integrations: "Integrationen",
       account: "Konto",
+      desktop: "Desktop",
     },
   },
   toasts: {
@@ -979,6 +980,83 @@ export const settings: Translation<typeof source> = {
       stay: "Auf {here} bleiben",
       switch: "Dieses Gerät auf {there} umstellen",
       openTarget: "{host} öffnen",
+    },
+  },
+  desktop: {
+    app: {
+      title: "Desktop-App",
+      description: "Wie sich die App auf diesem Computer verhält. Diese Einstellungen gelten nur für diesen Computer.",
+    },
+    openAtLogin: {
+      title: "Beim Anmelden öffnen",
+      description: "Track Your Time startet, wenn du dich an diesem Computer anmeldest.",
+      requiresApproval: "macOS braucht deine Bestätigung. Erlaube Track Your Time unter Systemeinstellungen → Allgemein → Anmeldeobjekte.",
+      unsupported: "Auf diesem System kann sich die App nicht selbst beim Anmelden öffnen.",
+    },
+    tray: {
+      titleMac: "Timer in der Menüleiste zeigen",
+      titleOther: "Timer im Infobereich zeigen",
+      description: "Die laufende Zeit und ein Menü zum Stoppen, Fortsetzen oder Starten eines Timers.",
+    },
+    closeHides: {
+      title: "Beim Schließen des Fensters weiterlaufen",
+      description: "Der Schließen-Knopf blendet das Fenster aus, und der Timer synchronisiert weiter. Beenden kannst du über das Menü im Infobereich.",
+      needsTray: "Dafür muss der Timer im Infobereich angezeigt werden.",
+    },
+    runningBadge: {
+      titleMac: "Kennzeichen im Dock, solange ein Timer läuft",
+      titleWindows: "Kennzeichen in der Taskleiste, solange ein Timer läuft",
+      description: "Ein roter Punkt auf dem App-Symbol, solange ein Timer läuft.",
+    },
+    shortcuts: {
+      title: "Tastenkürzel",
+      description: "Sie funktionieren in jeder App, auch wenn das Fenster geschlossen ist.",
+      actions: {
+        "toggle-timer": {
+          title: "Timer starten oder stoppen",
+          description: "Stoppt den laufenden Timer. Läuft keiner, wird der neueste Eintrag der letzten 7 Tage fortgesetzt oder ein neuer geöffnet.",
+        },
+        "new-timer": {
+          title: "Neuer Timer",
+          description: "Öffnet die App mit dem Beschreibungsfeld, bereit zum Tippen.",
+        },
+        "toggle-window": {
+          title: "Fenster zeigen oder ausblenden",
+          description: "Holt die App nach vorne oder blendet sie aus, wenn sie schon vorne ist.",
+        },
+        "open-palette": {
+          title: "Befehlspalette",
+          description: "Öffnet die App mit der Befehlspalette.",
+        },
+      },
+      notSet: "Nicht festgelegt",
+      change: "Ändern",
+      set: "Festlegen",
+      recording: "Drücke das Tastenkürzel …",
+      recordingHint: "Halte {modifiers} gedrückt und drücke eine Taste. Esc bricht ab.",
+      modifiersMac: "⌘, ⌃ oder ⌥",
+      modifiersOther: "{ctrl}, {alt} oder {super}",
+      cancel: "Abbrechen",
+      clear: "Entfernen",
+      reset: "Auf {shortcut} zurücksetzen",
+      problems: {
+        taken: "Eine andere App oder das System nutzt {shortcut} schon. Wähle ein anderes Tastenkürzel.",
+        invalid: "{shortcut} geht nicht. Halte mindestens eine Sondertaste gedrückt und drücke einen Buchstaben, eine Ziffer oder eine Funktionstaste.",
+        duplicate: "{shortcut} ist schon für „{action}“ festgelegt.",
+      },
+      optionWarning: "Auf dem Mac tippt ⌥ mit einer Taste ein Sonderzeichen. Solange dieses Tastenkürzel gilt, kannst du dieses Zeichen nicht tippen.",
+      keys: {
+        ctrl: "Strg",
+        alt: "Alt",
+        shift: "Umschalt",
+        win: "Win",
+        super: "Super",
+        space: "Leertaste",
+        enter: "Eingabe",
+        escape: "Esc",
+        backspace: "Rücktaste",
+        delete: "Entf",
+      },
     },
   },
 };

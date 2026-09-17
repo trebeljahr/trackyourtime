@@ -159,4 +159,12 @@ export const tracker: Translation<typeof source> = {
     heldDescription:
       "Dein Server unterstützt sie noch nicht. Sie bleiben erhalten und werden gesendet, sobald der Server aktualisiert ist.",
   },
+  desktopNotice: {
+    idleTitle: "Du warst {span} lang abwesend",
+    lockedTitle: "Dein Bildschirm war {span} lang gesperrt",
+    idleBody: "Dein Timer läuft noch. Öffne Track Your Time, um die Zeit zu behalten oder zu verwerfen.",
+    runawayTitle: "Dieser Timer läuft seit {ran}",
+    runawayBody: "„{description}“ läuft noch. Öffne Track Your Time, um die Zeit zu behalten oder zu korrigieren.",
+    runawayBodyNoDescription: "Dein Timer läuft noch. Öffne Track Your Time, um die Zeit zu behalten oder zu korrigieren.",
+  },
 };
