@@ -264,4 +264,21 @@ test("OS idle reported by the main process raises the idle prompt", async () => 
     }
   });
   await expect(page.getByTestId("idle-prompt")).toBeVisible({ timeout: 10_000 });
+
+  // Stage 5: the window is hidden (every harness launch is), so the prompt
+  // also went out as a system notification — recorded, never posted, in a
+  // headless run (electron/src/desktop.ts).
+  const notices = await app!.evaluate(
+    () =>
+      (globalThis as { __trackYourTimeDesktop?: { notifications: { kind: string; title: string; body: string }[] } })
+        .__trackYourTimeDesktop?.notifications ?? [],
+  );
+  expect(notices).toEqual([
+    {
+      kind: "idle",
+      tag: "trackyourtime-idle",
+      title: expect.stringMatching(/^You were away for \d+/),
+      body: "Your timer is still running. Open Track Your Time to keep or discard that time.",
+    },
+  ]);
 });
