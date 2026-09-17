@@ -99,6 +99,9 @@ export function installUpdater(options: {
       },
     },
     now: () => new Date(),
+    // Headless: only a spec's own `hook.update` drives the memory updater, so
+    // no timer may move the status underneath it.
+    autoCheck: !options.headless,
     onChange: options.onChange,
     beforeInstall: options.beforeInstall,
     log: (message, err) => console.warn(message, err),

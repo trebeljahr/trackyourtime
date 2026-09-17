@@ -245,6 +245,29 @@ describe("createUpdateController", () => {
     assert.equal(updater.checks, 2);
   });
 
+  it("schedules nothing with autoCheck off, and still checks and reports when driven", () => {
+    const updater = fakeUpdater();
+    const scheduler = fakeScheduler();
+    const controller = createUpdateController({
+      policy: { enabled: true },
+      currentVersion: "0.1.0",
+      loadUpdater: () => updater,
+      scheduler,
+      now: () => new Date(NOW),
+      onChange: () => undefined,
+      beforeInstall: () => undefined,
+      autoCheck: false,
+    });
+    assert.equal(scheduler.timeouts.length + scheduler.intervals.length, 0);
+    assert.deepEqual(controller.snapshot().status, { kind: "idle", lastCheckedAt: null });
+    controller.check();
+    assert.equal(updater.checks, 1);
+    updater.emit("update-downloaded", { version: "0.1.1" });
+    assert.deepEqual(controller.snapshot().status, { kind: "ready", version: "0.1.1" });
+    controller.dispose();
+    assert.equal(scheduler.cleared, 0);
+  });
+
   it("stops its timers on dispose", () => {
     const { controller, scheduler } = setup();
     controller.dispose();
@@ -268,5 +291,9 @@ describe("no forced restart, in the source", () => {
     const desktop = sources.find(({ name }) => name === "desktop.ts")!.text;
     assert.match(desktop, /id === "restart-to-update"\) updates\.controller\.restart\(\)/);
     assert.match(desktop, /DESKTOP_IPC\.updateRestart, \(\) => updates\.controller\.restart\(\)/);
+    // A headless run must not check on a timer: the memory updater answers no
+    // event, so a scheduled check would strand the status at "checking".
+    const updater = sources.find(({ name }) => name === "updater.ts")!.text;
+    assert.match(updater, /autoCheck: !options\.headless/);
   });
 });

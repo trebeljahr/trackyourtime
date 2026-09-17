@@ -160,6 +160,14 @@ export function createUpdateController(options: {
   onChange: (snapshot: DesktopUpdateSnapshot) => void;
   /** Right before `quitAndInstall`: lets the window close instead of hiding (window.ts). */
   beforeInstall: () => void;
+  /**
+   * Whether to check on its own (after `FIRST_CHECK_DELAY_MS` and every
+   * `UPDATE_CHECK_INTERVAL_MS`). Default true; `false` in a headless run
+   * (updater.ts), where the memory updater answers no event, so a scheduled
+   * check would leave the status "checking" forever — a spec that reads the
+   * status or counts checks would then fail on nothing but its own timing.
+   */
+  autoCheck?: boolean;
   log?: (message: string, err?: unknown) => void;
 }): UpdateController {
   const log = options.log ?? (() => undefined);
@@ -212,7 +220,7 @@ export function createUpdateController(options: {
     return snapshot();
   };
 
-  if (updater !== null) {
+  if (updater !== null && options.autoCheck !== false) {
     handles.push(options.scheduler.setTimeout(check, FIRST_CHECK_DELAY_MS));
     handles.push(options.scheduler.setInterval(check, UPDATE_CHECK_INTERVAL_MS));
   }
