@@ -370,8 +370,8 @@ What the stage text got wrong or left out:
 - **CSP `connect-src` stays narrow** (Stage 1 review's open choice): plain
   http/ws only to `localhost` and `127.0.0.1`. Allowing `http:`/`ws:` everywhere
   to cover `[::1]` and `*.localhost` would permit cleartext to any host, which
-  the picker refuses anyway; a picker entry of `http://[::1]:…` fails its health
-  check in the desktop app and says the server did not answer.
+  the picker refuses anyway. Expected, not tried: a picker entry of
+  `http://[::1]:…` is blocked by the CSP and fails its health check.
 - The server-picker's prerender test covers Electron, and the login page's
   browser sign-in renders nothing until after hydration.
 
