@@ -285,6 +285,110 @@ Left for later stages:
   Linux at runtime, and the CI `desktop` job itself (including the clipboard
   spec under xvfb, which is new on CI).
 
+### Stages 2 and 3 — signed in on a packaged build, and browser sign-in (2026-09-17)
+
+Run on macOS arm64, Node 24.14.1, Electron 42.1.0. Verified two ways against
+production-mode APIs with their own `mongod` on random ports:
+
+- **Packaged** (`pnpm electron:preview`, fused, ad-hoc signed), launched headless
+  with `--remote-debugging-port` and driven over `connectOverCDP`, against an API
+  preloaded with `e2e/desktop/record-requests.mjs`. 17 checks passed: form
+  sign-in; `source: "desktop"`; Devices row "Desktop app on macOS"; 27 requests
+  from `app://-` with **no Cookie**, every tRPC call after sign-in `Bearer` from
+  `trackyourtime-desktop`, the socket upgrade on the `bearer.` subprotocol;
+  `session.bin` written (83 bytes, `v10` ciphertext) and a relaunch landing on
+  `/app/track`; a TOTP account pointed from the form to the browser, signed in
+  by device flow, labelled "Desktop app"; a revoke with one queued start landing
+  on `/login` with "1 unsent change".
+- **Harness** (`pnpm test:e2e:desktop`, 25 pass, clipboard skipped as before),
+  which adds what a packaged build cannot be driven through: the server switch,
+  the idle prompt, a timer started on the web appearing within a second, a
+  passwordless account and a declined code.
+
+The web stayed green: `pnpm typecheck`, `pnpm run test:client` (130 files,
+1229 tests), the server env and admin-cli tests, and the web Playwright specs
+`auth`, `two-factor`, `smoke`, `move-server`, `timer` plus the `phone` project
+(45 pass).
+
+What the stage text got wrong or left out:
+
+- **The no-Cookie claim needs a server-side recorder, and a control.** Electron's
+  `webRequest` does not see the upgrade, and a page-side check cannot see what
+  the network stack adds. `record-requests.mjs` patches `http.Server#emit` in the
+  harness API and logs origin, client header, auth scheme and a cookie boolean
+  (never values). A control spec adds a Cookie through the main process and
+  asserts the log sees it. The harness's own Node calls send the app's Origin, so
+  they carry `user-agent: desktop-e2e-harness` and are filtered out.
+- **The auth client omits credentials in Electron.** Unlike WKWebView,
+  Electron's jar accepts third-party cookies, so better-fetch's default
+  `credentials: "include"` would store the API's session cookie on sign-in and
+  the socket upgrade would carry it beside the token. The tRPC link already
+  omitted once a token existed; sign-in did not. Capacitor is unchanged (not
+  retested on a device here) — worth the same change after an iOS check.
+- **Headless must not touch the Keychain.** Chromium's OSCrypt (cookies, and now
+  `safeStorage`) reads or creates "<app name> Safe Storage"; the login keychain
+  here already held "trackyourtime Safe Storage" and "Electron Safe Storage" from
+  Stages 0–1. Measured with a probe under a throwaway name: without
+  `--use-mock-keychain` an item is created, with it none is and encryption still
+  round-trips. Headless now appends the switch, so a headless profile's
+  `session.bin` only decrypts under another headless run.
+- **Headless must not open the OS browser either.** Browser sign-in calls
+  `openExternal`; a packaged build cannot be stubbed from Playwright (no
+  inspector fuse). `electron/src/external.ts` records the URL (global and
+  stdout) under `TRACKYOURTIME_HEADLESS=1`; the mailto spec now traps
+  `shell.openExternal` to prove it is never called.
+- **The bridge is key-less:** `secureStore.getToken/setToken/deleteToken/status`.
+  There is one credential; a key parameter across IPC would only be something
+  to validate. `status()` reports `{ persistent, backend }`, and Settings →
+  Devices shows a note when not persistent (Linux `basic_text`, or encryption
+  unavailable). That path is unit-tested only (`secure-store.test.ts`); no Linux
+  run.
+- **`DESKTOP_APP_ORIGIN` stays in `desktop-bridge.ts`**; `store-clients.ts`
+  imports it into `STORE_APP_ORIGINS`. `env.test.ts` spells out `app://-` so a
+  change to the constant fails a test instead of moving what servers trust.
+- **The "does not accept sign-ins from this app" messages named the Capacitor
+  origins.** They take `{origins}` now (`shellTrustedOrigins()`), so the desktop
+  app tells an administrator to add `app://-`.
+- **Revocation is not "within a minute".** Deleting a session sweeps live
+  sockets at once (`auth.ts` → `revokeStaleSockets`); the minute-long re-check is
+  the fallback. The 4401 close arrived in under a second in both runs, and
+  `revokeThisDevice` (the notice) has no caller but `onSessionRevoked`.
+- **The idle acceptance cannot be shortened by editing the entry from the web.**
+  Another device's edit is proof of life and restarts the idle clock, and no
+  span may begin before the entry did, so the spec waits out the one-minute
+  minimum threshold. It feeds `idle:state` from the main process exactly as
+  `idle.ts` broadcasts it; the OS idle counter itself was not moved.
+- **Meanings kept to Capacitor:** bounded query retries (battery), the
+  `pagehide` unload latch (Electron keeps the web one: `pagehide` fires on quit
+  and reload, not on hide-on-close), `@capacitor/network`, Preferences storage,
+  `autoFocus` on the tracker. `isAppShell()`'s "any non-http protocol" fallback
+  existed for Tauri and went with `lib/app-shell-host.ts`.
+- **Strings live in the `shell` namespace** (`auth.browserSignIn.*`,
+  `auth.twoFactor.desktopUseBrowser`, `auth.google.desktopNote`) beside the rest
+  of `/login`, not in `common`/`settings` as the stage said; the Devices note is
+  `settings`' `devices.tokenNotPersisted`.
+- **CSP `connect-src` stays narrow** (Stage 1 review's open choice): plain
+  http/ws only to `localhost` and `127.0.0.1`. Allowing `http:`/`ws:` everywhere
+  to cover `[::1]` and `*.localhost` would permit cleartext to any host, which
+  the picker refuses anyway; a picker entry of `http://[::1]:…` fails its health
+  check in the desktop app and says the server did not answer.
+- The server-picker's prerender test covers Electron, and the login page's
+  browser sign-in renders nothing until after hydration.
+
+Not run, and why:
+
+- **A real Google account.** OAuth cannot complete against a local API. The
+  harness removes the credential account from Mongo instead, leaving an account
+  only another sign-in method reaches; the device flow does not depend on how
+  the approving browser signed in.
+- **The server switch and the idle prompt on the packaged build**: the switch
+  would have needed a second API in the packaged run and was covered by the
+  harness on the same main process and export; the idle payload needs the main
+  process, which the fuses close to a driver.
+- **Windows and Linux at runtime**, the Linux keyring-less path, a visible
+  window, and the CI `desktop` job (still never run; it now needs a second API
+  database, derived from `MONGODB_URI`).
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**

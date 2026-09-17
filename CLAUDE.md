@@ -234,9 +234,29 @@ built, and the rules that fail quietly if broken:
 - **Closing the window hides it on macOS only.** Windows and Linux quit on close
   until the tray exists (plan Stage 4); a hidden window with no tray is an app
   nobody can reach.
-- **Sign-in does not work in the desktop app yet** (plan Stage 2): the bearer
-  path is gated on `isNative()`. The harness's signed-in specs attach a session
-  cookie from the main process as a documented stand-in.
+- **The desktop app signs in with the phone's bearer path, never a cookie.**
+  `lib/shell.ts` splits the old `isNative()` into `isCapacitor()` (phone UI,
+  Preferences storage, the radio), `isElectron()` and `isTokenShell()` (either:
+  bearer token, server picker, running-timer mirror); `hooks/use-shell.ts`
+  hydrates them as web. Never branch phone chrome on `isTokenShell()`. The
+  token is `userData/session.bin`, encrypted by `safeStorage` in the main
+  process (`electron/src/secure-store.ts`) and reached through
+  `electronAPI.secureStore`; on Linux's `basic_text` backend it is refused and
+  kept in memory, and Settings → Devices says so. The auth client sends
+  `credentials: "omit"` in Electron so the API's cookie never lands in
+  Chromium's jar — a second, silent credential would mask a broken bearer path.
+- **"Sign in with your browser"** (`components/browser-sign-in.tsx`) is the
+  device flow with client id `trackyourtime-desktop`: the way in for two-factor
+  and Google accounts, which the password form cannot finish in a shell.
+- **Headless launches never touch the Keychain or the OS browser.** Headless
+  appends `use-mock-keychain` (measured: no "<name> Safe Storage" item is
+  created, and one is without it), and `openInOs` (`external.ts`) records URLs
+  on `globalThis.__trackYourTimeOpenedExternally` and stdout instead of opening
+  them. A spec that needs the approval URL reads it from there.
+- **The harness proves auth from the server side.** `e2e/desktop/record-requests.mjs`
+  is preloaded into the harness APIs and logs every request's origin, client,
+  auth scheme and whether a Cookie was present; the harness's own Node calls
+  send `user-agent: desktop-e2e-harness` so `appRequests()` excludes them.
 
 **Simulator and emulator runs never take focus either.** `IOS_HEADLESS=1 pnpm
 dev:ios` drives simctl only (without it Simulator.app is opened with `open -g`),
@@ -561,7 +581,7 @@ adding one would only hide the fact that the cascade is doing the work.
 **The bottom tab bar renders on every platform.** `components/mobile-tab-bar.tsx`
 ships in the web bundle too and is `display: none` there — Tailwind's `hidden`,
 undone by the one `html.cap` rule in `native.css`. It must not branch on
-`isNative()`: under `output: "export"` every page is prerendered in Node, where
+`isCapacitor()`: under `output: "export"` every page is prerendered in Node, where
 `window.Capacitor` cannot exist, so a tree that differs at hydration is a
 mismatch React resolves by discarding the served DOM. The same argument applies
 to anything else the phone shows and the web does not. Three tabs, and the third
@@ -596,8 +616,8 @@ Set `TRUSTED_ORIGINS` on the server (comma-separated):
 TRUSTED_ORIGINS=capacitor://localhost,https://localhost
 ```
 
-or `TRUST_STORE_APPS=true`, which adds both of those plus the Chrome Web Store
-extension's pinned `chrome-extension://` id from
+or `TRUST_STORE_APPS=true`, which adds both of those, the desktop app's
+`app://-` and the Chrome Web Store extension's pinned `chrome-extension://` id from
 `packages/shared/src/store-clients.ts` — the self-host compose file defaults it
 on, so the store clients can sign in to a fresh self-hosted server with no
 manual step. For the extension the trust covers every request, not only
@@ -620,7 +640,7 @@ broken:
 - **The web app never has a choice.** Every export of `lib/api-origin.ts`
   returns the build's origin on web; nothing reads storage, awaits or rewrites a
   URL there. The picker renders nothing on web and nothing on the first client
-  render anywhere (`hooks/use-is-native.ts` hydrates as `false`), so the
+  render anywhere (`hooks/use-shell.ts` hydrates as `false`), so the
   prerendered login page is identical on both — `server-picker.test.tsx`
   compares the two `renderToString`s.
 - **Module-scope clients keep their build-time URL, and each request is
