@@ -30,8 +30,8 @@
   },
 
   // pnpm is pinned by package.json "packageManager" (pnpm@11.1.2); corepack
-  // installs exactly that version. The install is slow the first time —
-  // electron downloads its platform binary in postinstall.
+  // installs exactly that version. Electron 42 has no postinstall, so the
+  // install does not fetch its binary; `pnpm electron:ensure` does, on demand.
   "postCreateCommand": "corepack enable && pnpm install --frozen-lockfile",
 
   "forwardPorts": [
