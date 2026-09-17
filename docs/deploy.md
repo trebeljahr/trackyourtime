@@ -485,3 +485,201 @@ certificate is self-signed — that is expected and correct for an upload key.
 what you want for a build you are only going to `bundletool` onto a device. The
 guard exists so that a fresh checkout is not a Gradle error; CI is where an
 unsigned artifact must not pass silently, and there it does not.
+
+## Desktop release
+
+`.github/workflows/desktop-release.yml` builds every desktop artifact from one
+manual dispatch (Actions → Desktop Release → Run workflow). It has one leg per
+channel:
+
+| Leg | Runner | Output | Signed by |
+| --- | --- | --- | --- |
+| `mac` | macos-latest | dmg + zip, arm64 and x64 | Developer ID, notarized |
+| `mas` | macos-latest | pkg, universal | Apple Distribution + Mac Installer Distribution |
+| `win` | windows-latest | one NSIS exe, x64 + arm64 | Azure Trusted Signing or a certificate file |
+| `win-store` | windows-latest | appx, x64 and arm64 | Partner Center, on upload |
+| `linux-x64`, `linux-arm64` | ubuntu-24.04(-arm) | AppImage, deb, rpm, tar.gz, snap | not signed |
+
+Every leg follows the Android rule above:
+
+- **No secrets for a channel:** the leg still builds. Every dmg, zip and exe
+  has `-unsigned` in its file name. A `mas` leg without secrets packages the
+  `.app` to check the config and uploads nothing, because no unsigned pkg can
+  be submitted. A `win-store` leg without the three identity variables is
+  skipped with a notice.
+- **A complete set:** the leg signs, then verifies the signature. The checks
+  are `codesign --verify --deep --strict`, `spctl --assess` and
+  `stapler validate` for the Developer ID app, `pkgutil --check-signature` and
+  the sandbox entitlements for the store pkg, and `signtool verify /pa` for
+  Windows.
+- **Part of a set:** the leg fails on "Check the signing secrets", before the
+  export is built. The message lists what is set and what is missing.
+
+The decision is `resolveSigning` in `scripts/lib/desktop-release.mjs`, and it
+is unit-tested. The same function runs in `scripts/build-desktop.mjs`, so a
+local `--channel` build refuses in the same way. The API key and team id are
+shared with the iOS release, so they do not start signing on their own. Only
+the certificate does.
+
+Artifacts go to the run's Actions artifacts, with a `SHA256SUMS-<leg>.txt`
+file. Nothing is published: the GitHub Release and the updater feed come in
+Stage 7 of `docs/desktop-app-plan.md`, and every store upload is manual.
+
+### Secrets and variables
+
+Secrets (`gh secret set NAME`, which prompts and does not echo):
+
+| Name | Leg | Value |
+| --- | --- | --- |
+| `MAC_CSC_LINK` | mac | base64 of the Developer ID Application `.p12` |
+| `MAC_CSC_KEY_PASSWORD` | mac | its export password |
+| `APPLE_API_KEY_BASE64` | mac | base64 of the App Store Connect API key `.p8` (the iOS release's secret) |
+| `APPLE_API_KEY_ID` | mac | that key's id (shared with iOS) |
+| `APPLE_API_ISSUER_ID` | mac | the issuer id (shared with iOS) |
+| `MAS_CSC_LINK` | mas | base64 of one `.p12` holding Apple Distribution **and** Mac Installer Distribution |
+| `MAS_CSC_KEY_PASSWORD` | mas | its export password |
+| `MAS_PROVISIONING_PROFILE_BASE64` | mas | base64 of the Mac App Store Connect `.provisionprofile` |
+| `APPLE_TEAM_ID` | mas | the ten-character team id |
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` | win | the app registration that may sign |
+| `AZURE_TRUSTED_SIGNING_ENDPOINT`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, `AZURE_TRUSTED_SIGNING_PROFILE`, `AZURE_TRUSTED_SIGNING_PUBLISHER_NAME` | win | the signing account, certificate profile and the publisher name on it |
+| `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` | win | the alternative to Azure: base64 `.pfx` and its password. Set one Windows set, never both |
+| `HOMEBREW_TAP_TOKEN` | manifests | fine-grained token, contents write on the tap repository only |
+
+Repository variables (`gh variable set NAME`), which are not secret:
+
+| Name | Used by | Value |
+| --- | --- | --- |
+| `WINDOWS_STORE_IDENTITY_NAME` | win-store | Partner Center → product → Product identity → Package/Identity/Name |
+| `WINDOWS_STORE_PUBLISHER` | win-store | …/Identity/Publisher (`CN=…`) |
+| `WINDOWS_STORE_PUBLISHER_DISPLAY_NAME` | win-store | …/Properties/PublisherDisplayName |
+| `HOMEBREW_TAP_REPO` | manifests | `<owner>/homebrew-tap` |
+| `NEXT_PUBLIC_API_URL` | all | optional; defaults to `https://api.trackyourtime.dev` |
+
+The build derives nothing from these. The Store identity in particular is never
+defaulted, because Partner Center refuses a package whose identity differs from
+the reserved one.
+
+### macOS, Developer ID (dmg, zip, Homebrew)
+
+1. In the Apple Developer account (the Account Holder must do this), create a
+   **Developer ID Application** certificate. Export it with its private key from
+   Keychain Access as a `.p12` file, then set `MAC_CSC_LINK` and
+   `MAC_CSC_KEY_PASSWORD`:
+   `base64 -i DeveloperID.p12 | gh secret set MAC_CSC_LINK`.
+2. Notarization uses the App Store Connect API key the iOS release already has.
+   If it does not exist yet, create a Team key with the Developer role under
+   Users and Access → Integrations and set the three `APPLE_API_*` secrets.
+3. Dispatch the workflow. The `mac` leg is signed only when the certificate
+   and all three key values are set.
+
+Locally: `NEXT_PUBLIC_API_URL=… node scripts/build-desktop.mjs --channel mac
+--package --mac dmg zip --arm64`. Without `CSC_LINK` in the environment, this
+builds the `-unsigned` version.
+
+### macOS, Mac App Store (pkg)
+
+1. The App ID `com.trebeljahr.trackyourtime` already exists for iOS. **Decide
+   before the first upload:** a Mac build under the same App Store Connect
+   record ships as a Universal Purchase with the phone app, and a separate
+   record would need a different bundle id. That id is a contract (CLAUDE.md),
+   so a separate record is the expensive choice.
+2. Create an **Apple Distribution** and a **Mac Installer Distribution**
+   certificate. Export both into one `.p12` and set `MAS_CSC_LINK` and
+   `MAS_CSC_KEY_PASSWORD`.
+3. Create a **Mac App Store Connect** provisioning profile for the App ID, then
+   set `MAS_PROVISIONING_PROFILE_BASE64` and `APPLE_TEAM_ID`.
+4. Dispatch the workflow, download `desktop-mas-signed`, and upload the pkg with
+   Transporter. Review and release happen in App Store Connect.
+
+What is different under the sandbox: the app group is
+`<APPLE_TEAM_ID>.com.trebeljahr.trackyourtime`, and the entitlements are
+generated per build by `masEntitlementsPlist`. The app gets network client
+access and read/write access to files the user picks. It has no in-app updater,
+because the store updates it (`selfUpdates` in `electron/src/distribution.ts`).
+Open at login works through SMAppService, as in the Developer ID build.
+
+### Windows, NSIS and winget
+
+1. Pick one signing route:
+   - **Azure Trusted Signing.** Create a Trusted Signing account and pass
+     identity validation. Eligibility for individuals and organizations
+     depends on the country, so check the current rules first. Then create a
+     Public Trust certificate profile. Register an app in Entra ID, give it the
+     "Trusted Signing Certificate Profile Signer" role on the account, and set
+     the seven `AZURE_*` secrets.
+   - **A certificate file.** New OV and EV code-signing certificates have been
+     issued on hardware or cloud HSMs since 2023 and cannot be exported as a
+     `.pfx`. `WIN_CSC_LINK` therefore only fits a certificate that can still be
+     exported. Cloud HSM services need a custom sign hook, which this repo does
+     not have.
+2. Dispatch the workflow. The `win` leg verifies the installer and the
+   unpacked executables with `signtool verify /pa`.
+3. **winget**, once the release is published: run Desktop Manifests (below),
+   then copy `manifests/winget/*.yaml` to
+   `manifests/t/Trebeljahr/TrackYourTime/<version>/` in a fork of
+   `microsoft/winget-pkgs`. Run `winget validate` on that folder and open the
+   pull request. `wingetcreate submit <folder>` does the same.
+
+### Windows, Microsoft Store (appx)
+
+1. Open a Partner Center developer account and reserve the name "Track Your
+   Time".
+2. Copy the three values from Product management → Product identity into the
+   `WINDOWS_STORE_*` repository variables.
+3. Dispatch the workflow and upload the `.appx` files from `desktop-win-store`
+   to a submission. The package is not signed here, because the Store signs it.
+
+In the Store build, open at login is off. A packaged app's `Run` key is never
+read, and Electron does not expose `StartupTask`. Settings shows the row
+disabled. There is no in-app updater.
+
+### Linux: AppImage, deb, rpm, Snap Store, Flathub
+
+The AppImage, deb, rpm and tar.gz files are for the GitHub Release. No apt or
+rpm repository is hosted, so a deb or rpm install is not updated by the
+package manager.
+
+**Snap Store:**
+
+1. Create a Snapcraft account and run `snapcraft register trackyourtime`.
+2. Upload: `snapcraft upload --release=stable trackyourtime_<version>_amd64.snap`,
+   and do the same for arm64.
+3. The `password-manager-service` plug is not auto-connected. Until the
+   Snapcraft forum grants auto-connection, the user runs
+   `snap connect trackyourtime:password-manager-service`. Without it, the app
+   keeps the session in memory only and says so in Settings → Devices.
+
+**Flathub:**
+
+1. Add a `<screenshots>` block to
+   `packaging/flatpak/com.trebeljahr.trackyourtime.metainfo.xml.template`,
+   pointing at a committed capture. Flathub requires at least one.
+2. Once the release is published, run Desktop Manifests. Then open a pull
+   request against `flathub/flathub` (branch `new-pr`) with the files from
+   `manifests/flatpak/`. After acceptance, updates are commits to the
+   `flathub/com.trebeljahr.trackyourtime` repository that Flathub creates.
+3. The manifest repackages the release's tar.gz. Flathub reviewers can ask
+   for a source build of an open-source app instead. That build would need
+   every npm dependency vendored with `flatpak-node-generator`, which this
+   repo has not done.
+4. Verifying the app id (the badge) needs control of `trebeljahr.com`.
+
+In the Flatpak, open at login is unsupported and the in-app updater is off,
+the same as in the stores.
+
+### Homebrew
+
+1. Create a public repository named `homebrew-tap` under your account. Set the
+   variable `HOMEBREW_TAP_REPO` to `<owner>/homebrew-tap` and the secret
+   `HOMEBREW_TAP_TOKEN`.
+2. After a release with signed dmgs is **published** (not a draft), run
+   Actions → Desktop Manifests → Use workflow from → the `v<version>` tag. It
+   downloads the release files, renders the cask, winget and Flathub
+   manifests with real checksums, uploads them as an artifact, and commits
+   `Casks/track-your-time.rb` to the tap.
+3. Install with `brew install --cask <owner>/tap/track-your-time`. The official
+   `homebrew/cask` repository has notability requirements for new casks, so
+   the tap comes first.
+
+Locally, the same rendering is
+`node scripts/desktop-manifests.mjs --artifacts <folder with the release files> --out manifests`.
