@@ -7,9 +7,12 @@
  * them to this process, which is what lets `tests/admin-cli.test.ts` drive
  * each verdict with a made-up environment.
  *
- * Nothing here phones home: no telemetry, no update check. Every connection
- * the doctor opens is one the server itself opens.
+ * Nothing here phones home: no telemetry, and no update check of its own.
+ * Every connection the doctor opens is one the server itself opens; the
+ * newest release it prints is what the server's opt-in daily check stored.
  */
+
+import { compareVersions } from "@starter/shared";
 
 export type CheckStatus = "pass" | "warn" | "fail";
 
@@ -424,9 +427,85 @@ export function checkIndexes(
   return { name, status: "pass", detail: `all ${outcome.indexes.length} declared indexes exist` };
 }
 
+// ── Release ───────────────────────────────────────────────────────────────
+
+export type VersionState = {
+  /** `env.RELEASE`; empty for a build with no version. */
+  release: string;
+  apiLevel: number;
+  schemaVersion: number;
+  /** `env.TRACKYOURTIME_UPDATE_CHECK`. */
+  updateCheck: boolean;
+};
+
+/** The fields of the stored update check the doctor reads. */
+export type ReleaseCheckState = {
+  newestVersion: string | null;
+  checkedAt: Date;
+  succeededAt: Date | null;
+  lastError: string | null;
+};
+
+type ReleaseCheckOutcome =
+  | { ok: true; stored: ReleaseCheckState | null }
+  | { ok: false; error: string };
+
+/**
+ * What this server is — release, API level, schema version — and, when the
+ * operator turned the update check on, the newest release it last found. A
+ * newer release warns; nothing here fails, and nothing here asks GitHub.
+ */
+export function checkVersion(state: VersionState, outcome: ReleaseCheckOutcome | null): CheckResult {
+  const name = "release";
+  const identity =
+    `release ${state.release ? `v${state.release}` : "unknown (development build)"}, ` +
+    `API level ${state.apiLevel}, schema ${state.schemaVersion}`;
+  if (!state.updateCheck) {
+    return { name, status: "pass", detail: `${identity}; update check off` };
+  }
+  if (outcome === null || !outcome.ok) {
+    return {
+      name,
+      status: "pass",
+      detail: `${identity}; update check on, result not read${outcome ? `: ${outcome.error}` : ""}`,
+    };
+  }
+  const { stored } = outcome;
+  if (stored === null) {
+    return { name, status: "pass", detail: `${identity}; update check on, no answer stored yet` };
+  }
+  const newest = stored.newestVersion;
+  const checked = (stored.succeededAt ?? stored.checkedAt).toISOString().slice(0, 10);
+  if (newest && state.release && /^\d+\.\d+\.\d+/.test(state.release) && compareVersions(newest, state.release) > 0) {
+    return {
+      name,
+      status: "warn",
+      detail: `${identity}; v${newest} is available (checked ${checked})`,
+      fix: `read https://github.com/trebeljahr/trackyourtime/releases/tag/v${newest}, take a mongodump, then follow "Upgrading" in docs/self-hosting.md`,
+    };
+  }
+  if (stored.lastError) {
+    return {
+      name,
+      status: "warn",
+      detail: `${identity}; the last update check failed: ${stored.lastError}`,
+      fix: "the check needs outbound HTTPS to api.github.com; set TRACKYOURTIME_UPDATE_CHECK=false to turn it off",
+    };
+  }
+  return {
+    name,
+    status: "pass",
+    detail: `${identity}; ${newest ? `newest release v${newest}` : "no release published"} (checked ${checked})`,
+  };
+}
+
 // ── Running and printing ──────────────────────────────────────────────────
 
 export type DoctorInputs = {
+  /** What this build is. The release line is printed only when given. */
+  version?: VersionState;
+  /** The stored update check. Read only when the check is on and the database answers. */
+  releaseCheck?: () => Promise<ReleaseCheckState | null>;
   urls: UrlState;
   mail: MailState;
   redisUrl: string;
@@ -442,7 +521,18 @@ export type DoctorInputs = {
 /** Every check, in the order they are printed. */
 export async function runDoctor(inputs: DoctorInputs): Promise<CheckResult[]> {
   const mongo = await probeMongo(inputs.mongo, inputs.now);
+  const version = inputs.version;
   return [
+    ...(version
+      ? [
+          checkVersion(
+            version,
+            version.updateCheck && inputs.releaseCheck
+              ? await settle(mongo, inputs.releaseCheck, (stored) => ({ ok: true as const, stored }))
+              : null,
+          ),
+        ]
+      : []),
     checkMongo(mongo),
     await checkRedis(inputs.redisUrl, inputs.redisPing),
     checkMail(inputs.mail),

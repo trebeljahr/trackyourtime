@@ -25,6 +25,13 @@ import {
   saveBusinessProfile,
 } from "../../models/BusinessProfile.js";
 import { publishSync, publishToUser } from "../../ws/sync.js";
+import mongoose from "mongoose";
+import { env } from "../../config/env.js";
+import {
+  readReleaseCheck,
+  updateNoticeFor,
+  type UpdateNotice,
+} from "../../services/update-check.js";
 import { router, workspaceProcedure } from "../trpc.js";
 
 /** Fields that change what everybody in the workspace sees. */
@@ -196,4 +203,21 @@ export const settingsRouter = router({
       void publishSync(ctx.workspaceId, { kind: "settings.changed" }, originId);
       return profile;
     }),
+
+  /**
+   * "vX.Y.Z is available", for a workspace owner or admin, when the server
+   * runs with TRACKYOURTIME_UPDATE_CHECK and the daily check found a newer
+   * stable release. Null for everybody else and whenever the check is off, so
+   * the answer never says whether the check is configured. Reads the stored
+   * result only; this request never calls GitHub.
+   */
+  updateNotice: workspaceProcedure.input(workspaceScopeSchema).query(
+    async ({ ctx }): Promise<UpdateNotice | null> => {
+      if (!env.TRACKYOURTIME_UPDATE_CHECK) return null;
+      if (ctx.membership.role !== "owner" && ctx.membership.role !== "admin") return null;
+      const db = mongoose.connection.db;
+      if (!db) return null;
+      return updateNoticeFor(await readReleaseCheck(db), env.RELEASE);
+    },
+  ),
 });

@@ -3,8 +3,10 @@
 import * as React from "react";
 import { API_LEVEL } from "@starter/shared";
 
+import { useActiveWorkspace } from "@/components/members/use-active-workspace";
 import { useT } from "@/i18n/use-t";
 import { APP_VERSION } from "@/lib/app-version";
+import { SELF_HOSTING_URL } from "@/lib/site-links";
 import { trpc } from "@/lib/trpc";
 
 /**
@@ -13,6 +15,11 @@ import { trpc } from "@/lib/trpc";
  * The first thing a bug report or a self-hoster's "does this app work with my
  * server?" needs. The app's own half is a build-time constant, so it renders
  * identically in the prerendered HTML; the server's half arrives after mount.
+ *
+ * An owner or admin of a server that runs the opt-in update check also sees
+ * "vX.Y.Z is available", with the release notes and the Upgrading guide. The
+ * server decides and answers null for everybody else; the role only saves the
+ * request. Nothing here updates anything.
  */
 export function AppVersionInfo(): React.JSX.Element {
   const t = useT("settings");
@@ -21,6 +28,14 @@ export function AppVersionInfo(): React.JSX.Element {
     retry: false,
   });
   const server = health.data;
+  const { workspace } = useActiveWorkspace();
+  const mayUpgrade = workspace?.role === "owner" || workspace?.role === "admin";
+  const notice = trpc.settings.updateNotice.useQuery(undefined, {
+    enabled: mayUpgrade,
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+  const update = mayUpgrade ? notice.data ?? null : null;
   const serverVersion = server
     ? [server.release, server.commit ? `(${server.commit.slice(0, 7)})` : ""]
         .filter((part) => part !== "")
@@ -46,6 +61,28 @@ export function AppVersionInfo(): React.JSX.Element {
           {serverVersion !== ""
             ? t("about.server", { version: serverVersion, level: String(server.apiLevel) })
             : t("about.serverUnknown")}
+        </p>
+      ) : null}
+      {update ? (
+        <p data-testid="update-notice">
+          {t("about.updateAvailable", { version: update.version })}{" "}
+          <a
+            className="underline underline-offset-2"
+            href={update.releaseNotesUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("about.releaseNotes")}
+          </a>
+          {" · "}
+          <a
+            className="underline underline-offset-2"
+            href={`${SELF_HOSTING_URL}#upgrading`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("about.upgrading")}
+          </a>
         </p>
       ) : null}
     </div>

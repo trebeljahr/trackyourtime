@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 1;
+export const API_LEVEL = 2;
 
 export type ApiLevelChange = {
   level: number;
@@ -48,6 +48,13 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
       "`apiLevel`, `minClientApiLevel` and `commit` on `/api/health` and `health.check`.",
       "`clientVersion` and `apiLevel` on `devices.list` rows.",
       "The `CLIENT_TOO_OLD` refusal (`data.versionRefusal` on tRPC, `problems/client-too-old` on REST).",
+    ],
+  },
+  {
+    level: 2,
+    release: "0.1.0",
+    added: [
+      "`settings.updateNotice`: the newest release, for owners and admins of a server with `TRACKYOURTIME_UPDATE_CHECK` on.",
     ],
   },
 ];

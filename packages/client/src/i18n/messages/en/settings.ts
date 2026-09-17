@@ -15,6 +15,10 @@ export const settings = {
     apiLevel: "API level {level}",
     server: "Server: {version}, API level {level}",
     serverUnknown: "Server: version unknown",
+    /** Owners and admins, when the server's opt-in update check found a newer release. */
+    updateAvailable: "v{version} is available.",
+    releaseNotes: "Release notes",
+    upgrading: "How to upgrade",
   },
   page: {
     title: "Settings",

@@ -10,6 +10,9 @@ export const settings: Translation<typeof source> = {
     apiLevel: "API-Level {level}",
     server: "Server: {version}, API-Level {level}",
     serverUnknown: "Server: Version unbekannt",
+    updateAvailable: "v{version} ist verfügbar.",
+    releaseNotes: "Versionshinweise",
+    upgrading: "So aktualisierst du",
   },
   page: {
     title: "Einstellungen",

@@ -178,6 +178,11 @@ export function parseBooleanDefaultOn(raw: string): boolean {
   return !["false", "0", "no", "off"].includes(raw.trim().toLowerCase());
 }
 
+/** Off unless the value explicitly says on. */
+export function parseBooleanDefaultOff(raw: string): boolean {
+  return ["true", "1", "yes", "on"].includes(raw.trim().toLowerCase());
+}
+
 export const env = {
   NODE_ENV: getOptional("NODE_ENV", "development"),
   PORT: getPositiveInt("PORT", 5000),
@@ -322,6 +327,13 @@ export const env = {
   // off leaves the runaway guard to its lazy on-read evaluation and sends no
   // reminder emails.
   SCHEDULER_ENABLED: parseBooleanDefaultOn(getOptional("SCHEDULER_ENABLED")),
+
+  // Update notice (services/update-check.ts). OFF unless set to
+  // true/1/yes/on: with it off the server makes no request to GitHub, or to
+  // anything outside its own stack. On, a daily job reads the public list of
+  // Track Your Time releases and owners and admins see "vX.Y.Z is available"
+  // in Settings. It never updates anything.
+  TRACKYOURTIME_UPDATE_CHECK: parseBooleanDefaultOff(getOptional("TRACKYOURTIME_UPDATE_CHECK")),
 
   // Monitoring
   SENTRY_DSN: getOptional("SENTRY_DSN"),

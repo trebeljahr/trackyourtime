@@ -169,6 +169,10 @@ services:
       # The app is feature-complete without any of them: sign-in, tracking,
       # reports, invoices, import and export all work with this block unset.
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # true = once a day, read the public release list on api.github.com and
+      # tell owners and admins in Settings when a newer release exists. Empty
+      # makes no request outside this stack. Never updates anything.
+      TRACKYOURTIME_UPDATE_CHECK: ${TRACKYOURTIME_UPDATE_CHECK:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       STRIPE_MODE: ${STRIPE_MODE:-}

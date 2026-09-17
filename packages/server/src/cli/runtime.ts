@@ -86,7 +86,21 @@ export async function doctorInputsFromEnv(): Promise<DoctorInputs> {
   const { env, getTrustedOrigins } = await loadEnv();
   const email = await import("../services/email.js");
 
+  const { API_LEVEL } = await import("@starter/shared");
+  const { SCHEMA_VERSION } = await import("../services/migrations/index.js");
+
   return {
+    version: {
+      release: env.RELEASE,
+      apiLevel: API_LEVEL,
+      schemaVersion: SCHEMA_VERSION,
+      updateCheck: env.TRACKYOURTIME_UPDATE_CHECK,
+    },
+    releaseCheck: () =>
+      withDatabase(async (db) => {
+        const { readReleaseCheck } = await import("../services/update-check.js");
+        return readReleaseCheck(db);
+      }),
     urls: {
       appUrl: env.APP_URL,
       frontendUrl: env.FRONTEND_URL,
