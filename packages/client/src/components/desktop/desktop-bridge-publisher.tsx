@@ -11,6 +11,7 @@ import type {
   TimeEntry,
 } from "@starter/shared";
 
+import { DesktopAttentionGuards } from "@/components/desktop/desktop-attention-guards";
 import { useEntryMutations } from "@/components/tracker/use-entry-mutations";
 import { RECENT_INPUT } from "@/hooks/use-favorites";
 import { useIsElectron } from "@/hooks/use-shell";
@@ -26,6 +27,9 @@ const TRAY_RECENTS = 5;
 
 /** Settings listens for this when a tray click asks for its Desktop tab while it is already open. */
 export const SETTINGS_TAB_EVENT = "trackyourtime:settings-tab";
+
+/** The tracker screen, which mounts its own idle and runaway guards. */
+const isTrackPath = (path: string | null): boolean => path === "/app/track" || path === "/app/track/";
 
 const selectRunning = (): TimeEntry | null => timerStore.getState().running;
 
@@ -90,15 +94,17 @@ export function buildDesktopTimerState(input: {
  * bar and the command palette take, so a stop from the tray while offline is
  * the same optimistic, queued row as a stop from the bar.
  *
- * Mounted once, in `AppShell`, beside the offline queue. Renders nothing, and
- * on the web it does nothing at all: every query is disabled and every effect
- * returns before touching a bridge that is not there.
+ * Mounted once, in `AppShell`, beside the offline queue. On the web it does
+ * nothing at all: every query is disabled, every effect returns before
+ * touching a bridge that is not there, and it renders nothing. In the desktop
+ * app it also keeps the idle and runaway guards running off /app/track
+ * (`DesktopAttentionGuards`), since a hidden window can sit on any screen.
  */
 export function DesktopBridgePublisher({
   onOpenPalette,
 }: {
   onOpenPalette: () => void;
-}): null {
+}): React.JSX.Element | null {
   const electron = useIsElectron();
   const t = useT("shell");
   const router = useRouter();
@@ -257,5 +263,6 @@ export function DesktopBridgePublisher({
     });
   }, [electron]);
 
-  return null;
+  // `electron` is false during hydration, so the prerendered tree is the web's.
+  return electron && !isTrackPath(pathname) ? <DesktopAttentionGuards /> : null;
 }

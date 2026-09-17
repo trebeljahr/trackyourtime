@@ -486,11 +486,15 @@ What the stage text got wrong or left out:
   posts only when the window is hidden, minimised or not focused, replaces a
   notice with the same tag, and on click shows the window and sends
   `open-prompt`, which routes to `/app/track`.
-- **The idle and runaway guards are still mounted by the tracker bar.** A window
-  closed while on Reports raises neither the prompt nor its notification until
-  `/app/track` mounts again. Moving the guards into the shell changes the web
-  app too, so it was left for a decision. The runaway notification is sent only
-  for the `flagged` action (a question about a timer still running).
+- **The idle and runaway guards run on every screen in the desktop app only.**
+  On the web they stay in the tracker bar. The first version left them there
+  for Electron too, so a window hidden on Reports watched for no idleness and
+  posted no notification: Stage 5 was silent on every screen but one. Review
+  fix: `DesktopBridgePublisher` mounts `DesktopAttentionGuards` in Electron,
+  off `/app/track` only, so exactly one copy of each guard runs (two would
+  double every prompt). `electron` hydrates as false, so the prerender is
+  unchanged. The runaway notification is sent only for the `flagged` action
+  (a question about a timer still running).
 - **`backgroundThrottling: false` for every window, not only headless.** The
   hidden renderer owns the socket, the queue and the tray state, and Chromium's
   intensive throttling would hold a hidden page's timers to once a minute. The
@@ -556,6 +560,17 @@ Not run, and why:
   headless on macOS through the hook; none were seen on screen, and nothing ran
   on Windows.
 - The CI `desktop` job (still never run).
+
+Stage 4+5 review (2026-09-17). Rico asked mid-review that agents stop launching
+Electron sessions, which flash and take focus on his screen even with the
+headless switch set. So the review ran no Electron binary at all, and no
+harness spec or packaged build was run again. It read every change in the
+range and ran the plain-Node and jsdom suites on Node 24: client (133 files,
+1253 tests), the `electron/src` units (83) and core (107). The client suite
+fails 123 tests under Node 26, whose own `localStorage` global shadows
+jsdom's; this is not caused by this branch. A re-run of the harness should
+wait until Rico agrees to it. Also check whether macOS shows a Dock icon for
+the unpackaged `Electron.app` before `main.js` sets the accessory policy.
 
 ## Where it stands
 

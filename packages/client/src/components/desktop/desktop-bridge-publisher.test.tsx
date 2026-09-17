@@ -16,6 +16,10 @@ const { store } = vi.hoisted(() => ({ store: { current: null as ReturnType<typeo
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), usePathname: () => pathname }));
 vi.mock("@/components/tracker/use-entry-mutations", () => ({ useEntryMutations: () => mutations }));
+const idleGuard = vi.fn();
+const runawayGuard = vi.fn();
+vi.mock("@/components/tracker/use-idle-guard", () => ({ useIdleGuard: () => idleGuard() }));
+vi.mock("@/components/tracker/use-runaway-guard", () => ({ useRunawayGuard: () => runawayGuard() }));
 vi.mock("@/hooks/use-sync", async () => {
   const core = await import("@starter/core");
   store.current = core.createTimerStore();
@@ -146,6 +150,27 @@ describe("DesktopBridgePublisher", () => {
     render(<DesktopBridgePublisher onOpenPalette={() => undefined} />);
     expect(recentQuery.mock.calls.every(([, options]) => (options as { enabled: boolean }).enabled === false)).toBe(true);
     expect(projectQuery.mock.calls.every(([, options]) => (options as { enabled: boolean }).enabled === false)).toBe(true);
+  });
+
+  it("keeps the idle and runaway guards running off the tracker, in the desktop app only", async () => {
+    render(<DesktopBridgePublisher onOpenPalette={() => undefined} />);
+    expect(idleGuard).not.toHaveBeenCalled();
+    cleanup();
+
+    installBridge();
+    const view = render(<DesktopBridgePublisher onOpenPalette={() => undefined} />);
+    await act(async () => undefined);
+    expect(idleGuard).toHaveBeenCalled();
+    expect(runawayGuard).toHaveBeenCalled();
+    view.unmount();
+
+    // The tracker bar mounts its own copies there; two would double every prompt.
+    vi.clearAllMocks();
+    pathname = "/app/track/";
+    render(<DesktopBridgePublisher onOpenPalette={() => undefined} />);
+    await act(async () => undefined);
+    expect(idleGuard).not.toHaveBeenCalled();
+    expect(runawayGuard).not.toHaveBeenCalled();
   });
 
   it("publishes the running entry with its project, and signs out on unmount", async () => {
