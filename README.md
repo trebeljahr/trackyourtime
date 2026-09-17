@@ -8,7 +8,7 @@ At the end of the month, the hours become a report, a PDF invoice, or a ZUGFeRD 
 
 There's no paid plan, now or later. Use the hosted version at <https://trackyourtime.dev>, or run the same app on your own server from one compose file. The extensions and the phone apps work with either, because each one asks for a server address.
 
-The extensions and the phone apps aren't in their stores yet, and no release is tagged. Today you build them, and the self-host images, from source. [Not there yet](#not-there-yet) lists the other gaps.
+The extensions, the phone apps and the desktop app aren't in their stores yet, and no release is tagged. Today you build them, and the self-host images, from source. [Not there yet](#not-there-yet) lists the other gaps.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![build-and-deploy](https://github.com/trebeljahr/trackyourtime/actions/workflows/build-and-deploy.yml/badge.svg?branch=main)](https://github.com/trebeljahr/trackyourtime/actions/workflows/build-and-deploy.yml?query=branch%3Amain)
@@ -107,20 +107,20 @@ Everything is scoped to a workspace. A person can belong to several, and a works
 | **Browser extension** (Chrome MV3) | Working. Popup only, no content scripts: timer, badge, catalog, favorites, idle, the offline queue, a server picker, and optional activity-based entry suggestions. English and German. Version 0.1.0, not in the Chrome Web Store; you load it unpacked. |
 | **Raycast extension** (macOS) | Working. 5 commands — menu bar timer, Start / Stop Timer (hotkey-able, no window), a live timer view, Show All Time and Open Dashboard — with catalog CRUD through pushed forms and an offline queue (`packages/raycast/src/lib/offline.ts`). Not in the Raycast Store. |
 | **iOS and Android** (Capacitor) | Working from source. `ios/` and `android/` are committed, the bundle id is `com.trebeljahr.trackyourtime`, and `pnpm build:mobile` builds and syncs both. Keychain/Keystore session token, offline queue and running timer that survive an OS kill, safe areas, a bottom tab bar, and a server picker on the login screen. Not in the App Store or Google Play. See [`docs/mobile-app-plan.md`](docs/mobile-app-plan.md). |
-| **Desktop** (Electron) | Packages and navigates, but cannot sign in yet. `pnpm electron:preview` builds an unsigned app that serves the export from `app://-`, with a sender-checked IPC bridge, remembered window bounds, a macOS title-bar drag region and `powerMonitor`-backed idle reporting. No sign-in (the bearer path is still phone-only), no tray, no global shortcuts, no auto-update, no signing. [`docs/desktop-app-plan.md`](docs/desktop-app-plan.md) is the plan. |
+| **Desktop** (Electron: macOS, Windows, Linux) | Working from source, verified on macOS. Serves the export from `app://-` and signs in with a bearer token encrypted by `safeStorage`, by password or through the browser for two-factor and Google accounts. A menu bar or tray timer, four rebindable global shortcuts, open at login, notifications for idle and runaway prompts while the window is hidden, the offline queue and a server picker. The dmg, the Windows installer and the AppImage update themselves from GitHub Releases, installing on quit or on "Restart to update". Store and package-manager builds leave updates to their manager. `desktop-release.yml` builds every channel, signs when its secrets are set, and on a tag uploads to a draft release. No release is published and no store lists it, and the Windows and Linux builds have never run. See [`docs-site/docs/desktop.md`](docs-site/docs/desktop.md) and [`docs/desktop-app-plan.md`](docs/desktop-app-plan.md). |
 | **CLI** | No end-user CLI. `trackyourtime-cli` appears only as an allowlisted device-flow client id. The server image does ship an admin CLI for self-hosters (`node dist/cli/admin.js`). |
 | **MCP server** (`packages/mcp`) | Working. Lets Claude Desktop, Claude Code or any MCP client start and stop timers, log time, list entries, manage the catalog and run the summary report, through the public REST API with an API token. stdio only, not published to npm — run it from a clone. See [MCP server](#mcp-server). |
 
 ## Not there yet
 
 - **No release.** No git tag exists, so no self-host image has been published. `docker-compose.selfhost.yml` only pulls, which means a first start today needs the build override in `docker-compose.selfhost.build.yml` and about 4 GB of memory. [`docs/releasing.md`](docs/releasing.md) is the release process.
-- **No store listings.** The Chrome extension, the Raycast extension and the iPhone and Android apps all build from source.
+- **No store listings.** The Chrome extension, the Raycast extension, the iPhone and Android apps and the desktop app all build from source.
 - **Sign-up cannot be closed in the app.** Anyone who reaches a server can register. The self-hosting guide shows how to [block the sign-up endpoint at the proxy](docs/self-hosting.md#accounts-and-what-admin-means-here).
 - **No timesheet approval.** No submitted/approved state, no approver role, no lock-after-approval. Invoice status is invoice lifecycle, not time approval.
 - **Rates are per project, not per person.** An entry takes its project's rate, else the workspace default, so everyone on a project bills at the same rate.
 - **No client portal or shared reports.** A client cannot sign in or open a link to follow a project. Send them a report or an invoice as a PDF.
-- **No Firefox extension and no desktop app.** The extension is Chrome MV3 only; see the Electron row above.
-- **Two-factor sign-in does not work in the phone apps or the extension's password form.** The second step needs a cookie those clients cannot send. The extension's "Sign in with the web app" button and Raycast use the device flow instead, where you approve the sign-in in a browser. Google sign-in is web-only too.
+- **No Firefox extension.** The extension is Chrome MV3 only.
+- **Two-factor sign-in does not work in the phone apps or the extension's password form.** The second step needs a cookie those clients cannot send. The extension's "Sign in with the web app" button, the desktop app's "Sign in with your browser" and Raycast use the device flow instead, where you approve the sign-in in a browser. Google sign-in is web-only too, for the same reason.
 - **Time off, PTO, holidays, absence.** No model and no screen, so nothing computes capacity or utilization.
 - **Notifications** are one reminder email per runaway timer. No web push and no digests.
 - **Avatar upload.** The server stores no files. `avatarUrl` is a field with no upload path behind it.

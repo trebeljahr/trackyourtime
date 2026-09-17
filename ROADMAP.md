@@ -47,10 +47,36 @@ clients on a self-hosted server, `.github/workflows/mobile-release.yml` builds
 and verifies a signed Android bundle, and `docs/store-assets/` holds listing
 material for the Chrome Web Store and Google Play.
 
-**Missing.** None of the four is in its store.
+**Missing.** None of the four is in its store. The desktop app's store
+channels are under "Shipping the desktop app" above.
 
 **Would have to be built.** Store listings, review, signing for iOS, and a
 release process per store. Blocked more by paperwork than by code.
+
+### Shipping the desktop app
+
+**Exists.** The Electron app works from source on macOS: `app://-`, bearer
+sign-in through `safeStorage` and browser sign-in, the menu bar or tray timer,
+rebindable global shortcuts, open at login, notifications for prompts while
+hidden, and the offline queue. `desktop-release.yml` builds the Developer ID
+dmg and zip, the Mac App Store pkg, the NSIS installer, the AppX and the Linux
+packages, signs each channel only with its complete secret set, and on a `v*`
+tag uploads the signed downloads and their update feeds to a draft release.
+The dmg, the Windows installer and the AppImage update themselves from
+published releases and never restart on their own. `/download` and
+[`docs-site/docs/desktop.md`](docs-site/docs/desktop.md) describe it.
+[`docs/desktop-app-plan.md`](docs/desktop-app-plan.md) records each stage.
+
+**Missing.** A published release. There are no signing certificates yet, and
+the Windows route (Azure Trusted Signing or a certificate) is undecided. The
+workflow has never run, so nothing has been built or launched on Windows or
+Linux. No store lists the app. An update from one published release to the next
+has not been observed, because it needs two signed releases.
+
+**Would have to be built.** Nothing large in code: the certificates, one
+dispatch per channel to fix what the first run finds, and the store
+submissions. Desktop activity capture (plan Stage 8) is a separate, later
+piece of work.
 
 ### Two-factor sign-in in the phone apps and the extension's password form
 
@@ -110,20 +136,6 @@ configured.
 Wanted or plausibly wanted, but larger, or dependent on the items above, or
 genuinely undecided. Items marked **undecided** are ones where the honest
 answer is that nobody has ruled either way — do not read them as planned.
-
-### The desktop app
-
-**Exists.** Electron is real but thin — window lifecycle, a persisted
-fullscreen preference, external-link handling and `powerMonitor`-backed idle
-over IPC. It has never been packaged.
-[`docs/desktop-app-plan.md`](docs/desktop-app-plan.md) surveys what is there
-and lays out the stages: an `app://` scheme, bearer sign-in through
-`safeStorage`, a tray timer and global shortcut, then signing and auto-update.
-
-**Missing.** Everything from Stage 0 of that plan onward.
-
-**Would have to be built.** What the plan says. Signing, notarization and the
-update channel are gated on open questions in it — read those before starting.
 
 ### Rates per person **(undecided)**
 

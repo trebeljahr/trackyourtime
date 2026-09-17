@@ -6,8 +6,7 @@ A release is a `vX.Y.Z` git tag. Pushing one runs
 - `ghcr.io/trebeljahr/trackyourtime-server`
 - `ghcr.io/trebeljahr/trackyourtime-client-selfhost`
 
-Both are built for `linux/amd64` and `linux/arm64`. Nothing is deployed, and
-no GitHub Release is created. The hosted instance still deploys from
+Both are built for `linux/amd64` and `linux/arm64`. Nothing is deployed. The hosted instance still deploys from
 `build-and-deploy.yml` on every push to `main`.
 
 The same tag also runs `.github/workflows/extension-release.yml`, which builds
@@ -15,8 +14,13 @@ the browser extension and, once its secrets exist, submits it to the Chrome
 Web Store. Without the secrets it only uploads the zip as an artifact. See
 [Chrome Web Store](#chrome-web-store).
 
-A tag runs no other workflow. `desktop-release.yml` and `mobile-release.yml`
-run on manual dispatch only.
+A tag also runs `desktop-release.yml`, which builds every desktop channel and
+uploads the signed downloads and their update feeds to a **draft** GitHub
+Release (docs/deploy.md → "Desktop release"). Publishing that draft is the
+desktop release: installed apps only see published releases, and they update
+from the next one they see.
+
+`mobile-release.yml` runs on manual dispatch only.
 
 ## What the workflow does
 

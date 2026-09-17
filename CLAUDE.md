@@ -170,6 +170,8 @@ pnpm test:electron                    # node:test over electron/src (part of tes
 pnpm test:e2e:desktop                 # Playwright _electron harness; own mongod + API
 pnpm electron:ensure                  # download the Electron binary if it is missing
 pnpm icons:desktop                    # regenerate icns/ico from build/icon.png
+node scripts/build-desktop.mjs --channel mac --package --mac dmg zip --arm64  # a release leg, locally
+node scripts/desktop-release-draft.mjs --artifacts <dir> --out <dir>         # what a tag attaches to the draft
 ```
 
 `build/icon.png` is generated — run `pnpm icons:brand` to re-derive it (and
@@ -268,6 +270,39 @@ built, and the rules that fail quietly if broken:
   A headless launch with no `TRACKYOURTIME_USER_DATA_DIR` uses
   `<profile>-headless`, never the installed app's profile: the mock keychain
   cannot decrypt its `session.bin`, and the store deletes what it cannot decrypt.
+- **Every channel is built by one workflow, and signing fails closed**
+  (`.github/workflows/desktop-release.yml`, `scripts/lib/desktop-release.mjs`,
+  docs/deploy.md → "Desktop release"). No secrets for a channel builds files
+  named `-unsigned`; a partial set refuses before the export. Which channel a
+  running copy came from is `distribution.ts` (`process.mas`,
+  `process.windowsStore`, `SNAP`, `FLATPAK_ID`, `APPIMAGE`), and it decides
+  both open at login and updates.
+- **Only direct downloads update themselves** (`updater-model.ts`,
+  `updater.ts`): the Developer ID dmg/zip, the NSIS installer and the
+  AppImage, and only when the app has an `app-update.yml`. The stores, Snap,
+  Flatpak, deb, rpm and tar.gz never load electron-updater. The feed comes from
+  `updateFeedFor` in the builder config: signed mac and win builds and every
+  Linux build get GitHub Releases, everything else gets `publish: null` —
+  **explicitly null**, because left undefined electron-builder guesses a GitHub
+  feed from `GH_TOKEN`, which every CI runner has. electron-updater is bundled
+  into `main.js` by esbuild and loaded lazily, never packed as a dependency.
+- **Never restart for an update on the person's behalf.** A download installs
+  on quit (`autoInstallOnAppQuit`); `quitAndInstall` has exactly one call site,
+  reached only from the tray's "Restart to update" item and the Settings →
+  Desktop button, and `updater-model.test.ts` greps the source to keep it that
+  way. `markQuitting()` (window.ts) runs first, because on macOS Squirrel
+  closes windows before `before-quit` and the hide-on-close handler would
+  otherwise swallow the restart. Headless runs a memory updater: no network, and
+  `__trackYourTimeDesktop.update` drives it.
+- **A tag builds a DRAFT release, and a person publishes it.** The
+  `draft-release` job attaches signed downloads and each `latest*.yml`, checks
+  every file a feed names against its sha512 and size, never attaches
+  `-unsigned` files or store packages, and never touches a published release.
+  electron-updater reads only published releases, so publishing is the release
+  decision. The Homebrew cask says `auto_updates true` for the same reason.
+- **`/download` never links what does not exist.** Every channel's address is
+  `DESKTOP_DOWNLOADS` in `lib/site-links.ts`, `null` until a release is
+  published or a store approves the listing.
 - **The harness proves auth from the server side.** `e2e/desktop/record-requests.mjs`
   is preloaded into the harness APIs and logs every request's origin, client,
   auth scheme and whether a Cookie was present; the harness's own Node calls

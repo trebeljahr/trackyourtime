@@ -528,8 +528,45 @@ nothing else. Outside it electron-builder fills the identity with `CN=ms` and
 the package name, so `build-desktop.mjs` refuses before anything is built.
 
 Artifacts go to the run's Actions artifacts, with a `SHA256SUMS-<leg>.txt`
-file. Nothing is published: the GitHub Release and the updater feed come in
-Stage 7 of `docs/desktop-app-plan.md`, and every store upload is manual.
+file. Every store upload is manual.
+
+### Tags, the draft release and updates
+
+The workflow also runs on every `v*` tag. After every leg passes, the
+`draft-release` job runs `scripts/desktop-release-draft.mjs` and creates or
+updates a **draft** GitHub Release for the tag:
+
+- It attaches the signed dmg, zip and blockmaps, the signed Windows installer,
+  every Linux download except the snap, one `SHA256SUMS.txt`, and the update
+  feeds `latest-mac.yml`, `latest.yml`, `latest-linux.yml` and
+  `latest-linux-arm64.yml`.
+- It never attaches a file named `-unsigned`, a pkg, an appx or a snap. An
+  unsigned mac or win leg is a warning on the run, so the draft simply has no
+  download for that platform.
+- It fails when a leg that should have a feed has none, or when a feed names a
+  file that is not attached or whose sha512 or size differs.
+- It refuses a tag whose release is already published. Tag a new version.
+
+**Publish the draft by hand.** electron-updater reads the latest *published*
+release, so nothing reaches installed apps until then. Prereleases are never
+offered.
+
+Which builds update themselves is decided twice. At build time,
+`updateFeedFor` in `scripts/lib/desktop-release.mjs` gives signed mac and win
+builds and every Linux build a GitHub feed (`app-update.yml`), and everything
+else `publish: null`. At run time, `updaterPolicy` in
+`electron/src/updater-model.ts` turns the updater on only for the Developer ID
+build, the NSIS install and the AppImage. The Mac App Store, the Microsoft
+Store, Snap, Flatpak, deb, rpm and tar.gz leave updates to their manager. A
+downloaded update installs on quit, or on "Restart to update" in Settings →
+Desktop or the tray. The app never restarts by itself.
+`TRACKYOURTIME_DISABLE_UPDATES=1` turns the updater off on a managed machine.
+
+When a release is published, set the three direct entries of
+`DESKTOP_DOWNLOADS` in `packages/client/src/lib/site-links.ts` to
+`https://github.com/trebeljahr/trackyourtime/releases/latest`, and each store
+entry to its listing once it is live. Until then `/download` says "not
+released yet".
 
 ### Secrets and variables
 
@@ -683,7 +720,9 @@ the same as in the stores.
    downloads the release files, renders the cask, winget and Flathub
    manifests with real checksums, uploads them as an artifact, and commits
    `Casks/track-your-time.rb` to the tap.
-3. Install with `brew install --cask <owner>/tap/track-your-time`. The official
+3. Install with `brew install --cask <owner>/tap/track-your-time`. The cask
+   says `auto_updates true`, because the app updates itself; `brew upgrade`
+   then skips it unless run with `--greedy`. The official
    `homebrew/cask` repository has notability requirements for new casks, so
    the tap comes first.
 

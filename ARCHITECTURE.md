@@ -68,7 +68,8 @@ build before anything resolves them — hence the ordering in `pnpm run build`.
 | `e2e/` | Playwright suite: 10 specs, `helpers.ts`, `db-utils.ts`, `serve-static.mjs`, `start-server.sh` (starts its own Mongo/Redis outside CI) |
 | `docs/` | `deploy.md` (the production topology) and `dev-setup.md` (a Tailscale/Caddy dev-URL guide that needs a private CLI) |
 | `scripts/` | Root tooling: `dev.mjs` (port resolution for `dev` / `dev:auto` / `dev:fixed`), `extension-id.mjs` + `lib/`, icon scripts, `newsletter-*.ts`, mobile dev shells |
-| `electron/` | `src/` — main process split by concern (`protocol.ts` serves the export on `app://-`, `window.ts`, `ipc.ts` with sender checks, `security.ts`, `menu.ts`, `idle.ts`) and `preload.ts`; bundled by `scripts/build-desktop.mjs` into `dist/`, packaged by `electron-builder.config.mjs` |
+| `electron/` | `src/` — main process split by concern (`protocol.ts` serves the export on `app://-`, `window.ts`, `ipc.ts` with sender checks, `security.ts`, `secure-store.ts` for the session token, `desktop.ts` wiring the tray, shortcuts, settings and notifications, `distribution.ts` for which channel installed the app, `updater-model.ts` and `updater.ts` for electron-updater) and `preload.ts`; pure modules have `*.test.ts` beside them. Bundled by `scripts/build-desktop.mjs` into `dist/`, packaged by `electron-builder.config.mjs`, released by `.github/workflows/desktop-release.yml` |
+| `packaging/` | Templates for the Homebrew cask, winget and Flathub manifests, filled from a published release by `scripts/desktop-manifests.mjs` |
 | `emails/` | `welcome.html` and `digest-sample.html`, used by the `newsletter:*` scripts |
 | `resources/`, `build/` | Source images for mobile asset generation, and electron-builder's `buildResources` (`build/icon.png`) |
 | `docker-compose.dev.yml` | Local infra only — Mongo 27017, Redis 6379. No app containers |
@@ -224,8 +225,8 @@ how that session travels.
 
 | Client | How the session travels |
 |---|---|
-| Web app, desktop/mobile webviews | Cookie. `packages/client/src/lib/auth-client.ts` |
-| Browser extension, Raycast, CLI | The same session token as `Authorization: Bearer <token>`, and as the `bearer.<token>` WebSocket subprotocol |
+| Web app | Cookie. `packages/client/src/lib/auth-client.ts` |
+| Desktop and phone apps, browser extension, Raycast, CLI | The same session token as `Authorization: Bearer <token>`, and as the `bearer.<token>` WebSocket subprotocol. The desktop app keeps it in `safeStorage`, the phones in the Keychain or Keystore |
 
 The `bearer` plugin in `packages/server/src/auth/auth.ts` resolves the header
 before `getSession()` runs, so by the time a request reaches `createContext` a
