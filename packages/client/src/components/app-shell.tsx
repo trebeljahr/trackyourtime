@@ -412,6 +412,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
             href="/app/track"
             className="flex h-14 items-center gap-2 px-4 font-semibold"
             data-testid="brand"
+            data-window-inset
           >
             <BrandMark />
             <span>Track Your Time</span>
@@ -473,6 +474,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
           <header
             className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-border bg-background/95 px-3 backdrop-blur md:px-6"
             data-testid="app-header"
+            data-window-drag
           >
             <Button
               variant="ghost"

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { matchLocaleList } from "@starter/shared";
 
 import { LOCALE_PENDING_ATTRIBUTE } from "@/i18n/config";
-import { NATIVE_SHELL_SCRIPT, THEME_SCRIPT, localeScript } from "./pre-paint";
+import { DESKTOP_SHELL_SCRIPT, NATIVE_SHELL_SCRIPT, THEME_SCRIPT, localeScript } from "./pre-paint";
 
 /*
  * The pre-paint marker, run for real.
@@ -40,6 +40,7 @@ afterEach(() => {
   document.body.className = "";
   document.body.removeAttribute("data-platform");
   Reflect.deleteProperty(window, "Capacitor");
+  Reflect.deleteProperty(window, "electronAPI");
   Reflect.deleteProperty(window, "matchMedia");
 });
 
@@ -88,6 +89,46 @@ describe("NATIVE_SHELL_SCRIPT", () => {
 
     expect(document.documentElement.classList.contains("cap")).toBe(true);
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+  });
+});
+
+describe("DESKTOP_SHELL_SCRIPT", () => {
+  it("does nothing without electronAPI — the web app, the PWA, the phones", () => {
+    run(DESKTOP_SHELL_SCRIPT);
+    expect(document.documentElement.className).toBe("");
+    expect(document.documentElement.getAttribute("data-platform")).toBeNull();
+  });
+
+  it("does nothing inside Capacitor", () => {
+    Object.assign(window, { Capacitor: nativeCapacitor });
+    run(DESKTOP_SHELL_SCRIPT);
+    expect(document.documentElement.classList.contains("electron")).toBe(false);
+  });
+
+  it("ignores an electronAPI that is not the desktop bridge", () => {
+    Object.assign(window, { electronAPI: { platform: "darwin" } });
+    run(DESKTOP_SHELL_SCRIPT);
+    expect(document.documentElement.className).toBe("");
+  });
+
+  it("marks <html> with the class and platform, and leaves <body> alone", () => {
+    Object.assign(window, { electronAPI: { isDesktop: true, platform: "darwin" } });
+    run(DESKTOP_SHELL_SCRIPT);
+    expect(document.documentElement.classList.contains("electron")).toBe(true);
+    expect(document.documentElement.getAttribute("data-platform")).toBe("darwin");
+    // Never the phone marker: native.css must not reach a desktop window.
+    expect(document.documentElement.classList.contains("cap")).toBe(false);
+    expect(document.body.className).toBe("");
+    expect(document.body.getAttribute("data-platform")).toBeNull();
+  });
+
+  it("survives the theme script running after it", () => {
+    Object.assign(window, { electronAPI: { isDesktop: true, platform: "linux" } });
+    Object.assign(window, { matchMedia: () => ({ matches: false }) });
+    run(DESKTOP_SHELL_SCRIPT);
+    run(THEME_SCRIPT);
+    expect(document.documentElement.classList.contains("electron")).toBe(true);
+    expect(document.documentElement.classList.contains("light")).toBe(true);
   });
 });
 

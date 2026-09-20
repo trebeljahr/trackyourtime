@@ -5,7 +5,7 @@ import nextTs from "eslint-config-next/typescript";
 const config = defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores([".next/**", "out/**", "node_modules/**", "eslint.config.mjs"]),
+  globalIgnores([".next/**", "out/**", "out-mobile/**", "out-desktop/**", "node_modules/**", "eslint.config.mjs"]),
 ]);
 
 export default config;

@@ -7,6 +7,9 @@ const E2E_CLIENT_PORT = process.env.E2E_CLIENT_PORT ?? "49762";
 
 export default defineConfig({
   testDir: "./e2e",
+  // e2e/desktop/ drives Electron with its own config, servers and build
+  // (`pnpm test:e2e:desktop`); none of it belongs to a browser project.
+  testIgnore: /[\\/]desktop[\\/]/,
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 2 : 0,

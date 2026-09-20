@@ -35,7 +35,7 @@
     "einvoice:validate": "node scripts/einvoice-validate.mjs",
     "icons:brand": "node scripts/icons-brand.mjs",
     "test": "pnpm run test:unit && pnpm run test:client && pnpm run test:e2e",
-    "test:unit": "pnpm --filter @starter/core run test && pnpm --filter trackyourtime-raycast run test && pnpm --filter @starter/server run test && pnpm --filter @starter/mcp run test && pnpm --filter @starter/extension run test",
+    "test:unit": "pnpm --filter @starter/core run test && pnpm --filter trackyourtime-raycast run test && pnpm --filter @starter/server run test && pnpm --filter @starter/mcp run test && pnpm --filter @starter/extension run test && pnpm run test:electron",
     "test:client": "pnpm --filter @starter/client run test",
     "test:e2e": "npx playwright test",
     "dev:infra": "docker-compose -f docker-compose.dev.yml up -d",
@@ -43,11 +43,11 @@
     "dev:infra:reset": "docker-compose -f docker-compose.dev.yml down -v",
     "typecheck": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm -r --filter '!@starter/shared' --filter '!@starter/core' run typecheck && pnpm typecheck:electron",
     "typecheck:electron": "tsc -p electron --noEmit",
-    "dev:desktop": "concurrently -k -n next,electron -c blue,magenta \"PORT=7130 pnpm --filter @starter/client dev\" \"wait-on http://localhost:7130 && pnpm electron:compile && ELECTRON_DEV_URL=http://localhost:7130 electron electron/main.js\"",
-    "build:desktop": "RELATIVE_ASSET_PREFIX=1 pnpm build:client && pnpm electron:compile",
-    "electron:compile": "tsc -p electron",
-    "electron:build": "pnpm build:desktop && electron-builder",
-    "electron:preview": "pnpm build:desktop && electron-builder --dir",
+    "dev:desktop": "concurrently -k -n next,electron -c blue,magenta \"PORT=7130 pnpm --filter @starter/client dev\" \"wait-on http://localhost:7130 && node scripts/ensure-electron.mjs && pnpm electron:compile && ELECTRON_DEV_URL=http://localhost:7130 electron electron/dist/main.js\"",
+    "build:desktop": "node scripts/build-desktop.mjs",
+    "electron:compile": "node scripts/build-desktop.mjs --electron-only",
+    "electron:build": "node scripts/build-desktop.mjs --package",
+    "electron:preview": "node scripts/build-desktop.mjs --package --dir",
     "icons:desktop": "node scripts/icons-desktop.mjs",
     "itch:push:mac": "butler push release/*-mac.zip $ITCH_USER/$ITCH_GAME:mac",
     "itch:push:win": "butler push release/*-win.exe $ITCH_USER/$ITCH_GAME:win",
@@ -68,7 +68,10 @@
     "newsletter:draft": "tsx scripts/newsletter-draft.ts",
     "newsletter:test-tx": "tsx scripts/newsletter-test-tx.ts",
     "newsletter:welcome": "tsx scripts/newsletter-welcome.ts",
-    "newsletter:verify": "tsx scripts/newsletter-verify.ts"
+    "newsletter:verify": "tsx scripts/newsletter-verify.ts",
+    "electron:ensure": "node scripts/ensure-electron.mjs",
+    "test:electron": "node --import tsx --test \"electron/src/**/*.test.ts\"",
+    "test:e2e:desktop": "npx playwright test --config e2e/desktop/playwright.config.ts"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
@@ -98,41 +101,6 @@
     "@capacitor/screen-orientation": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2"
-  },
-  "build": {
-    "appId": "com.trebeljahr.trackyourtime",
-    "productName": "Track Your Time",
-    "directories": {
-      "output": "release",
-      "buildResources": "build"
-    },
-    "files": [
-      "packages/client/out/**/*",
-      "electron/main.js",
-      "electron/preload.js",
-      "electron/package.json"
-    ],
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "icon": "build/icon.icns",
-      "category": "public.app-category.utilities"
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "build/icon.ico"
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ],
-      "icon": "build/icon.png",
-      "category": "Utility"
-    }
   },
   "description": "A simple time tracker application"
 }

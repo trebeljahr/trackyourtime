@@ -24,4 +24,5 @@ export * from "./members.js";
 export * from "./einvoice.js";
 export * from "./api-level.js";
 export * from "./capabilities.js";
+export * from "./desktop-bridge.js";
 export * from "./extension-bridge.js";

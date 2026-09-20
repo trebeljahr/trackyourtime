@@ -20,6 +20,13 @@
 @import "./standalone.css";
 
 /*
+ * Electron window chrome: the drag region and the macOS traffic-light inset.
+ * Every selector is under `html.electron` (DESKTOP_SHELL_SCRIPT), so, like
+ * native.css, it is inert on the web and in the phone apps by construction.
+ */
+@import "./desktop.css";
+
+/*
  * The pre-paint language gate — see LOCALE_SCRIPT in app/pre-paint.ts.
  * While <html data-locale-pending> is set, the app subtree is still the
  * prerendered English and must not be seen. `visibility` rather than

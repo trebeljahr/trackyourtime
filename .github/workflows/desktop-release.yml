@@ -2,7 +2,7 @@ name: Desktop Release
 
 # Manual dispatch only (Actions -> Desktop Release -> Run workflow); a `v*` tag
 # does not start it — see the note under `on:`. Each platform job builds an
-# Electron app, uploads it as an Actions artifact, and pushes it to itch.io via
+# Electron app (scripts/build-desktop.mjs + electron-builder.config.mjs), uploads it as an Actions artifact, and pushes it to itch.io via
 # butler when ITCH_API_KEY / ITCH_USER / ITCH_GAME are set as repo secrets.
 # Nothing it produces is code-signed.
 
@@ -87,54 +87,17 @@ jobs:
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
-      - name: Build client static export
-        run: pnpm build:client
-        env:
-          # `pnpm build:desktop` is `RELATIVE_ASSET_PREFIX=1 pnpm build:client`,
-          # and this workflow was running the inner half alone. Electron loads
-          # the export off file:// (`win.loadFile` in electron/main.ts), where a
-          # root-absolute "/_next/..." resolves against the FILESYSTEM root and
-          # every chunk 404s — a packaged app that opens a blank window from a
-          # perfectly green build.
-          #
-          # Set as step env rather than inline in the command because pnpm runs
-          # scripts through cmd.exe on the windows runner, where `VAR=1 pnpm ...`
-          # is not a command.
-          RELATIVE_ASSET_PREFIX: "1"
-
-      # A release artifact built against the wrong URL is worse than a failed
-      # build, because it gets distributed. Assert both build-time inlinings
-      # actually landed, before anything is packaged or pushed to itch.
-      - name: Verify the export is the export we asked for
-        shell: bash
-        run: |
-          set -euo pipefail
-          out=packages/client/out
-
-          if [ -z "${NEXT_PUBLIC_API_URL:-}" ]; then
-            echo "::error::NEXT_PUBLIC_API_URL is empty — the app would resolve every request against file://" >&2
-            exit 1
-          fi
-          if ! grep -rqF "$NEXT_PUBLIC_API_URL" "$out/_next/static"; then
-            echo "::error::NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL never reached the bundle" >&2
-            exit 1
-          fi
-          echo "✓ built against $NEXT_PUBLIC_API_URL"
-
-          # The mirror image of the assertion in scripts/build-mobile.mjs, which
-          # fails when a relative prefix DOES leak into a Capacitor build.
-          if ! grep -rqF '"./_next' "$out" --include='*.html'; then
-            echo "::error::no emitted HTML references \"./_next — RELATIVE_ASSET_PREFIX did not apply, and the packaged app will load nothing off file://" >&2
-            exit 1
-          fi
-          echo "✓ assets are file://-safe (relative prefix)"
-
-      - name: Compile Electron
-        run: pnpm electron:compile
+      # One script builds the desktop export (packages/client/out-desktop), checks
+      # that NEXT_PUBLIC_API_URL reached the bundle and that no HTML uses a
+      # relative "./_next" prefix, and bundles electron/src into electron/dist.
+      # The app serves that export from the privileged app://- scheme, so the
+      # assets are root-absolute like the web build's.
+      - name: Build the desktop export and main process
+        run: node scripts/build-desktop.mjs
 
       # build/icon.icns and build/icon.ico are generated from build/icon.png and
       # gitignored as such (.gitignore: "source of truth is build/icon.png"), but
-      # the electron-builder config in package.json names all three. Without this
+      # electron-builder.config.mjs names all three. Without this
       # step a mac or windows packaging run fails on a missing icon; linux uses
       # the .png directly and needs nothing, so this is a no-op there.
       - name: Generate desktop icons
@@ -147,7 +110,7 @@ jobs:
       # artifacts reach users through upload-artifact and butler below, never
       # through electron-builder.
       - name: Package (electron-builder)
-        run: pnpm exec electron-builder --${{ matrix.target }} --publish never
+        run: pnpm exec electron-builder --config electron-builder.config.mjs --${{ matrix.target }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

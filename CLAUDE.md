@@ -162,28 +162,77 @@ was deleted on 2026-09-16 (`docs/desktop-app-plan.md`, answer 5).
 ### Desktop (Electron)
 
 ```bash
-pnpm dev:desktop                      # Next dev + Electron window, HMR recovery
-pnpm build:desktop                    # static export + compile electron/
-pnpm electron:build                   # electron-builder → dmg/zip/exe/AppImage
-pnpm icons:desktop                    # regenerate icns/ico/png set (electron-icon-builder; cross-platform)
+NEXT_PUBLIC_API_URL=http://localhost:51591 pnpm electron:preview  # export + bundle + unpacked app in release/
+NEXT_PUBLIC_API_URL=… pnpm build:desktop  # export (out-desktop) + electron/dist, no packaging
+pnpm electron:build                   # the same, then electron-builder → dmg/zip/exe/AppImage
+pnpm dev:desktop                      # Next dev on 7130 + Electron window (UI iteration only)
+pnpm test:electron                    # node:test over electron/src (part of test:unit)
+pnpm test:e2e:desktop                 # Playwright _electron harness; own mongod + API
+pnpm electron:ensure                  # download the Electron binary if it is missing
+pnpm icons:desktop                    # regenerate icns/ico from build/icon.png
 ```
 
 `build/icon.png` is generated — run `pnpm icons:brand` to re-derive it (and
 every other shipped bitmap) from `packages/client/public/brand/mark-tile.svg`,
 then `pnpm icons:desktop` to fan it out to icns/ico. Do not hand-edit it.
-Bundle config lives in root `package.json` `"build"` (electron-builder).
 
-**Native windows never take focus during dev and agent runs.** Under
-`pnpm dev:desktop` the Electron window is shown with `showInactive()`;
-`TRACKYOURTIME_ELECTRON_BACKGROUND=1` does that anywhere and also hides the
-macOS Dock icon, `=0` restores a normal `show()`. A packaged build sets
-neither, so users are unaffected. The same rule for the other shells:
-`IOS_HEADLESS=1
-pnpm dev:ios` (simctl only; without it Simulator.app is opened with
-`open -g`), and `ANDROID_HEADLESS=1 pnpm dev:android` (emulator with
-`-no-window`). Screenshot with `simctl io` / `adb exec-out screencap`, never
-by bringing a window forward.
-Electron IPC bridge: `electron/preload.ts` exposes `window.electronAPI`.
+The plan and its measured corrections are `docs/desktop-app-plan.md`. What is
+built, and the rules that fail quietly if broken:
+
+- **The packaged app serves the export from `app://-`** (`electron/src/protocol.ts`,
+  a privileged standard scheme), resolving paths like `serve.mjs`
+  (`resolve-app-path.ts`, unit-tested). Never `file://`: that origin is `null`,
+  sign-in answers 403 `MISSING_OR_NULL_ORIGIN`, and every route but `/` blanks.
+  **Never change the scheme or host** — the origin keys `localStorage` (the
+  offline queue) and every server's `TRUSTED_ORIGINS`.
+- **Own export directory, `packages/client/out-desktop`,** written only by
+  `scripts/build-desktop.mjs`, which requires `NEXT_PUBLIC_API_URL`, asserts
+  it is in a chunk, refuses `"./_next` in any HTML and refuses while a dev
+  server owns `.next`. There is no `assetPrefix` anywhere any more.
+- **Main and preload are esbuild bundles in `electron/dist/`**; the package
+  holds only those, the export and package.json (`electron-builder.config.mjs`
+  `files`, with `!node_modules/**` — electron-builder otherwise packs the root
+  `dependencies`, which are the Capacitor plugins). The build lists the asar and
+  fails on anything else.
+- **Electron 42 has no install script.** The binary downloads on first
+  `require("electron")`; `scripts/ensure-electron.mjs` does it explicitly and
+  detects the truncated extraction Node 26 leaves behind (use Node 24).
+- **`window.electronAPI`'s type is `DesktopBridge` in
+  `packages/shared/src/desktop-bridge.ts`**, imported by the preload and by
+  `types/electron.d.ts`, with the IPC channel names beside it.
+- **Every IPC handler registers through `handle()` in `ipc.ts`,** which refuses
+  a sender frame outside `app://-` (or the dev URL, unpackaged only). A packaged
+  app ignores `ELECTRON_DEV_URL`.
+- **Security baseline** (`security.ts`): navigation and `window.open` never
+  leave the app origin (http(s) goes to the OS browser), no `<webview>`, every
+  permission denied but notifications; a CSP response header on HTML
+  (`csp.ts`, so the web export is untouched); `devTools: false` and no
+  Reload/DevTools menu items outside dev; fuses (RunAsNode, NODE_OPTIONS and
+  `--inspect` off, asar integrity and only-load-from-asar on). The inspector
+  fuse means Playwright's `_electron.launch` cannot drive a **packaged** build
+  (it times out); drive it with `--remote-debugging-port` and
+  `chromium.connectOverCDP`, or use the harness, which runs the same
+  `electron/dist/main.js` unpackaged.
+- **`html.electron` + `data-platform`** are set pre-paint
+  (`DESKTOP_SHELL_SCRIPT` in `app/pre-paint.ts`) and style only window chrome in
+  `styles/desktop.css`: `[data-window-drag]` (the app header) is the drag region,
+  and on macOS `[data-window-inset]` (the sidebar brand row) clears the traffic
+  lights of the title-bar-less window. Never `html.cap` — that means phone.
+- **One instance per profile** (`requestSingleInstanceLock`); a second launch
+  focuses the first and exits. `TRACKYOURTIME_USER_DATA_DIR` moves the profile
+  (and the lock) — the harness uses it.
+- **Closing the window hides it on macOS only.** Windows and Linux quit on close
+  until the tray exists (plan Stage 4); a hidden window with no tray is an app
+  nobody can reach.
+- **Sign-in does not work in the desktop app yet** (plan Stage 2): the bearer
+  path is gated on `isNative()`. The harness's signed-in specs attach a session
+  cookie from the main process as a documented stand-in.
+
+**Simulator and emulator runs never take focus either.** `IOS_HEADLESS=1 pnpm
+dev:ios` drives simctl only (without it Simulator.app is opened with `open -g`),
+and `ANDROID_HEADLESS=1 pnpm dev:android` boots the emulator with `-no-window`.
+Screenshot with `simctl io` / `adb exec-out screencap`, never by bringing a
+window forward.
 
 ### Mobile
 
@@ -546,9 +595,9 @@ sign-in: it has no host permissions, so all of its traffic is CORS. Off unless s
 says. `STORE_EXTENSION_ID` is recomputed from `STORE_EXTENSION_KEY` in
 `tests/env.test.ts`; rotate both or neither.
 
-Electron `file://` sends `Origin: null` and can't be trusted with
-credentials. Register a custom protocol in `electron/main.ts` and add
-it (e.g. `app://-`) instead.
+Electron serves the app from `app://-` (`electron/src/protocol.ts`), the
+origin to trust; `file://` would send `Origin: null`, which can't be trusted
+with credentials.
 
 ### Choosing a server on the phone
 

@@ -10,10 +10,8 @@ dist-prod/
 .next-*/
 .turbo/
 
-# Electron compiled output (source is electron/*.ts; compiled JS is generated)
-electron/main.js
-electron/preload.js
-electron/*.js.map
+# Electron bundle (electron/src/*.ts -> electron/dist/, by scripts/build-desktop.mjs)
+# is covered by `dist/` above.
 
 # Electron-builder release artifacts
 release/
@@ -59,12 +57,13 @@ android/app/*.jks
 android/app/release.keystore
 
 # Next.js static export output.
-# out/        — web build (`pnpm build:client`), Playwright, and the
-#               Electron/Tauri shells (`pnpm build:desktop`).
-# out-mobile/ — the Capacitor bundle only (`pnpm build:mobile`), kept separate
-#               so a test build can never be synced into the app.
+# out/         — web build (`pnpm build:client`) and Playwright.
+# out-mobile/  — the Capacitor bundle only (`pnpm build:mobile`), kept separate
+#                so a test build can never be synced into the app.
+# out-desktop/ — the Electron bundle only (`pnpm build:desktop`), same reason.
 packages/client/out/
 packages/client/out-mobile/
+packages/client/out-desktop/
 
 # Environment (committed: .env.example, .env.development, AND
 #              .env.production — because production values are

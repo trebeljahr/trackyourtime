@@ -136,6 +136,92 @@ Tooling facts for Stage 1:
   --import tsx src/index.ts` needs `SCHEDULER_ENABLED=false` only to keep logs
   quiet; with no mail transport, sign-up needs no email verification.
 
+### Stage 1 — packaged app that navigates, and the Tauri deletion (2026-09-16)
+
+Run on macOS arm64, Node 24.14.1, Electron 42.1.0, electron-builder 26.8.1.
+Verified on `pnpm electron:preview` (packaged, fused, ad-hoc signed) against a
+production-mode API with its own `mongod`, and by `pnpm test:e2e:desktop`
+(10 specs, green). What the stage text got wrong or left out:
+
+- **`allowBuilds: electron` fixes nothing.** Electron 42's package has *no*
+  install script: the binary is downloaded lazily by `index.js` on the first
+  `require("electron")`, or by its `install.js`. The entry was not added;
+  `scripts/ensure-electron.mjs` (`pnpm electron:ensure`) downloads explicitly
+  and is called by the build, the harness and CI. Measured on a fresh clone:
+  under **Node 26** `install.js` stops mid-extraction (a truncated
+  `Electron.app`, no `path.txt`) and still exits 0; Node 24 extracts fully. The
+  script checks `path.txt`, `dist/version` and the executable instead of the
+  exit code, and names Node 24 in its error. Run everything desktop on Node 24
+  (`.nvmrc`); the client Vitest suite also fails under Node 26 (localStorage).
+- **Fuses use electron-builder's built-in `electronFuses`**, not an `afterPack`
+  hook — it flips them right before signing, as required, and re-signs
+  ad hoc on arm64 (`resetAdHocDarwinSignature`). Read back from the binary:
+  RunAsNode, NodeOptions and CLI-inspect off; asar integrity, only-load-from-
+  asar and cookie encryption on; file-protocol extra privileges off.
+- **Consequence: Playwright's `_electron.launch` cannot drive a packaged build**
+  (it needs `--inspect`; measured: a 15 s timeout). The harness runs
+  `electron/dist/main.js` unpackaged, which is the same main, scheme and export.
+  The packaged build was driven with `--remote-debugging-port` +
+  `chromium.connectOverCDP` (no fuse covers that switch; Stage 6 should decide
+  whether a release build strips it). Note that `connectOverCDP` emulates a light
+  colour scheme, so dark-mode checks need raw CDP.
+- **The CSP is a response header** from the protocol handler (`csp.ts`), not a
+  `<meta>`, so the web export stays byte-identical. `script-src` needs
+  `'unsafe-inline'` (pre-paint scripts, RSC payload). No CSP violations were
+  logged on any nav destination.
+- **`@electron/asar` listing: 9.0 MB, 497 entries, no `node_modules`** (Stage 0:
+  10.8 MB with ten `@capacitor/*` packages). `files` needs an explicit
+  `!node_modules/**`: electron-builder adds production dependencies whatever
+  `files` lists. The `.app` is still 275 MB (it is Electron). The build script
+  fails if the asar holds anything but `package.json`, `electron/dist/` and
+  `packages/client/out-desktop/`.
+- **Hide-on-close is macOS-only for now.** On Windows and Linux the window
+  quits on close until Stage 4's tray exists — hiding with no tray leaves an
+  app nobody can reach or quit.
+- **A window drag region needs a no-drag list**, and the macOS brand row needed
+  more than an inset: 80 px of traffic-light clearance in the 14rem sidebar
+  wrapped "Track Your Time" onto two lines, so on macOS it is one size smaller
+  and `nowrap`. The brand row is a drag handle there, so the brand link is not
+  clickable on macOS (Track in the nav is the same place). The window's
+  800 px minimum is above Tailwind's `md`, so the sidebar always shows and the
+  hamburger never sits under the traffic lights. Screens without the shell
+  (login, 404) get a 2.5rem drag strip via `body:not(:has([data-window-drag]))`.
+  `trafficLightPosition` is `{ x: 16, y: 20 }` with `titleBarStyle: "hidden"`.
+- **`TRACKYOURTIME_USER_DATA_DIR`** moves `userData` (and with it the
+  single-instance lock) — the harness needs a fresh profile per launch. A
+  packaged app ignores `ELECTRON_DEV_URL` (verified by launching one with it set).
+- **The "every nav destination renders" spec needs a session, and Stage 1 has
+  no desktop sign-in.** The harness signs up from Node (with `Origin: app://-`:
+  Node's `fetch` sends `Sec-Fetch-Mode`, so better-auth demands a trusted origin)
+  and the main process attaches the cookie to API requests with
+  `webRequest.onBeforeSendHeaders`. Marked as a stand-in in
+  `e2e/desktop/support.ts`; Stage 2 replaces it with the login form. The spec
+  also asserts the client-side clicks stayed in one document (a marker on
+  `window`), because Next falls back to a full load when the RSC fetch fails,
+  which would pass every URL assertion — a negative control (404 for `.txt`)
+  failed as expected.
+- **`DESKTOP_APP_ORIGIN` lives in `packages/shared/src/desktop-bridge.ts`**
+  beside the bridge type and IPC channel names, not in `store-clients.ts`.
+  Stage 2(c) should import it from there rather than define a second one.
+- Routes are `/app/…` now (the plan's `/reports/` is `/app/reports/`).
+- **Tauri is gone** (answer 5): `src-tauri/`, `tauri-release.yml`, the four
+  scripts, `@tauri-apps/cli`, `RELATIVE_ASSET_PREFIX` (no `assetPrefix` remains
+  in `next.config.ts`), the `__TAURI_INTERNALS__` check and the docs. No code
+  ever listed `tauri://` origins — only README and CLAUDE.md did — so nothing in
+  a self-hoster's env becomes invalid. CHANGELOG and the v0.1.0 release notes
+  still mention `tauri-release.yml`, as history.
+- `desktop-release.yml` now calls `scripts/build-desktop.mjs` and the config
+  file; butler and signing stay for Stage 6.
+- The CI `desktop` job (build-and-deploy.yml) is written but **has not run**: it
+  lifts Ubuntu 24.04's `apparmor_restrict_unprivileged_userns` so Chromium's
+  sandbox works under `xvfb-run` rather than disabling the sandbox. Check its
+  first run.
+- **Not verified here:** a real mouse drag of the window and a screenshot of
+  the traffic lights (the computed `-webkit-app-region` values and the brand
+  inset were checked in the packaged app; an OS-level attempt read a zero
+  window geometry and was abandoned), Windows and Linux at runtime, and
+  `canDownloadFiles()`'s save dialog in Electron (the plan table's Stage 1 item).
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**

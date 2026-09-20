@@ -68,7 +68,7 @@ build before anything resolves them — hence the ordering in `pnpm run build`.
 | `e2e/` | Playwright suite: 10 specs, `helpers.ts`, `db-utils.ts`, `serve-static.mjs`, `start-server.sh` (starts its own Mongo/Redis outside CI) |
 | `docs/` | `deploy.md` (the production topology) and `dev-setup.md` (a Tailscale/Caddy dev-URL guide that needs a private CLI) |
 | `scripts/` | Root tooling: `dev.mjs` (port resolution for `dev` / `dev:auto` / `dev:fixed`), `extension-id.mjs` + `lib/`, icon scripts, `newsletter-*.ts`, mobile dev shells |
-| `electron/` | `main.ts`, `preload.ts` and their tsconfig — window lifecycle and the `powerMonitor` idle IPC bridge |
+| `electron/` | `src/` — main process split by concern (`protocol.ts` serves the export on `app://-`, `window.ts`, `ipc.ts` with sender checks, `security.ts`, `menu.ts`, `idle.ts`) and `preload.ts`; bundled by `scripts/build-desktop.mjs` into `dist/`, packaged by `electron-builder.config.mjs` |
 | `emails/` | `welcome.html` and `digest-sample.html`, used by the `newsletter:*` scripts |
 | `resources/`, `build/` | Source images for mobile asset generation, and electron-builder's `buildResources` (`build/icon.png`) |
 | `docker-compose.dev.yml` | Local infra only — Mongo 27017, Redis 6379. No app containers |

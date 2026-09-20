@@ -7,7 +7,7 @@ import { DeployRecovery } from "@/components/deploy-recovery";
 import { ExtensionBridge } from "@/components/extension-bridge";
 import { OG_IMAGE } from "@/lib/page-metadata";
 import { LocaleRoot } from "@/i18n/locale-root";
-import { LOCALE_SCRIPT, NATIVE_SHELL_SCRIPT, THEME_SCRIPT } from "./pre-paint";
+import { DESKTOP_SHELL_SCRIPT, LOCALE_SCRIPT, NATIVE_SHELL_SCRIPT, THEME_SCRIPT } from "./pre-paint";
 import "@/styles/globals.css";
 
 const SITE_DESCRIPTION =
@@ -62,6 +62,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: NATIVE_SHELL_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: DESKTOP_SHELL_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: LOCALE_SCRIPT }} />
         {/* OpenPanel analytics — replace with your client ID */}

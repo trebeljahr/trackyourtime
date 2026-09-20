@@ -107,7 +107,7 @@ Everything is scoped to a workspace. A person can belong to several, and a works
 | **Browser extension** (Chrome MV3) | Working. Popup only, no content scripts: timer, badge, catalog, favorites, idle, the offline queue, a server picker, and optional activity-based entry suggestions. English and German. Version 0.1.0, not in the Chrome Web Store; you load it unpacked. |
 | **Raycast extension** (macOS) | Working. 5 commands — menu bar timer, Start / Stop Timer (hotkey-able, no window), a live timer view, Show All Time and Open Dashboard — with catalog CRUD through pushed forms and an offline queue (`packages/raycast/src/lib/offline.ts`). Not in the Raycast Store. |
 | **iOS and Android** (Capacitor) | Working from source. `ios/` and `android/` are committed, the bundle id is `com.trebeljahr.trackyourtime`, and `pnpm build:mobile` builds and syncs both. Keychain/Keystore session token, offline queue and running timer that survive an OS kill, safe areas, a bottom tab bar, and a server picker on the login screen. Not in the App Store or Google Play. See [`docs/mobile-app-plan.md`](docs/mobile-app-plan.md). |
-| **Desktop** (Electron) | Real but thin, and never packaged. Window lifecycle, persisted fullscreen preference, external-link handling and `powerMonitor`-backed idle reporting over IPC. No tray, no global shortcuts, no auto-update, no signing. [`docs/desktop-app-plan.md`](docs/desktop-app-plan.md) is the plan. |
+| **Desktop** (Electron) | Packages and navigates, but cannot sign in yet. `pnpm electron:preview` builds an unsigned app that serves the export from `app://-`, with a sender-checked IPC bridge, remembered window bounds, a macOS title-bar drag region and `powerMonitor`-backed idle reporting. No sign-in (the bearer path is still phone-only), no tray, no global shortcuts, no auto-update, no signing. [`docs/desktop-app-plan.md`](docs/desktop-app-plan.md) is the plan. |
 | **CLI** | No end-user CLI. `trackyourtime-cli` appears only as an allowlisted device-flow client id. The server image does ship an admin CLI for self-hosters (`node dist/cli/admin.js`). |
 | **MCP server** (`packages/mcp`) | Working. Lets Claude Desktop, Claude Code or any MCP client start and stop timers, log time, list entries, manage the catalog and run the summary report, through the public REST API with an API token. stdio only, not published to npm — run it from a clone. See [MCP server](#mcp-server). |
 
@@ -227,7 +227,8 @@ pnpm run build:extension:prod # dist-prod/ -> https://api.trackyourtime.dev
 pnpm run extension:id [dev|prod]  # the chrome-extension:// origin to trust
 
 pnpm run dev:raycast         # ray develop
-pnpm run dev:desktop         # Next dev + an Electron window
+pnpm run dev:desktop         # Next dev + an Electron window (UI only; see the note below)
+NEXT_PUBLIC_API_URL=http://localhost:5159 pnpm run electron:preview  # packaged app over app://-
 ```
 
 ## Testing
@@ -237,6 +238,7 @@ pnpm run test:unit      # core, server (node:test), MCP and extension suites —
 pnpm run test:client    # Vitest suites in the client — jsdom, no services needed
 pnpm run test:e2e       # Playwright specs — REQUIRES DOCKER
 pnpm run test:mcp:integration  # MCP server over a real API — starts its own mongod
+pnpm run test:e2e:desktop      # the Electron app over app://- — starts its own mongod and API
 pnpm test               # all three in sequence
 
 pnpm run typecheck      # builds shared + core, then tsc --noEmit everywhere else

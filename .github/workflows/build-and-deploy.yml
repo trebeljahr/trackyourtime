@@ -146,6 +146,57 @@ jobs:
           BETTER_AUTH_URL: http://127.0.0.1:5006
           FRONTEND_URL: http://127.0.0.1:3001
 
+  # Also runs on both events, and reads no secret. The Electron harness
+  # (e2e/desktop/): its global setup builds the desktop export and the bundled
+  # main/preload, starts its own production-mode API against the mongo service
+  # below, and every spec launches electron/dist/main.js over app://-. Linux
+  # has no display, hence xvfb-run. Not in build-server's or build-client's
+  # `needs:`, so a desktop-only failure does not hold up a web deploy.
+  desktop:
+    runs-on: ubuntu-latest
+    needs: [verify]
+    permissions:
+      contents: read
+    services:
+      mongo-desktop:
+        image: mongo:7
+        ports:
+          - 27019:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      # shared and core are what the API and the client import from dist/.
+      - run: pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build
+      # Electron 42 has no install script; the binary arrives only when asked.
+      - run: pnpm run electron:ensure
+      # Chromium's shared libraries for the Electron binary.
+      - run: npx playwright install-deps chromium
+      # Ubuntu 24.04's AppArmor forbids the unprivileged user namespaces
+      # Chromium's sandbox needs, and Electron aborts at launch without them.
+      # Lifting that on the throwaway runner keeps `sandbox: true` in force
+      # under test instead of launching with --no-sandbox.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Run the desktop harness
+        run: xvfb-run --auto-servernum -- pnpm run test:e2e:desktop
+        env:
+          CI: "true"
+          MONGODB_URI: mongodb://127.0.0.1:27019/trackyourtime-desktop-e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: desktop-e2e-results
+          path: test-results/
+          if-no-files-found: ignore
+
   # PUSH ONLY. `docker/login-action` below authenticates to ghcr.io with
   # secrets.GITHUB_TOKEN, which is read-only on a fork PR — `push: true` would
   # fail with a 403. The `if:` is what keeps this job off pull requests; the

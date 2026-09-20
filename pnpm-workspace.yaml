@@ -1,14 +1,15 @@
 packages:
   - "packages/*"
   - "docs-site"
+# `electron` is deliberately NOT listed: since Electron 42 the package has no
+# install script at all. The binary is downloaded on first `require("electron")`
+# (or by its `install-electron` bin), which `scripts/ensure-electron.mjs` runs
+# explicitly for every desktop build and the CI desktop job.
 allowBuilds:
   '@sentry/cli': true
   core-js: true
   core-js-pure: true
-  # Electron's postinstall downloads the platform binary into
-  # node_modules/electron/dist. Without it `electron` and Playwright's
-  # `_electron.launch` find no executable on a fresh install.
-  electron: true
+  electron: set this to true or false
   electron-winstaller: true
   esbuild: true
   sharp: true

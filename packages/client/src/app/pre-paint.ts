@@ -49,6 +49,23 @@ export const THEME_SCRIPT = `(function(){try{var c=localStorage.getItem("trackyo
 export const NATIVE_SHELL_SCRIPT = `(function(){try{var c=window.Capacitor;if(!c||!c.isNativePlatform||!c.isNativePlatform())return;var r=document.documentElement;r.classList.add("cap");r.setAttribute("data-platform",c.getPlatform?c.getPlatform():"unknown");}catch(e){}})();`;
 
 /**
+ * Marks the document as running inside the Electron shell, before first paint.
+ *
+ * `html.electron` plus `data-platform` ("darwin" | "win32" | "linux") are what
+ * styles/desktop.css keys the window chrome off: the header as the window's
+ * drag region, and on macOS the inset that keeps content clear of the traffic
+ * lights, which sit inside the page because the window has no title bar. Set
+ * this late and the first frame paints the header under the traffic lights and
+ * then jumps.
+ *
+ * `window.electronAPI` is readable here: the preload runs before any page
+ * script, head scripts included. Same <html>-not-<body> argument as
+ * NATIVE_SHELL_SCRIPT. Deliberately separate from `html.cap`, which means
+ * "phone": a desktop window must get none of native.css.
+ */
+export const DESKTOP_SHELL_SCRIPT = `(function(){try{var e=window.electronAPI;if(!e||e.isDesktop!==true)return;var r=document.documentElement;r.classList.add("electron");if(typeof e.platform==="string")r.setAttribute("data-platform",e.platform);}catch(e){}})();`;
+
+/**
  * Decides the interface language before first paint, and hides the app until
  * React has rendered in it.
  *

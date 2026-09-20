@@ -1,0 +1,70 @@
+/*
+ * Electron window chrome.
+ *
+ * THE ONE RULE IN THIS FILE: every selector is under `html.electron`, which
+ * only the Electron shell sets (DESKTOP_SHELL_SCRIPT in app/pre-paint.ts,
+ * before first paint). The web app, the PWA and the phone apps never match
+ * any of it. Rules that would also be right on the web belong in globals.css.
+ *
+ * Two jobs, nothing else:
+ *
+ * 1. The drag region. The macOS window has no title bar (`titleBarStyle:
+ *    "hidden"` in electron/src/window.ts), so the app header is what the
+ *    person drags. `-webkit-app-region: drag` swallows clicks, so every
+ *    control inside a drag region opts back out with `no-drag`.
+ *
+ * 2. The traffic lights. They are drawn by macOS over the page at
+ *    `trafficLightPosition` { x: 16, y: 20 } — three 12px buttons ending near
+ *    x = 68. The sidebar's brand row sits exactly there, so on macOS it is
+ *    pushed right. The window's minimum width (800px) is above Tailwind's `md`
+ *    breakpoint, so the sidebar is always shown and the header's hamburger,
+ *    which would otherwise sit under the lights, never is.
+ *
+ * Windows and Linux keep their native frame and title bar, so only the drag
+ * rules for the header apply there (harmless: the frame already drags).
+ */
+
+html.electron [data-window-drag] {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+html.electron [data-window-drag] :is(a, button, input, select, textarea, label, [role="button"], [role="combobox"], [role="menuitem"], [role="tab"], [tabindex]) {
+  -webkit-app-region: no-drag;
+}
+
+html.electron[data-platform="darwin"] [data-window-inset] {
+  /*
+   * Clear the traffic lights (they end at x ≈ 68). The row is also a drag
+   * handle, so the brand link is not clickable here; Track in the nav is the
+   * same destination. 80px of inset leaves the 14rem sidebar too narrow for
+   * the wordmark at its web size (it wrapped onto two lines), so it steps
+   * down one size and never wraps.
+   */
+  padding-left: 5rem;
+  padding-right: 0.75rem;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  -webkit-app-region: drag;
+}
+
+/*
+ * Screens without the app shell (sign-in, 404) have no header to drag by and
+ * nothing to clear the traffic lights with. A strip across the top of the
+ * window does both; `:has()` keeps it off every screen that has a real header.
+ * Controls inside it stay clickable through the `no-drag` rule below, which
+ * Electron subtracts from the drag region whatever the stacking order.
+ */
+html.electron[data-platform="darwin"] body:not(:has([data-window-drag]))::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 2.5rem;
+  z-index: 2147483647;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+
+html.electron[data-platform="darwin"] body:not(:has([data-window-drag])) :is(a, button, input, select, textarea, label, [role="button"], [role="combobox"]) {
+  -webkit-app-region: no-drag;
+}
