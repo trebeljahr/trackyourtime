@@ -18,7 +18,9 @@ type SessionResult = {
 let appShell = false;
 let session: SessionResult = { data: null, isPending: true, error: null };
 
-vi.mock("@/lib/app-shell-host", () => ({ isAppShell: () => appShell }));
+vi.mock("@/lib/shell", async () =>
+  (await import("@/lib/shell-mock")).mockShellModule(() => (appShell ? "electron" : "web")),
+);
 vi.mock("@/lib/api-origin", () => ({ getAbsoluteApiOrigin: () => "https://api.trackyourtime.dev" }));
 vi.mock("@/lib/auth-client", () => ({
   useSession: () => session,

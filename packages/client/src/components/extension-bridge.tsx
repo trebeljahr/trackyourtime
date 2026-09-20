@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { getAbsoluteApiOrigin } from "@/lib/api-origin";
-import { isAppShell } from "@/lib/app-shell-host";
+import { isAppShell } from "@/lib/shell";
 import { signOut, useSession } from "@/lib/auth-client";
 import { approveDeviceCode } from "@/lib/device-approve";
 import {

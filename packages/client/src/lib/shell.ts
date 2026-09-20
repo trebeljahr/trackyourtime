@@ -81,3 +81,18 @@ export function shellTrustedOrigins(): string {
   if (isElectron()) return DESKTOP_APP_ORIGIN;
   return `${IOS_APP_ORIGIN},${ANDROID_APP_ORIGIN}`;
 }
+
+/**
+ * True anywhere the app is not served from the web app's own http(s) origin:
+ * the phone shells, the desktop app, and any other non-http document.
+ *
+ * The question it answers is "do this build's chunks ship inside the app?" —
+ * which is why it is a protocol test and not `isTokenShell()`. A shell must
+ * not reload on a missing chunk (the reload fetches the same files) and must
+ * not watch for deploys.
+ */
+export function isAppShell(): boolean {
+  if (typeof window === "undefined") return false;
+  if (isTokenShell()) return true;
+  return !/^https?:$/.test(window.location.protocol);
+}

@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { useT } from "@/i18n/use-t";
-import { isAppShell } from "@/lib/app-shell-host";
+import { isAppShell } from "@/lib/shell";
 import { isChunkLoadError, reloadOnceForChunkError } from "@/lib/chunk-reload";
 
 /**

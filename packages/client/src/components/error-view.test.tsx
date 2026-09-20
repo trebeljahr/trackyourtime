@@ -6,7 +6,9 @@ import { cleanup, render, screen } from "@testing-library/react";
 let shell = false;
 const reloadOnce = vi.fn(() => true);
 
-vi.mock("@/lib/app-shell-host", () => ({ isAppShell: () => shell }));
+vi.mock("@/lib/shell", async () =>
+  (await import("@/lib/shell-mock")).mockShellModule(() => (shell ? "electron" : "web")),
+);
 vi.mock("@/lib/chunk-reload", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/chunk-reload")>()),
   reloadOnceForChunkError: () => reloadOnce(),

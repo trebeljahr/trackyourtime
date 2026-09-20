@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "@/components/ui/sonner";
 import { translate } from "@/i18n/translate";
-import { isAppShell } from "@/lib/app-shell-host";
+import { isAppShell } from "@/lib/shell";
 import { watchChunkErrors } from "@/lib/chunk-reload";
 import {
   BUILD_COMMIT,

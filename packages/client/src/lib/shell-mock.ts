@@ -14,6 +14,7 @@ export const mockShellModule = (current: () => MockShell) => ({
   isCapacitor: (): boolean => current() === "capacitor",
   isElectron: (): boolean => current() === "electron",
   isTokenShell: (): boolean => current() !== "web",
+  isAppShell: (): boolean => current() !== "web",
   clientId: (): "web" | "trackyourtime-mobile" | "trackyourtime-desktop" =>
     current() === "capacitor"
       ? "trackyourtime-mobile"
