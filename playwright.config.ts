@@ -63,7 +63,13 @@ export default defineConfig({
       // The phone-layout spec belongs to the project below; without this it
       // would also run here at desktop width, where its whole premise (that
       // a 390pt browser still gets the web treatment) is untestable.
-      testIgnore: /mobile-shell\.spec\.ts/,
+      //
+      // The desktop pattern is repeated from the top level on purpose: a
+      // project's `testIgnore` REPLACES the config's rather than adding to
+      // it, so naming only the phone spec here put every `e2e/desktop/` spec
+      // back into this project — where they fail on the first fetch, because
+      // their servers are started by the other config's global setup.
+      testIgnore: [/[\\/]desktop[\\/]/, /mobile-shell\.spec\.ts/],
     },
     {
       /*
