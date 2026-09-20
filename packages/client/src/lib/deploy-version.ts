@@ -8,7 +8,7 @@
  * reload itself is always the person's decision (`lib/chunk-reload.ts` is the
  * fallback for the tab that did not take it).
  *
- * **Web only.** The Capacitor, Electron and Tauri shells carry their bundle
+ * **Web only.** The Capacitor and Electron shells carry their bundle
  * inside the app, so a deploy of the web image says nothing about them. They
  * also build without `NEXT_PUBLIC_BUILD_COMMIT`, which disables the watcher on
  * its own; `shouldWatchForDeploys` checks the host as well, so a shell built
@@ -28,7 +28,7 @@ export type DeployWatchHost = {
   bakedCommit: string;
   /** `next dev`, or a test run: no image, no `/version.json`. */
   isProductionBuild: boolean;
-  /** Capacitor, Electron or Tauri. */
+  /** Capacitor or Electron. */
   isAppShell: boolean;
 };
 

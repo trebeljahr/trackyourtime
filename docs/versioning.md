@@ -331,13 +331,12 @@ configured; add to the suite instead.
 
 The root `package.json` `version` is the single source of truth.
 
-- The Next export (web, Capacitor, Electron, Tauri) reads it in
+- The Next export (web, Capacitor, Electron) reads it in
   `next.config.ts` and inlines it as `NEXT_PUBLIC_APP_VERSION`
   (`lib/app-version.ts`).
 - The browser extension reads it in `manifest.config.ts` for the manifest, and
   `vite.config.ts` bakes it in as `VITE_APP_VERSION`.
 - Hand-kept copies: every `packages/*/package.json` that has a version,
-  `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`,
   `packages/raycast/src/lib/version.ts` (a Raycast Store submission has no root
   package.json), `packages/mcp/src/server.ts`, iOS `MARKETING_VERSION` and
   Android `versionName`. `scripts/lib/version-sync.test.mjs` fails when any of

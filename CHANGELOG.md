@@ -12,14 +12,16 @@ release, and [`docs/releasing.md`](docs/releasing.md) renames this heading
 when the tag is cut.
 
 That release publishes the web app and API as self-host images. The Raycast
-extension, the browser extension and the iOS and Android projects are in the
-repository and build from source.
+extension, the browser extension, the Electron desktop app and the iOS and
+Android projects are in the repository and build from source.
 
-Not part of it: no desktop app and no mobile app.
-`desktop-release.yml`, `mobile-release.yml` and `tauri-release.yml` run on
-manual dispatch only, so the `v0.1.0` tag builds none of them. Their output is
-unsigned. The tag also runs `extension-release.yml`, which submits the browser
-extension to the Chrome Web Store only when its store secrets are set.
+Not part of it: no mobile app in either store. `mobile-release.yml` runs on
+manual dispatch only, so the `v0.1.0` tag does not build it, and its output is
+unsigned. The tag does run `desktop-release.yml`, which uploads the desktop
+downloads and their update feeds to a **draft** GitHub Release; each channel is
+signed only where its complete secret set exists, and no certificates are
+configured yet. The tag also runs `extension-release.yml`, which submits the
+browser extension to the Chrome Web Store only when its store secrets are set.
 
 ### Added
 

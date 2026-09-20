@@ -38,7 +38,7 @@ function readRootVersion(): string {
 // origin; Capacitor's router resolves every asset from the bundle root; and
 // Electron serves it from the privileged `app://-` scheme (electron/src/
 // protocol.ts), which is a standard origin with a root. A relative "./" prefix
-// was needed only while Electron and Tauri loaded `index.html` off file://, and
+// was needed only while Electron loaded `index.html` off file://, and
 // it was wrong everywhere else: under `trailingSlash: true` a document at
 // /app/track/ resolves "./_next/…" to "/app/track/_next/…" and every chunk
 // 404s. `scripts/build-mobile.mjs` and `scripts/build-desktop.mjs` both refuse

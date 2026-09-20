@@ -70,7 +70,7 @@ const bridgeAvailable = (): boolean =>
  *
  * Renders nothing and decides everything in effects: the prerendered HTML is
  * the same on every host, and nothing runs before hydration. Inert in
- * Capacitor, Electron and Tauri, and in every browser where no extension
+ * Capacitor and Electron, and in every browser where no extension
  * connects to this origin. Mounted once, inside `AuthProvider`.
  */
 export function ExtensionBridge(): null {

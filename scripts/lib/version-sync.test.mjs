@@ -46,15 +46,6 @@ describe("release version copies", () => {
     }
   });
 
-  it("the Tauri config and crate match the root", () => {
-    assert.equal(JSON.parse(read("src-tauri/tauri.conf.json")).version, rootVersion, "tauri.conf.json");
-    const cargo = read("src-tauri/Cargo.toml");
-    const packageSection = cargo.split(/^\[/m).find((section) => section.startsWith("package]"));
-    assert.ok(packageSection, "Cargo.toml has a [package] section");
-    const version = /^version\s*=\s*"([^"]+)"/m.exec(packageSection)?.[1];
-    assert.equal(version, rootVersion, "Cargo.toml [package] version");
-  });
-
   it("the Raycast and MCP constants match the root", () => {
     for (const version of single("packages/raycast/src/lib/version.ts", /export const APP_VERSION = "([^"]+)"/g)) {
       assert.equal(version, rootVersion, "packages/raycast/src/lib/version.ts");

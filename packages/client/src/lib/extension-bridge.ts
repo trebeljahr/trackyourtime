@@ -185,7 +185,7 @@ export const syncWithExtensions = async (
 export type ExtensionBridgeHost = {
   /**
    * Whether the bridge may run at all, asked before every exchange: the web
-   * app only (never Capacitor, Electron or Tauri), over http(s), with a
+   * app only (never Capacitor or Electron), over http(s), with a
    * `chrome.runtime` that can message an extension.
    */
   enabled: () => boolean;

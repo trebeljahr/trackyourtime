@@ -2519,7 +2519,7 @@ Rules that fail quietly if broken:
   bridge kinds are never accepted on `onMessage`, and popup messages never on
   `onMessageExternal`.
 - **Web only, after mount, after the session resolved.** Never under
-  `isAppShell()` (Capacitor, Electron, Tauri have no `chrome.runtime`, and the
+  `isAppShell()` (Capacitor and Electron have no `chrome.runtime`, and the
   prerendered HTML must not differ). A pending or failed session lookup is
   never sent as `userId: null`, or an offline page would sign the extension
   out. The target ids are `NEXT_PUBLIC_EXTENSION_IDS` (comma-separated, each

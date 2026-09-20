@@ -76,7 +76,7 @@ only.
    number. `/version.json`, the web bundle and the browser extension's
    manifest read it, and `pnpm build:mobile` fails until the iOS
    `MARKETING_VERSION` and the Android `versionName` match it. The other
-   hand-kept copies (Tauri, Raycast, the MCP server, the workspace
+   hand-kept copies (Raycast, the MCP server, the workspace
    `package.json` files) fail `pnpm run test:unit` until they match:
    `scripts/lib/version-sync.test.mjs` names each one. `extension-release.yml`
    fails before it uploads anything when the manifest does not match the tag,
