@@ -1547,6 +1547,14 @@ tax id, contact, payment details, payment terms, footer. **`Client.billing`**
 the customer's reference. `@starter/shared/business-identity` owns the one
 rule for both — blank is `null`, never `""` — and the snapshot helpers.
 
+The invoice PDF renderer lives in `@starter/invoice-pdf` (`renderInvoicePdf`,
+`invoice-pdf-blocks.ts`, `pdf-format.ts`, `sanitizePdfText`, and the pure
+`einvoice/format` and `einvoice/totals` helpers), so the same source renders on
+the server and in the browser. The server keeps the old module paths under
+`services/` as thin re-export shims — `services/invoice-pdf.ts` also wraps the
+package's `Uint8Array` in a `Buffer` — so every caller and test is unchanged and
+the bytes are identical (`invoice-pdf-package-parity.test.ts` pins it).
+
 Four rules, each of which fails quietly if broken:
 
 - **Both parties are frozen at `invoices.create`** (`Invoice.issuer`,
@@ -1845,12 +1853,15 @@ The output rules:
   `renderZugferdPdf` (`services/einvoice/pdfa3.ts`) passes a variant to
   `renderInvoicePdf` that registers Noto Sans under the names `Helvetica` and
   `Helvetica-Bold`; pdfkit resolves registered names first, so there is no second
-  drawing to drift. Any literal standard-14 name in `invoice-pdf.ts`
-  (`.font("Times-Roman")`) silently puts an unembedded font into every ZUGFeRD
-  PDF and breaks PDF/A. Use `INVOICE_PDF_FONT_NAMES`. `invoice-pdf-blocks.ts`
-  holds pure helpers only (tax identity lines, breakdown rows, exemption
-  reasons, bank lines) and draws nothing; every label comes from the `invoice`
-  server catalog.
+  drawing to drift. The renderer itself lives in `@starter/invoice-pdf`
+  (`invoice-pdf.ts`, browser-safe, returns a `Uint8Array`); the server reaches
+  it through `services/invoice-pdf.ts`, which wraps the bytes in a `Buffer` and
+  is where a variant's Noto faces are read and injected. Any literal standard-14
+  name in the package's `invoice-pdf.ts` (`.font("Times-Roman")`) silently puts
+  an unembedded font into every ZUGFeRD PDF and breaks PDF/A. Use
+  `INVOICE_PDF_FONT_NAMES`. `invoice-pdf-blocks.ts` (also in the package) holds
+  pure helpers only (tax identity lines, breakdown rows, exemption reasons, bank
+  lines) and draws nothing; every label comes from the `invoice` catalog.
 - **The variant constructs the document with `font: ""`.** pdfkit's default
   loads the standard Helvetica and caches it under the very name the variant
   registers, so that cached standard font would win. Passing the Noto path
