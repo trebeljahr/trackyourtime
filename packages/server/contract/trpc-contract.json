@@ -1,5 +1,5 @@
 {
-  "apiLevel": 4,
+  "apiLevel": 6,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {

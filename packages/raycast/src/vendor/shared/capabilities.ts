@@ -42,11 +42,17 @@ export const REQUIRES_API_LEVEL = {
    */
   "tasks.color": 3,
   /**
+   * `invoices.update`, manual `lines` on `invoices.preview` / `create`, and
+   * blank invoices (no `from` / `to`). An older server refuses the procedure
+   * and strips `lines`, so the web app hides the editor and the blank flow.
+   */
+  "invoices.lines": 4,
+  /**
    * `settings.setBusinessLogo` / `clearBusinessLogo` and `logo` on the
    * profile. An older server answers the procedures with NOT_FOUND, so the
    * upload control is hidden there rather than offered and refused.
    */
-  "settings.businessLogo": 4,
+  "settings.businessLogo": 5,
 } as const satisfies Readonly<Record<string, number>>;
 
 export type Capability = keyof typeof REQUIRES_API_LEVEL;

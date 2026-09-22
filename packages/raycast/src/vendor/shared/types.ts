@@ -8,6 +8,7 @@ import type {
   TaxCategory,
 } from "./einvoice.js";
 import type { BusinessLogo } from "./business-logo.js";
+import type { InvoiceLineKind, InvoiceLineUnit } from "./invoice-lines.js";
 import type { Locale, LocalePreference } from "./locale.js";
 
 /** User theme preference. */
@@ -683,29 +684,60 @@ export type DeviceSession = {
  */
 export type InvoiceStatus = "draft" | "sent" | "paid";
 
-/** One billable line — a project or a task, rolled up over the range. */
+/**
+ * One line of an invoice: a project or a task rolled up over the range (a
+ * TIME line), or something typed onto a draft (a MANUAL line). Read the
+ * quantity, unit and price through `lineQuantity` / `lineUnit` /
+ * `lineUnitPrice` in `invoice-lines.ts`: a row stored before manual lines
+ * existed carries none of the four optional keys and is a time line.
+ */
 export type InvoiceLineItem = {
-  /** Stable identity within the invoice: the project/task id, or "none". */
+  /**
+   * Stable identity within the invoice: the project/task id (or "none",
+   * either with an `@rate` suffix) on a time line, `manual:<id>` on a manual
+   * line (`MANUAL_LINE_KEY_PATTERN`).
+   */
   key: string;
   label: string;
   projectId: string | null;
   taskId: string | null;
-  /** Exact billed seconds, so the invoice can be re-derived. */
+  /** Absent = "time": every row written before manual lines existed. */
+  kind?: InvoiceLineKind;
+  /** Exact billed seconds, so the invoice can be re-derived. 0 on a manual line. */
   seconds: number;
-  /** `seconds` as decimal hours, rounded the way the line is billed. */
+  /** `seconds` as decimal hours, rounded the way the line is billed. 0 on a manual line. */
   hours: number;
-  /** Snapshot of the rate the line was billed at. */
+  /** Snapshot of the rate the line was billed at. On a manual line, the unit price again. */
   hourlyRate: number;
   currency: string;
-  /** `hours × hourlyRate`, rounded to 2dp. */
+  /** `quantity × unitPrice` (`hours × hourlyRate` on a time line), rounded to 2dp. */
   amount: number;
+  /** The billed quantity. Absent on a time line, where it is `hours`. */
+  quantity?: number;
+  /** The quantity's unit. Absent means `hour`. */
+  unit?: InvoiceLineUnit;
+  /** The price of one unit. Absent on a time line, where it is `hourlyRate`. */
+  unitPrice?: number;
   /** Absent on invoices created before e-invoicing, until attachEinvoiceData fills it. */
   taxCategory?: TaxCategory;
   /** Percent. Present iff taxCategory is. */
   taxRate?: number;
 };
 
-/** A generated invoice for one client over one date range. */
+/**
+ * Why `invoices.update` refused without touching the invoice. Sent as the
+ * `PRECONDITION_FAILED` message, so the client can translate it.
+ */
+export const INVOICE_UPDATE_REFUSALS = {
+  /** Only a draft is editable; a sent or paid invoice is a record. */
+  notDraft: "invoice-not-draft",
+  /** An e-invoice XML was issued from this draft: its figures are final. */
+  einvoiceIssued: "invoice-einvoice-issued",
+} as const;
+export type InvoiceUpdateRefusal =
+  (typeof INVOICE_UPDATE_REFUSALS)[keyof typeof INVOICE_UPDATE_REFUSALS];
+
+/** A generated invoice for one client, over one date range or none. */
 export type Invoice = {
   id: string;
   workspaceId: string;
@@ -721,11 +753,14 @@ export type Invoice = {
   issueDate: string;
   /** ISO date. */
   dueDate: string;
-  /** ISO date or datetime — start of the billed range, inclusive. */
-  from: string;
-  /** ISO date or datetime — end of the billed range. */
-  to: string;
-  /** Whether lines are one-per-project or one-per-task. */
+  /**
+   * ISO datetime — start of the billed range, inclusive. `null` on a blank
+   * invoice, which billed no tracked time and has no period.
+   */
+  from: string | null;
+  /** ISO datetime — end of the billed range, exclusive. `null` with `from`. */
+  to: string | null;
+  /** Whether time lines are one-per-project or one-per-task. */
   groupBy: "project" | "task";
   lineItems: InvoiceLineItem[];
   subtotal: number;
