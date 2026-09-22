@@ -251,7 +251,7 @@ export const checkRelease = ({ version, previousVersion, previous, next, readFil
 
   const changelog = readFile("CHANGELOG.md") ?? "";
   if (!changelog.includes(`## [${parsed.core}]`)) {
-    problems.push(`CHANGELOG.md has no "## [${parsed.core}]" heading (docs/releasing.md step 1)`);
+    problems.push(`CHANGELOG.md has no "## [${parsed.core}]" heading (docs/releasing.md → Steps, step 2)`);
   }
 
   const notesPath = `docs/release-notes/v${parsed.core}.md`;

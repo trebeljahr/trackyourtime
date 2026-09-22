@@ -4,8 +4,8 @@
  *
  *   pnpm release X.Y.Z [--dry-run] [--skip-tests] [--yes]
  *
- * docs/releasing.md → Steps is the contract; this script is its step 1 and 3
- * done in order, with the checks release.yml's `prepare` job would run on the
+ * docs/releasing.md → Steps is the contract; this script is its step 2,
+ * with the checks release.yml's `prepare` job would run on the
  * tag done first, here, where a failure costs nothing:
  *
  *  1. Refuses a dirty tree, a branch other than `main`, a `main` behind

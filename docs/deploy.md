@@ -549,7 +549,8 @@ updates a **draft** GitHub Release for the tag:
 
 **Publish the draft by hand.** electron-updater reads the latest *published*
 release, so nothing reaches installed apps until then. Prereleases are never
-offered.
+offered. `pnpm release:status vX.Y.Z` says whether the draft exists or is
+published (docs/releasing.md → Steps, step 6).
 
 Which builds update themselves is decided twice. At build time,
 `updateFeedFor` in `scripts/lib/desktop-release.mjs` gives signed mac and win

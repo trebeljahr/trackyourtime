@@ -1,6 +1,6 @@
 # Releasing
 
-A release is a `vX.Y.Z` git tag. Pushing one runs
+A release is a `vX.Y.Z` git tag; `pnpm release X.Y.Z` cuts one ([Steps](#steps)). Pushing it runs
 `.github/workflows/release.yml`, which publishes two images for self-hosters:
 
 - `ghcr.io/trebeljahr/trackyourtime-server`
@@ -71,44 +71,107 @@ only.
 
 ## Steps
 
-1. **Set the version, date the changelog, then push `main`.** Set
-   `"version"` in the root `package.json` to `X.Y.Z`. It is the one version
-   number. `/version.json`, the web bundle and the browser extension's
-   manifest read it, and `pnpm build:mobile` fails until the iOS
-   `MARKETING_VERSION` and the Android `versionName` match it. The other
-   hand-kept copies (Raycast, the MCP server, the workspace
-   `package.json` files) fail `pnpm run test:unit` until they match:
-   `scripts/lib/version-sync.test.mjs` names each one. `extension-release.yml`
-   fails before it uploads anything when the manifest does not match the tag,
-   because the Chrome Web Store refuses a version that is not higher than the
-   published one. If the release added a tRPC procedure, input field, enum
-   value or sync event kind, `API_LEVEL` must already be bumped
-   (`docs/versioning.md`).
+`pnpm release X.Y.Z` does steps 1 and 2 below on your machine and pushes
+nothing. The manual steps stay documented as what the script does, and each
+of them still works by hand.
 
-   In `CHANGELOG.md`, rename `## [Unreleased]` to
-   `## [X.Y.Z] - <release date>`, rewrite its opening
-   paragraph in the past tense, and add an empty `## [Unreleased]` above it.
-   Point the `[Unreleased]` link at `compare/vX.Y.Z...HEAD` and add a
-   `[X.Y.Z]` link to `releases/tag/vX.Y.Z`. Commit it. The tag must contain
-   the dated entry. The workflow builds what GitHub has, not
-   your local checkout. This must print nothing:
+1. **Write the record on `main`.** The script needs two things it cannot
+   write for you:
 
-   ```bash
-   git fetch origin && git rev-list origin/main..main
-   ```
+   - In `CHANGELOG.md`, rewrite the opening paragraph of `## [Unreleased]` in
+     the past tense. The script renames the heading and moves the body as it
+     is.
+   - `docs/release-notes/vX.Y.Z.md`, the body of the GitHub release page.
+     Without it, `pnpm release` writes a draft from the changelog section and
+     stops, so you can rewrite it for someone deciding whether to upgrade.
+     Commit it and run the command again. `--yes` releases with the draft as
+     it is.
 
-2. **Optional dry run.** Actions → release → Run workflow, on `main`, with
-   `tag` empty and `push` unchecked. It builds both images on both arches and
-   pushes nothing. It also fills the build cache that the tag run reads.
+   If the release added a tRPC procedure, input field, enum value or sync
+   event kind, `API_LEVEL` must already be bumped and its
+   `API_LEVEL_CHANGES` row must name this version (`docs/versioning.md`).
+   The policy check refuses otherwise.
 
-3. **Tag and push the tag.**
+2. **Cut the release.**
 
    ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
+   pnpm release 0.1.0 --dry-run   # prints the diff and the checks, writes nothing
+   pnpm release 0.1.0
    ```
 
-4. **Watch the run.** Actions → release.
+   The script refuses a working tree that is not clean, a branch other than
+   `main`, a `main` behind `origin/main`, tags on `origin` that this checkout
+   lacks, a version that is not higher than the root `package.json` (the
+   current version is allowed while no tag has it: that is the first
+   release), and an existing tag. Then, in this order:
+
+   1. Sets `"version"` in the root `package.json` to `X.Y.Z`. It is the one
+      version number. `/version.json`, the web bundle and the browser
+      extension's manifest read it. Sets every hand-kept copy to the same
+      value: each workspace `package.json` that has a version, the Raycast
+      `APP_VERSION` and the MCP `SERVER_VERSION` (the copies
+      `scripts/lib/version-sync.test.mjs` checks, so `pnpm run test:unit`
+      fails until they match), the iOS `MARKETING_VERSION` and the Android
+      `versionName` (which `pnpm build:mobile` checks). It raises the iOS
+      `CURRENT_PROJECT_VERSION` and the Android `versionCode` by one, since
+      App Store Connect and Play each refuse a build number they have seen.
+      Releasing the version the tree already carries leaves both build
+      numbers alone.
+   2. In `CHANGELOG.md`, renames `## [Unreleased]` to
+      `## [X.Y.Z] - <today>`, adds an empty `## [Unreleased]` above it,
+      points the `[Unreleased]` link at `compare/vX.Y.Z...HEAD` and adds a
+      `[X.Y.Z]` link to `releases/tag/vX.Y.Z`. An empty section refuses:
+      there is nothing to release.
+   3. Runs `scripts/release-policy-check.mjs` against the planned commit,
+      the same check as `release.yml`'s `prepare` job ([Checklist](#checklist)),
+      before a file is written. A dry run stops here and prints the diff.
+   4. Writes the files and runs `pnpm run test:unit` (`--skip-tests` skips
+      it). A failure restores every file it wrote.
+   5. Commits `chore(release): vX.Y.Z` and creates the annotated tag
+      `vX.Y.Z`. It never pushes. It prints the push commands and what each
+      one starts. To undo: `git tag -d vX.Y.Z && git reset --hard HEAD~1`.
+
+   The rewrites are `scripts/lib/release.mjs`, tested in
+   `scripts/lib/release.test.mjs`; the git and shell half is
+   `scripts/release.mjs`. Prereleases (`v0.2.0-rc.1`) are tagged by hand: the
+   stores take no prerelease version and the policy check skips their
+   written record.
+
+3. **Push `main`, then the tag.** The tag must contain the dated changelog
+   entry and the version bump. The workflows build what GitHub has, not your
+   local checkout.
+
+   ```bash
+   git push origin main && git push origin v0.1.0
+   ```
+
+   `main` starts `build-and-deploy.yml`, which deploys the hosted app. The
+   tag starts `release.yml` (self-host images), `extension-release.yml`
+   (browser extension), `desktop-release.yml` (desktop downloads into a
+   draft release), and `release-summary.yml` each time one of them finishes.
+   `mobile-release.yml` runs on manual dispatch only.
+
+   An optional dry run of the images before the tag: Actions → release → Run
+   workflow, on `main`, with `tag` empty and `push` unchecked. It builds both
+   images on both arches and pushes nothing. It also fills the build cache
+   that the tag run reads.
+
+4. **Watch the runs.**
+
+   ```bash
+   pnpm release:status            # the newest local v* tag
+   pnpm release:status v0.1.0
+   ```
+
+   One table: channel, workflow, result, run URL, and what the run did — smoke
+   and promote for the images, whether the store upload ran or was skipped
+   and why, how many desktop channels built and whether the draft exists or
+   is published, the Play and TestFlight uploads. It reads through `gh api`
+   only (`scripts/release-status.mjs`, tested in
+   `scripts/lib/release-status.test.mjs`). On GitHub, the same table is the
+   step summary of the newest `Release Summary` run for the tag
+   (`.github/workflows/release-summary.yml`, started by each tag workflow
+   finishing, `actions: read` and `contents: read` only).
 
    **On the first release, `smoke` fails, and that is expected.** GHCR creates
    a new package as private, so the anonymous pull of
@@ -144,18 +207,31 @@ only.
    Without Docker, `REGISTRY_ONLY=1` checks only that both tags can be pulled
    anonymously and list both arches.
 
-6. **Check nothing else ran.** Actions should show one `release` run and one
-   `Extension Release` run for the tag, and no desktop or mobile runs.
-   With the store secrets set, the extension run has submitted the new version
-   for review. Without them it is green with the notice "store upload
+6. **Check nothing else ran, then publish the release page.** Actions should
+   show one `release`, one `Extension Release` and one `Desktop Release` run
+   for the tag, plus the `Release Summary` runs they started, and no mobile
+   run. With the store secrets set, the extension run has submitted the new
+   version for review. Without them it is green with the notice "store upload
    skipped".
 
-   Then publish the release page. The workflow creates none. The body is
-   written ahead in `docs/release-notes/`:
+   The desktop run leaves a **draft** release for the tag with the downloads
+   attached and a placeholder body. Put the release notes on it and publish
+   it. Publishing is the desktop release: installed apps update from the
+   next published release they see.
+
+   ```bash
+   gh release edit v0.1.0 --title "v0.1.0" --notes-file docs/release-notes/v0.1.0.md
+   gh release edit v0.1.0 --draft=false
+   ```
+
+   If no draft exists (every desktop leg failed), create the page yourself:
 
    ```bash
    gh release create v0.1.0 --title "v0.1.0" --notes-file docs/release-notes/v0.1.0.md --verify-tag
    ```
+
+   Then, for the package managers, run Desktop Manifests from the tag
+   (docs/deploy.md → "Desktop release").
 
 7. **On the first release only, remove the "no release yet" statements.**
    They are true until step 5 passes and false after it. Find them with:

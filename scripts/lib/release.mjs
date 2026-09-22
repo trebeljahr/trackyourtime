@@ -3,7 +3,7 @@
  * free of git, the filesystem and the clock so every one of them is
  * unit-tested (`release.test.mjs`) against made-up files.
  *
- * What a release changes is docs/releasing.md → Steps, step 1: the root
+ * What a release changes is docs/releasing.md → Steps, step 2: the root
  * version and every hand-kept copy `version-sync.test.mjs` checks, the iOS and
  * Android build numbers, the dated CHANGELOG section with its links, and the
  * release notes the policy check requires.
@@ -166,7 +166,7 @@ const SECTION_END = /^(## \[|\[[^\]]+\]:\s*\S)/m;
 
 /**
  * CHANGELOG.md with `## [Unreleased]` renamed to `## [X.Y.Z] - <date>`, an
- * empty `## [Unreleased]` above it, and the links docs/releasing.md step 1
+ * empty `## [Unreleased]` above it, and the links docs/releasing.md step 2
  * names: `[Unreleased]` → `compare/vX.Y.Z...HEAD`, `[X.Y.Z]` →
  * `releases/tag/vX.Y.Z`. Returns the section's body too, for the notes.
  *
