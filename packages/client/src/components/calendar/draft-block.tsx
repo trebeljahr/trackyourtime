@@ -22,7 +22,9 @@ export type DraftBlockProps = {
   coarsePointer?: boolean;
 } & Omit<React.ComponentPropsWithoutRef<"div">, "onPointerDown" | "children">;
 
+/** The resize strip along each edge, for a mouse and for a finger. */
 const HANDLE_PX = 7;
+const TOUCH_HANDLE_PX = 14;
 const COMPACT_HEIGHT = 34;
 
 /**
@@ -49,7 +51,10 @@ export const DraftBlock = React.forwardRef<HTMLDivElement, DraftBlockProps>(
   ) {
     const t = useT("calendar");
     const touchAction = coarsePointer ? "pan-y" : "none";
+    const handlePx = coarsePointer ? TOUCH_HANDLE_PX : HANDLE_PX;
     const compact = height < COMPACT_HEIGHT;
+    // A finger has no cursor to tell it an edge resizes, so show one.
+    const grips = coarsePointer && !compact;
 
     return (
       <div
@@ -82,20 +87,28 @@ export const DraftBlock = React.forwardRef<HTMLDivElement, DraftBlockProps>(
           data-testid="calendar-create-draft-resize-start"
           aria-hidden
           className="absolute inset-x-0 top-0 cursor-ns-resize"
-          style={{ height: HANDLE_PX, touchAction }}
+          style={{ height: handlePx, touchAction }}
           onPointerDown={(event) => {
             onDraftPointerDown(event, "resize-start");
           }}
-        />
+        >
+          {grips ? (
+            <span className="bg-primary/40 absolute top-1 left-1/2 h-1 w-6 -translate-x-1/2 rounded-full" />
+          ) : null}
+        </div>
         <div
           data-testid="calendar-create-draft-resize-end"
           aria-hidden
           className="absolute inset-x-0 bottom-0 cursor-ns-resize"
-          style={{ height: HANDLE_PX, touchAction }}
+          style={{ height: handlePx, touchAction }}
           onPointerDown={(event) => {
             onDraftPointerDown(event, "resize-end");
           }}
-        />
+        >
+          {grips ? (
+            <span className="bg-primary/40 absolute bottom-1 left-1/2 h-1 w-6 -translate-x-1/2 rounded-full" />
+          ) : null}
+        </div>
         <div className="pointer-events-none flex h-full flex-col gap-0.5 overflow-hidden">
           <span className="truncate font-medium">
             {compact ? timeLabel : t("create.newEntry")}

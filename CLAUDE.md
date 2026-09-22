@@ -2483,6 +2483,42 @@ broken:
   "entries without a project". A time group narrows the range through
   `bucketRange`, clipped to the range on screen.
 
+### Calendar grid on a phone, a tablet and a touch screen
+
+The day and week grid (`components/calendar/time-grid.tsx`) is one pointer
+state machine for every input. A mouse or pen arms move, resize and
+drag-to-create on the press. A finger never does: the browser owns it as a
+scroll until it has rested for `LONG_PRESS_MS`, then the grid takes it over —
+hold empty grid to propose an entry (`TOUCH_CREATE_MINUTES`, stretched by the
+finger), hold a block to move it, hold its edge to resize it. A sideways
+finger steps to the next or previous range (`onSwipe`), two fingers pinch the
+zoom ladder around their midpoint, and any drag near the top or bottom of the
+scroll box scrolls it (with a finger there is no other way to reach an hour
+off screen). Rules that fail quietly if broken:
+
+- **`touch-action` cannot change mid-gesture; a non-passive `touchmove`
+  listener on the scroll box is what holds the scroll back.** It calls
+  `preventDefault` only while a press is armed or two fingers are down. The
+  first move after a rested finger is still cancelable; a finger that lands
+  during a momentum fling is not, and no code can take that one over.
+- **A second finger never begins a press** (`beginTouchPress` refuses while
+  `touchPointsRef` holds two). Its `pointerdown` bubbles to the column like
+  any other, and without the refusal a pinch's release read as a swipe.
+- **A long press is not a tap.** `armTouchPress` clears `touchTapRef`, since
+  the browser still fires a click for a finger that never left its spot.
+- **Drag deltas are measured against the grid, not the viewport**
+  (`gridYAtClientY`), because the edge auto-scroll moves the grid under a
+  pointer that has not moved.
+- **The grid sits in a padded wrapper** (`GRID_PAD_PX`): each gutter label is
+  centred on its rule, so the first hangs half a line above the grid and a
+  scroll box clips it — nothing scrolls to a negative offset. Every scroll
+  target and zoom anchor adds the pad.
+- **The screen's height is `.calendar-grid-screen` in globals.css**, computed
+  from the app chrome (`--app-header-offset`, `--app-tab-bar-offset`, main's
+  padding) so the grid scrolls inside the viewport whatever the toolbar wraps
+  to. Never a fixed `100dvh - <guess>`.
+- **Zoom buttons hide below `md`**; pinch, ctrl/⌘ + wheel and `+`/`-` remain.
+
 ### Web command palette and description autocomplete
 
 Cmd/Ctrl+K opens `components/command-palette/` on every protected screen; the

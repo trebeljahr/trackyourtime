@@ -2,7 +2,13 @@
 import "@testing-library/jest-dom/vitest";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import type { DetailedEntry } from "@starter/shared";
 
 // Same reason as time-grid.test.tsx: the grid needs display preferences, and
@@ -49,7 +55,7 @@ vi.mock("@/components/entry-fields/use-entry-fields", () => ({
 }));
 
 import { DEFAULT_VISIBLE_RANGE } from "./calendar-math";
-import { TimeGrid } from "./time-grid";
+import { LONG_PRESS_MS, TOUCH_CREATE_MINUTES, TimeGrid } from "./time-grid";
 import type { CalendarActions } from "./use-calendar-entries";
 
 /**
@@ -122,6 +128,9 @@ const actions = {
   create: vi.fn(),
 } as unknown as CalendarActions;
 
+const onSwipe = vi.fn();
+const onZoomBy = vi.fn();
+
 const renderGrid = () =>
   render(
     <TimeGrid
@@ -131,8 +140,41 @@ const renderGrid = () =>
       actions={actions}
       preferredRange={DEFAULT_VISIBLE_RANGE}
       pxPerMinute={1}
+      onZoomBy={onZoomBy}
+      onSwipe={onSwipe}
     />
   );
+
+type Touch = { pointerId: number; clientX?: number; clientY: number };
+
+const touchDown = (target: Element, touch: Touch): void => {
+  fireEvent.pointerDown(target, {
+    pointerType: "touch",
+    button: 0,
+    clientX: 0,
+    ...touch,
+  });
+};
+const touchMove = (target: Element, touch: Touch): void => {
+  fireEvent.pointerMove(target, { pointerType: "touch", clientX: 0, ...touch });
+};
+const touchUp = (target: Element, touch: Touch): void => {
+  fireEvent.pointerUp(target, { pointerType: "touch", clientX: 0, ...touch });
+};
+
+/** The finger rests long enough for the hold to fire. */
+const hold = (): void => {
+  act(() => {
+    vi.advanceTimersByTime(LONG_PRESS_MS + 1);
+  });
+};
+
+/** The draft's span in minutes: the grid renders at 1px per minute here. */
+const draftMinutes = (): number =>
+  parseFloat(screen.getByTestId("calendar-create-draft").style.height);
+/** Where the draft starts, in minutes from the top of the visible range. */
+const draftTop = (): number =>
+  parseFloat(screen.getByTestId("calendar-create-draft").style.top);
 
 /** A press-drag-release well past DRAG_THRESHOLD_PX. */
 const dragColumn = (pointerType: "touch" | "mouse"): void => {
@@ -154,6 +196,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 describe("TimeGrid under a coarse pointer", () => {
@@ -299,6 +342,246 @@ describe("TimeGrid under a coarse pointer", () => {
 
     expect(screen.getByTestId("calendar-edit-popover")).toBeInTheDocument();
     expect(actions.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("TimeGrid gutter", () => {
+  it("leaves air above the first label and below the last", () => {
+    renderGrid();
+
+    // Each label is centred on its rule, so the first hangs half a line above
+    // the grid. Without the pad the scroll box clips it — nothing scrolls to
+    // a negative offset.
+    const pad = screen.getByTestId("calendar-grid-pad");
+    expect(parseFloat(pad.style.paddingTop)).toBeGreaterThan(0);
+    expect(parseFloat(pad.style.paddingBottom)).toBeGreaterThan(0);
+  });
+});
+
+describe("TimeGrid held under a finger", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    coarse = true;
+  });
+
+  it("proposes a draft where the finger rested, and stretches it from there", () => {
+    renderGrid();
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+
+    touchDown(column, { pointerId: 1, clientY: 40 });
+    expect(
+      screen.queryByTestId("calendar-create-preview")
+    ).not.toBeInTheDocument();
+
+    hold();
+    expect(screen.getByTestId("calendar-create-preview")).toBeInTheDocument();
+
+    touchMove(column, { pointerId: 1, clientY: 160 });
+    touchUp(column, { pointerId: 1, clientY: 160 });
+    // The browser still fires a click for the release; a hold is not a tap.
+    fireEvent.click(column, { clientY: 160 });
+
+    expect(screen.getByTestId("calendar-create-draft")).toBeInTheDocument();
+    expect(draftMinutes()).toBe(120);
+  });
+
+  it("proposes a real block, not the snap minimum, when the finger never moves", () => {
+    renderGrid();
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+
+    touchDown(column, { pointerId: 1, clientY: 40 });
+    hold();
+    touchUp(column, { pointerId: 1, clientY: 40 });
+
+    expect(screen.getByTestId("calendar-create-draft")).toBeInTheDocument();
+    expect(draftMinutes()).toBe(TOUCH_CREATE_MINUTES);
+  });
+
+  it("is a pan, never a hold, once the finger has travelled before the timer", () => {
+    renderGrid();
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+
+    touchDown(column, { pointerId: 1, clientY: 40 });
+    touchMove(column, { pointerId: 1, clientY: 70 });
+    hold();
+    touchUp(column, { pointerId: 1, clientY: 70 });
+
+    expect(
+      screen.queryByTestId("calendar-create-draft")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("calendar-create-preview")
+    ).not.toBeInTheDocument();
+  });
+
+  it("moves a held block with the finger, and the release is not a tap", () => {
+    renderGrid();
+    const block = screen.getByTestId("calendar-entry-e1");
+
+    touchDown(block, { pointerId: 1, clientY: 40 });
+    hold();
+    touchMove(block, { pointerId: 1, clientY: 100 });
+    touchUp(block, { pointerId: 1, clientY: 100 });
+    fireEvent.click(block);
+
+    expect(actions.update).toHaveBeenCalledTimes(1);
+    expect(actions.update).toHaveBeenCalledWith(
+      "e1",
+      expect.objectContaining({
+        start: expect.any(String),
+        end: expect.any(String),
+      })
+    );
+    expect(
+      screen.queryByTestId("calendar-edit-popover")
+    ).not.toBeInTheDocument();
+  });
+
+  it("resizes a block held by its edge", () => {
+    renderGrid();
+    const handle = screen.getByTestId("calendar-entry-resize-end-e1");
+
+    touchDown(handle, { pointerId: 1, clientY: 40 });
+    hold();
+    touchMove(handle, { pointerId: 1, clientY: 100 });
+    touchUp(handle, { pointerId: 1, clientY: 100 });
+
+    expect(actions.update).toHaveBeenCalledTimes(1);
+    const [, patch] = vi.mocked(actions.update).mock.calls[0]!;
+    expect(patch).toHaveProperty("end");
+    expect(patch).not.toHaveProperty("start");
+  });
+
+  it("moves the draft itself when held, like a saved block", () => {
+    renderGrid();
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+
+    // A tap puts the draft down …
+    touchDown(column, { pointerId: 1, clientY: 40 });
+    touchUp(column, { pointerId: 1, clientY: 40 });
+    fireEvent.click(column, { clientY: 40 });
+    const draft = screen.getByTestId("calendar-create-draft");
+    const before = draftTop();
+
+    // … and a hold on it carries it down the grid.
+    touchDown(draft, { pointerId: 2, clientY: 60 });
+    hold();
+    touchMove(draft, { pointerId: 2, clientY: 120 });
+    touchUp(draft, { pointerId: 2, clientY: 120 });
+
+    expect(draftTop() - before).toBe(60);
+    expect(actions.create).not.toHaveBeenCalled();
+  });
+
+  it("gives the hold up the moment a second finger lands", () => {
+    renderGrid();
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+
+    touchDown(column, { pointerId: 1, clientX: 100, clientY: 40 });
+    touchDown(column, { pointerId: 2, clientX: 140, clientY: 40 });
+    hold();
+    touchUp(column, { pointerId: 2, clientX: 140, clientY: 40 });
+    touchUp(column, { pointerId: 1, clientX: 100, clientY: 40 });
+
+    expect(
+      screen.queryByTestId("calendar-create-draft")
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("TimeGrid swiped and pinched", () => {
+  beforeEach(() => {
+    coarse = true;
+  });
+
+  it("steps to the next range on a swipe left, the previous on a swipe right", () => {
+    renderGrid();
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+
+    touchDown(column, { pointerId: 1, clientX: 300, clientY: 40 });
+    touchMove(column, { pointerId: 1, clientX: 200, clientY: 48 });
+    touchUp(column, { pointerId: 1, clientX: 200, clientY: 48 });
+    expect(onSwipe).toHaveBeenLastCalledWith(1);
+
+    touchDown(column, { pointerId: 2, clientX: 100, clientY: 40 });
+    touchMove(column, { pointerId: 2, clientX: 220, clientY: 40 });
+    touchUp(column, { pointerId: 2, clientX: 220, clientY: 40 });
+    expect(onSwipe).toHaveBeenLastCalledWith(-1);
+
+    // A swipe never taps, so no draft goes down under it either.
+    fireEvent.click(column, { clientY: 40 });
+    expect(
+      screen.queryByTestId("calendar-create-draft")
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not read a short or a mostly vertical travel as a swipe", () => {
+    renderGrid();
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+
+    touchDown(column, { pointerId: 1, clientX: 300, clientY: 40 });
+    touchUp(column, { pointerId: 1, clientX: 270, clientY: 40 });
+    touchDown(column, { pointerId: 2, clientX: 300, clientY: 40 });
+    touchUp(column, { pointerId: 2, clientX: 200, clientY: 140 });
+
+    expect(onSwipe).not.toHaveBeenCalled();
+  });
+
+  it("does not open the editor for a swipe that started on a block", () => {
+    renderGrid();
+    const block = screen.getByTestId("calendar-entry-e1");
+
+    touchDown(block, { pointerId: 1, clientX: 300, clientY: 40 });
+    touchMove(block, { pointerId: 1, clientX: 200, clientY: 40 });
+    touchUp(block, { pointerId: 1, clientX: 200, clientY: 40 });
+    fireEvent.click(block);
+
+    expect(onSwipe).toHaveBeenCalledWith(1);
+    expect(
+      screen.queryByTestId("calendar-edit-popover")
+    ).not.toBeInTheDocument();
+  });
+
+  it("zooms in as two fingers spread and out as they close", () => {
+    renderGrid();
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+
+    touchDown(column, { pointerId: 1, clientX: 100, clientY: 100 });
+    touchDown(column, { pointerId: 2, clientX: 140, clientY: 100 });
+    // A little drift is not a step.
+    touchMove(column, { pointerId: 2, clientX: 145, clientY: 100 });
+    expect(onZoomBy).not.toHaveBeenCalled();
+
+    touchMove(column, { pointerId: 2, clientX: 200, clientY: 100 });
+    expect(onZoomBy).toHaveBeenLastCalledWith(1);
+
+    touchMove(column, { pointerId: 2, clientX: 120, clientY: 100 });
+    expect(onZoomBy).toHaveBeenLastCalledWith(-1);
+
+    touchUp(column, { pointerId: 2, clientX: 120, clientY: 100 });
+    touchUp(column, { pointerId: 1, clientX: 100, clientY: 100 });
+    expect(onSwipe).not.toHaveBeenCalled();
+  });
+
+  it("never ends a pinch in a swipe, whichever finger lifts first", () => {
+    renderGrid();
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+
+    // The second finger's press bubbles to the column like any other, and
+    // it travels far sideways as the fingers spread.
+    touchDown(column, { pointerId: 1, clientX: 100, clientY: 100 });
+    touchDown(column, { pointerId: 2, clientX: 130, clientY: 100 });
+    touchMove(column, { pointerId: 1, clientX: 20, clientY: 100 });
+    touchMove(column, { pointerId: 2, clientX: 220, clientY: 100 });
+    touchUp(column, { pointerId: 2, clientX: 220, clientY: 100 });
+    touchUp(column, { pointerId: 1, clientX: 20, clientY: 100 });
+    fireEvent.click(column, { clientY: 100 });
+
+    expect(onZoomBy).toHaveBeenCalled();
+    expect(onSwipe).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("calendar-create-draft")
+    ).not.toBeInTheDocument();
   });
 });
 

@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -346,9 +347,16 @@ export function CalendarScreen(): React.JSX.Element {
   };
 
   return (
-    <div className="space-y-4" data-testid="calendar-screen">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+    // The day and week grids scroll inside the viewport rather than with the
+    // page, so the screen takes the height under the app chrome
+    // (`.calendar-grid-screen`, globals.css) and the grid flexes into what
+    // the toolbar leaves — one row on a desktop, three on a phone.
+    <div
+      className={cn("flex flex-col gap-4", isGridView && "calendar-grid-screen")}
+      data-testid="calendar-screen"
+    >
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <Button
             variant="outline"
             size="icon"
@@ -382,14 +390,17 @@ export function CalendarScreen(): React.JSX.Element {
             <ChevronRight className="size-4" />
           </Button>
           <h1
-            className="ml-2 text-lg font-semibold"
+            className="ml-1 min-w-0 truncate text-base font-semibold sm:ml-2 sm:text-lg"
             data-testid="calendar-title"
           >
             {title}
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* On a phone the view switch takes a row of its own, first — it is
+            the control most reached for — and the rest share the row under
+            it. Zoom buttons go: a pinch, ctrl/⌘ + wheel and +/- cover it. */}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {isGridView ? (
             <Select
               value={rangeId}
@@ -399,7 +410,7 @@ export function CalendarScreen(): React.JSX.Element {
               }}
             >
               <SelectTrigger
-                className="w-36"
+                className="w-32 sm:w-36"
                 aria-label={t("toolbar.visibleHours")}
                 data-testid="calendar-range-select"
               >
@@ -421,7 +432,7 @@ export function CalendarScreen(): React.JSX.Element {
 
           {isGridView ? (
             <div
-              className="border-input flex items-center rounded-md border"
+              className="border-input hidden items-center rounded-md border md:flex"
               role="group"
               aria-label={t("toolbar.zoom")}
             >
@@ -466,15 +477,17 @@ export function CalendarScreen(): React.JSX.Element {
 
           <Tabs
             value={view}
+            className="order-first w-full sm:order-none sm:w-auto"
             onValueChange={(next) => {
               navigate({ view: isCalendarView(next) ? next : "week" });
             }}
           >
-            <TabsList>
+            <TabsList className="w-full sm:w-auto">
               {CALENDAR_VIEWS.map((candidate) => (
                 <TabsTrigger
                   key={candidate}
                   value={candidate}
+                  className="flex-1 sm:flex-none"
                   data-testid={`calendar-view-${candidate}`}
                 >
                   {tc(`time.${candidate}`)}
@@ -526,11 +539,13 @@ export function CalendarScreen(): React.JSX.Element {
 
           <Button
             size="sm"
+            className="ml-auto sm:ml-0"
+            aria-label={t("toolbar.addEntry")}
             data-testid="calendar-add-entry"
             onClick={openBlankDraft}
           >
             <Plus className="size-4" />
-            {t("toolbar.addEntry")}
+            <span className="hidden sm:inline">{t("toolbar.addEntry")}</span>
           </Button>
         </div>
       </div>
@@ -544,6 +559,7 @@ export function CalendarScreen(): React.JSX.Element {
           preferredRange={preferredRange}
           pxPerMinute={pxPerMinute}
           onZoomBy={zoomBy}
+          onSwipe={step}
         />
       ) : view === "month" ? (
         <MonthView

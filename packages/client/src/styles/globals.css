@@ -192,3 +192,30 @@ html[data-locale-pending] [data-locale-fixed] {
     -webkit-appearance: none;
   }
 }
+
+/*
+ * The calendar's day and week grids scroll inside the viewport rather than
+ * with the page: the screen takes what is left under the app header and
+ * main's padding (1rem top and bottom, 1.5rem from md), and the grid flexes
+ * into whatever the toolbar leaves. A fixed `100dvh - 15rem` guessed at the
+ * toolbar's height — one row on a desktop, three on a phone — and knew
+ * nothing of the tab bar. Both variables are set by native.css under
+ * `html.cap` and fall back to the web numbers here, so the phone's taller
+ * header and its tab bar are subtracted only where they exist. The minimum
+ * keeps a short landscape viewport usable by letting the page scroll instead
+ * of squeezing the grid to a strip.
+ */
+.calendar-grid-screen {
+  height: calc(
+    100dvh - var(--app-header-offset, 3.5rem) - 2rem - var(--app-tab-bar-offset, 0px)
+  );
+  min-height: 24rem;
+}
+
+@media (width >= 48rem) {
+  .calendar-grid-screen {
+    height: calc(
+      100dvh - var(--app-header-offset, 3.5rem) - 3rem - var(--app-tab-bar-offset, 0px)
+    );
+  }
+}

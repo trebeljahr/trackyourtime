@@ -49,7 +49,14 @@ export type EntryBlockProps = {
 const COMPACT_HEIGHT = 34;
 /** Below this only a single clipped line of title fits. */
 const TINY_HEIGHT = 21;
+/** The resize strip along each edge, for a mouse. */
 const HANDLE_PX = 7;
+/**
+ * The same strip for a finger, which lands within about a fingertip of where
+ * it meant to. Still short of half the block: a hold in the middle of a
+ * `COMPACT_HEIGHT` block has to stay a move.
+ */
+const TOUCH_HANDLE_PX = 14;
 
 /**
  * One entry drawn on the week grid. Purely presentational — every pointer
@@ -83,10 +90,14 @@ export const EntryBlock = React.forwardRef<HTMLDivElement, EntryBlockProps>(
   ) {
     const palette = blockPalette(entry.projectColor, isDragging || isSelected);
     const touchAction = coarsePointer ? "pan-y" : "none";
+    const handlePx = coarsePointer ? TOUCH_HANDLE_PX : HANDLE_PX;
     const tc = useT("common");
     const title = entry.description || tc("empty.noDescription");
     const compact = height < COMPACT_HEIGHT;
     const tiny = height < TINY_HEIGHT;
+    // A mouse has a cursor to say "this edge resizes"; a finger has nothing,
+    // so a block tall enough to have edges shows a grip on each.
+    const grips = coarsePointer && draggable && !compact;
     // Shingled blocks need an opaque backing, or the block behind bleeds
     // through the translucent tint and both titles become unreadable. The
     // tint is painted as a one-colour gradient layer over that backing.
@@ -151,20 +162,28 @@ export const EntryBlock = React.forwardRef<HTMLDivElement, EntryBlockProps>(
               data-testid={`calendar-entry-resize-start-${entry.id}`}
               aria-hidden
               className="absolute inset-x-0 top-0 cursor-ns-resize"
-              style={{ height: HANDLE_PX, touchAction }}
+              style={{ height: handlePx, touchAction }}
               onPointerDown={(event) => {
                 onBlockPointerDown(event, "resize-start");
               }}
-            />
+            >
+              {grips ? (
+                <span className="bg-foreground/25 absolute top-1 left-1/2 h-1 w-6 -translate-x-1/2 rounded-full" />
+              ) : null}
+            </div>
             <div
               data-testid={`calendar-entry-resize-end-${entry.id}`}
               aria-hidden
               className="absolute inset-x-0 bottom-0 cursor-ns-resize"
-              style={{ height: HANDLE_PX, touchAction }}
+              style={{ height: handlePx, touchAction }}
               onPointerDown={(event) => {
                 onBlockPointerDown(event, "resize-end");
               }}
-            />
+            >
+              {grips ? (
+                <span className="bg-foreground/25 absolute bottom-1 left-1/2 h-1 w-6 -translate-x-1/2 rounded-full" />
+              ) : null}
+            </div>
           </>
         ) : null}
 

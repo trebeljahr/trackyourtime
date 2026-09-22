@@ -15,6 +15,8 @@ import {
   CLUSTER_MIN_PX,
   DRAG_THRESHOLD_PX,
   MINUTES_PER_DAY,
+  MIN_DURATION_MINUTES,
+  SNAP_MINUTES,
   blockGeometry,
   clusterMicroBlocks,
   daySegment,
@@ -121,7 +123,74 @@ type DragState =
       anchorMin: number;
       range: MinuteRange;
       active: boolean;
+      /**
+       * The shortest block the drag proposes. A mouse drag can be as short
+       * as the snap allows; a long press proposes a real block first and the
+       * finger stretches it from there.
+       */
+      minDuration: number;
     };
+
+/**
+ * A finger resting on the grid. Until `LONG_PRESS_MS` passes it is a
+ * scroll, a swipe or a tap, and the browser owns it; after that the grid
+ * takes it over as the gesture `arm` names.
+ */
+type TouchPress = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  arm:
+    | { kind: "block"; block: Segment; mode: BlockDragMode; dayIndex: number }
+    | { kind: "draft"; mode: BlockDragMode }
+    | { kind: "column"; dayIndex: number }
+    | null;
+  /** The long press fired and the grid owns the finger from here. */
+  armed: boolean;
+};
+
+type Point = { x: number; y: number };
+
+/**
+ * Air above the first and below the last gutter label. Each label is centred
+ * on its rule, so the first one hangs half a line above the grid — which the
+ * scroll box clips, because nothing scrolls to a negative offset.
+ */
+const GRID_PAD_PX = 12;
+/** A finger held still this long arms a gesture instead of scrolling. */
+export const LONG_PRESS_MS = 400;
+/** Travel before the hold fires means the finger is panning or swiping. */
+const TOUCH_SLOP_PX = 10;
+/** Horizontal travel that steps the calendar to the previous or next range. */
+const SWIPE_MIN_PX = 56;
+/** What a long press on empty grid proposes before the finger stretches it. */
+export const TOUCH_CREATE_MINUTES = 30;
+/** How far two fingers move apart, or together, per zoom level. */
+const PINCH_STEP_RATIO = 1.25;
+/** A drag this close to the scroll box's edge scrolls it, faster nearer the edge. */
+const EDGE_SCROLL_PX = 40;
+const EDGE_SCROLL_MAX_PX_PER_FRAME = 14;
+
+const distance = (a: Point, b: Point): number =>
+  Math.hypot(a.x - b.x, a.y - b.y);
+
+/** A short tick where the platform offers one; iOS Safari offers none. */
+const buzz = (): void => {
+  if (
+    typeof navigator === "undefined" ||
+    typeof navigator.vibrate !== "function"
+  ) {
+    return;
+  }
+  try {
+    navigator.vibrate(10);
+  } catch {
+    // Some browsers refuse without a user activation; the gesture works anyway.
+  }
+};
 
 export type TimeGridProps = {
   /** The consecutive local days to render, left to right. At least one. */
@@ -133,8 +202,10 @@ export type TimeGridProps = {
   preferredRange: VisibleRange;
   /** Vertical scale. 1 is the 60px-per-hour baseline. */
   pxPerMinute: number;
-  /** Step the zoom ladder by `delta` levels, for ctrl/⌘ + wheel. */
+  /** Step the zoom ladder by `delta` levels, for ctrl/⌘ + wheel and pinch. */
   onZoomBy?: (delta: number) => void;
+  /** A horizontal finger swipe: `1` for the next range, `-1` for the previous. */
+  onSwipe?: (direction: -1 | 1) => void;
 };
 
 /**
@@ -149,6 +220,15 @@ export type TimeGridProps = {
  * drag puts one down over the dragged span, and the draft's edges and body
  * then drag like a saved block's while the popover anchored to it takes the
  * rest of the entry. Nothing is written until its Create button.
+ *
+ * A mouse or pen arms a gesture on the press. A finger never does: the
+ * browser owns it as a scroll until it has rested for `LONG_PRESS_MS`, after
+ * which the grid takes it over — a long press on empty grid proposes an
+ * entry the finger stretches, on a block (or the draft) moves it, on its edge
+ * resizes it — and a non-passive `touchmove` listener keeps the browser from
+ * scrolling underneath. A tap on empty grid still puts an hour's draft down.
+ * A finger that travels sideways instead steps to the next or previous
+ * range, and two fingers pinch the zoom ladder around their midpoint.
  */
 export function TimeGrid({
   days,
@@ -158,6 +238,7 @@ export function TimeGrid({
   preferredRange,
   pxPerMinute,
   onZoomBy,
+  onSwipe,
 }: TimeGridProps): React.JSX.Element {
   const format = useFormatSettings();
   const f = useFormat();
@@ -177,6 +258,14 @@ export function TimeGrid({
   /** The empty column a finger last pressed — see `handleColumnPointerDown`. */
   const touchColumnTapRef = React.useRef<number | null>(null);
   const draftRef = React.useRef<HTMLDivElement | null>(null);
+  /** The finger resting on the grid, if any. */
+  const touchPressRef = React.useRef<TouchPress | null>(null);
+  /** Every finger on the grid, for the pinch. */
+  const touchPointsRef = React.useRef<Map<number, Point>>(new Map());
+  /** The finger spread the last zoom step was measured against. */
+  const pinchBaseRef = React.useRef<number | null>(null);
+  /** Where the dragging pointer last was, for the edge auto-scroll. */
+  const lastPointerYRef = React.useRef<number | null>(null);
 
   const [drag, setDrag] = React.useState<DragState | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -324,7 +413,7 @@ export function TimeGrid({
     const target = firstEntryMin ?? preferredRange.startMin;
     node.scrollTop = Math.max(
       0,
-      offsetFromMinutes(target, pxPerMinute, visible) - 40
+      GRID_PAD_PX + offsetFromMinutes(target, pxPerMinute, visible) - 40
     );
     // Only re-aim when the visible days change, never on every tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -351,10 +440,11 @@ export function TimeGrid({
 
     const viewportY = anchor?.viewportY ?? node.clientHeight / 2;
     const minute =
-      anchor?.minute ?? visibleStart + (scrollTopRef.current + viewportY) / prevPx;
+      anchor?.minute ??
+      visibleStart + (scrollTopRef.current + viewportY - GRID_PAD_PX) / prevPx;
     node.scrollTop = Math.max(
       0,
-      offsetFromMinutes(minute, pxPerMinute, visible) - viewportY
+      GRID_PAD_PX + offsetFromMinutes(minute, pxPerMinute, visible) - viewportY
     );
   }, [pxPerMinute, visible, visibleStart]);
 
@@ -366,7 +456,8 @@ export function TimeGrid({
       event.preventDefault();
       const viewportY = event.clientY - node.getBoundingClientRect().top;
       zoomAnchorRef.current = {
-        minute: visibleStart + (node.scrollTop + viewportY) / pxPerMinute,
+        minute:
+          visibleStart + (node.scrollTop + viewportY - GRID_PAD_PX) / pxPerMinute,
         viewportY,
       };
       onZoomBy(event.deltaY < 0 ? 1 : -1);
@@ -376,6 +467,30 @@ export function TimeGrid({
       node.removeEventListener("wheel", onWheel);
     };
   }, [onZoomBy, pxPerMinute, visibleStart]);
+
+  // The browser decides at the first touch whether a finger scrolls, from
+  // `touch-action` — which cannot change mid-gesture. What can still stop the
+  // scroll is `preventDefault` on a cancelable `touchmove`, and a move is
+  // cancelable right up to the moment the browser commits to scrolling. A
+  // finger that rested for the long press has not moved, so the first move
+  // after the grid armed is still ours to refuse; and a second finger landing
+  // makes the pair a pinch rather than a two-finger scroll. (A finger that
+  // lands during a momentum fling is never cancelable; nothing can take that
+  // one over, and its hold is simply cancelled with the pointer.)
+  React.useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const onTouchMove = (event: TouchEvent): void => {
+      if (!event.cancelable) return;
+      if (touchPressRef.current?.armed || event.touches.length > 1) {
+        event.preventDefault();
+      }
+    };
+    node.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      node.removeEventListener("touchmove", onTouchMove);
+    };
+  }, []);
 
   // Escape aborts an in-flight drag without committing anything.
   const dragging = drag !== null;
@@ -396,8 +511,20 @@ export function TimeGrid({
     return minutesFromOffset(clientY - rect.top, pxPerMinute, visible);
   };
 
-  const capture = (event: React.PointerEvent<HTMLDivElement>): void => {
-    gridRef.current?.setPointerCapture(event.pointerId);
+  /**
+   * The pointer's offset inside the grid, not the viewport. A drag's delta
+   * has to be measured against the grid, because the edge auto-scroll moves
+   * the grid under a pointer that has not moved at all.
+   */
+  const gridYAtClientY = (clientY: number): number =>
+    clientY - (gridRef.current?.getBoundingClientRect().top ?? 0);
+
+  const capture = (pointerId: number): void => {
+    try {
+      gridRef.current?.setPointerCapture(pointerId);
+    } catch {
+      // The pointer is already gone; the up or cancel that follows cleans up.
+    }
   };
 
   const closePopovers = (): void => {
@@ -414,13 +541,17 @@ export function TimeGrid({
   };
 
   const armBlockDrag = (
-    event: React.PointerEvent<HTMLDivElement>,
+    pointer: { pointerId: number; clientY: number },
     mode: BlockDragMode,
     entryId: string,
     origin: MinuteRange,
-    dayIndex: number
+    dayIndex: number,
+    /** A long press is already past the threshold; a mouse press is not. */
+    active = false
   ): void => {
-    capture(event);
+    capture(pointer.pointerId);
+    lastPointerYRef.current = pointer.clientY;
+    const pointerStartY = gridYAtClientY(pointer.clientY);
     setDrag(
       mode === "move"
         ? {
@@ -429,8 +560,8 @@ export function TimeGrid({
             dayIndex,
             origin,
             range: origin,
-            pointerStartY: event.clientY,
-            active: false,
+            pointerStartY,
+            active,
           }
         : {
             kind: "resize",
@@ -439,10 +570,156 @@ export function TimeGrid({
             dayIndex,
             origin,
             range: origin,
-            pointerStartY: event.clientY,
-            active: false,
+            pointerStartY,
+            active,
           }
     );
+  };
+
+  const clearTouchPress = (): void => {
+    const press = touchPressRef.current;
+    if (press?.timer !== null && press?.timer !== undefined) {
+      clearTimeout(press.timer);
+    }
+    touchPressRef.current = null;
+  };
+
+  /** The long press fired: the grid takes the finger over from the browser. */
+  const armTouchPress = (pointerId: number): void => {
+    const press = touchPressRef.current;
+    if (!press || press.pointerId !== pointerId || press.armed || !press.arm) {
+      return;
+    }
+    // Two fingers are a pinch, whatever the first one was resting on.
+    if (touchPointsRef.current.size > 1) return;
+    press.timer = null;
+    press.armed = true;
+    // A long press is not a tap: the click the browser fires on release
+    // must not open the editor over a block that was just moved, nor put a
+    // draft down under one that was just proposed.
+    touchTapRef.current = null;
+    touchColumnTapRef.current = null;
+    buzz();
+    const pointer = { pointerId, clientY: press.lastY };
+
+    if (press.arm.kind === "column") {
+      capture(pointerId);
+      lastPointerYRef.current = press.lastY;
+      const anchorMin = minuteAtClientY(press.lastY);
+      setDrag({
+        kind: "create",
+        dayIndex: press.arm.dayIndex,
+        anchorMin,
+        range: rangeFromDrag(
+          anchorMin,
+          anchorMin,
+          SNAP_MINUTES,
+          TOUCH_CREATE_MINUTES
+        ),
+        active: true,
+        minDuration: TOUCH_CREATE_MINUTES,
+      });
+      return;
+    }
+
+    if (press.arm.kind === "draft") {
+      if (!draft) return;
+      armBlockDrag(pointer, press.arm.mode, DRAFT_ID, draft.range, draft.dayIndex, true);
+      return;
+    }
+
+    const { block, mode, dayIndex } = press.arm;
+    // Holding a saved block while a draft is open walks away from the draft.
+    setDraft(null);
+    armBlockDrag(
+      pointer,
+      mode,
+      block.entry.id,
+      { startMin: block.startMin, endMin: block.endMin },
+      dayIndex,
+      true
+    );
+  };
+
+  // The timer fires against whatever the grid holds *then* — the geometry,
+  // the draft — not the render the finger landed in.
+  const armTouchPressRef = React.useRef(armTouchPress);
+  React.useLayoutEffect(() => {
+    armTouchPressRef.current = armTouchPress;
+  });
+
+  const beginTouchPress = (
+    event: React.PointerEvent<HTMLDivElement>,
+    arm: TouchPress["arm"]
+  ): void => {
+    clearTouchPress();
+    // A second finger is the other half of a pinch, never a press of its
+    // own — the capture-phase tracker has already dropped the first one's.
+    // Without this its release, after the fingers spread, reads as a swipe.
+    if (touchPointsRef.current.size > 1) return;
+    const pointerId = event.pointerId;
+    touchPressRef.current = {
+      pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      timer:
+        arm === null
+          ? null
+          : setTimeout(() => {
+              armTouchPressRef.current(pointerId);
+            }, LONG_PRESS_MS),
+      arm,
+      armed: false,
+    };
+  };
+
+  /**
+   * Runs in the capture phase, so it sees the press on a block too — that
+   * handler stops propagation, as it must, so the column under the block
+   * does not also arm a create.
+   */
+  const trackTouchPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>
+  ): void => {
+    if (event.pointerType !== "touch") return;
+    const target = event.target;
+    if (!(target instanceof Node) || !gridRef.current?.contains(target)) return;
+    const points = touchPointsRef.current;
+    points.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (points.size < 2) return;
+    // A second finger turns whatever the first was doing into a pinch.
+    clearTouchPress();
+    touchTapRef.current = null;
+    touchColumnTapRef.current = null;
+    setDrag(null);
+    const [a, b] = [...points.values()];
+    pinchBaseRef.current = a && b ? distance(a, b) : null;
+  };
+
+  const forgetTouchPointer = (pointerId: number): void => {
+    touchPointsRef.current.delete(pointerId);
+    if (touchPointsRef.current.size < 2) pinchBaseRef.current = null;
+  };
+
+  /** Two fingers moving apart or together step the zoom around their midpoint. */
+  const handlePinch = (): void => {
+    const node = scrollRef.current;
+    const base = pinchBaseRef.current;
+    const [a, b] = [...touchPointsRef.current.values()];
+    if (!node || !onZoomBy || base === null || !a || !b) return;
+    const spread = distance(a, b);
+    if (spread <= 0 || base <= 0) return;
+    const ratio = spread / base;
+    if (ratio < PINCH_STEP_RATIO && ratio > 1 / PINCH_STEP_RATIO) return;
+    const midY = (a.y + b.y) / 2;
+    zoomAnchorRef.current = {
+      minute: minuteAtClientY(midY),
+      viewportY: midY - node.getBoundingClientRect().top,
+    };
+    pinchBaseRef.current = spread;
+    onZoomBy(ratio > 1 ? 1 : -1);
   };
 
   const handleDraftPointerDown = (
@@ -450,9 +727,12 @@ export function TimeGrid({
     mode: BlockDragMode
   ): void => {
     event.stopPropagation();
-    // A finger pans the grid through the draft, as through a saved block;
-    // its times are typed into the popover instead.
-    if (event.pointerType === "touch") return;
+    // A finger pans the grid through the draft, as through a saved block,
+    // until it has rested long enough to be holding it.
+    if (event.pointerType === "touch") {
+      beginTouchPress(event, { kind: "draft", mode });
+      return;
+    }
     if (event.button !== 0 && event.pointerType === "mouse") return;
     if (!draft) return;
     armBlockDrag(event, mode, DRAFT_ID, draft.range, draft.dayIndex);
@@ -465,13 +745,21 @@ export function TimeGrid({
     dayIndex: number
   ): void => {
     event.stopPropagation();
-    // A finger never arms move or resize. With `touchAction: "pan-y"` the
-    // browser owns the vertical pan, so the press that follows the finger is
-    // a scroll far more often than an edit — and arming here would commit
-    // that scroll as a real change to the entry. The tap that *was* a tap is
-    // resolved from the click below instead.
+    // A finger never arms move or resize on the press. With `touchAction:
+    // "pan-y"` the browser owns the vertical pan, so the press that follows
+    // the finger is a scroll far more often than an edit — and arming here
+    // would commit that scroll as a real change to the entry. The tap that
+    // *was* a tap is resolved from the click below; the hold that was a hold
+    // is resolved by `armTouchPress`, once the finger has rested long enough
+    // to be neither.
     if (event.pointerType === "touch") {
+      // A second finger is a pinch: neither a tap nor a hold on this block.
+      if (touchPointsRef.current.size > 1) return;
       touchTapRef.current = block.entry.id;
+      beginTouchPress(
+        event,
+        block.draggable ? { kind: "block", block, mode, dayIndex } : null
+      );
       return;
     }
     // Any mouse or pen press clears a stale tap, so a drag with the mouse can
@@ -508,9 +796,14 @@ export function TimeGrid({
     // page scrolling, and arming create-a-new-entry here is what turns every
     // stray drag into an invented time entry. The tap that *was* a tap is
     // resolved from the click that follows it, like a tap on a block.
+    // A finger that *rests* here instead is asking for a block over the span
+    // it then drags out — `armTouchPress` proposes it after the long press.
     if (event.pointerType === "touch") {
+      // A second finger is a pinch: it neither taps nor holds this column.
+      if (touchPointsRef.current.size > 1) return;
       touchColumnTapRef.current = anythingOpen ? null : dayIndex;
       if (anythingOpen) closeEverything();
+      beginTouchPress(event, anythingOpen ? null : { kind: "column", dayIndex });
       return;
     }
     touchColumnTapRef.current = null;
@@ -523,23 +816,24 @@ export function TimeGrid({
       return;
     }
     const anchorMin = minuteAtClientY(event.clientY);
-    capture(event);
+    lastPointerYRef.current = event.clientY;
+    capture(event.pointerId);
     setDrag({
       kind: "create",
       dayIndex,
       anchorMin,
       range: rangeFromDrag(anchorMin, anchorMin),
       active: false,
+      minDuration: MIN_DURATION_MINUTES,
     });
   };
 
-  const handleGridPointerMove = (
-    event: React.PointerEvent<HTMLDivElement>
-  ): void => {
-    if (!drag) return;
-    const clientY = event.clientY;
+  /** Re-aim the drag in flight at the pointer's current position. */
+  const applyPointer = (clientY: number): void => {
+    lastPointerYRef.current = clientY;
     // Read the geometry once, outside the state updater, which must stay pure.
     const pointerMin = minuteAtClientY(clientY);
+    const gridY = gridYAtClientY(clientY);
 
     setDrag((current) => {
       if (!current) return current;
@@ -552,11 +846,16 @@ export function TimeGrid({
         return {
           ...current,
           active,
-          range: rangeFromDrag(current.anchorMin, pointerMin),
+          range: rangeFromDrag(
+            current.anchorMin,
+            pointerMin,
+            SNAP_MINUTES,
+            current.minDuration
+          ),
         };
       }
 
-      const deltaPx = clientY - current.pointerStartY;
+      const deltaPx = gridY - current.pointerStartY;
       const active = current.active || Math.abs(deltaPx) > DRAG_THRESHOLD_PX;
       if (!active) return current;
 
@@ -567,6 +866,87 @@ export function TimeGrid({
           : resizeRange(current.origin, current.edge, deltaMinutes);
       return { ...current, active, range };
     });
+  };
+
+  const applyPointerRef = React.useRef(applyPointer);
+  React.useLayoutEffect(() => {
+    applyPointerRef.current = applyPointer;
+  });
+
+  // A drag near the top or bottom of the scroll box scrolls it, so an entry
+  // can be carried to an hour that is off screen — with a finger there is no
+  // other way to get there, since the finger *is* the scroll. The grid moves
+  // under the pointer, so each step re-aims the drag at the same clientY.
+  const dragActive = drag?.active === true;
+  React.useEffect(() => {
+    if (!dragActive) return;
+    const node = scrollRef.current;
+    if (!node || typeof requestAnimationFrame !== "function") return;
+    let frame = 0;
+    const step = (): void => {
+      const y = lastPointerYRef.current;
+      if (y !== null) {
+        const rect = node.getBoundingClientRect();
+        const fromTop = y - rect.top;
+        const fromBottom = rect.bottom - y;
+        let velocity = 0;
+        if (fromTop < EDGE_SCROLL_PX) {
+          velocity = -Math.ceil(
+            ((EDGE_SCROLL_PX - Math.max(0, fromTop)) / EDGE_SCROLL_PX) *
+              EDGE_SCROLL_MAX_PX_PER_FRAME
+          );
+        } else if (fromBottom < EDGE_SCROLL_PX) {
+          velocity = Math.ceil(
+            ((EDGE_SCROLL_PX - Math.max(0, fromBottom)) / EDGE_SCROLL_PX) *
+              EDGE_SCROLL_MAX_PX_PER_FRAME
+          );
+        }
+        if (velocity !== 0) {
+          const before = node.scrollTop;
+          node.scrollTop = before + velocity;
+          if (node.scrollTop !== before) applyPointerRef.current(y);
+        }
+      }
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [dragActive]);
+
+  const handleGridPointerMove = (
+    event: React.PointerEvent<HTMLDivElement>
+  ): void => {
+    if (event.pointerType === "touch") {
+      const points = touchPointsRef.current;
+      if (points.has(event.pointerId)) {
+        points.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      }
+      if (points.size > 1) {
+        handlePinch();
+        return;
+      }
+      const press = touchPressRef.current;
+      if (press && press.pointerId === event.pointerId) {
+        press.lastX = event.clientX;
+        press.lastY = event.clientY;
+        // Travel before the hold fires is a pan or a swipe, never a hold.
+        if (
+          !press.armed &&
+          press.timer !== null &&
+          Math.hypot(
+            event.clientX - press.startX,
+            event.clientY - press.startY
+          ) > TOUCH_SLOP_PX
+        ) {
+          clearTimeout(press.timer);
+          press.timer = null;
+        }
+      }
+    }
+    if (!drag) return;
+    applyPointer(event.clientY);
   };
 
   const commitDrag = (state: DragState): void => {
@@ -629,13 +1009,54 @@ export function TimeGrid({
   const handleGridPointerUp = (
     event: React.PointerEvent<HTMLDivElement>
   ): void => {
+    if (event.pointerType === "touch") {
+      forgetTouchPointer(event.pointerId);
+      const press = touchPressRef.current;
+      if (press && press.pointerId === event.pointerId) {
+        clearTouchPress();
+        if (!press.armed && !drag) {
+          // The finger travelled sideways: `pan-y` leaves that to us, and it
+          // is the gesture every phone calendar reads as "next" / "previous".
+          // A finger that swiped never taps, so the pending taps go too.
+          const dx = event.clientX - press.startX;
+          const dy = event.clientY - press.startY;
+          if (
+            onSwipe &&
+            Math.abs(dx) >= SWIPE_MIN_PX &&
+            Math.abs(dx) > Math.abs(dy) * 1.5
+          ) {
+            touchTapRef.current = null;
+            touchColumnTapRef.current = null;
+            onSwipe(dx < 0 ? 1 : -1);
+          }
+          return;
+        }
+      }
+    }
     if (!drag) return;
     if (gridRef.current?.hasPointerCapture(event.pointerId)) {
       gridRef.current.releasePointerCapture(event.pointerId);
     }
+    lastPointerYRef.current = null;
     commitDrag(drag);
     setDrag(null);
   };
+
+  const handleGridPointerCancel = (
+    event: React.PointerEvent<HTMLDivElement>
+  ): void => {
+    // The browser took the gesture over — the finger is panning, not
+    // tapping, holding or swiping.
+    forgetTouchPointer(event.pointerId);
+    clearTouchPress();
+    touchTapRef.current = null;
+    touchColumnTapRef.current = null;
+    lastPointerYRef.current = null;
+    setDrag(null);
+  };
+
+  // A timer left running would arm a drag on a grid that no longer exists.
+  React.useEffect(() => clearTouchPress, []);
 
   const todayIndex = days.findIndex((day) => isSameDay(day, new Date(nowMs)));
   const nowMinute =
@@ -648,8 +1069,7 @@ export function TimeGrid({
 
   return (
     <div
-      className="flex min-h-[26rem] flex-col"
-      style={{ height: "calc(100dvh - 15rem)" }}
+      className="flex min-h-0 flex-1 flex-col"
       data-testid={isSingleDay ? "calendar-day" : "calendar-week"}
       data-day-count={days.length}
     >
@@ -696,10 +1116,15 @@ export function TimeGrid({
         })}
       </div>
 
-      {/* Scrollable body. */}
+      {/* Scrollable body. `overscroll-contain` keeps a flick at either end
+          from turning into pull-to-refresh or the page behind; `pan-y` on the
+          box itself covers the gutter, so a pinch anywhere over the grid is
+          ours rather than the page zooming. */}
       <div
         ref={scrollRef}
-        className="relative flex-1 overflow-y-auto"
+        className="relative flex-1 overflow-y-auto overscroll-y-contain"
+        style={{ touchAction: "pan-y" }}
+        data-testid="calendar-grid-scroll"
         onScroll={(event) => {
           scrollTopRef.current = event.currentTarget.scrollTop;
         }}
@@ -712,19 +1137,28 @@ export function TimeGrid({
           </div>
         ) : (
           <div
-            ref={gridRef}
-            className="relative grid"
-            style={{ gridTemplateColumns: gridTemplate, height }}
-            onPointerMove={handleGridPointerMove}
-            onPointerUp={handleGridPointerUp}
-            onPointerCancel={() => {
-              // The browser took the gesture over — the finger is panning,
-              // not tapping.
-              touchTapRef.current = null;
-              touchColumnTapRef.current = null;
-              setDrag(null);
-            }}
+            data-testid="calendar-grid-pad"
+            style={{ paddingTop: GRID_PAD_PX, paddingBottom: GRID_PAD_PX }}
           >
+            <div
+              ref={gridRef}
+              className="relative grid select-none"
+              // No callout or selection on a held finger: the hold is a gesture.
+              style={{
+                gridTemplateColumns: gridTemplate,
+                height,
+                WebkitTouchCallout: "none",
+              }}
+              onPointerDownCapture={trackTouchPointerDown}
+              onPointerMove={handleGridPointerMove}
+              onPointerUp={handleGridPointerUp}
+              onPointerCancel={handleGridPointerCancel}
+              onContextMenu={(event) => {
+                // Android fires a context menu on a long press; the long
+                // press is spoken for.
+                if (touchPressRef.current) event.preventDefault();
+              }}
+            >
             {/* Hour gutter — sub-hour marks read as minutes of the hour above. */}
             <div className="border-border relative border-r">
               {majorMinutes.map((minute) => {
@@ -1063,6 +1497,7 @@ export function TimeGrid({
                 </div>
               );
             })}
+            </div>
           </div>
         )}
       </div>
