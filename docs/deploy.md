@@ -563,6 +563,66 @@ downloaded update installs on quit, or on "Restart to update" in Settings →
 Desktop or the tray. The app never restarts by itself.
 `TRACKYOURTIME_DISABLE_UPDATES=1` turns the updater off on a managed machine.
 
+### Staged rollout
+
+The update feeds can offer a release to part of the installed apps first.
+electron-updater reads `stagingPercentage` from `latest.yml`,
+`latest-mac.yml` and `latest-linux*.yml`. Each install has a random id,
+created once in its profile (`<userData>/.updaterId`), and is offered the
+release only when that id falls below the percentage. The id never changes,
+so raising the percentage keeps everybody who was already in. It applies to
+the three builds that update themselves; store and package-manager copies are
+not affected.
+
+**Release at 10 %.** Either set the repository variable
+`DESKTOP_STAGING_PERCENTAGE` to `10` before pushing the tag, or run the
+workflow by hand from the tag (Actions → Desktop Release → Run workflow → Use
+workflow from: `v1.4.0`, staging percentage `10`). The input wins over the
+variable. Both empty means every install, as before. The `staging percentage`
+job validates the value at the start of the run and fails on anything that is
+not a whole number from 0 to 100. The `draft-release` job writes the value
+into every feed and checks the rewritten feeds against the attached files
+again. Then publish the draft as usual.
+
+**Raise, halt or finish** on the published release, from a checkout with `gh`
+signed in:
+
+```bash
+pnpm desktop:rollout v1.4.0 50 --dry-run   # show what would change
+pnpm desktop:rollout v1.4.0 50             # half of all installs
+pnpm desktop:rollout v1.4.0 0              # halt
+pnpm desktop:rollout v1.4.0 100            # everybody (removes the key)
+```
+
+The script downloads the release's `latest*.yml`, changes that one line in
+each, checks that nothing else changed, and uploads them again with
+`--clobber`. It refuses a release that does not exist, a value outside 0 to
+100, and a feed that does not parse, and then uploads nothing. `100` removes
+the key instead of writing `100`: electron-updater compares with `<`, so an
+explicit 100 would leave out the one id in 2^32 at the very top.
+`--repo <owner>/<name>` targets a fork.
+
+Four limits:
+
+- **Nothing is rolled back.** `0` stops offering the release to installs that
+  do not have it yet. An install that already updated stays on it, and one
+  that already downloaded it still installs it on quit. To fix a bad release,
+  publish a higher version.
+- **Only the newest published release counts.** electron-updater reads the
+  feeds of the latest published release. The script warns when the tag is not
+  that release. A new release replaces the old rollout, so fix forward at
+  whatever percentage the fix needs.
+- Apps check at launch plus 30 seconds and every six hours, so a change takes
+  up to six hours to reach running apps.
+- `--clobber` deletes each feed before it uploads the new one. An app that
+  checks in that second gets an error and tries again at the next check.
+
+A headless run (tests, agents) never loads electron-updater, never writes
+`.updaterId` and never reads a feed. A profile moved with
+`TRACKYOURTIME_USER_DATA_DIR` gets its own id.
+
+### Publishing a release to the downloads page
+
 When a release is published, set the three direct entries of
 `DESKTOP_DOWNLOADS` in `packages/client/src/lib/site-links.ts` to
 `https://github.com/trebeljahr/trackyourtime/releases/latest`, and each store
@@ -598,6 +658,7 @@ Repository variables (`gh variable set NAME`), which are not secret:
 | `WINDOWS_STORE_PUBLISHER_DISPLAY_NAME` | win-store | …/Properties/PublisherDisplayName |
 | `HOMEBREW_TAP_REPO` | manifests | `<owner>/homebrew-tap` |
 | `NEXT_PUBLIC_API_URL` | all | optional; defaults to `https://api.trackyourtime.dev` |
+| `DESKTOP_STAGING_PERCENTAGE` | draft release | optional; 0-100, the share of installs a new tag's feeds offer the update to. Empty means every install ("Staged rollout") |
 
 The build derives nothing from these. The Store identity in particular is never
 defaulted, because Partner Center refuses a package whose identity differs from

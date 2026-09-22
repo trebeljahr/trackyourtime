@@ -308,6 +308,15 @@ built, and the rules that fail quietly if broken:
   `-unsigned` files or store packages, and never touches a published release.
   electron-updater reads only published releases, so publishing is the release
   decision. The Homebrew cask says `auto_updates true` for the same reason.
+- **A staged rollout is one line in each feed, and electron-updater decides.**
+  `stagingPercentage` comes from the dispatch input or
+  `DESKTOP_STAGING_PERCENTAGE` on a tag, and from `pnpm desktop:rollout` after
+  publishing; both write through `rewriteFeed` (`scripts/lib/desktop-rollout.mjs`),
+  which edits that line as text and refuses if anything else changed, so the
+  feed's sha512 and size stay byte-for-byte. `100` removes the key (an explicit
+  100 excludes one id in 2^32). Never assign `isUserWithinRollout` in
+  `electron/src`: the default check reads `<userData>/.updaterId`, stable only
+  because `userData` is pinned by name. Nothing rolls an update back; fix forward.
 - **`/download` never links what does not exist.** Every channel's address is
   `DESKTOP_DOWNLOADS` in `lib/site-links.ts`, `null` until a release is
   published or a store approves the listing.

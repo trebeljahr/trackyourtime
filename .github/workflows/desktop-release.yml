@@ -24,12 +24,25 @@ name: Desktop Release
 # GitHub Release. Nothing is published here. Installed apps only see a release
 # once a person publishes the draft, because electron-updater reads the latest
 # PUBLISHED release. Store uploads stay manual.
+#
+# Staged rollout: the feeds can carry `stagingPercentage`, so only that share
+# of installs is offered the release (docs/deploy.md → "Staged rollout"). The
+# value is the dispatch input, else the repo variable
+# DESKTOP_STAGING_PERCENTAGE, else nothing — every install, as before. It only
+# matters on a tag (a push, or a dispatch run from the tag), because only then
+# is a draft written. `pnpm desktop:rollout` changes it after publishing.
 
 on:
   # build-desktop.mjs refuses a tag that does not match package.json's version.
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      staging_percentage:
+        description: "Share of installs offered the update, 0-100 (empty: the DESKTOP_STAGING_PERCENTAGE variable, else everybody). Used when run from a v* tag."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -41,6 +54,29 @@ env:
   NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
 
 jobs:
+  # Validates the staging percentage in seconds, beside the builds rather than
+  # after them: a typo ("1O") fails here, not an hour later in draft-release.
+  # Empty is not a problem; it is a full rollout, and says so in a notice.
+  rollout:
+    name: staging percentage
+    runs-on: ubuntu-24.04
+    outputs:
+      percentage: ${{ steps.check.outputs.percentage }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Through the environment, never interpolated into the script: a
+      # dispatch input is free text.
+      - name: Check the staging percentage
+        id: check
+        env:
+          RAW: ${{ inputs.staging_percentage || vars.DESKTOP_STAGING_PERCENTAGE }}
+        run: node scripts/desktop-rollout.mjs --check "$RAW"
+
   build:
     name: ${{ matrix.channel }}
     strategy:
@@ -282,13 +318,16 @@ jobs:
   draft-release:
     name: draft release
     if: github.ref_type == 'tag'
-    needs: build
+    needs: [rollout, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.ref_name }}
+      # Normalised by the rollout job: a number from 0 to 99, or empty for
+      # every install (100 is written as no key; scripts/lib/desktop-rollout.mjs).
+      STAGING_PERCENTAGE: ${{ needs.rollout.outputs.percentage }}
     steps:
       - uses: actions/checkout@v4
 
@@ -308,8 +347,10 @@ jobs:
           pattern: desktop-*
           path: artifacts
 
+      # Writes stagingPercentage into each feed, then checks the rewritten
+      # feeds against the attached files the same way as the originals.
       - name: Collect the release files
-        run: node scripts/desktop-release-draft.mjs --artifacts artifacts --out release-files
+        run: node scripts/desktop-release-draft.mjs --artifacts artifacts --out release-files --staging-percentage "$STAGING_PERCENTAGE"
 
       - name: Refuse a release that is already published
         shell: bash

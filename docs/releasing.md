@@ -18,7 +18,9 @@ A tag also runs `desktop-release.yml`, which builds every desktop channel and
 uploads the signed downloads and their update feeds to a **draft** GitHub
 Release (docs/deploy.md → "Desktop release"). Publishing that draft is the
 desktop release: installed apps only see published releases, and they update
-from the next one they see.
+from the next one they see. To offer it to part of them first, set
+`DESKTOP_STAGING_PERCENTAGE` before tagging and raise it later with
+`pnpm desktop:rollout vX.Y.Z <percent>` (docs/deploy.md → "Staged rollout").
 
 `mobile-release.yml` runs on manual dispatch only.
 

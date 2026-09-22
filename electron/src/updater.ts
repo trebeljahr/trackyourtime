@@ -12,6 +12,18 @@
  * spec drives it through `__trackYourTimeDesktop.update` (desktop.ts), so the
  * "Restart to update" item and button can be exercised without a release, and
  * its `quitAndInstall` is recorded instead of quitting.
+ *
+ * **Staged rollout** (docs/deploy.md → "Staged rollout") is electron-updater's
+ * own and needs nothing from this file except to leave it alone: its default
+ * `isUserWithinRollout` compares the feed's `stagingPercentage` with a random
+ * id it creates once in `<userData>/.updaterId` (checked in 6.8.9,
+ * `AppUpdater.getOrCreateStagingUserId`). That id is stable because
+ * `userData` is pinned by name in profile.ts and set in main.ts before the
+ * app is ready, so an update never moves a person in or out of a rollout. Do
+ * not assign `isUserWithinRollout` here (updater-model.test.ts greps for it).
+ * `TRACKYOURTIME_USER_DATA_DIR` gives that profile its own id. A headless run
+ * never loads electron-updater, so it never writes `.updaterId` and never
+ * evaluates staging: the memory updater has no feed to read.
  */
 
 import { existsSync } from "node:fs";

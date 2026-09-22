@@ -296,4 +296,24 @@ describe("no forced restart, in the source", () => {
     const updater = sources.find(({ name }) => name === "updater.ts")!.text;
     assert.match(updater, /autoCheck: !options\.headless/);
   });
+
+  it("leaves staged rollout to electron-updater, keyed on a userData that is pinned before ready", async () => {
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const dir = new URL(".", import.meta.url);
+    const sources = readdirSync(dir)
+      .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+      .map((name) => ({ name, text: readFileSync(new URL(name, dir), "utf8") }));
+    // Overriding the rollout check, or the id it reads, would make every
+    // stagingPercentage in a feed mean nothing (scripts/lib/desktop-rollout.mjs).
+    for (const { name, text } of sources) {
+      assert.doesNotMatch(text, /\.isUserWithinRollout\s*=/, name);
+      assert.doesNotMatch(text, /(stagingUserIdPromise|getOrCreateStagingUserId)\s*=/, name);
+    }
+    // The staging id lives in userData, so userData must be set at module
+    // load, before whenReady and before any updater exists.
+    const main = sources.find(({ name }) => name === "main.ts")!.text;
+    const setPath = main.indexOf('app.setPath(\n  "userData"');
+    assert.ok(setPath !== -1, "main.ts sets userData");
+    assert.ok(setPath < main.indexOf("whenReady"), "userData is set before the app is ready");
+  });
 });
