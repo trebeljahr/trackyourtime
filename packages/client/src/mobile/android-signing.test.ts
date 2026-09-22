@@ -96,10 +96,12 @@ describe("the release workflow", () => {
   });
 
   it("exposes them at job level, where a step's `if` can see them", () => {
-    // The guards below are `if: env.ANDROID_KEYSTORE_BASE64 != ''`. Job-level
-    // env is unambiguously in scope for a step condition; env declared on the
-    // step being guarded is the ambiguous case, and getting it wrong skips the
-    // decode silently, leaving the build unsigned with nothing in the log.
+    // The step guards read `steps.plan.outputs.build`, and the Plan step reads
+    // the secrets' presence from the job env. Job-level env is unambiguously
+    // in scope for every step; env declared on one step is invisible to the
+    // next, and getting it wrong makes the plan read a set secret as unset and
+    // skip the decode silently, leaving the build unsigned with nothing in
+    // the log.
     const android = workflow.slice(
       workflow.indexOf("  android:"),
       workflow.indexOf("  ios:"),
@@ -114,8 +116,10 @@ describe("the release workflow", () => {
 
   it("refuses a half-configured signing setup and proves the result is signed", () => {
     // The gradle block deliberately falls back to unsigned. CI is where that
-    // must not pass quietly, so the strictness lives here instead.
-    expect(workflow).toContain("Check the signing secrets are complete");
+    // must not pass quietly, so the strictness lives here instead: the Plan
+    // step refuses a partial secret set (scripts/lib/mobile-release.mjs), and
+    // jarsigner proves the bundle a complete set produced is really signed.
+    expect(workflow).toContain("run: node scripts/mobile-release-plan.mjs android");
     expect(workflow).toContain("jarsigner -verify");
   });
 });
