@@ -370,15 +370,18 @@ jobs:
         run: |
           set -euo pipefail
           version="${TAG#v}"
-          if [ "${exists:-}" = "true" ]; then
-            gh release upload "$TAG" release-files/* --clobber
+          if [ -n "$STAGING_PERCENTAGE" ]; then
+            offered="$STAGING_PERCENTAGE % of the installed copies that update themselves (a staged rollout; \`pnpm desktop:rollout $TAG <percent>\` changes it)"
           else
-            if [ -n "$STAGING_PERCENTAGE" ]; then
-              offered="$STAGING_PERCENTAGE % of the installed copies that update themselves (a staged rollout; \`pnpm desktop:rollout $TAG <percent>\` changes it)"
-            else
-              offered="every installed copy that updates itself"
-            fi
-            printf 'Track Your Time %s.\n\nSee CHANGELOG.md for what changed. Publishing this release offers it to %s.\n' "$version" "$offered" > notes.md
+            offered="every installed copy that updates itself"
+          fi
+          printf 'Track Your Time %s.\n\nSee CHANGELOG.md for what changed. Publishing this release offers it to %s.\n' "$version" "$offered" > notes.md
+          if [ "${exists:-}" = "true" ]; then
+            # A re-dispatch with another staging percentage rewrites the
+            # feeds; the notes must name the same share.
+            gh release upload "$TAG" release-files/* --clobber
+            gh release edit "$TAG" --notes-file notes.md
+          else
             gh release create "$TAG" release-files/* --draft --verify-tag --title "Track Your Time $version" --notes-file notes.md
           fi
           echo "Draft: $(gh release view "$TAG" --json url --jq .url)"
