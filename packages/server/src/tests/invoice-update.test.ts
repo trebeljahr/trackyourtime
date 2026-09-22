@@ -338,4 +338,23 @@ describe("invoices.update", { skip: skipWithoutDatabase }, () => {
     assert.equal(updated.from, null);
     assert.equal(await TimeEntry.countDocuments({ invoiceId: { $ne: null } }), 0);
   });
+
+  it("refuses to empty a manual-only draft of every line", async () => {
+    // `create` refuses a zero-line invoice; editing one down to nothing must
+    // be refused the same way, or `update` stores a draft create would reject.
+    const seeded = await seedWorkspace();
+    const blank = await owner().create({
+      clientId: seeded.clientId,
+      lines: [{ label: "Fee", quantity: 1, unit: "piece", unitPrice: 10 }],
+      ...DATES,
+    });
+    await rejectedWith(
+      owner().update({ id: blank.id, updatedAt: blank.updatedAt, lines: [] }),
+      "BAD_REQUEST",
+      /at least one line/,
+    );
+    // The draft is untouched.
+    const after = await Invoice.findById(blank.id).lean();
+    assert.equal(after?.lineItems.length, 1);
+  });
 });

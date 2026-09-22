@@ -73,6 +73,7 @@ export function InvoiceGeneratorPage({ locale }: { locale: Locale }): React.Reac
   const [form, setForm] = React.useState<InvoiceForm>(emptyForm);
   const [hydrated, setHydrated] = React.useState(false);
   const [logoError, setLogoError] = React.useState<string | null>(null);
+  const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const draft = readDraft(window.localStorage);
@@ -139,33 +140,39 @@ export function InvoiceGeneratorPage({ locale }: { locale: Locale }): React.Reac
   );
 
   const download = async (): Promise<void> => {
-    // The renderer and pdfkit arrive only now — kept out of the first load.
-    // pdfkit's default entry expects a filesystem to read its standard-14 font
-    // metrics from; a browser has none, so we hand the renderer pdfkit's
-    // self-contained `pdfkit.standalone.js` build, which bundles those metrics
-    // and registers Helvetica at load. Importing the file path directly does
-    // not depend on any bundler alias.
-    const [{ renderInvoicePdf, invoicePdfFilename }, pdfkitStandalone] = await Promise.all([
-      import("@starter/invoice-pdf/invoice-pdf"),
-      import("pdfkit-standalone"),
-    ]);
-    // The standalone build is a UMD bundle with no types; its default export is
-    // the PDFDocument constructor.
-    const PDFDocument = ((pdfkitStandalone as { default?: unknown }).default ??
-      pdfkitStandalone) as RenderInvoicePdfOptions["PDFDocument"];
-    const generatedAt = new Date().toISOString();
-    const invoice = buildInvoice(form, locale, generatedAt);
-    const bytes = await renderInvoicePdf(invoice, { generatedAt }, undefined, { PDFDocument });
-    const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = invoicePdfFilename(invoice.number);
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    // Let the download start before the blob is revoked.
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    setDownloadError(null);
+    try {
+      // The renderer and pdfkit arrive only now — kept out of the first load.
+      // pdfkit's default entry expects a filesystem to read its standard-14
+      // font metrics from; a browser has none, so we hand the renderer pdfkit's
+      // self-contained `pdfkit.standalone.js` build, which bundles those metrics
+      // and registers Helvetica at load, through the `pdfkit-standalone` alias.
+      const [{ renderInvoicePdf, invoicePdfFilename }, pdfkitStandalone] = await Promise.all([
+        import("@starter/invoice-pdf/invoice-pdf"),
+        import("pdfkit-standalone"),
+      ]);
+      // The standalone build is a UMD bundle with no types; its default export
+      // is the PDFDocument constructor.
+      const PDFDocument = ((pdfkitStandalone as { default?: unknown }).default ??
+        pdfkitStandalone) as RenderInvoicePdfOptions["PDFDocument"];
+      const generatedAt = new Date().toISOString();
+      const invoice = buildInvoice(form, locale, generatedAt);
+      const bytes = await renderInvoicePdf(invoice, { generatedAt }, undefined, { PDFDocument });
+      const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = invoicePdfFilename(invoice.number);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      // Let the download start before the blob is revoked.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch {
+      // A failed chunk load, or an amount so large the cent maths overflows,
+      // must not white-screen the page — say so and leave the form intact.
+      setDownloadError(t("invoiceGenerator.form.downloadError"));
+    }
   };
 
   return (
@@ -456,6 +463,11 @@ export function InvoiceGeneratorPage({ locale }: { locale: Locale }): React.Reac
                 <Download />
                 {t("invoiceGenerator.form.download")}
               </Button>
+              {downloadError ? (
+                <p className="text-xs text-destructive" data-testid="generator-download-error">
+                  {downloadError}
+                </p>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"

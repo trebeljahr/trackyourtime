@@ -194,4 +194,14 @@ describe("draft persistence", () => {
     expect(isInvoiceForm(null)).toBe(false);
     expect(isInvoiceForm({ issuer: {}, recipient: {} })).toBe(false);
   });
+
+  it("rejects a draft whose line is not a well-formed line", () => {
+    // A malformed line would make validateLine call .trim() on a non-string
+    // and crash the page as the draft restores. The whole draft is refused.
+    const bad = { issuer: {}, recipient: {}, lines: [{}] };
+    expect(isInvoiceForm(bad)).toBe(false);
+    const storage = memStorage();
+    storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(bad));
+    expect(readDraft(storage)).toBeNull();
+  });
 });

@@ -613,6 +613,7 @@ export const marketing: Translation<typeof source> = {
       total: "Gesamtbetrag",
       lineCount: "{count, plural, one {# Position bereit} other {# Positionen bereit}}",
       download: "PDF herunterladen",
+      downloadError: "Das PDF konnte nicht erstellt werden. Prüf die Beträge und versuch es erneut.",
       clear: "Leeren",
       localOnly: "Das PDF entsteht in deinem Browser.",
     },

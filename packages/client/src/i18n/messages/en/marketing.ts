@@ -622,6 +622,7 @@ export const marketing = {
       total: "Total",
       lineCount: "{count, plural, one {# line ready} other {# lines ready}}",
       download: "Download PDF",
+      downloadError: "The PDF could not be made. Check the amounts and try again.",
       clear: "Clear",
       localOnly: "The PDF is made in your browser.",
     },

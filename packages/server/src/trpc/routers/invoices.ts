@@ -1145,6 +1145,14 @@ export const invoicesRouter = router({
         return badLines(error);
       }
 
+      // The same invariant `create` enforces: an invoice has at least one line.
+      // A ranged invoice cannot reach this (its time lines cannot be removed),
+      // but a manual-only draft edited down to nothing otherwise stores a draft
+      // create would have refused.
+      if (built.lines.length === 0) {
+        throw badRequest("An invoice needs at least one line.");
+      }
+
       // An edit that says nothing about VAT changes nothing about it: the
       // stored categories and exemption reasons are folded in as the request,
       // so relabelling a line cannot strip the invoice of its VAT. An edit

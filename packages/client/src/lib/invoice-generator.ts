@@ -386,6 +386,27 @@ export type DraftStorage = {
 };
 
 /** A stored value is only adopted when it has the shape the form expects. */
+/**
+ * One stored line, shape-checked. Every field a `LineForm` reads must be a
+ * string, or `validateLine` would throw on it (`.trim()` on a non-string) and
+ * white-screen the page as it restores the draft. A line that does not match
+ * is enough to reject the whole draft — the app only ever writes well-formed
+ * lines, so a malformed one means the stored value is not ours to trust.
+ */
+function isLineForm(value: unknown): value is LineForm {
+  if (typeof value !== "object" || value === null) return false;
+  const line = value as Partial<LineForm>;
+  return (
+    typeof line.id === "string" &&
+    typeof line.label === "string" &&
+    typeof line.quantity === "string" &&
+    typeof line.unit === "string" &&
+    typeof line.unitPrice === "string" &&
+    typeof line.taxCategory === "string" &&
+    typeof line.vatRate === "string"
+  );
+}
+
 export function isInvoiceForm(value: unknown): value is InvoiceForm {
   if (typeof value !== "object" || value === null) return false;
   const form = value as Partial<InvoiceForm>;
@@ -394,7 +415,8 @@ export function isInvoiceForm(value: unknown): value is InvoiceForm {
     form.issuer !== null &&
     typeof form.recipient === "object" &&
     form.recipient !== null &&
-    Array.isArray(form.lines)
+    Array.isArray(form.lines) &&
+    form.lines.every(isLineForm)
   );
 }
 
