@@ -61,8 +61,9 @@ describe("headless activity capture", () => {
   });
 
   it("imports child_process only in the process runner", () => {
+    // Any mention in code, so a require() or a dynamic import() counts too.
     const importers = sources(electronSrc)
-      .filter((file) => /from\s+["'](node:)?child_process["']/.test(read(file)))
+      .filter((file) => /["'](node:)?child_process["']/.test(code(file)))
       .map((file) => path.relative(electronSrc, file));
     assert.deepEqual(importers, ["activity/process-runner.ts"]);
   });

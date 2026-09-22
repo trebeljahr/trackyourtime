@@ -235,12 +235,17 @@ export function step(state: CaptureState, event: CaptureEvent, now: number, ctx:
 
   switch (event.kind) {
     case "boot": {
-      s.closeStale(now);
       const open = s.state.open;
-      // Written by an earlier run under settings or an account that no longer
-      // hold: it ended when it was last seen.
-      if (open !== null && (!s.state.settings.enabled || open.scope !== s.state.scope || !ctx.available)) {
+      if (open !== null && open.scope !== s.state.scope) {
+        // Left behind under a scope that is no longer current (a crash between
+        // writes): never filed under anybody, so another account's is never written.
+        s.drop();
+      } else if (open !== null && (!s.state.settings.enabled || !ctx.available)) {
+        // Written by an earlier run under settings that no longer hold: it
+        // ended when it was last seen.
         s.close(open.lastSeen);
+      } else {
+        s.closeStale(now);
       }
       return s.result();
     }

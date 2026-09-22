@@ -8,12 +8,12 @@
  * a refusal, never a throw across IPC.
  */
 
-import { normalizeHostPattern } from "../../../packages/core/src/activity/index.ts";
 import type {
   DesktopActivityInterval,
   DesktopActivityRule,
   DesktopActivitySettings,
 } from "../../../packages/shared/src/desktop-bridge.ts";
+import { toActivityPattern } from "./keys.ts";
 import { clampRetentionDays, cleanAppList } from "./settings.ts";
 
 export const MAX_RANGE_MS = 8 * 86_400_000;
@@ -86,7 +86,7 @@ export function parseCheckAcceptInput(
 
 export function parseRuleInput(value: unknown): Omit<DesktopActivityRule, "id"> | null {
   if (!isRecord(value) || typeof value.pattern !== "string" || value.pattern.length > MAX_PATTERN_LENGTH) return null;
-  const pattern = normalizeHostPattern(value.pattern);
+  const pattern = toActivityPattern(value.pattern);
   if (pattern === "") return null;
   const rule: Omit<DesktopActivityRule, "id"> = { pattern };
   if (value.description !== undefined) {

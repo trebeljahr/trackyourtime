@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { BUILT_IN_NEVER_RECORD, toActivityKey, type FrontmostTarget } from "./keys.ts";
+import { BUILT_IN_NEVER_RECORD, toActivityKey, toActivityPattern, type FrontmostTarget } from "./keys.ts";
 import {
   decodeXpropString,
   findOnPath,
@@ -16,6 +16,7 @@ import {
   encodedForegroundScript,
   parseWindowsHelperLine,
   powershellPath,
+  WINDOWS_FOREGROUND_SCRIPT,
   WINDOWS_WATCHDOG_MS,
 } from "./source-windows.ts";
 import {
@@ -149,6 +150,12 @@ describe("toActivityKey", () => {
     assert.equal(toActivityKey("x".repeat(500)).length, 200);
   });
 
+  it("shapes a typed pattern like the key it must match, keeping globs", () => {
+    assert.equal(toActivityPattern("Track Your Time.exe"), toActivityKey("Track Your Time.exe"));
+    assert.equal(toActivityPattern(" COM.JetBrains.* "), "com.jetbrains.*");
+    assert.equal(toActivityPattern("exe-My Tool"), toActivityKey("exe-My Tool"));
+  });
+
   it("lists this app and the lock screens as never recorded", () => {
     for (const key of ["com.trebeljahr.trackyourtime", "com.apple.loginwindow", "lockapp.exe", "logonui.exe"]) {
       assert.ok(BUILT_IN_NEVER_RECORD.includes(key), key);
@@ -270,6 +277,15 @@ describe("PowerShell helper lines", () => {
     assert.match(decode(encodedForegroundScript(false, 77)), /\$titles = \$false\n\$parentId = 77\n/);
     assert.match(decode(encodedForegroundScript(true, 77)), /\$titles = \$true/);
     assert.equal(powershellPath({ SystemRoot: "D:\\Win" }), "D:\\Win\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+  });
+
+  it("writes UTF-8, switched only after the language-mode check", () => {
+    const script = WINDOWS_FOREGROUND_SCRIPT;
+    const encoding = script.indexOf("[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false");
+    assert.notEqual(encoding, -1);
+    // Under CLM setting [Console] throws, which would hide the policy answer.
+    assert.ok(encoding > script.indexOf("constrained-language"));
+    assert.ok(encoding < script.indexOf("while ($true)"));
   });
 });
 

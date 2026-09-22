@@ -23,6 +23,13 @@ describe("activity IPC parsers", () => {
     for (const bad of [null, [], "x", 5, new Date()]) assert.equal(parseSettingsPatch(bad), null);
   });
 
+  it("shapes typed patterns like keys, so a name with spaces still matches", () => {
+    assert.deepEqual(parseSettingsPatch({ excludedApps: ["Track Your Time.exe", "C:\\Tools\\x.exe"] }), {
+      excludedApps: ["track-your-time.exe", "c-tools-x.exe"],
+    });
+    assert.equal(parseRuleInput({ pattern: "My Editor" })?.pattern, "my-editor");
+  });
+
   it("refuses empty, long or colon-carrying scope ids", () => {
     assert.deepEqual(parseScope({ userId: "u1", workspaceId: "w1" }), { userId: "u1", workspaceId: "w1" });
     for (const bad of [

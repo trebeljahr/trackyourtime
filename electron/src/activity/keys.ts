@@ -21,6 +21,16 @@ export function toActivityKey(raw: string): string {
 }
 
 /**
+ * A "Never record" or filing-rule pattern, in the same shape as the keys it
+ * is matched against. A typed `Track Your Time.exe` must become
+ * `track-your-time.exe`, as the key does; kept as core's host pattern it would
+ * keep its spaces and never match anything. `*` survives, so globs still work.
+ */
+export function toActivityPattern(raw: string): string {
+  return toActivityKey(raw).replace(/\.$/, "");
+}
+
+/**
  * Never recorded, whatever the settings say: this app itself (time spent in
  * the tracker is not work to suggest), and the lock screen and screen saver on
  * each OS, which are the machine standing in for nobody.

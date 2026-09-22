@@ -316,4 +316,14 @@ describe("boot", () => {
     assert.equal(off.state.open, null);
     assert.equal(appended(off.effects)[0]?.end, T0 + MIN);
   });
+
+  it("never writes an open segment left under another scope", () => {
+    const open = { scope: "u2:w1", key: "com.example.editor", name: "Editor", start: T0, lastSeen: T0 + MIN };
+    for (const scope of ["u1:w1", null]) {
+      const result = step(initialCaptureState(on, scope, open), { kind: "boot" }, T0 + MIN, ctx);
+      assert.equal(result.state.open, null);
+      assert.deepEqual(appended(result.effects), []);
+      assert.ok(result.effects.some((effect) => effect.kind === "clear-open"));
+    }
+  });
 });

@@ -13,7 +13,9 @@
  * PowerShell as `-EncodedCommand`: the asar holds only the bundle, and no
  * `.ps1` file is ever written or executed. Constrained Language Mode (AppLocker
  * or WDAC) refuses `Add-Type`; the script checks first and reports
- * `constrained-language`, which is `blocked-by-policy` here.
+ * `constrained-language`, which is `blocked-by-policy` here. Output is switched
+ * to UTF-8 after that check (setting `[Console]` is itself refused under
+ * CLM), since the console's OEM code page would mangle non-ASCII names.
  *
  * Watchdog: no line for 90 s → kill and respawn; three failures in ten
  * minutes → `source-failed`, retried every five minutes. The helper also exits
@@ -43,6 +45,9 @@ export const WINDOWS_FOREGROUND_SCRIPT = String.raw`$ErrorActionPreference = 'St
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
   [Console]::Out.WriteLine('{"error":"constrained-language"}'); [Console]::Out.Flush(); exit 3
 }
+# UTF-8 without a BOM: the console default is the OEM code page, which turns
+# a non-ASCII app name or title into '?' before Node ever sees it.
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;

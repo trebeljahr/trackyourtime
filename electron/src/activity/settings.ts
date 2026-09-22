@@ -5,8 +5,8 @@
  * turns it on — nothing in this directory ever turns it on by itself.
  */
 
-import { normalizeHostPattern } from "../../../packages/core/src/activity/index.ts";
 import type { DesktopActivitySettings } from "../../../packages/shared/src/desktop-bridge.ts";
+import { toActivityPattern } from "./keys.ts";
 
 export const DEFAULT_RETENTION_DAYS = 14;
 export const MIN_RETENTION_DAYS = 1;
@@ -27,12 +27,12 @@ export function clampRetentionDays(value: number): number {
     : DEFAULT_RETENTION_DAYS;
 }
 
-/** Normalised, de-duplicated patterns; empty and over-long ones dropped. */
+/** Key-shaped (`toActivityPattern`), de-duplicated patterns; empty and over-long ones dropped. */
 export function cleanAppList(values: readonly unknown[]): string[] {
   const out: string[] = [];
   for (const value of values) {
     if (typeof value !== "string" || value.length > 200) continue;
-    const pattern = normalizeHostPattern(value);
+    const pattern = toActivityPattern(value);
     if (pattern !== "" && !out.includes(pattern)) out.push(pattern);
     if (out.length >= MAX_EXCLUDED_APPS) break;
   }
