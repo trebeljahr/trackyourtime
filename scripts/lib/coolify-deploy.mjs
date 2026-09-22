@@ -63,11 +63,27 @@ export const parseWhich = (which) => {
 // ── Checks ───────────────────────────────────────────────────────────────
 
 /**
+ * The problems of an app that gave no JSON body — a 502 from the proxy while
+ * the container swaps, a connection refused, a timeout.
+ *
+ * No body is no commit either. While a commit is expected, that is reported
+ * as the commit check failing (`api-commit` / `web-commit`), which is what
+ * `commitProblems` and so the ten-minute poll wait on. Reported as the
+ * `api-health` / `web-version` check alone, the poll would take the first
+ * silent look as "landed" and hand a server it never heard from to the gate,
+ * which gives up after a few short retries.
+ */
+const noAnswerProblems = (prefix, path, expectedSha) => [
+  ...(expectedSha === null ? [] : [`${prefix}-commit: ${path} gave no answer, expected ${expectedSha}`]),
+  `${prefix}-${prefix === "api" ? "health" : "version"}: no JSON answer from ${path}`,
+];
+
+/**
  * Problems with an `/api/health` answer, as named checks. `expectedSha` null
  * skips the commit comparison (the server was not part of this deploy).
  */
 export const healthProblems = (body, expectedSha) => {
-  if (!body || typeof body !== "object") return ["api-health: no JSON answer from /api/health"];
+  if (!body || typeof body !== "object") return noAnswerProblems("api", "/api/health", expectedSha);
   const problems = [];
   // `commit` is the field's name; `version` is the same commit under the name
   // older images report it as (app.ts), which a rollback target may be.
@@ -85,7 +101,7 @@ export const healthProblems = (body, expectedSha) => {
  * in at build time, so the right commit can still carry the wrong URL.
  */
 export const versionJsonProblems = (body, expectedSha, apiUrl) => {
-  if (!body || typeof body !== "object") return ["web-version: no JSON answer from /version.json"];
+  if (!body || typeof body !== "object") return noAnswerProblems("web", "/version.json", expectedSha);
   const problems = [];
   if (expectedSha !== null && body.commit !== expectedSha) {
     problems.push(`web-commit: /version.json reports ${String(body.commit || "<none>")}, expected ${expectedSha}`);
@@ -121,7 +137,11 @@ export const gateProblems = (observed, expected) => [
       ]),
 ];
 
-/** Only the commit checks: what "the deploy landed" means, before the gate. */
+/**
+ * Only the commit checks: what "the deploy landed" means, before the gate.
+ * An app that answered nothing fails its commit check too (`noAnswerProblems`),
+ * so "landed" always means a body that named the sha.
+ */
 export const commitProblems = (problems) =>
   problems.filter((problem) => problem.startsWith("api-commit:") || problem.startsWith("web-commit:"));
 
@@ -248,6 +268,9 @@ export const waitForHealthy = async (deps, config, expected) => {
     if (attempt === pollAttempts) return problems;
     await deps.sleep(pollIntervalMs);
   }
+  // Reached only with no commit problem left, and an app that answered
+  // nothing has one while its sha is expected: each line below is a body
+  // that named the sha, never a look that got no answer.
   for (const [app, sha] of [
     ["server", expected.serverSha],
     ["client", expected.clientSha],
@@ -424,7 +447,7 @@ export const deployWithRollback = async (deps, config, request) => {
   const failed = [...new Set(problems.map(checkName))].join(", ");
   const details = problems.map((problem) => `  ${problem}`);
   const headline = (outcome) => `${targetSha} failed the deploy gate (${failed}); ${outcome}`;
-  if (!rollback) return { ok: false, errors: [headline("no rollback was requested"), ...details] };
+  if (!rollback) return { ok: false, errors: [headline("it stays pinned, since no rollback was requested"), ...details] };
 
   const plan = planRollback({ apps, previous, targetSha, contractAt: deps.contractAt });
   const skipped = Object.entries(plan.skipped).map(([app, reason]) => `  ${app}: ${reason}`);

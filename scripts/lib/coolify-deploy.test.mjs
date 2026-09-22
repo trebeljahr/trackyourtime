@@ -8,9 +8,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  commitProblems,
   deployWithRollback,
   findEnvValue,
   gateProblems,
+  healthProblems,
   imageRef,
   parseWhich,
   planRollback,
@@ -179,6 +181,18 @@ describe("gate", () => {
   it("does not ask for a commit from an app that was not deployed", () => {
     assert.deepEqual(gateProblems({ ...healthy, health: { ...healthy.health, version: OLD } }, { ...expected, serverSha: null }), []);
   });
+
+  it("counts an app that answered nothing as not landed while its commit is expected", () => {
+    // A 502 from the proxy or a refused connection reads as no body. That is
+    // no commit either, so the poll must keep waiting rather than hand the
+    // silent app to the gate.
+    const silent = gateProblems({ ...healthy, health: null, version: null }, expected);
+    assert.deepEqual(silent.map((line) => line.slice(0, line.indexOf(":"))), ["api-commit", "api-health", "web-commit", "web-version"]);
+    assert.deepEqual(commitProblems(silent).map((line) => line.slice(0, line.indexOf(":"))), ["api-commit", "web-commit"]);
+    // With no commit expected from it, a silent app is a gate failure only.
+    assert.deepEqual(healthProblems(null, null), ["api-health: no JSON answer from /api/health"]);
+    assert.deepEqual(commitProblems(gateProblems({ ...healthy, health: null }, { ...expected, serverSha: null })), []);
+  });
 });
 
 describe("migrations and server rollback", () => {
@@ -266,6 +280,47 @@ describe("deployWithRollback", () => {
     const result = await deployWithRollback(deps, config, { targetSha: NEW, apps: ["server", "client"], rollback: true });
     assert.equal(result.ok, false);
     assert.match(result.errors[0], /failed the deploy gate \(api-commit\); rolled back to server/);
+  });
+
+  it("keeps polling through a proxy 502 and a refused connection until the server answers", async () => {
+    // The first look gets a 502 from the proxy (a container swap), the second
+    // no answer at all (a server booting behind it), the third the new commit.
+    const world = fakeWorld();
+    const fetch = world.fetch;
+    let looks = 0;
+    const flaky = {
+      ...world,
+      fetch: async (url, init) => {
+        if (url.startsWith(`${API}/api/health`)) {
+          looks += 1;
+          if (looks === 1) return { status: 502, ok: false, headers: { get: () => null }, text: async () => "Bad Gateway" };
+          if (looks === 2) throw new TypeError("fetch failed");
+        }
+        return fetch(url, init);
+      },
+    };
+    const { deps, lines } = depsFor(flaky);
+    const result = await deployWithRollback(deps, config, { targetSha: NEW, apps: ["server", "client"], rollback: true });
+    assert.deepEqual(result, { ok: true, errors: [] });
+    assert.equal(looks, config.pollAttempts, "every poll attempt was used before the commit matched");
+    const waiting = lines.filter((line) => line.includes("waiting ("));
+    assert.equal(waiting.length, 2);
+    assert.ok(waiting.every((line) => /api-commit: \/api\/health gave no answer/.test(line)), waiting.join("\n"));
+    // The commit is reported only after a body named it, and after the waits.
+    const reported = lines.findIndex((line) => line === `✓ server reports ${NEW}`);
+    assert.ok(reported > lines.lastIndexOf(waiting.at(-1)), lines.join("\n"));
+  });
+
+  it("gives a server that never answers the whole poll, then fails on the commit", async () => {
+    const world = fakeWorld({ broken: { [NEW]: { down: true } } });
+    const { deps, lines } = depsFor(world);
+    const result = await deployWithRollback(deps, config, { targetSha: NEW, apps: ["server", "client"], rollback: false });
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /failed the deploy gate \(api-commit, api-health\); it stays pinned/);
+    // Every poll attempt, and never the gate: the poll gave up, not the gate.
+    assert.equal(lines.filter((line) => line.includes("waiting (")).length, config.pollAttempts);
+    assert.ok(!lines.some((line) => line.includes("gate (")), "the gate never ran for a server that never landed");
+    assert.ok(!lines.some((line) => line.startsWith("✓ server reports")), "no commit was reported for a server that never answered");
   });
 
   it("keeps the new server and restores only the client when a migration forbids the downgrade", async () => {
