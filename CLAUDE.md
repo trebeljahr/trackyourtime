@@ -2816,6 +2816,38 @@ the root, because mailed links point at them. Three rules:
   and the runaway reminder's link. Deploy the client first when changing a
   path, or those links point at a page the running client does not have.
 
+### Client error reporting
+
+The web app, the desktop app and the phone apps (one bundle) report to a
+Sentry-protocol endpoint when `NEXT_PUBLIC_SENTRY_DSN` is set at build time,
+mirroring the server's `SENTRY_DSN` (`packages/server/src/instrument.ts`,
+`@sentry/node`; the client uses `@sentry/browser` at the same version). The
+code is `packages/client/src/lib/error-reporting/`, started from
+`components/error-reporting.tsx`; the variable is a repo VARIABLE with an empty
+fallback in `build-and-deploy.yml`, `desktop-release.yml` and
+`mobile-release.yml` (docs/deploy.md → Error reporting). Four rules:
+
+- **Empty means no SDK in the bundle.** `loadSentry` keeps the `import()`
+  behind a condition on the inlined variable, so the bundler drops the chunk.
+  The SDK starts from an effect after mount and `reportingPlatform()` is read
+  then: nothing in render, and the prerendered HTML is the same in every build.
+- **What a report may carry is `scrub.ts` and nothing else** (`beforeSend`
+  and `beforeBreadcrumb`): no user, no query strings anywhere, no cookies or
+  headers but the browser identifier, no bodies, no console or DOM
+  breadcrumbs, `sendDefaultPii: false`, `defaultIntegrations: false`. The
+  privacy page states the same list; change both.
+- **No tracing, replay or sessions.** Tracing adds `sentry-trace`/`baggage`
+  to every API request, and a header the API does not allow fails the CORS
+  preflight — sign-in would break in the name of monitoring.
+- **A web chunk error is dropped unless tagged `chunk_reload: refused`.**
+  `lib/chunk-reload.ts` decides the reload first; `ErrorView` and
+  `DeployRecovery` report only what the reload-once guard refused, and the
+  SDK's global handler sees the same failure untagged and drops it. In a
+  shell every chunk error is kept, since its chunks ship inside the app.
+
+Not the browser extension and not Raycast: both are store-reviewed with a
+declared privacy scope.
+
 ### Static export caveats
 
 - `NEXT_PUBLIC_API_URL` is baked at build time — desktop binaries are locked

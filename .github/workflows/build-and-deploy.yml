@@ -235,6 +235,19 @@ jobs:
     needs: [verify, e2e]
     steps:
       - uses: actions/checkout@v4
+      # Error reporting is opt-in per build (an empty NEXT_PUBLIC_SENTRY_DSN
+      # leaves the SDK out of the bundle), so an image that reports nothing
+      # says so here rather than looking like one that does.
+      # docs/deploy.md → Error reporting.
+      - name: Error reporting
+        env:
+          NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+        run: |
+          if [ -z "${NEXT_PUBLIC_SENTRY_DSN:-}" ]; then
+            echo "::notice::NEXT_PUBLIC_SENTRY_DSN is not set — this build reports no errors. See docs/deploy.md → Error reporting."
+          else
+            echo "Error reporting is on: NEXT_PUBLIC_SENTRY_DSN is set."
+          fi
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io

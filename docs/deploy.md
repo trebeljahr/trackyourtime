@@ -531,6 +531,56 @@ PORT=<free port> HOST=127.0.0.1 node packages/client/serve.mjs
 `Dockerfile.selfhost` does not include the docs: a self-hosted instance links
 to them on trackyourtime.dev.
 
+## Error reporting
+
+The server reports to a Sentry-protocol endpoint (a self-hosted GlitchTip
+works) when `SENTRY_DSN` is set in Coolify's env fields
+(`packages/server/src/instrument.ts`). The clients do the same when
+`NEXT_PUBLIC_SENTRY_DSN` is set at build time: the web app, the desktop app
+and the phone apps are one bundle, so one variable covers all three. It is a
+repository VARIABLE with an empty fallback, never a secret (a DSN is in the
+shipped bundle either way):
+
+```bash
+gh variable set NEXT_PUBLIC_SENTRY_DSN --body 'https://key@glitchtip.example.com/2'
+```
+
+Three workflows read it: `build-and-deploy.yml` passes it as a build arg of
+the client image, `desktop-release.yml` and `mobile-release.yml` carry it in
+their job env, where `next build` inherits it. Each prints a `::notice::` when
+it is empty, so a build that reports nothing says so in its log. `release.yml`
+(the self-host image) never passes it: a self-hosted web app reports nowhere
+unless the operator builds the image with the variable.
+
+Empty means off, not "on with nowhere to send". The SDK (`@sentry/browser`,
+pinned like the server's `@sentry/node`) is imported behind a condition on the
+inlined variable (`packages/client/src/lib/error-reporting/reporter.ts`), so a
+build without it ships none of it, and nothing is loaded before mount in any
+build — the prerendered HTML is the same either way.
+
+What a report carries is decided in
+`packages/client/src/lib/error-reporting/scrub.ts`, and the privacy page says
+the same in plain words: the error and its stack frames, the page and request
+URLs with query strings removed (invite ids, device codes and `?next=` live
+there), the method and status of the last requests, the browser identifier,
+`release` (`trackyourtime@<version>+<commit>`; desktop and phone builds are
+tagged and carry the version alone) and `platform` (`web`, `electron`, `ios`,
+`android`). No user, no cookies, no headers but the browser identifier, no
+request bodies, no console or DOM breadcrumbs, no session replay, no tracing.
+
+Two things to settle when the variable is first set:
+
+- **Who runs the endpoint.** The privacy page's processor list says no other
+  company receives data. A DSN on a GlitchTip you run keeps that true; a DSN
+  on sentry.io makes that company a processor, and the page must name it.
+- **A first event arrives** with `platform` and `release` set. The SDK adds no
+  headers to the app's own API requests (tracing is off), so the API's CORS
+  preflight is untouched; if sign-in breaks after the deploy, it is not this.
+
+The browser extension and the Raycast extension do not report. Both are
+store-reviewed against a declared privacy scope, and reporting from them is a
+separate decision.
+
 ## Android release signing
 
 Play will not accept an unsigned bundle. `.github/workflows/mobile-release.yml`
@@ -886,6 +936,7 @@ Repository variables (`gh variable set NAME`), which are not secret:
 | `HOMEBREW_TAP_REPO` | manifests | `<owner>/homebrew-tap` |
 | `NEXT_PUBLIC_API_URL` | all | optional; defaults to `https://api.trackyourtime.dev` |
 | `DESKTOP_STAGING_PERCENTAGE` | draft release | optional; 0-100, the share of installs a new tag's feeds offer the update to. Empty means every install ("Staged rollout") |
+| `NEXT_PUBLIC_SENTRY_DSN` | all | optional; empty by default, which ships no error reporting. See [Error reporting](#error-reporting) |
 
 The build derives nothing from these. The Store identity in particular is never
 defaulted, because Partner Center refuses a package whose identity differs from

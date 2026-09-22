@@ -89,6 +89,11 @@ permissions:
 # than producing an .aab, and the workflow needs no separate check.
 env:
   NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+  # Error reporting, baked in the same way: a repo VARIABLE, empty by default.
+  # Empty means the reporting SDK is not in the bundle at all
+  # (packages/client/src/lib/error-reporting/reporter.ts); each job's "Error
+  # reporting" step says which it was. docs/deploy.md → Error reporting.
+  NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
 
 jobs:
   android:
@@ -140,6 +145,16 @@ jobs:
       - name: Install deps
         if: steps.plan.outputs.build != 'skip'
         run: pnpm install --frozen-lockfile
+
+      # Opt-in per build, so a release that reports nothing must say so in
+      # its log rather than look like one that does.
+      - name: Error reporting
+        run: |
+          if [ -z "${NEXT_PUBLIC_SENTRY_DSN:-}" ]; then
+            echo "::notice::NEXT_PUBLIC_SENTRY_DSN is not set — this build reports no errors. See docs/deploy.md → Error reporting."
+          else
+            echo "Error reporting is on: NEXT_PUBLIC_SENTRY_DSN is set."
+          fi
 
       # Also asserts versionName and the identifiers against package.json and
       # capacitor.config.ts.
@@ -234,6 +249,14 @@ jobs:
       - name: Install deps
         if: steps.plan.outputs.build != 'skip'
         run: pnpm install --frozen-lockfile
+
+      - name: Error reporting
+        run: |
+          if [ -z "${NEXT_PUBLIC_SENTRY_DSN:-}" ]; then
+            echo "::notice::NEXT_PUBLIC_SENTRY_DSN is not set — this build reports no errors. See docs/deploy.md → Error reporting."
+          else
+            echo "Error reporting is on: NEXT_PUBLIC_SENTRY_DSN is set."
+          fi
 
       # Also asserts MARKETING_VERSION and the identifiers against package.json
       # and capacitor.config.ts.

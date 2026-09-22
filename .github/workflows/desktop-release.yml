@@ -52,6 +52,11 @@ permissions:
 # an app that talks to no API). Same read as build-and-deploy.yml.
 env:
   NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+  # Error reporting, baked in the same way: a repo VARIABLE, empty by default.
+  # Empty means the reporting SDK is not in the bundle at all
+  # (packages/client/src/lib/error-reporting/reporter.ts); the "Error
+  # reporting" step below says which it was. docs/deploy.md → Error reporting.
+  NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
 
 jobs:
   # Validates the staging percentage in seconds, before the builds: a typo
@@ -218,6 +223,18 @@ jobs:
       # icons, electron-builder with --publish never, then the asar listing
       # (no @capacitor, nothing stray) and the version inside every package
       # against package.json (and, on a tag, the tag against package.json).
+      # Opt-in per build, so a release that reports nothing must say so in
+      # its log rather than look like one that does.
+      - name: Error reporting
+        if: steps.signing.outputs.mode != 'skip'
+        shell: bash
+        run: |
+          if [ -z "${NEXT_PUBLIC_SENTRY_DSN:-}" ]; then
+            echo "::notice::NEXT_PUBLIC_SENTRY_DSN is not set — this build reports no errors. See docs/deploy.md → Error reporting."
+          else
+            echo "Error reporting is on: NEXT_PUBLIC_SENTRY_DSN is set."
+          fi
+
       - name: Build and package
         if: steps.signing.outputs.mode != 'skip'
         shell: bash

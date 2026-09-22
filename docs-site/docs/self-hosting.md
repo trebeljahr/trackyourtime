@@ -1467,7 +1467,12 @@ downloaded or installed: you upgrade by hand, as below.
 
 **Sentry.** Set `SENTRY_DSN` to send server errors to any Sentry-protocol
 endpoint, including a self-hosted GlitchTip. Unset, nothing is reported and no
-error data leaves the server.
+error data leaves the server. The web app in the self-host image reports
+nowhere: it is built without `NEXT_PUBLIC_SENTRY_DSN`, and without that value
+the reporting SDK is not in the bundle. To have it report, build the client
+image yourself with that variable set (it is inlined at build time, so a
+runtime env value does nothing); what a report carries is
+`packages/client/src/lib/error-reporting/scrub.ts`.
 
 **Google sign-in.** Set both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to
 register the provider. With either empty, the server registers no social

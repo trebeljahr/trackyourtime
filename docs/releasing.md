@@ -50,6 +50,12 @@ Tag rules:
 The server image reports its commit in `/api/health` as `commit`, and as
 `version` for older readers.
 
+Error reporting from the desktop and phone builds is the
+`NEXT_PUBLIC_SENTRY_DSN` repository variable, read by `desktop-release.yml`
+and `mobile-release.yml` at build time. Empty, the default, ships no reporting
+SDK and each run says so in a notice. `docs/deploy.md` → Error reporting has
+the value, what a report carries and what to check after setting it.
+
 ## Checklist
 
 `prepare` runs `scripts/release-policy-check.mjs` and fails the tag, before
