@@ -95,6 +95,43 @@ These settings belong to the computer, not to your account.
   a shortcut from the start: ⌥⇧⌘Space on macOS, Ctrl+Alt+Shift+Space on
   Windows and Linux. If another app already uses a shortcut, Settings says so.
 
+## Activity suggestions
+
+The desktop app can record which app is in front and suggest entries for the
+time you did not track. Capture is off until you turn it on in **Settings →
+Desktop → Activity capture**. It asks for no system permission.
+
+What it records, and where:
+
+- The name of the app in front, when it came to the front and when it left.
+  A stretch ends when you are idle or the screen locks.
+- Window titles, only on Windows and Linux, and only when you switch on
+  **Include window titles**. Turning them off deletes the titles already
+  stored. The Mac app records app names only.
+- Everything stays in the app's own folder on your computer (`activity/` in
+  the app's data folder). Nothing is sent until you add an entry, and that
+  entry holds only what you put in it.
+- Activity is deleted after 14 days by default. You can set 1 to 90 days.
+- **Never record** takes an app from your recent apps or a pattern such as
+  `com.example.*`. Adding one deletes what is already recorded for that app.
+  The app never records itself, the lock screen or the screen saver.
+- **Delete all activity now** removes the recorded activity. Signing out
+  removes it too.
+
+The **Activity** page lists the untracked stretches for a day. **Add** files a
+stretch as an entry, **Edit and add** lets you change it first, and
+**Dismiss** hides it. **Always file … under** saves a project, task, tags and
+description for an app. New suggestions where that app is the busiest start
+with them. Rules stay on this computer.
+
+How each system reads the app in front:
+
+| System | How | Not available |
+| --- | --- | --- |
+| macOS | `lsappinfo`, which ships with macOS | Mac App Store version |
+| Windows | A PowerShell process that the app starts | Microsoft Store version; PCs where policy puts PowerShell in Constrained Language Mode |
+| Linux | `xprop` on an X11 session | Wayland sessions, Snap, Flatpak, or when `xprop` is not installed |
+
 ## Build it from source
 
 You need Node.js 24 and pnpm. Node 26 is known to leave Electron's download
@@ -124,5 +161,7 @@ names end in `-unsigned`. It does not update itself.
   unless you turn on **Keep running when the window is closed**.
 - On Linux the tray shows no running time, because AppIndicator has no
   tooltip. The icon changes while a timer runs.
-- The app does not record which applications you use. Activity suggestions
-  exist in the Chrome extension only.
+- Activity capture does not work on Wayland, in the store versions, or in the
+  Snap and Flatpak versions. The Activity page is hidden there.
+- The Mac app does not record window titles, because macOS gives them only to
+  apps with the Screen Recording permission.

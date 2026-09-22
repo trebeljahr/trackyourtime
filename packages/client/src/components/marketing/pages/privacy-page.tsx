@@ -117,6 +117,16 @@ export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement 
         <p>{t("privacy.raycast.body")}</p>
       </Block>
 
+      <Block title={t("privacy.desktop.title")}>
+        <ul>
+          <li>{t("privacy.desktop.activity")}</li>
+          <li>{t("privacy.desktop.titles")}</li>
+          <li>{t("privacy.desktop.retention")}</li>
+          <li>{t("privacy.desktop.local")}</li>
+          <li>{t("privacy.desktop.stores")}</li>
+        </ul>
+      </Block>
+
       <Block title={t("privacy.mobile.title")}>
         <ul>
           <li>{t("privacy.mobile.keychain")}</li>

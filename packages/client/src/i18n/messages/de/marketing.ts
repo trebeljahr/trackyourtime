@@ -244,6 +244,18 @@ export const marketing: Translation<typeof source> = {
       title: "Die Raycast-Erweiterung",
       body: "Die Raycast-Erweiterung speichert dein Sitzungstoken, eine Kopie der zuletzt geladenen Daten und noch nicht gesendete Änderungen im verschlüsselten lokalen Speicher von Raycast auf deinem Mac. Sie spricht nur mit dem Track-Your-Time-Server, der in ihren Einstellungen eingetragen ist.",
     },
+    desktop: {
+      title: "Die Desktop-App",
+      activity:
+        "Die Aktivitätserfassung ist aus, bis du sie unter Einstellungen → Desktop einschaltest. Ist sie an, speichert die App den Namen der App im Vordergrund und wann du sie benutzt hast. Das liegt in ihrem eigenen Ordner auf deinem Computer.",
+      titles:
+        "Unter Windows und Linux kannst du zusätzlich Fenstertitel einschalten. Die Mac-App erfasst keine Fenstertitel.",
+      retention:
+        "Die App löscht die Aktivität nach 14 Tagen oder nach dem Zeitraum, den du einstellst. Apps, die du ausschließt, erfasst sie nie, und beim Ausschließen löscht sie, was sie für diese App schon erfasst hat.",
+      local:
+        "Deine Aktivität sendet die App nirgendwohin. Nur ein Eintrag, den du hinzufügst, erreicht den Server, und er enthält nur, was du einträgst.",
+      stores: "Die Versionen aus dem Mac App Store und dem Microsoft Store, Snap und Flatpak erfassen keine Aktivität.",
+    },
     mobile: {
       title: "Die Apps für iPhone und Android",
       keychain: "Die Apps bewahren dein Sitzungstoken im iOS-Schlüsselbund oder im Android Keystore auf.",

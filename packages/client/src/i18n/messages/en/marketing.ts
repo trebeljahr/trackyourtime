@@ -247,6 +247,18 @@ export const marketing = {
       title: "The Raycast extension",
       body: "The Raycast extension stores your session token, a copy of recent data, and any unsent changes in Raycast’s encrypted local storage on your Mac. It talks only to the Track Your Time server set in its preferences.",
     },
+    desktop: {
+      title: "The desktop app",
+      activity:
+        "Activity capture is off until you turn it on in Settings → Desktop. With it on, the app stores the name of the app in front and when you used it. It keeps this in its own folder on your computer.",
+      titles:
+        "On Windows and Linux you can also switch on window titles. The Mac app does not record window titles.",
+      retention:
+        "The app deletes activity after 14 days, or after the period you set. It never records the apps you exclude, and excluding an app deletes what it already recorded for it.",
+      local:
+        "The app sends your activity nowhere. Only an entry you add reaches the server, and that entry holds only what you put in it.",
+      stores: "The Mac App Store and Microsoft Store versions, Snap and Flatpak do not record activity.",
+    },
     mobile: {
       title: "The iPhone and Android apps",
       keychain: "The apps keep your session token in the iOS Keychain or the Android Keystore.",
