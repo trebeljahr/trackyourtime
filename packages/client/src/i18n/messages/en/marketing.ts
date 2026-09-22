@@ -159,7 +159,7 @@ export const marketing = {
       },
       stores: {
         q: "Where do I get the apps?",
-        a: "The Chrome extension, the Raycast extension and the phone apps aren’t in their stores yet. The web app works in any browser today, on your phone too.",
+        a: "The browser extension is in the Chrome Web Store, and Edge, Brave, Opera, Vivaldi and Arc install it from there. The Raycast extension and the phone apps aren’t in their stores yet. The web app works in any browser today, on your phone too.",
       },
       shutdown: {
         q: "What happens if the project stops?",
@@ -403,6 +403,15 @@ export const marketing = {
     login: {
       title: "No second login",
       body: "Logged in at trackyourtime.dev in Chrome? The extension logs in too. There’s no extra password and no API key to copy. Log out of the web app, and the extension logs out with it.",
+    },
+    browsers: {
+      title: "Not using Chrome?",
+      body: "Edge, Brave, Opera, Vivaldi and Arc install the extension from the Chrome Web Store. Your browser needs Chromium 116 or newer, and every current version of these browsers is newer than that.",
+      edge: "Edge: open the extension in the Chrome Web Store and choose Allow extensions from other stores in the banner at the top. Then add the extension.",
+      opera: "Opera: first add Install Chrome Extensions from Opera’s add-ons site. Then add the extension from the Chrome Web Store.",
+      others: "Brave, Vivaldi and Arc: add it from the Chrome Web Store, the same way as in Chrome.",
+      edgeStore: "The extension isn’t in Microsoft’s Edge Add-ons store. In Edge, use the copy from the Chrome Web Store.",
+      same: "It works the same in each of these browsers, and it logs in with the web app there too.",
     },
     selfHost: {
       title: "Using your own server?",

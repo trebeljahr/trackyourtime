@@ -82,6 +82,25 @@ export function ExtensionPage({ locale }: { locale: Locale }): React.ReactElemen
         </Prose>
       </Section>
 
+      <Section title={t("extension.browsers.title")}>
+        <div className="space-y-4">
+          <Prose>
+            <p>{t("extension.browsers.body")}</p>
+          </Prose>
+          <Bullets
+            items={[
+              t("extension.browsers.edge"),
+              t("extension.browsers.opera"),
+              t("extension.browsers.others"),
+            ]}
+          />
+          <Prose>
+            <p>{t("extension.browsers.edgeStore")}</p>
+            <p>{t("extension.browsers.same")}</p>
+          </Prose>
+        </div>
+      </Section>
+
       <Section title={t("extension.selfHost.title")}>
         <Prose>
           <p>

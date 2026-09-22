@@ -157,7 +157,7 @@ export const marketing: Translation<typeof source> = {
       },
       stores: {
         q: "Wo bekomme ich die Apps?",
-        a: "Die Chrome-Erweiterung, die Raycast-Erweiterung und die Mobil-Apps sind noch nicht in ihren Stores. Die Web-App läuft schon heute in jedem Browser, auch auf dem Handy.",
+        a: "Die Browser-Erweiterung ist im Chrome Web Store, und Edge, Brave, Opera, Vivaldi und Arc installieren sie von dort. Die Raycast-Erweiterung und die Mobil-Apps sind noch nicht in ihren Stores. Die Web-App läuft schon heute in jedem Browser, auch auf dem Handy.",
       },
       shutdown: {
         q: "Was passiert, wenn das Projekt eingestellt wird?",
@@ -400,6 +400,15 @@ export const marketing: Translation<typeof source> = {
     login: {
       title: "Keine zweite Anmeldung",
       body: "Du bist in Chrome auf trackyourtime.dev angemeldet? Dann meldet sich die Erweiterung auch an. Kein zusätzliches Passwort, kein API-Token zum Kopieren. Meldest du dich in der Web-App ab, meldet sich die Erweiterung mit ab.",
+    },
+    browsers: {
+      title: "Du nutzt nicht Chrome?",
+      body: "Edge, Brave, Opera, Vivaldi und Arc installieren die Erweiterung aus dem Chrome Web Store. Dein Browser braucht Chromium 116 oder neuer, und jede aktuelle Version dieser Browser ist neuer.",
+      edge: "Edge: Öffne die Erweiterung im Chrome Web Store und wähle im Banner oben „Erweiterungen aus anderen Stores zulassen“. Füge die Erweiterung dann hinzu.",
+      opera: "Opera: Füge zuerst „Install Chrome Extensions“ von Operas Add-on-Seite hinzu. Füge die Erweiterung dann aus dem Chrome Web Store hinzu.",
+      others: "Brave, Vivaldi und Arc: Füge sie aus dem Chrome Web Store hinzu, genau wie in Chrome.",
+      edgeStore: "Im Store „Edge-Add-ons“ von Microsoft gibt es die Erweiterung nicht. Nimm in Edge die Version aus dem Chrome Web Store.",
+      same: "Sie funktioniert in jedem dieser Browser gleich, auch die Anmeldung über die Web-App.",
     },
     selfHost: {
       title: "Du nutzt einen eigenen Server?",

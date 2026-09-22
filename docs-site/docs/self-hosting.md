@@ -1515,7 +1515,7 @@ origins to the trusted list:
 |---|---|
 | iOS app | `capacitor://localhost` |
 | Android app | `https://localhost` |
-| Chrome extension from the Web Store | `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` |
+| Browser extension from the Chrome Web Store | `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` |
 | Desktop app | `app://-` |
 | Raycast extension | None. Raycast sends no `Origin`. |
 
@@ -1541,6 +1541,24 @@ trust them yet, and name the setting to change. Under a single domain, enter the
 `https://track.example.com`, not an `api.` subdomain.
 
 ### Browser extension
+
+The extension installs from the Chrome Web Store in any browser built on
+Chromium 116 or newer:
+
+- **Chrome, Brave, Vivaldi and Arc** add it from the Chrome Web Store.
+- **Edge** needs one extra step. Open the extension in the Chrome Web Store and
+  choose **Allow extensions from other stores** in the banner at the top. Then
+  add the extension.
+- **Opera** needs Opera's **Install Chrome Extensions** add-on first. Then add
+  the extension from the Chrome Web Store.
+
+Every one of these browsers installs the same copy, so the extension has the
+same id, `opibnndhibnigcfgfbgbipakadhnbjfi`, in each of them. The one entry that
+`TRUST_STORE_APPS` adds covers all of them. The extension is not in Microsoft's
+Edge Add-ons store. A copy from that store would get a different id, and your
+server would not trust it.
+
+To connect the extension to your server:
 
 1. Open the popup and choose **Change server** below the sign-in form.
 2. Choose **My own server**, enter `https://track.example.com`, and confirm.
