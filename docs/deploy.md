@@ -638,11 +638,18 @@ anything is built. The rules are `scripts/lib/mobile-release.mjs`, tested in
 
 The tag must be `v` plus the root `package.json` version, or "Plan" fails.
 `pnpm build:mobile` then fails when `MARKETING_VERSION` or `versionName`
-differs from `package.json`. The build numbers are the workflow's run number:
-`ANDROID_VERSION_CODE` for Android's `versionCode`, and
-`CURRENT_PROJECT_VERSION` for iOS. Both stores refuse a build number they have
-already seen, and the run number only grows. A build uploaded by hand must use
-a number below the next run number.
+differs from `package.json`. The build numbers are "Plan"'s `build_number`,
+the workflow's run number × 100 + the run attempt: `ANDROID_VERSION_CODE` for
+Android's `versionCode`, and `CURRENT_PROJECT_VERSION` for iOS. Both stores
+refuse a build number they have already seen; the run number grows with every
+run, and the attempt is what makes "Re-run all jobs" after a successful upload
+a new number rather than a store error. A build uploaded by hand must use a
+number below the next run number × 100.
+
+A prerelease tag (`vX.Y.Z-rc.N`) builds Android only. The tag pins
+`package.json`, and so `MARKETING_VERSION`, to `X.Y.Z-rc.N`, and App Store
+Connect refuses a marketing version that is not dotted integers, so the iOS
+job skips with a notice. TestFlight builds come from stable tags or a dispatch.
 
 ### Google Play tracks and staged rollout
 
@@ -689,8 +696,9 @@ With all five set, two project files are also required, or "Plan" fails:
 
 The archive and the export use the API key with `-allowProvisioningUpdates`,
 so Xcode creates or fetches the provisioning profile itself. Creating a profile
-needs a key with the Admin role. The IPA goes to TestFlight for stable and prerelease tags alike;
-the workflow never submits for review.
+needs a key with the Admin role. The IPA goes to TestFlight from a stable tag
+or a dispatch; a prerelease tag is skipped (above), and the workflow never
+submits for review.
 
 **Submitting to the App Store is manual.** In App Store Connect, pick the
 TestFlight build for the new version and submit it for review. To roll out in

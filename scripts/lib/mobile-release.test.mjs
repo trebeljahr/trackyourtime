@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   ANDROID_SIGNING_SECRETS,
+  buildNumber,
   developmentTeamConfigured,
   IOS_SECRETS,
   isPrereleaseTag,
@@ -49,6 +50,24 @@ describe("parseUserFraction", () => {
     for (const bad of ["0", "10", "10%", "1.5", "-0.1", "abc"]) {
       assert.ok("error" in parseUserFraction(bad), bad);
     }
+  });
+});
+
+describe("buildNumber", () => {
+  it("grows on a re-run of the same run, and stays below the next run", () => {
+    const first = buildNumber({ runNumber: "12", runAttempt: "1" });
+    const rerun = buildNumber({ runNumber: "12", runAttempt: "2" });
+    const next = buildNumber({ runNumber: "13", runAttempt: "1" });
+    assert.deepEqual(first, { buildNumber: 1201 });
+    assert.ok(rerun.buildNumber > first.buildNumber);
+    assert.ok(next.buildNumber > rerun.buildNumber);
+  });
+
+  it("refuses a missing or non-numeric run number or attempt", () => {
+    assert.ok("error" in buildNumber({ runNumber: undefined, runAttempt: "1" }));
+    assert.ok("error" in buildNumber({ runNumber: "12", runAttempt: "" }));
+    assert.ok("error" in buildNumber({ runNumber: "0", runAttempt: "1" }));
+    assert.ok("error" in buildNumber({ runNumber: "12", runAttempt: "abc" }));
   });
 });
 
@@ -174,12 +193,31 @@ describe("planIos", () => {
     assert.match(planIos({ ...tag(), env, developmentTeam: true, exportOptions: false }).errors.join(), /ExportOptions/);
   });
 
-  it("signs and uploads to TestFlight, prerelease included", () => {
-    for (const ref of [tag(), tag("v0.2.0-rc.1")]) {
-      const plan = planIos({ ...ref, env: all(IOS_SECRETS), ...ready });
-      assert.equal(plan.build, "signed");
-      assert.equal(plan.upload, true);
+  it("signs and uploads a stable tag to TestFlight", () => {
+    const plan = planIos({ ...tag(), env: all(IOS_SECRETS), ...ready });
+    assert.equal(plan.build, "signed");
+    assert.equal(plan.upload, true);
+    assert.deepEqual(plan.errors, []);
+  });
+
+  it("skips a prerelease tag with a notice, secrets or not, pushed or dispatched", () => {
+    // Apple refuses a CFBundleShortVersionString of 0.2.0-rc.1, and the tag
+    // pins package.json (and so MARKETING_VERSION) to exactly that.
+    const byHand = { event: "workflow_dispatch", refType: "tag", refName: "v0.2.0-rc.1", version: "0.2.0-rc.1" };
+    for (const ref of [tag("v0.2.0-rc.1"), byHand]) {
+      for (const env of [all(IOS_SECRETS), {}]) {
+        const plan = planIos({ ...ref, env, ...ready });
+        assert.equal(plan.build, "skip");
+        assert.equal(plan.upload, false);
+        assert.deepEqual(plan.errors, []);
+        assert.match(plan.notices.join(), /prerelease marketing version/);
+      }
     }
+  });
+
+  it("still refuses a partial set on a prerelease tag", () => {
+    const plan = planIos({ ...tag("v0.2.0-rc.1"), env: { APPLE_API_KEY_ID: "x" }, ...ready });
+    assert.match(plan.errors.join(), /APPLE_CERTIFICATE_BASE64/);
   });
 });
 
@@ -214,6 +252,15 @@ describe("mobile-release.yml", () => {
       assert.match(step, /if: steps\.plan\.outputs\.build == '(signed|unsigned)'/);
       assert.doesNotMatch(step, /build != 'skip'/);
     }
+  });
+
+  it("takes both store build numbers from the plan, never the bare run number", () => {
+    // github.run_number does not grow on "Re-run all jobs", so a re-run after
+    // a successful upload would hand the store a number it already holds.
+    assert.match(workflow, /ANDROID_VERSION_CODE: \$\{\{ steps\.plan\.outputs\.build_number \}\}/);
+    assert.match(workflow, /CURRENT_PROJECT_VERSION=\$\{\{ steps\.plan\.outputs\.build_number \}\}/);
+    // The expression, not a mention: the header comment explains the rule.
+    assert.doesNotMatch(workflow, /\$\{\{[^}]*github\.run_number/);
   });
 
   it("reads every secret the plan checks", () => {

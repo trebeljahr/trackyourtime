@@ -25,8 +25,10 @@ from the next one they see. To offer it to part of them first, set
 A tag also runs `mobile-release.yml`, which builds the Android AAB and the iOS
 IPA and uploads them to Google Play and TestFlight when their secrets exist.
 Without the secrets each job ends green with a notice and uploads no artifact.
-A prerelease tag goes to Play's internal track only. Submitting the iOS build
-to the App Store is manual (docs/deploy.md → "Mobile release").
+A prerelease tag goes to Play's internal track only and skips iOS: Apple
+refuses the prerelease marketing version the tag pins, so TestFlight builds
+come from stable tags or a dispatch. Submitting the iOS build to the App Store
+is manual (docs/deploy.md → "Mobile release").
 
 ## What the workflow does
 

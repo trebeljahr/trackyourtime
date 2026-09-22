@@ -20,7 +20,15 @@
  * The tag is checked against package.json with desktop-release.mjs's
  * `tagMismatch`; package.json against the native versions (MARKETING_VERSION,
  * versionName) is `scripts/build-mobile.mjs`'s assertion. Together they tie a
- * tag to what the stores are told.
+ * tag to what the stores are told — which is why a prerelease tag never
+ * reaches iOS: `v0.2.0-rc.1` needs package.json `0.2.0-rc.1`, build-mobile
+ * then needs MARKETING_VERSION `0.2.0-rc.1`, and App Store Connect refuses a
+ * CFBundleShortVersionString that is not dotted integers. Android's
+ * versionName is free text, so its prerelease path (internal track) stands.
+ *
+ * The build numbers (versionCode, CURRENT_PROJECT_VERSION) are `buildNumber`
+ * below, from the run number AND the attempt: both stores refuse a number they
+ * have seen, and "Re-run all jobs" keeps the run number.
  */
 
 import { tagMismatch } from "./desktop-release.mjs";
@@ -75,6 +83,28 @@ export function secretSetState(env, names) {
  */
 export function isPrereleaseTag(refName) {
   return /^v\d+\.\d+\.\d+-/.test(refName);
+}
+
+/**
+ * The store build number for a run: versionCode on Android,
+ * CURRENT_PROJECT_VERSION on iOS. `github.run_number` alone is not enough — it
+ * does not grow on "Re-run all jobs", so a re-run after a successful upload
+ * would offer the store a number it already holds and fail there. The attempt
+ * (1-based, reset per run) breaks the tie; 100 per run leaves room for it.
+ *
+ * @param {{ runNumber: string | number | undefined, runAttempt: string | number | undefined }} input
+ * @returns {{ buildNumber: number } | { error: string }}
+ */
+export function buildNumber({ runNumber, runAttempt }) {
+  const run = Number(runNumber);
+  const attempt = Number(runAttempt);
+  if (!Number.isInteger(run) || run < 1) {
+    return { error: `GITHUB_RUN_NUMBER "${runNumber ?? ""}" is not a positive integer.` };
+  }
+  if (!Number.isInteger(attempt) || attempt < 1) {
+    return { error: `GITHUB_RUN_ATTEMPT "${runAttempt ?? ""}" is not a positive integer.` };
+  }
+  return { buildNumber: run * 100 + attempt };
 }
 
 /**
@@ -237,8 +267,10 @@ export function planAndroid({ event, refType, refName, version, env, track, user
  */
 
 /**
- * iOS has one destination, TestFlight, for stable and prerelease tags alike.
- * App Store submission and its phased release are App Store Connect steps.
+ * iOS has one destination, TestFlight, and only stable tags and dispatches
+ * reach it: a prerelease tag is skipped with a notice (see the header — Apple
+ * refuses the marketing version the tag implies). App Store submission and
+ * its phased release are App Store Connect steps.
  *
  * @param {{
  *   event: string,
@@ -253,7 +285,7 @@ export function planAndroid({ event, refType, refName, version, env, track, user
  */
 export function planIos({ event, refType, refName, version, env, developmentTeam, exportOptions }) {
   const notices = [];
-  const { errors } = refFacts({ refType, refName, version });
+  const { prerelease, errors } = refFacts({ refType, refName, version });
   const tagPush = event === "push" && refType === "tag";
   const secrets = secretSetState(env, IOS_SECRETS);
 
@@ -262,6 +294,13 @@ export function planIos({ event, refType, refName, version, env, developmentTeam
     errors.push(
       `The iOS signing secrets are incomplete. Set: ${secrets.present.join(", ")}. Missing: ${secrets.missing.join(", ")}. ` +
         "Set all five to sign, or none of them.",
+    );
+  } else if (prerelease) {
+    // Whatever the event: a dispatch of the tag would fail the same way, at
+    // build-mobile's MARKETING_VERSION check or at App Store Connect.
+    notices.push(
+      `${refName} is a prerelease — iOS skipped. Apple refuses a prerelease marketing version; ` +
+        "TestFlight builds come from stable tags or a dispatch.",
     );
   } else if (secrets.state === "complete") {
     // The secrets are the switch; the two project facts are then required.

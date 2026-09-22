@@ -5,17 +5,18 @@
  *   node scripts/mobile-release-plan.mjs <android|ios>
  *
  * Reads the secrets' presence (never their values) from the job's env, the ref
- * from GITHUB_EVENT_NAME / GITHUB_REF_TYPE / GITHUB_REF_NAME, and for Android
- * the track and rollout from PLAY_TRACK / PLAY_USER_FRACTION. Writes `build`,
- * `upload`, `version` and, for Android, `track`, `status` and `user_fraction` to
- * $GITHUB_OUTPUT. Errors print as ::error:: and exit 1; skips print ::notice::.
- * The rules are scripts/lib/mobile-release.mjs.
+ * from GITHUB_EVENT_NAME / GITHUB_REF_TYPE / GITHUB_REF_NAME, the build number
+ * from GITHUB_RUN_NUMBER / GITHUB_RUN_ATTEMPT, and for Android the track and
+ * rollout from PLAY_TRACK / PLAY_USER_FRACTION. Writes `build`, `upload`,
+ * `version`, `build_number` and, for Android, `track`, `status` and
+ * `user_fraction` to $GITHUB_OUTPUT. Errors print as ::error:: and exit 1;
+ * skips print ::notice::. The rules are scripts/lib/mobile-release.mjs.
  */
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { developmentTeamConfigured, planAndroid, planIos } from "./lib/mobile-release.mjs";
+import { buildNumber, developmentTeamConfigured, planAndroid, planIos } from "./lib/mobile-release.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const platform = process.argv[2];
@@ -26,6 +27,9 @@ const ref = {
   refName: env.GITHUB_REF_NAME ?? "",
   version: JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8")).version,
 };
+// Outside Actions (a local dry run) there is no run number; 0 says so, and a
+// skip never uses it. On a runner both variables are always set.
+const number = env.GITHUB_RUN_NUMBER === undefined ? { buildNumber: 0 } : buildNumber({ runNumber: env.GITHUB_RUN_NUMBER, runAttempt: env.GITHUB_RUN_ATTEMPT });
 
 let plan;
 let outputs;
@@ -38,6 +42,7 @@ if (platform === "android") {
     status: plan.status,
     user_fraction: plan.userFraction,
     version: ref.version,
+    build_number: "buildNumber" in number ? String(number.buildNumber) : "",
   };
 } else if (platform === "ios") {
   const pbxPath = resolve(repoRoot, "ios/App/App.xcodeproj/project.pbxproj");
@@ -47,11 +52,19 @@ if (platform === "android") {
     developmentTeam: existsSync(pbxPath) && developmentTeamConfigured(readFileSync(pbxPath, "utf8")),
     exportOptions: existsSync(resolve(repoRoot, "ios/App/ExportOptions.plist")),
   });
-  outputs = { build: plan.build, upload: String(plan.upload), version: ref.version };
+  outputs = {
+    build: plan.build,
+    upload: String(plan.upload),
+    version: ref.version,
+    build_number: "buildNumber" in number ? String(number.buildNumber) : "",
+  };
 } else {
   console.log(`::error::Usage: mobile-release-plan.mjs <android|ios> — got "${platform ?? ""}".`);
   process.exit(1);
 }
+
+// A build with no usable number would upload nothing the store accepts.
+if ("error" in number && plan.build !== "skip") plan.errors.push(number.error);
 
 // A refused run prints only why it was refused: a "skipped" notice beside the
 // error would read as the reason.

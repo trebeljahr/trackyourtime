@@ -32,13 +32,18 @@ name: Mobile Release
 # variable (default internal), rolled out to MOBILE_PLAY_USER_FRACTION of users
 # when that is set (a staged rollout, status inProgress). A prerelease tag
 # (`v1.2.0-rc.1`) always goes to internal, whatever the variables say. iOS goes
-# to TestFlight for both; App Store submission, and its phased release, are
-# App Store Connect steps.
+# to TestFlight from a stable tag or a dispatch only: a prerelease tag is
+# skipped with a notice, because the tag pins package.json and MARKETING_VERSION
+# to `1.2.0-rc.1` and App Store Connect refuses a marketing version that is not
+# dotted integers. App Store submission, and its phased release, are App Store
+# Connect steps.
 #
 # Versions. The plan refuses a tag that is not package.json's version, and
 # build-mobile.mjs refuses a MARKETING_VERSION / versionName that is not
 # package.json's. The build numbers (versionCode, CURRENT_PROJECT_VERSION) are
-# this workflow's run number, because both stores refuse a number they have seen.
+# the plan's `build_number`, run number × 100 + attempt: both stores refuse a
+# number they have seen, and `github.run_number` alone does not grow on
+# "Re-run all jobs", so a re-run after a successful upload would fail there.
 
 on:
   push:
@@ -156,7 +161,7 @@ jobs:
         if: steps.plan.outputs.build != 'skip'
         working-directory: android
         env:
-          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_VERSION_CODE: ${{ steps.plan.outputs.build_number }}
         run: ./gradlew bundleRelease
 
       # Gradle signs with whatever config it was handed and says nothing when
@@ -287,7 +292,7 @@ jobs:
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8" \
             -authenticationKeyID "$APPLE_API_KEY_ID" \
             -authenticationKeyIssuerID "$APPLE_API_ISSUER_ID" \
-            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CURRENT_PROJECT_VERSION=${{ steps.plan.outputs.build_number }} \
             archive
 
       - name: Export IPA
