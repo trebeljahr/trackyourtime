@@ -17,6 +17,7 @@ vi.mock("@/lib/format", () => ({
     clock: () => "09:00",
     entryDuration: (entry: DetailedEntry) => entry.durationSec,
   }),
+  formatDayLabel: () => "Tue 3 Feb",
 }));
 
 // The inline editor pulls the catalog pickers in, and those are tRPC-backed.
@@ -25,6 +26,16 @@ vi.mock("@/components/entry-fields/entry-fields-editor", () => ({
   EntryFieldsEditor: () => null,
 }));
 vi.mock("@/components/entry-fields/use-entry-fields", () => ({
+  useEntryFields: () => ({
+    fields: {
+      description: "",
+      projectId: null,
+      taskId: null,
+      tagIds: [],
+      billable: false,
+    },
+    setFields: () => {},
+  }),
   useWriteThroughEntryFields: () => ({
     fields: {
       description: "",
@@ -111,8 +122,6 @@ const actions = {
   create: vi.fn(),
 } as unknown as CalendarActions;
 
-const onRequestCreate = vi.fn();
-
 const renderGrid = () =>
   render(
     <TimeGrid
@@ -122,7 +131,6 @@ const renderGrid = () =>
       actions={actions}
       preferredRange={DEFAULT_VISIBLE_RANGE}
       pxPerMinute={1}
-      onRequestCreate={onRequestCreate}
     />
   );
 
@@ -173,10 +181,44 @@ describe("TimeGrid under a coarse pointer", () => {
 
     dragColumn("touch");
 
-    expect(onRequestCreate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("calendar-create-draft")).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("calendar-create-preview")
     ).not.toBeInTheDocument();
+  });
+
+  it("puts a draft down on a tap on empty grid, from the click after it", () => {
+    coarse = true;
+    renderGrid();
+
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+    fireEvent.pointerDown(column, {
+      pointerId: 1,
+      pointerType: "touch",
+      button: 0,
+      clientY: 40,
+    });
+    fireEvent.pointerUp(column, { pointerId: 1, pointerType: "touch", clientY: 40 });
+    fireEvent.click(column, { clientY: 40 });
+
+    expect(screen.getByTestId("calendar-create-draft")).toBeInTheDocument();
+  });
+
+  it("does not put a draft down when the finger panned instead", () => {
+    coarse = true;
+    renderGrid();
+
+    const column = screen.getByTestId(`calendar-day-column-${DAY_KEY}`);
+    fireEvent.pointerDown(column, {
+      pointerId: 1,
+      pointerType: "touch",
+      button: 0,
+      clientY: 40,
+    });
+    fireEvent.pointerCancel(column, { pointerId: 1, pointerType: "touch" });
+    fireEvent.click(column, { clientY: 40 });
+
+    expect(screen.queryByTestId("calendar-create-draft")).not.toBeInTheDocument();
   });
 
   it("never turns a finger drag on a block into a move or a resize", () => {
@@ -273,7 +315,7 @@ describe("TimeGrid under a fine pointer", () => {
 
     dragColumn("mouse");
 
-    expect(onRequestCreate).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("calendar-create-draft")).toBeInTheDocument();
   });
 
   it("does not open the editor from a bare mouse click", () => {

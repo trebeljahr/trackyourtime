@@ -54,6 +54,7 @@ export const calendar: Translation<typeof source> = {
   },
   create: {
     title: "Neuer Zeiteintrag",
+    newEntry: "Neuer Eintrag",
     descriptionPlaceholder: "Woran arbeitest du?",
     submit: "Eintrag erstellen",
     invalidTimes: "Gib Uhrzeiten wie 9:15 oder 14:00 ein",

@@ -131,7 +131,10 @@ export function EntryEditPopover({
       side="bottom"
       sideOffset={8}
       collisionPadding={8}
-      className="w-80 space-y-3"
+      // Taller than the space above or below the block, the panel scrolls
+      // rather than running off the top of the window: Radix only flips
+      // between the two sides and shifts sideways, never vertically.
+      className="w-80 max-h-[var(--radix-popover-content-available-height)] space-y-3 overflow-y-auto"
       data-testid="calendar-edit-popover"
       onOpenAutoFocus={(event) => {
         event.preventDefault();

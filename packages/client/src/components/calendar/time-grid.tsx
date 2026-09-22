@@ -26,6 +26,7 @@ import {
   minutesFromOffset,
   moveRange,
   offsetFromMinutes,
+  rangeFromClick,
   rangeFromDrag,
   resizeRange,
   type LaidOut,
@@ -33,11 +34,12 @@ import {
   type ResizeEdge,
   type VisibleRange,
 } from "./calendar-math";
+import { DraftBlock } from "./draft-block";
 import { EntryBlock, type BlockDragMode } from "./entry-block";
+import { EntryCreatePopover } from "./entry-create-popover";
 import { EntryEditPopover } from "./entry-edit-popover";
 import { DensityCluster, DensityClusterPopover } from "./density-cluster";
 import { blockPalette } from "./entry-color";
-import type { CreateDraft } from "./entry-create-dialog";
 import type { CalendarActions } from "./use-calendar-entries";
 import { useCoarsePointer } from "./use-coarse-pointer";
 import { useNow } from "./use-now";
@@ -71,6 +73,18 @@ type GridItem = MinuteRange & {
         members: Segment[];
       }
   );
+
+/**
+ * The entry being created: a block on the grid that is not saved yet. Its
+ * edges and body drag like a saved block's, through the same state machine,
+ * under this id in place of an entry id.
+ */
+const DRAFT_ID = "__draft__";
+
+type Draft = {
+  dayIndex: number;
+  range: MinuteRange;
+};
 
 type DayColumn = {
   day: Date;
@@ -121,7 +135,6 @@ export type TimeGridProps = {
   pxPerMinute: number;
   /** Step the zoom ladder by `delta` levels, for ctrl/⌘ + wheel. */
   onZoomBy?: (delta: number) => void;
-  onRequestCreate: (draft: CreateDraft) => void;
 };
 
 /**
@@ -130,6 +143,12 @@ export type TimeGridProps = {
  * resize, create) run through one pointer-capture state machine, and every
  * commit goes through the optimistic `actions` so the block never snaps back
  * while the mutation is in flight.
+ *
+ * Creating works the way a calendar app does it: a click on empty grid puts
+ * a draft block down (an hour from the slot clicked, see `rangeFromClick`), a
+ * drag puts one down over the dragged span, and the draft's edges and body
+ * then drag like a saved block's while the popover anchored to it takes the
+ * rest of the entry. Nothing is written until its Create button.
  */
 export function TimeGrid({
   days,
@@ -139,7 +158,6 @@ export function TimeGrid({
   preferredRange,
   pxPerMinute,
   onZoomBy,
-  onRequestCreate,
 }: TimeGridProps): React.JSX.Element {
   const format = useFormatSettings();
   const f = useFormat();
@@ -156,10 +174,22 @@ export function TimeGrid({
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   /** The entry a finger last pressed — see `handleBlockPointerDown`. */
   const touchTapRef = React.useRef<string | null>(null);
+  /** The empty column a finger last pressed — see `handleColumnPointerDown`. */
+  const touchColumnTapRef = React.useRef<number | null>(null);
+  const draftRef = React.useRef<HTMLDivElement | null>(null);
 
   const [drag, setDrag] = React.useState<DragState | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [openClusterId, setOpenClusterId] = React.useState<string | null>(null);
+  const [draft, setDraft] = React.useState<Draft | null>(null);
+
+  // A new set of days is a new grid; a draft on the old one has no column.
+  const rangeKey = days.map((day) => toDateKey(day)).join(",");
+  const [draftRangeKey, setDraftRangeKey] = React.useState(rangeKey);
+  if (draftRangeKey !== rangeKey) {
+    setDraftRangeKey(rangeKey);
+    setDraft(null);
+  }
 
   const columns = React.useMemo<DayColumn[]>(() => {
     return days.map((day) => {
@@ -234,13 +264,16 @@ export function TimeGrid({
     });
   }, [days, entries, nowMs, pxPerMinute]);
 
+  // The draft counts too: an hour proposed at the bottom of the window must
+  // not run off the grid it was clicked on.
+  const draftRange = draft?.range ?? null;
   const visible = React.useMemo<VisibleRange>(
     () =>
-      expandVisibleRange(
-        preferredRange,
-        columns.flatMap((column) => column.items)
-      ),
-    [columns, preferredRange]
+      expandVisibleRange(preferredRange, [
+        ...columns.flatMap((column) => column.items),
+        ...(draftRange ? [draftRange] : []),
+      ]),
+    [columns, draftRange, preferredRange]
   );
   const { startMin: visibleStart, endMin: visibleEnd } = visible;
   const height = (visibleEnd - visibleStart) * pxPerMinute;
@@ -273,7 +306,6 @@ export function TimeGrid({
   }, [labelStepMin, minorStepMin, visibleEnd, visibleStart]);
 
   // Auto-scroll to the first entry on screen (minus a little air).
-  const rangeKey = days.map((day) => toDateKey(day)).join(",");
   const firstEntryMin = React.useMemo<number | null>(() => {
     let earliest: number | null = null;
     for (const column of columns) {
@@ -373,6 +405,59 @@ export function TimeGrid({
     setOpenClusterId(null);
   };
 
+  const anythingOpen =
+    selectedId !== null || openClusterId !== null || draft !== null;
+
+  const closeEverything = (): void => {
+    closePopovers();
+    setDraft(null);
+  };
+
+  const armBlockDrag = (
+    event: React.PointerEvent<HTMLDivElement>,
+    mode: BlockDragMode,
+    entryId: string,
+    origin: MinuteRange,
+    dayIndex: number
+  ): void => {
+    capture(event);
+    setDrag(
+      mode === "move"
+        ? {
+            kind: "move",
+            entryId,
+            dayIndex,
+            origin,
+            range: origin,
+            pointerStartY: event.clientY,
+            active: false,
+          }
+        : {
+            kind: "resize",
+            entryId,
+            edge: mode === "resize-start" ? "start" : "end",
+            dayIndex,
+            origin,
+            range: origin,
+            pointerStartY: event.clientY,
+            active: false,
+          }
+    );
+  };
+
+  const handleDraftPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+    mode: BlockDragMode
+  ): void => {
+    event.stopPropagation();
+    // A finger pans the grid through the draft, as through a saved block;
+    // its times are typed into the popover instead.
+    if (event.pointerType === "touch") return;
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    if (!draft) return;
+    armBlockDrag(event, mode, DRAFT_ID, draft.range, draft.dayIndex);
+  };
+
   const handleBlockPointerDown = (
     event: React.PointerEvent<HTMLDivElement>,
     mode: BlockDragMode,
@@ -393,38 +478,20 @@ export function TimeGrid({
     // never end by also opening the editor through the click below.
     touchTapRef.current = null;
     if (event.button !== 0 && event.pointerType === "mouse") return;
+    // Pressing a saved block while a draft is open walks away from the draft.
+    setDraft(null);
 
     if (!block.draggable) {
       setSelectedId(block.entry.id);
       return;
     }
 
-    const origin: MinuteRange = {
-      startMin: block.startMin,
-      endMin: block.endMin,
-    };
-    capture(event);
-    setDrag(
-      mode === "move"
-        ? {
-            kind: "move",
-            entryId: block.entry.id,
-            dayIndex,
-            origin,
-            range: origin,
-            pointerStartY: event.clientY,
-            active: false,
-          }
-        : {
-            kind: "resize",
-            entryId: block.entry.id,
-            edge: mode === "resize-start" ? "start" : "end",
-            dayIndex,
-            origin,
-            range: origin,
-            pointerStartY: event.clientY,
-            active: false,
-          }
+    armBlockDrag(
+      event,
+      mode,
+      block.entry.id,
+      { startMin: block.startMin, endMin: block.endMin },
+      dayIndex
     );
   };
 
@@ -432,17 +499,29 @@ export function TimeGrid({
     event: React.PointerEvent<HTMLDivElement>,
     dayIndex: number
   ): void => {
-    // Same reason as the block: a finger dragging across empty grid is the
-    // page scrolling, and arming create-a-new-entry here is what turns every
-    // stray drag into an invented time entry.
-    if (event.pointerType === "touch") return;
-    if (event.button !== 0 && event.pointerType === "mouse") return;
     // A popover is a React child of its block, so React bubbles its events
     // up to this column even though the DOM node lives in a portal. Without
     // this, every click inside the editor closed it and armed a create-drag.
     const target = event.target;
     if (!(target instanceof Node) || !gridRef.current?.contains(target)) return;
-    closePopovers();
+    // Same reason as the block: a finger dragging across empty grid is the
+    // page scrolling, and arming create-a-new-entry here is what turns every
+    // stray drag into an invented time entry. The tap that *was* a tap is
+    // resolved from the click that follows it, like a tap on a block.
+    if (event.pointerType === "touch") {
+      touchColumnTapRef.current = anythingOpen ? null : dayIndex;
+      if (anythingOpen) closeEverything();
+      return;
+    }
+    touchColumnTapRef.current = null;
+    if (event.button !== 0 && event.pointerType === "mouse") return;
+    // A press on empty grid while an editor or a draft is open only closes
+    // it; a second press is what starts the next entry. Otherwise clicking
+    // away from an editor would put a draft down every time.
+    if (anythingOpen) {
+      closeEverything();
+      return;
+    }
     const anchorMin = minuteAtClientY(event.clientY);
     capture(event);
     setDrag({
@@ -495,11 +574,23 @@ export function TimeGrid({
     if (!day) return;
 
     if (state.kind === "create") {
-      if (!state.active) return;
-      onRequestCreate({
-        start: isoAtMinute(day, state.range.startMin),
-        end: isoAtMinute(day, state.range.endMin),
+      // A press that never moved proposes an hour from where it landed; a
+      // drag proposes exactly what it covered. Either way the draft's edges
+      // can still be dragged before anything is saved.
+      setDraft({
+        dayIndex: state.dayIndex,
+        range: state.active
+          ? state.range
+          : rangeFromClick(state.anchorMin),
       });
+      return;
+    }
+
+    if (state.entryId === DRAFT_ID) {
+      if (!state.active) return;
+      setDraft((current) =>
+        current ? { ...current, range: state.range } : current
+      );
       return;
     }
 
@@ -630,6 +721,7 @@ export function TimeGrid({
               // The browser took the gesture over — the finger is panning,
               // not tapping.
               touchTapRef.current = null;
+              touchColumnTapRef.current = null;
               setDrag(null);
             }}
           >
@@ -666,6 +758,16 @@ export function TimeGrid({
                 drag.active
                   ? drag.range
                   : null;
+              const draftHere = draft?.dayIndex === dayIndex ? draft : null;
+              const draftDragged =
+                draftHere &&
+                drag &&
+                drag.kind !== "create" &&
+                drag.entryId === DRAFT_ID &&
+                drag.active
+                  ? drag.range
+                  : null;
+              const draftShown = draftDragged ?? draftHere?.range ?? null;
 
               return (
                 <div
@@ -678,6 +780,17 @@ export function TimeGrid({
                   style={{ touchAction: coarsePointer ? "pan-y" : "none" }}
                   onPointerDown={(event) => {
                     handleColumnPointerDown(event, dayIndex);
+                  }}
+                  onClick={(event) => {
+                    // Only ever the tap that pointer-down declined — a
+                    // finger that panned fires no click, and a mouse never
+                    // sets the ref (see the block's `onClick`).
+                    if (touchColumnTapRef.current !== dayIndex) return;
+                    touchColumnTapRef.current = null;
+                    setDraft({
+                      dayIndex,
+                      range: rangeFromClick(minuteAtClientY(event.clientY)),
+                    });
                   }}
                 >
                   {majorMinutes.map((minute) => (
@@ -885,6 +998,49 @@ export function TimeGrid({
                       {" – "}
                       {formatMinuteOfDay(createPreview.endMin, format.timeFormat)}
                     </div>
+                  ) : null}
+
+                  {draftHere && draftShown ? (
+                    <Popover
+                      open
+                      onOpenChange={(open) => {
+                        if (!open) setDraft(null);
+                      }}
+                    >
+                      <PopoverAnchor asChild>
+                        <DraftBlock
+                          ref={draftRef}
+                          top={offsetFromMinutes(
+                            draftShown.startMin,
+                            pxPerMinute,
+                            visible
+                          )}
+                          height={
+                            (draftShown.endMin - draftShown.startMin) *
+                            pxPerMinute
+                          }
+                          timeLabel={`${formatMinuteOfDay(draftShown.startMin, format.timeFormat)} – ${formatMinuteOfDay(draftShown.endMin, format.timeFormat)}`}
+                          durationLabel={format.duration(
+                            (draftShown.endMin - draftShown.startMin) * 60
+                          )}
+                          isDragging={draftDragged !== null}
+                          coarsePointer={coarsePointer}
+                          onDraftPointerDown={handleDraftPointerDown}
+                        />
+                      </PopoverAnchor>
+                      <EntryCreatePopover
+                        day={column.day}
+                        range={draftShown}
+                        onRangeChange={(range) => {
+                          setDraft({ dayIndex, range });
+                        }}
+                        actions={actions}
+                        draftRef={draftRef}
+                        onClose={() => {
+                          setDraft(null);
+                        }}
+                      />
+                    </Popover>
                   ) : null}
 
                   {isToday && nowMinute !== null ? (

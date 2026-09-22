@@ -544,7 +544,6 @@ export function CalendarScreen(): React.JSX.Element {
           preferredRange={preferredRange}
           pxPerMinute={pxPerMinute}
           onZoomBy={zoomBy}
-          onRequestCreate={setDraft}
         />
       ) : view === "month" ? (
         <MonthView

@@ -16,6 +16,7 @@ import {
   minutesFromOffset,
   moveRange,
   offsetFromMinutes,
+  rangeFromClick,
   rangeFromDrag,
   resizeRange,
   snapMinutes,
@@ -81,6 +82,22 @@ describe("resizeRange", () => {
       startMin: 540,
       endMin: 545,
     });
+  });
+});
+
+describe("rangeFromClick", () => {
+  it("proposes an hour from the slot the click landed in", () => {
+    expect(rangeFromClick(547)).toEqual({ startMin: 540, endMin: 600 });
+    expect(rangeFromClick(559)).toEqual({ startMin: 555, endMin: 615 });
+  });
+
+  it("stays inside the day", () => {
+    expect(rangeFromClick(1430)).toEqual({ startMin: 1380, endMin: 1440 });
+    expect(rangeFromClick(-5)).toEqual({ startMin: 0, endMin: 60 });
+  });
+
+  it("never proposes less than the minimum duration", () => {
+    expect(rangeFromClick(600, 1)).toEqual({ startMin: 600, endMin: 605 });
   });
 });
 

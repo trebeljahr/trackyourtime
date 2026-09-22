@@ -108,6 +108,28 @@ export const resizeRange = (
   return { startMin: range.startMin, endMin };
 };
 
+/** A click on empty space lands on this grid — the slot it is read as. */
+export const CLICK_SNAP_MINUTES = 15;
+
+/** The length a click on empty space proposes, before the edges are dragged. */
+export const DEFAULT_CREATE_MINUTES = 60;
+
+/**
+ * The range a plain click on empty space proposes: the slot the click landed
+ * in, `duration` long, kept inside the day. The person then drags either edge
+ * or types the times — the click only has to land near the right hour.
+ */
+export const rangeFromClick = (
+  anchorMin: number,
+  duration: number = DEFAULT_CREATE_MINUTES,
+  step: number = CLICK_SNAP_MINUTES
+): MinuteRange => {
+  const length = Math.min(MINUTES_PER_DAY, Math.max(MIN_DURATION_MINUTES, duration));
+  const slot = Math.floor(clampMinute(anchorMin) / step) * step;
+  const startMin = Math.min(slot, MINUTES_PER_DAY - length);
+  return { startMin, endMin: startMin + length };
+};
+
 /**
  * The range produced by dragging on empty space from `anchorMin` to
  * `pointerMin`. Works in both directions and always yields a usable block.

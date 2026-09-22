@@ -60,6 +60,8 @@ export const calendar = {
   },
   create: {
     title: "New time entry",
+    /** The label on the draft block a click on the grid puts down. */
+    newEntry: "New entry",
     descriptionPlaceholder: "What are you working on?",
     submit: "Create entry",
     invalidTimes: "Enter times like 9:15 or 14:00",

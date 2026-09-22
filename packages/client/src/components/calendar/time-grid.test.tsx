@@ -87,7 +87,6 @@ const renderGrid = (pxPerMinute: number) =>
       actions={actions}
       preferredRange={DEFAULT_VISIBLE_RANGE}
       pxPerMinute={pxPerMinute}
-      onRequestCreate={vi.fn()}
     />
   );
 
