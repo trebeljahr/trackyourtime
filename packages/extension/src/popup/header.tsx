@@ -1,13 +1,14 @@
 import type { JSX } from "react";
 import { useT } from "../i18n/use-t";
+import { Icon } from "./icons";
 import type { SyncLabel } from "./sync-label";
 
 /**
  * The popup's only chrome.
  *
- * 32px, and it stays that small because the tracker gets no title — the
- * elapsed clock is the title. That is what pays for a header on the one screen
- * where every pixel is already spoken for.
+ * 44px with 32px buttons: the icons are the popup's whole navigation, and at
+ * the old 14px glyphs they were hard to hit and harder to read. The tracker
+ * still gets no title — the elapsed clock is the title.
  *
  * Nothing here opens a popover. The overflow menu's list opens *upward*
  * because it lives in the footer, and a header-anchored dropdown would need a
@@ -52,7 +53,7 @@ export function Header({
           onClick={onBack}
           data-testid="header-back"
         >
-          ←
+          <Icon name="back" />
         </button>
       ) : null}
 
@@ -80,7 +81,7 @@ export function Header({
             onClick={onNewEntry}
             data-testid="header-new-entry"
           >
-            +
+            <Icon name="plus" />
           </button>
         ) : null}
 
@@ -93,7 +94,7 @@ export function Header({
             onClick={onOpenSuggestions}
             data-testid="header-suggestions"
           >
-            ✦
+            <Icon name="sparkles" />
           </button>
         ) : null}
 
@@ -106,7 +107,7 @@ export function Header({
             onClick={onOpenEntries}
             data-testid="header-entries"
           >
-            ☰
+            <Icon name="list" />
           </button>
         ) : null}
 
@@ -119,7 +120,7 @@ export function Header({
             onClick={onOpenSettings}
             data-testid="header-settings"
           >
-            ⚙
+            <Icon name="settings" />
           </button>
         ) : null}
       </div>

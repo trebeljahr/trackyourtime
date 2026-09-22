@@ -358,18 +358,22 @@ export async function buildState(): Promise<BackgroundState> {
   // failure — offline, the last known list still resolves the choice.
   await resolveWorkspaces();
 
+  // One wave, not three. These used to run as running → settings → batch,
+  // and against a cold worker (every popup opened more than ~30s after the
+  // last) each step was a full round trip the popup waited behind.
+  //
   // `resolveRunning` reports its own reachability from inside the runtime,
   // where it can tell a real request apart from a cache hit.
-  const running = await localRead(resolveRunning, peekRunning());
-
-  // `localRead`, not `softRead`: `resolveSettings` swallows its own failure and
-  // answers null, so wrapping it in the reachability probe would report the
-  // server as answering on every failure. Read before the parallel batch
-  // because it is what names the user for a session whose record has no user,
-  // and the day total counts only that user's time.
-  const settings = await localRead(resolveSettings, getCachedSettings());
-  const userId = getKnownUserId();
+  //
+  // Settings are `localRead`, not `softRead`: `resolveSettings` swallows its
+  // own failure and answers null, so wrapping it in the reachability probe
+  // would report the server as answering on every failure. They also name the
+  // user for a session whose record has none, and the day total counts only
+  // that user's time — so that one read waits for them, and nothing else does.
+  const settingsRead = localRead(resolveSettings, getCachedSettings());
   const [
+    running,
+    settings,
     email,
     projects,
     clients,
@@ -380,12 +384,17 @@ export async function buildState(): Promise<BackgroundState> {
     recents,
     idle,
   ] = await Promise.all([
+    localRead(resolveRunning, peekRunning()),
+    settingsRead,
     localRead(resolveEmail, session.email),
     softRead(() => fetchProjects(current.api), getCachedProjects() ?? []),
     softRead(() => fetchClients(current.api), getCachedClients() ?? []),
     softRead(() => fetchTags(current.api), getCachedTags() ?? []),
     softRead(() => fetchTasks(current.api), getCachedTasks() ?? []),
-    softRead(() => fetchTodaySec(current.api, userId), getCachedTodaySec() ?? 0),
+    softRead(async () => {
+      await settingsRead;
+      return fetchTodaySec(current.api, getKnownUserId());
+    }, getCachedTodaySec() ?? 0),
     softRead(() => fetchFavorites(current.api), getCachedFavorites() ?? []),
     softRead(() => fetchRecents(current.api), getCachedRecents() ?? []),
     localRead(pendingIdle, null),

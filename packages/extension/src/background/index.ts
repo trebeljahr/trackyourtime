@@ -38,9 +38,11 @@ import {
 } from "../lib/sign-out-marker";
 import type {
   BackgroundResponse,
+  BackgroundState,
   PopupToBackground,
 } from "../lib/messaging";
 import { APP_VERSION } from "../lib/app-version";
+import { savePopupSnapshot } from "../lib/popup-snapshot";
 import {
   activityIdleChanged,
   applyActivitySettings,
@@ -577,6 +579,12 @@ const apply = async (message: PopupToBackground): Promise<void> => {
  * Resolves, never rejects. The popup's `sendToBackground` treats a missing
  * reply as a dead worker, so every path has to produce a response object.
  */
+/** Keep the snapshot for the next popup open; see `lib/popup-snapshot.ts`. */
+const remember = (state: BackgroundState): BackgroundState => {
+  void savePopupSnapshot(state);
+  return state;
+};
+
 const handle = async (message: unknown): Promise<BackgroundResponse> => {
   if (!isPopupMessage(message)) return badMessage;
 
@@ -585,7 +593,7 @@ const handle = async (message: unknown): Promise<BackgroundResponse> => {
     await apply(message);
     // Every success carries the full fresh snapshot, built after the mutation
     // landed, so the popup never has to guess what its own action did.
-    return { ok: true, state: await buildState() };
+    return { ok: true, state: remember(await buildState()) };
   } catch (error) {
     if (isUnauthorized(error)) {
       // The token was revoked from Settings → Devices, or it expired. Only
@@ -594,7 +602,7 @@ const handle = async (message: unknown): Promise<BackgroundResponse> => {
       // further press failing the same way. Dropping it here returns the
       // signed-out snapshot, which puts the sign-in form back.
       await forgetRejectedSession();
-      return { ok: true, state: await buildState() };
+      return { ok: true, state: remember(await buildState()) };
     }
     return toErrorResponse(error);
   }

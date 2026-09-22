@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { CatalogEditProvider, type CatalogEdit } from "./catalog-edit";
+import { loadPopupSnapshot } from "../lib/popup-snapshot";
 import { dayKeyInZone, deviceTimeZone, type QuickStart } from "@starter/core";
 import {
   sendToBackground,
@@ -147,6 +148,16 @@ export function App(): JSX.Element {
   );
 
   useEffect(() => {
+    // Paint the last snapshot at once, then let the fresh one replace it —
+    // only if nothing fresher has landed first. See lib/popup-snapshot.ts.
+    void loadPopupSnapshot().then((snapshot) => {
+      if (snapshot === null) return;
+      setState((current) => {
+        if (current !== null) return current;
+        apiUrlRef.current = snapshot.apiUrl;
+        return snapshot;
+      });
+    });
     void send({ type: "state:get" });
   }, [send]);
 
@@ -687,12 +698,17 @@ export function App(): JSX.Element {
 
   if (state === null) {
     return (
-      <div className="popup">
-        <div className="popup__body">
+      // Held at the tracker's height: Chrome sizes the popup to its content,
+      // so a one-line "Loading…" shrank the window to a strip that then
+      // jumped to full size when the snapshot arrived.
+      <div className="popup popup--boot">
+        <div className="popup__body boot">
           {error === null ? (
-            <p className="loading" data-testid="popup-loading">
-              {t("app.loading")}
-            </p>
+            <div className="boot__status" data-testid="popup-loading" role="status">
+              <img className="boot__mark" src="/icons/48.png" alt="" width="40" height="40" />
+              <span className="boot__spinner" aria-hidden="true" />
+              <span className="boot__label">{t("app.loading")}</span>
+            </div>
           ) : (
             <>
               <p className="notice" role="alert" aria-live="assertive">
