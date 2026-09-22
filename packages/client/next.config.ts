@@ -34,6 +34,12 @@ const workspaceRoot = findWorkspaceRoot(clientDir);
 const pdfkitEntry = createRequire(import.meta.url).resolve("pdfkit");
 const pdfkitStandalone = join(dirname(pdfkitEntry), "pdfkit.standalone.js");
 const pdfkitStandaloneRequest = `./${relative(workspaceRoot, pdfkitStandalone).split(sep).join("/")}`;
+// Turbopack resolves an aliased RELATIVE request from the importing package
+// (`packages/client`), not from `turbopack.root`, so the workspace-root form
+// above misses. pdfkit is a direct dependency of the client too, so its
+// standalone build is reachable through the client's own `node_modules`
+// symlink — a path that resolves from `packages/client`.
+const pdfkitStandaloneClientRequest = `./${relative(clientDir, join(clientDir, "node_modules", "pdfkit", "js", "pdfkit.standalone.js")).split(sep).join("/")}`;
 
 /** The pnpm workspace root: the nearest ancestor with a `pnpm-workspace.yaml`. */
 function findWorkspaceRoot(from: string): string {
@@ -117,12 +123,28 @@ const baseConfig: NextConfig = {
   // `pdfkit` import at its self-contained standalone build. Both bundlers are
   // configured because `next build` uses Turbopack by default and `--webpack`
   // switches to webpack.
-  turbopack: { root: workspaceRoot, resolveAlias: { pdfkit: pdfkitStandaloneRequest } },
+  // `pdfkit-standalone` is a dedicated specifier the invoice generator page
+  // imports directly (`invoice-generator-page.tsx`). Aliasing the bare `pdfkit`
+  // alone is not enough: it does not reach the `import "pdfkit"` inside the
+  // pre-built `@starter/invoice-pdf` dist (not a transpiled package), so that
+  // path loads pdfkit's Node build, which cannot register its standard fonts in
+  // a browser. The page therefore imports `pdfkit-standalone` — app source that
+  // IS bundled here — and hands the constructor to the renderer. The made-up
+  // specifier also sidesteps pdfkit's `exports` map, which blocks the real
+  // `pdfkit/js/pdfkit.standalone.js` subpath.
+  turbopack: {
+    root: workspaceRoot,
+    resolveAlias: {
+      pdfkit: pdfkitStandaloneRequest,
+      "pdfkit-standalone": pdfkitStandaloneClientRequest,
+    },
+  },
   webpack: (webpackConfig) => {
     webpackConfig.resolve ??= {};
     webpackConfig.resolve.alias = {
       ...(webpackConfig.resolve.alias as Record<string, string> | undefined),
       pdfkit: pdfkitStandalone,
+      "pdfkit-standalone": pdfkitStandalone,
     };
     return webpackConfig;
   },

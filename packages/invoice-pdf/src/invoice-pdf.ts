@@ -106,6 +106,14 @@ const FONT_BOLD = "Helvetica-Bold";
 export const INVOICE_PDF_FONT_NAMES = { regular: FONT, bold: FONT_BOLD } as const;
 
 /** Everything that makes a variant of the same drawing: document options, fonts, and what happens before end(). */
+/**
+ * Render-time overrides. `PDFDocument` swaps the constructor for pdfkit's
+ * browser build; see `renderInvoicePdf`.
+ */
+export type RenderInvoicePdfOptions = {
+  PDFDocument?: typeof PDFDocument;
+};
+
 export type InvoicePdfVariant = {
   /** Spread over pageOptions() in the constructor only. addPage keeps using pageOptions(). */
   documentOptions: PDFKit.PDFDocumentOptions;
@@ -738,8 +746,18 @@ export async function renderInvoicePdf(
   invoice: RenderableInvoice,
   meta: InvoicePdfMeta,
   variant?: InvoicePdfVariant,
+  options?: RenderInvoicePdfOptions,
 ): Promise<Uint8Array> {
-  const doc = new PDFDocument({ ...pageOptions(), ...variant?.documentOptions });
+  // The constructor is injectable for ONE reason: the browser. On the server
+  // pdfkit's Node build reads its standard-14 AFM metrics off disk and
+  // registers Helvetica itself, so the default import is correct and the
+  // output stays byte-identical. A browser bundle has no filesystem; only
+  // pdfkit's self-contained `pdfkit.standalone.js` build registers the
+  // standard fonts at load, and it must be handed in — the public invoice
+  // generator does exactly that. When nothing is passed, this is the same
+  // `new PDFDocument(...)` as before.
+  const Doc = options?.PDFDocument ?? PDFDocument;
+  const doc = new Doc({ ...pageOptions(), ...variant?.documentOptions });
   // Absent = issued before localisation = English, forever.
   const locale: Locale = invoice.locale ?? "en";
   const t = invoiceT(locale);

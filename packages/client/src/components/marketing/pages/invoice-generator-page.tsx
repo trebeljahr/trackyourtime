@@ -31,6 +31,8 @@ import {
   type InvoiceLineUnit,
 } from "@starter/shared";
 
+import type { RenderInvoicePdfOptions } from "@starter/invoice-pdf/invoice-pdf";
+
 import { PrimaryLink } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { Button } from "@/components/ui/button";
@@ -138,10 +140,22 @@ export function InvoiceGeneratorPage({ locale }: { locale: Locale }): React.Reac
 
   const download = async (): Promise<void> => {
     // The renderer and pdfkit arrive only now — kept out of the first load.
-    const { renderInvoicePdf, invoicePdfFilename } = await import("@starter/invoice-pdf/invoice-pdf");
+    // pdfkit's default entry expects a filesystem to read its standard-14 font
+    // metrics from; a browser has none, so we hand the renderer pdfkit's
+    // self-contained `pdfkit.standalone.js` build, which bundles those metrics
+    // and registers Helvetica at load. Importing the file path directly does
+    // not depend on any bundler alias.
+    const [{ renderInvoicePdf, invoicePdfFilename }, pdfkitStandalone] = await Promise.all([
+      import("@starter/invoice-pdf/invoice-pdf"),
+      import("pdfkit-standalone"),
+    ]);
+    // The standalone build is a UMD bundle with no types; its default export is
+    // the PDFDocument constructor.
+    const PDFDocument = ((pdfkitStandalone as { default?: unknown }).default ??
+      pdfkitStandalone) as RenderInvoicePdfOptions["PDFDocument"];
     const generatedAt = new Date().toISOString();
     const invoice = buildInvoice(form, locale, generatedAt);
-    const bytes = await renderInvoicePdf(invoice, { generatedAt });
+    const bytes = await renderInvoicePdf(invoice, { generatedAt }, undefined, { PDFDocument });
     const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
