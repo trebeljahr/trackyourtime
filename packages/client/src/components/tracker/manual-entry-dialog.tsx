@@ -23,7 +23,10 @@ import { DurationInput } from "@/components/duration-input";
 import { EntryFieldsEditor } from "@/components/entry-fields/entry-fields-editor";
 import { useEntryFields } from "@/components/entry-fields/use-entry-fields";
 import { TimeField } from "@/components/tracker/time-field";
-import type { EntryMutations } from "@/components/tracker/use-entry-mutations";
+import type {
+  EntryMutations,
+  ManualEntryArgs,
+} from "@/components/tracker/use-entry-mutations";
 import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 
@@ -47,6 +50,13 @@ export type ManualEntryDialogProps = {
   /** Prefill, so a half-typed composer is not thrown away by opening this. */
   seed: ManualEntrySeed;
   mutations: EntryMutations;
+  /** The block to open on, as ISO instants. Omitted: the default recent block. */
+  range?: { start: string; end: string };
+  /**
+   * Called with the entry instead of `mutations.createManualEntry` — for a
+   * caller that checks the block before creating it (an activity suggestion).
+   */
+  onAdd?: (args: ManualEntryArgs) => void;
 };
 
 /**
@@ -63,6 +73,8 @@ export function ManualEntryDialog({
   onOpenChange,
   seed,
   mutations,
+  range: seedRange,
+  onAdd,
 }: ManualEntryDialogProps): React.JSX.Element {
   const format = useFormatSettings();
   const t = useT("tracker");
@@ -78,11 +90,13 @@ export function ManualEntryDialog({
     open
   );
 
+  const seedRangeRef = React.useRef(seedRange);
+  seedRangeRef.current = seedRange;
   const [range, setRange] = React.useState(defaultManualRange);
   const [wasOpen, setWasOpen] = React.useState(false);
   if (wasOpen !== open) {
     setWasOpen(open);
-    if (open) setRange(defaultManualRange());
+    if (open) setRange(seedRangeRef.current ?? defaultManualRange());
   }
 
   const seconds = Math.max(
@@ -93,13 +107,15 @@ export function ManualEntryDialog({
   const add = React.useCallback((): void => {
     // Roll a midnight-crossing end forward rather than clamping it: 23:30 to
     // 00:30 is an hour of work, and clamping would throw that away.
-    mutations.createManualEntry({
+    const args: ManualEntryArgs = {
       ...fields,
       start: range.start,
       end: rollEndAfterStart(range.start, range.end),
-    });
+    };
+    if (onAdd !== undefined) onAdd(args);
+    else mutations.createManualEntry(args);
     onOpenChange(false);
-  }, [fields, mutations, onOpenChange, range]);
+  }, [fields, mutations, onAdd, onOpenChange, range]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

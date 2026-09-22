@@ -15,6 +15,7 @@ import {
   Receipt,
   Search,
   Settings as SettingsIcon,
+  Sparkles,
   Tags as TagsIcon,
   Timer,
   User as UserIcon,
@@ -42,6 +43,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DesktopActivityScope } from "@/components/desktop/desktop-activity-scope";
 import { DesktopBridgePublisher } from "@/components/desktop/desktop-bridge-publisher";
 import { ThemeSync } from "@/components/theme-sync";
 import {
@@ -91,6 +93,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/app/track", id: "track", icon: Timer },
       { href: "/app/timesheet", id: "timesheet", icon: Grid3x3 },
       { href: "/app/calendar", id: "calendar", icon: CalendarDays },
+      { href: "/app/activity", id: "activity", icon: Sparkles, shell: "electron" },
       { href: "/app/reports", id: "reports", icon: BarChart3 },
     ],
   },
@@ -563,6 +566,8 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
 
         {/* The desktop app's tray and global shortcuts. Inert on the web. */}
         <DesktopBridgePublisher onOpenPalette={openPalette} />
+        {/* Whose activity the desktop app records. Inert on the web. */}
+        <DesktopActivityScope />
       </div>
     </TooltipProvider>
   );

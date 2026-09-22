@@ -19,6 +19,7 @@ import { writeRunningMirror } from "@/lib/running-mirror";
 import { rebaseApiUrl, whenApiOriginReady } from "@/lib/api-origin";
 import { clearActiveWorkspace } from "@/lib/active-workspace";
 import { clearAppQueryCache } from "@/lib/query-client";
+import { forgetDesktopActivity } from "@/lib/desktop-activity";
 
 /**
  * better-auth validates its baseURL with `new URL()`, so a relative
@@ -186,6 +187,10 @@ export const onSignOut = (cleanup: () => void | Promise<void>): (() => void) => 
  * and membership list go too: the next account must neither send the
  * previous one's workspace id nor be shown its workspace names.
  *
+ * On the desktop app the recorded activity goes too (every segment, rule and
+ * dismissal, and whose it was), so the next account is never offered the
+ * previous one's apps as suggestions.
+ *
  * Every step is settled independently; a cleanup that throws must not keep
  * the others from running, or leave a sign-out half done.
  */
@@ -193,6 +198,7 @@ const forgetAccountOnDevice = async (): Promise<void> => {
   await Promise.allSettled([
     writeRunningMirror(null),
     clearActiveWorkspace(),
+    forgetDesktopActivity(),
     ...[...signOutCleanups].map(async (cleanup) => cleanup()),
   ]);
   await clearAppQueryCache().catch(() => undefined);

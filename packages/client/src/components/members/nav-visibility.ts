@@ -4,6 +4,7 @@ import * as React from "react";
 import type { WorkspacePermissions } from "@starter/shared";
 
 import { useActiveWorkspace } from "@/components/members/use-active-workspace";
+import { useDesktopActivityAvailable } from "@/components/activity/use-desktop-activity";
 import type { NavItem } from "@/lib/nav";
 
 type Section = { heading: string | null; items: NavItem[] };
@@ -20,17 +21,28 @@ type Section = { heading: string | null; items: NavItem[] };
 export const visibleNavSections = <S extends Section>(
   sections: readonly S[],
   permissions: WorkspacePermissions | null,
-): S[] => {
-  if (permissions === null) return [...sections];
-  return sections.map((section) => ({
+  /**
+   * Which shell-only items may show: `electron` when this is the desktop app
+   * AND it reports the item's feature available. Unlike permissions, unknown
+   * here means hidden — the web must never draw a desktop destination, not
+   * even for a frame.
+   */
+  shells: { electron: boolean } = { electron: false },
+): S[] =>
+  sections.map((section) => ({
     ...section,
     items: section.items.filter(
-      (item) => item.requires === undefined || permissions[item.requires],
+      (item) =>
+        (item.shell === undefined || shells[item.shell]) &&
+        (permissions === null || item.requires === undefined || permissions[item.requires]),
     ),
   }));
-};
 
 export const useVisibleNavSections = <S extends Section>(sections: readonly S[]): S[] => {
   const permissions = useActiveWorkspace().workspace?.permissions ?? null;
-  return React.useMemo(() => visibleNavSections(sections, permissions), [sections, permissions]);
+  const electron = useDesktopActivityAvailable();
+  return React.useMemo(
+    () => visibleNavSections(sections, permissions, { electron }),
+    [sections, permissions, electron],
+  );
 };

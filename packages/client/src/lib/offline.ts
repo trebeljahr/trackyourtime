@@ -684,6 +684,37 @@ export const listForeignQueued = async (): Promise<ForeignQueuedRow[]> => {
 };
 
 /**
+ * This account's queued rows on this server in `workspaceId`, decoded, held
+ * rows included — the time it tracked that no server has seen yet.
+ *
+ * For callers that must count queued work as already tracked (desktop
+ * activity suggestions): a start or a create still waiting here would
+ * otherwise be offered again as untracked, and accepting it would file the
+ * same time twice. A held row counts too — it is kept, and will be sent.
+ * A row with no workspace stamp is from a build before the stamp and is
+ * counted as this workspace's, the same way adoption would claim it. With no
+ * account known, nothing is anybody's (`isForeignTo` with `null` claims
+ * nothing), so only the rows for this server with no owner stamp count.
+ */
+export const listOwnQueuedMutations = async (
+  workspaceId: string,
+): Promise<OfflineMutation[]> => {
+  await hydrateLastOwner();
+  await whenApiOriginReady();
+  const against = owner ?? lastOwner;
+  const rows = await getOfflineQueue().list();
+  return rows
+    .filter(
+      (row) =>
+        isOnThisServer(row) &&
+        !isForeignTo(row, against) &&
+        (row.workspaceId === undefined || row.workspaceId === workspaceId),
+    )
+    .map((row) => decodeOfflineMutation(row))
+    .filter((mutation): mutation is OfflineMutation => mutation !== null);
+};
+
+/**
  * Delete the rows queued by another account, and only those — or this
  * account's held rows, which no flush from this build will ever send.
  *

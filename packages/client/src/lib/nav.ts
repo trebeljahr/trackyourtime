@@ -29,6 +29,12 @@ export type NavItem = {
    * the screen behind it is refused on the server either way.
    */
   requires?: keyof WorkspacePermissions;
+  /**
+   * Shown only inside this shell, and only once it says the feature behind
+   * the item works there. Decided after mount (`hooks/use-shell.ts`), so the
+   * prerendered nav — and every web nav — never has the item.
+   */
+  shell?: "electron";
 };
 
 /** Active when the path is the item's route or a child of it. */

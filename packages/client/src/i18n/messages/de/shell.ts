@@ -77,6 +77,7 @@ export const shell: Translation<typeof source> = {
       track: "Erfassen",
       timesheet: "Stundenzettel",
       calendar: "Kalender",
+      activity: "Aktivität",
       reports: "Berichte",
       clients: "Kunden",
       projects: "Projekte",

@@ -83,6 +83,7 @@ export const shell = {
       track: "Track",
       timesheet: "Timesheet",
       calendar: "Calendar",
+      activity: "Activity",
       reports: "Reports",
       clients: "Clients",
       projects: "Projects",
