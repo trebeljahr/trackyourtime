@@ -298,7 +298,7 @@ async function recordFailure(
   const subscription = await WebhookSubscription.findOneAndUpdate(
     { _id: target.subscriptionId },
     { $inc: { consecutiveFailures: 1 }, $set: { lastDeliveryAt: now } },
-    { new: true },
+    { returnDocument: "after" },
   ).lean();
   if (!subscription) return;
   if (!shouldAutoDisable(subscription.consecutiveFailures ?? 0)) return;
@@ -363,7 +363,7 @@ export async function deliverWebhook(deliveryId: string): Promise<void> {
   const delivery = await WebhookDelivery.findOneAndUpdate(
     { _id: deliveryId, status: "pending", attempt: pending.attempt ?? 0 },
     { $set: { attempt: attemptsMade } },
-    { new: true },
+    { returnDocument: "after" },
   ).lean();
   // Somebody else claimed this attempt between the read and the update.
   if (!delivery) return;
@@ -520,7 +520,7 @@ export async function claimDueDeliveries(
     const row = await WebhookDelivery.findOneAndUpdate(
       { status: "pending", nextAttemptAt: { $ne: null, $lte: now } },
       { $set: { nextAttemptAt: leaseUntil } },
-      { sort: { nextAttemptAt: 1 }, new: true, projection: { _id: 1 } },
+      { sort: { nextAttemptAt: 1 }, returnDocument: "after", projection: { _id: 1 } },
     ).lean();
     if (!row) break;
     claimed.push(String(row._id));
