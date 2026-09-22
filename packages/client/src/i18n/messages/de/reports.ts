@@ -197,6 +197,7 @@ export const reports: Translation<typeof source> = {
       "Rechne erfasste Zeit aus einem Zeitraum mit einem Kunden ab. Schon abgerechnete Zeit wird nie ein zweites Mal angeboten.",
     count: "{count, plural, one {# Rechnung} other {# Rechnungen}}",
     newInvoice: "Neue Rechnung",
+    newBlankInvoice: "Neue leere Rechnung",
     emptyTitle: "Noch keine Rechnungen",
     emptyDescription:
       "Eine Rechnung macht aus der abrechenbaren Zeit eines Kunden in einem Zeitraum ein Dokument. Zeit, die auf einer Rechnung steht, wird nie wieder zur Abrechnung angeboten.",
@@ -218,8 +219,18 @@ export const reports: Translation<typeof source> = {
       language: "Sprache",
       line: "Position",
       hours: "Stunden",
+      quantity: "Menge",
+      unit: "Einheit",
+      unitPrice: "Preis",
     },
     hoursValue: "{hours} h",
+    quantityValue:
+      "{quantity} {unit, select, hour {h} day {{count, plural, one {Tag} other {Tage}}} piece {Stk.} other {{unit}}}",
+    units: {
+      hour: "Stunden",
+      day: "Tage",
+      piece: "Stück",
+    },
     billedHours: "Abgerechnete Stunden",
     subtotal: "Zwischensumme",
     noTax: "Keine Steuer",
@@ -231,6 +242,9 @@ export const reports: Translation<typeof source> = {
 
     detail: {
       close: "Rechnung schließen",
+      noRange: "Kein abgerechneter Zeitraum",
+      editDraft: "Entwurf bearbeiten",
+      entriesNone: "Auf dieser Rechnung sind keine Zeiteinträge abgerechnet.",
       entriesDraft:
         "{count, plural, one {# Zeiteintrag ist auf dieser Rechnung abgerechnet und kann erst wieder abgerechnet werden, wenn dieser Entwurf gelöscht wird.} other {# Zeiteinträge sind auf dieser Rechnung abgerechnet und können erst wieder abgerechnet werden, wenn dieser Entwurf gelöscht wird.}}",
       entriesFinal:
@@ -251,6 +265,42 @@ export const reports: Translation<typeof source> = {
       statusFailed: "Der Status konnte nicht geändert werden.",
       deleteFailed: "Die Rechnung konnte nicht gelöscht werden.",
       pdfFailed: "Das PDF für {number} konnte nicht erstellt werden.",
+      saved: "Entwurf {number} gespeichert.",
+      saveFailed: "Der Entwurf konnte nicht gespeichert werden.",
+    },
+
+    lines: {
+      addLine: "Position hinzufügen",
+      removeLine: "Position {label} entfernen",
+      labelPlaceholder: "Beschreibung",
+      timeLineHint:
+        "Eine Zeitposition nimmt Stunden und Stundensatz aus den Einträgen, die sie abrechnet; hier lässt sich nur die Beschreibung ändern.",
+      additional: "Weitere Positionen",
+      additionalHint: "Pauschalen, Auslagen, alles, was nicht als Zeit erfasst wurde.",
+      empty: "Noch keine Positionen.",
+      errors: {
+        label: "Gib eine Beschreibung ein.",
+        quantity: "Gib eine Menge über 0 mit höchstens 3 Nachkommastellen ein.",
+        unitPrice: "Gib einen Preis ab 0 mit höchstens 2 Nachkommastellen ein.",
+      },
+    },
+
+    edit: {
+      title: "Entwurf {number} bearbeiten",
+      number: "Nummer",
+      save: "Änderungen speichern",
+      cancel: "Änderungen verwerfen",
+      nothingChanged: "Noch nichts geändert.",
+      invalidLines: "Korrigiere die markierten Positionen, bevor du speicherst.",
+      invalidNumber: "Gib eine Rechnungsnummer ein.",
+      invalidDates: "Das Fälligkeitsdatum kann nicht vor dem Rechnungsdatum liegen.",
+      conflict:
+        "Dieser Entwurf wurde in einem anderen Fenster geändert. Lade ihn neu und nimm deine Änderungen noch einmal vor.",
+      reload: "Neu laden",
+      numberTaken: "Diese Nummer wird schon von einer anderen Rechnung verwendet.",
+      notDraft: "Nur ein Entwurf lässt sich bearbeiten. Diese Rechnung wurde versendet.",
+      einvoiceIssued:
+        "Aus diesem Entwurf wurde eine E-Rechnung ausgestellt, deshalb lässt er sich nicht mehr bearbeiten.",
     },
 
     notices: {
@@ -273,6 +323,12 @@ export const reports: Translation<typeof source> = {
       title: "Neue Rechnung",
       description:
         "Die Vorschau ändert nichts. Wenn du die Rechnung erstellst, ist die Zeit darauf abgerechnet – sie kann nie wieder abgerechnet werden.",
+      blankTitle: "Neue leere Rechnung",
+      blankDescription:
+        "Eine Rechnung mit Positionen, die du selbst eingibst: keine erfasste Zeit und kein abgerechneter Zeitraum. Erfasste Zeit bleibt abrechenbar.",
+      addLinesForPreview: "Füge mindestens eine vollständige Position hinzu, um die Vorschau zu sehen.",
+      confirmNoEntries:
+        "Damit erstellst du Rechnung <b>{number}</b> für <b>{client}</b> über <b>{total}</b>. Sie rechnet keine erfasste Zeit ab.",
       selectClient: "Kunden auswählen",
       lines: "Positionen",
       perProject: "Eine Position pro Projekt",

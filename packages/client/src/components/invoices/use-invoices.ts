@@ -1,9 +1,16 @@
 "use client";
 
 import * as React from "react";
-import type { CreateInvoiceInput, EinvoiceIssue, InvoiceStatus } from "@starter/shared";
+import {
+  INVOICE_UPDATE_REFUSALS,
+  type CreateInvoiceInput,
+  type EinvoiceIssue,
+  type InvoiceStatus,
+  type InvoiceUpdateRefusal,
+  type UpdateInvoiceInput,
+} from "@starter/shared";
 
-import { errorMessage } from "@/components/catalog/types";
+import { errorCode, errorMessage } from "@/components/catalog/types";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
 import { translate } from "@/i18n/translate";
@@ -32,10 +39,25 @@ export type EinvoiceDownloadOutcome =
 
 /** `originId` is stamped by the hook, never by a caller. */
 export type CreateInvoiceVars = Omit<CreateInvoiceInput, "originId">;
+export type UpdateInvoiceVars = Omit<UpdateInvoiceInput, "originId">;
+
+/**
+ * How an edit ended. A conflict and the two stable refusals are the form's
+ * to explain in place — a toast would vanish with the person's edits still
+ * on screen; any other failure was already toasted.
+ */
+export type UpdateInvoiceOutcome =
+  | { kind: "updated"; invoice: InvoiceRow }
+  | { kind: "conflict" }
+  | { kind: "number-taken" }
+  | { kind: "refused"; code: InvoiceUpdateRefusal }
+  | { kind: "error" };
 
 export type InvoiceMutations = {
   /** Resolves to the created invoice, or null when the server refused. */
   createInvoice: (vars: CreateInvoiceVars) => Promise<InvoiceRow | null>;
+  /** Edit a draft; never throws. */
+  updateInvoice: (vars: UpdateInvoiceVars) => Promise<UpdateInvoiceOutcome>;
   setStatus: (id: string, status: InvoiceStatus) => void;
   removeInvoice: (id: string) => void;
   /** Fetches the server-rendered PDF and hands it to the browser. */
@@ -76,6 +98,42 @@ export function useInvoiceMutations(): InvoiceMutations {
     },
     onSettled: settle,
   });
+
+  /**
+   * An edit moves money on a draft nobody has seen; a refusal is the form's
+   * to explain (`UpdateInvoiceOutcome`), so only a plain failure toasts.
+   */
+  const update = trpc.invoices.update.useMutation({
+    onSuccess: (invoice) => {
+      toast.success(
+        translate("reports")("invoices.toast.saved", { number: invoice.number }),
+      );
+    },
+    onSettled: settle,
+  });
+  const { mutateAsync: updateAsync } = update;
+
+  const updateInvoice = React.useCallback(
+    async (vars: UpdateInvoiceVars): Promise<UpdateInvoiceOutcome> => {
+      try {
+        const invoice = await updateAsync({ ...vars, originId: ORIGIN_ID });
+        return { kind: "updated", invoice };
+      } catch (error) {
+        const code = errorCode(error);
+        const message = errorMessage(error, "");
+        if (code === "CONFLICT") {
+          return /already used/.test(message) ? { kind: "number-taken" } : { kind: "conflict" };
+        }
+        if (code === "PRECONDITION_FAILED") {
+          const refusal = Object.values(INVOICE_UPDATE_REFUSALS).find((value) => value === message);
+          if (refusal) return { kind: "refused", code: refusal };
+        }
+        toast.error(errorMessage(error, translate("reports")("invoices.toast.saveFailed")));
+        return { kind: "error" };
+      }
+    },
+    [updateAsync],
+  );
 
   const updateStatus = trpc.invoices.updateStatus.useMutation({
     onSuccess: (invoice) => {
@@ -171,6 +229,7 @@ export function useInvoiceMutations(): InvoiceMutations {
   return {
     createInvoice: (vars) =>
       create.mutateAsync({ ...vars, originId: ORIGIN_ID }).catch(() => null),
+    updateInvoice,
     setStatus: (id, status) => {
       updateStatus.mutate({ id, status, originId: ORIGIN_ID });
     },
@@ -183,6 +242,7 @@ export function useInvoiceMutations(): InvoiceMutations {
     isCreating: create.isPending,
     isBusy:
       create.isPending ||
+      update.isPending ||
       updateStatus.isPending ||
       remove.isPending ||
       isDownloading,

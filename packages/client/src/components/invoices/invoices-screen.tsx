@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Plus } from "lucide-react";
+import { FilePlus, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
+import { useServerSupports } from "@/lib/server-level";
 import { trpc } from "@/lib/trpc";
 import { InvoiceDetail } from "./invoice-detail";
 import { InvoiceList } from "./invoice-list";
@@ -23,8 +24,12 @@ export function InvoicesScreen(): React.JSX.Element {
   const t = useT("reports");
   const list = trpc.invoices.list.useQuery(INVOICE_LIST_INPUT);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [creating, setCreating] = React.useState(false);
+  // Which create flow is open: over tracked time, or a blank invoice.
+  const [creating, setCreating] = React.useState<"time" | "blank" | null>(null);
   const [linkedId, setLinkedId] = React.useState<string | null>(null);
+  // A blank invoice needs `invoices.create` without a range, which an older
+  // self-hosted server refuses; the button waits for one that answers it.
+  const blankSupported = useServerSupports("invoices.lines");
 
   // `?invoice=<id>`: the way back from fixing billing data for one invoice.
   // Read from `location`, like settings `?tab=`, and applied once the list
@@ -49,10 +54,22 @@ export function InvoicesScreen(): React.JSX.Element {
         <p className="text-sm text-muted-foreground" data-testid="invoices-count">
           {t("invoices.count", { count: invoices.length })}
         </p>
-        <Button onClick={() => setCreating(true)} data-testid="new-invoice">
-          <Plus className="size-4" />
-          {t("invoices.newInvoice")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {blankSupported ? (
+            <Button
+              variant="outline"
+              onClick={() => setCreating("blank")}
+              data-testid="new-blank-invoice"
+            >
+              <FilePlus className="size-4" />
+              {t("invoices.newBlankInvoice")}
+            </Button>
+          ) : null}
+          <Button onClick={() => setCreating("time")} data-testid="new-invoice">
+            <Plus className="size-4" />
+            {t("invoices.newInvoice")}
+          </Button>
+        </div>
       </div>
 
       <InvoiceList
@@ -60,7 +77,7 @@ export function InvoicesScreen(): React.JSX.Element {
         isLoading={list.isPending}
         selectedId={selectedId}
         onSelect={setSelectedId}
-        onCreate={() => setCreating(true)}
+        onCreate={() => setCreating("time")}
       />
 
       {selected ? (
@@ -72,8 +89,9 @@ export function InvoicesScreen(): React.JSX.Element {
       ) : null}
 
       <NewInvoiceDialog
-        open={creating}
-        onOpenChange={setCreating}
+        open={creating !== null}
+        blank={creating === "blank"}
+        onOpenChange={(open) => setCreating(open ? (creating ?? "time") : null)}
         onCreated={(invoice) => setSelectedId(invoice.id)}
       />
     </div>

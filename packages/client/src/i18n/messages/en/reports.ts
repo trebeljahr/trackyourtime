@@ -222,6 +222,7 @@ export const reports = {
       "Bill a client for a range of tracked time. Time that has already been invoiced is never offered a second time.",
     count: "{count, plural, one {# invoice} other {# invoices}}",
     newInvoice: "New invoice",
+    newBlankInvoice: "New blank invoice",
     emptyTitle: "No invoices yet",
     emptyDescription:
       "An invoice turns one client's billable time over one date range into a document. Time that lands on an invoice is never offered for billing again.",
@@ -247,9 +248,23 @@ export const reports = {
       language: "Language",
       line: "Line",
       hours: "Hours",
+      /** Replaces "Hours" once a manual line is on the invoice; every cell then names its unit. */
+      quantity: "Quantity",
+      unit: "Unit",
+      /** Replaces "Rate" beside "Quantity": the price of one unit. */
+      unitPrice: "Price",
     },
     /** Decimal hours on an invoice; `{hours}` is formatted: "3.00 h". */
     hoursValue: "{hours} h",
+    /** A quantity with its unit; `{quantity}` is formatted, `{count}` is the same number for the plural. */
+    quantityValue:
+      "{quantity} {unit, select, hour {h} day {{count, plural, one {day} other {days}}} piece {{count, plural, one {pc} other {pcs}}} other {{unit}}}",
+    /** The unit picker's options. */
+    units: {
+      hour: "Hours",
+      day: "Days",
+      piece: "Pieces",
+    },
     billedHours: "Billed hours",
     subtotal: "Subtotal",
     noTax: "No tax",
@@ -262,6 +277,10 @@ export const reports = {
 
     detail: {
       close: "Close invoice",
+      /** The billed-range cell of a blank invoice. */
+      noRange: "No billed range",
+      editDraft: "Edit draft",
+      entriesNone: "No time entries are billed on this invoice.",
       entriesDraft:
         "{count, plural, one {# time entry is billed on this invoice and cannot be billed again unless this draft is deleted.} other {# time entries are billed on this invoice and cannot be billed again unless this draft is deleted.}}",
       entriesFinal:
@@ -283,6 +302,42 @@ export const reports = {
       statusFailed: "Could not change the status.",
       deleteFailed: "Could not delete the invoice.",
       pdfFailed: "Could not build the PDF for {number}.",
+      saved: "Draft {number} saved.",
+      saveFailed: "Could not save the draft.",
+    },
+
+    /** The line editor: manual lines on a new invoice, and every line of a draft. */
+    lines: {
+      addLine: "Add line",
+      removeLine: "Remove line {label}",
+      labelPlaceholder: "Description",
+      timeLineHint:
+        "A time line takes its hours and rate from the entries it bills; only its description can change here.",
+      additional: "Additional lines",
+      additionalHint: "Fixed fees, expenses, anything not tracked as time.",
+      empty: "No lines yet.",
+      errors: {
+        label: "Enter a description.",
+        quantity: "Enter a quantity above 0 with at most 3 decimals.",
+        unitPrice: "Enter a price of 0 or more with at most 2 decimals.",
+      },
+    },
+
+    /** Editing a draft in place. */
+    edit: {
+      title: "Edit draft {number}",
+      number: "Number",
+      save: "Save changes",
+      cancel: "Discard changes",
+      nothingChanged: "Nothing changed yet.",
+      invalidLines: "Fix the highlighted lines before saving.",
+      invalidNumber: "Enter an invoice number.",
+      invalidDates: "The due date cannot be before the issue date.",
+      conflict: "This draft changed in another window. Reload it and make your changes again.",
+      reload: "Reload",
+      numberTaken: "This number is already used by another invoice.",
+      notDraft: "Only a draft can be edited. This invoice has been sent.",
+      einvoiceIssued: "An e-invoice was issued from this draft, so it can no longer be edited.",
     },
 
     notices: {
@@ -305,6 +360,13 @@ export const reports = {
       title: "New invoice",
       description:
         "Preview costs nothing and changes nothing. Creating the invoice bills the time on it — that time can never be invoiced again.",
+      blankTitle: "New blank invoice",
+      blankDescription:
+        "An invoice with lines you type yourself: no tracked time and no billed range. Tracked time stays billable.",
+      addLinesForPreview: "Add at least one complete line to see the preview.",
+      /** The confirmation strip of an invoice that bills no tracked time. */
+      confirmNoEntries:
+        "This creates invoice <b>{number}</b> for <b>{client}</b> at <b>{total}</b>. It bills no tracked time.",
       selectClient: "Select a client",
       lines: "Lines",
       perProject: "One line per project",

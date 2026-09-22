@@ -1,12 +1,16 @@
 import { addDays, format, parseISO } from "date-fns";
-import type {
-  ExemptionNotes,
-  Invoice,
-  InvoiceLineItem,
-  InvoiceStatus,
-  LineTax,
-  TaxBreakdownRow,
-  TaxCategory,
+import {
+  lineKind,
+  lineQuantity,
+  lineUnit,
+  type ExemptionNotes,
+  type Invoice,
+  type InvoiceLineItem,
+  type InvoiceLineLike,
+  type InvoiceStatus,
+  type LineTax,
+  type TaxBreakdownRow,
+  type TaxCategory,
 } from "@starter/shared";
 
 import { translate } from "@/i18n/translate";
@@ -264,10 +268,38 @@ export function formatHours(
   });
 }
 
-/** Total decimal hours across the lines, for the summary row. */
+/** Total decimal hours across the lines, for the summary row. A manual line has no seconds. */
 export function totalHours(lineItems: readonly InvoiceLineItem[]): number {
   const seconds = lineItems.reduce((sum, line) => sum + line.seconds, 0);
   return Math.round((seconds / 3600) * 100) / 100;
+}
+
+/** True once any line was typed rather than rolled up from time: the table then names every unit. */
+export function hasManualLines(lineItems: readonly Pick<InvoiceLineItem, "kind">[]): boolean {
+  return lineItems.some((line) => lineKind(line) === "manual");
+}
+
+/**
+ * "2.00 days" / „2,00 Tage“ — a line's quantity with its unit, two places
+ * like `formatHours`, so `quantity × price = amount` reconciles by eye.
+ */
+export function formatQuantity(
+  line: InvoiceLineLike,
+  locale: ClientLocale = getActiveLocale(),
+): string {
+  const quantity = lineQuantity(line);
+  return reportsT(locale)("invoices.quantityValue", {
+    quantity: formatDecimal(Number.isFinite(quantity) ? quantity : 0, locale, 2),
+    count: quantity,
+    unit: lineUnit(line),
+  });
+}
+
+/** True when the preview has anything on it at all — time lines or manual ones. */
+export function previewHasLines(
+  preview: Pick<InvoicePreviewData, "lineItems"> | undefined,
+): boolean {
+  return (preview?.lineItems.length ?? 0) > 0;
 }
 
 /** "Tax (19%)" / "No tax" — the tax line's own label. */

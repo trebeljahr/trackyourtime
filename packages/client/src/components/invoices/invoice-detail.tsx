@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Download, Loader2, Trash2, X } from "lucide-react";
+import { Download, Loader2, Pencil, Trash2, X } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/catalog/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useLocale } from "@/i18n/locale-store";
 import { useT } from "@/i18n/use-t";
+import { useServerSupports } from "@/lib/server-level";
 import { EinvoicePanel } from "./einvoice-panel";
+import { InvoiceEditForm } from "./invoice-edit-form";
 import { InvoiceLines } from "./invoice-lines";
 import {
   canDeleteInvoice,
@@ -50,6 +52,12 @@ export function InvoiceDetail({
   const locale = useLocale();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
+  // Editing is a mode of THIS draft: another selection, or a status change
+  // landing from elsewhere, leaves it.
+  const [editing, setEditing] = React.useState(false);
+  const serverEdits = useServerSupports("invoices.lines");
+  const editable = canDeleteInvoice(invoice.status) && serverEdits;
+  if (editing && !editable) setEditing(false);
 
   const transitions = statusTransitions(invoice.status);
   const deletable = canDeleteInvoice(invoice.status);
@@ -113,7 +121,10 @@ export function InvoiceDetail({
         <div>
           <dt className="text-muted-foreground">{t("invoices.columns.billedRange")}</dt>
           <dd data-testid="invoice-detail-range">
-            {formatRange(invoice.from, invoice.to, locale)}
+            {/* A blank invoice billed no tracked time and has no range. */}
+            {invoice.from !== null && invoice.to !== null
+              ? formatRange(invoice.from, invoice.to, locale)
+              : t("invoices.detail.noRange")}
           </dd>
         </div>
         {/* The document's own language, snapshotted at creation. An invoice
@@ -126,26 +137,36 @@ export function InvoiceDetail({
         </div>
       </dl>
 
-      <InvoiceLines
-        lineItems={invoice.lineItems}
-        subtotal={invoice.subtotal}
-        taxRate={invoice.taxRate}
-        taxAmount={invoice.taxAmount}
-        total={invoice.total}
-        currency={invoice.currency}
-        testIdPrefix="invoice-detail"
-        taxBreakdown={invoice.taxBreakdown ?? null}
-        renderLineTax={
-          linesHaveMixedTax(invoice.lineItems)
-            ? (line) =>
-                line.taxCategory === undefined
-                  ? "—"
-                  : taxCategoryLabel(line.taxCategory, line.taxRate ?? 0)
-            : null
-        }
-      />
+      {editing ? (
+        <InvoiceEditForm
+          // A save answers a fresh `updatedAt`; the list refetch carries it here.
+          key={invoice.updatedAt}
+          invoice={invoice}
+          onSaved={() => setEditing(false)}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <InvoiceLines
+          lineItems={invoice.lineItems}
+          subtotal={invoice.subtotal}
+          taxRate={invoice.taxRate}
+          taxAmount={invoice.taxAmount}
+          total={invoice.total}
+          currency={invoice.currency}
+          testIdPrefix="invoice-detail"
+          taxBreakdown={invoice.taxBreakdown ?? null}
+          renderLineTax={
+            linesHaveMixedTax(invoice.lineItems)
+              ? (line) =>
+                  line.taxCategory === undefined
+                    ? "—"
+                    : taxCategoryLabel(line.taxCategory, line.taxRate ?? 0)
+              : null
+          }
+        />
+      )}
 
-      {invoice.notes ? (
+      {invoice.notes && !editing ? (
         <p
           className="whitespace-pre-wrap rounded-md bg-muted/50 p-3 text-sm"
           data-testid="invoice-detail-notes"
@@ -157,14 +178,30 @@ export function InvoiceDetail({
       <EinvoicePanel invoice={invoice} />
 
       <p className="text-xs text-muted-foreground" data-testid="invoice-detail-entries">
-        {deletable
-          ? t("invoices.detail.entriesDraft", { count: invoice.entryIds.length })
-          : t("invoices.detail.entriesFinal", { count: invoice.entryIds.length })}
+        {invoice.entryIds.length === 0
+          ? t("invoices.detail.entriesNone")
+          : deletable
+            ? t("invoices.detail.entriesDraft", { count: invoice.entryIds.length })
+            : t("invoices.detail.entriesFinal", { count: invoice.entryIds.length })}
       </p>
 
       <Separator />
 
       <div className="flex flex-wrap items-center gap-2">
+        {editable && !editing ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={isBusy}
+            onClick={() => setEditing(true)}
+            data-testid="invoice-edit"
+          >
+            <Pencil className="size-4" />
+            {t("invoices.detail.editDraft")}
+          </Button>
+        ) : null}
+
         {transitions.map((status) => (
           <Button
             key={status}

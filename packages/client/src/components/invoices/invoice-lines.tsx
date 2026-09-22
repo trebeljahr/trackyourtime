@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { InvoiceLineItem, TaxBreakdownRow } from "@starter/shared";
+import { lineUnitPrice, type InvoiceLineItem, type TaxBreakdownRow } from "@starter/shared";
 
 import {
   Table,
@@ -13,7 +13,14 @@ import {
 } from "@/components/ui/table";
 import { useFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
-import { formatHours, taxCategoryLabel, taxLabel, totalHours } from "./types";
+import {
+  formatHours,
+  formatQuantity,
+  hasManualLines,
+  taxCategoryLabel,
+  taxLabel,
+  totalHours,
+} from "./types";
 
 export type InvoiceLinesProps = {
   lineItems: InvoiceLineItem[];
@@ -59,6 +66,9 @@ export function InvoiceLines({
   const f = useFormat();
   const money = (amount: number): string => f.money(amount, currency);
   const breakdown = taxBreakdown && taxBreakdown.length > 0 ? taxBreakdown : null;
+  // Once a manual line is on the invoice every quantity names its unit and
+  // the rate column is a price; an invoice of time lines alone reads as before.
+  const withUnits = hasManualLines(lineItems);
 
   return (
     <div className="space-y-3">
@@ -67,8 +77,12 @@ export function InvoiceLines({
           <TableHeader>
             <TableRow>
               <TableHead>{t("invoices.columns.line")}</TableHead>
-              <TableHead className="text-right">{t("invoices.columns.hours")}</TableHead>
-              <TableHead className="text-right">{tc("fields.rate")}</TableHead>
+              <TableHead className="text-right">
+                {withUnits ? t("invoices.columns.quantity") : t("invoices.columns.hours")}
+              </TableHead>
+              <TableHead className="text-right">
+                {withUnits ? t("invoices.columns.unitPrice") : tc("fields.rate")}
+              </TableHead>
               {renderLineTax ? (
                 <TableHead data-testid={`${testIdPrefix}-vat-column`}>
                   {te("lines.vatColumn")}
@@ -81,11 +95,11 @@ export function InvoiceLines({
             {lineItems.map((line, index) => (
               <TableRow key={line.key} data-testid={`${testIdPrefix}-line`}>
                 <TableCell className="font-medium">{line.label}</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatHours(line.hours, f.locale)}
+                <TableCell className="text-right tabular-nums" data-testid={`${testIdPrefix}-line-quantity`}>
+                  {withUnits ? formatQuantity(line, f.locale) : formatHours(line.hours, f.locale)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums text-muted-foreground">
-                  {money(line.hourlyRate)}
+                  {money(lineUnitPrice(line))}
                 </TableCell>
                 {renderLineTax ? (
                   <TableCell data-testid={`${testIdPrefix}-line-tax`}>

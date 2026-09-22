@@ -56,9 +56,17 @@ import {
   type InvoiceTaxState,
 } from "./invoice-tax-section";
 import {
+  invalidManualLines,
+  manualLinesInput,
+  newManualLineDraft,
+  type EditableLine,
+} from "./line-editor";
+import { ManualLinesEditor } from "./manual-lines-editor";
+import {
   defaultInvoiceDates,
   emptyPreviewReason,
   exclusionNotices,
+  previewHasLines,
   previewIsBillable,
   reconcileDueDate,
   type InvoiceGroupBy,
@@ -72,6 +80,11 @@ export type NewInvoiceDialogProps = {
   onOpenChange: (open: boolean) => void;
   /** Called with the created invoice so the screen can select it. */
   onCreated: (invoice: InvoiceRow) => void;
+  /**
+   * A BLANK invoice: no billed range and no tracked time, only the lines
+   * typed into it. The request then carries no `from` / `to`.
+   */
+  blank?: boolean;
 };
 
 const GROUP_OPTIONS = [
@@ -96,15 +109,18 @@ export function NewInvoiceDialog({
   open,
   onOpenChange,
   onCreated,
+  blank = false,
 }: NewInvoiceDialogProps): React.JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
         data-testid="invoice-dialog"
+        data-blank={blank}
       >
         {open ? (
           <NewInvoiceForm
+            blank={blank}
             onCreated={(invoice) => {
               onCreated(invoice);
               onOpenChange(false);
@@ -118,6 +134,7 @@ export function NewInvoiceDialog({
 }
 
 type NewInvoiceFormProps = {
+  blank: boolean;
   onCreated: (invoice: InvoiceRow) => void;
   onCancel: () => void;
 };
@@ -135,6 +152,7 @@ type NewInvoiceFormProps = {
  * at, never the ones you were looking at a moment ago.
  */
 function NewInvoiceForm({
+  blank,
   onCreated,
   onCancel,
 }: NewInvoiceFormProps): React.JSX.Element {
@@ -149,6 +167,13 @@ function NewInvoiceForm({
     rangeForPreset("thisMonth", format.weekStartsOn),
   );
   const [groupBy, setGroupBy] = React.useState<InvoiceGroupBy>("project");
+  // Manual lines: a blank invoice starts with one to fill in; a ranged one
+  // with none, and takes them as "additional lines" under the tracked time.
+  const [lines, setLines] = React.useState<EditableLine[]>(() =>
+    blank ? [newManualLineDraft()] : [],
+  );
+  const manualInputs = manualLinesInput(lines);
+  const linesValid = invalidManualLines(lines).size === 0;
   const te = useT("einvoice");
   const [taxState, setTaxState] = React.useState<InvoiceTaxState>(INITIAL_INVOICE_TAX_STATE);
   // The server's resolution is adopted once per client, and never after an edit.
@@ -216,15 +241,18 @@ function NewInvoiceForm({
   // A dry run, re-fetched on every edit. `enabled` keeps it from firing with a
   // placeholder client id, and `staleTime: 0` keeps it honest — another tab
   // may have invoiced this range since the last look.
+  // Preview and create read this ONE shape for the client, the range and the
+  // lines, so a blank invoice cannot preview with a range it then omits.
+  const content = {
+    clientId: clientId ?? "",
+    ...(blank ? {} : { from: range.from, to: range.to }),
+    groupBy,
+    ...(manualInputs.length > 0 ? { lines: manualInputs } : {}),
+  };
   const preview = trpc.invoices.preview.useQuery(
-    {
-      clientId: clientId ?? "",
-      from: range.from,
-      to: range.to,
-      groupBy,
-      ...taxInputs,
-    },
-    { enabled: clientId !== null && tax.ok, staleTime: 0 },
+    { ...content, ...taxInputs },
+    // A blank invoice has nothing to preview until a line is complete.
+    { enabled: clientId !== null && tax.ok && (!blank || manualInputs.length > 0), staleTime: 0 },
   );
 
   const data = preview.data;
@@ -257,6 +285,13 @@ function NewInvoiceForm({
     setConfirming(false);
     setTaxState(next);
   };
+  const changeLines = (next: EditableLine[]): void => {
+    setConfirming(false);
+    setLines(next);
+  };
+  // Something is on the invoice: tracked time, manual lines, or both. The
+  // exclusion notices still speak for the time that dropped out.
+  const hasLines = previewHasLines(data) && (!blank || manualInputs.length > 0);
   const billable = previewIsBillable(data);
   const notices = data ? exclusionNotices(data, f.locale) : [];
 
@@ -282,12 +317,10 @@ function NewInvoiceForm({
   };
 
   const submit = async (): Promise<void> => {
-    if (clientId === null || !taxResult.ok || !billable || notesMissing.length > 0) return;
+    if (clientId === null || !taxResult.ok || !hasLines || !linesValid || notesMissing.length > 0) return;
     const vars: CreateInvoiceVars = {
+      ...content,
       clientId,
-      from: range.from,
-      to: range.to,
-      groupBy,
       ...taxInputs,
       issueDate: dates.issueDate,
       dueDate,
@@ -308,8 +341,10 @@ function NewInvoiceForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{t("invoices.form.title")}</DialogTitle>
-        <DialogDescription>{t("invoices.form.description")}</DialogDescription>
+        <DialogTitle>{blank ? t("invoices.form.blankTitle") : t("invoices.form.title")}</DialogTitle>
+        <DialogDescription>
+          {blank ? t("invoices.form.blankDescription") : t("invoices.form.description")}
+        </DialogDescription>
       </DialogHeader>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -336,41 +371,45 @@ function NewInvoiceForm({
           />
         </div>
 
-        <div className="space-y-2">
-          <Label>{t("invoices.columns.billedRange")}</Label>
-          <DateRangePicker
-            value={range}
-            onChange={(next) => {
-              setConfirming(false);
-              setRange(next);
-            }}
-            weekStartsOn={format.weekStartsOn}
-            className="w-full"
-            testId="invoice-range"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>{t("invoices.form.lines")}</Label>
-          <div className="flex flex-wrap gap-2" data-testid="invoice-groupby">
-            {GROUP_OPTIONS.map((option) => (
-              <Button
-                key={option.id}
-                type="button"
-                size="sm"
-                variant={groupBy === option.id ? "secondary" : "outline"}
-                onClick={() => {
-                  setConfirming(false);
-                  setGroupBy(option.id);
-                }}
-                aria-pressed={groupBy === option.id}
-                data-testid={`invoice-groupby-${option.id}`}
-              >
-                {t(option.labelKey)}
-              </Button>
-            ))}
+        {blank ? null : (
+          <div className="space-y-2">
+            <Label>{t("invoices.columns.billedRange")}</Label>
+            <DateRangePicker
+              value={range}
+              onChange={(next) => {
+                setConfirming(false);
+                setRange(next);
+              }}
+              weekStartsOn={format.weekStartsOn}
+              className="w-full"
+              testId="invoice-range"
+            />
           </div>
-        </div>
+        )}
+
+        {blank ? null : (
+          <div className="space-y-2">
+            <Label>{t("invoices.form.lines")}</Label>
+            <div className="flex flex-wrap gap-2" data-testid="invoice-groupby">
+              {GROUP_OPTIONS.map((option) => (
+                <Button
+                  key={option.id}
+                  type="button"
+                  size="sm"
+                  variant={groupBy === option.id ? "secondary" : "outline"}
+                  onClick={() => {
+                    setConfirming(false);
+                    setGroupBy(option.id);
+                  }}
+                  aria-pressed={groupBy === option.id}
+                  data-testid={`invoice-groupby-${option.id}`}
+                >
+                  {t(option.labelKey)}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="invoice-issue-date">{t("invoices.form.issueDate")}</Label>
@@ -438,6 +477,20 @@ function NewInvoiceForm({
         </div>
       </div>
 
+      <section className="space-y-2" data-testid="invoice-manual-lines">
+        <Label>{blank ? t("invoices.form.lines") : t("invoices.lines.additional")}</Label>
+        {blank ? null : (
+          <p className="text-xs text-muted-foreground">{t("invoices.lines.additionalHint")}</p>
+        )}
+        <ManualLinesEditor
+          lines={lines}
+          onChange={changeLines}
+          currency={data?.currency ?? format.settings.currency}
+          testIdPrefix="invoice-lines"
+          disabled={isCreating}
+        />
+      </section>
+
       <InvoiceTaxSection
         lines={knownLines}
         value={taxState}
@@ -503,6 +556,10 @@ function NewInvoiceForm({
           >
             {t("invoices.form.pickClient")}
           </p>
+        ) : blank && manualInputs.length === 0 ? (
+          <p className="text-sm text-muted-foreground" data-testid="invoice-preview-no-lines">
+            {t("invoices.form.addLinesForPreview")}
+          </p>
         ) : !tax.ok ? (
           <p className="text-sm text-muted-foreground" data-testid="invoice-preview-tax-invalid">
             {!taxResult.ok && taxResult.errorKey === "oMixed" ? te("tax.oMixed") : te("tax.rate")}
@@ -542,7 +599,7 @@ function NewInvoiceForm({
               </p>
             ))}
 
-            {billable ? (
+            {hasLines ? (
               <InvoiceLines
                 lineItems={data.lineItems}
                 subtotal={data.subtotal}
@@ -572,7 +629,7 @@ function NewInvoiceForm({
 
       <Separator />
 
-      {confirming && data && billable ? (
+      {confirming && data && hasLines ? (
         <div
           className="space-y-3 rounded-lg border-2 border-destructive/50 bg-destructive/5 p-4"
           data-testid="invoice-create-confirm-panel"
@@ -580,13 +637,20 @@ function NewInvoiceForm({
           <p className="flex items-start gap-2 text-sm">
             <Info className="mt-0.5 size-4 shrink-0" />
             <span>
-              {t.rich("invoices.form.confirm", {
-                number: data.suggestedNumber,
-                client: data.clientName,
-                total: f.money(data.total, data.currency),
-                count: data.entryIds.length,
-                b: (chunks) => <strong>{chunks}</strong>,
-              })}
+              {billable
+                ? t.rich("invoices.form.confirm", {
+                    number: data.suggestedNumber,
+                    client: data.clientName,
+                    total: f.money(data.total, data.currency),
+                    count: data.entryIds.length,
+                    b: (chunks) => <strong>{chunks}</strong>,
+                  })
+                : t.rich("invoices.form.confirmNoEntries", {
+                    number: data.suggestedNumber,
+                    client: data.clientName,
+                    total: f.money(data.total, data.currency),
+                    b: (chunks) => <strong>{chunks}</strong>,
+                  })}
             </span>
           </p>
           <div className="flex justify-end gap-2">
@@ -622,7 +686,7 @@ function NewInvoiceForm({
           <Button
             type="button"
             onClick={() => setConfirming(true)}
-            disabled={!billable || !tax.ok || notesMissing.length > 0 || isCreating}
+            disabled={!hasLines || !linesValid || !tax.ok || notesMissing.length > 0 || isCreating}
             data-testid="invoice-create"
           >
             {t("invoices.form.create")}
