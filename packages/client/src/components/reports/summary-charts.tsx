@@ -30,6 +30,7 @@ import {
   sumReportMoney,
 } from "@/components/reports/report-money";
 import { isDrillableKey } from "@/components/reports/drill";
+import { groupColorMap } from "@/components/reports/group-colors";
 import {
   bucketTimeline,
   formatBucketLabel,
@@ -38,27 +39,12 @@ import {
 } from "@/components/reports/timeline-buckets";
 import { cn } from "@/lib/utils";
 
-/**
- * Series colours come from the theme tokens rather than literals, so the
- * charts follow the light/dark switch without a re-render. Recharts writes
- * these straight into SVG `fill`, where `var()` resolves normally.
- */
-export const CHART_COLORS: string[] = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-];
-
 const BILLABLE_COLOR = "hsl(var(--chart-1))";
 const NON_BILLABLE_COLOR = "hsl(var(--chart-3))";
 const AXIS_COLOR = "hsl(var(--muted-foreground))";
+/** Unreachable in practice: every group is in the map built from the same list. */
+const CHART_FALLBACK = "hsl(var(--chart-1))";
 const GRID_COLOR = "hsl(var(--border))";
-
-/** Colour for a group row - its own catalogue colour, else a palette slot. */
-export const colorForGroup = (group: SummaryGroup, index: number): string =>
-  group.color ?? CHART_COLORS[index % CHART_COLORS.length];
 
 const SECONDS_PER_HOUR = 3600;
 const MAX_SLICES = 8;
@@ -453,14 +439,15 @@ export function GroupBreakdownChart({
     const head = positive.slice(0, MAX_SLICES);
     const tail = positive.slice(MAX_SLICES);
     const total = totalSec > 0 ? totalSec : 1;
+    const colors = groupColorMap(groups);
 
-    const mapped: Slice[] = head.map((group, index) => ({
+    const mapped: Slice[] = head.map((group) => ({
       key: group.key,
       label: group.label,
       seconds: group.seconds,
       amount: group.amount,
       share: (group.seconds / total) * 100,
-      fill: colorForGroup(group, index),
+      fill: colors.get(group.key) ?? CHART_FALLBACK,
     }));
 
     if (tail.length > 0) {
@@ -517,8 +504,11 @@ export function GroupBreakdownChart({
                       innerRadius="58%"
                       outerRadius="86%"
                       paddingAngle={1}
-                      stroke="hsl(var(--background))"
-                      strokeWidth={2}
+                      // One slice is the whole ring. The background stroke
+                      // exists to separate slices, and on a lone one it only
+                      // draws a seam where the arc starts and ends.
+                      stroke={slices.length === 1 ? "none" : "hsl(var(--background))"}
+                      strokeWidth={slices.length === 1 ? 0 : 2}
                       isAnimationActive={false}
                       onClick={(_, index) => selectSlice(slices[index]?.key ?? "")}
                     >

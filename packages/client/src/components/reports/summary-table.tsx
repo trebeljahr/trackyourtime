@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { colorForGroup } from "@/components/reports/summary-charts";
+import { CHART_COLORS, groupColorMap } from "@/components/reports/group-colors";
 import { useFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
 import type { BudgetView } from "@/lib/budget-view";
@@ -77,6 +77,7 @@ export function SummaryTable({
     () => [...groups].sort((a, b) => b.seconds - a.seconds),
     [groups]
   );
+  const colors = React.useMemo(() => groupColorMap(groups), [groups]);
 
   const denominator = totalSec > 0 ? totalSec : 1;
 
@@ -115,7 +116,8 @@ export function SummaryTable({
       <TableBody>
         {rows.map((group, index) => {
           const share = (group.seconds / denominator) * 100;
-          const color = colorForGroup(group, index);
+          const color =
+            colors.get(group.key) ?? CHART_COLORS[index % CHART_COLORS.length];
           const href = hrefForGroup?.(group) ?? null;
           const label = (
             <span className="flex items-center gap-2">
