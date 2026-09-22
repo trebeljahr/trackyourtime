@@ -4,6 +4,8 @@ import type { ComboboxOption } from "@/components/ui/combobox";
 export type PickerTask = {
   id: string;
   name: string;
+  /** Absent from a server older than task colors; the row then shows no dot. */
+  color?: string;
   projectIds?: string[];
 };
 
@@ -35,6 +37,7 @@ export function taskPickerOptions(
       value: task.id,
       label: task.name,
       keywords: [task.name],
+      ...(task.color !== undefined ? { color: task.color } : {}),
     };
     if (!scoped || task.id === selectedId) return option;
     if (task.projectIds?.includes(projectId as string)) return option;

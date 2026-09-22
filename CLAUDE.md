@@ -1307,6 +1307,15 @@ Three places this used to leak, each of which now deliberately does nothing:
 Task documents written before this may still carry a stray `projectId`; the
 strict mongoose schema drops it on read, so there is nothing to backfill.
 
+A task carries a `color` like a client, project or tag (server-assigned from
+the palette at `TASK_COLOR_OFFSET` when a create names none; a row from
+before the field reads as the first task color), and `tasks.list` rows carry
+`entryCount` beside `totalSec`. There is no `done` flag any more: it was a
+todo-app leftover that nothing filtered on, and `archived` already says "stop
+offering this". The capability is `tasks.color` (API level 3); an older
+server strips `color` from a write rather than refusing it, so the web and
+Raycast forms hide the picker there instead of saving nothing.
+
 The pickers still *suggest* by project. `tasks.list` (tRPC only, never REST)
 carries `projectIds`: the projects a task has been booked on, derived from
 entries under the roll-up author scope, plus that stray legacy `projectId`

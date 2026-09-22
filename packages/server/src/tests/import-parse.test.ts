@@ -304,7 +304,13 @@ test("a JSON catalog is read as values, not trusted as types", () => {
         // is nothing this row could ever be matched to.
         { name: "   ", hourlyRate: 10 },
       ],
-      tasks: [{ name: "Orphan", projectName: "" }],
+      tasks: [
+        // From a file older than task colors, and — as every exporter has
+        // written it — with no project beside it. Both are kept.
+        { name: "Imports", done: false },
+        { name: "   " },
+        { name: "Review", color: 7 },
+      ],
       tags: [{ name: "deep work", color: 42 }],
     }),
   );
@@ -320,8 +326,14 @@ test("a JSON catalog is read as values, not trusted as types", () => {
   assert.strictEqual(project.hourlyRate, null);
   assert.strictEqual(project.estimatedHours, null);
   assert.strictEqual(project.idleBehavior, null);
-  // A task without its project addresses nothing.
-  assert.equal(doc.tasks.length, 0);
+  // Tasks are workspace-wide: a name is the whole address. The reader used to
+  // demand a `projectName` the exporter never wrote, dropping every task.
+  assert.deepEqual(
+    doc.tasks.map((task) => task.name),
+    ["Imports", "Review"],
+  );
+  assert.strictEqual(doc.tasks[0]?.color, "");
+  assert.strictEqual(doc.tasks[1]?.color, "");
   // An unreadable color is blank rather than the number 42, which the model's
   // required String would take and render as a swatch nobody chose.
   assert.strictEqual(doc.tags[0]?.color, "");

@@ -35,6 +35,12 @@ export const REQUIRES_API_LEVEL = {
   "invoices.einvoice": 1,
   /** `settings.updateNotice`, the opt-in "vX.Y.Z is available" line in Settings. */
   "settings.updateNotice": 2,
+  /**
+   * `color` on tasks and `entryCount` on `tasks.list`. An older server strips
+   * `color` from a create or update rather than refusing it, so a form that
+   * offered the picker there would save nothing — hide it instead.
+   */
+  "tasks.color": 3,
 } as const satisfies Readonly<Record<string, number>>;
 
 export type Capability = keyof typeof REQUIRES_API_LEVEL;

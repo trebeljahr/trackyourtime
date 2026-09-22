@@ -383,7 +383,8 @@ export type Task = {
   /** Audit only — never used for scoping. */
   createdBy: string;
   name: string;
-  done: boolean;
+  /** Hex color, e.g. "#4f46e5". */
+  color: string;
   archived: boolean;
   createdAt: string;
   updatedAt: string;

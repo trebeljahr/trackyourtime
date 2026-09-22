@@ -250,9 +250,8 @@ export const catalog = {
     new: "New task",
     search: "Search tasks",
     editLabel: "Edit task “{name}”",
-    markDone: "Mark {name} done",
     summary:
-      "{count, plural, one {# task} other {# tasks}} · {open, number} open · {duration} tracked",
+      "{count, plural, one {# task} other {# tasks}} · {duration} tracked",
     empty: {
       title: "No tasks yet",
       filteredTitle: "No tasks match these filters",

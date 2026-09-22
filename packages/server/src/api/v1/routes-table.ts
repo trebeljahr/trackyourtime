@@ -253,13 +253,15 @@ export const projectWithStatsSchema: z.ZodType<ProjectWithStats> = z.object({
   progress: budgetProgressSchema.nullable(),
 });
 
+// Tasks are workspace-wide: no `projectId` here, and none on the wire. This
+// table used to declare one (and a `done` flag) the server never sent, and
+// the published OpenAPI document promised both.
 const taskShape = {
   id: z.string(),
   workspaceId: z.string(),
   createdBy: z.string(),
-  projectId: z.string(),
   name: z.string(),
-  done: z.boolean(),
+  color: z.string(),
   archived: z.boolean(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
@@ -269,8 +271,7 @@ export const taskSchema: z.ZodType<Task> = z.object(taskShape);
 
 export const taskWithStatsSchema: z.ZodType<TaskWithStats> = z.object({
   ...taskShape,
-  projectName: z.string().nullable(),
-  projectColor: z.string().nullable(),
+  entryCount: z.number(),
   totalSec: z.number(),
 });
 

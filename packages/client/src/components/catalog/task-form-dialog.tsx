@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { ColorPicker, COLOR_PALETTE } from "@/components/color-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { translate, useT } from "@/i18n/use-t";
+import { useServerSupports } from "@/lib/server-level";
 import type { TaskRow } from "./types";
 import { useTaskMutations } from "./use-catalog-mutations";
 
@@ -31,10 +33,12 @@ export type TaskFormDialogProps = {
   onCreated?: (task: { id: string; name: string }) => void;
 };
 
+const FALLBACK_COLOR = COLOR_PALETTE[0] ?? "#4f46e5";
+
 /**
  * The create/edit form behind every "New task…" surface. A task is a
- * workspace-wide label for a kind of work, so a name is all it needs — there
- * is no project to file it under.
+ * workspace-wide label for a kind of work, so a name and a colour is all it
+ * needs — there is no project to file it under.
  */
 export function TaskFormDialog({
   open,
@@ -70,7 +74,12 @@ function TaskForm({ task, onDone }: TaskFormProps): React.JSX.Element {
   const t = useT("catalog");
   const tc = useT("common");
   const [name, setName] = React.useState(task?.name ?? "");
+  const [color, setColor] = React.useState(task?.color ?? FALLBACK_COLOR);
   const [nameError, setNameError] = React.useState<string | null>(null);
+  // An older server strips `color` rather than refusing it, so the picker
+  // would save nothing there. Hidden, and the field left out of the write.
+  const offersColor = useServerSupports("tasks.color");
+  const colorPatch = offersColor ? { color } : {};
 
   const { createTask, updateTask, isSaving } = useTaskMutations({
     onConflict: setNameError,
@@ -87,7 +96,7 @@ function TaskForm({ task, onDone }: TaskFormProps): React.JSX.Element {
     }
 
     if (task) {
-      void updateTask({ id: task.id, name: trimmed }).then((saved) => {
+      void updateTask({ id: task.id, name: trimmed, ...colorPatch }).then((saved) => {
         if (!saved) return;
         toast.success(translate("catalog")("tasks.form.saved"));
         onDone();
@@ -95,7 +104,7 @@ function TaskForm({ task, onDone }: TaskFormProps): React.JSX.Element {
       return;
     }
 
-    void createTask({ name: trimmed }).then((created) => {
+    void createTask({ name: trimmed, ...colorPatch }).then((created) => {
       if (!created) return;
       toast.success(
         translate("catalog")("tasks.form.created", { name: created.name }),
@@ -134,6 +143,13 @@ function TaskForm({ task, onDone }: TaskFormProps): React.JSX.Element {
           </p>
         ) : null}
       </div>
+
+      {offersColor ? (
+        <div className="space-y-2">
+          <Label>{tc("fields.color")}</Label>
+          <ColorPicker value={color} onChange={setColor} testId="task-color" />
+        </div>
+      ) : null}
 
       <DialogFooter>
         <Button

@@ -41,7 +41,7 @@ const v2 = (overrides: Partial<WorkspaceExport> = {}): WorkspaceExport => ({
     },
   ],
   tasks: [
-    { name: "Imports", done: false, archived: false },
+    { name: "Imports", color: "#333333", archived: false },
   ],
   tags: [{ name: "deep work", color: "#444444", archived: false }],
   entries: [

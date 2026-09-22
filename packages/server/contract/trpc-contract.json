@@ -1,5 +1,5 @@
 {
-  "apiLevel": 2,
+  "apiLevel": 3,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -3822,6 +3822,10 @@
     "tasks.create": {
       "input": {
         "properties": {
+          "color": {
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "type": "string"
+          },
           "name": {
             "maxLength": 200,
             "minLength": 1,
@@ -3875,8 +3879,9 @@
           "archived": {
             "type": "boolean"
           },
-          "done": {
-            "type": "boolean"
+          "color": {
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "type": "string"
           },
           "id": {
             "minLength": 1,

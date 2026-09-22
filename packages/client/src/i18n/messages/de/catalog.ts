@@ -230,9 +230,8 @@ export const catalog: Translation<typeof source> = {
     new: "Neue Tätigkeit",
     search: "Tätigkeiten suchen",
     editLabel: "Tätigkeit „{name}“ bearbeiten",
-    markDone: "{name} als erledigt markieren",
     summary:
-      "{count, plural, one {# Tätigkeit} other {# Tätigkeiten}} · {open, number} offen · {duration} erfasst",
+      "{count, plural, one {# Tätigkeit} other {# Tätigkeiten}} · {duration} erfasst",
     empty: {
       title: "Noch keine Tätigkeiten",
       filteredTitle: "Keine Tätigkeit passt zu diesen Filtern",

@@ -184,6 +184,7 @@ test.describe("Projects catalog", () => {
     const taskId = await idFromTestId(taskRow, "task-row-");
     await expect(page.getByTestId(`task-name-${taskId}`)).toHaveText(TASK_NAME);
     await expect(page.getByTestId(`task-total-${taskId}`)).toHaveText("0:00:00");
+    await expect(page.getByTestId(`task-entries-${taskId}`)).toHaveText("0");
 
     // ── track against the project ───────────────────────────────────
     await page.goto("/app/track");

@@ -580,10 +580,11 @@ export function useTaskMutations(
         workspaceId: "",
         createdBy: "",
         name: vars.name.trim(),
-        done: false,
+        color: vars.color ?? DEFAULT_COLOR,
         archived: false,
         createdAt: now,
         updatedAt: now,
+        entryCount: 0,
         totalSec: 0,
         projectIds: [],
       };
@@ -612,7 +613,7 @@ export function useTaskMutations(
                   ...(vars.name !== undefined
                     ? { name: vars.name.trim() }
                     : {}),
-                  ...(vars.done !== undefined ? { done: vars.done } : {}),
+                  ...(vars.color !== undefined ? { color: vars.color } : {}),
                   ...(vars.archived !== undefined
                     ? { archived: vars.archived }
                     : {}),

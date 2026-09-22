@@ -44,6 +44,7 @@ import {
   type ImportUndoResult,
   type IdleBehavior,
   type QuickStart,
+  TASK_COLOR_OFFSET,
   type Visibility,
   type WorkspaceExport,
   type WorkspaceExportEntry,
@@ -64,7 +65,7 @@ import { ImportBatch, toClientImportBatch } from "../../models/ImportBatch.js";
 import { Invoice } from "../../models/Invoice.js";
 import { Project, DEFAULT_PROJECT_COLOR } from "../../models/Project.js";
 import { Tag, DEFAULT_TAG_COLOR } from "../../models/Tag.js";
-import { Task } from "../../models/Task.js";
+import { DEFAULT_TASK_COLOR, Task } from "../../models/Task.js";
 import { TimeEntry } from "../../models/TimeEntry.js";
 import {
   WorkspaceSettingsModel,
@@ -354,6 +355,7 @@ type CatalogHints = {
   projectColor: Map<string, string>;
   projectRate: Map<string, number | null>;
   projectBillable: Map<string, boolean>;
+  taskColor: Map<string, string>;
   tagColor: Map<string, string>;
   /**
    * The rest of what a project states about itself. Restored with it, because
@@ -376,6 +378,7 @@ const emptyHints = (): CatalogHints => ({
   projectColor: new Map(),
   projectRate: new Map(),
   projectBillable: new Map(),
+  taskColor: new Map(),
   tagColor: new Map(),
   projectExtras: new Map(),
 });
@@ -408,6 +411,9 @@ function hintsFromDoc(doc: WorkspaceExport | null): CatalogHints {
       budgetCurrency: project.budgetCurrency ?? null,
       idleBehavior: project.idleBehavior ?? null,
     });
+  }
+  for (const task of doc.tasks) {
+    if (task?.name && task.color) hints.taskColor.set(lower(task.name), task.color);
   }
   for (const tag of doc.tags) {
     if (tag?.name && tag.color) hints.tagColor.set(lower(tag.name), tag.color);
@@ -743,6 +749,7 @@ async function createMissingCatalog(args: {
 
   // Tasks are workspace-wide, so a row naming a task but no project still
   // gets one: the entry keeps the task and is simply project-less.
+  let taskSeed = catalog.tasks.size;
   for (const row of rows) {
     if (!row.taskName) continue;
     const key = lower(row.taskName);
@@ -751,7 +758,11 @@ async function createMissingCatalog(args: {
       workspaceId,
       createdBy,
       name: row.taskName,
+      color:
+        hints.taskColor.get(key) ??
+        pickCatalogColor(taskSeed, TASK_COLOR_OFFSET),
     });
+    taskSeed += 1;
     const id = String(doc._id);
     catalog.tasks.set(key, id);
     created.taskIds.push(id);
@@ -1074,7 +1085,8 @@ async function buildWorkspaceExport(args: {
     })),
     tasks: catalogTasks.map((task) => ({
       name: task.name,
-      done: task.done,
+      // A lean read of a row from before task colors has none.
+      color: task.color ?? DEFAULT_TASK_COLOR,
       archived: task.archived,
     })),
     tags: catalogTags.map((tag) => ({

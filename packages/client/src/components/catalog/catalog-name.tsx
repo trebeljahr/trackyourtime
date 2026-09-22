@@ -26,14 +26,12 @@ export function ColorDot({
 
 export type CatalogNameProps = {
   name: string;
-  /** Omitted for rows that carry no colour of their own, such as tasks. */
+  /** Omitted for a row that carries no colour of its own. */
   color?: string | null;
   /** Opens this row's edit dialog. */
   onEdit: () => void;
   /** Appends an "Archived" badge, as the tables did before. */
   archived?: boolean;
-  /** Struck through, for a completed task. */
-  done?: boolean;
   /** What the button announces, e.g. `Edit client "Acme"`. */
   editLabel: string;
   className?: string;
@@ -58,7 +56,6 @@ export function CatalogName({
   color,
   onEdit,
   archived = false,
-  done = false,
   editLabel,
   className,
   nameClassName = "font-medium",
@@ -80,14 +77,7 @@ export function CatalogName({
       data-testid={testId}
     >
       {color === undefined ? null : <ColorDot color={color} />}
-      <span
-        className={cn(
-          "truncate",
-          nameClassName,
-          done && "text-muted-foreground line-through",
-        )}
-        data-testid={nameTestId}
-      >
+      <span className={cn("truncate", nameClassName)} data-testid={nameTestId}>
         {name}
       </span>
       {archived ? (

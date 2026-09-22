@@ -2,7 +2,9 @@ import { Action, ActionPanel, Form, Icon, showToast, Toast, useNavigation } from
 import type { Task } from "../../vendor/index.js";
 import { useState } from "react";
 import { getTrackYourTime } from "../../lib/api.js";
+import { useServerLevel } from "../../lib/server-level.js";
 import { showFailureToast } from "../../lib/ui.js";
+import { AUTOMATIC, ColorField } from "./color-field.js";
 
 type Props = {
   /** Absent creates; present edits that task. */
@@ -11,17 +13,20 @@ type Props = {
 };
 
 /**
- * Create or rename a task.
+ * Create or edit a task.
  *
  * A task is a workspace-wide name for a kind of work, not a child of a
- * project — so a name is the whole form.
+ * project — so a name and a colour are the whole form.
  */
 export function TaskForm({ task, onSaved }: Props): React.JSX.Element {
   const { pop } = useNavigation();
   const [name, setName] = useState(task?.name ?? "");
   const [nameError, setNameError] = useState<string | undefined>();
-  const [done, setDone] = useState(task?.done ?? false);
+  const [color, setColor] = useState(task?.color ?? AUTOMATIC);
   const [submitting, setSubmitting] = useState(false);
+  // An older server strips `color` instead of refusing it; offer nothing there.
+  const offersColor = useServerLevel().supports("tasks.color");
+  const colorPatch = offersColor && color !== AUTOMATIC ? { color } : {};
 
   const submit = async (): Promise<void> => {
     const trimmed = name.trim();
@@ -34,8 +39,8 @@ export function TaskForm({ task, onSaved }: Props): React.JSX.Element {
     try {
       const api = await getTrackYourTime();
       const saved = task
-        ? await api.updateTask({ id: task.id, name: trimmed, done })
-        : await api.createTask({ name: trimmed });
+        ? await api.updateTask({ id: task.id, name: trimmed, ...colorPatch })
+        : await api.createTask({ name: trimmed, ...colorPatch });
 
       await showToast({
         style: Toast.Style.Success,
@@ -72,15 +77,7 @@ export function TaskForm({ task, onSaved }: Props): React.JSX.Element {
           if (nameError) setNameError(undefined);
         }}
       />
-      {task ? (
-        <Form.Checkbox
-          id="done"
-          label="Done"
-          value={done}
-          onChange={setDone}
-          info="A done task stays selectable — it only sorts and renders differently."
-        />
-      ) : null}
+      {offersColor ? <ColorField value={color} onChange={setColor} /> : null}
     </Form>
   );
 }

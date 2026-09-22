@@ -519,7 +519,8 @@ export type WorkspaceExportProject = {
 
 export type WorkspaceExportTask = {
   name: string;
-  done: boolean;
+  /** Empty in a file written before tasks had colors; the import picks one. */
+  color: string;
   archived: boolean;
 };
 

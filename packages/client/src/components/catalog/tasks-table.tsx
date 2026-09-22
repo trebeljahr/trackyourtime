@@ -13,7 +13,6 @@ import {
 
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { useAllTimeRange } from "@/lib/entry-links";
@@ -57,8 +57,9 @@ export function TasksTable({
 }: TasksTableProps): React.JSX.Element {
   const t = useT("catalog");
   const tc = useT("common");
+  const f = useFormat();
   const format = useFormatSettings();
-  const { updateTask, setTaskArchived, removeTask } = useTaskMutations();
+  const { setTaskArchived, removeTask } = useTaskMutations();
   // The Tracked column is a lifetime total, so its link has to span one too.
   const allTime = useAllTimeRange();
 
@@ -108,9 +109,9 @@ export function TasksTable({
         <Table data-testid="tasks-table">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-10" />
               <TableHead>{tc("fields.task")}</TableHead>
               <TableHead className="text-right">{t("columns.tracked")}</TableHead>
+              <TableHead className="text-right">{t("columns.entries")}</TableHead>
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
@@ -122,21 +123,10 @@ export function TasksTable({
                 data-archived={task.archived ? "true" : "false"}
               >
                 <TableCell>
-                  <Checkbox
-                    checked={task.done}
-                    aria-label={t("tasks.markDone", { name: task.name })}
-                    onCheckedChange={(checked) => {
-                      void updateTask({ id: task.id, done: checked === true });
-                    }}
-                    data-testid={`task-done-${task.id}`}
-                  />
-                </TableCell>
-
-                <TableCell>
                   <CatalogName
                     name={task.name}
+                    color={task.color}
                     archived={task.archived}
-                    done={task.done}
                     editLabel={t("tasks.editLabel", { name: task.name })}
                     onEdit={() => setEditing(task)}
                     nameTestId={`task-name-${task.id}`}
@@ -154,6 +144,20 @@ export function TasksTable({
                     testId={`task-total-link-${task.id}`}
                   >
                     {format.duration(task.totalSec)}
+                  </EntriesLink>
+                </TableCell>
+
+                <TableCell
+                  className="text-right tabular-nums text-muted-foreground"
+                  data-testid={`task-entries-${task.id}`}
+                >
+                  <EntriesLink
+                    target={{ dimension: "task", id: task.id }}
+                    range={allTime}
+                    label={task.name}
+                    testId={`task-entries-link-${task.id}`}
+                  >
+                    {f.number(task.entryCount)}
                   </EntriesLink>
                 </TableCell>
 

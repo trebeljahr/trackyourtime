@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 2;
+export const API_LEVEL = 3;
 
 export type ApiLevelChange = {
   level: number;
@@ -55,6 +55,15 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     release: "0.1.0",
     added: [
       "`settings.updateNotice`: the newest release, for owners and admins of a server with `TRACKYOURTIME_UPDATE_CHECK` on.",
+    ],
+  },
+  {
+    level: 3,
+    release: "0.1.0",
+    added: [
+      "`color` on tasks: on every task row, and as an optional input to `tasks.create` and `tasks.update` (and REST `POST`/`PATCH /tasks`).",
+      "`entryCount` on `tasks.list` and `tasks.get` rows, beside `totalSec`.",
+      "Tasks no longer carry `done`; a server at this level strips it from an update rather than refusing it.",
     ],
   },
 ];

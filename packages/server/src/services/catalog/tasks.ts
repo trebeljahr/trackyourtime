@@ -6,8 +6,10 @@ import { TRPCError } from "@trpc/server";
 import mongoose from "mongoose";
 import {
   type CreateTaskInput,
+  pickCatalogColor,
   projectRemoveResult,
   rollupVisibility,
+  TASK_COLOR_OFFSET,
   type Task as TaskWire,
   type TaskListInput,
   type UpdateTaskInput,
@@ -24,6 +26,8 @@ import { catalogEntryRollup } from "./rollup.js";
 
 /** A task plus its rolled-up tracked time. */
 export type TaskWithStats = TaskWire & {
+  /** Number of entries booked on this task, under the same scope as `totalSec`. */
+  entryCount: number;
   /**
    * Sum of `durationSec` across entries booked on this task, counted under
    * the CALLER's roll-up scope — their own entries only unless they may see
@@ -73,9 +77,8 @@ async function aggregateTasks(
   const rows = await Task.aggregate<TaskAggregateRow>([
     { $match: { workspaceId, ...match } },
     // Author-scoped: see the note on `totalSec` above. Shared with the
-    // projects roll-up, which also counts entries — a task carries no
-    // `entryCount` on the wire, so that half of the group is simply unread.
-    // Narrowed through `rollupVisibility` for the same reason it is there.
+    // projects roll-up, and narrowed through `rollupVisibility` for the same
+    // reason it is there.
     catalogEntryRollup({
       workspaceId,
       visibility: rollupVisibility(scope.visibility),
@@ -88,6 +91,7 @@ async function aggregateTasks(
 
   return rows.map((row) => ({
     ...toClientTask(row),
+    entryCount: row.stats[0]?.entryCount ?? 0,
     totalSec: row.stats[0]?.totalSec ?? 0,
   }));
 }
@@ -120,11 +124,15 @@ export async function createTask(
   const name = input.name.trim();
   await assertUniqueTaskName(scope.workspaceId, name);
 
+  // Same rule as projects and tags: a create that names no color gets the
+  // next palette entry, so a list of tasks is told apart at a glance.
+  const existing = await Task.countDocuments({ workspaceId: scope.workspaceId });
+
   const created = await Task.create({
     workspaceId: scope.workspaceId,
     createdBy: scope.userId,
     name,
-    done: false,
+    color: input.color ?? pickCatalogColor(existing, TASK_COLOR_OFFSET),
     archived: false,
   });
 
@@ -150,7 +158,7 @@ export async function updateTask(
     {
       $set: {
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-        ...(input.done !== undefined ? { done: input.done } : {}),
+        ...(input.color !== undefined ? { color: input.color } : {}),
         ...(input.archived !== undefined ? { archived: input.archived } : {}),
       },
     },

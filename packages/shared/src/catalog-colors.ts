@@ -39,6 +39,10 @@ export const CATALOG_COLOR_PALETTE: readonly string[] = CATALOG_COLORS.map(
 /** Offset applied to project colors so they cycle out of phase with clients. */
 export const PROJECT_COLOR_OFFSET = 6;
 
+/** Tasks start a quarter-turn further on, so a fresh workspace's first client,
+ * project and task each wear a different hue. Tags use 10 (`services/catalog/tags.ts`). */
+export const TASK_COLOR_OFFSET = 3;
+
 /**
  * Pick the next palette entry, cycling forever. `offset` lets projects start
  * at a different point in the cycle than clients so the two lists look

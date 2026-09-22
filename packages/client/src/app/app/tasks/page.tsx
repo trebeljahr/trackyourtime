@@ -44,8 +44,6 @@ export default function TasksPage(): React.JSX.Element {
     (sum, task) => sum + task.totalSec,
     0,
   );
-  const openCount = visibleTasks.filter((task) => !task.done).length;
-
   return (
     <CatalogScreen
       title={tc("fields.tasks")}
@@ -60,7 +58,6 @@ export default function TasksPage(): React.JSX.Element {
       onShowArchivedChange={setShowArchived}
       summary={t("tasks.summary", {
         count: visibleTasks.length,
-        open: openCount,
         duration: format.duration(trackedTotal),
       })}
       hasError={tasksQuery.isError}

@@ -36,6 +36,17 @@ describe("taskPickerOptions", () => {
     expect(suggested(options)).toEqual(["review", "invoicing"]);
   });
 
+  it("carries a task's color into its option, and none for a server without", () => {
+    const colored = [{ id: "review", name: "Design review", color: "#ef4444" }];
+    expect(taskPickerOptions(colored, null, null, "Other")[0]).toMatchObject({
+      color: "#ef4444",
+    });
+    const legacy = [{ id: "review", name: "Design review" }];
+    expect(taskPickerOptions(legacy, null, null, "Other")[0]).not.toHaveProperty(
+      "color",
+    );
+  });
+
   it("lists everything when the server does not report associations", () => {
     const legacy = tasks.map(({ id, name }) => ({ id, name }));
     expect(suggested(taskPickerOptions(legacy, "p1", null, "Other"))).toEqual([

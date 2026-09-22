@@ -95,7 +95,7 @@ export function TaskPicker({
   return (
     <Combobox
       label={t("fields.task")}
-      options={tasks.map((task) => ({ id: task.id, label: task.name }))}
+      options={tasks.map((task) => ({ id: task.id, label: task.name, color: task.color }))}
       value={value}
       onChange={onChange}
       emptyLabel={t("fields.noTask")}

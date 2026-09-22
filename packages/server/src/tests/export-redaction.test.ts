@@ -189,7 +189,7 @@ const fixture = (): ExhaustiveExport => ({
     },
   ],
   tasks: [
-    { name: "Imports", projectName: "trackyourtime", done: false, archived: false },
+    { name: "Imports", color: "#333333", archived: false },
   ],
   tags: [{ name: "deep work", color: "#444444", archived: false }],
   entries: [

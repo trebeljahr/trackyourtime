@@ -162,7 +162,7 @@ export const taskField = (
           key={task.id}
           value={task.id}
           title={task.totalSec > 0 ? `${task.name} (${formatDurationShort(task.totalSec)})` : task.name}
-          icon={task.done ? Icon.CheckCircle : Icon.Circle}
+          icon={{ source: Icon.CircleFilled, tintColor: task.color }}
         />
       ))}
     </Form.Dropdown>

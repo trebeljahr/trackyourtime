@@ -8,13 +8,15 @@
  * which the entry shapers already treat as a zero rate until the replay.
  */
 import { z } from "zod";
-import type {
-  Client,
-  DetailedFavorite,
-  Project,
-  ResolvedSettings,
-  Tag,
-  Task,
+import {
+  type Client,
+  type DetailedFavorite,
+  pickCatalogColor,
+  type Project,
+  type ResolvedSettings,
+  type Tag,
+  type Task,
+  TASK_COLOR_OFFSET,
 } from "@starter/shared";
 
 /** A project as `projects.list` answers it, stats included. */
@@ -25,7 +27,7 @@ export type StoredProject = Project & {
   totalSec: number;
 };
 
-export type StoredTask = Task & { totalSec: number };
+export type StoredTask = Task & { entryCount: number; totalSec: number };
 
 export type StoredTag = Tag & { entryCount: number; totalSec: number };
 
@@ -51,8 +53,12 @@ const projectSchema = z.looseObject({
 const taskSchema = z.looseObject({
   id,
   name: z.string(),
-  done: flag,
+  // A cache written before tasks had colors has none; the row is worth
+  // keeping (it is what an offline start files under), so it wears the
+  // palette's first task color until the next fetch.
+  color: z.string().catch(pickCatalogColor(0, TASK_COLOR_OFFSET)),
   archived: flag,
+  entryCount: count,
   totalSec: count,
 });
 

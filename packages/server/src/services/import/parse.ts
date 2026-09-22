@@ -793,20 +793,17 @@ function readExportProjects(value: unknown): WorkspaceExportProject[] {
   });
 }
 
+// Tasks are workspace-wide and unique by name. This used to require a
+// `projectName` beside the name, from when a task belonged to a project —
+// and the exporter never wrote one, so every task in every file was dropped
+// here and its color and archived flag with it. `color` is "" in a file
+// older than task colors; the import then picks one.
 function readExportTasks(value: unknown): WorkspaceExportTask[] {
   return objects(value).flatMap((row) => {
-    const name = text(row.name, 120);
-    const projectName = text(row.projectName, 120);
-    // A task addresses nothing without its project: task names are unique
-    // within a project, not within a workspace.
-    if (name === "" || projectName === "") return [];
+    const name = text(row.name, 200);
+    if (name === "") return [];
     return [
-      {
-        name,
-        projectName,
-        done: flag(row.done, false),
-        archived: flag(row.archived, false),
-      },
+      { name, color: text(row.color, 32), archived: flag(row.archived, false) },
     ];
   });
 }

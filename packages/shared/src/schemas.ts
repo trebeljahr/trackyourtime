@@ -351,13 +351,20 @@ export const taskListSchema = z.object({
 
 export const createTaskSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
+  color: hexColorSchema.optional(),
   originId,
 });
 
+/**
+ * A task used to carry a `done` flag. It was a todo-app leftover: nothing
+ * filtered on it, and `archived` already says "stop offering this". Older
+ * clients that still send it are stripped by the object schema, never
+ * refused, so a queued or outdated update lands.
+ */
 export const updateTaskSchema = z.object({
   id: idString,
   name: z.string().min(1).max(200).optional(),
-  done: z.boolean().optional(),
+  color: hexColorSchema.optional(),
   archived: z.boolean().optional(),
   originId,
 });

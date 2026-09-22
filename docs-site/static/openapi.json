@@ -7629,14 +7629,11 @@
                           "createdBy": {
                             "type": "string"
                           },
-                          "projectId": {
-                            "type": "string"
-                          },
                           "name": {
                             "type": "string"
                           },
-                          "done": {
-                            "type": "boolean"
+                          "color": {
+                            "type": "string"
                           },
                           "archived": {
                             "type": "boolean"
@@ -7651,25 +7648,8 @@
                             "format": "date-time",
                             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
                           },
-                          "projectName": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "projectColor": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
+                          "entryCount": {
+                            "type": "number"
                           },
                           "totalSec": {
                             "type": "number"
@@ -7679,14 +7659,12 @@
                           "id",
                           "workspaceId",
                           "createdBy",
-                          "projectId",
                           "name",
-                          "done",
+                          "color",
                           "archived",
                           "createdAt",
                           "updatedAt",
-                          "projectName",
-                          "projectColor",
+                          "entryCount",
                           "totalSec"
                         ],
                         "additionalProperties": false
@@ -7809,6 +7787,10 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
+                  "color": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
                   "originId": {
                     "type": "string",
                     "maxLength": 64
@@ -7861,14 +7843,11 @@
                         "createdBy": {
                           "type": "string"
                         },
-                        "projectId": {
-                          "type": "string"
-                        },
                         "name": {
                           "type": "string"
                         },
-                        "done": {
-                          "type": "boolean"
+                        "color": {
+                          "type": "string"
                         },
                         "archived": {
                           "type": "boolean"
@@ -7888,9 +7867,8 @@
                         "id",
                         "workspaceId",
                         "createdBy",
-                        "projectId",
                         "name",
-                        "done",
+                        "color",
                         "archived",
                         "createdAt",
                         "updatedAt"
@@ -8044,14 +8022,11 @@
                         "createdBy": {
                           "type": "string"
                         },
-                        "projectId": {
-                          "type": "string"
-                        },
                         "name": {
                           "type": "string"
                         },
-                        "done": {
-                          "type": "boolean"
+                        "color": {
+                          "type": "string"
                         },
                         "archived": {
                           "type": "boolean"
@@ -8066,25 +8041,8 @@
                           "format": "date-time",
                           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
                         },
-                        "projectName": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "projectColor": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
+                        "entryCount": {
+                          "type": "number"
                         },
                         "totalSec": {
                           "type": "number"
@@ -8094,14 +8052,12 @@
                         "id",
                         "workspaceId",
                         "createdBy",
-                        "projectId",
                         "name",
-                        "done",
+                        "color",
                         "archived",
                         "createdAt",
                         "updatedAt",
-                        "projectName",
-                        "projectColor",
+                        "entryCount",
                         "totalSec"
                       ],
                       "additionalProperties": false
@@ -8233,8 +8189,9 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
-                  "done": {
-                    "type": "boolean"
+                  "color": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
                   },
                   "archived": {
                     "type": "boolean"
@@ -8288,14 +8245,11 @@
                         "createdBy": {
                           "type": "string"
                         },
-                        "projectId": {
-                          "type": "string"
-                        },
                         "name": {
                           "type": "string"
                         },
-                        "done": {
-                          "type": "boolean"
+                        "color": {
+                          "type": "string"
                         },
                         "archived": {
                           "type": "boolean"
@@ -8315,9 +8269,8 @@
                         "id",
                         "workspaceId",
                         "createdBy",
-                        "projectId",
                         "name",
-                        "done",
+                        "color",
                         "archived",
                         "createdAt",
                         "updatedAt"
@@ -8667,14 +8620,11 @@
                         "createdBy": {
                           "type": "string"
                         },
-                        "projectId": {
-                          "type": "string"
-                        },
                         "name": {
                           "type": "string"
                         },
-                        "done": {
-                          "type": "boolean"
+                        "color": {
+                          "type": "string"
                         },
                         "archived": {
                           "type": "boolean"
@@ -8694,9 +8644,8 @@
                         "id",
                         "workspaceId",
                         "createdBy",
-                        "projectId",
                         "name",
-                        "done",
+                        "color",
                         "archived",
                         "createdAt",
                         "updatedAt"

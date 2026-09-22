@@ -37,8 +37,11 @@ export type ProjectRow = Project & {
 /** A bare client, as returned by `clients.list`. */
 export type ClientRow = Client;
 
-/** A task plus its tracked seconds and the projects it has been booked on. */
+/** A task plus its roll-up and the projects it has been booked on. */
 export type TaskRow = Task & {
+  /** Number of time entries booked on this task. */
+  entryCount: number;
+  /** Sum of `durationSec` across those entries. */
   totalSec: number;
   projectIds: string[];
 };

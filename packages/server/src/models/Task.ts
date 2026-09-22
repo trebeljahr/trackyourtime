@@ -1,11 +1,14 @@
 import mongoose, { Schema, type Document } from "mongoose";
-import type { Task as TaskWire } from "@starter/shared";
+import { pickCatalogColor, TASK_COLOR_OFFSET, type Task as TaskWire } from "@starter/shared";
+
+/** What a task written before tasks had colors reads as. */
+export const DEFAULT_TASK_COLOR = pickCatalogColor(0, TASK_COLOR_OFFSET);
 
 export interface ITask extends Document {
   workspaceId: string;
   createdBy: string;
   name: string;
-  done: boolean;
+  color: string;
   archived: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -20,7 +23,11 @@ export type TaskDocLike = {
   workspaceId: string;
   createdBy: string;
   name: string;
-  done: boolean;
+  /**
+   * Absent on a `.lean()` read of a row written before tasks had colors —
+   * a mongoose default fills a hydrated document, never a lean one.
+   */
+  color?: string;
   archived: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -36,7 +43,7 @@ const taskSchema = new Schema<ITask>(
     // Same trap as TimeEntry.description.
     createdBy: { type: String, default: "" },
     name: { type: String, required: true, maxlength: 200, trim: true },
-    done: { type: Boolean, required: true, default: false },
+    color: { type: String, required: true, default: DEFAULT_TASK_COLOR },
     archived: { type: Boolean, required: true, default: false },
   },
   { timestamps: true },
@@ -57,7 +64,7 @@ export function toClientTask(doc: TaskDocLike): TaskWire {
     workspaceId: doc.workspaceId,
     createdBy: doc.createdBy,
     name: doc.name,
-    done: doc.done,
+    color: doc.color ?? DEFAULT_TASK_COLOR,
     archived: doc.archived,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
