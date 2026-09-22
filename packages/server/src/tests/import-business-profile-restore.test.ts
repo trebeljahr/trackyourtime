@@ -2,7 +2,9 @@
 // stored ones once merged: only the contradicting keys are left out, and
 // everything else in the file is restored.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { after, afterEach, before, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { BusinessProfileModel, getBusinessProfile, saveBusinessProfile } from "../models/BusinessProfile.js";
 import { profileKeysToDrop, restoreBusinessProfile } from "../trpc/routers/data.js";
 import {
@@ -76,5 +78,52 @@ describe("restoreBusinessProfile", { skip: skipWithoutDatabase }, () => {
     const stored = await getBusinessProfile(WORKSPACE);
     assert.equal(stored.smallBusiness, true);
     assert.equal(stored.defaultTaxCategory, "E");
+  });
+});
+
+describe("restoreBusinessProfile and the logo", { skip: skipWithoutDatabase }, () => {
+  const png = readFileSync(fileURLToPath(new URL("./fixtures/logo/rgb.png", import.meta.url)));
+  const jpeg = readFileSync(fileURLToPath(new URL("./fixtures/logo/rgb.jpg", import.meta.url)));
+  const dataUrl = (bytes: Buffer, mime: string): string => `data:${mime};base64,${bytes.toString("base64")}`;
+  type Restored = Parameters<typeof restoreBusinessProfile>[1];
+
+  before(async () => {
+    await connectTestDatabase("import-profile-logo", [BusinessProfileModel] as never);
+  });
+  afterEach(clearTestDatabase);
+  after(dropTestDatabase);
+
+  it("restores the file's logo beside the identity, and only under the key", async () => {
+    await restoreBusinessProfile(WORKSPACE, {
+      legalName: "Example GmbH",
+      logo: dataUrl(png, "image/png"),
+    } as Restored);
+    const stored = await getBusinessProfile(WORKSPACE);
+    assert.equal(stored.legalName, "Example GmbH");
+    assert.deepEqual(stored.logo, { dataUrl: dataUrl(png, "image/png"), width: 48, height: 16 });
+
+    // A file with no logo key leaves the stored logo alone.
+    await restoreBusinessProfile(WORKSPACE, { legalName: "Example AG" } as Restored);
+    const kept = await getBusinessProfile(WORKSPACE);
+    assert.equal(kept.legalName, "Example AG");
+    assert.equal(kept.logo?.dataUrl, dataUrl(png, "image/png"));
+
+    // A file whose logo the invoice could not print leaves it alone too.
+    await restoreBusinessProfile(WORKSPACE, { logo: dataUrl(png, "image/jpeg") } as Restored);
+    assert.equal((await getBusinessProfile(WORKSPACE)).logo?.dataUrl, dataUrl(png, "image/png"));
+
+    // A JPEG replaces it; an explicit null clears it.
+    await restoreBusinessProfile(WORKSPACE, { logo: dataUrl(jpeg, "image/jpeg") } as Restored);
+    assert.equal((await getBusinessProfile(WORKSPACE)).logo?.dataUrl, dataUrl(jpeg, "image/jpeg"));
+    await restoreBusinessProfile(WORKSPACE, { logo: null } as Restored);
+    assert.equal((await getBusinessProfile(WORKSPACE)).logo, null);
+  });
+
+  it("a logo-only file creates no identity row of its own", async () => {
+    await restoreBusinessProfile(WORKSPACE, { logo: dataUrl(png, "image/png") } as Restored);
+    const stored = await getBusinessProfile(WORKSPACE);
+    assert.equal(stored.logo?.width, 48);
+    assert.equal(stored.legalName, null);
+    assert.equal(stored.updatedAt, null);
   });
 });

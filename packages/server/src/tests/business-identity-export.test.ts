@@ -6,7 +6,9 @@
 // what survives the trip — the document the exporter writes, serialised, and
 // read back by the same parser `data.analyze` and `data.commit` use.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   WORKSPACE_EXPORT_VERSION,
   type BusinessProfileValues,
@@ -198,5 +200,46 @@ describe("business identity export round trip", () => {
       [billing?.vatId, billing?.electronicAddress, billing?.electronicAddressScheme, billing?.preferredFormat, billing?.defaultTaxCategory],
       [null, null, null, null, null],
     );
+  });
+});
+
+describe("the logo in the export file", () => {
+  const png = readFileSync(fileURLToPath(new URL("./fixtures/logo/rgb.png", import.meta.url)));
+  const dataUrl = `data:image/png;base64,${png.toString("base64")}`;
+
+  it("round-trips a PNG data URL beside the identity", () => {
+    const read = roundTrip(exported({ businessProfile: { ...profile, logo: dataUrl } }));
+    assert.equal(read.businessProfile?.logo, dataUrl);
+    assert.equal(read.businessProfile?.legalName, "Alice Consulting");
+  });
+
+  it("keeps a profile that holds only a logo, and an explicit null", () => {
+    const onlyLogo = workspaceJsonCatalog(JSON.stringify({ ...exported(), businessProfile: { logo: dataUrl } }));
+    // Main's keys are read as they always were (blank), and the logo beside them.
+    assert.equal(onlyLogo?.businessProfile?.logo, dataUrl);
+    assert.equal(onlyLogo?.businessProfile?.legalName, null);
+    const cleared = roundTrip(exported({ businessProfile: { ...profile, logo: null } }));
+    assert.equal(cleared.businessProfile?.logo, null);
+  });
+
+  it("leaves out a logo the invoice could not print, and never turns it into null", () => {
+    for (const bad of [
+      "data:image/svg+xml;base64,PHN2Zy8+",
+      `data:image/jpeg;base64,${png.toString("base64")}`,
+      "data:image/png;base64,iVBORw0KGgo=",
+      "https://example.com/logo.png",
+      42,
+    ]) {
+      const read = workspaceJsonCatalog(
+        JSON.stringify({ ...exported(), businessProfile: { ...profile, logo: bad } }),
+      );
+      assert.ok(read?.businessProfile);
+      assert.equal("logo" in read.businessProfile, false, String(bad));
+      assert.equal(read.businessProfile.legalName, "Alice Consulting");
+    }
+  });
+
+  it("a file without the key says nothing about the logo", () => {
+    assert.equal("logo" in (roundTrip(exported()).businessProfile ?? {}), false);
   });
 });

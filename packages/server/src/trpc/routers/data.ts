@@ -27,6 +27,7 @@ import {
   importUndoSchema,
   isIdentityEmpty,
   normalizeBusinessProfile,
+  parseImageDataUrl,
   normalizeClientBilling,
   normalizeIssuer,
   normalizeRecipient,
@@ -57,8 +58,11 @@ import {
 import {
   BusinessProfileInvalidError,
   BusinessProfileModel,
+  clearBusinessLogo,
   saveBusinessProfile,
+  setBusinessLogo,
 } from "../../models/BusinessProfile.js";
+import { inspectLogoUpload, logoToWire, storedLogoOf } from "../../services/invoice-logo.js";
 import { Client, DEFAULT_CLIENT_COLOR } from "../../models/Client.js";
 import { Favorite } from "../../models/Favorite.js";
 import { ImportBatch, toClientImportBatch } from "../../models/ImportBatch.js";
@@ -521,6 +525,31 @@ export async function restoreBusinessProfile(
   workspaceId: string,
   profile: ImportedBusinessProfile,
 ): Promise<void> {
+  // The logo is bytes, not a merged value: it goes through its own write
+  // after the identity, and independently of whether the identity could be
+  // restored. A file that says nothing about it leaves the stored one alone.
+  const { logo, ...identity } = profile;
+  if (Object.keys(identity).length > 0) await restoreBusinessIdentity(workspaceId, identity);
+  if (logo === undefined) return;
+  if (logo === null) {
+    await clearBusinessLogo(workspaceId);
+    return;
+  }
+  const parsed = parseImageDataUrl(logo);
+  const inspected = parsed ? inspectLogoUpload(parsed) : null;
+  if (!inspected?.ok) {
+    // The parser already left an unreadable logo out; this is the same
+    // rule for a caller that hands the file's value over directly.
+    console.warn(`[import] business logo not restored for ${workspaceId}: not a PNG or JPEG the invoice can print`);
+    return;
+  }
+  await setBusinessLogo(workspaceId, inspected.logo);
+}
+
+async function restoreBusinessIdentity(
+  workspaceId: string,
+  profile: Omit<ImportedBusinessProfile, "logo">,
+): Promise<void> {
   const remaining: Record<string, unknown> = { ...profile };
   const dropped = new Set<string>();
   for (;;) {
@@ -910,9 +939,13 @@ async function buildWorkspaceExport(args: {
           .lean()
           .then((doc) => {
             // Every stored key, the e-invoice defaults included; omitted
-            // while the profile is empty, as before.
+            // while the profile is empty, as before. The logo rides beside
+            // them as a data URL, and a profile holding only a logo is
+            // still a profile worth carrying.
             const values = normalizeBusinessProfile(doc);
-            return isIdentityEmpty(values) ? undefined : values;
+            const logo = storedLogoOf(doc?.logo);
+            if (isIdentityEmpty(values) && !logo) return undefined;
+            return logo ? { ...values, logo: logoToWire(logo).dataUrl } : values;
           })
       : Promise.resolve(undefined),
   ]);

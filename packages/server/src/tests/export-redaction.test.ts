@@ -88,7 +88,7 @@ const visibility = (
 type ExhaustiveExport = Required<
   Omit<WorkspaceExport, "moneyRedacted" | "newerVersion">
 > & {
-  businessProfile: BusinessProfileValues;
+  businessProfile: BusinessProfileValues & { logo: string };
   /** Typed `undefined` rather than dropped: readable, and impossible to set. */
   moneyRedacted?: undefined;
   /** Set by the reader only; an export never writes it. */
@@ -112,6 +112,9 @@ const fixture = (): ExhaustiveExport => ({
   currency: "EUR",
   settings: { defaultHourlyRate: 95, weekStartsOn: 1 },
   businessProfile: {
+    // Bytes on the profile leave with the profile: payment details and a
+    // logo alike, so a redacted file drops the block whole.
+    logo: "data:image/png;base64,iVBORw0KGgo=",
     legalName: "Alice Consulting",
     addressLines: ["Hauptstr. 1"],
     postalCode: "10115",
@@ -498,6 +501,7 @@ test("a redacted export states no business profile and no invoice parties", () =
   }
   const kept = redactExportMoney(fixture(), visibility(true, true));
   assert.equal(kept.businessProfile?.taxId, "DE123456789");
+  assert.equal(kept.businessProfile?.logo, "data:image/png;base64,iVBORw0KGgo=");
   assert.equal(kept.invoices?.[0]?.issuer?.city, "Berlin");
 });
 

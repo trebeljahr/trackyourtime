@@ -16,6 +16,7 @@ import {
   WORKSPACE_EXPORT_VERSION,
   businessProfileProblems,
   dayKeyInZone,
+  imageDataUrl,
   isIdentityEmpty,
   isValidBic,
   isValidElectronicAddress,
@@ -23,6 +24,7 @@ import {
   isValidVatId,
   normalizeBusinessProfile,
   normalizeClientBilling,
+  parseImageDataUrl,
   stripSpacesUpper,
   zonedWallClockToMs,
   type BusinessProfileFields,
@@ -46,6 +48,7 @@ import {
   type WorkspaceExportTag,
   type WorkspaceExportTask,
 } from "@starter/shared";
+import { inspectLogoUpload } from "../invoice-logo.js";
 import { cell, readDelimitedFile } from "./delimited.js";
 import { dateCandidateValues, detectColumns } from "./columns.js";
 import {
@@ -754,7 +757,13 @@ export function readExportBusinessProfile(
     );
   }
 
-  if (isIdentityEmpty(normalizeBusinessProfile(fields))) return undefined;
+  // The logo, only when the file has the key: `null` states "no logo" and
+  // clears the stored one on restore; a value the invoice could not print
+  // (an SVG, a truncated file, a bad data URL) is left OUT rather than
+  // degraded to null, so a corrupt logo in a backup never wipes a good one.
+  const logo = has("logo") ? readExportLogo(row.logo) : undefined;
+
+  if (isIdentityEmpty(normalizeBusinessProfile(fields)) && logo === undefined) return undefined;
   // The keys left out above must stay OUT, not become null — see the comment
   // on this function. Typed as the full profile because that is what an
   // export writes; `saveBusinessProfile` merges it key by key.
@@ -763,7 +772,17 @@ export function readExportBusinessProfile(
       ([key]) => key in fields,
     ),
   );
-  return present as BusinessProfileValues;
+  return { ...present, ...(logo !== undefined ? { logo } : {}) } as BusinessProfileValues & {
+    logo?: string | null;
+  };
+}
+
+/** A data URL the invoice can print, `null` for an explicit null, else nothing. */
+function readExportLogo(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  const parsed = parseImageDataUrl(value);
+  if (!parsed) return undefined;
+  return inspectLogoUpload(parsed).ok ? imageDataUrl(parsed) : undefined;
 }
 
 function readExportProjects(value: unknown): WorkspaceExportProject[] {

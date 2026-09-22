@@ -11,7 +11,11 @@ import { buildCiiXml } from "../services/einvoice/cii.js";
 import { coverInvoiceText } from "../services/einvoice/glyph-coverage.js";
 import { renderZugferdPdf } from "../services/einvoice/pdfa3.js";
 import { assertEinvoiceReady } from "../services/einvoice/validate.js";
-import { inspectLogoBytes, type StoredLogo } from "../services/invoice-logo.js";
+import {
+  inspectLogoBytes,
+  type RenderableInvoice,
+  type StoredLogo,
+} from "../services/invoice-logo.js";
 import { renderInvoicePdf } from "../services/invoice-pdf.js";
 import { loadPdfFonts } from "../services/pdf-fonts.js";
 import { einvoiceCase } from "./fixtures/einvoice/cases.js";
@@ -153,7 +157,8 @@ describe("the invoice PDF and the logo", () => {
   it("carries the logo into the ZUGFeRD PDF/A-3b container", async () => {
     const invoice = einvoiceCase("standard-19").invoice();
     const logo = fixtureLogo("rgba.png");
-    const ready = assertEinvoiceReady({ ...invoice, issuer: { ...invoice.issuer!, logo } }, "en16931");
+    const frozen: RenderableInvoice = { ...invoice, issuer: { ...invoice.issuer!, logo } };
+    const ready = assertEinvoiceReady(frozen, "en16931");
     const xml = buildCiiXml(ready, "en16931");
     // The drawn copy the variant renders from keeps the bytes.
     const drawn = coverInvoiceText(ready, loadPdfFonts().hasGlyph) as typeof ready & {
