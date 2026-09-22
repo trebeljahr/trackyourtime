@@ -67,7 +67,9 @@ describe("buildCiiXml: every case", () => {
 
       it("writes every date as format 102 with 8 digits", () => {
         const dates = [...en.matchAll(/<udt:DateTimeString([^>]*)>([^<]*)</g)];
-        assert.ok(dates.length >= 4);
+        // Issue, delivery and due dates always; the period's two only on a
+        // ranged invoice (a blank one has no BillingSpecifiedPeriod).
+        assert.ok(dates.length >= (c.invoice().from === null ? 3 : 5));
         for (const [, attrs, value] of dates) {
           assert.equal(attrs, ' format="102"');
           assert.match(value ?? "", /^\d{8}$/);

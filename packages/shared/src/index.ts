@@ -22,6 +22,7 @@ export * from "./store-clients.js";
 export * from "./business-identity.js";
 export * from "./members.js";
 export * from "./einvoice.js";
+export * from "./invoice-lines.js";
 export * from "./api-level.js";
 export * from "./capabilities.js";
 export * from "./desktop-bridge.js";

@@ -225,6 +225,10 @@ const groupWholeSet = (rows: Row[], spec: Row): Row[] => {
 const applySet = (row: Row, update: Row): void => {
   const set = update.$set;
   if (typeof set === "object" && set !== null) Object.assign(row, set);
+  const unset = update.$unset;
+  if (typeof unset === "object" && unset !== null) {
+    for (const key of Object.keys(unset)) delete row[key];
+  }
 };
 
 /** One collection's rows, plus a record of every filter it was queried with. */

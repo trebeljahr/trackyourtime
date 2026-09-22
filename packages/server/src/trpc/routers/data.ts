@@ -995,8 +995,9 @@ async function buildWorkspaceExport(args: {
       status: invoice.status,
       issueDate: invoice.issueDate.toISOString(),
       dueDate: invoice.dueDate.toISOString(),
-      from: invoice.from.toISOString(),
-      to: invoice.to.toISOString(),
+      // A blank invoice has no period.
+      from: invoice.from ? invoice.from.toISOString() : null,
+      to: invoice.to ? invoice.to.toISOString() : null,
       groupBy: invoice.groupBy,
       lineItems: (invoice.lineItems ?? []).map((line) => ({
         label: line.label,
@@ -1004,11 +1005,17 @@ async function buildWorkspaceExport(args: {
           ? (projectById.get(line.projectId)?.name ?? null)
           : null,
         taskName: line.taskId ? (taskNameById.get(line.taskId) ?? null) : null,
+        // The manual-line keys travel only when the row has them, so a line
+        // from before they existed exports exactly as it did.
+        ...(line.kind ? { kind: line.kind } : {}),
         seconds: line.seconds,
         hours: line.hours,
         hourlyRate: line.hourlyRate,
         currency: line.currency,
         amount: line.amount,
+        ...(typeof line.quantity === "number" ? { quantity: line.quantity } : {}),
+        ...(line.unit ? { unit: line.unit } : {}),
+        ...(typeof line.unitPrice === "number" ? { unitPrice: line.unitPrice } : {}),
         ...(line.taxCategory
           ? { taxCategory: line.taxCategory, taxRate: line.taxRate ?? 0 }
           : {}),

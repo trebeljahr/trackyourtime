@@ -7,7 +7,7 @@
 // database. How the refusal reads depends on what was asked:
 //
 //   list                                  → an empty page
-//   get / exportPdf / updateStatus / remove → NOT_FOUND, exactly like an id
+//   get / exportPdf / update / updateStatus / remove → NOT_FOUND, exactly like an id
 //                                           that does not exist (FORBIDDEN
 //                                           would confirm the invoice is real)
 //   preview / create                      → FORBIDDEN invoice-permission-required
@@ -189,6 +189,21 @@ for (const callerSpec of CALLERS) {
         await refusedWith(call, "NOT_FOUND");
         assertNothingRead();
         assert.equal(store.invoices.rows[0]?.status, "draft");
+      }
+    });
+
+    it("update", async () => {
+      const call = caller().update({
+        id: String(INVOICE_ID),
+        updatedAt: "2026-08-31T00:00:00.000Z",
+        notes: "edited",
+      });
+      if (allowed) {
+        assert.equal((await call).notes, "edited");
+      } else {
+        await refusedWith(call, "NOT_FOUND");
+        assertNothingRead();
+        assert.equal(store.invoices.rows[0]?.notes, null);
       }
     });
 

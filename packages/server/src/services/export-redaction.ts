@@ -117,6 +117,8 @@ export function redactExportMoney(
             ...line,
             hourlyRate: null,
             amount: null,
+            // A manual line's price per unit is its rate: it goes with them.
+            ...(line.unitPrice !== undefined ? { unitPrice: null } : {}),
             ...(line.taxRate !== undefined ? { taxRate: null } : {}),
           })),
         };

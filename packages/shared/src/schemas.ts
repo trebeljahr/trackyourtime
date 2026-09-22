@@ -30,6 +30,13 @@ import {
   vatIdInput,
   vatRateSchema,
 } from "./einvoice.js";
+import {
+  MANUAL_LINE_KEY_PATTERN,
+  MANUAL_LINE_LIMITS,
+  invoiceLineUnitSchema,
+  manualLineQuantitySchema,
+  manualLineUnitPriceSchema,
+} from "./invoice-lines.js";
 
 /** A supported interface/document language, e.g. "de". */
 export const localeSchema = z.enum(SUPPORTED_LOCALES);
@@ -631,36 +638,134 @@ const taxAgreesWithRate = (input: {
 
 const TAX_RATE_DISAGREES = { message: "taxRate and tax.rate disagree", path: ["taxRate"] };
 
-export const invoicePreviewSchema = z
-  .object({
-    clientId: idString,
-    from: isoDateOrDateTimeSchema,
-    to: isoDateOrDateTimeSchema,
-    groupBy: invoiceGroupBySchema.default("project"),
-    taxRate: taxRateSchema.nullish(),
-    ...invoiceTaxFields,
-  })
-  .refine(taxAgreesWithRate, TAX_RATE_DISAGREES);
+/**
+ * A manual line as typed onto an invoice: a quantity of a unit at a price.
+ * The amount is never sent — the server computes `manualLineAmount` and
+ * stores it, so a client cannot bill a figure its own numbers do not give.
+ * `tax` is this line's VAT; absent, the line follows the invoice-wide choice
+ * and the client's and profile's defaults like every other line.
+ */
+export const manualInvoiceLineSchema = z.object({
+  /**
+   * `manual:<id>`; assigned by the server when omitted. A client that needs
+   * to address the line before its first save (a per-line VAT choice) picks
+   * one with `newManualLineKey`.
+   */
+  key: z.string().regex(MANUAL_LINE_KEY_PATTERN).optional(),
+  label: z.string().trim().min(1).max(MANUAL_LINE_LIMITS.label),
+  quantity: manualLineQuantitySchema,
+  unit: invoiceLineUnitSchema,
+  unitPrice: manualLineUnitPriceSchema,
+  tax: lineTaxSchema.optional(),
+});
+export type ManualInvoiceLineInput = z.infer<typeof manualInvoiceLineSchema>;
 
-export const createInvoiceSchema = z.object({
+const manualLines = z.array(manualInvoiceLineSchema).max(MANUAL_LINE_LIMITS.linesPerInvoice);
+
+/** Manual line keys must be distinct within one request. */
+const manualKeysDistinct = (lines: ReadonlyArray<{ key?: string | undefined }> | undefined): boolean => {
+  const keys = (lines ?? []).map((line) => line.key).filter((key): key is string => key !== undefined);
+  return new Set(keys).size === keys.length;
+};
+
+/** `from` and `to` name a range together, or a blank invoice together. */
+const rangeIsWhole = (input: { from?: string | undefined; to?: string | undefined }): boolean =>
+  (input.from === undefined) === (input.to === undefined);
+
+const RANGE_HALF = { message: "from and to go together", path: ["to"] };
+const KEYS_REPEAT = { message: "manual line keys must be distinct", path: ["lines"] };
+
+/**
+ * What a preview and a create share: the client, the (optional) range that
+ * decides the time lines, the manual lines and the VAT.
+ *
+ * BLANK INVOICES: leaving `from` AND `to` out makes a blank invoice. Nothing is
+ * gathered, no entry is claimed, the stored range is `null`, and `lines` has
+ * to hold at least one manual line or the create is refused. With a range,
+ * `lines` are appended after the time lines.
+ */
+const invoiceContentFields = {
   clientId: idString,
-  from: isoDateOrDateTimeSchema,
-  to: isoDateOrDateTimeSchema,
+  from: isoDateOrDateTimeSchema.optional(),
+  to: isoDateOrDateTimeSchema.optional(),
   groupBy: invoiceGroupBySchema.default("project"),
   taxRate: taxRateSchema.nullish(),
-  issueDate: isoDateOrDateTimeSchema,
-  dueDate: isoDateOrDateTimeSchema,
-  /** Server-generated when omitted; must stay unique per owner. */
-  number: z.string().min(1).max(40).optional(),
-  notes: z.string().max(2_000).optional(),
-  /**
-   * Per-invoice language override. Omitted = resolved from the client, then
-   * the issuer (`resolveInvoiceLocale`), and snapshotted either way.
-   */
-  locale: localeSchema.optional(),
+  lines: manualLines.optional(),
   ...invoiceTaxFields,
-  originId,
-}).refine(taxAgreesWithRate, TAX_RATE_DISAGREES);
+};
+
+export const invoicePreviewSchema = z
+  .object(invoiceContentFields)
+  .refine(taxAgreesWithRate, TAX_RATE_DISAGREES)
+  .refine(rangeIsWhole, RANGE_HALF)
+  .refine((input) => manualKeysDistinct(input.lines), KEYS_REPEAT);
+
+export const createInvoiceSchema = z
+  .object({
+    ...invoiceContentFields,
+    issueDate: isoDateOrDateTimeSchema,
+    dueDate: isoDateOrDateTimeSchema,
+    /** Server-generated when omitted; must stay unique per owner. */
+    number: z.string().min(1).max(40).optional(),
+    notes: z.string().max(2_000).optional(),
+    /**
+     * Per-invoice language override. Omitted = resolved from the client, then
+     * the issuer (`resolveInvoiceLocale`), and snapshotted either way.
+     */
+    locale: localeSchema.optional(),
+    originId,
+  })
+  .refine(taxAgreesWithRate, TAX_RATE_DISAGREES)
+  .refine(rangeIsWhole, RANGE_HALF)
+  .refine((input) => manualKeysDistinct(input.lines), KEYS_REPEAT);
+
+/**
+ * A time line of a draft, as `invoices.update` accepts it: only the label may
+ * change. Time lines cannot be added or removed through an update — removing
+ * one would have to release its entries, which only deleting the draft does.
+ */
+export const updateTimeLineSchema = z.object({
+  kind: z.literal("time"),
+  key: idString.max(200),
+  label: z.string().trim().min(1).max(MANUAL_LINE_LIMITS.label).optional(),
+  tax: lineTaxSchema.optional(),
+});
+
+export const updateManualLineSchema = manualInvoiceLineSchema.extend({
+  kind: z.literal("manual"),
+});
+
+/**
+ * Edit a DRAFT. Every field is optional; what is sent replaces the stored
+ * value. `lines`, when sent, is the whole line list in its new order: every
+ * stored time line once (matched by `key`), manual lines added, changed or
+ * left out. `updatedAt` is the wire value the caller read; a draft that
+ * changed since answers CONFLICT and writes nothing.
+ */
+export const updateInvoiceSchema = z
+  .object({
+    id: idString,
+    updatedAt: isoDateTimeSchema,
+    number: z.string().trim().min(1).max(40).optional(),
+    issueDate: isoDateOrDateTimeSchema.optional(),
+    dueDate: isoDateOrDateTimeSchema.optional(),
+    /** `null` clears the notes. */
+    notes: z.string().max(2_000).nullable().optional(),
+    locale: localeSchema.optional(),
+    taxRate: taxRateSchema.nullish(),
+    ...invoiceTaxFields,
+    lines: z
+      .array(z.discriminatedUnion("kind", [updateTimeLineSchema, updateManualLineSchema]))
+      .max(MANUAL_LINE_LIMITS.linesPerInvoice + 500)
+      .optional(),
+    originId,
+  })
+  .refine(taxAgreesWithRate, TAX_RATE_DISAGREES)
+  .refine(
+    (input) => manualKeysDistinct(input.lines?.filter((line) => line.kind === "manual")),
+    KEYS_REPEAT,
+  );
+export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
 
 export const updateInvoiceStatusSchema = z.object({
   id: idString,

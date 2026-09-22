@@ -39,6 +39,12 @@ export const REQUIRES_API_LEVEL = {
    * offered the picker there would save nothing — hide it instead.
    */
   "tasks.color": 3,
+  /**
+   * `invoices.update`, manual `lines` on `invoices.preview` / `create`, and
+   * blank invoices (no `from` / `to`). An older server refuses the procedure
+   * and strips `lines`, so the web app hides the editor and the blank flow.
+   */
+  "invoices.lines": 4,
 } as const satisfies Readonly<Record<string, number>>;
 
 export type Capability = keyof typeof REQUIRES_API_LEVEL;

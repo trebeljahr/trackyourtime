@@ -7,10 +7,15 @@
 // of that row, never per line and then summed.
 import {
   VATEX_CODES,
+  lineKind,
+  lineQuantity,
+  lineUnitPrice,
+  type InvoiceLineLike,
   type TaxBreakdownRow,
   type TaxCategory,
   type TotalsMismatch,
 } from "@starter/shared";
+import { formatDecimal } from "./format.js";
 
 /** 2-dp amount → integer cents. RangeError for non-finite input or more than 2 decimals. */
 export function toCents(amount: number): number {
@@ -233,6 +238,24 @@ export function billedHoursQuantity(seconds: number): string {
 export function isLineNetConsistent(seconds: number, hourlyRate: number, amount: number): boolean {
   const quantity = Number(billedHoursQuantity(seconds));
   return Math.abs(quantity * hourlyRate - amount) <= 0.01 + 1e-9;
+}
+
+/**
+ * BT-129 of any line: a time line's hours from its exact seconds, a manual
+ * line's quantity as stored (at most 3 decimals, so `formatDecimal` writes it
+ * without rounding). Both trim trailing zeros.
+ */
+export function billedQuantity(line: InvoiceLineLike & { seconds: number }): string {
+  if (lineKind(line) === "time") return billedHoursQuantity(line.seconds);
+  return formatDecimal(lineQuantity(line));
+}
+
+/** The R120 guard for either kind: |BT-129 × BT-146 − line net| ≤ 0.01. */
+export function isLineConsistent(line: InvoiceLineLike & { seconds: number; amount: number }): boolean {
+  if (lineKind(line) === "time") {
+    return isLineNetConsistent(line.seconds, line.hourlyRate, line.amount);
+  }
+  return Math.abs(Number(billedQuantity(line)) * lineUnitPrice(line) - line.amount) <= 0.01 + 1e-9;
 }
 
 function safeCents(value: number): number | null {

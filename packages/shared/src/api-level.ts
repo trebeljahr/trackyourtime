@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 4;
+export const API_LEVEL = 5;
 
 export type ApiLevelChange = {
   level: number;
@@ -71,6 +71,15 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     release: "0.1.0",
     added: [
       "`profile.setAvatar` and `profile.removeAvatar`: a profile picture, stored by the server and served at `/api/avatars/<userId>/<key>`, which `user.image` on the session points at.",
+    ],
+  },
+  {
+    level: 5,
+    release: "0.1.0",
+    added: [
+      "`invoices.update`: edit a draft's number, dates, notes, language, VAT and lines, guarded by `updatedAt`.",
+      "Manual lines: `lines` on `invoices.preview` and `invoices.create`; `kind`, `quantity`, `unit` and `unitPrice` on invoice line rows.",
+      "Blank invoices: `from` and `to` are optional on `invoices.preview` and `invoices.create`, and `null` on the invoice row.",
     ],
   },
 ];

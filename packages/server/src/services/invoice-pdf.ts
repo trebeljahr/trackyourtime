@@ -36,6 +36,10 @@
 import PDFDocument from "pdfkit";
 import {
   formatPostalAddress,
+  lineKind,
+  lineQuantity,
+  lineUnit,
+  lineUnitPrice,
   type Invoice,
   type InvoiceIssuer,
   type InvoiceLineItem,
@@ -169,14 +173,26 @@ type Sheet = {
   page: number;
 };
 
+/**
+ * The table's columns. An invoice of time lines alone has an "Hours" column,
+ * as it always did. Once a manual line is on it the column is "Quantity" and
+ * every cell names its unit (see `lineCells`), because "2.00" beside "3.00"
+ * says nothing about which is days and which is hours.
+ */
 const columnsFor = (
   t: ServerTranslator<"invoice">,
   width: number,
+  withUnits: boolean,
 ): SizedColumn[] => {
   const definition: Column[] = [
     { key: "label", header: t("columns.description"), width: null, align: "left" },
-    { key: "hours", header: t("columns.hours"), width: 60, align: "right" },
-    { key: "rate", header: t("columns.rate"), width: 70, align: "right" },
+    {
+      key: "hours",
+      header: withUnits ? t("columns.quantity") : t("columns.hours"),
+      width: withUnits ? 72 : 60,
+      align: "right",
+    },
+    { key: "rate", header: withUnits ? t("columns.unitPrice") : t("columns.rate"), width: 70, align: "right" },
     { key: "amount", header: t("columns.amount"), width: 80, align: "right" },
   ];
   const fixed = definition.reduce((total, column) => total + (column.width ?? 0), 0);
@@ -295,6 +311,30 @@ function drawParty(
   return cursor;
 }
 
+/**
+ * The Period row, when the invoice has a range. `to` is the exclusive bound,
+ * midnight of the day after the last billed day; an invoice created since
+ * e-invoicing (it froze a BT-20 sentence) names the last billed day, the date
+ * its XML carries as BT-74. Older invoices keep the exclusive `to` they were
+ * sent with: a re-render must reproduce the page the customer already holds.
+ */
+function periodRow(
+  invoice: Invoice,
+  t: ServerTranslator<"invoice">,
+  format: PdfFormat,
+): [string, string][] {
+  if (invoice.from === null || invoice.to === null) return [];
+  const period = billedPeriodDates(invoice.from, invoice.to);
+  return [
+    [
+      t("period"),
+      invoice.paymentTerms
+        ? t("periodRange", { from: format.date(period.start), to: format.date(period.end) })
+        : t("periodRange", { from: format.date(invoice.from), to: format.date(invoice.to) }),
+    ],
+  ];
+}
+
 /** The masthead: title, the two parties side by side, then the dates. */
 function drawHeaderBlock(sheet: Sheet): void {
   const { doc, invoice, t, format } = sheet;
@@ -336,23 +376,13 @@ function drawHeaderBlock(sheet: Sheet): void {
     : sheet.y;
   sheet.y = Math.max(recipientBottom, issuerBottom) + 8;
 
-  // `to` is the exclusive bound, midnight of the day after the last billed
-  // day; the page names the last billed day, as BT-74 does.
-  const period = billedPeriodDates(invoice.from, invoice.to);
   const rows: [string, string][] = [
     [t("status"), t("statusValue", { status: invoice.status })],
     [t("issueDate"), format.date(invoice.issueDate)],
     [t("dueDate"), format.date(invoice.dueDate)],
-    [
-      t("period"),
-      // An invoice created since e-invoicing (it froze a BT-20 sentence) ends
-      // on the last billed day, the date its XML carries as BT-74. Older
-      // invoices keep the exclusive `to` they were sent with: a re-render must
-      // reproduce the page the customer already holds.
-      invoice.paymentTerms
-        ? t("periodRange", { from: format.date(period.start), to: format.date(period.end) })
-        : t("periodRange", { from: format.date(invoice.from), to: format.date(invoice.to) }),
-    ],
+    // A blank invoice has no period and prints no Period row; every invoice
+    // with a range prints one exactly as before.
+    ...periodRow(invoice, t, format),
     [t("groupedBy"), t("groupByValue", { groupBy: invoice.groupBy })],
   ];
 
@@ -464,13 +494,28 @@ const headerCells = (columns: SizedColumn[]): Partial<Cells> =>
     columns.map((column) => [column.key, column.header]),
   ) as Partial<Cells>;
 
-/** `2.5` → "2.50" ("2,50") — the quantity column always shows two decimals. */
-const lineCells = (format: PdfFormat, line: InvoiceLineItem): Cells => ({
-  label: line.label,
-  hours: format.hours(line.hours),
-  rate: format.amount(line.hourlyRate),
-  amount: format.amount(line.amount),
-});
+/**
+ * `2.5` → "2.50" ("2,50") — the quantity column always shows two decimals.
+ * With `withUnits` (a manual line is on the invoice) every quantity names its
+ * unit, "3.00 h" / "2.00 d" / "1.00 pc", and the rate column shows each
+ * line's unit price; a time line's is its hourly rate.
+ */
+const lineCells = (
+  format: PdfFormat,
+  t: ServerTranslator<"invoice">,
+  line: InvoiceLineItem,
+  withUnits: boolean,
+): Cells => {
+  const quantity = lineQuantity(line);
+  return {
+    label: line.label,
+    hours: withUnits
+      ? t("quantityValue", { quantity: format.hours(quantity), count: quantity, unit: lineUnit(line) })
+      : format.hours(line.hours),
+    rate: format.amount(lineUnitPrice(line)),
+    amount: format.amount(line.amount),
+  };
+};
 
 /** The subtotal / tax / total stack, right-aligned under the amount column. */
 function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
@@ -660,7 +705,8 @@ export async function renderInvoicePdf(
       drawFooter(sheet);
       drawHeaderBlock(sheet);
 
-      const columns = columnsFor(t, sheet.width);
+      const withUnits = invoice.lineItems.some((line) => lineKind(line) === "manual");
+      const columns = columnsFor(t, sheet.width, withUnits);
       drawRow(sheet, columns, headerCells(columns), "header");
 
       if (invoice.lineItems.length === 0) {
@@ -668,7 +714,7 @@ export async function renderInvoicePdf(
       } else {
         for (const line of invoice.lineItems) {
           ensureSpace(sheet, columns, ROW_HEIGHT);
-          drawRow(sheet, columns, lineCells(format, line), "body");
+          drawRow(sheet, columns, lineCells(format, t, line, withUnits), "body");
         }
       }
 

@@ -1807,6 +1807,72 @@
             "maxItems": 500,
             "type": "array"
           },
+          "lines": {
+            "items": {
+              "properties": {
+                "key": {
+                  "pattern": "^manual:[A-Za-z0-9_-]{1,64}$",
+                  "type": "string"
+                },
+                "label": {
+                  "maxLength": 300,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "quantity": {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1000000,
+                  "type": "number"
+                },
+                "tax": {
+                  "properties": {
+                    "category": {
+                      "enum": [
+                        "S",
+                        "Z",
+                        "E",
+                        "AE",
+                        "O"
+                      ],
+                      "type": "string"
+                    },
+                    "rate": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "category",
+                    "rate"
+                  ],
+                  "type": "object"
+                },
+                "unit": {
+                  "enum": [
+                    "hour",
+                    "day",
+                    "piece"
+                  ],
+                  "type": "string"
+                },
+                "unitPrice": {
+                  "maximum": 100000000,
+                  "minimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "label",
+                "quantity",
+                "unit",
+                "unitPrice"
+              ],
+              "type": "object"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
           "locale": {
             "enum": [
               "en",
@@ -1880,8 +1946,6 @@
         },
         "required": [
           "clientId",
-          "from",
-          "to",
           "issueDate",
           "dueDate"
         ],
@@ -2116,6 +2180,72 @@
             "maxItems": 500,
             "type": "array"
           },
+          "lines": {
+            "items": {
+              "properties": {
+                "key": {
+                  "pattern": "^manual:[A-Za-z0-9_-]{1,64}$",
+                  "type": "string"
+                },
+                "label": {
+                  "maxLength": 300,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "quantity": {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1000000,
+                  "type": "number"
+                },
+                "tax": {
+                  "properties": {
+                    "category": {
+                      "enum": [
+                        "S",
+                        "Z",
+                        "E",
+                        "AE",
+                        "O"
+                      ],
+                      "type": "string"
+                    },
+                    "rate": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "category",
+                    "rate"
+                  ],
+                  "type": "object"
+                },
+                "unit": {
+                  "enum": [
+                    "hour",
+                    "day",
+                    "piece"
+                  ],
+                  "type": "string"
+                },
+                "unitPrice": {
+                  "maximum": 100000000,
+                  "minimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "label",
+                "quantity",
+                "unit",
+                "unitPrice"
+              ],
+              "type": "object"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
           "tax": {
             "properties": {
               "category": {
@@ -2168,9 +2298,7 @@
           }
         },
         "required": [
-          "clientId",
-          "from",
-          "to"
+          "clientId"
         ],
         "type": "object"
       },
@@ -2190,6 +2318,323 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "invoices.update": {
+      "input": {
+        "properties": {
+          "dueDate": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                "type": "string"
+              },
+              {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              }
+            ]
+          },
+          "exemptionNotes": {
+            "properties": {
+              "AE": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "E": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "O": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "issueDate": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                "type": "string"
+              },
+              {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              }
+            ]
+          },
+          "lineTax": {
+            "items": {
+              "allOf": [
+                {
+                  "properties": {
+                    "category": {
+                      "enum": [
+                        "S",
+                        "Z",
+                        "E",
+                        "AE",
+                        "O"
+                      ],
+                      "type": "string"
+                    },
+                    "rate": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "category",
+                    "rate"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "key": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "key"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "maxItems": 500,
+            "type": "array"
+          },
+          "lines": {
+            "items": {
+              "oneOf": [
+                {
+                  "properties": {
+                    "key": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "time",
+                      "type": "string"
+                    },
+                    "label": {
+                      "maxLength": 300,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "tax": {
+                      "properties": {
+                        "category": {
+                          "enum": [
+                            "S",
+                            "Z",
+                            "E",
+                            "AE",
+                            "O"
+                          ],
+                          "type": "string"
+                        },
+                        "rate": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "category",
+                        "rate"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "key"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "key": {
+                      "pattern": "^manual:[A-Za-z0-9_-]{1,64}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "manual",
+                      "type": "string"
+                    },
+                    "label": {
+                      "maxLength": 300,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000000,
+                      "type": "number"
+                    },
+                    "tax": {
+                      "properties": {
+                        "category": {
+                          "enum": [
+                            "S",
+                            "Z",
+                            "E",
+                            "AE",
+                            "O"
+                          ],
+                          "type": "string"
+                        },
+                        "rate": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "category",
+                        "rate"
+                      ],
+                      "type": "object"
+                    },
+                    "unit": {
+                      "enum": [
+                        "hour",
+                        "day",
+                        "piece"
+                      ],
+                      "type": "string"
+                    },
+                    "unitPrice": {
+                      "maximum": 100000000,
+                      "minimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "quantity",
+                    "unit",
+                    "unitPrice",
+                    "kind"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "maxItems": 700,
+            "type": "array"
+          },
+          "locale": {
+            "enum": [
+              "en",
+              "de"
+            ],
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "number": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "originId": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "tax": {
+            "properties": {
+              "category": {
+                "enum": [
+                  "S",
+                  "Z",
+                  "E",
+                  "AE",
+                  "O"
+                ],
+                "type": "string"
+              },
+              "rate": {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "category",
+              "rate"
+            ],
+            "type": "object"
+          },
+          "taxRate": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "updatedAt"
         ],
         "type": "object"
       },

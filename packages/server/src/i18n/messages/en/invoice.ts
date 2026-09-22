@@ -34,9 +34,19 @@ export const invoice = {
   columns: {
     description: "Description",
     hours: "Hours",
+    /** Replaces "Hours" once a manual line is on the invoice; every cell then names its unit. */
+    quantity: "Quantity",
     rate: "Rate",
+    /** Replaces "Rate" beside "Quantity": the price of one unit. */
+    unitPrice: "Price",
     amount: "Amount",
   },
+  /**
+   * A quantity with its unit: `quantity` is already formatted ("2.00"),
+   * `count` is the same number for the plural, `unit` one of hour/day/piece.
+   */
+  quantityValue:
+    "{quantity} {unit, select, hour {h} day {{count, plural, one {day} other {days}}} piece {{count, plural, one {pc} other {pcs}}} other {{unit}}}",
   noLines: "No billable time in this range.",
   subtotal: "Subtotal ({currency})",
   /** `rate` is a formatted number without its percent sign. */

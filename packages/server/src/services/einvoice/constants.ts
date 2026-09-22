@@ -24,9 +24,6 @@ export const INVOICE_TYPE_CODE = "380";
 /** BT-81: SEPA credit transfer. */
 export const PAYMENT_MEANS_CREDIT_TRANSFER = "58";
 
-/** Unit of BT-129 / BT-130: hours. */
-export const HOURS_UNIT_CODE = "HUR";
-
 /** The Factur-X XMP extension values and the attachment name. */
 export const FACTURX_XMP = {
   documentFileName: "factur-x.xml",

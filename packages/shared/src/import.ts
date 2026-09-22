@@ -23,6 +23,7 @@
  */
 import { z } from "zod";
 import type { TaxBreakdownRow, TaxCategory } from "./einvoice.js";
+import type { InvoiceLineKind, InvoiceLineUnit } from "./invoice-lines.js";
 import type {
   BusinessProfileValues,
   ClientBilling,
@@ -431,8 +432,9 @@ export type WorkspaceExportInvoice = {
   status: InvoiceStatus;
   issueDate: string;
   dueDate: string;
-  from: string;
-  to: string;
+  /** `null` on a blank invoice, which billed no tracked time and has no period. */
+  from: string | null;
+  to: string | null;
   groupBy: "project" | "task";
   lineItems: WorkspaceExportInvoiceLine[];
   /** MONEY — `null` only when the export was redacted. */
@@ -467,17 +469,24 @@ export type WorkspaceExportInvoiceLine = {
   label: string;
   projectName: string | null;
   taskName: string | null;
+  /** Absent on lines from before manual lines existed, which are time lines. */
+  kind?: InvoiceLineKind;
   /**
    * The billed quantity. Not money, but the amount below cannot be checked
-   * without it, so the two always travel together.
+   * without it, so the two always travel together. 0 on a manual line.
    */
   seconds: number;
   hours: number;
   /** MONEY — the rate the line was billed at, never a project's rate today. */
   hourlyRate: number | null;
   currency: string;
-  /** MONEY — `hours × hourlyRate`, rounded once, at creation. */
+  /** MONEY — `quantity × unitPrice`, rounded once, at creation. */
   amount: number | null;
+  /** A manual line's quantity and unit. Absent on a time line (`hours` of `hour`). */
+  quantity?: number;
+  unit?: InvoiceLineUnit;
+  /** MONEY — a manual line's price per unit; `null` only when the export was redacted. */
+  unitPrice?: number | null;
   /** The line's VAT category. Absent on invoices without categories. */
   taxCategory?: TaxCategory;
   /** Percent; `null` only when the export was redacted. Present iff taxCategory is. */

@@ -24,8 +24,10 @@ import {
   type ClientBillingFields,
   type EinvoiceProfile,
   type Invoice,
+  manualLineAmount,
   type InvoiceIssuer,
   type InvoiceLineItem,
+  type InvoiceLineUnit,
   type InvoiceRecipient,
   type LineTax,
   type Locale,
@@ -148,6 +150,33 @@ export function lineFixture(seconds: number, hourlyRate: number, tax: LineTax, l
   };
 }
 
+/** One manual line, priced the way `manualLineItems` prices it: `manualLineAmount`, never a float product. */
+export function manualLineFixture(
+  quantity: number,
+  unit: InvoiceLineUnit,
+  unitPrice: number,
+  tax: LineTax,
+  label: string,
+): InvoiceLineItem {
+  return {
+    key: `manual:${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    label,
+    projectId: null,
+    taskId: null,
+    kind: "manual",
+    seconds: 0,
+    hours: 0,
+    hourlyRate: unitPrice,
+    currency: "EUR",
+    amount: manualLineAmount(quantity, unitPrice),
+    quantity,
+    unit,
+    unitPrice,
+    taxCategory: tax.category,
+    taxRate: tax.rate,
+  };
+}
+
 const RANGE = {
   from: new Date(2026, 8, 1).toISOString(),
   to: new Date(2026, 9, 1).toISOString(),
@@ -199,6 +228,8 @@ export function readyInvoiceFixture(parts: {
   number?: string;
   /** Invoice and line currency; "EUR" when absent. */
   currency?: string;
+  /** A blank invoice: no billed range (`from` and `to` null), manual lines only. */
+  blank?: boolean;
 }): Invoice {
   const taxed = parts.lines.map((line) => {
     if (line.taxCategory === undefined || line.taxRate === undefined) {
@@ -214,6 +245,7 @@ export function readyInvoiceFixture(parts: {
       parts.lines.map((line) => ({ ...line, currency })),
     ),
     currency,
+    ...(parts.blank ? { from: null, to: null } : {}),
     subtotal: totals.subtotal,
     taxRate: commonTaxRate(taxed),
     taxAmount: totals.taxAmount,
@@ -448,6 +480,38 @@ export const EINVOICE_CASES: readonly EinvoiceCase[] = [
         // Hand-written on purpose: a line break and an email address in BT-20,
         // which no sentence the router writes contains.
         paymentTerms: "Payable within 14 days.\nQuestions: billing@seller.example",
+      }),
+  },
+  {
+    name: "manual-lines",
+    description: "Tracked hours (HUR) beside a workshop billed by the day (DAY) and a licence by the piece (C62), all at 19 %.",
+    profiles: BOTH,
+    invoice: () =>
+      readyInvoiceFixture({
+        number: "2026-0053",
+        lines: [
+          lineFixture(45000, 95, S19, "Website relaunch – development"),
+          manualLineFixture(2, "day", 800, S19, "Workshop"),
+          manualLineFixture(1, "piece", 250, S19, "Licence"),
+        ],
+        issuer: issuerFixture(),
+        recipient: recipientFixture(),
+      }),
+  },
+  {
+    name: "blank",
+    description: "A blank invoice: no billed range, so no BillingSpecifiedPeriod, and delivery on the issue date; two manual lines at 19 %.",
+    profiles: BOTH,
+    invoice: () =>
+      readyInvoiceFixture({
+        number: "2026-0054",
+        blank: true,
+        lines: [
+          manualLineFixture(1.5, "day", 900, S19, "Consulting day"),
+          manualLineFixture(3, "piece", 49.99, S19, "Support ticket"),
+        ],
+        issuer: issuerFixture(),
+        recipient: recipientFixture(),
       }),
   },
   {

@@ -27,9 +27,13 @@ export const invoice: Translation<typeof source> = {
   columns: {
     description: "Beschreibung",
     hours: "Stunden",
+    quantity: "Menge",
     rate: "Stundensatz",
+    unitPrice: "Preis",
     amount: "Betrag",
   },
+  quantityValue:
+    "{quantity} {unit, select, hour {h} day {{count, plural, one {Tag} other {Tage}}} piece {Stk.} other {{unit}}}",
   noLines: "Keine abrechenbare Zeit in diesem Zeitraum.",
   subtotal: "Zwischensumme ({currency})",
   // No-break space between the number and its unit, per the glossary.

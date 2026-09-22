@@ -1,11 +1,15 @@
 // IMPLEMENTED BY: invoicing agent
 //
 // An invoice turns billable time for ONE client over ONE date range into a
-// document. Two rules make the rest of the design fall out:
+// document — plus, since manual lines exist, whatever was typed onto it, and
+// a BLANK invoice is typed lines alone with no range at all. Two rules make
+// the rest of the design fall out:
 //
 //  - It is a SNAPSHOT. Rates, currency, the client's name and the billed
 //    seconds are copied onto the document at creation, so nothing that
 //    happens afterwards can rewrite a document already sent to a customer.
+//    Only a DRAFT may still move, through `update`, and its totals are then
+//    computed again through exactly the code `create` uses.
 //  - Time is billed ONCE. `Invoice.entryIds` is the source of truth and
 //    `TimeEntry.invoiceId` its denormalized index; `preview` and `create`
 //    only ever consider entries with `invoiceId: null`, and `remove` must
@@ -18,6 +22,7 @@
 // standing up Mongo.
 import { TRPCError } from "@trpc/server";
 import {
+  INVOICE_UPDATE_REFUSALS,
   createInvoiceSchema,
   entryAmount,
   idInputSchema,
@@ -30,6 +35,7 @@ import {
   normalizeClientBilling,
   recipientSnapshot,
   resolveInvoiceLocale,
+  updateInvoiceSchema,
   updateInvoiceStatusSchema,
   type ClientBilling,
   type ExemptionNotes,
@@ -39,6 +45,7 @@ import {
   type InvoiceStatus,
   type LineTax,
   type Locale,
+  type ManualInvoiceLineInput,
   type PdfExportResult,
   type TaxBreakdownRow,
 } from "@starter/shared";
@@ -59,6 +66,11 @@ import {
   yearOfIsoDate,
 } from "../../services/invoice-number.js";
 import { invoicePdfFilename, renderInvoicePdf } from "../../services/invoice-pdf.js";
+import {
+  InvoiceLinesError,
+  manualLineItems,
+  mergeDraftLines,
+} from "../../services/invoice-lines.js";
 import { paymentTermsSentence } from "../../services/einvoice/payment-terms.js";
 import {
   applyInvoiceTax,
@@ -73,7 +85,12 @@ import {
   requireInvoiceById,
   mayUseInvoices,
 } from "./invoice-gate.js";
-import { invoiceEinvoiceProcedures, WITHOUT_ISSUED_XML } from "./invoice-einvoice.js";
+import {
+  hasAnyIssuedXml,
+  invoiceEinvoiceProcedures,
+  WITHOUT_ISSUED_XML,
+  WITHOUT_ISSUED_XML_BYTES,
+} from "./invoice-einvoice.js";
 
 // Moved to their own modules; re-exported so existing importers keep working.
 export { INVOICE_PERMISSION_REQUIRED } from "./invoice-gate.js";
@@ -394,13 +411,25 @@ const parseRangeBound = (value: string, endOfDay: boolean): Date => {
 
 type Range = { from: Date; to: Date };
 
-const parseRange = (input: { from: string; to: string }): Range => {
+/**
+ * The billed range, or `null` for a BLANK invoice: `from` and `to` both left
+ * out (the schema refuses one without the other). Blank means no tracked time
+ * is gathered or claimed, and the stored range is null.
+ */
+const parseRange = (input: { from?: string | undefined; to?: string | undefined }): Range | null => {
+  if (input.from === undefined || input.to === undefined) return null;
   const from = parseRangeBound(input.from, false);
   const to = parseRangeBound(input.to, true);
   if (to.getTime() <= from.getTime()) {
     throw badRequest("`to` must be after `from`");
   }
   return { from, to };
+};
+
+/** A `manualLineItems` / `mergeDraftLines` refusal is the caller's mistake: BAD_REQUEST. */
+const badLines = (error: unknown): never => {
+  if (error instanceof InvoiceLinesError) throw badRequest(error.message);
+  throw error;
 };
 
 // ── gathering (database) ─────────────────────────────────────────────
@@ -455,10 +484,21 @@ type Gathered = {
   clientBilling: ClientBilling | null;
   /** The client's document language, when it has one. */
   clientLocale: Locale | null;
+  /** The billed range, or null for a blank invoice. */
+  range: Range | null;
   selection: BillableSelection;
-  /** Lines as rolled up, before any VAT category is applied. */
+  /** Time lines as rolled up, then the manual lines, before any VAT category is applied. */
   lineItems: InvoiceLineItem[];
+  /** The VAT each manual line asked for by itself, keyed like `lineTax`. */
+  manualLineTax: Array<{ key: string } & LineTax>;
   currency: string;
+};
+
+const NO_TIME: BillableSelection = {
+  billable: [],
+  skippedMissingRate: 0,
+  skippedInvoiced: 0,
+  currencies: [],
 };
 
 const assertSingleCurrency = (currencies: readonly string[]): void => {
@@ -486,10 +526,10 @@ const gather = async (
   workspaceId: string,
   input: {
     clientId: string;
-    from: string;
-    to: string;
+    from?: string | undefined;
+    to?: string | undefined;
     groupBy: InvoiceGroupBy;
-    taxRate?: number | null;
+    lines?: ManualInvoiceLineInput[] | undefined;
   },
 ): Promise<Gathered> => {
   const client = await Client.findOne({
@@ -503,7 +543,43 @@ const gather = async (
   const range = parseRange(input);
   const settings = await getOrCreateWorkspaceSettings(workspaceId);
 
-  const projects = await Project.find({ workspaceId, clientId: input.clientId })
+  // A blank invoice gathers nothing: no range, no entries, and its currency
+  // is the workspace's.
+  const selection = range ? await gatherTime(workspaceId, input.clientId, range, input.groupBy) : NO_TIME;
+  assertSingleCurrency(selection.currencies);
+  const timeLines = range ? invoiceLineItems(selection.billable, input.groupBy) : [];
+  const currency = selection.currencies[0] ?? settings.currency;
+
+  let manual: ReturnType<typeof manualLineItems>;
+  try {
+    manual = manualLineItems(input.lines ?? [], currency, new Set(timeLines.map((line) => line.key)));
+  } catch (error) {
+    return badLines(error);
+  }
+
+  return {
+    clientName: client.name,
+    recipient: recipientSnapshot(client.name, client.billing),
+    clientBilling: normalizeClientBilling(client.billing),
+    // A newer release may have stored a locale this build does not ship;
+    // it contributes nothing rather than failing the create (models/README.md).
+    clientLocale: isLocale(client.invoiceLocale) ? client.invoiceLocale : null,
+    range,
+    selection,
+    lineItems: [...timeLines, ...manual.lines],
+    manualLineTax: manual.lineTax,
+    currency,
+  };
+};
+
+/** The client's billable, un-invoiced time in the range, as candidates for the lines. */
+const gatherTime = async (
+  workspaceId: string,
+  clientId: string,
+  range: Range,
+  groupBy: InvoiceGroupBy,
+): Promise<BillableSelection> => {
+  const projects = await Project.find({ workspaceId, clientId })
     .select("_id name")
     .lean();
   const projectNames = new Map(
@@ -552,7 +628,7 @@ const gather = async (
   // Task names are only needed for a task-grouped invoice; skip the round
   // trip entirely otherwise.
   const taskNames =
-    input.groupBy === "task" && taskIds.length > 0
+    groupBy === "task" && taskIds.length > 0
       ? new Map(
           (await Task.find({ workspaceId, _id: { $in: taskIds } })
             .select("_id name")
@@ -572,23 +648,7 @@ const gather = async (
     invoiceId: row.invoiceId ?? null,
   }));
 
-  const selection = selectBillableEntries(candidates);
-  assertSingleCurrency(selection.currencies);
-
-  const lineItems = invoiceLineItems(selection.billable, input.groupBy);
-  const recipient = recipientSnapshot(client.name, client.billing);
-
-  return {
-    clientName: client.name,
-    recipient,
-    clientBilling: normalizeClientBilling(client.billing),
-    // A newer release may have stored a locale this build does not ship;
-    // it contributes nothing rather than failing the create (models/README.md).
-    clientLocale: isLocale(client.invoiceLocale) ? client.invoiceLocale : null,
-    selection,
-    lineItems,
-    currency: selection.currencies[0] ?? settings.currency,
-  };
+  return selectBillableEntries(candidates);
 };
 
 /**
@@ -630,7 +690,7 @@ type TaxInput = Parameters<typeof resolveInvoiceTax>[1];
  */
 const taxGathered = async (
   workspaceId: string,
-  gathered: Gathered,
+  gathered: Pick<Gathered, "lineItems" | "clientBilling" | "manualLineTax">,
   input: TaxInput,
   locale: Locale,
 ): Promise<{
@@ -640,9 +700,12 @@ const taxGathered = async (
   profile: Awaited<ReturnType<typeof getBusinessProfile>>;
 }> => {
   const profile = await getBusinessProfile(workspaceId);
+  // A manual line's own `tax` is the most specific choice there is, so it
+  // is folded in after the request's `lineTax` and wins over it.
+  const lineTax = [...(input.lineTax ?? []), ...gathered.manualLineTax];
   const resolved = resolveInvoiceTax(
     gathered.lineItems.map((line) => line.key),
-    input,
+    { ...input, lineTax },
     { client: gathered.clientBilling, profile, locale },
   );
   if (resolved.kind === "unknownKeys") {
@@ -687,6 +750,43 @@ const recentNumbers = async (workspaceId: string): Promise<string[]> => {
 /** The first number a create would try, from what is currently stored. */
 const suggestNumber = async (workspaceId: string, year: number): Promise<string> =>
   nextInvoiceNumber(await recentNumbers(workspaceId), year);
+
+/** The exemption reasons a stored breakdown carries, as the notes an edit would re-send. */
+const storedExemptionNotes = (
+  breakdown: readonly TaxBreakdownRow[] | undefined,
+): ExemptionNotes | undefined => {
+  if (!breakdown) return undefined;
+  const notes: ExemptionNotes = {};
+  for (const row of breakdown) {
+    if (row.category === "E" || row.category === "AE" || row.category === "O") {
+      if (row.exemptionReason) notes[row.category] = row.exemptionReason;
+    }
+  }
+  return notes;
+};
+
+/**
+ * The guarded write of an edit: only a draft, only one untouched since
+ * `readAt`, and only one without an issued XML in either profile.
+ */
+const draftUpdate = (
+  id: string,
+  workspaceId: string,
+  readAt: Date,
+  update: Record<string, unknown>,
+) =>
+  Invoice.findOneAndUpdate(
+    {
+      _id: id,
+      workspaceId,
+      status: "draft",
+      updatedAt: readAt,
+      "einvoice.issuedXml.en16931": { $in: [null] },
+      "einvoice.issuedXml.xrechnung": { $in: [null] },
+    },
+    update,
+    { returnDocument: "after", projection: { "einvoice.issuedXml": 0 } },
+  ).lean();
 
 // ── list pagination ──────────────────────────────────────────────────
 
@@ -775,13 +875,18 @@ export const invoicesRouter = router({
       const gathered = await gather(workspaceId, input);
       const entryIds = gathered.selection.billable.map((entry) => entry.id);
 
-      if (entryIds.length === 0) {
+      // An invoice with nothing on it is refused, whatever kind it is: a
+      // ranged one with no billable time and no manual lines, or a blank one
+      // with no lines at all.
+      if (gathered.lineItems.length === 0) {
         throw badRequest(
-          "There is no un-invoiced billable time for this client in that range.",
+          gathered.range
+            ? "There is no un-invoiced billable time for this client in that range."
+            : "A blank invoice needs at least one line.",
         );
       }
 
-      const range = parseRange(input);
+      const range = gathered.range;
       const issueDate = new Date(input.issueDate);
       const dueDate = new Date(input.dueDate);
       if (Number.isNaN(issueDate.getTime()) || Number.isNaN(dueDate.getTime())) {
@@ -816,8 +921,9 @@ export const invoicesRouter = router({
         status: "draft" as const,
         issueDate,
         dueDate,
-        from: range.from,
-        to: range.to,
+        // A blank invoice has no period.
+        from: range?.from ?? null,
+        to: range?.to ?? null,
         groupBy: input.groupBy,
         lineItems: taxed.lineItems,
         subtotal: taxed.subtotal,
@@ -886,6 +992,9 @@ export const invoicesRouter = router({
       // hour, so it is treated as fatal: unwind everything and make the
       // caller retry against fresh numbers, rather than issue an invoice
       // that overlaps one already sent to the customer.
+      // A blank invoice (or a ranged one carried by manual lines alone)
+      // claims nothing; `updateMany` on an empty `$in` matches nothing and
+      // the counts agree at zero.
       const claim = await TimeEntry.updateMany(
         { _id: { $in: entryIds }, workspaceId, invoiceId: null },
         { $set: { invoiceId } },
@@ -973,8 +1082,167 @@ export const invoicesRouter = router({
     }),
 
   /**
-   * Status is the ONLY mutable field — the money on a sent invoice never
-   * moves. An illegal step is rejected by name so the UI can explain it.
+   * Edit a DRAFT: its number, dates, notes, language, VAT and lines.
+   *
+   * A draft is the one state in which the figures may still move — nobody
+   * outside has seen it. Everything else stays a snapshot: a sent or paid
+   * invoice answers a stable refusal code, and so does a draft from which an
+   * e-invoice XML was already issued (the stored XML would no longer match
+   * the page). Time lines may only be relabelled, because their figures are
+   * what the claimed entries add up to; manual lines are free. Totals are
+   * recomputed through exactly the code `create` uses, and the write is
+   * conditional on `updatedAt`, so an edit made against a stale read answers
+   * CONFLICT and writes nothing.
+   */
+  update: workspaceProcedure
+    .input(updateInvoiceSchema)
+    .mutation(async ({ ctx, input }): Promise<InvoiceWire> => {
+      requireInvoiceById(ctx);
+      const workspaceId = ctx.workspaceId;
+      const doc = await Invoice.findOne({
+        _id: requireObjectId(input.id, "Invoice not found"),
+        workspaceId,
+      })
+        .select(WITHOUT_ISSUED_XML_BYTES)
+        .lean();
+      if (!doc) throw notFound();
+      if (doc.status !== "draft") {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: INVOICE_UPDATE_REFUSALS.notDraft,
+        });
+      }
+      if (hasAnyIssuedXml(doc)) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: INVOICE_UPDATE_REFUSALS.einvoiceIssued,
+        });
+      }
+      const stored = toClientInvoice(doc);
+
+      const issueDate = input.issueDate === undefined ? doc.issueDate : new Date(input.issueDate);
+      const dueDate = input.dueDate === undefined ? doc.dueDate : new Date(input.dueDate);
+      if (Number.isNaN(issueDate.getTime()) || Number.isNaN(dueDate.getTime())) {
+        throw badRequest("Invalid issue or due date");
+      }
+      if (dueDate.getTime() < issueDate.getTime()) {
+        throw badRequest("`dueDate` cannot be before `issueDate`");
+      }
+      // The language stays the snapshot's unless the edit names one; an
+      // invoice from before localisation keeps having none (English).
+      const locale: Locale = input.locale ?? (isLocale(doc.locale) ? doc.locale : "en");
+
+      let built: ReturnType<typeof mergeDraftLines>;
+      try {
+        built = mergeDraftLines(stored.lineItems, input.lines, doc.currency);
+      } catch (error) {
+        return badLines(error);
+      }
+
+      // An edit that says nothing about VAT changes nothing about it: the
+      // stored categories and exemption reasons are folded in as the request,
+      // so relabelling a line cannot strip the invoice of its VAT. An edit
+      // that does name VAT is resolved exactly like a create.
+      const taxTouched =
+        input.tax !== undefined ||
+        input.lineTax !== undefined ||
+        input.taxRate !== undefined ||
+        input.exemptionNotes !== undefined ||
+        built.lineTax.length > 0;
+      const keptOverrides: Array<{ key: string } & LineTax> = taxTouched
+        ? []
+        : built.lines.flatMap((line) =>
+            line.taxCategory
+              ? [{ key: line.key, category: line.taxCategory, rate: line.taxRate ?? 0 }]
+              : [],
+          );
+      const keptNotes: ExemptionNotes | undefined = taxTouched
+        ? undefined
+        : storedExemptionNotes(stored.taxBreakdown);
+      const client = await Client.findOne({ _id: doc.clientId, workspaceId })
+        .select("billing")
+        .lean();
+      const { taxed } = await taxGathered(
+        workspaceId,
+        {
+          lineItems: built.lines,
+          clientBilling: normalizeClientBilling(client?.billing),
+          manualLineTax: built.lineTax,
+        },
+        {
+          tax: input.tax,
+          lineTax: [...keptOverrides, ...(input.lineTax ?? [])],
+          taxRate: input.taxRate === undefined ? stored.taxRate : input.taxRate,
+          exemptionNotes: input.exemptionNotes ?? keptNotes,
+        },
+        locale,
+      );
+
+      // BT-20 is frozen with the dates it explains: a moved due date, or a
+      // new language, re-freezes it from the snapshot's own terms. An
+      // invoice that never froze one (created before e-invoicing) keeps
+      // deriving its due line on the page.
+      const datesChanged =
+        issueDate.getTime() !== doc.issueDate.getTime() ||
+        dueDate.getTime() !== doc.dueDate.getTime();
+      const localeChanged = input.locale !== undefined && input.locale !== doc.locale;
+      const paymentTerms =
+        doc.paymentTerms !== undefined && (datesChanged || localeChanged)
+          ? paymentTermsSentence(locale, doc.issuer?.paymentTermsDays ?? null, dueDate.toISOString(), {
+              issueDateIso: issueDate.toISOString(),
+            })
+          : undefined;
+
+      const set: Record<string, unknown> = {
+        ...(input.number !== undefined ? { number: input.number } : {}),
+        issueDate,
+        dueDate,
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        ...(input.locale !== undefined ? { locale: input.locale } : {}),
+        lineItems: taxed.lineItems,
+        subtotal: taxed.subtotal,
+        taxRate: taxed.taxRate,
+        taxAmount: taxed.taxAmount,
+        total: taxed.total,
+        ...(taxed.taxBreakdown ? { taxBreakdown: taxed.taxBreakdown } : {}),
+        ...(paymentTerms !== undefined ? { paymentTerms } : {}),
+      };
+      const update = taxed.taxBreakdown ? { $set: set } : { $set: set, $unset: { taxBreakdown: "" } };
+
+      // Conditional on the state the edit was made against: still a draft,
+      // untouched since the read, and still without an issued XML (storing
+      // one never bumps `updatedAt`). The unique index decides a number
+      // collision, as on create.
+      let updated: Awaited<ReturnType<typeof draftUpdate>>;
+      try {
+        updated = await draftUpdate(input.id, workspaceId, new Date(input.updatedAt), update);
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) throw error;
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Invoice number "${input.number ?? ""}" is already used.`,
+        });
+      }
+      if (!updated) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "This invoice changed in another window. Reload it.",
+        });
+      }
+
+      const invoice = toClientInvoice(updated);
+      void publishSync(
+        workspaceId,
+        { kind: "invoice.changed", id: String(updated._id) },
+        input.originId,
+      );
+      return invoice;
+    }),
+
+  /**
+   * Status is the ONLY field of a non-draft that moves — the money on a
+   * sent invoice never does. An illegal step is rejected by name so the UI
+   * can explain it.
    */
   updateStatus: workspaceProcedure
     .input(updateInvoiceStatusSchema)

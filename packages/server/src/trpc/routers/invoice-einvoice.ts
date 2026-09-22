@@ -61,12 +61,13 @@ import { requireInvoiceById } from "./invoice-gate.js";
 export const WITHOUT_ISSUED_XML = "-einvoice.issuedXml";
 
 /** Keeps whether an issued XML exists (its metadata) without loading the bytes. */
-const WITHOUT_ISSUED_XML_BYTES = "-einvoice.issuedXml.en16931.xml -einvoice.issuedXml.xrechnung.xml";
+export const WITHOUT_ISSUED_XML_BYTES =
+  "-einvoice.issuedXml.en16931.xml -einvoice.issuedXml.xrechnung.xml";
 
 type StoredInvoiceDoc = InvoiceDocLike & { workspaceId: string; updatedAt: Date };
 
 /** Whether an issued XML exists for either profile; the metadata is enough. */
-const hasAnyIssuedXml = (doc: StoredInvoiceDoc): boolean =>
+export const hasAnyIssuedXml = (doc: Pick<InvoiceDocLike, "einvoice">): boolean =>
   Boolean(doc.einvoice?.issuedXml?.en16931 || doc.einvoice?.issuedXml?.xrechnung);
 
 const FILL_LOCKED_MESSAGE =

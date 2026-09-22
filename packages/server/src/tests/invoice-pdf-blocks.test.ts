@@ -245,7 +245,7 @@ describe("invoice PDF with e-invoice data", () => {
       assert.ok(!page.includes(absent), `legacy PDF must not print ${absent}`);
     }
     assert.ok(
-      page.includes(`${fen.date(legacy.from)} to ${fen.date(legacy.to)}`),
+      page.includes(`${fen.date(legacy.from ?? "")} to ${fen.date(legacy.to ?? "")}`),
       "a legacy invoice keeps the exclusive end it was sent with",
     );
   });

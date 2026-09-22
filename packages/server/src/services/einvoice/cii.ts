@@ -21,6 +21,9 @@
  */
 
 import {
+  INVOICE_LINE_UNIT_CODES,
+  lineUnit,
+  lineUnitPrice,
   recipientLegalName,
   type EinvoiceProfile,
   type ElectronicAddressScheme,
@@ -31,7 +34,6 @@ import {
 import {
   BUSINESS_PROCESS_ID,
   GUIDELINE_IDS,
-  HOURS_UNIT_CODE,
   INVOICE_TYPE_CODE,
   PAYMENT_MEANS_CREDIT_TRANSFER,
 } from "./constants.js";
@@ -45,7 +47,7 @@ import {
   safeFilenamePart,
   utcDateKey,
 } from "./format.js";
-import { billedHoursQuantity, formatCents, isLineNetConsistent, toCents } from "./totals.js";
+import { billedQuantity, formatCents, isLineConsistent, toCents } from "./totals.js";
 import type { EinvoiceReadyInvoice } from "./validate.js";
 import { el, render, type XmlNode } from "./xml.js";
 
@@ -160,10 +162,11 @@ export function assertCiiInvariants(invoice: EinvoiceReadyInvoice): void {
     if (!rowKeys.has(key)) fail("4 (BR-CO-18)", `lines with ${key} have no breakdown row`);
   }
 
-  // 5. Quantity × price ≈ line amount (PEPPOL-EN16931-R120).
+  // 5. Quantity × price ≈ line amount (PEPPOL-EN16931-R120), for a time line
+  //    (hours from its seconds) and a manual line (its stored quantity) alike.
   invoice.lineItems.forEach((line, index) => {
-    if (!isLineNetConsistent(line.seconds, line.hourlyRate, line.amount)) {
-      fail("5 (PEPPOL-EN16931-R120)", `line ${index + 1}: ${line.seconds} s × ${line.hourlyRate} does not give ${line.amount}`);
+    if (!isLineConsistent(line)) {
+      fail("5 (PEPPOL-EN16931-R120)", `line ${index + 1}: ${billedQuantity(line)} × ${lineUnitPrice(line)} does not give ${line.amount}`);
     }
   });
 
@@ -209,10 +212,13 @@ function lineItem(line: ReadyLine, index: number): XmlNode {
       el("ram:AssociatedDocumentLineDocument", [el("ram:LineID", String(index + 1))]),
       el("ram:SpecifiedTradeProduct", [must(el("ram:Name", cleanLine(line.label)), `BT-153 name of line ${index + 1}`)]),
       el("ram:SpecifiedLineTradeAgreement", [
-        el("ram:NetPriceProductTradePrice", [el("ram:ChargeAmount", netPrice(line.hourlyRate, index))]),
+        el("ram:NetPriceProductTradePrice", [el("ram:ChargeAmount", netPrice(lineUnitPrice(line), index))]),
       ]),
+      // BT-129 / BT-130: a time line's hours (HUR) from its exact seconds, a
+      // manual line's quantity in its own unit. A line from before manual
+      // lines existed reads as a time line and serialises as it always did.
       el("ram:SpecifiedLineTradeDelivery", [
-        el("ram:BilledQuantity", billedHoursQuantity(line.seconds), { unitCode: HOURS_UNIT_CODE }),
+        el("ram:BilledQuantity", billedQuantity(line), { unitCode: INVOICE_LINE_UNIT_CODES[lineUnit(line)] }),
       ]),
       el("ram:SpecifiedLineTradeSettlement", [
         el("ram:ApplicableTradeTax", [
@@ -230,11 +236,11 @@ function lineItem(line: ReadyLine, index: number): XmlNode {
   );
 }
 
-function netPrice(hourlyRate: number, index: number): string {
+function netPrice(unitPrice: number, index: number): string {
   try {
-    return formatDecimal(hourlyRate);
+    return formatDecimal(unitPrice);
   } catch {
-    return fail("5 (BR-27)", `line ${index + 1} has an invalid net price ${String(hourlyRate)}`);
+    return fail("5 (BR-27)", `line ${index + 1} has an invalid net price ${String(unitPrice)}`);
   }
 }
 
@@ -314,11 +320,18 @@ function headerAgreement(invoice: EinvoiceReadyInvoice, hasNotSubject: boolean):
   );
 }
 
-/** BT-72 is always written: Factur-X warns (BR-FX-EN-04) on a period without it. */
+/**
+ * BT-72 is always written: Factur-X warns (BR-FX-EN-04) on a period without
+ * it, and the CII schema requires the delivery block, which must not be empty
+ * (PEPPOL-EN16931-R008). A ranged invoice delivers on its last billed day; a
+ * BLANK one has no period, and its supply date is its issue date — the
+ * § 14 UStG reading of an invoice that names no other day.
+ */
 function headerDelivery(invoice: EinvoiceReadyInvoice): XmlNode {
+  const delivered = invoice.to === null ? utcDateKey(invoice.issueDate) : lastBilledDateKey(invoice.to);
   return must(
     el("ram:ApplicableHeaderTradeDelivery", [
-      el("ram:ActualDeliverySupplyChainEvent", [dateTime("ram:OccurrenceDateTime", lastBilledDateKey(invoice.to))]),
+      el("ram:ActualDeliverySupplyChainEvent", [dateTime("ram:OccurrenceDateTime", delivered)]),
     ]),
     "ApplicableHeaderTradeDelivery",
   );
@@ -369,7 +382,9 @@ function breakdownTax(row: TaxBreakdownRow, index: number): XmlNode {
   );
 }
 
+/** BG-14, only on an invoice with a billed range: a blank invoice writes no period. */
 function billingPeriod(invoice: EinvoiceReadyInvoice): XmlNode | null {
+  if (invoice.from === null || invoice.to === null) return null;
   return el("ram:BillingSpecifiedPeriod", [
     dateTime("ram:StartDateTime", localDateKey(invoice.from)),
     dateTime("ram:EndDateTime", lastBilledDateKey(invoice.to)),

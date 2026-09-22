@@ -28,7 +28,7 @@ import {
   compareStoredTotals,
   computeEn16931Totals,
   formatCents,
-  isLineNetConsistent,
+  isLineConsistent,
   rateToBasisPoints,
   toCents,
   type TaxedLine,
@@ -279,7 +279,7 @@ function lineIssues(invoice: Invoice): EinvoiceIssue[] {
   });
   lines.forEach((line, index) => {
     if (!safeLineNetConsistent(line)) {
-      issues.push(invoiceIssue("LINE_AMOUNT_INCONSISTENT", `invoice.lineItems[${index}].amount`, "PEPPOL-EN16931-R120", `Line ${index + 1} ("${line.label}") does not equal its hours times its rate to the cent. ${FROZEN_AMOUNTS}`));
+      issues.push(invoiceIssue("LINE_AMOUNT_INCONSISTENT", `invoice.lineItems[${index}].amount`, "PEPPOL-EN16931-R120", `Line ${index + 1} ("${line.label}") does not equal its quantity times its price to the cent. ${FROZEN_AMOUNTS}`));
     }
   });
 
@@ -324,7 +324,7 @@ function isValidLineRate(category: TaxCategory, rate: number | undefined): boole
 
 function safeLineNetConsistent(line: InvoiceLineItem): boolean {
   try {
-    return isLineNetConsistent(line.seconds, line.hourlyRate, line.amount);
+    return isLineConsistent(line);
   } catch {
     return false;
   }

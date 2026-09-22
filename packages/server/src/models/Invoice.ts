@@ -37,8 +37,9 @@ export interface IInvoice extends Document {
   status: InvoiceStatus;
   issueDate: Date;
   dueDate: Date;
-  from: Date;
-  to: Date;
+  /** The billed range; `null` on a blank invoice (no tracked time, no period). */
+  from: Date | null;
+  to: Date | null;
   groupBy: "project" | "task";
   lineItems: InvoiceLineItem[];
   subtotal: number;
@@ -78,8 +79,9 @@ export type InvoiceDocLike = {
   status: InvoiceStatus;
   issueDate: Date;
   dueDate: Date;
-  from: Date;
-  to: Date;
+  /** `null` (or, on a lean read of an old row, never absent) on a blank invoice. */
+  from: Date | null;
+  to: Date | null;
   groupBy: "project" | "task";
   lineItems: InvoiceLineItem[];
   subtotal: number;
@@ -115,6 +117,14 @@ const lineItemSchema = new Schema<InvoiceLineItem>(
     hourlyRate: { type: Number, required: true, min: 0 },
     currency: { type: String, required: true },
     amount: { type: Number, required: true },
+    // Manual-line keys, and the explicit quantity of a time line written since
+    // they exist. No defaults and no `enum` (models/README.md): a row from
+    // before reads as a time line through `lineKind`, and a unit a newer
+    // release may add must not fail a save here.
+    kind: { type: String },
+    quantity: { type: Number, min: 0 },
+    unit: { type: String },
+    unitPrice: { type: Number, min: 0 },
     ...lineTaxFields,
   },
   { _id: false },
@@ -177,8 +187,11 @@ const invoiceSchema = new Schema<IInvoice>(
     },
     issueDate: { type: Date, required: true },
     dueDate: { type: Date, required: true },
-    from: { type: Date, required: true },
-    to: { type: Date, required: true },
+    // A blank invoice bills no tracked time and has no period: both null,
+    // written as such, so a blank row and a ranged row are told apart by the
+    // value and never by a missing key.
+    from: { type: Date, default: null },
+    to: { type: Date, default: null },
     groupBy: {
       type: String,
       enum: ["project", "task"],
@@ -237,23 +250,12 @@ export function toClientInvoice(doc: InvoiceDocLike): InvoiceWire {
     status: doc.status,
     issueDate: doc.issueDate.toISOString(),
     dueDate: doc.dueDate.toISOString(),
-    from: doc.from.toISOString(),
-    to: doc.to.toISOString(),
+    // A blank invoice has no period; a row from before blank invoices always
+    // has both dates.
+    from: doc.from ? doc.from.toISOString() : null,
+    to: doc.to ? doc.to.toISOString() : null,
     groupBy: doc.groupBy,
-    lineItems: (doc.lineItems ?? []).map((line) => ({
-      key: line.key,
-      label: line.label,
-      projectId: line.projectId ?? null,
-      taskId: line.taskId ?? null,
-      seconds: line.seconds,
-      hours: line.hours,
-      hourlyRate: line.hourlyRate,
-      currency: line.currency,
-      amount: line.amount,
-      ...(line.taxCategory
-        ? { taxCategory: line.taxCategory, taxRate: line.taxRate ?? 0 }
-        : {}),
-    })),
+    lineItems: (doc.lineItems ?? []).map(copyLineItem),
     subtotal: doc.subtotal,
     taxRate: doc.taxRate ?? null,
     taxAmount: doc.taxAmount,
@@ -282,6 +284,32 @@ export function toClientInvoice(doc: InvoiceDocLike): InvoiceWire {
     // einvoice.issuedXml is deliberately never mapped.
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
+  };
+}
+
+/**
+ * A plain copy of a stored line. The manual-line keys (`kind`, `quantity`,
+ * `unit`, `unitPrice`) and the VAT pair appear only when the row has them, so
+ * a line written before either existed serialises exactly as it did.
+ */
+export function copyLineItem(line: InvoiceLineItem): InvoiceLineItem {
+  return {
+    key: line.key,
+    label: line.label,
+    projectId: line.projectId ?? null,
+    taskId: line.taskId ?? null,
+    ...(line.kind ? { kind: line.kind } : {}),
+    seconds: line.seconds,
+    hours: line.hours,
+    hourlyRate: line.hourlyRate,
+    currency: line.currency,
+    amount: line.amount,
+    ...(typeof line.quantity === "number" ? { quantity: line.quantity } : {}),
+    ...(line.unit ? { unit: line.unit } : {}),
+    ...(typeof line.unitPrice === "number" ? { unitPrice: line.unitPrice } : {}),
+    ...(line.taxCategory
+      ? { taxCategory: line.taxCategory, taxRate: line.taxRate ?? 0 }
+      : {}),
   };
 }
 
