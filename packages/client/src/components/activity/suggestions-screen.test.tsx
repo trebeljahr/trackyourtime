@@ -31,6 +31,13 @@ vi.mock("@/lib/active-workspace", () => ({ getActiveWorkspaceId: () => "w1" }));
 const toastInfo = vi.fn();
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: (m: string) => toastInfo(m), error: vi.fn() } }));
 
+const { QueryClient } = await import("@tanstack/react-query");
+let queryClient = new QueryClient();
+vi.mock("@tanstack/react-query", async (original) => ({
+  ...(await original<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => queryClient,
+}));
+
 const listFetch = vi.fn(async () => ({ entries: [] as unknown[] }));
 vi.mock("@/lib/trpc", () => {
   const utils = {
@@ -51,7 +58,7 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { SuggestionsScreen } = await import("./suggestions-screen");
+const { SuggestionsScreen, timesEdited } = await import("./suggestions-screen");
 
 const HOUR = 3_600_000;
 const T0 = Date.now() - 3 * HOUR;
@@ -104,6 +111,7 @@ const install = (activity: DesktopActivity | undefined): void => {
 
 beforeEach(() => {
   shell = "web";
+  queryClient = new QueryClient();
   createManualEntry.mockClear();
   toastInfo.mockClear();
   install(undefined);
@@ -177,6 +185,26 @@ describe("SuggestionsScreen", () => {
     await waitFor(() => expect(activity.dismiss).toHaveBeenCalledWith({ start: T0, end: T0 + 25 * 60_000 }));
   });
 
+  it("asks again when the entries change, and not when its own read lands", async () => {
+    shell = "electron";
+    const activity = bridge([suggestion()]);
+    install(activity);
+    render(<SuggestionsScreen />);
+    await screen.findByTestId("activity-suggestion");
+    const settled = activity.suggestions.mock.calls.length;
+    // A fetch finishing (this screen's own `entries.list` read) is not a change.
+    queryClient.setQueryData([["entries", "list"], { input: {}, type: "query" }], { entries: [] });
+    queryClient.setQueryData([["projects", "list"], { input: {}, type: "query" }], []);
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(activity.suggestions.mock.calls.length).toBe(settled);
+    // Something tracked elsewhere: sync or a settled mutation invalidates entries.*.
+    void queryClient.invalidateQueries({ queryKey: [["projects"]] });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(activity.suggestions.mock.calls.length).toBe(settled);
+    void queryClient.invalidateQueries({ queryKey: [["entries"]] });
+    await waitFor(() => expect(activity.suggestions.mock.calls.length).toBe(settled + 1));
+  });
+
   it("says capture is off and links to the desktop settings", async () => {
     shell = "electron";
     const activity = bridge([]);
@@ -185,5 +213,21 @@ describe("SuggestionsScreen", () => {
     render(<SuggestionsScreen />);
     expect(await screen.findByTestId("activity-status")).toHaveAttribute("data-status", "off");
     expect(await screen.findByTestId("activity-empty")).toBeInTheDocument();
+  });
+});
+
+describe("timesEdited", () => {
+  const block = { start: Date.parse("2026-09-22T09:00:30Z"), end: Date.parse("2026-09-22T09:25:10Z") };
+
+  it("is false when only the fields changed, whatever the seconds", () => {
+    expect(timesEdited(block, { start: "2026-09-22T09:00:00.000Z", end: "2026-09-22T09:25:00.000Z" })).toBe(false);
+    expect(
+      timesEdited(block, { start: new Date(block.start).toISOString(), end: new Date(block.end).toISOString() }),
+    ).toBe(false);
+  });
+
+  it("is true when either end moved by a minute or more", () => {
+    expect(timesEdited(block, { start: "2026-09-22T08:59:00.000Z", end: "2026-09-22T09:25:00.000Z" })).toBe(true);
+    expect(timesEdited(block, { start: "2026-09-22T09:00:00.000Z", end: "2026-09-22T09:40:00.000Z" })).toBe(true);
   });
 });

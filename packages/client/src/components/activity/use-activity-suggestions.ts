@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQueryClient, type QueryCacheNotifyEvent } from "@tanstack/react-query";
 import type {
   DesktopActivity,
   DesktopActivityInterval,
@@ -29,6 +30,25 @@ export const SUGGESTIONS_REFRESH_MS = 30_000;
  */
 export const TRACKED_REUSE_MS = 15_000;
 
+/**
+ * How long to gather invalidated entry queries into one refresh. A sync event
+ * or a settled mutation invalidates every `entries.*` query at once, and each
+ * would otherwise start its own round trip.
+ */
+export const ENTRIES_CHANGED_DEBOUNCE_MS = 500;
+
+/**
+ * An `entries.*` query was invalidated: something was tracked, changed or
+ * removed — here, from the tracker, or on another device via the sync
+ * socket. Only the invalidation counts, never a fetch finishing, since this
+ * screen's own reads of `entries.list` would otherwise refresh it forever.
+ */
+export const isEntriesInvalidation = (event: QueryCacheNotifyEvent): boolean => {
+  if (event.type !== "updated" || event.action.type !== "invalidate") return false;
+  const path: unknown = event.query.queryKey[0];
+  return Array.isArray(path) && path[0] === "entries";
+};
+
 export type ActivitySuggestionsState = {
   /** Null until main answers, and when it has no scope or its store is locked. */
   suggestions: DesktopActivitySuggestion[] | null;
@@ -45,14 +65,16 @@ export type ActivitySuggestionsState = {
 /**
  * The suggestions for one range (a day on screen), composed by main from what
  * it recorded minus what is tracked here. Refreshes on mount, on every
- * activity push from main, every 30 s while the document is visible, and
- * whenever a caller asks (after an accept or a dismiss).
+ * activity push from main, every 30 s while the document is visible, when
+ * the entries change (`isEntriesInvalidation`), and whenever a caller asks
+ * (after an accept or a dismiss).
  */
 export const useActivitySuggestions = (
   activity: DesktopActivity | null,
   range: DesktopActivityInterval,
 ): ActivitySuggestionsState => {
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const viewerId = useViewerId();
   const [suggestions, setSuggestions] = React.useState<DesktopActivitySuggestion[] | null>(null);
   const [loaded, setLoaded] = React.useState(false);
@@ -142,6 +164,22 @@ export const useActivitySuggestions = (
     }, SUGGESTIONS_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [activity, refresh]);
+
+  React.useEffect(() => {
+    if (activity === null) return;
+    let timer: number | null = null;
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (timer !== null || !isEntriesInvalidation(event)) return;
+      timer = window.setTimeout(() => {
+        timer = null;
+        void refresh({ fresh: true });
+      }, ENTRIES_CHANGED_DEBOUNCE_MS);
+    });
+    return () => {
+      unsubscribe();
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [activity, queryClient, refresh]);
 
   return { suggestions, loaded, failed, refresh, trackedBetween };
 };

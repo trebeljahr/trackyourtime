@@ -115,6 +115,25 @@ export const acceptFieldsOf = (suggestion: DesktopActivitySuggestion): AcceptFie
   ...(suggestion.proposed.billable !== undefined ? { billable: suggestion.proposed.billable } : {}),
 });
 
+/**
+ * Whether "Edit & add" changed the block's times, to the minute (the form's
+ * time fields hold minutes). Only then is the accept an edited one, which keeps
+ * the person's times; an edit of the project or the description alone is
+ * still a plain accept and is clipped to what is untracked NOW — otherwise
+ * time tracked since the card was drawn would be filed a second time.
+ */
+export const timesEdited = (
+  suggestion: Pick<DesktopActivitySuggestion, "start" | "end">,
+  args: Pick<ManualEntryArgs, "start" | "end">,
+): boolean => {
+  const minute = 60_000;
+  const moved = (was: number, now: string): boolean => {
+    const parsed = Date.parse(now);
+    return !Number.isFinite(parsed) || Math.floor(parsed / minute) !== Math.floor(was / minute);
+  };
+  return moved(suggestion.start, args.start) || moved(suggestion.end, args.end);
+};
+
 /** The toast for an accept that created nothing. */
 const refusalMessage = (
   reason: Exclude<AcceptOutcome, { ok: true }>["reason"],
@@ -398,15 +417,22 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
             : { start: new Date(editing.start).toISOString(), end: new Date(editing.end).toISOString() }
         }
         mutations={mutations}
-        onAdd={(args: ManualEntryArgs) =>
-          void accept(Date.parse(args.start), Date.parse(args.end), true, {
-            description: args.description,
-            projectId: args.projectId,
-            taskId: args.taskId ?? null,
-            tagIds: args.tagIds ?? [],
-            billable: args.billable,
-          })
-        }
+        onAdd={(args: ManualEntryArgs) => {
+          if (editing === null) return;
+          const edited = timesEdited(editing, args);
+          void accept(
+            edited ? Date.parse(args.start) : editing.start,
+            edited ? Date.parse(args.end) : editing.end,
+            edited,
+            {
+              description: args.description,
+              projectId: args.projectId,
+              taskId: args.taskId ?? null,
+              tagIds: args.tagIds ?? [],
+              billable: args.billable,
+            },
+          );
+        }}
       />
 
       <ActivityRuleDialog

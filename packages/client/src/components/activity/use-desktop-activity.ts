@@ -41,6 +41,33 @@ export const useDesktopActivitySnapshot = (): DesktopActivitySnapshot | null => 
   return electron ? snapshot : null;
 };
 
-/** The desktop app, with activity capture possible on this OS and channel. */
-export const useDesktopActivityAvailable = (): boolean =>
-  useDesktopActivitySnapshot()?.support.supported === true;
+/**
+ * The desktop app, with activity capture possible on this OS and channel.
+ *
+ * Kept as a boolean in state rather than derived from the snapshot: the nav
+ * (in `AppShell`) reads this, and main pushes a new snapshot every couple of
+ * seconds while it records. A snapshot in state would re-render the whole
+ * shell on each push; an unchanged boolean lets React bail out.
+ */
+export const useDesktopActivityAvailable = (): boolean => {
+  const electron = useIsElectron();
+  const [available, setAvailable] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!electron) return;
+    const activity = desktopActivity();
+    if (activity === null) return;
+    let live = true;
+    const take = (next: DesktopActivitySnapshot): void => {
+      if (live) setAvailable(next.support.supported);
+    };
+    const unsubscribe = activity.onChanged(take);
+    activity.snapshot().then(take, () => undefined);
+    return () => {
+      live = false;
+      unsubscribe();
+    };
+  }, [electron]);
+
+  return electron && available;
+};
