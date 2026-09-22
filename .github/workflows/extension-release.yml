@@ -169,7 +169,8 @@ jobs:
         run: pnpm run build:extension:prod
 
       # Checks the manifest version against the tag (the root package.json is
-      # the single source — docs/releasing.md step 1 bumps it), strips `key`
+      # the single source — docs/releasing.md → Steps, step 2 (`pnpm release`)
+      # bumps it), strips `key`
       # and zips the directory contents with manifest.json at the root. Without
       # a tag (a branch build) it checks against package.json's own version.
       - id: package

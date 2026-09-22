@@ -36,12 +36,12 @@
 # client emits no third-party script tags at all, so a self-hosted instance
 # makes no outbound request the operator did not ask for.
 #
-# A `v*` tag runs THIS workflow and extension-release.yml (the Chrome Web Store
+# A `v*` tag runs THIS workflow, extension-release.yml (the Chrome Web Store
 # upload, which only uploads an artifact while its secrets are unset) and
-# nothing else. desktop-release.yml and mobile-release.yml
-# run on manual dispatch only (their `on:` blocks list what has to be true
-# before a tag trigger comes back), and build-and-deploy.yml runs on pushes to
-# main and on pull requests.
+# desktop-release.yml (every desktop channel into a DRAFT GitHub Release;
+# publishing it is the release). mobile-release.yml runs on manual dispatch
+# only (its `on:` block lists what has to be true before a tag trigger comes
+# back), and build-and-deploy.yml runs on pushes to main and on pull requests.
 #
 # ── Jobs, in order ───────────────────────────────────────────────────────
 #

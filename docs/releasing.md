@@ -173,7 +173,11 @@ of them still works by hand.
    `scripts/lib/release-status.test.mjs`). On GitHub, the same table is the
    step summary of the newest `Release Summary` run for the tag
    (`.github/workflows/release-summary.yml`, started by each tag workflow
-   finishing, `actions: read` and `contents: read` only).
+   finishing, `actions: read`, `checks: read` and `contents: read` only).
+   That summary cannot see a **draft** release — its token is read-only,
+   and GitHub shows drafts to write access only — so it reports "no GitHub
+   Release visible" until the draft is published; run
+   `pnpm release:status vX.Y.Z` locally for that fact.
 
    **On the first release, `smoke` fails, and that is expected.** GHCR creates
    a new package as private, so the anonymous pull of

@@ -74,8 +74,9 @@ const rows = CHANNELS.map((channel) => {
 
   const jobs = api(`repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`)?.jobs ?? [];
   // Annotations say WHY a step was skipped (the extension's store upload).
-  // They need checks: read, which the summary workflow does not ask for, so a
-  // refusal only makes that one fact less specific.
+  // They need checks: read, which release-summary.yml asks for; a token
+  // without it (a fork, a narrower `gh auth` scope) only makes that one fact
+  // less specific.
   const annotations =
     channel.file === "extension-release.yml"
       ? jobs.flatMap(

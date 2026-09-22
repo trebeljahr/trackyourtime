@@ -27,6 +27,8 @@ on:
 
 permissions:
   actions: read
+  # The annotations that say why the extension's store upload was skipped.
+  checks: read
   contents: read
 
 # Several workflows finish close together for one tag; only the newest
