@@ -3,19 +3,20 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { after, describe, it } from "node:test";
-import { main } from "../scripts/einvoice-samples.js";
+import { LOGO_SAMPLE_CASE, logoSampleName, main } from "../scripts/einvoice-samples.js";
 import { EINVOICE_CASES, fixturePath } from "./fixtures/einvoice/cases.js";
 
 describe("einvoice-samples", () => {
   const out = mkdtempSync(join(tmpdir(), "einvoice-samples-"));
   after(() => rmSync(out, { recursive: true, force: true }));
 
-  it("writes every golden XML and one ZUGFeRD PDF per case", async () => {
+  it("writes every golden XML and one ZUGFeRD PDF per case, plus one PDF with the logo", async () => {
     const lines: string[] = [];
     const result = await main({ out, log: (line) => lines.push(line) });
 
     const xmlNames = EINVOICE_CASES.flatMap((c) => c.profiles.map((p) => `${c.name}.${p}.xml`));
-    const pdfNames = EINVOICE_CASES.map((c) => `${c.name}.zugferd.pdf`);
+    assert.ok(EINVOICE_CASES.some((c) => c.name === LOGO_SAMPLE_CASE));
+    const pdfNames = [...EINVOICE_CASES.map((c) => `${c.name}.zugferd.pdf`), logoSampleName(LOGO_SAMPLE_CASE)];
     assert.deepEqual(readdirSync(out).sort(), [...xmlNames, ...pdfNames].sort());
     assert.deepEqual(result.files.map((file) => basename(file)).sort(), [...xmlNames, ...pdfNames].sort());
 

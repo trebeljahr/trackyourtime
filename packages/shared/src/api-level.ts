@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 5;
+export const API_LEVEL = 6;
 
 export type ApiLevelChange = {
   level: number;
@@ -83,7 +83,7 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     ],
   },
   {
-    level: 5,
+    level: 6,
     release: "0.1.0",
     added: [
       "`settings.setBusinessLogo` and `settings.clearBusinessLogo`: the PNG or JPEG printed top right of every new invoice.",

@@ -24,7 +24,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 5;
+export const API_LEVEL = 6;
 
 export type ApiLevelChange = {
   level: number;
@@ -82,6 +82,15 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
       "`invoices.update`: edit a draft's number, dates, notes, language, VAT and lines, guarded by `updatedAt`.",
       "Manual lines: `lines` on `invoices.preview` and `invoices.create`; `kind`, `quantity`, `unit` and `unitPrice` on invoice line rows.",
       "Blank invoices: `from` and `to` are optional on `invoices.preview` and `invoices.create`, and `null` on the invoice row.",
+    ],
+  },
+  {
+    level: 6,
+    release: "0.1.0",
+    added: [
+      "`settings.setBusinessLogo` and `settings.clearBusinessLogo`: the PNG or JPEG printed top right of every new invoice.",
+      "`logo` on `settings.businessProfile` (a data URL with its pixel size, or null).",
+      "`hasLogo` on an invoice's `issuer` when the invoice carries the logo frozen at its creation.",
     ],
   },
 ];

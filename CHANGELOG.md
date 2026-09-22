@@ -99,6 +99,10 @@ browser extension to the Chrome Web Store only when its store secrets are set.
   breaks, the payment terms and the footer.
 - An invoice keeps a copy of both parties from the day it was created. A
   later edit to the profile or the client does not change it.
+- A business logo, uploaded in Settings → Billing (PNG or JPEG, up to
+  300 KB), printed top right of every new invoice and of its ZUGFeRD PDF. An
+  invoice keeps the logo it was created with; the workspace export carries
+  it and the import restores it with the profile.
 - The new invoice dialog warns when either address is missing, and suggests
   a due date from the payment terms.
 - An invoice also downloads as a ZUGFeRD PDF (PDF/A-3b with the EN 16931 XML

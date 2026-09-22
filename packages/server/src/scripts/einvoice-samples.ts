@@ -20,6 +20,7 @@ import type { EinvoiceProfile } from "@starter/shared";
 import { buildCiiXml } from "../services/einvoice/cii.js";
 import { renderZugferdPdf } from "../services/einvoice/pdfa3.js";
 import { assertEinvoiceReady } from "../services/einvoice/validate.js";
+import { inspectLogoBytes, type StoredLogo } from "../services/invoice-logo.js";
 import { EINVOICE_CASES, fixturePath } from "../tests/fixtures/einvoice/cases.js";
 
 /** Fixed so every run writes byte-identical PDFs. */
@@ -72,8 +73,27 @@ export async function main(options: SamplesOptions): Promise<SamplesResult> {
     const ready = assertEinvoiceReady(c.invoice(), profile);
     const xml = buildCiiXml(ready, profile);
     write(`${c.name}.zugferd.pdf`, await renderZugferdPdf(ready, xml, { generatedAt: SAMPLES_GENERATED_AT }));
+
+    // One PDF with the issuer logo frozen on it, so veraPDF checks the image
+    // XObject and its /SMask (PNG alpha) inside the PDF/A-3b container. The
+    // same XML: the logo is drawn, never serialised.
+    if (c.name === LOGO_SAMPLE_CASE) {
+      const frozen = { ...ready, issuer: { ...ready.issuer, logo: sampleLogo() } };
+      write(logoSampleName(c.name), await renderZugferdPdf(frozen, xml, { generatedAt: SAMPLES_GENERATED_AT }));
+    }
   }
   return { files };
+}
+
+/** The case that also gets a `-logo` PDF. */
+export const LOGO_SAMPLE_CASE = "standard-19";
+
+export const logoSampleName = (caseName: string): string => `${caseName}-logo.zugferd.pdf`;
+
+function sampleLogo(): StoredLogo {
+  const inspected = inspectLogoBytes(readFileSync(fixturePath("logo.png")));
+  if (!inspected.ok) throw new Error(`fixtures/einvoice/logo.png refused: ${inspected.refusal}`);
+  return inspected.logo;
 }
 
 function parseArgs(argv: readonly string[]): SamplesOptions {

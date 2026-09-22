@@ -38,6 +38,14 @@ that print as the issuer of your invoices. Fill in the fields, then click
 **Save business profile**. The button stays disabled while a field holds a
 value the server would refuse, and the field says why.
 
+The **Logo** at the top of the card prints top right of every invoice you
+create from then on, in the plain PDF and in the ZUGFeRD PDF; the XML files
+carry no image. Upload a PNG or JPEG of up to 300 KB and at most 2000 px on a
+side. Interlaced PNGs and CMYK JPEGs are refused, because the PDF/A-3b file
+cannot carry them; export the image without interlacing, or in RGB. An
+invoice keeps the logo it was created with: replacing or removing the logo
+changes only the invoices you create afterwards.
+
 | Field | ZUGFeRD | XRechnung | Notes |
 | --- | --- | --- | --- |
 | Legal name | Required | Required | The registered name of your business. |
