@@ -397,3 +397,22 @@ describe("createLineSplitter", () => {
     assert.deepEqual(lines, ["a", "bc", "next"]);
   });
 });
+
+/*
+ * Opt-in, never in CI: the parsers against a real `lsappinfo` on this Mac.
+ * Read-only and prompt-free, and it launches no Electron — but it does read
+ * the real frontmost app, which is why it is off unless asked for.
+ */
+describe("real lsappinfo", () => {
+  const enabled = process.env.TRACKYOURTIME_ACTIVITY_REAL_SOURCE_TEST === "1" && process.platform === "darwin";
+  it("parses what this Mac answers", { skip: !enabled }, async () => {
+    const { createNodeProcessRunner } = await import("./process-runner.ts");
+    const runner = createNodeProcessRunner();
+    const front = await runner.run(LSAPPINFO, ["front"]);
+    const asn = parseLsappinfoFront(front.stdout);
+    assert.ok(asn !== null, front.stdout);
+    const info = await runner.run(LSAPPINFO, ["info", "-only", "bundleid", "-only", "name", "-only", "pid", asn]);
+    const target = parseLsappinfoInfo(info.stdout);
+    assert.ok(target !== null && target.key !== "", info.stdout);
+  });
+});
