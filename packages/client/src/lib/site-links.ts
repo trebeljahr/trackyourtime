@@ -22,6 +22,8 @@ export const API_DOCS_URL = `${DOCS_URL}api/`;
 /** Every route, with a link to the OpenAPI document (`/docs/openapi.json`). */
 export const API_REFERENCE_URL = `${DOCS_URL}api/reference/`;
 export const MCP_DOCS_URL = `${DOCS_URL}mcp/`;
+/** ZUGFeRD / XRechnung e-invoices (docs-site/docs/e-invoices.md). */
+export const EINVOICE_DOCS_URL = `${DOCS_URL}e-invoices/`;
 /** How to build, install and update the desktop app (docs-site/docs/desktop.md). */
 export const DESKTOP_DOCS_URL = `${DOCS_URL}desktop/`;
 export const ISSUES_URL = `${REPO_URL}/issues`;

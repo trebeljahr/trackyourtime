@@ -8,6 +8,11 @@ describe("localizedPath", () => {
     expect(localizedPath("de", "/privacy/")).toBe("/de/privacy/");
     expect(localizedPath("de", "/")).toBe("/de/");
   });
+
+  it("maps a page whose German slug differs from the English one", () => {
+    expect(localizedPath("en", "/invoice-generator/")).toBe("/invoice-generator/");
+    expect(localizedPath("de", "/invoice-generator/")).toBe("/de/rechnung-erstellen/");
+  });
 });
 
 describe("marketingMetadata", () => {
