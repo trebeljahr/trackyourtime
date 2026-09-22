@@ -31,6 +31,8 @@ export const tracker: Translation<typeof source> = {
     notBillable: "Nicht abrechenbar",
   },
   bar: {
+    /** Before the running entry's start time in the bar. */
+    startedAt: "Seit",
     descriptionPlaceholder: "Woran arbeitest du?",
     addEntry: "Zeiteintrag hinzufügen",
     authBlocked: "Abgemeldet – melde dich an, um zu synchronisieren",

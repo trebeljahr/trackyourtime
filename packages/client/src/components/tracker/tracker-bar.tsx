@@ -14,7 +14,11 @@ import {
   WifiOff,
 } from "lucide-react";
 import Link from "next/link";
-import type { DescriptionSuggestion, EntryFields } from "@starter/core";
+import {
+  deviceTimeZone,
+  type DescriptionSuggestion,
+  type EntryFields,
+} from "@starter/core";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +29,7 @@ import { BillableGlyph } from "@/components/tracker/billable-glyph";
 import { DescriptionCombobox } from "@/components/tracker/description-combobox";
 import { ManualEntryDialog } from "@/components/tracker/manual-entry-dialog";
 import { QuickStartMenu } from "@/components/tracker/quick-start-menu";
+import { TimeField } from "@/components/tracker/time-field";
 import { useEntryMutations } from "@/components/tracker/use-entry-mutations";
 import { useIdleGuard } from "@/components/tracker/use-idle-guard";
 import { useRunawayGuard } from "@/components/tracker/use-runaway-guard";
@@ -34,6 +39,7 @@ import { useRunningEntry } from "@/hooks/use-sync";
 import { formatDurationFor } from "@/i18n/format";
 import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
+import { isTempId } from "@/lib/offline";
 import { isCapacitor } from "@/lib/shell";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -278,6 +284,7 @@ export function TrackerBar(): React.JSX.Element {
       className="sticky top-14 z-30 -mx-3 mb-6 border-b border-border bg-background/95 px-3 py-3 backdrop-blur md:-mx-6 md:px-6"
       data-testid="tracker-bar"
       data-running={isRunning ? "true" : "false"}
+      data-running-id={running?.id ?? ""}
     >
       {/* Its own line above the composer. Sharing the row meant it was the
           first thing before the description field and shifted every control
@@ -353,6 +360,25 @@ export function TrackerBar(): React.JSX.Element {
         </Button>
 
         <Separator orientation="vertical" className="hidden h-8 sm:block" />
+
+        {/* The running entry has no row in the list below — this bar is its
+            only editor — so the start time a forgotten Start needs moving
+            back is edited here. Read and written in the zone the entry was
+            recorded in, like every other time field. */}
+        {editsRunning && running ? (
+          <label className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+            {t("bar.startedAt")}
+            <TimeField
+              value={running.start}
+              timeFormat={format.timeFormat}
+              timeZone={running.timeZone ?? deviceTimeZone()}
+              disabled={isTempId(running.id)}
+              aria-label={t("fields.startTime")}
+              testId="tracker-start"
+              onCommit={(iso) => mutations.updateEntry({ id: running.id, start: iso })}
+            />
+          </label>
+        ) : null}
 
         <span
           className="w-24 shrink-0 text-right font-mono text-lg tabular-nums"

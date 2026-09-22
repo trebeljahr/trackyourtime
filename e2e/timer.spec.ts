@@ -36,9 +36,19 @@ function entryRow(page: Page, description: string): Locator {
     .filter({ hasText: description });
 }
 
-/** Every row that the list currently renders as still running. */
+/**
+ * Every row that the list currently renders as still running. The running
+ * entry belongs to the tracker bar and has no row of its own, so this is
+ * expected to be empty at all times — it is asserted to catch the row coming
+ * back, which read as two timers.
+ */
 function runningRows(page: Page): Locator {
   return page.locator('[data-testid="entry-row"][data-running="true"]');
+}
+
+/** The tracker bar while a timer runs — the running entry's one editor. */
+function runningBar(page: Page): Locator {
+  return page.locator('[data-testid="tracker-bar"][data-running="true"]');
 }
 
 /** Sign up a fresh user and land on the tracker with the list settled. */
@@ -85,12 +95,15 @@ test.describe("Timer", () => {
       { timeout: 15_000 },
     );
 
-    // …and exactly one row in the list is the running one.
-    await expect(runningRows(page)).toHaveCount(1);
-    await expect(
-      runningRows(page).getByTestId("entry-description"),
-    ).toHaveText("Writing the spec");
-    await expect(runningRows(page).getByTestId("entry-end")).toHaveText("now");
+    // …and the running entry lives in the bar, not in the list: a row for it
+    // under Today read as a second timer.
+    await expect(runningBar(page)).toHaveCount(1);
+    await expect(page.getByTestId("tracker-description")).toHaveValue(
+      "Writing the spec",
+    );
+    await expect(page.getByTestId("tracker-start")).toBeVisible();
+    await expect(runningRows(page)).toHaveCount(0);
+    await expect(entryRow(page, "Writing the spec")).toHaveCount(0);
 
     await page.getByTestId("tracker-toggle").click();
 
@@ -103,7 +116,7 @@ test.describe("Timer", () => {
       "data-running",
       "false",
     );
-    await expect(runningRows(page)).toHaveCount(0);
+    await expect(runningBar(page)).toHaveCount(0);
 
     const row = entryRow(page, "Writing the spec");
     await expect(row).toHaveCount(1);
@@ -148,7 +161,7 @@ test.describe("Timer", () => {
     await page.goto("/app/track");
     await page.getByTestId("tracker-description").fill("Reading the RFC");
     await page.getByTestId("tracker-toggle").click();
-    await expect(runningRows(page)).toHaveCount(1);
+    await expect(runningBar(page)).toHaveCount(1);
 
     // The detector is the OS in real life, so the test injects a reading
     // instead of idling for a real minute. `__trackYourTimeIdle` feeds exactly the
@@ -175,7 +188,7 @@ test.describe("Timer", () => {
     // Paused: the entry is closed, nothing is running, and the seconds it had
     // before the lock survive — a truncation is clamped to stay after the
     // entry's start, so it can never destroy tracked time.
-    await expect(runningRows(page)).toHaveCount(0);
+    await expect(runningBar(page)).toHaveCount(0);
     const paused = entryRow(page, "Reading the RFC").first();
     await expect(paused).toHaveAttribute("data-running", "false");
 
@@ -183,13 +196,12 @@ test.describe("Timer", () => {
     await page.evaluate(() => window.__trackYourTimeIdle?.simulate("active"));
 
     // A resume is two chained writes — close the old entry, open a new one —
-    // and the list is briefly inconsistent while `entries.start` is in flight:
-    // the optimistic row is on screen before every cache the pause invalidated
-    // has caught up, so a count taken in that window can still see the paused
-    // row as running. Wait for the new row to carry its server id first.
-    const resumed = runningRows(page).first();
+    // and the screen is briefly inconsistent while `entries.start` is in
+    // flight: the optimistic entry is in the bar before every cache the pause
+    // invalidated has caught up. Wait for the bar to carry its server id first.
+    const bar = page.getByTestId("tracker-bar");
     await expect
-      .poll(async () => (await resumed.getAttribute("data-entry-id")) ?? "", {
+      .poll(async () => (await bar.getAttribute("data-running-id")) ?? "", {
         message: "expected the resumed row to settle to its server id",
         // The optimistic row is there in a frame; the id it settles to comes
         // from the server, which is the slow part under a loaded suite.
@@ -197,13 +209,15 @@ test.describe("Timer", () => {
       })
       .not.toMatch(/^(?:temp-|$)/);
 
-    await expect(runningRows(page)).toHaveCount(1);
-    await expect(
-      runningRows(page).getByTestId("entry-description"),
-    ).toHaveText("Reading the RFC");
+    await expect(runningBar(page)).toHaveCount(1);
+    await expect(page.getByTestId("tracker-description")).toHaveValue(
+      "Reading the RFC",
+    );
 
-    // One session, now two rows: the work before the lock and the work after
-    // it. The time spent away is in neither.
+    // One session, now two entries: the work before the lock, listed, and the
+    // work after it, running in the bar. The time spent away is in neither.
+    await expect(entryRow(page, "Reading the RFC")).toHaveCount(1);
+    await page.getByTestId("tracker-toggle").click();
     await expect(entryRow(page, "Reading the RFC")).toHaveCount(2);
   });
 
@@ -213,30 +227,29 @@ test.describe("Timer", () => {
     // A finished entry to come back to later.
     await page.getByTestId("tracker-description").fill("First task");
     await page.getByTestId("tracker-toggle").click();
-    await expect(runningRows(page)).toHaveCount(1);
+    await expect(runningBar(page)).toHaveCount(1);
     await page.getByTestId("tracker-toggle").click();
-    await expect(runningRows(page)).toHaveCount(0);
+    await expect(runningBar(page)).toHaveCount(0);
     await expect(entryRow(page, "First task")).toHaveCount(1);
 
     // Second timer.
     await page.getByTestId("tracker-description").fill("Second task");
     await page.getByTestId("tracker-toggle").click();
-    await expect(runningRows(page)).toHaveCount(1);
-    await expect(
-      runningRows(page).getByTestId("entry-description"),
-    ).toHaveText("Second task");
+    await expect(runningBar(page)).toHaveCount(1);
+    await expect(page.getByTestId("tracker-description")).toHaveValue(
+      "Second task",
+    );
+    await expect(runningRows(page)).toHaveCount(0);
 
     // Continuing the first entry starts a third timer, which must stop the
     // second one rather than run alongside it.
     await entryRow(page, "First task").getByTestId("entry-continue").click();
 
-    await expect(runningRows(page)).toHaveCount(1);
-    await expect(
-      runningRows(page).getByTestId("entry-description"),
-    ).toHaveText("First task");
+    await expect(runningBar(page)).toHaveCount(1);
     await expect(page.getByTestId("tracker-description")).toHaveValue(
       "First task",
     );
+    await expect(runningRows(page)).toHaveCount(0);
 
     // The interrupted timer kept its time and is no longer live.
     const second = entryRow(page, "Second task");
@@ -247,7 +260,7 @@ test.describe("Timer", () => {
     );
 
     await page.getByTestId("tracker-toggle").click();
-    await expect(runningRows(page)).toHaveCount(0);
+    await expect(runningBar(page)).toHaveCount(0);
   });
 
   test("logs a manual entry with an explicit duration", async ({ page }) => {
@@ -292,7 +305,7 @@ test.describe("Timer", () => {
     await expect(row.getByTestId("entry-duration")).toHaveValue("0:45:00");
 
     // Adding logged the block without starting a timer.
-    await expect(runningRows(page)).toHaveCount(0);
+    await expect(runningBar(page)).toHaveCount(0);
   });
 
   /**
@@ -359,35 +372,50 @@ test.describe("Timer", () => {
   });
 
   /**
-   * Regression: the running row used to render a Continue button. Clicking it
-   * stopped the entry and started an identical copy, so repeatedly pressing it
-   * shredded one stretch of work into a pile of few-second fragments instead of
-   * doing the obvious thing.
+   * The running entry has no row: the tracker bar is its one editor, and a
+   * row for it under Today read as a second timer. So the bar carries the
+   * start-time field a forgotten Start needs, and the row appears only once
+   * the entry has stopped — offering Continue, never a Stop of its own.
    */
-  test("the running row offers Stop, not Continue", async ({ page }) => {
+  test("the running entry is edited in the bar and listed once stopped", async ({
+    page,
+  }) => {
     await openTracker(page, "running-row");
 
     await page.getByTestId("tracker-description").fill("Long stretch");
     await page.getByTestId("tracker-toggle").click();
-    await expect(runningRows(page)).toHaveCount(1);
-
-    const row = runningRows(page).first();
-    await expect(row.getByTestId("entry-stop")).toBeVisible();
-    await expect(row.getByTestId("entry-continue")).toHaveCount(0);
-
-    // Stopping from the row stops that entry — it must not spawn a second one.
-    await row.getByTestId("entry-stop").click();
+    await expect(runningBar(page)).toHaveCount(1);
     await expect(runningRows(page)).toHaveCount(0);
+    await expect(entryRow(page, "Long stretch")).toHaveCount(0);
+
+    // Moving the start back is the edit a running entry needs most.
+    const start = page.getByTestId("tracker-start");
+    await expect(start).toBeVisible();
+    const started = page.waitForResponse(
+      (response) => response.url().includes("entries.update") && response.ok(),
+    );
+    await start.fill("00:00");
+    await start.press("Enter");
+    await started;
+    await expect(page.getByTestId("tracker-elapsed")).toHaveText(
+      /^(?:[1-9]|1\d|2[0-3]):\d{2}:\d{2}$/,
+      { timeout: 15_000 },
+    );
+
+    await page.getByTestId("tracker-toggle").click();
+    await expect(runningBar(page)).toHaveCount(0);
+    await expect(page.getByTestId("tracker-start")).toHaveCount(0);
     await expect(entryRow(page, "Long stretch")).toHaveCount(1);
     await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
       "data-state",
       "idle",
     );
 
-    // And the stopped row goes back to offering Continue.
-    await expect(
-      entryRow(page, "Long stretch").getByTestId("entry-continue"),
-    ).toBeVisible();
+    // The stopped row offers Continue, and kept the moved start.
+    const row = entryRow(page, "Long stretch");
+    await expect(row.getByTestId("entry-continue")).toBeVisible();
+    await expect(row.getByTestId("entry-stop")).toHaveCount(0);
+    await expect(row.getByTestId("entry-start")).toHaveValue("00:00");
   });
 
   test("the project picker can create a project without typing a name", async ({
@@ -422,7 +450,7 @@ test.describe("Timer", () => {
 
     await page.getByTestId("tracker-description").fill("Unfiled work");
     await page.getByTestId("tracker-toggle").click();
-    await expect(runningRows(page)).toHaveCount(1);
+    await expect(runningBar(page)).toHaveCount(1);
     await page.getByTestId("tracker-toggle").click();
 
     const row = entryRow(page, "Unfiled work");
@@ -455,9 +483,9 @@ test.describe("Timer", () => {
 
     await page.getByTestId("tracker-description").fill("Stray click");
     await page.getByTestId("tracker-toggle").click();
-    await expect(runningRows(page)).toHaveCount(1);
+    await expect(runningBar(page)).toHaveCount(1);
     await page.getByTestId("tracker-toggle").click();
-    await expect(runningRows(page)).toHaveCount(0);
+    await expect(runningBar(page)).toHaveCount(0);
 
     // Ignoring the offer keeps the entry.
     const discard = page.getByRole("button", { name: "Discard" });

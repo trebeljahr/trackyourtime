@@ -127,10 +127,12 @@ test.describe("Command palette", () => {
     await openTracker(page, "palette-offline");
     await page.getByTestId("tracker-description").fill("Offline stretch");
     await startFromBar(page);
-    await expect(entryRow(page, "Offline stretch")).toHaveAttribute(
-      "data-running",
-      "true",
+    // The running entry lives in the bar; it gets a row once stopped.
+    await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
+      "data-state",
+      "running",
     );
+    await expect(entryRow(page, "Offline stretch")).toHaveCount(0);
 
     await context.setOffline(true);
     await expect(page.getByTestId("offline-indicator")).toBeVisible();
@@ -246,14 +248,17 @@ test.describe("Tracker description autocomplete", () => {
     const description = page.getByTestId("tracker-description");
     await description.fill("Draft");
     await startFromBar(page);
-    await expect(entryRow(page, "Draft")).toHaveAttribute(
-      "data-running",
-      "true",
+    await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
+      "data-state",
+      "running",
     );
 
     await description.fill("Draft two");
+    const saved = page.waitForResponse(
+      (response) => response.url().includes("entries.update") && response.ok(),
+    );
     await page.getByTestId("tracker-elapsed").click();
-    await expect(entryRow(page, "Draft two")).toBeVisible();
+    await saved;
 
     await page.reload();
     await expect(description).toHaveValue("Draft two");

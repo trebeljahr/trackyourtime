@@ -87,9 +87,10 @@ test.describe("Reports", () => {
 
     // Nothing may be running: a live entry would make the report totals move
     // between assertions.
-    await expect(
-      page.locator('[data-testid="entry-row"][data-running="true"]')
-    ).toHaveCount(0);
+    await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
+      "data-state",
+      "idle"
+    );
   });
 
   test("totals add up the tracked time and groups it", async ({ page }) => {

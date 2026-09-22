@@ -138,7 +138,11 @@ function SyncDot({ status }: { status: SyncStatus }): React.JSX.Element {
   );
 }
 
-function RunningTimerIndicator(): React.JSX.Element | null {
+function RunningTimerIndicator({
+  pathname,
+}: {
+  pathname: string;
+}): React.JSX.Element | null {
   const { entry, elapsedSec } = useRunningEntry();
   const { duration } = useFormatSettings();
   const { activeId, workspaces } = useActiveWorkspace();
@@ -155,6 +159,13 @@ function RunningTimerIndicator(): React.JSX.Element | null {
       ? (workspaces?.find((workspace) => workspace.id === entry.workspaceId)
           ?.name ?? null)
       : null;
+
+  // On the tracker the bar right under the header IS the running timer, so
+  // this pill would be the same clock twice, linking to the page it is on.
+  // A timer from another workspace is not in that bar, so it keeps the pill.
+  if (elsewhere === null && pathname.replace(/\/$/, "") === "/app/track") {
+    return null;
+  }
 
   return (
     <Link
@@ -516,7 +527,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
                 </TooltipContent>
               </Tooltip>
               <WorkspaceSwitcher />
-              <RunningTimerIndicator />
+              <RunningTimerIndicator pathname={pathname} />
               <SyncDot status={status} />
               <ThemeSync />
               <LocaleSync />

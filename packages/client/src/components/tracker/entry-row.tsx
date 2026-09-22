@@ -49,6 +49,13 @@ import { cn } from "@/lib/utils";
 
 const MINUTE_MS = 60_000;
 
+/**
+ * The second line's pickers: compact left-aligned text that reads as a
+ * caption until pointed at. A combobox trigger's last child is its chevron.
+ */
+const META_CONTROL =
+  "h-7 w-auto min-w-0 shrink justify-start px-2 text-xs text-muted-foreground hover:text-foreground [&>svg:last-child]:opacity-0 group-hover/row:[&>svg:last-child]:opacity-50 focus-visible:[&>svg:last-child]:opacity-50";
+
 export type EntryRowProps = {
   entry: DetailedEntry;
   mutations: EntryMutations;
@@ -168,37 +175,16 @@ function EntryRowImpl({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 last:border-b-0 hover:bg-muted/40",
-        // Every row shares ONE column template, so description, project,
-        // client, task, tags and the times line up down the list instead of
-        // each row packing its own width. Track sizes are `fr` or fixed —
-        // never `auto`/`min-content`, which resolve against a single row's
-        // content and would bring the ragged columns straight back.
-        //
-        // Two templates for the same ELEVEN items: the fixed part of the row
-        // (times, duration, amount) costs ~23rem whatever the viewport, so
-        // below `xl` the client and the amount collapse to zero-width tracks
-        // rather than being hidden — `display: none` would drop a grid item
-        // and slide every later column one track left. The lower switch is
-        // 1140px rather than `lg`, because at 1024 what is left over is so
-        // thin the project reads "A…"; below it the row stays a wrapping flex
-        // line, ragged but legible.
-        "min-[1140px]:grid min-[1140px]:grid-cols-[minmax(0,1.8fr)_minmax(0,1.4fr)_0px_minmax(0,1.2fr)_minmax(5rem,1fr)_2rem_12.5rem_5.5rem_0px_2rem_2rem]",
-        "xl:grid-cols-[minmax(0,1.8fr)_minmax(0,1.5fr)_minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(5.5rem,1fr)_2rem_13rem_5.5rem_4.5rem_2rem_2rem]",
+        // Two lines. What the work WAS gets the whole left side to itself, so
+        // a long description is no longer cut to "Create Tra…" by eight
+        // columns sharing one line; what it was filed under sits quieter
+        // underneath. The right side keeps fixed widths, so times, durations
+        // and amounts still line up down the list.
+        "group/row flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5 last:border-b-0 hover:bg-muted/40 sm:flex-nowrap",
         nested && "pl-10",
-        // The one row that is still happening. A 5% tint was not enough to
-        // find it in a day of twelve rows, so it also gets an accent edge and
-        // a live badge — three signals rather than one, and the badge carries
-        // a word, so the row never relies on colour alone.
-        //
-        // `destructive`, because that is already this app's "live" colour: the
-        // header's running dot and the Stop button both use it, while
-        // `primary` is near-black in the light theme and reads as "selected".
-        //
-        // The edge is a pseudo-element rather than a border, and the badge
-        // lives INSIDE the description cell: both column templates above name
-        // exactly eleven tracks, so a twelfth grid item — or four pixels of
-        // border — would knock this row's columns out of line with the rest.
+        // The list leaves the running entry to the tracker bar, so this is a
+        // fallback: if one ever reaches a row it still says so, with a word
+        // and an edge rather than colour alone.
         running &&
           "relative bg-destructive/[0.06] hover:bg-destructive/10 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-destructive"
       )}
@@ -207,281 +193,286 @@ function EntryRowImpl({
       data-running={running ? "true" : "false"}
       data-syncing={syncing ? "true" : "false"}
     >
-      <div className="flex min-w-0 flex-1 basis-56 items-center gap-2 min-[1140px]:w-full">
-        {running ? (
-          <span
-            className="flex shrink-0 items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive"
-            data-testid="entry-running-badge"
-          >
-            <span className="relative flex size-1.5">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-75" />
-              <span className="relative inline-flex size-1.5 rounded-full bg-destructive" />
+      <div className="min-w-0 flex-1 basis-64">
+        <div className="flex min-w-0 items-center gap-2">
+          {running ? (
+            <span
+              className="shrink-0 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive"
+              data-testid="entry-running-badge"
+            >
+              {t("row.running")}
             </span>
-            {t("row.running")}
-          </span>
-        ) : null}
+          ) : null}
 
-        {editingDescription ? (
-          <Input
-            value={draft}
-            autoFocus
-            aria-label={tc("fields.description")}
-            className="h-8 min-w-0 flex-1"
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={commitDescription}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commitDescription();
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
+          {editingDescription ? (
+            <Input
+              value={draft}
+              autoFocus
+              aria-label={tc("fields.description")}
+              className="h-8 min-w-0 flex-1"
+              onChange={(event) => setDraft(event.target.value)}
+              onBlur={commitDescription}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitDescription();
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setDraft(entry.description);
+                  setEditingDescription(false);
+                }
+              }}
+              data-testid="entry-description-input"
+            />
+          ) : (
+            <button
+              type="button"
+              disabled={syncing}
+              className={cn(
+                // Two lines before clipping, not one: the description has the
+              // whole left side now, and a long one is the thing this row
+              // exists to show.
+              "line-clamp-2 min-w-0 flex-1 break-words rounded px-2 py-0.5 text-left text-sm hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent",
+                entry.description.trim() === "" && "text-muted-foreground italic"
+              )}
+              onClick={() => {
                 setDraft(entry.description);
-                setEditingDescription(false);
-              }
-            }}
-            data-testid="entry-description-input"
-          />
-        ) : (
-          <button
-            type="button"
+                setEditingDescription(true);
+              }}
+              data-testid="entry-description"
+            >
+              {entry.description.trim() === ""
+                ? t("row.addDescription")
+                : entry.description}
+            </button>
+          )}
+        </div>
+
+        {/* Same coupled control as the tracker bar, the dialogs and the
+            calendar: filing a past entry under a project that does not exist
+            yet is exactly when you need to make one. The chevrons show on hover
+            and focus only — on every row at once they were most of the noise. */}
+        <div className="flex min-w-0 flex-nowrap items-center">
+          <ProjectTaskPicker
+            value={fields}
+            onChange={applyFields}
             disabled={syncing}
-            className={cn(
-              "min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent",
-              entry.description.trim() === "" && "text-muted-foreground italic"
-            )}
-            onClick={() => {
-              setDraft(entry.description);
-              setEditingDescription(true);
-            }}
-            data-testid="entry-description"
-          >
-            {entry.description.trim() === ""
-              ? t("row.addDescription")
-              : entry.description}
-          </button>
-        )}
+            size="sm"
+            bare
+            layout="contents"
+            controlClassName={META_CONTROL}
+            testIdPrefix="entry"
+          />
+
+          {/* The chips ARE the trigger, so tagging costs one click and the row
+              keeps its height however many tags it carries — the overflow
+              collapses into "+N" rather than wrapping. */}
+          <TagPicker
+            value={entry.tagIds}
+            disabled={syncing}
+            maxChips={2}
+            placeholder=""
+            className="h-7 w-auto shrink-0 border-0 px-2 text-xs shadow-none"
+            testId="entry-tags"
+            onChange={(ids) => mutations.updateEntry({ id: entry.id, tagIds: ids })}
+          />
+        </div>
       </div>
 
-      {/* Same coupled control as the tracker bar, the dialogs and the
-          calendar: filing a past entry under a project that does not exist
-          yet is exactly when you need to make one, and sending that trip to
-          the Projects screen loses the row you were fixing. `contents` keeps
-          project, client and task as three grid items of THIS row, so they
-          stay in the shared column template. */}
-      <ProjectTaskPicker
-        value={fields}
-        onChange={applyFields}
-        disabled={syncing}
-        size="sm"
-        bare
-        layout="contents"
-        controlClassName="h-8 w-full min-w-0 max-w-48 min-[1140px]:max-w-none"
-        testIdPrefix="entry"
-      />
-
-      {/* The chips ARE the trigger, so tagging costs one click and the row
-          keeps its height however many tags it carries — the overflow
-          collapses into "+N" rather than wrapping onto a second line. */}
-      <TagPicker
-        value={entry.tagIds}
-        disabled={syncing}
-        maxChips={2}
-        placeholder=""
-        className="h-8 w-full min-w-0 max-w-44 border-0 px-2 shadow-none min-[1140px]:max-w-none"
-        testId="entry-tags"
-        onChange={(ids) => mutations.updateEntry({ id: entry.id, tagIds: ids })}
-      />
-
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-8 cap-touch"
-        disabled={syncing}
-        aria-label={
-          entry.billable ? tc("fields.billable") : t("fields.notBillable")
-        }
-        aria-pressed={entry.billable}
-        onClick={() =>
-          mutations.updateEntry({ id: entry.id, billable: !entry.billable })
-        }
-        data-testid="entry-billable"
-        data-billable={entry.billable ? "true" : "false"}
-      >
-        <BillableGlyph billable={entry.billable} />
-      </Button>
-
-      <div className="flex min-w-0 items-center gap-1 min-[1140px]:w-full">
-        <TimeField
-          value={entry.start}
-          timeFormat={format.timeFormat}
-          timeZone={entryZone}
+      {/* Below `sm` the row wraps: the description block takes the line and
+          the controls follow underneath, wrapping among themselves. */}
+      <div className="flex w-full flex-wrap items-center gap-1 sm:ml-auto sm:w-auto sm:shrink-0 sm:flex-nowrap">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 cap-touch"
           disabled={syncing}
-          aria-label={t("fields.startTime")}
-          testId="entry-start"
-          onCommit={handleStartCommit}
-        />
-        <span className="text-muted-foreground">–</span>
-        {entry.end === null ? (
-          <span
-            className="w-[4.5rem] text-center font-mono text-sm text-muted-foreground tabular-nums"
-            data-testid="entry-end"
-          >
-            {t("row.now")}
-          </span>
-        ) : (
+          aria-label={
+            entry.billable ? tc("fields.billable") : t("fields.notBillable")
+          }
+          aria-pressed={entry.billable}
+          onClick={() =>
+            mutations.updateEntry({ id: entry.id, billable: !entry.billable })
+          }
+          data-testid="entry-billable"
+          data-billable={entry.billable ? "true" : "false"}
+        >
+          <BillableGlyph billable={entry.billable} />
+        </Button>
+
+        <div className="flex w-[13.5rem] items-center gap-1">
           <TimeField
-            value={entry.end}
+            value={entry.start}
             timeFormat={format.timeFormat}
             timeZone={entryZone}
             disabled={syncing}
-            aria-label={t("fields.endTime")}
-            testId="entry-end"
-            onCommit={handleEndCommit}
+            aria-label={t("fields.startTime")}
+            testId="entry-start"
+            onCommit={handleStartCommit}
+          />
+          <span className="text-muted-foreground">–</span>
+          {entry.end === null ? (
+            <span
+              className="w-[4.5rem] text-center font-mono text-sm text-muted-foreground tabular-nums"
+              data-testid="entry-end"
+            >
+              {t("row.now")}
+            </span>
+          ) : (
+            <TimeField
+              value={entry.end}
+              timeFormat={format.timeFormat}
+              timeZone={entryZone}
+              disabled={syncing}
+              aria-label={t("fields.endTime")}
+              testId="entry-end"
+              onCommit={handleEndCommit}
+            />
+          )}
+          {/* Without this an entry reads "23:30 – 00:30" and looks like it ran
+              backwards, with nothing to say the end is on the next day. */}
+          {spansDayBoundaryInZone(entry.start, entry.end, entryZone) ? (
+            <span
+              className="ml-1 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground"
+              title={t("row.nextDayTitle")}
+              data-testid="entry-next-day"
+            >
+              {t("row.nextDay")}
+            </span>
+          ) : null}
+          {/* Only shown when the entry was recorded somewhere else — otherwise
+              every row would carry a redundant label for the zone you are in. */}
+          {foreignZone ? (
+            <span
+              className="ml-1 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground"
+              title={t("row.recordedIn", { zone: entryZone })}
+              data-testid="entry-zone"
+            >
+              {zoneLabel(entryZone)}
+            </span>
+          ) : null}
+        </div>
+
+        {running ? (
+          <LiveDuration
+            baseSec={0}
+            matchEntryId={entry.id}
+            className="w-24 text-right text-sm font-semibold"
+            testId="entry-duration"
+          />
+        ) : (
+          <DurationInput
+            value={entry.durationSec}
+            format={format.durationFormat}
+            disabled={syncing}
+            aria-label={tc("fields.duration")}
+            testId="entry-duration"
+            className="h-8 w-24"
+            onCommit={handleDurationCommit}
           />
         )}
-        {/* Without this an entry reads "23:30 – 00:30" and looks like it ran
-            backwards, with nothing to say the end is on the next day. */}
-        {spansDayBoundaryInZone(entry.start, entry.end, entryZone) ? (
-          <span
-            className="ml-1 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground"
-            title={t("row.nextDayTitle")}
-            data-testid="entry-next-day"
-          >
-            {t("row.nextDay")}
-          </span>
-        ) : null}
-        {/* Only shown when the entry was recorded somewhere else — otherwise
-            every row would carry a redundant label for the zone you are in. */}
-        {foreignZone ? (
-          <span
-            className="ml-1 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground"
-            title={t("row.recordedIn", { zone: entryZone })}
-            data-testid="entry-zone"
-          >
-            {zoneLabel(entryZone)}
-          </span>
-        ) : null}
-      </div>
 
-      {running ? (
-        <LiveDuration
-          baseSec={0}
-          matchEntryId={entry.id}
-          className="w-24 text-right text-sm font-semibold min-[1140px]:w-full"
-          testId="entry-duration"
-        />
-      ) : (
-        <DurationInput
-          value={entry.durationSec}
-          format={format.durationFormat}
-          disabled={syncing}
-          aria-label={tc("fields.duration")}
-          testId="entry-duration"
-          className="h-8 w-24 min-[1140px]:w-full"
-          onCommit={handleDurationCommit}
-        />
-      )}
-
-      <span
-        className="hidden w-20 overflow-hidden text-right text-sm text-muted-foreground tabular-nums sm:inline min-[1140px]:block min-[1140px]:w-full"
-        data-testid="entry-amount"
-      >
-        {entry.hourlyRate === null || entry.amount === null
-          ? ""
-          : format.money(entry.amount)}
-      </span>
-
-      {/* The running entry gets Stop, not Continue. "Continuing" something
-          already running stops it and starts an identical copy, which silently
-          shreds one stretch of work into a pile of few-second fragments. */}
-      {running ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8 cap-touch bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
-          aria-label={t("row.stop")}
-          onClick={() => mutations.stopTimer()}
-          data-testid="entry-stop"
+        <span
+          className="hidden w-20 overflow-hidden text-right text-sm text-muted-foreground tabular-nums sm:inline"
+          data-testid="entry-amount"
         >
-          <Square />
-        </Button>
-      ) : (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8 cap-touch text-primary"
-          aria-label={t("row.continue")}
-          onClick={() => mutations.continueEntry(entry)}
-          data-testid="entry-continue"
-        >
-          <Play />
-        </Button>
-      )}
+          {entry.hourlyRate === null || entry.amount === null
+            ? ""
+            : format.money(entry.amount)}
+        </span>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        {/* The running entry gets Stop, not Continue. "Continuing" something
+            already running stops it and starts an identical copy, which silently
+            shreds one stretch of work into a pile of few-second fragments. */}
+        {running ? (
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8 cap-touch"
-            aria-label={t("row.actions")}
-            data-testid="entry-menu"
+            className="size-8 cap-touch bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
+            aria-label={t("row.stop")}
+            onClick={() => mutations.stopTimer()}
+            data-testid="entry-stop"
           >
-            <Ellipsis />
+            <Square />
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {/* Pinning is what promotes an entry from "recently tracked" to
-              "always one click away". A temp entry is excluded: its project
-              and task are real, but pinning something the server has not seen
-              invites a pin that outlives an entry the replay may still
-              reject. */}
-          {pinned ? (
-            <DropdownMenuItem
-              onSelect={() => {
-                if (favoriteId !== null) quickStarts.unpin(favoriteId);
-              }}
-              data-testid="entry-menu-unpin"
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 cap-touch text-primary"
+            aria-label={t("row.continue")}
+            onClick={() => mutations.continueEntry(entry)}
+            data-testid="entry-continue"
+          >
+            <Play />
+          </Button>
+        )}
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 cap-touch"
+              aria-label={t("row.actions")}
+              data-testid="entry-menu"
             >
-              <PinOff /> {t("row.unpin")}
+              <Ellipsis />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {/* Pinning is what promotes an entry from "recently tracked" to
+                "always one click away". A temp entry is excluded: its project
+                and task are real, but pinning something the server has not seen
+                invites a pin that outlives an entry the replay may still
+                reject. */}
+            {pinned ? (
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (favoriteId !== null) quickStarts.unpin(favoriteId);
+                }}
+                data-testid="entry-menu-unpin"
+              >
+                <PinOff /> {t("row.unpin")}
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                disabled={syncing}
+                onSelect={() => quickStarts.pin(quick)}
+                data-testid="entry-menu-pin"
+              >
+                <Pin /> {t("row.pin")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onSelect={() => mutations.duplicateEntry(entry)}
+              data-testid="entry-menu-duplicate"
+            >
+              <Copy /> {tc("actions.duplicate")}
             </DropdownMenuItem>
-          ) : (
             <DropdownMenuItem
               disabled={syncing}
-              onSelect={() => quickStarts.pin(quick)}
-              data-testid="entry-menu-pin"
+              onSelect={() => onEdit(entry)}
+              data-testid="entry-menu-edit"
             >
-              <Pin /> {t("row.pin")}
+              <Pencil /> {tc("actions.edit")}
             </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            onSelect={() => mutations.duplicateEntry(entry)}
-            data-testid="entry-menu-duplicate"
-          >
-            <Copy /> {tc("actions.duplicate")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={syncing}
-            onSelect={() => onEdit(entry)}
-            data-testid="entry-menu-edit"
-          >
-            <Pencil /> {tc("actions.edit")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => mutations.removeEntry(entry)}
-            data-testid="entry-menu-delete"
-          >
-            <Trash2 /> {tc("actions.delete")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => mutations.removeEntry(entry)}
+              data-testid="entry-menu-delete"
+            >
+              <Trash2 /> {tc("actions.delete")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }

@@ -43,8 +43,8 @@ import { userErrorMessage } from "@/lib/error-message";
 const STICKY_TOP =
   "calc(var(--app-header-offset, 3.5rem) + var(--tracker-bar-height, 4.1rem))";
 
-/** Rough rendered height of one row and one heading, in px. */
-const ROW_HEIGHT = 45;
+/** Rough rendered height of one two-line row and one heading, in px. */
+const ROW_HEIGHT = 64;
 const HEADING_HEIGHT = 37;
 
 function EntrySkeletons(): React.JSX.Element {
@@ -289,7 +289,12 @@ export function EntryList(): React.JSX.Element {
           data-date={day.date}
         >
           <DayHeader group={day} live={day.date === runningDate} />
-          {day.entries.map((entry) => (
+          {day.entries.map((entry) =>
+            // The running entry is the tracker bar's: it is edited there, and
+            // a second copy of it here read as two timers. The day still
+            // counts it — its header total runs live — it just has no row
+            // until it stops.
+            entry.end === null ? null : (
             <EntryRow
               key={entry.id}
               entry={entry}
@@ -297,7 +302,8 @@ export function EntryList(): React.JSX.Element {
               quickStarts={quickStarts}
               onEdit={handleEdit}
             />
-          ))}
+            )
+          )}
         </section>
       ))}
 

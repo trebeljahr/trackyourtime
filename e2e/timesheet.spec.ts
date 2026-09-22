@@ -201,9 +201,16 @@ test.describe("Weekly timesheet", () => {
     await expect(page.getByTestId("track-page")).toBeVisible();
     await pickComboboxOption(page, "tracker-project", PROJECT_NAME);
     await page.getByTestId("tracker-toggle").click();
-    await expect(page.getByTestId("running-timer-indicator")).toBeVisible();
+    // On the tracker the bar is the timer; the header's pill only shows on
+    // other screens.
+    await expect(page.getByTestId("running-timer-indicator")).toHaveCount(0);
+    await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
+      "data-state",
+      "running",
+    );
 
     await page.goto("/app/timesheet");
+    await expect(page.getByTestId("running-timer-indicator")).toBeVisible();
     const row = rowFor(page, PROJECT_NAME);
 
     // The cell holding the timer is a button, not a field — there is nothing

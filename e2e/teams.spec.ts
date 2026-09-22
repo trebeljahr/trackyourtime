@@ -285,15 +285,14 @@ test.describe("Teams", () => {
     await member.getByTestId("tracker-toggle").click();
     await expect(member.getByTestId("tracker-toggle")).toHaveAttribute("data-state", "running");
     await expect(member.getByTestId("tracker-running-elsewhere")).toHaveCount(0);
-    const running = member.locator('[data-testid="entry-row"][data-running="true"]');
-    await expect(running).toHaveCount(1);
-    await expect(running).toContainText(MEMBER_TIMER);
+    // The running entry is the bar's, never a row of the list.
+    await expect(member.locator('[data-testid="entry-row"][data-running="true"]')).toHaveCount(0);
+    await expect(member.getByTestId("tracker-description")).toHaveValue(MEMBER_TIMER);
     await expect(member.getByTestId("tracker-elapsed")).toHaveText(/^0:00:(?:0[1-9]|[1-5]\d)$/, {
       timeout: 15_000,
     });
     await member.getByTestId("tracker-toggle").click();
     await expect(member.getByTestId("tracker-toggle")).toHaveAttribute("data-state", "idle");
-    await expect(running).toHaveCount(0);
     await expect
       .poll(async () => (await entryRow(member, MEMBER_TIMER).getAttribute("data-entry-id")) ?? "")
       .not.toMatch(/^temp-|^$/);

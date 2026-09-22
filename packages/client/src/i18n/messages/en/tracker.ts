@@ -35,6 +35,8 @@ export const tracker = {
     notBillable: "Not billable",
   },
   bar: {
+    /** Before the running entry's start time in the bar. */
+    startedAt: "Since",
     descriptionPlaceholder: "What are you working on?",
     addEntry: "Add time entry",
     authBlocked: "Signed out — sign in to sync",
