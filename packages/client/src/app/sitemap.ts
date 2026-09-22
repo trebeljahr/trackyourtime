@@ -12,7 +12,16 @@ const SITE_URL = "https://trackyourtime.dev";
  * not listed. `llms.txt` and `llms-full.txt` are not HTML pages and are
  * found through their conventional addresses instead.
  */
-const PAGES = ["/", "/extension/", "/raycast/", "/mobile/", "/download/", "/privacy/", "/support/"];
+const PAGES = [
+  "/",
+  "/invoice-generator/",
+  "/extension/",
+  "/raycast/",
+  "/mobile/",
+  "/download/",
+  "/privacy/",
+  "/support/",
+];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return PAGES.map((path) => ({
