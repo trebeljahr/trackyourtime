@@ -100,6 +100,17 @@ html.cap [data-testid="app-header"] {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
+/*
+ * The native shell navigates by the bottom tab bar and the drawer its More
+ * cell opens, never a persistent sidebar. Hiding it here — whatever the width,
+ * beating the component's own `lg:flex` because this file is unlayered — is
+ * what stops a wide tablet from showing the desktop sidebar and the tab bar at
+ * once. Nav still reaches every screen: the drawer renders `NAV_SECTIONS`.
+ */
+html.cap [data-testid="sidebar"] {
+  display: none;
+}
+
 /* Comes to rest below the taller header, not below the web one. */
 html.cap [data-testid="tracker-bar"] {
   top: var(--app-header-offset);

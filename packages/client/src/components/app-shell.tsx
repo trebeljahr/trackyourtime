@@ -423,9 +423,13 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex min-h-screen bg-background">
-        {/* Desktop sidebar */}
+        {/* Persistent sidebar — wide viewports only. Below `lg` (portrait
+            tablets, phones) it folds into the hamburger drawer, and on the
+            native shells it never shows at all (styles/native.css), which is
+            what keeps a tablet from carrying the sidebar and the bottom tab
+            bar at once. */}
         <aside
-          className="hidden w-56 shrink-0 border-r border-border md:flex md:flex-col"
+          className="hidden w-56 shrink-0 border-r border-border lg:flex lg:flex-col"
           data-testid="sidebar"
         >
           <Link
@@ -441,9 +445,12 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
           <SidebarNav pathname={pathname} />
         </aside>
 
-        {/* Mobile drawer */}
+        {/* Mobile drawer. No width gate: it is only ever rendered while
+            `mobileOpen`, which can only be set by the hamburger (hidden at
+            `lg`) or the native tab bar's More cell — so a `lg:hidden` here
+            would have made More open nothing on a wide tablet. */}
         {mobileOpen ? (
-          <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
             <button
               type="button"
               aria-label={t("nav.close")}
@@ -490,7 +497,12 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <VersionBanner />
+          {/* Header first, banner under it. The header is `sticky top-0` and
+              on the native shells carries the status-bar safe-area inset
+              (styles/native.css), so it must be the topmost element — a banner
+              above it would take the inset instead, leaving the header to
+              stick under the Dynamic Island the moment the banner scrolls
+              away, and doubling the top inset while it was on screen. */}
           <header
             className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-border bg-background/95 px-3 backdrop-blur md:px-6"
             data-testid="app-header"
@@ -499,7 +511,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="lg:hidden"
               onClick={openMobile}
               aria-label={t("nav.open")}
               data-testid="sidebar-toggle"
@@ -513,7 +525,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="hidden md:inline-flex"
+                    className="hidden lg:inline-flex"
                     onClick={() => setPaletteOpen(true)}
                     aria-label={t("palette.openHint")}
                     aria-keyshortcuts="Meta+K Control+K"
@@ -542,6 +554,8 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
               <UserMenu />
             </div>
           </header>
+
+          <VersionBanner />
 
           <main
             className="min-w-0 flex-1 px-3 py-4 md:px-6 md:py-6"

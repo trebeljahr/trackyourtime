@@ -180,7 +180,7 @@ function EntryRowImpl({
         // columns sharing one line; what it was filed under sits quieter
         // underneath. The right side keeps fixed widths, so times, durations
         // and amounts still line up down the list.
-        "group/row flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5 last:border-b-0 hover:bg-muted/40 sm:flex-nowrap",
+        "group/row flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5 last:border-b-0 hover:bg-muted/40 lg:flex-nowrap",
         nested && "pl-10",
         // The list leaves the running entry to the tracker bar, so this is a
         // fallback: if one ever reaches a row it still says so, with a word
@@ -281,9 +281,14 @@ function EntryRowImpl({
         </div>
       </div>
 
-      {/* Below `sm` the row wraps: the description block takes the line and
-          the controls follow underneath, wrapping among themselves. */}
-      <div className="flex w-full flex-wrap items-center gap-1 sm:ml-auto sm:w-auto sm:shrink-0 sm:flex-nowrap">
+      {/* Below `lg` the row wraps: the description block takes the whole line
+          and the controls follow underneath, wrapping among themselves. The
+          controls carry ~34rem of fixed widths (time range, duration, amount,
+          the button cluster), so on a portrait tablet or a narrow window they
+          would otherwise starve the description down to a single character
+          per line — the `lg` gate keeps the dense one-line layout to widths
+          that can actually hold both. */}
+      <div className="flex w-full flex-wrap items-center gap-1 lg:ml-auto lg:w-auto lg:shrink-0 lg:flex-nowrap">
         <Button
           type="button"
           variant="ghost"
@@ -376,7 +381,7 @@ function EntryRowImpl({
         )}
 
         <span
-          className="hidden w-20 overflow-hidden text-right text-sm text-muted-foreground tabular-nums sm:inline"
+          className="hidden w-20 overflow-hidden text-right text-sm text-muted-foreground tabular-nums lg:inline"
           data-testid="entry-amount"
         >
           {entry.hourlyRate === null || entry.amount === null
