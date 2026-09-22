@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
@@ -444,16 +445,16 @@ function ProjectForm({
               <Label htmlFor="project-rate">
                 {t("projects.billing.hourlyRate", { currency })}
               </Label>
-              <Input
+              <NumberInput
                 id="project-rate"
-                inputMode="decimal"
                 value={rate}
+                min={0}
                 placeholder={t("projects.billing.ratePlaceholder", {
                   amount: money(settings.defaultHourlyRate),
                 })}
                 aria-invalid={rateError !== null}
-                onChange={(event) => {
-                  setRate(event.target.value);
+                onValueChange={(next) => {
+                  setRate(next);
                   if (rateError) setRateError(null);
                 }}
                 data-testid="project-rate-input"
@@ -489,14 +490,14 @@ function ProjectForm({
                   <Label htmlFor="project-estimate">
                     {t("projects.form.targets.estimate")}
                   </Label>
-                  <Input
+                  <NumberInput
                     id="project-estimate"
-                    inputMode="decimal"
                     value={estimate}
+                    min={0}
                     placeholder={t("projects.form.targets.estimatePlaceholder")}
                     aria-invalid={estimateError !== null}
-                    onChange={(event) => {
-                      setEstimate(event.target.value);
+                    onValueChange={(next) => {
+                      setEstimate(next);
                       if (estimateError) setEstimateError(null);
                     }}
                     data-testid="project-estimate-input"
@@ -517,14 +518,14 @@ function ProjectForm({
                       currency: budgetCurrency,
                     })}
                   </Label>
-                  <Input
+                  <NumberInput
                     id="project-budget"
-                    inputMode="decimal"
                     value={budget}
+                    min={0}
                     placeholder={t("projects.noBudget")}
                     aria-invalid={budgetError !== null}
-                    onChange={(event) => {
-                      setBudget(event.target.value);
+                    onValueChange={(next) => {
+                      setBudget(next);
                       if (budgetError) setBudgetError(null);
                     }}
                     data-testid="project-budget-input"

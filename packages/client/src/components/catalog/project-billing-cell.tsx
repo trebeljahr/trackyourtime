@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -175,17 +175,17 @@ export function ProjectBillingCell({
             <Label htmlFor={`project-billing-rate-${project.id}`}>
               {t("projects.billing.hourlyRate", { currency: format.currency })}
             </Label>
-            <Input
+            <NumberInput
               id={`project-billing-rate-${project.id}`}
-              inputMode="decimal"
               value={rate}
+              min={0}
               disabled={!billable}
               placeholder={t("projects.billing.ratePlaceholder", {
                 amount: format.money(defaultRate),
               })}
               aria-invalid={rateError !== null}
-              onChange={(event) => {
-                setRate(event.target.value);
+              onValueChange={(next) => {
+                setRate(next);
                 if (rateError) setRateError(null);
               }}
               data-testid="project-billing-rate"

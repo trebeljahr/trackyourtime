@@ -3,7 +3,7 @@
 import * as React from "react";
 import type { TaxCategory } from "@starter/shared";
 
-import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import {
@@ -104,15 +104,18 @@ export function TaxChoiceSelect({
           ))}
         </NativeSelect>
         {value?.kind === "Scustom" ? (
-          <Input
-            inputMode="decimal"
+          <NumberInput
             value={value.rate}
+            min={0}
+            max={100}
+            suffix="%"
             disabled={disabled}
             placeholder={t("tax.customRate")}
             aria-label={t("tax.customRate")}
             aria-invalid={rateError}
-            className={compact ? "h-8 w-20 text-xs" : "sm:w-28"}
-            onChange={(event) => onChange({ kind: "Scustom", rate: event.target.value })}
+            className={compact ? "h-8 w-28" : "sm:w-32"}
+            inputClassName={compact ? "text-xs" : undefined}
+            onValueChange={(next) => onChange({ kind: "Scustom", rate: next })}
             onBlur={onRateBlur}
             onKeyDown={(event) => {
               if (event.key === "Enter") {

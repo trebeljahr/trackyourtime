@@ -107,7 +107,7 @@ export function BillingSettings({
                 onCommit={(defaultHourlyRate) => save({ defaultHourlyRate })}
                 min={0}
                 max={1_000_000}
-                step={0.01}
+                precision={2}
                 suffix={settings.currency}
                 testId="default-hourly-rate"
                 aria-label={t("billing.defaultRate.title")}

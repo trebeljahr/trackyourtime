@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
@@ -521,13 +522,14 @@ function BusinessProfileForm({
         <Label htmlFor="business-profile-terms">
           {t("businessProfile.paymentTermsDays")}
         </Label>
-        <Input
+        <NumberInput
           id="business-profile-terms"
-          inputMode="numeric"
           className="sm:w-32"
           value={draft.paymentTermsDays}
+          min={0}
+          precision={0}
           aria-invalid={errors.paymentTermsDays === true}
-          onChange={(event) => set("paymentTermsDays", event.target.value)}
+          onValueChange={(next) => set("paymentTermsDays", next)}
           data-testid="business-profile-terms"
         />
         {errors.paymentTermsDays ? (
