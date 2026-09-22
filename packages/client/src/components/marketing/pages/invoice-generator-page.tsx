@@ -18,7 +18,6 @@
  * — pure and unit-tested. This file is the UI and the browser side only.
  */
 import * as React from "react";
-import type { Metadata } from "next";
 import { Download, Plus, Trash2 } from "lucide-react";
 import {
   BUSINESS_LOGO_MAX_BYTES,
@@ -38,7 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { marketingMetadata, marketingT } from "@/i18n/marketing";
+import { marketingT } from "@/i18n/marketing";
 import type { Translator } from "@/i18n/translator";
 import { EINVOICE_DOCS_URL } from "@/lib/site-links";
 import {
@@ -59,16 +58,6 @@ import {
 } from "@/lib/invoice-generator";
 
 type MarketingTranslator = Translator<"marketing">;
-
-/** Metadata for one locale of this page. `path` stays the English path. */
-export const invoiceGeneratorMetadata = (locale: Locale): Metadata => {
-  const t = marketingT(locale);
-  return marketingMetadata(locale, {
-    title: t("invoiceGenerator.meta.title"),
-    description: t("invoiceGenerator.meta.description"),
-    path: "/invoice-generator/",
-  });
-};
 
 /** A unique-enough id for a new line; the invoice key is derived from it. */
 function newLineId(): string {

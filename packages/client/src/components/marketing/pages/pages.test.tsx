@@ -4,10 +4,8 @@ import { DEFAULT_DESKTOP_SHORTCUTS } from "@starter/shared";
 
 import { DownloadPage, downloadMetadata } from "@/components/marketing/pages/download-page";
 import { ExtensionPage, extensionMetadata } from "@/components/marketing/pages/extension-page";
-import {
-  InvoiceGeneratorPage,
-  invoiceGeneratorMetadata,
-} from "@/components/marketing/pages/invoice-generator-page";
+import { invoiceGeneratorMetadata } from "@/components/marketing/pages/invoice-generator-meta";
+import { InvoiceGeneratorPage } from "@/components/marketing/pages/invoice-generator-page";
 import { LandingPage, landingMetadata } from "@/components/marketing/pages/landing-page";
 import { MobilePage, mobileMetadata } from "@/components/marketing/pages/mobile-page";
 import { PrivacyPage, privacyMetadata } from "@/components/marketing/pages/privacy-page";
