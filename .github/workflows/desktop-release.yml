@@ -54,9 +54,10 @@ env:
   NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
 
 jobs:
-  # Validates the staging percentage in seconds, beside the builds rather than
-  # after them: a typo ("1O") fails here, not an hour later in draft-release.
-  # Empty is not a problem; it is a full rollout, and says so in a notice.
+  # Validates the staging percentage in seconds, before the builds: a typo
+  # ("1O") fails here and nothing is built, rather than an hour later in
+  # draft-release. Empty is not a problem; it is a full rollout, and says so
+  # in a notice.
   rollout:
     name: staging percentage
     runs-on: ubuntu-24.04
@@ -79,6 +80,7 @@ jobs:
 
   build:
     name: ${{ matrix.channel }}
+    needs: rollout
     strategy:
       fail-fast: false
       matrix:
@@ -371,7 +373,12 @@ jobs:
           if [ "${exists:-}" = "true" ]; then
             gh release upload "$TAG" release-files/* --clobber
           else
-            printf 'Track Your Time %s.\n\nSee CHANGELOG.md for what changed. Publishing this release offers it to every installed copy that updates itself.\n' "$version" > notes.md
+            if [ -n "$STAGING_PERCENTAGE" ]; then
+              offered="$STAGING_PERCENTAGE % of the installed copies that update themselves (a staged rollout; \`pnpm desktop:rollout $TAG <percent>\` changes it)"
+            else
+              offered="every installed copy that updates itself"
+            fi
+            printf 'Track Your Time %s.\n\nSee CHANGELOG.md for what changed. Publishing this release offers it to %s.\n' "$version" "$offered" > notes.md
             gh release create "$TAG" release-files/* --draft --verify-tag --title "Track Your Time $version" --notes-file notes.md
           fi
           echo "Draft: $(gh release view "$TAG" --json url --jq .url)"

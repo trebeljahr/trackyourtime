@@ -20,7 +20,8 @@ manual dispatch only, so the `v0.1.0` tag does not build it, and its output is
 unsigned. The tag does run `desktop-release.yml`, which uploads the desktop
 downloads and their update feeds to a **draft** GitHub Release; each channel is
 signed only where its complete secret set exists, and no certificates are
-configured yet. The tag also runs `extension-release.yml`, which submits the
+configured yet. The feeds can offer the release to a share of installs first
+(`DESKTOP_STAGING_PERCENTAGE`, raised later with `pnpm desktop:rollout`). The tag also runs `extension-release.yml`, which submits the
 browser extension to the Chrome Web Store only when its store secrets are set.
 
 ### Added

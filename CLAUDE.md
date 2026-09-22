@@ -180,6 +180,7 @@ pnpm electron:ensure                  # download the Electron binary if it is mi
 pnpm icons:desktop                    # regenerate icns/ico from build/icon.png
 node scripts/build-desktop.mjs --channel mac --package --mac dmg zip --arm64  # a release leg, locally
 node scripts/desktop-release-draft.mjs --artifacts <dir> --out <dir>         # what a tag attaches to the draft
+pnpm desktop:rollout v1.4.0 25        # offer a published release to 25 % of installs; 0 halts, 100 finishes
 ```
 
 `build/icon.png` is generated — run `pnpm icons:brand` to re-derive it (and

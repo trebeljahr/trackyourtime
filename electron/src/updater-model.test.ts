@@ -312,7 +312,7 @@ describe("no forced restart, in the source", () => {
     // The staging id lives in userData, so userData must be set at module
     // load, before whenReady and before any updater exists.
     const main = sources.find(({ name }) => name === "main.ts")!.text;
-    const setPath = main.indexOf('app.setPath(\n  "userData"');
+    const setPath = main.search(/app\.setPath\(\s*"userData"/);
     assert.ok(setPath !== -1, "main.ts sets userData");
     assert.ok(setPath < main.indexOf("whenReady"), "userData is set before the app is ready");
   });

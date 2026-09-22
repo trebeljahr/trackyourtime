@@ -546,6 +546,9 @@ updates a **draft** GitHub Release for the tag:
 - It fails when a leg that should have a feed has none, or when a feed names a
   file that is not attached or whose sha512 or size differs.
 - It refuses a tag whose release is already published. Tag a new version.
+- It writes `stagingPercentage` into every feed when the run has a staging
+  percentage ("Staged rollout" below), and checks the rewritten feeds against
+  the attached files the same way.
 
 **Publish the draft by hand.** electron-updater reads the latest *published*
 release, so nothing reaches installed apps until then. Prereleases are never
@@ -580,7 +583,8 @@ workflow by hand from the tag (Actions → Desktop Release → Run workflow → 
 workflow from: `v1.4.0`, staging percentage `10`). The input wins over the
 variable. Both empty means every install, as before. The `staging percentage`
 job validates the value at the start of the run and fails on anything that is
-not a whole number from 0 to 100. The `draft-release` job writes the value
+not a whole number from 0 to 100, before any build starts. The
+`draft-release` job writes the value
 into every feed and checks the rewritten feeds against the attached files
 again. Then publish the draft as usual.
 
