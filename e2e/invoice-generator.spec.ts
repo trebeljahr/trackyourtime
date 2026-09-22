@@ -36,7 +36,10 @@ test.describe("invoice generator", () => {
     const path = await downloaded.path();
     const bytes = await readFile(path);
     expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
-    expect(bytes.byteLength).toBeGreaterThan(3000);
+    // The web renderer uses the standard-14 Helvetica (not embedded), so a
+    // one-line invoice is ~2 KB — real, but not the tens of KB an embedded
+    // font would add.
+    expect(bytes.byteLength).toBeGreaterThan(1500);
   });
 
   test("adds and removes a line", async ({ page }) => {
