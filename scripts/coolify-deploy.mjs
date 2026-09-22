@@ -9,7 +9,9 @@
  *
  * `deploy` is the split layout (two Coolify apps): build-and-deploy.yml runs
  * it with `--rollback` on every push to main, hosted-rollback.yml runs it by
- * hand with `--guard-server-downgrade`. `verify` is the gate alone, for the
+ * hand with `--guard-server-downgrade` and adds `--rollback` only when
+ * `restore_on_failure` is set (the images pinned before a manual rollback are
+ * usually the build being escaped). `verify` is the gate alone, for the
  * single-app and webhook layouts, which have no image variable to pin.
  *
  * Environment: COOLIFY_BASE_URL, COOLIFY_API_TOKEN,

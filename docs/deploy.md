@@ -282,12 +282,23 @@ refuses to boot is an outage. Going back past such a migration needs the
 ### Rolling back by hand
 
 `.github/workflows/hosted-rollback.yml` pins the images of an earlier commit
-and runs the same poll, gate and rollback:
+and runs the same poll and gate:
 
 ```bash
 gh workflow run hosted-rollback.yml -f sha=<commit> -f which=both
 gh workflow run hosted-rollback.yml -f sha=<commit> -f which=client
+sleep 5   # the run appears in the list a moment after the dispatch
+gh run watch --exit-status "$(gh run list --workflow hosted-rollback.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
 ```
+
+Watch the run rather than dispatching and walking away. Both workflows share
+the `hosted-deploy` concurrency group (below), and GitHub keeps **one
+pending run per group**: a rollback queued behind a running push deploy is
+cancelled when another push to main arrives while it waits, because the
+newer push takes the waiting slot. `gh run watch --exit-status` ends
+non-zero on a cancelled run as on a failed one; check the Actions queue and
+run `gh workflow run` again if the rollback was cancelled, since nothing
+re-dispatches it.
 
 - `sha` must be a commit on main: only those have images, because only
   `build-and-deploy.yml` pushes `:<sha>` tags. The run resolves an
@@ -299,15 +310,21 @@ gh workflow run hosted-rollback.yml -f sha=<commit> -f which=client
   refuses to move the server to a commit that cannot read the database the
   current one has migrated. Use `which=client`, or restore the dump from
   before that migration and run again with `force_server` checked.
-- When the gate fails, the images pinned before the run are put back, exactly
-  as after a failed push deploy, and the run fails.
+- When the gate fails, the run fails and the images of `sha` stay pinned.
+  The images pinned before the run are usually the build being escaped, so
+  putting them back would re-pin it; the error names the failed check, and
+  the next step is another run with a different sha or a fix forward.
+  `restore_on_failure=true` puts the previous images back instead, exactly
+  as after a failed push deploy — for a rollback that is a trial of an older
+  build, not an escape from the current one.
 
 Both workflows share the `hosted-deploy` concurrency group, so a push deploy
 and a rollback never pin images at the same time, and a deploy is never
 cancelled between pinning the new images and restoring the old ones.
 `build-and-deploy.yml` therefore no longer cancels an in-progress run on a
 new push to main; the newer push waits, and GitHub keeps only the newest
-waiting run.
+waiting run — of either workflow, which is why a queued manual rollback has
+to be watched (above).
 
 Without any Coolify secret the scripts print a `::notice::` and deploy
 nothing; with some of them set and others missing, they fail, because half a

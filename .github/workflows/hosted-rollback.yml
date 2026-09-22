@@ -8,8 +8,16 @@ name: hosted-rollback
 #
 # Only commits that build-and-deploy.yml built on main have images
 # (ghcr.io/trebeljahr/trackyourtime-{server,client}:<sha>), so the commit must
-# be on main. When the gate fails, the images that were pinned before this run
-# are put back, exactly as after a failed push deploy.
+# be on main. When the gate fails, the run fails and the images of `sha` stay
+# pinned: the images that were pinned before this run are usually the build
+# being escaped, and putting them back would re-pin it. `restore_on_failure`
+# puts them back instead, exactly as after a failed push deploy — for a
+# rollback that is a trial rather than an escape.
+#
+# Both workflows share one concurrency group, and GitHub keeps one waiting run
+# per group: a rollback queued behind a running push deploy is cancelled by a
+# later push. docs/deploy.md → "Rolling back by hand" says how to watch for
+# that and re-dispatch.
 #
 # The server is refused when the database it would start on carries a
 # migration it cannot read (a minReaderSchema above its SCHEMA_VERSION —
@@ -31,6 +39,11 @@ on:
         options: [both, client, server]
       force_server:
         description: Deploy the server even past a migration it cannot read (only after restoring a dump)
+        required: false
+        type: boolean
+        default: false
+      restore_on_failure:
+        description: When the gate fails, pin the images that were live before this run again (off, since those are usually the build being escaped)
         required: false
         type: boolean
         default: false
@@ -93,8 +106,10 @@ jobs:
           SHA: ${{ steps.resolve.outputs.sha }}
           WHICH: ${{ inputs.which }}
           FORCE_SERVER: ${{ inputs.force_server }}
+          RESTORE_ON_FAILURE: ${{ inputs.restore_on_failure }}
         run: |
           set -euo pipefail
-          args=(deploy --sha "$SHA" --which "$WHICH" --rollback --guard-server-downgrade)
+          args=(deploy --sha "$SHA" --which "$WHICH" --guard-server-downgrade)
           if [ "$FORCE_SERVER" = "true" ]; then args+=(--force-server); fi
+          if [ "$RESTORE_ON_FAILURE" = "true" ]; then args+=(--rollback); fi
           node scripts/coolify-deploy.mjs "${args[@]}"
