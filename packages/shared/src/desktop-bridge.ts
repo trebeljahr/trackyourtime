@@ -264,6 +264,143 @@ export interface DesktopShell {
 }
 
 /**
+ * Why this copy of the app cannot record which application is in front.
+ *
+ * - `store`: a Mac App Store or Microsoft Store build (sandboxed children,
+ *   and review risk for an app that watches other apps).
+ * - `linux-sandbox`: Snap or Flatpak, where the host's display tools are out
+ *   of reach.
+ * - `wayland`: a Wayland session, which gives no application the frontmost
+ *   window; XWayland would answer, wrongly.
+ * - `unsupported-platform`: an OS or session with no mechanism at all.
+ * - `tool-missing`: Linux without `xprop`; `hint` names the package.
+ * - `blocked-by-policy`: Windows PowerShell in Constrained Language Mode.
+ * - `source-failed`: the helper kept dying and capture gave up for now.
+ * - `newer-format`: a newer build wrote the activity folder; this one leaves it alone.
+ */
+export type DesktopActivityUnavailableReason =
+  | "store"
+  | "linux-sandbox"
+  | "wayland"
+  | "unsupported-platform"
+  | "tool-missing"
+  | "blocked-by-policy"
+  | "source-failed"
+  | "newer-format";
+
+/** Device preferences: they stay when the account signs out. */
+export interface DesktopActivitySettings {
+  /** Off until somebody turns it on. */
+  enabled: boolean;
+  /** Window titles are their own opt-in, and turning them off deletes stored ones. */
+  storeTitles: boolean;
+  /** Application key globs that are never recorded. */
+  excludedApps: string[];
+  retentionDays: number;
+}
+
+export interface DesktopActivityApp {
+  key: string;
+  name: string;
+}
+
+/**
+ * "Always file <app> under …". A structural copy of core's `ActivityRule`
+ * (shared cannot import core); `electron/src/activity/wire.ts` fails `tsc`
+ * when the two drift.
+ */
+export interface DesktopActivityRule {
+  id: string;
+  pattern: string;
+  description?: string;
+  projectId?: string | null;
+  taskId?: string | null;
+  tagIds?: string[];
+  billable?: boolean;
+}
+
+/** A half-open `[start, end)` span in epoch ms. */
+export interface DesktopActivityInterval {
+  start: number;
+  end: number;
+}
+
+export type DesktopActivitySupport =
+  | { supported: true }
+  | { supported: false; reason: DesktopActivityUnavailableReason; hint: string | null };
+
+export interface DesktopActivitySnapshot {
+  settings: DesktopActivitySettings;
+  support: DesktopActivitySupport;
+  /** Whether window titles can be recorded on this OS at all: false on macOS for now. */
+  titlesAvailable: boolean;
+  /** An account and workspace to file activity under is known. */
+  scoped: boolean;
+  /** Enabled, supported, scoped, and the person is neither idle nor locked. */
+  recording: boolean;
+  /** Stored segments of the current scope. */
+  storedSegments: number;
+  /** The current scope's apps, newest first, at most 30. */
+  recentApps: DesktopActivityApp[];
+  /** The current scope's rules. */
+  rules: DesktopActivityRule[];
+}
+
+export interface DesktopActivitySuggestion {
+  start: number;
+  end: number;
+  topApps: { key: string; name: string; seconds: number; share: number }[];
+  /** Up to three titles of the dominant app; empty unless titles are stored. */
+  titles: string[];
+  ruleId?: string;
+  proposed: {
+    description?: string;
+    projectId?: string | null;
+    taskId?: string | null;
+    tagIds?: string[];
+    billable?: boolean;
+  };
+}
+
+export type DesktopActivityAcceptCheck =
+  | { ok: true; start: number; end: number }
+  | { ok: false; reason: "already-tracked" | "no-scope" | "bad-range" };
+
+/**
+ * Desktop activity capture (Stage 8). Raw segments never cross this bridge:
+ * the main process composes suggestions and answers with those.
+ */
+export interface DesktopActivity {
+  snapshot: () => Promise<DesktopActivitySnapshot>;
+  onChanged: (listener: (snapshot: DesktopActivitySnapshot) => void) => () => void;
+  updateSettings: (patch: Partial<DesktopActivitySettings>) => Promise<DesktopActivitySnapshot>;
+  /** Whose activity is recorded. There is no way to clear it but `forget`. */
+  setScope: (scope: { userId: string; workspaceId: string }) => Promise<void>;
+  /** Sign-out and account deletion: every row, rule and dismissal, and the scope. */
+  forget: () => Promise<void>;
+  /** "Delete all activity now": every row, rule and dismissal; the scope stays. */
+  wipe: () => Promise<DesktopActivitySnapshot>;
+  /** Null when there is no scope or the store belongs to a newer build. */
+  suggestions: (input: {
+    from: number;
+    to: number;
+    tracked: DesktopActivityInterval[];
+  }) => Promise<DesktopActivitySuggestion[] | null>;
+  checkAccept: (input: {
+    start: number;
+    end: number;
+    edited: boolean;
+    tracked: DesktopActivityInterval[];
+  }) => Promise<DesktopActivityAcceptCheck>;
+  /** Treat a just-accepted span as tracked for a few minutes, until the entry lists. */
+  markAccepted: (span: DesktopActivityInterval) => Promise<void>;
+  dismiss: (span: DesktopActivityInterval) => Promise<boolean>;
+  /** Replaces a rule with the same pattern. */
+  addRule: (rule: Omit<DesktopActivityRule, "id">) => Promise<DesktopActivityRule[]>;
+  removeRule: (id: string) => Promise<DesktopActivityRule[]>;
+}
+
+/**
  * `window.electronAPI`. Guard every use: the same export also runs in a
  * browser, an installed PWA and the Capacitor shells, where it is undefined.
  */
@@ -291,6 +428,9 @@ export interface DesktopBridge {
 
   /** Tray, global shortcuts, desktop settings and notifications (Stages 4 and 5). */
   desktop: DesktopShell;
+
+  /** Activity capture (Stage 8). Optional so an older preload is still a valid bridge. */
+  activity?: DesktopActivity;
 }
 
 /**
@@ -314,6 +454,17 @@ export const DESKTOP_IPC = {
   updateGetStatus: "update:status",
   updateCheck: "update:check",
   updateRestart: "update:restart",
+  activitySnapshot: "activity:snapshot",
+  activitySettings: "activity:settings",
+  activityScope: "activity:scope",
+  activityForget: "activity:forget",
+  activityWipe: "activity:wipe",
+  activitySuggestions: "activity:suggestions",
+  activityCheckAccept: "activity:check-accept",
+  activityAccepted: "activity:accepted",
+  activityDismiss: "activity:dismiss",
+  activityRuleAdd: "activity:rule-add",
+  activityRuleRemove: "activity:rule-remove",
   /** main → renderer push, not an invoke. */
   idleState: "idle:state",
   /** main → renderer push. */
@@ -322,6 +473,8 @@ export const DESKTOP_IPC = {
   desktopSettingsChanged: "desktop:settings-changed",
   /** main → renderer push. */
   updateStatusChanged: "update:status-changed",
+  /** main → renderer push, at most one per two seconds. */
+  activityChanged: "activity:changed",
 } as const;
 
 export type DesktopIpcChannel = (typeof DESKTOP_IPC)[keyof typeof DESKTOP_IPC];

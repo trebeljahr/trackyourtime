@@ -109,3 +109,46 @@ export function loginItemMechanism(
       return { kind: "xdg-autostart", exec: context.execPath };
   }
 }
+
+export type ActivityCaptureMechanism = "macos-lsappinfo" | "windows-powershell" | "linux-xprop";
+
+export type ActivityUnavailableReason = "store" | "linux-sandbox" | "wayland" | "unsupported-platform";
+
+export type ActivityCaptureSupport =
+  | { kind: "supported"; mechanism: ActivityCaptureMechanism }
+  | { kind: "unsupported"; reason: ActivityUnavailableReason };
+
+/**
+ * Whether this copy can record which application is in front, and how
+ * (Stage 8, `activity/`). Only the channel and the session decide here; the
+ * runtime reasons (`xprop` missing, PowerShell locked down, a helper that
+ * keeps dying) are layered on by the capturer.
+ *
+ * - **Mac App Store and Microsoft Store: unavailable.** The App Sandbox is
+ *   inherited by every child process, and an app that watches other apps is
+ *   an App Review risk; MSIX spawning PowerShell is unverified. Flipping the
+ *   Microsoft Store is one line here once it is.
+ * - **Snap and Flatpak: unavailable.** The host's display and its tools are
+ *   outside the confinement.
+ * - **Wayland: unavailable.** It tells no client which window is in front,
+ *   and asking XWayland answers for X clients only — wrong data, silently.
+ *   Linux with no `DISPLAY` at all has no X server to ask either.
+ */
+export function activityCaptureSupport(
+  channel: DistributionChannel,
+  platform: NodeJS.Platform,
+  env: Record<string, string | undefined>,
+): ActivityCaptureSupport {
+  if (channel === "mac-app-store" || channel === "windows-store") return { kind: "unsupported", reason: "store" };
+  if (channel === "snap" || channel === "flatpak") return { kind: "unsupported", reason: "linux-sandbox" };
+  if (platform === "darwin") return { kind: "supported", mechanism: "macos-lsappinfo" };
+  if (platform === "win32") return { kind: "supported", mechanism: "windows-powershell" };
+  if (platform === "linux") {
+    if (env.XDG_SESSION_TYPE === "wayland" || (env.WAYLAND_DISPLAY ?? "") !== "") {
+      return { kind: "unsupported", reason: "wayland" };
+    }
+    if ((env.DISPLAY ?? "") === "") return { kind: "unsupported", reason: "unsupported-platform" };
+    return { kind: "supported", mechanism: "linux-xprop" };
+  }
+  return { kind: "unsupported", reason: "unsupported-platform" };
+}
