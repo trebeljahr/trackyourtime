@@ -5,6 +5,8 @@ import * as React from "react";
 import { useT } from "@/i18n/use-t";
 import { isAppShell } from "@/lib/shell";
 import { isChunkLoadError, reloadOnceForChunkError } from "@/lib/chunk-reload";
+import { reportClientError } from "@/lib/error-reporting/reporter";
+import { CHUNK_RELOAD_REFUSED } from "@/lib/error-reporting/scrub";
 
 /**
  * The body of app/global-error.tsx and app/app/error.tsx.
@@ -13,20 +15,34 @@ import { isChunkLoadError, reloadOnceForChunkError } from "@/lib/chunk-reload";
  * automatically on the web; if that already happened, or on any other error,
  * the screen offers the reload itself. The shells skip the automatic reload —
  * their chunks ship inside the app, so a reload fetches the same files.
+ *
+ * Every error it shows is reported (a no-op in a build without a DSN), except
+ * a web chunk error the automatic reload is about to fix: only one the guard
+ * refused to reload again is sent, tagged so `lib/error-reporting/scrub.ts`
+ * keeps it. The reload decision is made first and is never delayed by the
+ * report, which is queued and sent in the background.
  */
 export function ErrorView({
   error,
   reset,
+  boundary,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
+  /** Which boundary rendered this, for the report's `source` tag. */
+  boundary: "app" | "global";
 }): React.JSX.Element {
   const t = useT("shell");
   const chunk = isChunkLoadError(error);
 
   React.useEffect(() => {
-    if (chunk && !isAppShell()) reloadOnceForChunkError();
-  }, [chunk]);
+    if (chunk && !isAppShell()) {
+      if (reloadOnceForChunkError()) return;
+      reportClientError(error, { source: boundary, chunkReload: CHUNK_RELOAD_REFUSED });
+      return;
+    }
+    reportClientError(error, { source: boundary });
+  }, [chunk, error, boundary]);
 
   return (
     <main className="flex min-h-screen items-center justify-center p-8">

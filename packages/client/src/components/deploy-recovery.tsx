@@ -6,7 +6,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/sonner";
 import { translate } from "@/i18n/translate";
 import { isAppShell } from "@/lib/shell";
-import { watchChunkErrors } from "@/lib/chunk-reload";
+import { reloadOnceForChunkError, watchChunkErrors } from "@/lib/chunk-reload";
+import { reportClientError } from "@/lib/error-reporting/reporter";
+import { CHUNK_RELOAD_REFUSED } from "@/lib/error-reporting/scrub";
 import {
   BUILD_COMMIT,
   createDeployWatcher,
@@ -35,7 +37,13 @@ export function DeployRecovery(): null {
     const shell = isAppShell();
     if (shell || !isProductionBuild) return;
 
-    const stopChunkWatch = watchChunkErrors();
+    // The default handler, plus a report when the guard refuses: a chunk that
+    // is still missing after the one reload is a broken deploy, not a stale tab.
+    const stopChunkWatch = watchChunkErrors((error) => {
+      if (!reloadOnceForChunkError()) {
+        reportClientError(error, { source: "chunk-watch", chunkReload: CHUNK_RELOAD_REFUSED });
+      }
+    });
     if (!shouldWatchForDeploys({ bakedCommit: BUILD_COMMIT, isProductionBuild, isAppShell: shell })) {
       return stopChunkWatch;
     }

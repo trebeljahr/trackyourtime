@@ -116,6 +116,11 @@ describe("watchChunkErrors", () => {
     window.dispatchEvent(chunkEvent());
     expect(onChunkError).toHaveBeenCalledTimes(2);
 
+    // The failure itself is handed over, so DeployRecovery can report the one
+    // the reload guard refuses.
+    expect(onChunkError.mock.calls[0]?.[0]).toBeInstanceOf(TypeError);
+    expect(onChunkError.mock.calls[1]?.[0]).toBe("Loading chunk 7 failed.");
+
     stop();
     stop = undefined;
     window.dispatchEvent(chunkEvent());

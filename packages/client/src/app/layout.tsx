@@ -4,6 +4,7 @@ import { AuthProvider } from "@/providers/auth-provider";
 import { MobileBridgeLoader } from "@/mobile/MobileBridgeLoader";
 import { Toaster } from "@/components/ui/sonner";
 import { DeployRecovery } from "@/components/deploy-recovery";
+import { ErrorReporting } from "@/components/error-reporting";
 import { ExtensionBridge } from "@/components/extension-bridge";
 import { OG_IMAGE } from "@/lib/page-metadata";
 import { LocaleRoot } from "@/i18n/locale-root";
@@ -87,6 +88,7 @@ export default function RootLayout({
         )}
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
+        <ErrorReporting />
         <MobileBridgeLoader />
         <LocaleRoot>
           <TRPCProvider>

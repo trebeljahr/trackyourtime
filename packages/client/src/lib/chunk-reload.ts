@@ -78,15 +78,16 @@ export const reloadOnceForChunkError = (
  * `global-error.tsx`, which call `reloadOnceForChunkError` themselves.
  */
 export const watchChunkErrors = (
-  onChunkError: () => void = () => {
+  onChunkError: (error: unknown) => void = () => {
     reloadOnceForChunkError();
   },
 ): (() => void) => {
   const onError = (event: ErrorEvent): void => {
-    if (isChunkLoadError(event.error ?? event.message)) onChunkError();
+    const error: unknown = event.error ?? event.message;
+    if (isChunkLoadError(error)) onChunkError(error);
   };
   const onRejection = (event: PromiseRejectionEvent): void => {
-    if (isChunkLoadError(event.reason)) onChunkError();
+    if (isChunkLoadError(event.reason)) onChunkError(event.reason);
   };
   window.addEventListener("error", onError);
   window.addEventListener("unhandledrejection", onRejection);

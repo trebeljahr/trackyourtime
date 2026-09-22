@@ -14,5 +14,5 @@ export default function AppError({
   error: Error & { digest?: string };
   reset: () => void;
 }): React.JSX.Element {
-  return <ErrorView error={error} reset={reset} />;
+  return <ErrorView error={error} reset={reset} boundary="app" />;
 }
