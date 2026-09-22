@@ -4,9 +4,10 @@
  * unit-tested (`release.test.mjs`) against made-up files.
  *
  * What a release changes is docs/releasing.md → Steps, step 2: the root
- * version and every hand-kept copy `version-sync.test.mjs` checks, the iOS and
- * Android build numbers, the dated CHANGELOG section with its links, and the
- * release notes the policy check requires.
+ * version and every hand-kept copy `version-sync.test.mjs` checks (the
+ * self-host `TRACKYOURTIME_VERSION` defaults among them), the iOS and Android
+ * build numbers, the dated CHANGELOG section with its links, and the release
+ * notes the policy check requires.
  */
 
 /** Every hand-kept copy of the version that is not a package.json. */
@@ -18,6 +19,18 @@ export const VERSION_CONSTANTS = Object.freeze([
 export const IOS_PROJECT = "ios/App/App.xcodeproj/project.pbxproj";
 export const ANDROID_GRADLE = "android/app/build.gradle";
 export const CHANGELOG = "CHANGELOG.md";
+
+/**
+ * The self-host files that default `TRACKYOURTIME_VERSION` to a tag: the
+ * example env file (`TRACKYOURTIME_VERSION=vX.Y.Z`) and the compose file
+ * (`${TRACKYOURTIME_VERSION:-vX.Y.Z}`, once per image). release.yml's smoke
+ * job starts the compose file from the tagged commit, and a self-hoster's
+ * first `docker compose up` pulls whatever these say, so they name the tag
+ * being cut.
+ */
+export const SELFHOST_ENV_EXAMPLE = ".env.selfhost.example";
+export const SELFHOST_COMPOSE = "docker-compose.selfhost.yml";
+export const SELFHOST_VERSION_FILES = Object.freeze([SELFHOST_ENV_EXAMPLE, SELFHOST_COMPOSE]);
 
 /** The path `release-policy.mjs` looks for, and the release page body. */
 export const releaseNotesPath = (version) => `docs/release-notes/v${version}.md`;
@@ -122,6 +135,26 @@ export const setVersionConstant = (text, name, version, path = name) => {
   return text.replace(pattern, `$1${version}$2`);
 };
 
+/** Two groups each: what precedes the tag and what follows it. */
+const SELFHOST_PATTERNS = {
+  [SELFHOST_ENV_EXAMPLE]: /^(TRACKYOURTIME_VERSION=)v\S+($)/m,
+  [SELFHOST_COMPOSE]: /(\$\{TRACKYOURTIME_VERSION:-)v[^}\s]+(\})/g,
+};
+
+/**
+ * A self-host file (`SELFHOST_VERSION_FILES`) with its `TRACKYOURTIME_VERSION`
+ * default set to `vX.Y.Z`. Throws when the file has no such default, since a
+ * file that stopped carrying one would otherwise pass through untouched and
+ * keep pulling the previous release.
+ */
+export const setSelfhostVersion = (text, version, path) => {
+  const pattern = SELFHOST_PATTERNS[path];
+  if (!pattern) throw new Error(`${path} is not one of ${SELFHOST_VERSION_FILES.join(", ")}`);
+  if (!pattern.test(text)) throw new Error(`${path} has no TRACKYOURTIME_VERSION default matching ${pattern}`);
+  pattern.lastIndex = 0;
+  return text.replace(pattern, `$1v${version}$2`);
+};
+
 /**
  * The Xcode project with every `MARKETING_VERSION` set and, when `bumpBuild`,
  * every `CURRENT_PROJECT_VERSION` set to one above the highest it had.
@@ -214,6 +247,14 @@ export const scaffoldReleaseNotes = (version, section) =>
   `  release policy check asks for. Then delete this comment.\n` +
   `-->\n\n${section.trim()}\n`;
 
+/**
+ * The scaffold without its leading drafting comment: what `--yes` commits,
+ * since a release page that still says "then delete this comment" was never
+ * read by the person the comment addresses. Text with no such comment is
+ * returned as it is.
+ */
+export const stripDraftingComment = (notes) => notes.replace(/^<!--[\s\S]*?-->\n*/, "");
+
 // ── The whole plan ──────────────────────────────────────────────────────
 
 /**
@@ -225,8 +266,10 @@ export const scaffoldReleaseNotes = (version, section) =>
  * @param {string} input.date              YYYY-MM-DD
  * @param {(path: string) => string | null} input.readFile   the tree at HEAD
  * @param {string[]} input.workspacePackages  packages/<name>/package.json paths
+ * @param {boolean} [input.acceptDraft]   `--yes`: the drafted notes are the
+ *   release page as they are, so the scaffold's drafting comment is left out
  */
-export const planRelease = ({ version, date, readFile, workspacePackages }) => {
+export const planRelease = ({ version, date, readFile, workspacePackages, acceptDraft = false }) => {
   const must = (path) => {
     const text = readFile(path);
     if (text === null) throw new Error(`${path} is missing`);
@@ -254,6 +297,9 @@ export const planRelease = ({ version, date, readFile, workspacePackages }) => {
   for (const { path, name } of VERSION_CONSTANTS) {
     change(path, setVersionConstant(must(path), name, version, path));
   }
+  for (const path of SELFHOST_VERSION_FILES) {
+    change(path, setSelfhostVersion(must(path), version, path));
+  }
   const ios = setIosVersions(must(IOS_PROJECT), version, bumpBuild);
   change(IOS_PROJECT, ios.text);
   const android = setAndroidVersions(must(ANDROID_GRADLE), version, bumpBuild);
@@ -264,7 +310,10 @@ export const planRelease = ({ version, date, readFile, workspacePackages }) => {
 
   const notesPath = releaseNotesPath(version);
   const notesCreated = readFile(notesPath) === null;
-  if (notesCreated) change(notesPath, scaffoldReleaseNotes(version, changelog.section));
+  if (notesCreated) {
+    const scaffold = scaffoldReleaseNotes(version, changelog.section);
+    change(notesPath, acceptDraft ? stripDraftingComment(scaffold) : scaffold);
+  }
 
   return { current, changes, notesPath, notesCreated, iosBuild: ios.build, androidCode: android.code };
 };

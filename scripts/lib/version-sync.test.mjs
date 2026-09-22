@@ -64,6 +64,17 @@ describe("release version copies", () => {
     }
   });
 
+  it("the self-host TRACKYOURTIME_VERSION defaults name the root's tag", () => {
+    // What a self-hoster's first `docker compose up` pulls, and what
+    // release.yml's smoke job starts from the tagged commit.
+    for (const tag of single(".env.selfhost.example", /^TRACKYOURTIME_VERSION=(\S+)$/gm)) {
+      assert.equal(tag, `v${rootVersion}`, ".env.selfhost.example TRACKYOURTIME_VERSION");
+    }
+    const defaults = single("docker-compose.selfhost.yml", /\$\{TRACKYOURTIME_VERSION:-([^}\s]+)\}/g);
+    assert.equal(defaults.length, 2, "docker-compose.selfhost.yml: one default per image");
+    for (const tag of defaults) assert.equal(tag, `v${rootVersion}`, "docker-compose.selfhost.yml default");
+  });
+
   it("the web export and the extension read the root instead of keeping a copy", () => {
     const next = read("packages/client/next.config.ts");
     assert.match(next, /NEXT_PUBLIC_APP_VERSION: readRootVersion\(\)/);

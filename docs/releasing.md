@@ -109,10 +109,12 @@ of them still works by hand.
       version number. `/version.json`, the web bundle and the browser
       extension's manifest read it. Sets every hand-kept copy to the same
       value: each workspace `package.json` that has a version, the Raycast
-      `APP_VERSION` and the MCP `SERVER_VERSION` (the copies
-      `scripts/lib/version-sync.test.mjs` checks, so `pnpm run test:unit`
-      fails until they match), the iOS `MARKETING_VERSION` and the Android
-      `versionName` (which `pnpm build:mobile` checks). It raises the iOS
+      `APP_VERSION` and the MCP `SERVER_VERSION`, the `TRACKYOURTIME_VERSION`
+      defaults in `.env.selfhost.example` and `docker-compose.selfhost.yml`
+      (the copies `scripts/lib/version-sync.test.mjs` checks, so
+      `pnpm run test:unit` fails until they match), the iOS
+      `MARKETING_VERSION` and the Android `versionName` (which
+      `pnpm build:mobile` checks). It raises the iOS
       `CURRENT_PROJECT_VERSION` and the Android `versionCode` by one, since
       App Store Connect and Play each refuse a build number they have seen.
       Releasing the version the tree already carries leaves both build

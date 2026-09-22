@@ -16,7 +16,8 @@
  *     every hand-kept copy, the iOS and Android build numbers, the CHANGELOG
  *     roll and its links, and a draft of `docs/release-notes/vX.Y.Z.md` when
  *     there is none — in which case it writes only that file and stops, so a
- *     person rewrites it first (`--yes` takes the draft as it is).
+ *     person rewrites it first (`--yes` takes the draft as it is, minus its
+ *     drafting comment).
  *  3. Runs `scripts/release-policy-check.mjs` against a commit object built
  *     from the plan in a throwaway index. The check reads files at a ref, and
  *     this lets it read the release exactly as it will be tagged without
@@ -120,7 +121,7 @@ const workspacePackages = git(["ls-tree", "--name-only", "HEAD", "packages/"])
 
 let plan;
 try {
-  plan = planRelease({ version, date: localDate(new Date()), readFile: readHead, workspacePackages });
+  plan = planRelease({ version, date: localDate(new Date()), readFile: readHead, workspacePackages, acceptDraft: yes });
 } catch (caught) {
   fail(caught instanceof Error ? caught.message : String(caught));
 }

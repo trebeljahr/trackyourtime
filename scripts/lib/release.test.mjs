@@ -15,6 +15,9 @@ import {
   ANDROID_GRADLE,
   CHANGELOG,
   IOS_PROJECT,
+  SELFHOST_COMPOSE,
+  SELFHOST_ENV_EXAMPLE,
+  SELFHOST_VERSION_FILES,
   VERSION_CONSTANTS,
   compareVersions,
   localDate,
@@ -26,7 +29,9 @@ import {
   setAndroidVersions,
   setIosVersions,
   setPackageVersion,
+  setSelfhostVersion,
   setVersionConstant,
+  stripDraftingComment,
   versionRefusal,
 } from "./release.mjs";
 import { checkRelease, EMPTY_CONTRACT } from "./release-policy.mjs";
@@ -101,6 +106,19 @@ describe("version copies", () => {
     const text = '// note\nexport const APP_VERSION = "0.1.0";\n';
     assert.equal(setVersionConstant(text, "APP_VERSION", "0.2.0"), '// note\nexport const APP_VERSION = "0.2.0";\n');
     assert.throws(() => setVersionConstant("const X = 1;", "APP_VERSION", "0.2.0"), /declares no/);
+  });
+
+  it("sets the self-host TRACKYOURTIME_VERSION defaults, and refuses a file without one", () => {
+    const env = "# The images to pull.\nTRACKYOURTIME_VERSION=v0.1.0\nMONGO_PORT=27017\n";
+    assert.equal(setSelfhostVersion(env, "0.2.0", SELFHOST_ENV_EXAMPLE), env.replace("v0.1.0", "v0.2.0"));
+    const compose =
+      "    image: ghcr.io/o/r-server:${TRACKYOURTIME_VERSION:-v0.1.0}\n" +
+      "    # TRACKYOURTIME_VERSION changes\n" +
+      "    image: ghcr.io/o/r-client-selfhost:${TRACKYOURTIME_VERSION:-v0.1.0}\n";
+    assert.equal(setSelfhostVersion(compose, "0.2.0", SELFHOST_COMPOSE), compose.replaceAll("v0.1.0", "v0.2.0"));
+    assert.throws(() => setSelfhostVersion("MONGO_PORT=27017\n", "0.2.0", SELFHOST_ENV_EXAMPLE), /no TRACKYOURTIME_VERSION/);
+    assert.throws(() => setSelfhostVersion("image: x:latest\n", "0.2.0", SELFHOST_COMPOSE), /no TRACKYOURTIME_VERSION/);
+    assert.throws(() => setSelfhostVersion(env, "0.2.0", "docker-compose.yml"), /is not one of/);
   });
 
   it("sets every iOS marketing version and raises the build number past the highest", () => {
@@ -183,6 +201,11 @@ The next release.
     assert.ok(notes.endsWith("-->\n\n- A thing.\n"));
   });
 
+  it("strips the drafting comment and nothing else", () => {
+    assert.equal(stripDraftingComment(scaffoldReleaseNotes("0.2.0", "- A thing.\n")), "- A thing.\n");
+    assert.equal(stripDraftingComment("## Notes\n\n<!-- kept -->\n"), "## Notes\n\n<!-- kept -->\n");
+  });
+
   it("formats the local date", () => {
     assert.equal(localDate(new Date(2026, 0, 5)), "2026-01-05");
   });
@@ -195,6 +218,8 @@ describe("planRelease", () => {
     "packages/raycast/package.json": '{\n  "name": "raycast"\n}\n',
     "packages/raycast/src/lib/version.ts": 'export const APP_VERSION = "0.1.0";\n',
     "packages/mcp/src/server.ts": 'export const SERVER_VERSION = "0.1.0";\n',
+    [SELFHOST_ENV_EXAMPLE]: "TRACKYOURTIME_VERSION=v0.1.0\n",
+    [SELFHOST_COMPOSE]: "image: a:${TRACKYOURTIME_VERSION:-v0.1.0}\nimage: b:${TRACKYOURTIME_VERSION:-v0.1.0}\n",
     [IOS_PROJECT]: "CURRENT_PROJECT_VERSION = 1;\nMARKETING_VERSION = 0.1.0;\n",
     [ANDROID_GRADLE]: 'versionCode 1\nversionName "0.1.0"\n',
     [CHANGELOG]: "## [Unreleased]\n\n- New.\n\n[Unreleased]: https://github.com/o/r/commits/main\n",
@@ -211,17 +236,28 @@ describe("planRelease", () => {
         "packages/a/package.json",
         "packages/raycast/src/lib/version.ts",
         "packages/mcp/src/server.ts",
+        SELFHOST_ENV_EXAMPLE,
+        SELFHOST_COMPOSE,
         IOS_PROJECT,
         ANDROID_GRADLE,
         CHANGELOG,
         releaseNotesPath("0.2.0"),
       ],
     );
+    const compose = plan.changes.find((change) => change.path === SELFHOST_COMPOSE);
+    assert.equal(compose?.after, "image: a:${TRACKYOURTIME_VERSION:-v0.2.0}\nimage: b:${TRACKYOURTIME_VERSION:-v0.2.0}\n");
     assert.equal(plan.current, "0.1.0");
     assert.equal(plan.iosBuild, 2);
     assert.equal(plan.androidCode, 2);
     assert.equal(plan.notesCreated, true);
     assert.equal(plan.changes.at(-1)?.before, null);
+  });
+
+  it("drafts the notes with the drafting comment, and without it when the draft is accepted", () => {
+    const notes = (acceptDraft) =>
+      planRelease({ version: "0.2.0", date: "2026-09-22", readFile, workspacePackages, acceptDraft }).changes.at(-1);
+    assert.match(notes(false)?.after ?? "", /^<!--\n/);
+    assert.equal(notes(true)?.after, "- New.\n");
   });
 
   it("releases the untagged current version without spending build numbers", () => {
@@ -271,6 +307,7 @@ describe("this checkout", () => {
     const paths = plan.changes.map((change) => change.path);
     for (const path of ["package.json", IOS_PROJECT, ANDROID_GRADLE, CHANGELOG]) assert.ok(paths.includes(path), path);
     for (const { path } of VERSION_CONSTANTS) assert.ok(paths.includes(path), path);
+    for (const path of SELFHOST_VERSION_FILES) assert.ok(paths.includes(path), path);
     for (const path of workspacePackages) {
       const text = read(path);
       if (text !== null && JSON.parse(text).version !== undefined) assert.ok(paths.includes(path), path);
