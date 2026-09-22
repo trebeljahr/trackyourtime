@@ -101,14 +101,21 @@ export function ProjectTaskPicker({
 
   const contents = layout === "contents";
   const control = bare ? "border-0 shadow-none" : "w-full";
+  const [projectOpen, setProjectOpen] = React.useState(false);
 
   /**
-   * The client, read-only.
+   * The client, read-only — but a way into the project picker.
    *
-   * Never a picker: a client owns projects and an entry points at a project —
-   * so choosing one here would be a second source of truth that can disagree
-   * with the project's own client. Shown rather than chosen is what keeps
-   * "Redesign" unambiguous when two clients both have one.
+   * Never a picker of its own: a client owns projects and an entry points at a
+   * project — so choosing one here would be a second source of truth that can
+   * disagree with the project's own client. Shown rather than chosen is what
+   * keeps "Redesign" unambiguous when two clients both have one.
+   *
+   * It still reads as a field, sitting between two pickers, and a label that
+   * ignores a click looks broken rather than derived. So clicking it opens
+   * the project picker, whose list is grouped by client: the way to move an
+   * entry to another client IS to file it under one of that client's
+   * projects, and the title says so.
    *
    * How much room it earns depends on where it is. In the caller's grid it
    * owns a track that collapses to 0px on narrower viewports, so it must stay
@@ -117,27 +124,46 @@ export function ProjectTaskPicker({
    * project and says "No client" when there is none, which is information. On
    * a bar competing for width it is neither, so it goes away entirely.
    */
+  const clientLabel = (
+    <>
+      <Building2 className="size-3 shrink-0" aria-hidden />
+      <span className="truncate">{clientName ?? tc("empty.noClient")}</span>
+    </>
+  );
+  const clientClassName = cn(
+    "min-w-0 items-center gap-1 truncate text-xs text-muted-foreground",
+    contents
+      ? "hidden min-[1140px]:flex"
+      : labelled
+        ? "flex"
+        : "hidden max-w-32 shrink lg:inline-flex"
+  );
+  const clientTitle =
+    clientName === null
+      ? tc("empty.noClient")
+      : t("entryFields.clientTitle", { name: clientName });
   const client =
-    !contents && !labelled && clientName === null ? null : (
+    !contents && !labelled && clientName === null ? null : disabled ? (
       <span
-        className={cn(
-          "min-w-0 items-center gap-1 truncate text-xs text-muted-foreground",
-          contents
-            ? "hidden min-[1140px]:flex"
-            : labelled
-              ? "flex"
-              : "hidden max-w-32 shrink lg:inline-flex"
-        )}
-        title={
-          clientName === null
-            ? tc("empty.noClient")
-            : t("entryFields.clientTitle", { name: clientName })
-        }
+        className={clientClassName}
+        title={clientTitle}
         data-testid={`${testIdPrefix}-client`}
       >
-        <Building2 className="size-3 shrink-0" aria-hidden />
-        <span className="truncate">{clientName ?? tc("empty.noClient")}</span>
+        {clientLabel}
       </span>
+    ) : (
+      <button
+        type="button"
+        className={cn(
+          clientClassName,
+          "cursor-pointer rounded px-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        )}
+        title={t("entryFields.clientHint", { title: clientTitle })}
+        onClick={() => setProjectOpen(true)}
+        data-testid={`${testIdPrefix}-client`}
+      >
+        {clientLabel}
+      </button>
     );
 
   const project = (
@@ -148,6 +174,8 @@ export function ProjectTaskPicker({
       size={size}
       className={cn(control, !contents && !bare && "flex-1", controlClassName)}
       testId={`${testIdPrefix}-project`}
+      open={projectOpen}
+      onOpenChange={setProjectOpen}
     />
   );
 

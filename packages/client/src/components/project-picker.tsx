@@ -68,6 +68,9 @@ export type ProjectPickerProps = {
   className?: string;
   size?: "default" | "sm" | "lg";
   testId?: string;
+  /** Controlled open state, for a caller with a second way in — the client label. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 /**
@@ -84,6 +87,8 @@ export function ProjectPicker({
   className,
   size = "default",
   testId = "project-picker",
+  open,
+  onOpenChange,
 }: ProjectPickerProps): React.JSX.Element {
   const t = useT("tracker");
   const tc = useT("common");
@@ -195,6 +200,8 @@ export function ProjectPicker({
         size={size}
         className={cn("min-w-48", className)}
         data-testid={testId}
+        open={open}
+        onOpenChange={onOpenChange}
         footerActions={
           allowCreate
             ? [

@@ -413,6 +413,23 @@ function EntryRowImpl({
           </Button>
         )}
 
+        {/* The dialog is the only place the row's DATE can change, and a menu
+            item three clicks away was where people stopped looking for it. The
+            menu keeps its Edit item for keyboard and phone users. */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 cap-touch"
+          disabled={syncing}
+          aria-label={tc("actions.edit")}
+          title={tc("actions.edit")}
+          onClick={() => onEdit(entry)}
+          data-testid="entry-edit"
+        >
+          <Pencil />
+        </Button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

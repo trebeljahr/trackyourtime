@@ -82,6 +82,7 @@ export const tracker = {
   entryFields: {
     descriptionPlaceholder: "What did you work on?",
     clientTitle: "Client: {name}",
+    clientHint: "{title}. Set by the project. Choose another project to change it.",
   },
   projectPicker: {
     searchPlaceholder: "Search projects...",

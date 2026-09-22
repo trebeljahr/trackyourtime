@@ -76,6 +76,7 @@ export const tracker: Translation<typeof source> = {
   entryFields: {
     descriptionPlaceholder: "Woran hast du gearbeitet?",
     clientTitle: "Kunde: {name}",
+    clientHint: "{title}. Ergibt sich aus dem Projekt. Wähle ein anderes Projekt, um ihn zu ändern.",
   },
   projectPicker: {
     searchPlaceholder: "Projekte suchen …",

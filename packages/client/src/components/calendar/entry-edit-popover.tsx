@@ -2,8 +2,12 @@
 
 import * as React from "react";
 import { Trash2 } from "lucide-react";
-import type { EntryFields } from "@starter/core";
-import { parseTimeOfDay, type DetailedEntry } from "@starter/shared";
+import { deviceTimeZone, type EntryFields } from "@starter/core";
+import {
+  dayKeyInZone,
+  parseTimeOfDay,
+  type DetailedEntry,
+} from "@starter/shared";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { EntryFieldsEditor } from "@/components/entry-fields/entry-fields-editor";
 import { useWriteThroughEntryFields } from "@/components/entry-fields/use-entry-fields";
+import { movedStartDay } from "@/components/tracker/use-entry-editor";
 import { toast } from "@/components/ui/sonner";
 import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
@@ -65,6 +70,27 @@ export function EntryEditPopover({
   }
 
   const durationSec = format.entryDuration(entry, nowMs);
+
+  // The day is read and re-anchored in the zone the entry was RECORDED in,
+  // like the edit dialog: moving "23:30 Berlin" to another day keeps it at
+  // 23:30 Berlin whoever is editing. `movedStartDay` carries the end along by
+  // the same delta, so the block keeps its length; a running entry has no end
+  // to carry, and stays running.
+  const entryZone = entry.timeZone ?? deviceTimeZone();
+  const dayKey = dayKeyInZone(Date.parse(entry.start), entryZone);
+  const commitDay = (next: string): void => {
+    if (next === "" || next === dayKey) return;
+    const moved = movedStartDay(
+      { start: entry.start, end: endIso },
+      next,
+      entryZone
+    );
+    if (moved.start === entry.start) return;
+    actions.update(
+      entry.id,
+      isRunning ? { start: moved.start } : { start: moved.start, end: moved.end }
+    );
+  };
 
   const commitTime = (field: "start" | "end", raw: string): void => {
     const anchor = field === "start" ? entry.start : endIso;
@@ -122,6 +148,23 @@ export function EntryEditPopover({
         idPrefix={`calendar-edit-${entry.id}`}
         testIdPrefix="calendar-edit"
       />
+
+      {/* The grid can move a block within the week it shows; the day field is
+          how it leaves that week — the calendar's version of the dialog's
+          start date, without a Save button because nothing else here has one. */}
+      <div className="space-y-1.5">
+        <Label htmlFor={`calendar-edit-date-${entry.id}`}>{tc("fields.date")}</Label>
+        <Input
+          id={`calendar-edit-date-${entry.id}`}
+          type="date"
+          value={dayKey}
+          className="tabular-nums"
+          onChange={(event) => {
+            commitDay(event.target.value);
+          }}
+          data-testid="calendar-edit-date"
+        />
+      </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1.5">
