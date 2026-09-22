@@ -174,6 +174,8 @@ export const catalog: Translation<typeof source> = {
       rateInvalid: "Gib einen Satz von 0 oder mehr ein oder lass das Feld leer",
       rateHint: "Leer lassen, um den Standard des Arbeitsbereichs zu verwenden.",
       nonBillableHint: "Nicht abrechenbare Zeit hat keinen Satz.",
+      zeroRateHint:
+        "Der Satz ist 0, daher sind neue Einträge nicht abrechenbar. Gib einen Satz über 0 ein.",
       saved: "Abrechnung für neue Einträge gespeichert.",
       savedWithEntries:
         "Abrechnung gespeichert und {count, plural, one {# Eintrag} other {# Einträge}} aktualisiert.",

@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 // Subpath import: a bare named import from "@starter/shared" throws under tsx.
 // See the note in duration.test.ts.
-import { entryAmount, resolveHourlyRate, sumAmounts } from "@starter/shared/rates";
+import {
+  entryAmount,
+  projectBillableByDefault,
+  resolveHourlyRate,
+  sumAmounts,
+} from "@starter/shared/rates";
 
 // ── resolveHourlyRate ────────────────────────────────────────────────
 
@@ -107,5 +112,39 @@ test("sumAmounts matches the sum of per-entry amounts", () => {
   assert.equal(
     sumAmounts(amounts),
     Math.round(amounts.reduce((total, amount) => total + amount * 100, 0)) / 100
+  );
+});
+
+// ── projectBillableByDefault ─────────────────────────────────────────
+
+test("projectBillableByDefault needs the flag AND a rate above 0", () => {
+  assert.equal(
+    projectBillableByDefault({ billableDefault: true, hourlyRate: 90 }, 0),
+    true
+  );
+  assert.equal(
+    projectBillableByDefault({ billableDefault: true, hourlyRate: null }, 60),
+    true
+  );
+  assert.equal(
+    projectBillableByDefault({ billableDefault: false, hourlyRate: 90 }, 60),
+    false
+  );
+});
+
+test("projectBillableByDefault: a project billing at 0 is not billable", () => {
+  // Its own rate is 0, whatever the workspace default.
+  assert.equal(
+    projectBillableByDefault({ billableDefault: true, hourlyRate: 0 }, 60),
+    false
+  );
+  // No rate of its own, and the workspace default is 0 (a fresh workspace).
+  assert.equal(
+    projectBillableByDefault({ billableDefault: true, hourlyRate: null }, 0),
+    false
+  );
+  assert.equal(
+    projectBillableByDefault({ billableDefault: true, hourlyRate: undefined }, null),
+    false
   );
 });

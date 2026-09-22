@@ -25,6 +25,7 @@ import {
   MAX_FAVORITES,
   createFavoriteSchema,
   idInputSchema,
+  projectBillableByDefault,
   quickStartKey,
   reorderFavoritesSchema,
   type DetailedFavorite,
@@ -32,6 +33,7 @@ import {
 } from "@starter/shared";
 import { Favorite, toClientFavorite } from "../../models/Favorite.js";
 import { Project } from "../../models/Project.js";
+import { getOrCreateWorkspaceSettings } from "../../models/Settings.js";
 import { Task } from "../../models/Task.js";
 import { publishToUser } from "../../ws/sync.js";
 import { router, workspaceProcedure } from "../trpc.js";
@@ -132,7 +134,15 @@ export const favoritesRouter = router({
           message: "Project not found",
         });
       }
-      const billable = input.billable ?? project?.billableDefault ?? false;
+      const billable =
+        input.billable ??
+        (project
+          ? projectBillableByDefault(
+              project,
+              (await getOrCreateWorkspaceSettings(ctx.workspaceId))
+                .defaultHourlyRate,
+            )
+          : false);
 
       // Validated at pin time for the same reason `entries.start` validates at
       // start time: a pin that cannot be started is worse than a rejected pin,

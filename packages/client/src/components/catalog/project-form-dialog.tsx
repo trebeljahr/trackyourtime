@@ -2,7 +2,11 @@
 
 import * as React from "react";
 import { ChevronRight } from "lucide-react";
-import { IDLE_BEHAVIORS, type IdleBehavior } from "@starter/shared";
+import {
+  IDLE_BEHAVIORS,
+  projectBillableByDefault,
+  type IdleBehavior,
+} from "@starter/shared";
 
 import { ColorPicker, COLOR_PALETTE } from "@/components/color-picker";
 import { Button } from "@/components/ui/button";
@@ -298,6 +302,17 @@ function ProjectForm({
     });
   };
 
+  // The switch is on but the rate the form would save resolves to 0: the
+  // server answers `billableDefault: false` for that, so say so before Save.
+  const rateTarget = parseTarget(rate);
+  const billsNothing =
+    billableDefault &&
+    rateTarget !== INVALID &&
+    !projectBillableByDefault(
+      { billableDefault: true, hourlyRate: rateTarget },
+      settings.defaultHourlyRate,
+    );
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <DialogHeader>
@@ -443,8 +458,13 @@ function ProjectForm({
                 }}
                 data-testid="project-rate-input"
               />
-              <p className="text-xs text-muted-foreground">
-                {t("projects.form.rateHint")}
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="project-rate-hint"
+              >
+                {billsNothing
+                  ? t("projects.billing.zeroRateHint")
+                  : t("projects.form.rateHint")}
               </p>
               {rateError ? (
                 <p

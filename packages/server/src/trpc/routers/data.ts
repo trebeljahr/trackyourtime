@@ -51,6 +51,7 @@ import {
   type WorkspaceExportInfo,
   type WorkspaceExportInvoice,
   type WorkspaceRole,
+  projectBillableByDefault,
 } from "@starter/shared";
 import {
   BusinessProfileInvalidError,
@@ -1240,7 +1241,10 @@ export const dataRouter = router({
           ? (catalog.tasks.get(lower(row.taskName)) ?? null)
           : null;
         const billable =
-          row.billable ?? project?.billableDefault ?? defaultBillable;
+          row.billable ??
+          (project
+            ? projectBillableByDefault(project, settings.defaultHourlyRate)
+            : defaultBillable);
         return {
           workspaceId,
           authorId: ctx.user.id,

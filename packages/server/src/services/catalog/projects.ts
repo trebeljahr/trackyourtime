@@ -19,6 +19,8 @@ import {
   type ProjectUpdateResult,
   type UpdateProjectInput,
   type UpdateProjectWithEntriesInput,
+  type WorkspaceSettings,
+  projectBillableByDefault,
 } from "@starter/shared";
 import { Favorite } from "../../models/Favorite.js";
 import {
@@ -99,6 +101,25 @@ const assertUniqueProjectName = (
   });
 
 /**
+ * The wire shape every read and write answers with: the stored row, with
+ * `billableDefault` projected through the zero-rate rule
+ * (`projectBillableByDefault`). Every client defaults new entries from the
+ * wire flag, so a project billing at 0 reads as non-billable everywhere at
+ * once, and reads as billable again the moment its rate (or the workspace
+ * default it inherits) is raised — without any project being edited.
+ */
+function projectWire(
+  doc: ProjectDocLike,
+  settings: Pick<WorkspaceSettings, "defaultHourlyRate">,
+): ProjectWire {
+  const wire = toClientProject(doc);
+  return {
+    ...wire,
+    billableDefault: projectBillableByDefault(wire, settings.defaultHourlyRate),
+  };
+}
+
+/**
  * The one pipeline. `list` and `get` differ only in their `$match`, so they
  * share this — a separate single-row query is how the two stop agreeing about
  * what `totalSec` and `progress` mean.
@@ -108,6 +129,7 @@ async function aggregateProjects(
   match: Record<string, unknown>,
 ): Promise<ProjectWithStats[]> {
   const workspaceId = scope.workspaceId;
+  const settings = await getOrCreateWorkspaceSettings(workspaceId);
   const rows = await Project.aggregate<ProjectAggregateRow>([
     { $match: { workspaceId, ...match } },
     {
@@ -143,7 +165,7 @@ async function aggregateProjects(
     const client = row.clientDoc[0];
     const stats = row.stats[0];
     return {
-      ...toClientProject(row),
+      ...projectWire(row, settings),
       clientName: client?.name ?? null,
       clientColor: client?.color ?? null,
       entryCount: stats?.entryCount ?? 0,
@@ -216,11 +238,9 @@ export async function createProject(
   const existing = await Project.countDocuments({
     workspaceId: scope.workspaceId,
   });
-  // Only read settings when a money budget is actually being set — every
-  // other create stays a single write.
-  const workspaceCurrency = needsCurrency(input)
-    ? (await getOrCreateWorkspaceSettings(scope.workspaceId)).currency
-    : "";
+  // Read for the budget's currency and for the answer's billable flag, which
+  // depends on the workspace default rate.
+  const settings = await getOrCreateWorkspaceSettings(scope.workspaceId);
   const created = await Project.create({
     workspaceId: scope.workspaceId,
     createdBy: scope.userId,
@@ -232,7 +252,7 @@ export async function createProject(
     estimatedHours: null,
     budgetAmount: null,
     budgetCurrency: null,
-    ...budgetWrite(input, workspaceCurrency),
+    ...budgetWrite(input, settings.currency),
     idleBehavior: input.idleBehavior ?? null,
     archived: false,
   });
@@ -242,7 +262,7 @@ export async function createProject(
     { kind: "catalog.changed", scope: "project" },
     input.originId,
   );
-  return toClientProject(created);
+  return projectWire(created, settings);
 }
 
 export async function updateProject(
@@ -255,18 +275,22 @@ export async function updateProject(
   }
   if (input.clientId) await assertClientOwned(scope.workspaceId, input.clientId);
 
+  // Read on every update: the answer's billable flag depends on the
+  // workspace default rate.
+  const settings = await getOrCreateWorkspaceSettings(scope.workspaceId);
+
   // Changing a budget's amount must keep the currency it was agreed in,
   // so the existing snapshot is read before it is overwritten. An
-  // estimate-only edit needs neither lookup.
+  // estimate-only edit needs no lookup.
   let budgetSet: Record<string, unknown> = {};
   if (touchesBudget(input)) {
     if (needsCurrency(input)) {
-      const [settings, existing] = await Promise.all([
-        getOrCreateWorkspaceSettings(scope.workspaceId),
-        Project.findOne({ _id: input.id, workspaceId: scope.workspaceId })
-          .select("budgetAmount budgetCurrency")
-          .lean(),
-      ]);
+      const existing = await Project.findOne({
+        _id: input.id,
+        workspaceId: scope.workspaceId,
+      })
+        .select("budgetAmount budgetCurrency")
+        .lean();
       budgetSet = budgetWrite(input, settings.currency, {
         budgetAmount: existing?.budgetAmount ?? null,
         budgetCurrency: existing?.budgetCurrency ?? null,
@@ -308,7 +332,7 @@ export async function updateProject(
     { kind: "catalog.changed", scope: "project" },
     input.originId,
   );
-  return toClientProject(updated);
+  return projectWire(updated, settings);
 }
 
 /**
@@ -333,23 +357,28 @@ export async function updateProjectWithEntries(
 
   assertObjectId(update.id);
   // Read before the write: whether the default changed decides whether each
-  // entry's own flag is overwritten or left alone.
-  const before = await Project.findOne({
-    _id: update.id,
-    workspaceId: scope.workspaceId,
-  })
-    .select("billableDefault")
-    .lean();
+  // entry's own flag is overwritten or left alone. Compared as the clients
+  // saw it — through the zero-rate rule — so giving a rate to a project that
+  // was billable at 0 counts as switching it on, and its entries follow.
+  const [before, settings] = await Promise.all([
+    Project.findOne({ _id: update.id, workspaceId: scope.workspaceId })
+      .select("billableDefault hourlyRate")
+      .lean(),
+    getOrCreateWorkspaceSettings(scope.workspaceId),
+  ]);
   if (!before) throw notFound();
+  const wasBillable = projectBillableByDefault(
+    before,
+    settings.defaultHourlyRate,
+  );
 
   const project = await updateProject(scope, update);
-  const settings = await getOrCreateWorkspaceSettings(scope.workspaceId);
   const entriesRewritten = await applyBillingToEntries(
     scope,
     project.id,
     {
       billableDefault: project.billableDefault,
-      billableChanged: project.billableDefault !== before.billableDefault,
+      billableChanged: project.billableDefault !== wasBillable,
       projectRate: project.hourlyRate,
     },
     settings,
@@ -387,7 +416,10 @@ export async function archiveProject(
     { kind: "catalog.changed", scope: "project" },
     input.originId,
   );
-  return toClientProject(updated);
+  return projectWire(
+    updated,
+    await getOrCreateWorkspaceSettings(scope.workspaceId),
+  );
 }
 
 /**

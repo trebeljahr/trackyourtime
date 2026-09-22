@@ -29,6 +29,35 @@ export const resolveHourlyRate = ({
   return null;
 };
 
+/** The two project fields that decide whether new time on it is billable. */
+export type ProjectBillingDefaults = {
+  billableDefault: boolean;
+  hourlyRate: number | null | undefined;
+};
+
+/**
+ * Whether time booked on a project is billable by default.
+ *
+ * A project that is billable on paper but bills at 0 — its own rate is 0, or
+ * it has none and the workspace default is 0 — is not billable: its time would
+ * land on invoices and in reports as billable hours worth nothing. Every
+ * client reads this through the project's wire `billableDefault`, which the
+ * server projects through this rule, so a rate later raised above 0 makes the
+ * project billable again with no edit to it.
+ */
+export const projectBillableByDefault = (
+  project: ProjectBillingDefaults,
+  defaultRate: number | null | undefined,
+): boolean => {
+  if (!project.billableDefault) return false;
+  const rate = resolveHourlyRate({
+    billable: true,
+    projectRate: project.hourlyRate,
+    defaultRate,
+  });
+  return rate !== null && rate > 0;
+};
+
 /** Earnings for `seconds` at `hourlyRate`, rounded to 2 decimals. */
 export const entryAmount = (
   seconds: number,

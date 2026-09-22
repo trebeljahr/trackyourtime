@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
+import { projectBillableByDefault } from "@starter/shared";
 import { translate, useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import {
@@ -104,6 +105,16 @@ export function ProjectBillingCell({
   };
 
   const effectiveRate = project.hourlyRate ?? defaultRate;
+  // The switch is on but the rate the form would save resolves to 0: the
+  // server answers `billableDefault: false` for that, so say so before Save.
+  const parsedRate = parseRate(rate);
+  const billsNothing =
+    billable &&
+    parsedRate !== "invalid" &&
+    !projectBillableByDefault(
+      { billableDefault: true, hourlyRate: parsedRate },
+      defaultRate,
+    );
 
   return (
     <Popover open={open} onOpenChange={openEditor}>
@@ -187,10 +198,15 @@ export function ProjectBillingCell({
                 {rateError}
               </p>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                {billable
-                  ? t("projects.billing.rateHint")
-                  : t("projects.billing.nonBillableHint")}
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="project-billing-rate-hint"
+              >
+                {!billable
+                  ? t("projects.billing.nonBillableHint")
+                  : billsNothing
+                    ? t("projects.billing.zeroRateHint")
+                    : t("projects.billing.rateHint")}
               </p>
             )}
           </div>

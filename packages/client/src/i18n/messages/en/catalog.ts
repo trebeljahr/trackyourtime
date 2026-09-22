@@ -192,6 +192,9 @@ export const catalog = {
       rateInvalid: "Enter a rate of 0 or more, or leave it empty",
       rateHint: "Leave empty to use the workspace default.",
       nonBillableHint: "Non-billable time carries no rate.",
+      /** The switch is on, but the rate that applies is 0. */
+      zeroRateHint:
+        "This bills at 0, so new entries are not billable. Enter a rate above 0.",
       saved: "Billing saved for new entries.",
       savedWithEntries:
         "Billing saved and {count, plural, one {# entry} other {# entries}} updated.",

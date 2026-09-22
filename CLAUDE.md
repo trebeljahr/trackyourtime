@@ -1341,6 +1341,20 @@ does the rewrite. Three limits, each an existing rule:
 `updateProjectSchema`: REST validates with the latter and publishes it as
 OpenAPI, and a bulk rewrite of history is not part of the public API.
 
+**A project billing at 0 is not billable.** `projectBillableByDefault` in
+`@starter/shared/rates` is the rule: the stored flag AND a rate above 0 (its
+own, else the workspace default). The server projects every project's wire
+`billableDefault` through it (`projectWire` in `services/catalog/projects.ts`,
+so REST, MCP, the extension and Raycast inherit it) and every server-side
+fallback for an omitted `billable` (start, create, favorites, import) asks it
+rather than the stored flag. The stored flag is untouched: raising the rate,
+or the workspace default a rate-less project inherits, makes the project
+billable again with no edit. `updateProjectWithEntries` compares before and
+after through the same rule, so giving a rate to a project that billed at 0
+counts as switching billing on, and "apply to entries" flags its time. An
+entry's own hand-set `billable` is never overridden — the rule is a default.
+The billing cell and project form say so (`zeroRateHint`) before Save.
+
 ### Colleagues' time and money
 
 A `WorkspaceMember` carries `canViewOthersTime` and `canViewOthersMoney`, and

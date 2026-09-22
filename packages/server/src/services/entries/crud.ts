@@ -6,10 +6,11 @@
 // — the latter would let a member with the time-visibility flag edit anybody's
 // row the moment somebody granted it.
 import { TRPCError } from "@trpc/server";
-import type {
-  CreateEntryInput,
-  TimeEntry as TimeEntryWire,
-  UpdateEntryInput,
+import {
+  projectBillableByDefault,
+  type CreateEntryInput,
+  type TimeEntry as TimeEntryWire,
+  type UpdateEntryInput,
 } from "@starter/shared";
 import { Project } from "../../models/Project.js";
 import { TimeEntry, toClientTimeEntry } from "../../models/TimeEntry.js";
@@ -53,8 +54,14 @@ export async function createEntry(
     input.taskId ?? null,
   );
   const tagIds = (await resolveTagIds(workspaceId, input.tagIds)) ?? [];
-  const billable = input.billable ?? refs.project?.billableDefault ?? false;
   const settings = await getOrCreateWorkspaceSettings(workspaceId);
+  // The project's default as every client sees it: a project billing at 0 is
+  // not billable (`projectBillableByDefault`).
+  const billable =
+    input.billable ??
+    (refs.project
+      ? projectBillableByDefault(refs.project, settings.defaultHourlyRate)
+      : false);
   const { hourlyRate, currency } = snapshotRate(
     billable,
     refs.project,

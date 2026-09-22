@@ -18,6 +18,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
+  projectBillableByDefault,
   resolvedEndMs,
   type ContinueEntryInput,
   type EntrySource,
@@ -236,8 +237,14 @@ export type StartedEntry = {
 export const startNewEntry = async (args: StartArgs): Promise<StartedEntry> => {
   const refs = await resolveRefs(args.workspaceId, args.projectId, args.taskId);
   const tagIds = (await resolveTagIds(args.workspaceId, args.tagIds)) ?? [];
-  const billable = args.billable ?? refs.project?.billableDefault ?? false;
   const settings = await getOrCreateWorkspaceSettings(args.workspaceId);
+  // The project's default as every client sees it: a project billing at 0 is
+  // not billable (`projectBillableByDefault`).
+  const billable =
+    args.billable ??
+    (refs.project
+      ? projectBillableByDefault(refs.project, settings.defaultHourlyRate)
+      : false);
   const { hourlyRate, currency } = snapshotRate(
     billable,
     refs.project,
