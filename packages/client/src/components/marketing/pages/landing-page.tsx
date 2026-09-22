@@ -146,6 +146,15 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
       >
         <p>{t("landing.invoice.rates")}</p>
         <p>{t("landing.invoice.once")}</p>
+        <p>
+          {t.rich("landing.invoice.generator", {
+            tool: (chunks) => (
+              <Link href={localizedPath(locale, "/invoice-generator/")} className={link}>
+                {chunks}
+              </Link>
+            ),
+          })}
+        </p>
       </Feature>
 
       <Section title={t("landing.team.title")}>

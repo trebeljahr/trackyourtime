@@ -4,6 +4,10 @@ import { DEFAULT_DESKTOP_SHORTCUTS } from "@starter/shared";
 
 import { DownloadPage, downloadMetadata } from "@/components/marketing/pages/download-page";
 import { ExtensionPage, extensionMetadata } from "@/components/marketing/pages/extension-page";
+import {
+  InvoiceGeneratorPage,
+  invoiceGeneratorMetadata,
+} from "@/components/marketing/pages/invoice-generator-page";
 import { LandingPage, landingMetadata } from "@/components/marketing/pages/landing-page";
 import { MobilePage, mobileMetadata } from "@/components/marketing/pages/mobile-page";
 import { PrivacyPage, privacyMetadata } from "@/components/marketing/pages/privacy-page";
@@ -23,6 +27,7 @@ const PAGES = [
   { name: "raycast", Page: RaycastPage, meta: raycastMetadata, title: "Track time without leaving the keyboard" },
   { name: "mobile", Page: MobilePage, meta: mobileMetadata, title: "Track time wherever the work happens" },
   { name: "download", Page: DownloadPage, meta: downloadMetadata, title: "Start the timer from any app on your computer" },
+  { name: "invoiceGenerator", Page: InvoiceGeneratorPage, meta: invoiceGeneratorMetadata, title: "Make an invoice without an account" },
 ] as const;
 
 describe("public pages in English", () => {
@@ -39,6 +44,22 @@ describe("public pages in English", () => {
       expect(meta("en").description).toBeTruthy();
     });
   }
+
+  for (const { name, Page, meta } of PAGES) {
+    it(`renders ${name} in German with no missing messages`, () => {
+      const html = renderToStaticMarkup(<Page locale="de" />);
+      expect(html).not.toMatch(/marketing\.[a-z]+\.[a-zA-Z.]+/);
+      expect(errors).not.toHaveBeenCalled();
+      expect(meta("de").description).toBeTruthy();
+    });
+  }
+
+  it("localises the invoice generator title", () => {
+    const en = renderToStaticMarkup(<InvoiceGeneratorPage locale="en" />);
+    const de = renderToStaticMarkup(<InvoiceGeneratorPage locale="de" />);
+    expect(en).toContain("Make an invoice without an account");
+    expect(de).toContain("Erstelle eine Rechnung ohne Konto");
+  });
 
   it("keeps rich-text links and arguments", () => {
     const html = renderToStaticMarkup(<PrivacyPage locale="en" />);

@@ -80,6 +80,7 @@ export function MarketingShell({
             <li><Link href={href("/raycast/")} className="hover:text-foreground">{t("shell.footer.raycastExtension")}</Link></li>
             <li><Link href={href("/mobile/")} className="hover:text-foreground">{t("shell.footer.mobile")}</Link></li>
             <li><Link href={href("/download/")} className="hover:text-foreground">{t("shell.footer.desktop")}</Link></li>
+            <li><Link href={href("/invoice-generator/")} className="hover:text-foreground">{t("shell.footer.invoiceGenerator")}</Link></li>
           </ul>
           <ul className="space-y-2">
             <li><a href={REPO_URL} className="hover:text-foreground">{t("shell.footer.sourceCode")}</a></li>
