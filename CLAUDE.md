@@ -335,6 +335,19 @@ desktop one needs `app://-` in the live server's `TRUSTED_ORIGINS` (or
 `TRUST_STORE_APPS=true`); `/api/health` with an `Origin: app://-` header says
 whether it is (`originTrusted`).
 
+**Windows and Linux from a Mac** (`docs/cross-platform-testing.md`, tools in
+`scripts/crossplat/`). `pnpm prod:win` cross-builds the unpacked Windows arm64
+app against the live API and drops it into `~/VMShare` for a UTM VM, where a
+person double-clicks `run.cmd` — for people, like `prod:desktop`.
+`pnpm test:desktop:linux` builds for the Docker daemon's arch and starts the
+app in a container under Xvfb (pass/fail, screenshot in
+`test-results/linux-smoke/`); safe for agents. Two rules: the smoke runs
+**without** `TRACKYOURTIME_HEADLESS`, because on X11 a never-shown window gives
+CDP no frames and the screenshot hangs; and `scripts/crossplat/` imports
+nothing from this repo and names no app — it is shared with the other projects
+and headed for hatchkit, so project wiring stays in `package.json` and
+`scripts/desktop-linux-smoke.mjs`.
+
 **Desktop activity capture** (plan Stage 8, `electron/src/activity/`, the
 `/app/activity` screen in `components/activity/`, the card in
 `components/settings/desktop-activity.tsx`). The desktop counterpart of the

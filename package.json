@@ -51,6 +51,8 @@
     "electron:build": "node scripts/build-desktop.mjs --package",
     "electron:preview": "node scripts/build-desktop.mjs --package --dir",
     "prod:desktop": "NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev node scripts/build-desktop.mjs --open --package --dir",
+    "prod:win": "NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev node scripts/build-desktop.mjs --package --win --arm64 --dir && node scripts/crossplat/vm-drop.mjs --project trackyourtime --platform windows-arm64 --source release/win-arm64-unpacked --launch \"Track Your Time.exe\" --note api.trackyourtime.dev",
+    "test:desktop:linux": "node scripts/desktop-linux-smoke.mjs",
     "prod:ios": "NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev pnpm cap:run:ios",
     "prod:android": "NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev pnpm cap:run:android",
     "icons:desktop": "node scripts/icons-desktop.mjs",
