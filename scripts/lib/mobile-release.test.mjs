@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -230,9 +230,10 @@ describe("developmentTeamConfigured", () => {
     assert.equal(developmentTeamConfigured(`${two}DEVELOPMENT_TEAM = "";\nDEVELOPMENT_TEAM = "";\n`), false);
   });
 
-  it("matches the committed project, which has no team yet", () => {
+  it("accepts the committed project, which names the team on both configurations", () => {
     const pbxproj = readFileSync(resolve(repoRoot, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
-    assert.equal(developmentTeamConfigured(pbxproj), false);
+    assert.equal(developmentTeamConfigured(pbxproj), true);
+    assert.ok(existsSync(resolve(repoRoot, "ios/App/ExportOptions.plist")));
   });
 });
 

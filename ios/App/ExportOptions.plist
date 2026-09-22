@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Read by `xcodebuild -exportArchive` in mobile-release.yml. `app-store-connect`
+	     covers TestFlight and the App Store; the IPA is uploaded by altool afterwards,
+	     so `destination` stays `export`. Automatic signing with the team's API key
+	     (-allowProvisioningUpdates) resolves the profile, so none is named here. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>export</string>
+	<key>teamID</key>
+	<string>4BHY8H2J25</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>
