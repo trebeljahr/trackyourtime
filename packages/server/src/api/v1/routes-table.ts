@@ -328,6 +328,9 @@ export const summaryReportSchemaOut: z.ZodType<SummaryReportResult> = z.object({
       date: dayKey,
       seconds: z.number(),
       billableSec: z.number(),
+      shares: z
+        .array(z.object({ key: z.string(), seconds: z.number() }))
+        .optional(),
     }),
   ),
   /** False when every amount above is withheld as `null`. */

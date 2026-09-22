@@ -10046,6 +10046,25 @@
                               },
                               "billableSec": {
                                 "type": "number"
+                              },
+                              "shares": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "seconds": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "key",
+                                    "seconds"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               }
                             },
                             "required": [

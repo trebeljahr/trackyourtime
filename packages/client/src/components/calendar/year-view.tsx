@@ -9,7 +9,11 @@ import {
   startOfMonth,
   startOfYear,
 } from "date-fns";
-import type { WeekStart } from "@starter/shared";
+import type {
+  SummaryGroup,
+  SummaryTimelinePoint,
+  WeekStart,
+} from "@starter/shared";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { toDateKey } from "@/components/date-range-picker";
@@ -20,30 +24,26 @@ import { useFormatSettings } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { NO_PROJECT_COLOR } from "./entry-color";
+import { daySharesOf, heatFill, intensityOf, type DayShare } from "./year-heat";
 
-/** Intensity buckets, lightest to darkest. Index 0 means "nothing tracked". */
-const INTENSITY = [
-  "bg-muted",
-  "bg-primary/25",
-  "bg-primary/45",
-  "bg-primary/65",
-  "bg-primary/85",
-] as const;
+/**
+ * The hue of a day whose server sent no per-project split (one from before
+ * `SummaryTimelinePoint.shares`): the old single-color heatmap.
+ */
+const FALLBACK_HUE = "hsl(var(--primary))";
 
-/** Which bucket a day falls into, measured against the busiest day. */
-const intensityOf = (seconds: number, busiestSec: number): number => {
-  if (seconds <= 0 || busiestSec <= 0) return 0;
-  const share = seconds / busiestSec;
-  if (share <= 0.25) return 1;
-  if (share <= 0.5) return 2;
-  if (share <= 0.75) return 3;
-  return 4;
-};
+/** How many projects a day's tooltip names. */
+const TOOLTIP_SHARES = 3;
 
 type YearDay = {
   date: Date;
   key: string;
   seconds: number;
+  /**
+   * The day's projects, biggest first; the first one paints the cell.
+   * `null` when the server sent no split.
+   */
+  shares: DayShare[] | null;
 };
 
 type YearMonth = {
@@ -79,6 +79,7 @@ export function YearView({
   const format = useFormatSettings();
   const f = useFormat();
   const t = useT("calendar");
+  const tc = useT("common");
   const yearNumber = year.getFullYear();
 
   const summary = trpc.reports.summary.useQuery(
@@ -91,13 +92,23 @@ export function YearView({
     { staleTime: 60_000 }
   );
 
-  const secondsByDay = React.useMemo<Map<string, number>>(() => {
-    const map = new Map<string, number>();
+  const pointsByDay = React.useMemo<Map<string, SummaryTimelinePoint>>(() => {
+    const map = new Map<string, SummaryTimelinePoint>();
     for (const point of summary.data?.timeline ?? []) {
-      map.set(point.date, point.seconds);
+      map.set(point.date, point);
     }
     return map;
   }, [summary.data]);
+
+  const groupsByKey = React.useMemo<Map<string, SummaryGroup>>(() => {
+    const map = new Map<string, SummaryGroup>();
+    for (const group of summary.data?.groups ?? []) {
+      map.set(group.key, group);
+    }
+    return map;
+  }, [summary.data]);
+
+  const noProjectLabel = tc("empty.noProject");
 
   const months = React.useMemo<YearMonth[]>(() => {
     return Array.from({ length: 12 }, (_, index) => {
@@ -110,9 +121,15 @@ export function YearView({
       for (let day = 1; day <= last.getDate(); day += 1) {
         const date = new Date(yearNumber, index, day);
         const key = toDateKey(date);
-        const seconds = secondsByDay.get(key) ?? 0;
+        const point = pointsByDay.get(key);
+        const seconds = point?.seconds ?? 0;
         totalSec += seconds;
-        days.push({ date, key, seconds });
+        days.push({
+          date,
+          key,
+          seconds,
+          shares: daySharesOf(point, groupsByKey, noProjectLabel),
+        });
       }
 
       return {
@@ -123,7 +140,7 @@ export function YearView({
         days,
       };
     });
-  }, [f, secondsByDay, weekStartsOn, yearNumber]);
+  }, [f, groupsByKey, noProjectLabel, pointsByDay, weekStartsOn, yearNumber]);
 
   const stats = React.useMemo(() => {
     let busiest: YearDay | null = null;
@@ -249,29 +266,54 @@ export function YearView({
                 {Array.from({ length: month.lead }, (_, index) => (
                   <span key={`lead-${index}`} aria-hidden />
                 ))}
-                {month.days.map((day) => (
-                  <button
-                    key={day.key}
-                    type="button"
-                    data-testid={`calendar-year-day-${day.key}`}
-                    title={`${f.date(day.date, "dayLabel")} · ${
-                      day.seconds > 0
-                        ? format.durationShort(day.seconds)
-                        : t("year.nothingTracked")
-                    }`}
-                    onClick={() => {
-                      onSelectDay(day.date);
-                    }}
-                    className={cn(
-                      "focus-visible:ring-ring aspect-square rounded-[3px] text-[0.6rem] tabular-nums transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:outline-none",
-                      INTENSITY[intensityOf(day.seconds, busiestSec)],
-                      day.seconds > 0 ? "text-primary-foreground" : "text-transparent",
-                      isSameDay(day.date, today) && "ring-primary ring-1"
-                    )}
-                  >
-                    {f.number(day.date.getDate())}
-                  </button>
-                ))}
+                {month.days.map((day) => {
+                  // Painted in the project that took most of the day, as
+                  // strongly as the day was busy — so a month reads as
+                  // "mostly the rebrand, two days of support" at a glance,
+                  // where one hue only said "busy" or "quiet".
+                  const dominant = day.shares?.[0];
+                  const fill = heatFill(
+                    dominant?.color ?? FALLBACK_HUE,
+                    intensityOf(day.seconds, busiestSec)
+                  );
+                  const split = day.shares
+                    ?.slice(0, TOOLTIP_SHARES)
+                    .map(
+                      (share) =>
+                        `${share.label} ${format.durationShort(share.seconds)}`
+                    )
+                    .join(", ");
+                  const title = [
+                    f.date(day.date, "dayLabel"),
+                    day.seconds > 0
+                      ? format.durationShort(day.seconds)
+                      : t("year.nothingTracked"),
+                    split || null,
+                  ]
+                    .filter((part) => part !== null)
+                    .join(" · ");
+
+                  return (
+                    <button
+                      key={day.key}
+                      type="button"
+                      data-testid={`calendar-year-day-${day.key}`}
+                      data-project={dominant?.key}
+                      title={title}
+                      onClick={() => {
+                        onSelectDay(day.date);
+                      }}
+                      style={fill ? { background: fill } : undefined}
+                      className={cn(
+                        "focus-visible:ring-ring aspect-square rounded-[3px] text-[0.6rem] tabular-nums transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:outline-none",
+                        fill ? "text-foreground" : "bg-muted text-transparent",
+                        isSameDay(day.date, today) && "ring-primary ring-1"
+                      )}
+                    >
+                      {f.number(day.date.getDate())}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );

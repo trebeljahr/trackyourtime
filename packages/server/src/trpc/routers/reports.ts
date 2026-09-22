@@ -792,6 +792,7 @@ const emptySummary = (
     date,
     seconds: 0,
     billableSec: 0,
+    shares: [],
   })),
   moneyVisible,
 });
@@ -903,8 +904,12 @@ export const buildSummary = async (
   }
 
   const timeline = new Map<string, SummaryTimelinePoint>();
+  // Per day, seconds by group key — what lets a heatmap color each day by the
+  // group that took most of it, without a second report per group.
+  const sharesByDay = new Map<string, Map<string, number>>();
   for (const date of dayKeysInRange(range.fromMs, range.toMs, calendar.timeZone)) {
-    timeline.set(date, { date, seconds: 0, billableSec: 0 });
+    timeline.set(date, { date, seconds: 0, billableSec: 0, shares: [] });
+    sharesByDay.set(date, new Map());
   }
 
   const groups = new Map<string, GroupAccumulator>();
@@ -948,7 +953,25 @@ export const buildSummary = async (
       if (!point) continue;
       point.seconds += slice.seconds;
       if (doc.billable) point.billableSec += slice.seconds;
+
+      const shares = sharesByDay.get(slice.date);
+      if (!shares) continue;
+      for (const identity of identities) {
+        shares.set(
+          identity.key,
+          (shares.get(identity.key) ?? 0) + slice.seconds,
+        );
+      }
     }
+  }
+
+  for (const [date, shares] of sharesByDay) {
+    const point = timeline.get(date);
+    if (!point) continue;
+    point.shares = [...shares]
+      .filter(([, seconds]) => seconds > 0)
+      .map(([key, seconds]) => ({ key, seconds }))
+      .sort((a, b) => b.seconds - a.seconds || a.key.localeCompare(b.key));
   }
 
   const sortedGroups: SummaryGroup[] = sortGroups(groups.values());

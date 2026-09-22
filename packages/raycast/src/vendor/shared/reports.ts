@@ -67,11 +67,28 @@ export type SummaryGroup = {
   amount: ReportMoney;
 };
 
+/** One group's share of a single timeline day. */
+export type SummaryTimelineShare = {
+  /** A `SummaryGroup.key` of the same report. */
+  key: string;
+  seconds: number;
+};
+
 export type SummaryTimelinePoint = {
   /** Local "YYYY-MM-DD". */
   date: string;
   seconds: number;
   billableSec: number;
+  /**
+   * How the day's seconds split across the report's groups, biggest first,
+   * with only groups that have time on the day. For `groupBy: "tag"` an
+   * entry's seconds land under each of its tags, exactly as in `groups`, so
+   * the shares of a day may sum to more than its `seconds`.
+   *
+   * Optional because a server from before this field omits it; a client
+   * reading a day's split falls back to the plain total when it is absent.
+   */
+  shares?: SummaryTimelineShare[];
 };
 
 export type SummaryReportResult = {
