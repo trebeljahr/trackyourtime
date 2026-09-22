@@ -48,6 +48,7 @@ import {
   postalDraftFrom,
   type PostalDraft,
 } from "@/components/invoices/identity-fields";
+import { BusinessLogoControl } from "@/components/settings/business-logo";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -268,11 +269,15 @@ export function BusinessProfileCard(): React.JSX.Element {
             <p>{t("businessProfile.hiddenByRole")}</p>
           </div>
         ) : query.data ? (
-          <BusinessProfileForm
-            // Re-seeded when a save lands (here or in another tab), never while typing.
-            key={query.data.updatedAt ?? "empty"}
-            profile={query.data}
-          />
+          <div className="space-y-6">
+            {/* Outside the form and its key: a logo change never re-seeds the draft. */}
+            <BusinessLogoControl profile={query.data} />
+            <BusinessProfileForm
+              // Re-seeded when a save lands (here or in another tab), never while typing.
+              key={query.data.updatedAt ?? "empty"}
+              profile={query.data}
+            />
+          </div>
         ) : query.isError ? (
           <p className="text-sm text-destructive" data-testid="business-profile-error">
             {t("businessProfile.loadFailed")}

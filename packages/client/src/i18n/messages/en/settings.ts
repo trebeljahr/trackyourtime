@@ -867,6 +867,31 @@ export const settings = {
     invalidFields: "Correct the marked fields to save.",
     smallBusinessNeedsE: "A small business invoices without VAT: choose Exempt (E) as the default.",
     backToInvoice: "Back to the invoice",
+    /** The invoice logo, above the form. */
+    logo: {
+      title: "Logo",
+      hint: "Printed top right of every new invoice. PNG or JPEG, up to {max} KB. Invoices you already created keep the logo they were created with.",
+      none: "No logo yet.",
+      alt: "Your invoice logo",
+      size: "{width} × {height} px",
+      upload: "Upload logo",
+      replace: "Replace",
+      remove: "Remove",
+      saved: "Logo saved",
+      removed: "Logo removed",
+      saveFailed: "The logo could not be saved. Try again.",
+      removeFailed: "The logo could not be removed. Try again.",
+      readFailed: "The file could not be read. Try another file.",
+      errors: {
+        unsupportedFormat: "Choose a PNG or JPEG file.",
+        tooLarge: "The file is larger than {max} KB. Export a smaller one.",
+        tooBig: "The image is larger than {max} px on a side. Export a smaller one.",
+        corrupt: "The file is not a readable image. Export it again.",
+        interlacedPng: "Interlaced PNGs cannot be printed. Export the PNG without interlacing.",
+        cmykJpeg: "CMYK JPEGs cannot be printed. Export the JPEG in RGB.",
+        unsupportedJpeg: "This JPEG uses an encoding PDF readers do not support. Export it as a baseline or progressive JPEG.",
+      },
+    },
   },
   /** Settings → Account → Two-factor authentication. */
   twoFactor: {

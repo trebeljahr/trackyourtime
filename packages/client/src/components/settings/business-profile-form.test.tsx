@@ -27,6 +27,9 @@ vi.mock("@/lib/trpc", () => ({
       updateBusinessProfile: {
         useMutation: () => ({ mutate, isPending: false }),
       },
+      // The logo control above the form has its own mutations (business-logo.test.tsx).
+      setBusinessLogo: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      clearBusinessLogo: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
   },
 }));
