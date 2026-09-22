@@ -390,6 +390,23 @@ if (args[0] === "release" && args[1] === "view") {
     }
   });
 
+  it("says gh is missing rather than reporting no release", () => {
+    // An empty dir on PATH alone: nothing named gh resolves, so execFileSync
+    // throws ENOENT before any release lookup.
+    const bin = mkdtempSync(join(tmpdir(), "no-gh-"));
+    try {
+      const result = spawnSync(process.execPath, [script, "v0.4.0", "10"], {
+        encoding: "utf8",
+        env: { ...process.env, PATH: bin },
+      });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /gh is not installed/);
+      assert.doesNotMatch(result.stderr, /No release/);
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
   it("refuses a release with no feeds", () => {
     const gh = fakeGh({ feeds: {} });
     try {

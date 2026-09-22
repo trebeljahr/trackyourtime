@@ -81,6 +81,11 @@ function main() {
   try {
     release = JSON.parse(gh(["release", "view", args.tag, "--repo", repo, "--json", "tagName,isDraft,isPrerelease,assets,url"]));
   } catch (err) {
+    // ENOENT is execFileSync failing to start `gh` at all (no `status`), not
+    // gh answering "no such release".
+    if (err.code === "ENOENT") {
+      fail("gh is not installed (https://cli.github.com); desktop:rollout is a person's command with their own gh login.");
+    }
     const detail = String(err.stderr ?? err.message).trim();
     fail(`No release ${args.tag} in ${repo}${detail ? ` (${detail})` : ""}.`);
   }
