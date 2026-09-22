@@ -1641,11 +1641,21 @@ downloaded or installed: you upgrade by hand, as below.
 
 **Sentry.** Set `SENTRY_DSN` to send server errors to any Sentry-protocol
 endpoint, including a self-hosted GlitchTip. Unset, nothing is reported and no
-error data leaves the server. The web app in the self-host image reports
-nowhere: it is built without `NEXT_PUBLIC_SENTRY_DSN`, and without that value
-the reporting SDK is not in the bundle. To have it report, build the client
-image yourself with that variable set (it is inlined at build time, so a
-runtime env value does nothing); what a report carries is
+error data leaves the server. The published web-app image reports nowhere: it
+is built without `NEXT_PUBLIC_SENTRY_DSN`, and without that value the
+reporting SDK is not in the bundle. To have it report, build the client image
+yourself ([Where the images come from](#where-the-images-come-from)) with the
+build arg `NEXT_PUBLIC_SENTRY_DSN` set. `docker-compose.selfhost.build.yml`
+passes it from the variable of the same name, so put the line in `.env` and
+every later rebuild keeps it:
+
+```bash
+echo 'NEXT_PUBLIC_SENTRY_DSN=https://key@glitchtip.example.com/2' >> .env
+docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml up -d --build
+```
+
+The value is inlined at build time, so setting it on a running container does
+nothing. What a report carries is
 `packages/client/src/lib/error-reporting/scrub.ts`.
 
 **Google sign-in.** Set both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to

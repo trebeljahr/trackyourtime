@@ -54,3 +54,8 @@ services:
         # and Caddy makes them the same origin as the page. A value here would
         # bind the build to one host. See packages/client/Dockerfile.selfhost.
         NEXT_PUBLIC_API_URL: ""
+        # Error reporting for the web app: empty (the default) ships no
+        # reporting SDK. Set NEXT_PUBLIC_SENTRY_DSN in .env or the shell to
+        # build a web app that reports to that Sentry-protocol endpoint.
+        # Build-time only — see docs/self-hosting.md → Sentry.
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}

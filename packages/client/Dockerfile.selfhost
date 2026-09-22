@@ -61,6 +61,16 @@ COPY packages/client packages/client
 ARG NEXT_PUBLIC_API_URL=""
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
+# Error reporting for the web app, off by default. Empty ships none of the
+# reporting SDK (packages/client/src/lib/error-reporting/reporter.ts); a
+# Sentry-protocol DSN makes the web app report to that endpoint. Inlined at
+# build time like every NEXT_PUBLIC_* value, so an env value on the running
+# container does nothing — it has to be a build arg.
+# docker-compose.selfhost.build.yml passes it from the variable of the same
+# name in .env or the shell.
+ARG NEXT_PUBLIC_SENTRY_DSN=""
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+
 # The release commit. Stamped into /version.json and into the bundle, where an
 # open tab compares the two to offer a reload after an upgrade
 # (packages/client/src/lib/deploy-version.ts). Empty — a local
