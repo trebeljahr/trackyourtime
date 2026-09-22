@@ -64,12 +64,16 @@ function platformFromUserAgent(userAgent: string): string | null {
 /** Browser name, for the common case of several browsers on one machine. */
 function browserFromUserAgent(userAgent: string): string | null {
   const ua = userAgent.toLowerCase();
-  // Order matters: every Chromium UA also claims Safari, Edge also claims Chrome.
-  if (ua.includes("edg/")) return "Edge";
+  // Order matters: every Chromium UA also claims Safari, Edge and Opera also
+  // claim Chrome, and every iOS browser is WebKit claiming Safari with its
+  // own token beside it.
+  if (/edg(e|a|ios)?\//.test(ua)) return "Edge";
   if (ua.includes("opr/") || ua.includes("opera")) return "Opera";
-  if (ua.includes("firefox")) return "Firefox";
-  if (ua.includes("chrome") || ua.includes("chromium")) return "Chrome";
-  if (ua.includes("safari")) return "Safari";
+  if (ua.includes("samsungbrowser/")) return "Samsung Internet";
+  if (ua.includes("firefox/") || ua.includes("fxios/")) return "Firefox";
+  if (ua.includes("chrome/") || ua.includes("chromium/") || ua.includes("crios/"))
+    return "Chrome";
+  if (ua.includes("safari/")) return "Safari";
   return null;
 }
 
@@ -78,22 +82,30 @@ function browserFromUserAgent(userAgent: string): string | null {
  *
  * A self-declared client wins ("Raycast on macOS"). Otherwise fall back to
  * reading the user agent, which is all a plain browser session gives us.
+ *
+ * An extension's requests come from its background page or worker, whose user
+ * agent is the browser's own, so its row names the browser too ("Firefox
+ * extension on Windows") — with the same extension installed in two browsers
+ * on one machine, "Browser extension on macOS" twice tells them apart not at
+ * all. Chromium browsers that send Chrome's user agent unchanged (Brave, Arc,
+ * Vivaldi) read as Chrome; that is the price of not fingerprinting.
  */
 export function describeClient(
   client: ClientKind,
   userAgent: string | null,
 ): string {
   const platform = userAgent ? platformFromUserAgent(userAgent) : null;
+  const browser = userAgent ? browserFromUserAgent(userAgent) : null;
 
   if (client === "web" || client === "unknown") {
-    const browser = userAgent ? browserFromUserAgent(userAgent) : null;
     if (browser && platform) return `${browser} on ${platform}`;
     if (browser) return browser;
     if (platform) return `${CLIENT_LABELS.web} on ${platform}`;
     return CLIENT_LABELS[client];
   }
 
-  const base = CLIENT_LABELS[client];
+  const base =
+    client === "extension" && browser ? `${browser} extension` : CLIENT_LABELS[client];
   return platform ? `${base} on ${platform}` : base;
 }
 

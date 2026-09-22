@@ -72,6 +72,32 @@ describe("describeClient", () => {
   it("degrades gracefully with no user agent at all", () => {
     assert.equal(describeClient("unknown", null), "Unknown client");
   });
+
+  it("names the browser an extension runs in", () => {
+    const firefoxWin =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0";
+    const safariMac =
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 " +
+      "(KHTML, like Gecko) Version/17.5 Safari/605.1.15";
+    assert.equal(describeClient("extension", CHROME_MAC), "Chrome extension on macOS");
+    assert.equal(
+      describeClient("extension", `${CHROME_MAC} Edg/126.0.0.0`),
+      "Edge extension on macOS",
+    );
+    assert.equal(describeClient("extension", firefoxWin), "Firefox extension on Windows");
+    assert.equal(describeClient("extension", safariMac), "Safari extension on macOS");
+    assert.equal(describeClient("extension", "curl/8.7.1"), "Browser extension");
+    assert.equal(describeClient("extension", null), "Browser extension");
+  });
+
+  it("reads the iOS browsers that all claim Safari", () => {
+    const ios = (token: string): string =>
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 " +
+      `(KHTML, like Gecko) ${token} Mobile/15E148 Safari/604.1`;
+    assert.equal(describeClient("web", ios("CriOS/126.0.0.0")), "Chrome on iOS");
+    assert.equal(describeClient("web", ios("FxiOS/128.0")), "Firefox on iOS");
+    assert.equal(describeClient("web", ios("EdgiOS/126.0.0.0")), "Edge on iOS");
+  });
 });
 
 describe("DEVICE_FLOW_CLIENT_IDS", () => {
