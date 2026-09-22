@@ -586,7 +586,10 @@ job validates the value at the start of the run and fails on anything that is
 not a whole number from 0 to 100, before any build starts. The
 `draft-release` job writes the value
 into every feed and checks the rewritten feeds against the attached files
-again. Then publish the draft as usual.
+again. Then publish the draft as usual. The variable stays in effect for
+every later tag until you change or delete it (`gh variable delete
+DESKTOP_STAGING_PERCENTAGE`); a fix-forward release that should reach
+everybody needs it cleared, or the dispatch input set to 100.
 
 **Raise, halt or finish** on the published release, from a checkout with `gh`
 signed in:
