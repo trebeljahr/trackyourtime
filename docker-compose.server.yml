@@ -63,6 +63,11 @@ services:
       # chrome-extension://<id> lives here. Without it better-auth answers
       # sign-in with 403 INVALID_ORIGIN before checking the password.
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+      # "true" adds the store clients' fixed origins to the list above: the
+      # desktop app (app://-), both phone shells and the Web Store extension.
+      # Off unless set in Coolify. It must be listed here, because Coolify's
+      # env fields only reach the container through a ${VAR} in this file.
+      TRUST_STORE_APPS: ${TRUST_STORE_APPS:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       LISTMONK_URL: ${LISTMONK_URL:-}
