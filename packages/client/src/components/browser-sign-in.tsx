@@ -4,11 +4,13 @@ import * as React from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
 import {
   AuthError,
+  checkServer,
   pollForDeviceSession,
   startDeviceAuthorization,
   type DeviceAuthorization,
 } from "@starter/core";
 
+import { untrustedMessage } from "@/components/server-picker";
 import { Button } from "@/components/ui/button";
 import { useIsElectron } from "@/hooks/use-shell";
 import { useT } from "@/i18n/use-t";
@@ -58,6 +60,24 @@ const FAILURE_MESSAGES = {
 
 /** Every request of the flow: the chosen server, never a cookie. */
 const deviceFetch: typeof fetch = (input, init) => fetch(input, { ...init, credentials: "omit" });
+
+/**
+ * Why a flow that failed to start failed, when the server can say so.
+ *
+ * A server that does not trust `app://-` answers without
+ * `Access-Control-Allow-Origin`, and Chromium reports that refusal exactly
+ * like a dead network. `/api/health` answers every origin and says whether
+ * this one is trusted, so ask it before blaming the connection.
+ */
+const untrustedReason = async (
+  origin: string,
+  t: Parameters<typeof untrustedMessage>[1],
+): Promise<string | null> => {
+  const result = await checkServer(origin);
+  return result.ok && result.server.originTrusted === false
+    ? untrustedMessage(result.server, t)
+    : null;
+};
 
 /** A sleep that ends early, and rejects, when the wait is cancelled. */
 const abortableSleep =
@@ -133,7 +153,13 @@ export function BrowserSignIn({
     } catch (caught) {
       if (controller.signal.aborted) return;
       const failure = browserSignInFailure(caught);
-      if (failure !== "cancelled") setError(t(FAILURE_MESSAGES[failure]));
+      if (failure === "failed") {
+        const reason = await untrustedReason(getAbsoluteApiOrigin(), t);
+        if (controller.signal.aborted) return;
+        setError(reason ?? t(FAILURE_MESSAGES.failed));
+      } else if (failure !== "cancelled") {
+        setError(t(FAILURE_MESSAGES[failure]));
+      }
       setPhase({ kind: "idle" });
     }
   };

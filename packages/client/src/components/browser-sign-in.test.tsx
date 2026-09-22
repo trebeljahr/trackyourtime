@@ -130,6 +130,41 @@ describe("BrowserSignIn", () => {
     expect(onSignedIn).not.toHaveBeenCalled();
   });
 
+  it("names an untrusted origin instead of blaming the connection", async () => {
+    // What Chromium does when the API omits Access-Control-Allow-Origin.
+    vi.stubGlobal("fetch", async (url: string) => {
+      if (url.endsWith("/api/health")) {
+        return json({
+          status: 200,
+          body: { status: "ok", service: "trackyourtime", webUrl: "https://time.example.test", db: true, originTrusted: false },
+        });
+      }
+      throw new TypeError("Failed to fetch");
+    });
+    render(<BrowserSignIn onSignedIn={async () => undefined} />);
+
+    fireEvent.click(await screen.findByTestId("browser-sign-in"));
+    const error = await screen.findByTestId("browser-sign-in-error");
+    expect(error).toHaveTextContent("does not accept sign-ins from this app");
+    expect(error).toHaveTextContent("TRUST_STORE_APPS=true");
+  });
+
+  it("keeps the connection message when the server trusts the app", async () => {
+    vi.stubGlobal("fetch", async (url: string) => {
+      if (url.endsWith("/api/health")) {
+        return json({
+          status: 200,
+          body: { status: "ok", service: "trackyourtime", webUrl: "https://time.example.test", db: true, originTrusted: true },
+        });
+      }
+      throw new TypeError("Failed to fetch");
+    });
+    render(<BrowserSignIn onSignedIn={async () => undefined} />);
+
+    fireEvent.click(await screen.findByTestId("browser-sign-in"));
+    expect(await screen.findByTestId("browser-sign-in-error")).toHaveTextContent("Check your connection");
+  });
+
   it("stops polling on cancel and says nothing", async () => {
     render(<BrowserSignIn onSignedIn={async () => undefined} />);
 
