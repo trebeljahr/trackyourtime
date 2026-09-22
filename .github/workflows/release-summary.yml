@@ -1,0 +1,70 @@
+name: Release Summary
+
+# One place per tag listing every release channel's outcome. Each time one of
+# the workflows below finishes a run for a `v*` tag, this runs
+# scripts/release-status.mjs for that tag and writes its table to the step
+# summary, so the newest Release Summary run for a tag is the whole picture:
+# images, extension, desktop draft, mobile and package managers side by side.
+# `pnpm release:status vX.Y.Z` prints the same table locally.
+#
+# It only reads: the runs, their jobs and steps, and the tag's GitHub Release.
+# No checkout of the tag and no secrets — the script comes from the default
+# branch, and the tag reaches it as an environment variable that the script
+# refuses unless it is a vX.Y.Z tag.
+#
+# The names below must match each workflow's `name:`;
+# scripts/lib/release-status.test.mjs fails when one does not.
+
+on:
+  workflow_run:
+    workflows:
+      - release
+      - Extension Release
+      - Desktop Release
+      - Mobile Release
+      - Desktop Manifests
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+# Several workflows finish close together for one tag; only the newest
+# summary matters, since each one re-reads every channel.
+concurrency:
+  group: release-summary-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  summary:
+    # head_branch is the tag name for a tag push and for a run dispatched from
+    # a tag. Branch runs (a dry run of release.yml on main) are not releases.
+    if: startsWith(github.event.workflow_run.head_branch, 'v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Summarise every channel for the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.workflow_run.head_branch }}
+          TRIGGER: ${{ github.event.workflow_run.name }}
+        run: |
+          set -euo pipefail
+          # startsWith('v') also lets a branch like "vendor-bump" through.
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::notice::$TAG is not a vX.Y.Z tag — no release to summarise."
+            exit 0
+          fi
+          {
+            node scripts/release-status.mjs "$TAG" --markdown
+            echo ""
+            echo "_This run was started by the ${TRIGGER} run finishing._"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -37,6 +37,8 @@
     "test": "pnpm run test:unit && pnpm run test:client && pnpm run test:e2e",
     "test:unit": "pnpm --filter @starter/core run test && pnpm --filter trackyourtime-raycast run test && pnpm --filter @starter/server run test && pnpm --filter @starter/mcp run test && pnpm --filter @starter/extension run test && pnpm run test:electron",
     "test:client": "pnpm --filter @starter/client run test",
+    "release": "node scripts/release.mjs",
+    "release:status": "node scripts/release-status.mjs",
     "test:e2e": "npx playwright test",
     "dev:infra": "docker-compose -f docker-compose.dev.yml up -d",
     "dev:infra:stop": "docker-compose -f docker-compose.dev.yml down",
