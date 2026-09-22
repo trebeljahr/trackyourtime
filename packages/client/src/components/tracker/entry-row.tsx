@@ -281,14 +281,15 @@ function EntryRowImpl({
         </div>
       </div>
 
-      {/* Below `lg` the row wraps: the description block takes the whole line
-          and the controls follow underneath, wrapping among themselves. The
-          controls carry ~34rem of fixed widths (time range, duration, amount,
-          the button cluster), so on a portrait tablet or a narrow window they
-          would otherwise starve the description down to a single character
-          per line — the `lg` gate keeps the dense one-line layout to widths
-          that can actually hold both. */}
-      <div className="flex w-full flex-wrap items-center gap-1 lg:ml-auto lg:w-auto lg:shrink-0 lg:flex-nowrap">
+      {/* Below `lg` the row wraps into two tidy lines: the data fields
+          (billable, the clock range and the duration) keep the left, and the
+          actions cluster is pushed to the right by its own `ml-auto`, so it
+          drops onto its own right-aligned line rather than scattering the
+          controls across the wrap. The controls carry ~34rem of fixed widths,
+          so the dense one-line layout is gated to `lg` — a width that can hold
+          both it and the description without starving the description down to
+          a character per line. */}
+      <div className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 lg:ml-auto lg:w-auto lg:shrink-0 lg:flex-nowrap lg:gap-1">
         <Button
           type="button"
           variant="ghost"
@@ -308,7 +309,7 @@ function EntryRowImpl({
           <BillableGlyph billable={entry.billable} />
         </Button>
 
-        <div className="flex w-[13.5rem] items-center gap-1">
+        <div className="flex w-auto items-center gap-1 lg:w-[13.5rem]">
           <TimeField
             value={entry.start}
             timeFormat={format.timeFormat}
@@ -380,8 +381,12 @@ function EntryRowImpl({
           />
         )}
 
+        {/* The actions. Below `lg` this whole cluster is pushed right by its
+            own `ml-auto` and wraps onto a line of its own; at `lg` and up the
+            `ml-auto` is dropped and it sits inline as before. */}
+        <div className="ml-auto flex items-center gap-1 lg:ml-0">
         <span
-          className="hidden w-20 overflow-hidden text-right text-sm text-muted-foreground tabular-nums lg:inline"
+          className="w-auto overflow-hidden text-right text-sm text-muted-foreground tabular-nums lg:w-20"
           data-testid="entry-amount"
         >
           {entry.hourlyRate === null || entry.amount === null
@@ -421,11 +426,13 @@ function EntryRowImpl({
         {/* The dialog is the only place the row's DATE can change, and a menu
             item three clicks away was where people stopped looking for it. The
             menu keeps its Edit item for keyboard and phone users. */}
+        {/* Hidden while the row is wrapped, where it is tight and Edit is one
+            tap away in the ⋯ menu below; shown inline at `lg` and up. */}
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="size-8 cap-touch"
+          className="hidden size-8 cap-touch lg:inline-flex"
           disabled={syncing}
           aria-label={tc("actions.edit")}
           title={tc("actions.edit")}
@@ -494,6 +501,7 @@ function EntryRowImpl({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
     </div>
   );

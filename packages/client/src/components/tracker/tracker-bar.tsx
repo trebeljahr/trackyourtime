@@ -328,11 +328,16 @@ export function TrackerBar(): React.JSX.Element {
             it rides along inside this control, shown read-only, which is what
             stops "Redesign" from being ambiguous when two clients both have
             one without adding a picker to a bar that is already wide. */}
+        {/* On a phone the two pickers share one line — `flex-1 min-w-0` lets
+            them shrink out of their `min-w-48`/`min-w-40` defaults, which
+            otherwise total more than 351pt and force each onto a line of its
+            own. From `sm` up they take their fixed widths again. */}
         <ProjectTaskPicker
           value={fields}
           onChange={applyFields}
           bare
-          controlClassName="h-10"
+          className="flex-1 basis-full sm:basis-auto sm:flex-none"
+          controlClassName="h-10 min-w-0 flex-1 sm:min-w-48 sm:flex-none"
           testIdPrefix="tracker"
         />
 
