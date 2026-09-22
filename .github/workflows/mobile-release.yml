@@ -1,32 +1,75 @@
 name: Mobile Release
 
-# Manual dispatch only (Actions -> Mobile Release -> Run workflow); a `v*` tag
-# does not start it — see the note under `on:`. Builds an Android AAB and an iOS
-# archive. Signing and store uploads are gated on secrets — without them the
-# Android job produces an UNSIGNED bundle as an Actions artifact, and the iOS
-# job cannot archive at all (no development team is configured).
+# Builds, signs and uploads the phone apps: an Android AAB to Google Play and an
+# iOS IPA to TestFlight. Runs beside release.yml on every `v*` tag, and on
+# manual dispatch.
+#
+# What each job does is decided up front by scripts/mobile-release-plan.mjs
+# (rules and tests: scripts/lib/mobile-release.mjs), before anything is built:
+#
+#   complete secret set     build, sign, upload the artifact, upload to the store
+#   no secrets, on a tag    nothing built, NO artifact, green with a ::notice::
+#   no secrets, dispatched  Android: an unsigned AAB named -unsigned.
+#                           iOS: a compile check with signing off, no artifact.
+#   partial secret set      ::error:: on every event
+#
+# The tag case is why this workflow was once dispatch-only: on v0.1.0, with no
+# secrets on the repo, the Android job went green and attached an unsigned .aab
+# to the tag's run — downloadable from a public repo for 90 days and looking
+# like a release — and the iOS job went red at Archive. Both are now a notice.
+#
+# Android sets:  ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#                ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (signing), then
+#                PLAY_SERVICE_ACCOUNT_JSON + ANDROID_PACKAGE_NAME (Play upload,
+#                which needs signing). docs/deploy.md -> "Android release signing".
+# iOS set:       APPLE_CERTIFICATE_BASE64, APPLE_CERTIFICATE_PASSWORD,
+#                APPLE_API_KEY_BASE64, APPLE_API_KEY_ID, APPLE_API_ISSUER_ID —
+#                and then DEVELOPMENT_TEAM in ios/App/App.xcodeproj and a
+#                committed ios/App/ExportOptions.plist are required.
+#                docs/deploy.md -> "iOS release".
+#
+# Tracks. A stable tag uploads to the Play track in the MOBILE_PLAY_TRACK repo
+# variable (default internal), rolled out to MOBILE_PLAY_USER_FRACTION of users
+# when that is set (a staged rollout, status inProgress). A prerelease tag
+# (`v1.2.0-rc.1`) always goes to internal, whatever the variables say. iOS goes
+# to TestFlight for both; App Store submission, and its phased release, are
+# App Store Connect steps.
+#
+# Versions. The plan refuses a tag that is not package.json's version, and
+# build-mobile.mjs refuses a MARKETING_VERSION / versionName that is not
+# package.json's. The build numbers (versionCode, CURRENT_PROJECT_VERSION) are
+# this workflow's run number, because both stores refuse a number they have seen.
 
 on:
-  # No `push: tags` trigger, on purpose. v0.1.0 ships the two self-host images
-  # (release.yml) and nothing else: no store build is claimed as released, and
-  # none of the signing or store secrets exist on this repo. Left on the tag,
-  # the iOS job would go red at Archive, and the Android job would go green and
-  # upload an unsigned .aab as an artifact of the tag's run — downloadable from this public
-  # repo for 90 days, looking like a release artifact.
-  #
-  # Before adding `push: { tags: ["v*"] }` back above workflow_dispatch:
-  #   - Android: the ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
-  #     ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD secrets (docs/deploy.md ->
-  #     "Android release signing"), plus PLAY_SERVICE_ACCOUNT_JSON and
-  #     ANDROID_PACKAGE_NAME for the Play upload
-  #   - iOS: DEVELOPMENT_TEAM set in ios/App/App.xcodeproj, a committed
-  #     ios/App/ExportOptions.plist, and the APPLE_CERTIFICATE_BASE64,
-  #     APPLE_CERTIFICATE_PASSWORD, APPLE_API_KEY_BASE64, APPLE_API_KEY_ID and
-  #     APPLE_API_ISSUER_ID secrets — moved into the iOS job's job-level
-  #     `env:`, because its `if:` guards read them and a step's own `env:` is
-  #     not in scope for that step's `if:` (Export IPA has no env at all)
-  #   - run a dispatch of this workflow green on both jobs first
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      play-track:
+        description: "Google Play track for the signed AAB. A prerelease tag is refused anything but internal"
+        required: true
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+        default: internal
+      user-fraction:
+        description: "Staged rollout: share of users, e.g. 0.1 for 10 %. Empty is a full rollout. Not on internal"
+        required: false
+        type: string
+        default: ""
+
+# One upload per ref at a time, never cancelled half-way: a cancelled Play edit
+# or TestFlight upload can leave state the next run trips on.
+concurrency:
+  group: mobile-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 # The API origin baked into the static export. See the long note in
 # desktop-release.yml: a repo VARIABLE with a literal fallback, because this was
@@ -45,86 +88,86 @@ env:
 jobs:
   android:
     runs-on: ubuntu-latest
-    # Job-level rather than step-level, so the `if:` guards below can read them.
-    # The four names on the right are the GitHub secrets to set; the four on the
-    # left are exactly what android/app/build.gradle's signing block reads.
-    # docs/deploy.md -> "Android release signing" has the commands.
-    #
-    # PLAY_SERVICE_ACCOUNT_JSON is here for the same reason: the Play upload's
-    # `if:` reads it, and declared only on that step it was never visible to
-    # the guard, so the upload skipped even with the secret set.
+    # Job-level, not step-level: a step's own `env:` is not in scope for that
+    # step's `if:`. KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD are the names
+    # android/app/build.gradle's signing block reads.
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
       - uses: actions/checkout@v4
+
+      # Presence only; the script never prints a value. The track and rollout
+      # are the dispatch inputs on a dispatch and the repo variables on a tag —
+      # written so an empty user-fraction input stays empty rather than falling
+      # through to the variable.
+      - name: Plan
+        id: plan
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          ANDROID_PACKAGE_NAME: ${{ secrets.ANDROID_PACKAGE_NAME }}
+          PLAY_TRACK: ${{ github.event_name == 'workflow_dispatch' && inputs.play-track || vars.MOBILE_PLAY_TRACK }}
+          PLAY_USER_FRACTION: ${{ github.event_name == 'workflow_dispatch' && inputs.user-fraction || (github.event_name != 'workflow_dispatch' && vars.MOBILE_PLAY_USER_FRACTION || '') }}
+        run: node scripts/mobile-release-plan.mjs android
 
       # No `version:` input — see desktop-release.yml. action-setup reads
       # `packageManager` from package.json and throws on a differing pin.
       - uses: pnpm/action-setup@v4
+        if: steps.plan.outputs.build != 'skip'
 
       - uses: actions/setup-node@v4
+        if: steps.plan.outputs.build != 'skip'
         with:
           node-version: 24
           cache: pnpm
 
       - uses: actions/setup-java@v4
+        if: steps.plan.outputs.build != 'skip'
         with:
           distribution: temurin
           java-version: 21
 
       - name: Install deps
+        if: steps.plan.outputs.build != 'skip'
         run: pnpm install --frozen-lockfile
 
+      # Also asserts versionName and the identifiers against package.json and
+      # capacitor.config.ts.
       - name: Build static export
+        if: steps.plan.outputs.build != 'skip'
         run: pnpm build:mobile android
 
-      # A keystore alone signs nothing: the other three secrets carry the
-      # passwords and the alias. Half a signing setup would otherwise fall
-      # through the gradle guard and produce an unsigned bundle with a green
-      # build — the exact trap this job used to be stuck in.
-      - name: Check the signing secrets are complete
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
-        run: |
-          missing=""
-          [ -n "$KEYSTORE_PASSWORD" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
-          [ -n "$KEY_ALIAS" ] || missing="$missing ANDROID_KEY_ALIAS"
-          [ -n "$KEY_PASSWORD" ] || missing="$missing ANDROID_KEY_PASSWORD"
-          if [ -n "$missing" ]; then
-            echo "::error::ANDROID_KEYSTORE_BASE64 is set but these secrets are not:$missing"
-            exit 1
-          fi
-
       - name: Decode signing keystore
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        if: steps.plan.outputs.build == 'signed'
         run: |
           mkdir -p android/app
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
 
-      # Signed when all four inputs are present, unsigned otherwise.
       # `signingConfigs.release` in android/app/build.gradle is conditional on
-      # android/app/release.keystore existing AND these three names being set,
-      # so a half-configured set produces an unsigned bundle with a logged
-      # reason rather than a confusing Gradle failure — and a local `./gradlew
-      # bundleRelease` with no keystore at all still builds.
+      # android/app/release.keystore existing AND the three passwords/alias being
+      # set, so the unsigned dispatch build and a local `./gradlew bundleRelease`
+      # with no keystore both still build.
       - name: Build AAB
+        if: steps.plan.outputs.build != 'skip'
         working-directory: android
+        env:
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew bundleRelease
 
       # Gradle signs with whatever config it was handed and says nothing when
       # that config is empty, so "the secrets are set" and "the bundle is
       # signed" are two different facts. Assert the second one here, or the
-      # first Play upload is where we find out.
+      # Play upload is where we find out.
       - name: Verify the AAB is signed
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        if: steps.plan.outputs.build == 'signed'
         run: |
           set -euo pipefail
-          AAB=$(ls android/app/build/outputs/bundle/release/*.aab | head -n1)
+          AAB=$(find android/app/build/outputs/bundle/release -name "*.aab" | head -n1)
           if ! jarsigner -verify "$AAB" | grep -q 'jar verified'; then
             echo "::error::$AAB is not signed — a keystore was decoded but gradle did not use it" >&2
             jarsigner -verify "$AAB" >&2 || true
@@ -132,39 +175,65 @@ jobs:
           fi
           echo "✓ $AAB is signed"
 
+      # The unsigned dispatch build says what it is in the artifact name.
       - name: Upload AAB
+        if: steps.plan.outputs.build == 'signed' || steps.plan.outputs.build == 'unsigned'
         uses: actions/upload-artifact@v4
         with:
-          name: android-aab
+          name: android-aab-${{ steps.plan.outputs.version }}${{ steps.plan.outputs.build == 'unsigned' && '-unsigned' || '' }}
           path: android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
 
-      - name: Upload to Play Store (internal track)
-        if: env.PLAY_SERVICE_ACCOUNT_JSON != ''
+      # status inProgress + userFraction is a staged rollout; Play then waits for
+      # the rollout to be raised or halted in the Play Console. The first upload
+      # of a never-published app must be done by hand (docs/deploy.md).
+      - name: Upload to Google Play (${{ steps.plan.outputs.track }})
+        if: steps.plan.outputs.upload == 'true'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: ${{ secrets.ANDROID_PACKAGE_NAME }}
           releaseFiles: android/app/build/outputs/bundle/release/*.aab
-          track: internal
+          track: ${{ steps.plan.outputs.track }}
+          status: ${{ steps.plan.outputs.status }}
+          userFraction: ${{ steps.plan.outputs.user_fraction }}
 
   ios:
     runs-on: macos-latest
+    # Job-level for the same reason as Android: the `if:` guards below read the
+    # plan, and every step that uses a secret reads it from here.
+    env:
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Plan
+        id: plan
+        run: node scripts/mobile-release-plan.mjs ios
 
       # No `version:` input — see desktop-release.yml. action-setup reads
       # `packageManager` from package.json and throws on a differing pin.
       - uses: pnpm/action-setup@v4
+        if: steps.plan.outputs.build != 'skip'
 
       - uses: actions/setup-node@v4
+        if: steps.plan.outputs.build != 'skip'
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install deps
+        if: steps.plan.outputs.build != 'skip'
         run: pnpm install --frozen-lockfile
 
+      # Also asserts MARKETING_VERSION and the identifiers against package.json
+      # and capacitor.config.ts.
       - name: Build static export + sync
+        if: steps.plan.outputs.build != 'skip'
         run: pnpm build:mobile ios
 
       # No `pod install`: Capacitor 8 generates an SPM project (there is no
@@ -172,59 +241,87 @@ jobs:
       # machines this is developed on either. Dependencies come from
       # ios/App/CapApp-SPM, resolved by xcodebuild.
 
-      - name: Import signing certificate
-        if: env.APPLE_CERTIFICATE_BASE64 != ''
-        env:
-          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ci-temp-password
-        run: |
-          echo "$APPLE_CERTIFICATE_BASE64" | base64 -d > /tmp/cert.p12
-          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security import /tmp/cert.p12 -k build.keychain \
-            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: \
-            -s -k "$KEYCHAIN_PASSWORD" build.keychain
-
-      - name: Archive
+      - name: Compile without signing
+        if: steps.plan.outputs.build == 'check'
         working-directory: ios/App
         run: |
           xcodebuild -project App.xcodeproj \
             -scheme App \
             -configuration Release \
-            -archivePath $PWD/build/App.xcarchive \
             -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Import signing certificate and API key
+        if: steps.plan.outputs.build == 'signed'
+        env:
+          KEYCHAIN_PASSWORD: ci-temp-password
+        run: |
+          set -euo pipefail
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import "$RUNNER_TEMP/cert.p12" -k build.keychain \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm "$RUNNER_TEMP/cert.p12"
+          # altool looks for the key here by id; xcodebuild is given the path.
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo "$APPLE_API_KEY_BASE64" | base64 -d \
+            > "$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8"
+
+      # The API key lets xcodebuild fetch or create the provisioning profiles
+      # (-allowProvisioningUpdates); a certificate alone cannot export an IPA.
+      - name: Archive
+        if: steps.plan.outputs.build == 'signed'
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -archivePath "$PWD/build/App.xcarchive" \
+            -destination 'generic/platform=iOS' \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8" \
+            -authenticationKeyID "$APPLE_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APPLE_API_ISSUER_ID" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             archive
 
       - name: Export IPA
-        if: env.APPLE_CERTIFICATE_BASE64 != ''
+        if: steps.plan.outputs.build == 'signed'
         working-directory: ios/App
         run: |
           xcodebuild -exportArchive \
-            -archivePath $PWD/build/App.xcarchive \
-            -exportPath $PWD/build/ipa \
-            -exportOptionsPlist ExportOptions.plist
+            -archivePath "$PWD/build/App.xcarchive" \
+            -exportPath "$PWD/build/ipa" \
+            -exportOptionsPlist ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8" \
+            -authenticationKeyID "$APPLE_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APPLE_API_ISSUER_ID"
 
-      - name: Upload archive
+      - name: Upload IPA
+        if: steps.plan.outputs.build == 'signed'
         uses: actions/upload-artifact@v4
         with:
-          name: ios-archive
-          path: ios/App/build/App.xcarchive
+          name: ios-ipa-${{ steps.plan.outputs.version }}
+          path: ios/App/build/ipa/*.ipa
+          if-no-files-found: error
 
       - name: Upload to TestFlight
-        if: env.APPLE_API_KEY_BASE64 != ''
-        env:
-          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        if: steps.plan.outputs.upload == 'true'
         run: |
-          mkdir -p ~/.appstoreconnect/private_keys
-          echo "$APPLE_API_KEY_BASE64" | base64 -d \
-            > ~/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8
+          set -euo pipefail
+          IPA=$(find ios/App/build/ipa -name "*.ipa" | head -n1)
           xcrun altool --upload-app \
-            --file ios/App/build/ipa/*.ipa \
+            --file "$IPA" \
             --type ios \
             --apiKey "$APPLE_API_KEY_ID" \
             --apiIssuer "$APPLE_API_ISSUER_ID"
+
+      - name: Remove the signing keychain
+        if: always() && steps.plan.outputs.build == 'signed'
+        run: security delete-keychain build.keychain || true

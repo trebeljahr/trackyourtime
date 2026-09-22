@@ -22,7 +22,11 @@ from the next one they see. To offer it to part of them first, set
 `DESKTOP_STAGING_PERCENTAGE` before tagging and raise it later with
 `pnpm desktop:rollout vX.Y.Z <percent>` (docs/deploy.md → "Staged rollout").
 
-`mobile-release.yml` runs on manual dispatch only.
+A tag also runs `mobile-release.yml`, which builds the Android AAB and the iOS
+IPA and uploads them to Google Play and TestFlight when their secrets exist.
+Without the secrets each job ends green with a notice and uploads no artifact.
+A prerelease tag goes to Play's internal track only. Submitting the iOS build
+to the App Store is manual (docs/deploy.md → "Mobile release").
 
 ## What the workflow does
 
@@ -215,12 +219,15 @@ of them still works by hand.
    Without Docker, `REGISTRY_ONLY=1` checks only that both tags can be pulled
    anonymously and list both arches.
 
-6. **Check nothing else ran, then publish the release page.** Actions should
-   show one `release`, one `Extension Release` and one `Desktop Release` run
-   for the tag, plus the `Release Summary` runs they started, and no mobile
-   run. With the store secrets set, the extension run has submitted the new
-   version for review. Without them it is green with the notice "store upload
-   skipped".
+6. **Check the other runs, then publish the release page.** Actions should
+   show one run each of `release`, `Extension Release`, `Desktop Release` and
+   `Mobile Release` for the tag, plus the `Release Summary` runs they started,
+   and nothing else. With the store secrets set, the extension run has
+   submitted the new version for review. Without them it is green with the
+   notice "store upload skipped".
+   With the mobile secrets set, the Android job has uploaded to the Play track
+   in `MOBILE_PLAY_TRACK` (default `internal`) and the iOS job to TestFlight.
+   Without them each job is green with a notice that nothing was built.
 
    The desktop run leaves a **draft** release for the tag with the downloads
    attached and a placeholder body. Put the release notes on it and publish

@@ -533,9 +533,9 @@ to them on trackyourtime.dev.
 
 ## Android release signing
 
-Play will not accept an unsigned bundle, and `.github/workflows/
-mobile-release.yml` builds one when it is dispatched by hand (a `v*` tag no
-longer runs it; its `on:` block lists what must be true first). The wiring is
+Play will not accept an unsigned bundle. `.github/workflows/mobile-release.yml`
+runs on every `v*` tag and on manual dispatch, and with no signing secrets a
+tag run builds nothing (see [Mobile release](#mobile-release)). The wiring is
 done —
 `android/app/build.gradle` has a `signingConfigs.release` block that reads the
 key material out of the environment, and the workflow passes it — but the key
@@ -588,16 +588,16 @@ instead. Either way the workflow's `base64 -d` accepts wrapped input, so a
 newline in the secret is harmless; what matters is that the whole file is in
 there.
 
-`ANDROID_KEYSTORE_BASE64` is the switch: with it unset the workflow still
-builds and still uploads an artifact, just an unsigned one. With it set and any
-of the other three missing, the job now fails on the "Check the signing secrets
-are complete" step rather than building an unsigned bundle and discovering it
-at upload time.
+All four or none. With none, a tag run skips the Android job with a notice and
+uploads no artifact, and a manual dispatch builds an unsigned bundle whose
+artifact name ends in `-unsigned`. With some but not all, the job fails on its
+"Plan" step, before anything is built, and names the missing secrets.
 
 Play uploads need a fifth and sixth secret — `PLAY_SERVICE_ACCOUNT_JSON` and
-`ANDROID_PACKAGE_NAME` — and that step stays skipped until they exist. Signing
-and uploading are independent: a signed AAB downloaded from the workflow's
-artifacts can be uploaded to the Play Console by hand.
+`ANDROID_PACKAGE_NAME`. Without them a signed run uploads the AAB as an
+artifact and skips the Play upload with a notice; with one of them, or with
+them but no signing secrets, the run fails. A signed AAB downloaded from the
+workflow's artifacts can also be uploaded to the Play Console by hand.
 
 ### 3. Building a signed bundle locally
 
@@ -621,6 +621,83 @@ what you want for a build you are only going to `bundletool` onto a device. The
 guard exists so that a fresh checkout is not a Gradle error; CI is where an
 unsigned artifact must not pass silently, and there it does not.
 
+## Mobile release
+
+`.github/workflows/mobile-release.yml` builds the Android AAB and the iOS IPA
+on every `v*` tag and on manual dispatch (Actions → Mobile Release → Run
+workflow). Each job starts with a "Plan" step,
+`scripts/mobile-release-plan.mjs`, which decides what the job does before
+anything is built. The rules are `scripts/lib/mobile-release.mjs`, tested in
+`scripts/lib/mobile-release.test.mjs`.
+
+| Secrets for the job | Tag run | Dispatch |
+| --- | --- | --- |
+| None | Green, with a notice. Nothing is built and no artifact is uploaded. | Android: unsigned AAB, artifact `android-aab-<version>-unsigned`. iOS: a compile with signing off, no artifact. |
+| Some, not all | Fails on "Plan". | Fails on "Plan". |
+| All | Signed build, artifact, store upload. | The same. |
+
+The tag must be `v` plus the root `package.json` version, or "Plan" fails.
+`pnpm build:mobile` then fails when `MARKETING_VERSION` or `versionName`
+differs from `package.json`. The build numbers are the workflow's run number:
+`ANDROID_VERSION_CODE` for Android's `versionCode`, and
+`CURRENT_PROJECT_VERSION` for iOS. Both stores refuse a build number they have
+already seen, and the run number only grows. A build uploaded by hand must use
+a number below the next run number.
+
+### Google Play tracks and staged rollout
+
+| Run | Track | Rollout |
+| --- | --- | --- |
+| Stable tag | repo variable `MOBILE_PLAY_TRACK`, default `internal` | repo variable `MOBILE_PLAY_USER_FRACTION`, default full |
+| Prerelease tag (`vX.Y.Z-rc.N`) | always `internal` | full |
+| Dispatch | input `play-track` | input `user-fraction` |
+
+A user fraction such as `0.1` uploads the release with status `inProgress` to
+that share of users. Raise it or halt it in the Play Console (Release →
+the track → Manage rollout). An empty value or `1` is a full rollout. The
+internal track has no staged rollout, so a fraction with `internal` fails
+"Plan". A dispatch of a prerelease tag to any track but `internal` also fails.
+
+Set the variables with `gh variable set MOBILE_PLAY_TRACK --body production`
+and `gh variable set MOBILE_PLAY_USER_FRACTION --body 0.1`. Leave them unset
+until the app is published on that track.
+
+Play accepts API uploads only for an app that already exists. The first AAB
+of a new app must be uploaded by hand in the Play Console. The service account
+behind `PLAY_SERVICE_ACCOUNT_JSON` needs release permissions for the app
+(Play Console → Users and permissions). `ANDROID_PACKAGE_NAME` is the
+`applicationId` in `android/app/build.gradle`, `com.ricoslabs.trackyourtime`.
+
+### iOS release
+
+The iOS job signs only when all five secrets are set:
+
+| Secret | Value |
+| --- | --- |
+| `APPLE_CERTIFICATE_BASE64` | base64 of the Apple Distribution certificate `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | that `.p12`'s password |
+| `APPLE_API_KEY_BASE64` | base64 of the App Store Connect API key `.p8` |
+| `APPLE_API_KEY_ID` | that key's id |
+| `APPLE_API_ISSUER_ID` | the issuer id |
+
+With all five set, two project files are also required, or "Plan" fails:
+
+- `DEVELOPMENT_TEAM` in `ios/App/App.xcodeproj` for the Debug and Release
+  configurations (Xcode → App target → Signing & Capabilities → Team).
+- `ios/App/ExportOptions.plist`, committed, with `method` `app-store-connect`,
+  your `teamID` and `signingStyle` `automatic`.
+
+The archive and the export use the API key with `-allowProvisioningUpdates`,
+so Xcode creates or fetches the provisioning profile itself. Creating a profile
+needs a key with the Admin role. The IPA goes to TestFlight for stable and prerelease tags alike;
+the workflow never submits for review.
+
+**Submitting to the App Store is manual.** In App Store Connect, pick the
+TestFlight build for the new version and submit it for review. To roll out in
+stages, choose "Release update over 7-day period using phased release" on the
+version page before you submit. Phased release applies to automatic updates
+only, and it can be paused or completed early from the same page.
+
 ## Desktop release
 
 `.github/workflows/desktop-release.yml` builds every desktop artifact from one
@@ -635,7 +712,7 @@ channel:
 | `win-store` | windows-latest | appx, x64 and arm64 | Partner Center, on upload |
 | `linux-x64`, `linux-arm64` | ubuntu-24.04(-arm) | AppImage, deb, rpm, tar.gz, snap | not signed |
 
-Every leg follows the Android rule above:
+Every leg follows the all-or-none rule of [Android release signing](#android-release-signing):
 
 - **No secrets for a channel:** the leg still builds. Every dmg, zip and exe
   has `-unsigned` in its file name. A `mas` leg without secrets packages the

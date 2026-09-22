@@ -37,11 +37,11 @@
 # makes no outbound request the operator did not ask for.
 #
 # A `v*` tag runs THIS workflow, extension-release.yml (the Chrome Web Store
-# upload, which only uploads an artifact while its secrets are unset) and
+# upload, which only uploads an artifact while its secrets are unset),
 # desktop-release.yml (every desktop channel into a DRAFT GitHub Release;
-# publishing it is the release). mobile-release.yml runs on manual dispatch
-# only (its `on:` block lists what has to be true before a tag trigger comes
-# back), and build-and-deploy.yml runs on pushes to main and on pull requests.
+# publishing it is the release) and mobile-release.yml (Play and TestFlight;
+# with no secrets it builds nothing and ends with a notice).
+# build-and-deploy.yml runs on pushes to main and on pull requests.
 #
 # ── Jobs, in order ───────────────────────────────────────────────────────
 #

@@ -39,7 +39,10 @@ android {
         applicationId "com.ricoslabs.trackyourtime"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        // Play refuses a second upload with a versionCode it has seen, so CI
+        // passes the workflow's run number (mobile-release.yml), which only
+        // grows. A local build with nothing set stays at 1.
+        versionCode ((System.getenv("ANDROID_VERSION_CODE") ?: "1") as Integer)
         // Kept in step with the root package.json by hand: `cap add` stamps the
         // template's own "1.0" here and `cap sync` never touches it again.
         // scripts/build-mobile.mjs asserts the two agree, the same way it does

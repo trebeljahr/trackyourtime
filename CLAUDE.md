@@ -413,6 +413,15 @@ set, and runs `jarsigner -verify` on the artifact — CI is where an unsigned AA
 must not pass quietly. Generating the keystore and setting the four secrets is
 a manual, one-time step: `docs/deploy.md` → "Android release signing".
 
+`mobile-release.yml` runs on every `v*` tag, so its "Plan" step
+(`scripts/lib/mobile-release.mjs`) decides each job before anything is built:
+a tag with no secrets builds nothing and **uploads no artifact** (an unsigned
+.aab on a public tag run reads as a release download), a partial set fails, and
+a prerelease tag goes to Play's internal track only. Every `upload-artifact`
+step is guarded by the plan, which `mobile-release.test.mjs` asserts. The
+build numbers come from the run number (`ANDROID_VERSION_CODE`,
+`CURRENT_PROJECT_VERSION`); both stores refuse a number they have seen.
+
 `pnpm mobile:assets` also rewrites `ios/App/App.xcodeproj/project.pbxproj`,
 stripping the leading zero from `LastSwiftUpdateCheck`/`LastUpgradeCheck`.
 Harmless, but `git checkout` it rather than committing the churn.
