@@ -1555,6 +1555,33 @@ the server and in the browser. The server keeps the old module paths under
 package's `Uint8Array` in a `Buffer` — so every caller and test is unchanged and
 the bytes are identical (`invoice-pdf-package-parity.test.ts` pins it).
 
+The issuer also carries an optional **logo** (`BusinessProfile.logo`, set by
+`settings.setBusinessLogo` / `clearBusinessLogo`, PNG/JPEG validated by
+`services/invoice-logo.ts`: magic bytes, header dimensions, a byte cap enforced
+BEFORE decode, interlaced-PNG and CMYK-JPEG refused). It is frozen onto
+`Invoice.issuer.logo` at create like every other party field, drawn top-right in
+the PDF, and the bytes NEVER reach the wire — `toClientInvoice` maps it to
+`hasLogo`, so webhooks, exports and OpenAPI carry no logo bytes. The JSON export
+carries the profile logo as a data URL; a redacted export drops it with the
+profile.
+
+Draft invoices are **editable** (`invoices.update`, draft-only, refused on a
+`sent`/`paid` invoice or one with an issued e-invoice XML, `updatedAt` CONFLICT
+guard). Lines are `time` or `manual` (`kind`/`quantity`/`unit`/`unitPrice`); a
+time line may only be relabelled, manual lines added/edited/removed. An invoice
+with no billing period is **blank** (`from`/`to` null, no CII period, no PDF
+Period row); both `create` and `update` refuse zero lines.
+
+The **public invoice generator** (`/invoice-generator/`, `/de/rechnung-erstellen/`,
+`components/marketing/pages/invoice-generator-page.tsx` over
+`lib/invoice-generator.ts`) is an account-free marketing page that builds the
+same `Invoice` wire shape and renders it with `renderInvoicePdf` in the browser
+— nothing leaves the page, the draft is in `localStorage`. pdfkit's Node build
+cannot register its standard fonts in a browser, so the page imports pdfkit's
+`pdfkit.standalone.js` through the `pdfkit-standalone` alias in `next.config.ts`
+and hands the constructor to `renderInvoicePdf`'s optional `PDFDocument` option;
+the server path is unchanged.
+
 Four rules, each of which fails quietly if broken:
 
 - **Both parties are frozen at `invoices.create`** (`Invoice.issuer`,
