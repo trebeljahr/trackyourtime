@@ -17,7 +17,7 @@ export const privacyMetadata = (locale: Locale): Metadata => {
 };
 
 /** Bump when the policy changes in substance. Store listings link to this page. */
-const LAST_UPDATED = Date.UTC(2026, 8, 15);
+const LAST_UPDATED = Date.UTC(2026, 8, 22);
 
 /**
  * The date in the page's language, identical on every build machine.
@@ -124,6 +124,13 @@ export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement 
           <li>{t("privacy.mobile.permissions")}</li>
           <li>{t("privacy.mobile.noTracking")}</li>
         </ul>
+      </Block>
+
+      <Block title={t("privacy.errors.title")}>
+        <p>{t("privacy.errors.when")}</p>
+        <p>{t.rich("privacy.errors.contains", { strong })}</p>
+        <p>{t.rich("privacy.errors.omits", { strong })}</p>
+        <p>{t("privacy.errors.ip")}</p>
       </Block>
 
       <Block title={t("privacy.retention.title")}>

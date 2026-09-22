@@ -251,7 +251,17 @@ export const marketing: Translation<typeof source> = {
         "Noch nicht gesendete Änderungen und der laufende Timer liegen im eigenen Speicher der App auf dem Handy. So überstehen sie einen Neustart ohne Empfang.",
       permissions:
         "Die Apps lesen den Netzwerkstatus des Handys, um zu wissen, ob sie online sind. Standort, Kontakte, Kamera, Mikrofon und Fotos nutzen sie nicht.",
-      noTracking: "Die Apps enthalten keinen Code für Werbung, Analyse oder Tracking.",
+      noTracking:
+        "Die Apps enthalten keinen Code für Werbung, Analyse oder Tracking. Fehlerberichte senden sie, wie unten beschrieben.",
+    },
+    errors: {
+      title: "Fehlerberichte",
+      when: "Stößt die Web-App, die Desktop-App oder eine Handy-App auf einen Fehler, von dem sie sich nicht erholen kann, sendet sie einen Bericht an die Fehlerverfolgung von Track Your Time. Solange die App funktioniert, sendet sie nichts.",
+      contains:
+        "<strong>Ein Bericht enthält:</strong> die Fehlermeldung und die Stelle im Code, an der der Fehler aufgetreten ist, die Adresse der Seite ohne alles hinter dem Fragezeichen, die Adressen, Methoden und Statuscodes der letzten Anfragen der App, die Version der App, die Plattform (Web, Desktop, iPhone oder Android) sowie die Namen von Browser und Betriebssystem.",
+      omits:
+        "<strong>Ein Bericht enthält nie:</strong> deinen Namen, deine E-Mail-Adresse, dein Sitzungstoken, Cookies, etwas, das du eingegeben hast, den Inhalt einer Anfrage oder eine Aufzeichnung des Bildschirms.",
+      ip: "Wie jede Anfrage an den Dienst kommt ein Bericht mit deiner IP-Adresse an. Der Bericht selbst nennt sie nicht.",
     },
     retention: {
       title: "Wie lange die Daten gespeichert bleiben",

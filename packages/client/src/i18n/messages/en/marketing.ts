@@ -254,7 +254,17 @@ export const marketing = {
         "Unsent changes and the running timer are stored in the app’s own storage on the phone, so that they survive a restart with no signal.",
       permissions:
         "The apps read the phone’s network state to know if they are online. They do not use your location, contacts, camera, microphone or photos.",
-      noTracking: "The apps contain no advertising, analytics or tracking code.",
+      noTracking:
+        "The apps contain no advertising, analytics or tracking code. They send error reports as described below.",
+    },
+    errors: {
+      title: "Error reports",
+      when: "When the web app, the desktop app or a phone app hits an error it cannot recover from, it sends a report to the error tracker of Track Your Time. Nothing is sent while the app works.",
+      contains:
+        "<strong>A report contains:</strong> the error message and where in the code it happened, the page address without anything after the question mark, the addresses, methods and status codes of the last requests the app made, the app version, the platform (web, desktop, iPhone or Android), and the names of the browser and the operating system.",
+      omits:
+        "<strong>A report never contains:</strong> your name, your email address, your session token, cookies, anything you typed, the contents of any request, or a recording of the screen.",
+      ip: "Like every request to the service, a report arrives with your IP address. The report itself does not name it.",
     },
     retention: {
       title: "How long it is kept",
