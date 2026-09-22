@@ -28,7 +28,7 @@ const catalog: KnownCatalog = {
 
 const depsWith = (
   check: DesktopActivityAcceptCheck,
-  overrides: Partial<AcceptDeps> = {},
+  overrides: Partial<Pick<AcceptDeps, "workspaceId">> = {},
 ): AcceptDeps & {
   calls: string[];
   createManualEntry: ReturnType<typeof vi.fn>;
