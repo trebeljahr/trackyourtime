@@ -163,7 +163,7 @@ What it cannot do yet:
 - Budgets show progress, but nothing notifies you when a project goes over. There are no milestones or deadlines.
 - There is no tagged release yet, so there are no published Docker images. Until the first release, you build the images yourself, which needs about 4 GB of RAM.
 - Anyone who can reach your domain can create an account. The application has no setting to close sign-up, and the self-hosting guide lists workarounds at the proxy.
-- The Chrome extension is in the [Chrome Web Store](https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). The Raycast extension and the phone apps are not in any store yet. There is no Firefox extension and no desktop app.
+- The Chrome extension is in the [Chrome Web Store](https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). Edge, Brave, Opera, Vivaldi and Arc install it from there. The Raycast extension and the phone apps are not in any store yet. There is no Firefox extension and no desktop app.
 
 Pick Track Your Time if:
 
