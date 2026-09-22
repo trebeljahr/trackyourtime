@@ -19,6 +19,7 @@ import {
   checkRelease,
   previousStableTag,
   readContract,
+  readMigrationContract,
   requiredBump,
 } from "./release-policy.mjs";
 
@@ -79,6 +80,32 @@ const check = (previousVersion, previousTree, version, nextTree) =>
 describe("reading a tree", () => {
   it("reads 0 for everything a pre-handshake release lacks", () => {
     assert.deepEqual(contract(tree({})), { ...EMPTY_CONTRACT });
+  });
+
+  it("reads the migrations alone for a rollback, whatever the other constants did", () => {
+    // A refactor that moved API_LEVEL fails the release check, and must not
+    // turn a safe server rollback into "cannot compare".
+    const moved = release({
+      migrations: [
+        [1, 0],
+        [2, 2],
+      ],
+      extra: { [API_LEVEL_FILE]: "export const API_LEVEL = levelOf(changes);" },
+    });
+    assert.throws(() => contract(moved), /declares no `export const API_LEVEL/);
+    const only = readMigrationContract(moved.readFile, moved.listDir);
+    assert.deepEqual(only, {
+      migrations: [
+        { file: "001-m.ts", id: 1, minReaderSchema: 0 },
+        { file: "002-m.ts", id: 2, minReaderSchema: 2 },
+      ],
+      schemaVersion: 2,
+    });
+    assert.deepEqual(readMigrationContract(tree({}).readFile, tree({}).listDir), { migrations: [], schemaVersion: 0 });
+    // The full contract carries the same two fields, read the same way.
+    const intact = release({ migrations: [[1, 0], [2, 2]] });
+    const full = contract(intact);
+    assert.deepEqual({ migrations: full.migrations, schemaVersion: full.schemaVersion }, readMigrationContract(intact.readFile, intact.listDir));
   });
 
   it("throws when a file exists but the constant moved", () => {

@@ -76,22 +76,38 @@ const readMigrations = (readFile, listDir) => {
 };
 
 /**
+ * The migrations a tree carries, and nothing else: what a server rollback
+ * compares (`scripts/lib/coolify-deploy.mjs` → `serverDowngradeBlock`).
+ *
+ * Deliberately not `readContract`. That reader throws when `API_LEVEL`,
+ * `MIN_CLIENT_API_LEVEL` or `MIN_SERVER_API_LEVEL` moved — right for the
+ * release check, which must not wave such a refactor through — but a rollback
+ * treats a throw as "cannot compare" and keeps the server on the failed
+ * build. A constant that moved says nothing about whether an older server can
+ * read the database, so the rollback reads only what decides that.
+ *
+ * @param {(path: string) => string | null} readFile
+ * @param {(dir: string) => string[]} listDir
+ * @returns {{ migrations: { file: string, id: number, minReaderSchema: number }[], schemaVersion: number }}
+ */
+export const readMigrationContract = (readFile, listDir) => {
+  const migrations = readMigrations(readFile, listDir);
+  return { migrations, schemaVersion: migrations.at(-1)?.id ?? 0 };
+};
+
+/**
  * What a tree promises its peers.
  *
  * @param {(path: string) => string | null} readFile
  * @param {(dir: string) => string[]} listDir
  */
-export const readContract = (readFile, listDir) => {
-  const migrations = readMigrations(readFile, listDir);
-  return {
-    apiLevel: readConstant(readFile, API_LEVEL_FILE, "API_LEVEL"),
-    minClientApiLevel: readConstant(readFile, API_LEVEL_FILE, "MIN_CLIENT_API_LEVEL"),
-    minServerApiLevel: readConstant(readFile, SERVER_ORIGIN_FILE, "MIN_SERVER_API_LEVEL"),
-    apiLevelChanges: readApiLevelChanges(readFile),
-    migrations,
-    schemaVersion: migrations.at(-1)?.id ?? 0,
-  };
-};
+export const readContract = (readFile, listDir) => ({
+  apiLevel: readConstant(readFile, API_LEVEL_FILE, "API_LEVEL"),
+  minClientApiLevel: readConstant(readFile, API_LEVEL_FILE, "MIN_CLIENT_API_LEVEL"),
+  minServerApiLevel: readConstant(readFile, SERVER_ORIGIN_FILE, "MIN_SERVER_API_LEVEL"),
+  apiLevelChanges: readApiLevelChanges(readFile),
+  ...readMigrationContract(readFile, listDir),
+});
 
 /** The contract of a release from before any of it existed. */
 export const EMPTY_CONTRACT = Object.freeze({

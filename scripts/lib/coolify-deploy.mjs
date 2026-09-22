@@ -162,7 +162,7 @@ export const checkName = (problem) => problem.slice(0, problem.indexOf(":"));
  * checkout, a file the parser does not recognise) is a reason too: the
  * question is whether it is safe, and "unknown" is not "yes".
  *
- * @param {(sha: string) => object} contractAt  release-policy's readContract at a sha; throws when it cannot
+ * @param {(sha: string) => { migrations: object[], schemaVersion: number }} contractAt  release-policy's readMigrationContract at a sha; throws when it cannot
  */
 export const serverDowngradeBlock = (contractAt, olderSha, newerSha) => {
   let older;
@@ -187,7 +187,7 @@ export const serverDowngradeBlock = (contractAt, olderSha, newerSha) => {
  * @property {(url: string, init?: object) => Promise<{ status: number, ok: boolean, headers: { get(name: string): string | null }, text(): Promise<string> }>} fetch
  * @property {(ms: number) => Promise<void>} sleep
  * @property {(line: string) => void} log
- * @property {(sha: string) => object} contractAt
+ * @property {(sha: string) => { migrations: object[], schemaVersion: number }} contractAt  readMigrationContract at a sha
  */
 
 /**
@@ -357,7 +357,7 @@ export const trigger = async (deps, config, apps) => {
  * @param {string[]} input.apps          the apps this deploy changed
  * @param {Record<string, string | null>} input.previous  their image values before it
  * @param {string} input.targetSha
- * @param {(sha: string) => object} input.contractAt
+ * @param {(sha: string) => { migrations: object[], schemaVersion: number }} input.contractAt
  */
 export const planRollback = ({ apps, previous, targetSha, contractAt }) => {
   const restore = {};

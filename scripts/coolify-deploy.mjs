@@ -28,7 +28,7 @@ import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 
 import { deployWithRollback, parseWhich, verifyOnly } from "./lib/coolify-deploy.mjs";
-import { readContract } from "./lib/release-policy.mjs";
+import { readMigrationContract } from "./lib/release-policy.mjs";
 
 const inActions = process.env.GITHUB_ACTIONS === "true";
 const error = (message) => console.error(inActions ? `::error::${message.replace(/\n/g, "%0A")}` : `ERROR: ${message}`);
@@ -48,9 +48,12 @@ const haveCommit = (sha) => {
 const contracts = new Map();
 
 /**
- * The migration contract at a commit, fetching it once if a shallow or stale
+ * The migration registry at a commit, fetching it once if a shallow or stale
  * checkout lacks it. Throws when it still cannot be read; the caller treats
- * that as "not safe to downgrade".
+ * that as "not safe to downgrade". Only the migrations are read: the full
+ * `readContract` also throws when an unrelated constant (API_LEVEL, the two
+ * floors) changed shape, which would keep the server on a failed build for a
+ * reason that has nothing to do with the database.
  */
 const contractAt = (sha) => {
   const cached = contracts.get(sha);
@@ -63,7 +66,7 @@ const contractAt = (sha) => {
     }
     if (!haveCommit(sha)) throw new Error(`commit ${sha} is not in this checkout`);
   }
-  const contract = readContract(
+  const contract = readMigrationContract(
     (path) => {
       try {
         return git("show", `${sha}:${path}`);
