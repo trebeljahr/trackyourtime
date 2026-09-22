@@ -1058,6 +1058,65 @@ export const settings: Translation<typeof source> = {
         delete: "Entf",
       },
     },
+    /** Stage 8: Aktivitätserfassung für /app/activity. Geräte-Einstellungen, gespeichert vom Hauptprozess. */
+    activity: {
+      title: "Aktivitätserfassung",
+      description:
+        "Zeichnet auf, welche App im Vordergrund ist, nur auf diesem Computer, und schlägt Einträge für Zeit vor, die du nicht erfasst hast. Nichts wird gesendet, bis du einen Eintrag hinzufügst.",
+      enabled: {
+        title: "Aufzeichnen, welche App im Vordergrund ist",
+        description: "Aus, bis du es einschaltest. Es ist keine Systemberechtigung nötig: Die App liest nur, welche App im Vordergrund ist.",
+      },
+      status: {
+        off: "Aus.",
+        recording: "Aktivität wird erfasst.",
+        idle: "Pausiert: seit einer Weile keine Eingabe.",
+        locked: "Pausiert, solange der Bildschirm gesperrt ist.",
+        noScope: "Beginnt, sobald dein Konto und dein Arbeitsbereich geladen sind.",
+      },
+      unavailable: {
+        store: "In Installationen aus einem App-Store gibt es keine Aktivitätserfassung. Nutze den direkten Download von der Download-Seite.",
+        "linux-sandbox": "Snap- und Flatpak-Installationen können andere Apps nicht sehen. Nutze das AppImage, das deb- oder das rpm-Paket von der Download-Seite.",
+        wayland: "Wayland teilt Apps nicht mit, welches Fenster im Vordergrund ist. Die Aktivitätserfassung funktioniert in einer X11-Sitzung.",
+        "unsupported-platform": "Auf diesem System funktioniert die Aktivitätserfassung nicht.",
+        "tool-missing": "Die Aktivitätserfassung braucht xprop. Installiere das Paket {package} und schalte die Erfassung dann aus und wieder ein.",
+        "blocked-by-policy": "Eine Windows-Richtlinie auf diesem Computer blockiert das PowerShell-Hilfsprogramm, das die App im Vordergrund liest. Frag die Person, die diesen Computer verwaltet.",
+        "source-failed": "Das Hilfsprogramm, das die App im Vordergrund liest, antwortet nicht mehr. Track Your Time versucht es alle 5 Minuten noch einmal.",
+        "newer-format": "Eine neuere Version von Track Your Time hat die Aktivität auf diesem Computer gespeichert. Die Erfassung bleibt aus, bis du aktualisierst. Nichts wurde gelöscht.",
+      },
+      titles: {
+        title: "Fenstertitel mit aufzeichnen",
+        description: "Fenstertitel verraten mehr über dich als App-Namen. Wenn du das ausschaltest, werden die gespeicherten Titel gelöscht.",
+        notOnMac: "Unter macOS werden Fenstertitel noch nicht aufgezeichnet.",
+        notHere: "Auf diesem System werden Fenstertitel nicht aufgezeichnet.",
+      },
+      exclude: {
+        title: "Nie aufzeichnen",
+        description:
+          "Apps auf dieser Liste werden nie gespeichert. Wenn du eine hinzufügst, wird gelöscht, was für sie schon aufgezeichnet ist. Mit com.example.* erfasst du eine ganze Gruppe von Apps.",
+        recent: "Zuletzt genutzte Apps",
+        add: "Hinzufügen",
+        addApp: "{app} nie aufzeichnen",
+        remove: "{app} wieder aufzeichnen",
+      },
+      retention: {
+        title: "Aktivität aufbewahren für",
+        description: "Ältere Aktivität wird täglich gelöscht. Regeln bleiben erhalten.",
+        suffix: "Tage",
+        label: "Aufbewahrung der Aktivität in Tagen",
+      },
+      wipe: {
+        title: "Alle Aktivität löschen",
+        description:
+          "{count, plural, =0 {Für dieses Konto ist keine Aktivität gespeichert.} one {# gespeicherter Abschnitt Aktivität.} other {# gespeicherte Abschnitte Aktivität.}} Beim Löschen werden auch deine Regeln und ausgeblendeten Vorschläge entfernt.",
+        button: "Alle Aktivität jetzt löschen",
+        confirmTitle: "Alle aufgezeichnete Aktivität löschen?",
+        confirmHint:
+          "Das entfernt aufgezeichnete Aktivität, Regeln und ausgeblendete Vorschläge von diesem Computer. Einträge, die du schon hinzugefügt hast, bleiben unverändert. Das lässt sich nicht rückgängig machen.",
+        done: "Alle aufgezeichnete Aktivität wurde von diesem Computer gelöscht.",
+      },
+      failed: "Die Änderung konnte nicht gespeichert werden. Versuch es noch einmal.",
+    },
     updates: {
       title: "Updates",
       version: "Version {version}",

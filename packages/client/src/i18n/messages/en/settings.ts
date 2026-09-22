@@ -1086,6 +1086,65 @@ export const settings = {
         delete: "Delete",
       },
     },
+    /** Stage 8: activity capture for /app/activity. Device preferences, kept by the main process. */
+    activity: {
+      title: "Activity capture",
+      description:
+        "Records which app is in front, on this computer only, and suggests entries for the time you did not track. Nothing is sent until you add an entry.",
+      enabled: {
+        title: "Record which app is in front",
+        description: "Off until you turn it on. No system permission is needed: the app reads only which app is in front.",
+      },
+      status: {
+        off: "Off.",
+        recording: "Recording.",
+        idle: "Paused: no input for a while.",
+        locked: "Paused while the screen is locked.",
+        noScope: "Starts once your account and workspace have loaded.",
+      },
+      unavailable: {
+        store: "Activity capture is not available in copies from an app store. Use the direct download from the download page.",
+        "linux-sandbox": "Snap and Flatpak copies cannot see other apps. Use the AppImage, deb or rpm from the download page.",
+        wayland: "Wayland does not tell apps which window is in front. Activity capture works in an X11 session.",
+        "unsupported-platform": "Activity capture does not work on this system.",
+        "tool-missing": "Activity capture needs xprop. Install the {package} package, then turn this off and on again.",
+        "blocked-by-policy": "A Windows policy on this computer blocks the PowerShell helper that reads the app in front. Ask whoever manages this computer.",
+        "source-failed": "The helper that reads the app in front stopped answering. Track Your Time tries again every 5 minutes.",
+        "newer-format": "A newer version of Track Your Time wrote the activity on this computer. Capture is off until you update. Nothing was deleted.",
+      },
+      titles: {
+        title: "Include window titles",
+        description: "Window titles say more about you than app names. Turning this off deletes the titles already stored.",
+        notOnMac: "Window titles are not recorded on macOS yet.",
+        notHere: "Window titles are not recorded on this system.",
+      },
+      exclude: {
+        title: "Never record",
+        description:
+          "Apps on this list are never stored. Adding one removes what is already recorded for it. Use com.example.* for a group of apps.",
+        recent: "Recent apps",
+        add: "Add",
+        addApp: "Never record {app}",
+        remove: "Record {app} again",
+      },
+      retention: {
+        title: "Keep activity for",
+        description: "Older activity is deleted every day. Rules are kept.",
+        suffix: "days",
+        label: "Activity retention in days",
+      },
+      wipe: {
+        title: "Delete all activity",
+        description:
+          "{count, plural, =0 {No activity is stored for this account.} one {# stored stretch of activity.} other {# stored stretches of activity.}} Deleting also removes your rules and dismissed suggestions.",
+        button: "Delete all activity now",
+        confirmTitle: "Delete all recorded activity?",
+        confirmHint:
+          "This removes recorded activity, rules and dismissed suggestions from this computer. Entries you already added are not touched. This cannot be undone.",
+        done: "All recorded activity was deleted from this computer.",
+      },
+      failed: "The change could not be saved. Try again.",
+    },
     /** Stage 7: the updater's status. The app never restarts for an update by itself. */
     updates: {
       title: "Updates",
