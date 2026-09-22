@@ -142,7 +142,7 @@ export function SignIn(): React.JSX.Element {
           <ActionPanel>
             <Action.OpenInBrowser title="Open Web App" url={webLink("/app/track")} />
             <Action
-              title="Sign Out"
+              title="Sign out"
               icon={Icon.Logout}
               style={Action.Style.Destructive}
               onAction={async () => {
@@ -195,7 +195,7 @@ export function SignIn(): React.JSX.Element {
           <ActionPanel>
             <Action.OpenInBrowser title="Open Approval Page" url={approvalUrl} />
             <Action.CopyToClipboard title="Copy Code" content={userCode} />
-            <Action title="Start Over" icon={Icon.Repeat} onAction={retry} />
+            <Action title="Start over" icon={Icon.Repeat} onAction={retry} />
           </ActionPanel>
         }
       />

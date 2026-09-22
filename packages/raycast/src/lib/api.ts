@@ -1017,7 +1017,7 @@ const wrap = (
  * Build a caller bound to the stored session.
  *
  * Throws {@link NotSignedInError} when there is no token, which every command
- * turns into "run Sign In to Track Your Time" rather than a raw failure toast.
+ * turns into "run Sign in to Track Your Time" rather than a raw failure toast.
  */
 export async function getTrackYourTime(): Promise<TrackYourTime> {
   const session = await getStoredSession();

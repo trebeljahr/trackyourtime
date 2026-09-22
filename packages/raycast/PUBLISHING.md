@@ -30,7 +30,7 @@ This file is for maintainers and is not part of the store copy. The extension is
 
    - The extension needs a Track Your Time account. Reviewers can create one at https://trackyourtime.dev/signup, or ask for test credentials, which you send privately and never put in the pull request.
    - Leave **API URL** and **Web App URL** empty to use the hosted service. `npm run dev` uses the hosted service too.
-   - Sign-in: run **Timer**, choose **Sign In to Track Your Time**, and approve the code on the page that opens in the browser.
+   - Sign-in: run **Timer**, choose **Sign in to Track Your Time**, and approve the code on the page that opens in the browser.
    - `src/vendor/` is copied from the Track Your Time repository, where the other Track Your Time clients use the same code. Changes to it belong there.
 
 3. If a reviewer changes the pull request, `publish` refuses until you pull those changes. **Never run `pull-contributions` inside the monorepo.** It runs `git pull` and `git merge` in the directory it starts in, which puts merge commits on the monorepo's branch. Pull into a throwaway repository instead:

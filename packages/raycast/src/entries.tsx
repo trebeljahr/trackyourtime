@@ -1,4 +1,4 @@
-import { Action, ActionPanel, Alert, Color, Icon, List, Toast, confirmAlert, showToast } from "@raycast/api";
+import { Action, ActionPanel, Alert, Color, Icon, Keyboard, List, Toast, confirmAlert, showToast } from "@raycast/api";
 import { entryDurationSec, toQuickStart, type DetailedEntry } from "./vendor/index.js";
 import { getTrackYourTime } from "./lib/api.js";
 import { isLocalEntry } from "./lib/overlay.js";
@@ -229,7 +229,7 @@ export default function Entries(): React.JSX.Element {
                       <Action.Push
                         title="Edit Entry"
                         icon={Icon.Pencil}
-                        shortcut={{ modifiers: ["cmd"], key: "e" }}
+                        shortcut={Keyboard.Shortcut.Common.Edit}
                         target={<EditEntry entry={entry} onSaved={revalidate} />}
                       />
                     </ActionPanel.Section>
@@ -239,17 +239,17 @@ export default function Entries(): React.JSX.Element {
                       <Action.CopyToClipboard
                         title="Copy Description"
                         content={label(entry)}
-                        shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+                        shortcut={Keyboard.Shortcut.Common.Copy}
                       />
                       <Action.OpenInBrowser
                         title="Open Web App"
                         url={webLink("/app/track")}
-                        shortcut={{ modifiers: ["cmd"], key: "o" }}
+                        shortcut={Keyboard.Shortcut.Common.Open}
                       />
                       <Action
                         title="Refresh"
                         icon={Icon.ArrowClockwise}
-                        shortcut={{ modifiers: ["cmd"], key: "r" }}
+                        shortcut={Keyboard.Shortcut.Common.Refresh}
                         onAction={revalidate}
                       />
                     </ActionPanel.Section>

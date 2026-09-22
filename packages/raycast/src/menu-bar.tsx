@@ -1,5 +1,6 @@
 import {
   Icon,
+  Keyboard,
   LaunchType,
   MenuBarExtra,
   Toast,
@@ -105,7 +106,7 @@ export default function MenuBar(): React.JSX.Element | null {
   if (signedOut) {
     return (
       <MenuBarExtra icon={BRAND_MARK} tooltip="Track Your Time — not signed in">
-        <MenuBarExtra.Item title="Sign In to Track Your Time" icon={Icon.Key} onAction={openTimer} />
+        <MenuBarExtra.Item title="Sign in to Track Your Time" icon={Icon.Key} onAction={openTimer} />
       </MenuBarExtra>
     );
   }
@@ -221,7 +222,7 @@ export default function MenuBar(): React.JSX.Element | null {
           <MenuBarExtra.Item
             title="Stop Timer"
             icon={Icon.Stop}
-            shortcut={{ modifiers: ["cmd"], key: "s" }}
+            shortcut={Keyboard.Shortcut.Common.Save}
             onAction={() => {
               void act(async () => {
                 const api = await getTrackYourTime();
@@ -239,7 +240,7 @@ export default function MenuBar(): React.JSX.Element | null {
           <MenuBarExtra.Item
             title="Edit Timer…"
             icon={Icon.Pencil}
-            shortcut={{ modifiers: ["cmd"], key: "e" }}
+            shortcut={Keyboard.Shortcut.Common.Edit}
             onAction={openTimer}
           />
           <MenuBarExtra.Submenu title="Move to Project" icon={Icon.Folder}>
@@ -298,7 +299,7 @@ export default function MenuBar(): React.JSX.Element | null {
           <MenuBarExtra.Item
             title="Start Timer…"
             icon={Icon.Play}
-            shortcut={{ modifiers: ["cmd"], key: "n" }}
+            shortcut={Keyboard.Shortcut.Common.New}
             onAction={openTimer}
           />
         </MenuBarExtra.Section>
@@ -419,7 +420,7 @@ export default function MenuBar(): React.JSX.Element | null {
         <MenuBarExtra.Item
           title="Refresh"
           icon={Icon.ArrowClockwise}
-          shortcut={{ modifiers: ["cmd"], key: "r" }}
+          shortcut={Keyboard.Shortcut.Common.Refresh}
           onAction={revalidate}
         />
       </MenuBarExtra.Section>

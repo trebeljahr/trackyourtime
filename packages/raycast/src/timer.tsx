@@ -1,4 +1,4 @@
-import { Action, ActionPanel, Alert, Color, Icon, List, Toast, confirmAlert, showToast } from "@raycast/api";
+import { Action, ActionPanel, Alert, Color, Icon, Keyboard, List, Toast, confirmAlert, showToast } from "@raycast/api";
 import {
   entryDurationSec,
   formatDuration,
@@ -233,15 +233,11 @@ export default function Timer(): React.JSX.Element {
   /** Shared tail of every row's panel — never the primary action. */
   const commonActions = (
     <ActionPanel.Section>
-      <Action.OpenInBrowser
-        title="Open Web App"
-        url={webLink("/app/track")}
-        shortcut={{ modifiers: ["cmd"], key: "o" }}
-      />
+      <Action.OpenInBrowser title="Open Web App" url={webLink("/app/track")} shortcut={Keyboard.Shortcut.Common.Open} />
       <Action
         title="Refresh"
         icon={Icon.ArrowClockwise}
-        shortcut={{ modifiers: ["cmd"], key: "r" }}
+        shortcut={Keyboard.Shortcut.Common.Refresh}
         onAction={revalidate}
       />
       {/* The only way to see or drop this Mac's session now that pairing has
@@ -280,7 +276,7 @@ export default function Timer(): React.JSX.Element {
     <Action.Push
       title="Start New Timer…"
       icon={Icon.Plus}
-      shortcut={{ modifiers: ["cmd"], key: "n" }}
+      shortcut={Keyboard.Shortcut.Common.New}
       target={<StartTimer />}
     />
   );
@@ -442,7 +438,7 @@ export default function Timer(): React.JSX.Element {
                       <Action.Push
                         title="Edit Timer…"
                         icon={Icon.Pencil}
-                        shortcut={{ modifiers: ["cmd"], key: "e" }}
+                        shortcut={Keyboard.Shortcut.Common.Edit}
                         target={<EditEntry entry={running} onSaved={onSaved} />}
                       />
                       <ActionPanel.Submenu
@@ -476,7 +472,7 @@ export default function Timer(): React.JSX.Element {
                   <Action.CopyToClipboard
                     title="Copy Description"
                     content={entryLabel(running)}
-                    shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+                    shortcut={Keyboard.Shortcut.Common.Copy}
                   />
                 </ActionPanel.Section>
 
@@ -589,7 +585,7 @@ export default function Timer(): React.JSX.Element {
                     <Action.Push
                       title="Edit Entry…"
                       icon={Icon.Pencil}
-                      shortcut={{ modifiers: ["cmd"], key: "e" }}
+                      shortcut={Keyboard.Shortcut.Common.Edit}
                       target={<EditEntry entry={entry} onSaved={onSaved} />}
                     />
                     <Action

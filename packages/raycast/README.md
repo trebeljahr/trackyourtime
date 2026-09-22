@@ -32,7 +32,7 @@ If you belong to more than one workspace, **⌘⇧W** in **Timer** picks the wor
 
 ## Setup
 
-1. Run **Timer** and choose **Sign In to Track Your Time**.
+1. Run **Timer** and choose **Sign in to Track Your Time**.
 2. The extension shows a short code and opens the approval page in your browser.
 3. Sign in to the web app if it asks, check that the code matches, and approve.
 
