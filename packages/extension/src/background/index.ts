@@ -61,6 +61,10 @@ import {
   createTag,
   createProject,
   createTask,
+  updateClient,
+  updateProject,
+  updateTag,
+  updateTask,
 } from "./catalog";
 import { searchDescriptions } from "./descriptions";
 import {
@@ -435,11 +439,19 @@ const apply = async (message: PopupToBackground): Promise<void> => {
       await createTag(message.name);
       return;
     case "project:create":
-      await createProject(message.name, message.clientId);
+      await createProject(message.name, message.clientId, message.details);
       return;
     case "task:create":
       await createTask(message.name);
       return;
+    case "client:update":
+      return updateClient(message.id, message.patch);
+    case "project:update":
+      return updateProject(message.id, message.patch);
+    case "task:update":
+      return updateTask(message.id, message.patch);
+    case "tag:update":
+      return updateTag(message.id, message.patch);
     case "config:set-server":
       return setServer(message.origin, message.discardUnsent === true);
     case "view:set":

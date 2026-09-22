@@ -45,6 +45,22 @@ export type ComboboxProps = {
   /** When given, offers "Create <query>" for a query that matches nothing. */
   onCreate?: (name: string) => Promise<void>;
   createLabel?: (name: string) => string;
+  /**
+   * When given, every option carries an edit button that calls this with its
+   * id. The picker closes first: the caller replaces it with an edit panel.
+   */
+  onEdit?: (id: string) => void;
+  /** Accessible name of an option's edit button. */
+  editLabel?: (label: string) => string;
+  /**
+   * When given, the unfiltered list ends with this row ("New project…").
+   *
+   * "Create X" only appears after typing a name that matches nothing, so on
+   * an empty workspace there was no visible way to make anything at all — the
+   * same reason the web app's pickers carry one.
+   */
+  onNew?: () => void;
+  newLabel?: string;
   testId?: string;
 };
 
@@ -61,6 +77,10 @@ export function Combobox({
   disabledHint,
   onCreate,
   createLabel,
+  onEdit,
+  editLabel,
+  onNew,
+  newLabel,
   testId,
 }: ComboboxProps): JSX.Element {
   const t = useT("popup");
@@ -89,14 +109,19 @@ export function Combobox({
     trimmed !== "" &&
     !options.some((option) => normalize(option.label) === normalize(trimmed));
 
-  const rows: Array<{ kind: "empty" | "option" | "create"; option?: ComboboxOption }> =
-    [
-      ...(emptyLabel !== undefined && normalize(query) === ""
-        ? [{ kind: "empty" as const }]
-        : []),
-      ...matches.map((option) => ({ kind: "option" as const, option })),
-      ...(canCreate ? [{ kind: "create" as const }] : []),
-    ];
+  const rows: Array<{
+    kind: "empty" | "option" | "create" | "new";
+    option?: ComboboxOption;
+  }> = [
+    ...(emptyLabel !== undefined && normalize(query) === ""
+      ? [{ kind: "empty" as const }]
+      : []),
+    ...matches.map((option) => ({ kind: "option" as const, option })),
+    ...(canCreate ? [{ kind: "create" as const }] : []),
+    // Only while nothing is typed: with a query, "Create X" is the same
+    // action already, and two rows for it would read as two different things.
+    ...(onNew !== undefined && trimmed === "" ? [{ kind: "new" as const }] : []),
+  ];
 
   useEffect(() => {
     if (!open) return;
@@ -158,6 +183,11 @@ export function Combobox({
       close();
       return;
     }
+    if (row.kind === "new" && onNew) {
+      close();
+      onNew();
+      return;
+    }
     if (row.kind === "create" && onCreate) {
       setCreating(true);
       try {
@@ -195,6 +225,17 @@ export function Combobox({
     if (event.key === "Escape") {
       event.preventDefault();
       close();
+      return;
+    }
+    // ⌘E / Ctrl+E edits the highlighted row, so the pencil is not
+    // mouse-only. The pencil itself stays out of the tab order: tabbing
+    // through a pencil per row would make leaving the list take eighty stops.
+    if (event.key === "e" && (event.metaKey || event.ctrlKey) && open) {
+      const row = rows[active];
+      if (row?.kind !== "option" || !row.option || onEdit === undefined) return;
+      event.preventDefault();
+      close();
+      onEdit(row.option.id);
     }
   };
 
@@ -254,7 +295,10 @@ export function Combobox({
               const key =
                 row.kind === "option" ? (row.option?.id ?? "option") : row.kind;
               return (
-                <li key={key}>
+                <li
+                  key={key}
+                  className={onEdit !== undefined ? "combobox__item" : undefined}
+                >
                   <button
                     type="button"
                     role="option"
@@ -298,7 +342,25 @@ export function Combobox({
                             : t("combobox.create", { name: trimmed })}
                       </span>
                     )}
+                    {row.kind === "new" && (
+                      <span className="combobox__create">{newLabel}</span>
+                    )}
                   </button>
+                  {row.kind === "option" && row.option && onEdit !== undefined && (
+                    <EditButton
+                      option={row.option}
+                      label={
+                        editLabel !== undefined
+                          ? editLabel(row.option.label)
+                          : t("combobox.edit", { name: row.option.label })
+                      }
+                      onEdit={(id) => {
+                        close();
+                        onEdit(id);
+                      }}
+                      testId={testId && `${testId}-pencil-${row.option.id}`}
+                    />
+                  )}
                 </li>
               );
             })}
@@ -306,5 +368,49 @@ export function Combobox({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A pencil beside an option. A sibling of the row's button, never inside it:
+ * a button in a button is invalid HTML, and the click would also choose.
+ */
+function EditButton({
+  option,
+  label,
+  onEdit,
+  testId,
+}: {
+  option: ComboboxOption;
+  label: string;
+  onEdit: (id: string) => void;
+  testId?: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      className="combobox__edit"
+      aria-label={label}
+      title={label}
+      tabIndex={-1}
+      // mousedown for the same reason as the row: the input's blur would
+      // otherwise close the list before the click landed.
+      onMouseDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onEdit(option.id);
+      }}
+      data-testid={testId}
+    >
+      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+        <path
+          d="M11.3 2.3a1 1 0 0 1 1.4 0l1 1a1 1 0 0 1 0 1.4L6 12.4 3 13l.6-3z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
   );
 }

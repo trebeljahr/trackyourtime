@@ -13,6 +13,13 @@
  * re-applied.
  */
 import type { ApiClient, Client, Project, Tag, Task } from "@starter/core";
+import type {
+  ClientPatch,
+  ProjectDetails,
+  ProjectPatch,
+  TagPatch,
+  TaskPatch,
+} from "../lib/messaging";
 import {
   ensureReady,
   ORIGIN_ID,
@@ -98,9 +105,11 @@ export async function createClient(name: string): Promise<Client> {
 export async function createProject(
   name: string,
   clientId: string | null,
+  details: ProjectDetails = {},
 ): Promise<Project> {
   const current = await ensureReady();
   const created = await current.api.mutate<Project>("projects.create", {
+    ...details,
     name: name.trim(),
     clientId,
     originId: ORIGIN_ID,
@@ -121,3 +130,66 @@ export async function createTask(name: string): Promise<Task> {
   setCachedTasks([...(getCachedTasks() ?? []), created]);
   return created;
 }
+
+/**
+ * Editing a catalog row from inside a picker.
+ *
+ * Each patch carries only the fields the person changed. That is not tidiness:
+ * a member who cannot see colleagues' money reads every project's
+ * `hourlyRate` as `null`, and a form that echoed the whole row back would
+ * clear a rate it was never shown.
+ *
+ * Every edit refetches rather than splicing the row in: a rename can move a
+ * row in the server's collation, and a project edit is the one write whose
+ * answer (`ProjectUpdateResult`) is not the plain row the cache holds.
+ */
+export async function updateClient(id: string, patch: ClientPatch): Promise<void> {
+  const current = await ensureReady();
+  await current.api.mutate<Client>("clients.update", {
+    ...trimName(patch),
+    id,
+    originId: ORIGIN_ID,
+  });
+  await fetchClients(current.api);
+  // A project row names its client, so the picker's hint would go stale.
+  await fetchProjects(current.api);
+}
+
+export async function updateProject(id: string, patch: ProjectPatch): Promise<void> {
+  const current = await ensureReady();
+  // Never `applyToEntries`: a billing change reaching booked time is decided
+  // on the web app's screen, which says what it will rewrite. From here it
+  // applies to new time only, as the panel says.
+  await current.api.mutate<Project>("projects.update", {
+    ...trimName(patch),
+    id,
+    originId: ORIGIN_ID,
+  });
+  await fetchProjects(current.api);
+}
+
+export async function updateTask(id: string, patch: TaskPatch): Promise<void> {
+  const current = await ensureReady();
+  await current.api.mutate<Task>("tasks.update", {
+    ...trimName(patch),
+    id,
+    originId: ORIGIN_ID,
+  });
+  // Not `fetchTasks`, which answers from the cache it would have to refill.
+  setCachedTasks(
+    await current.api.query<Task[]>("tasks.list", { includeArchived: false }),
+  );
+}
+
+export async function updateTag(id: string, patch: TagPatch): Promise<void> {
+  const current = await ensureReady();
+  await current.api.mutate<Tag>("tags.update", {
+    ...trimName(patch),
+    id,
+    originId: ORIGIN_ID,
+  });
+  await fetchTags(current.api);
+}
+
+const trimName = <T extends { name?: string }>(patch: T): T =>
+  patch.name === undefined ? patch : { ...patch, name: patch.name.trim() };

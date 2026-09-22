@@ -135,6 +135,23 @@ export type EntryPage = {
   pendingIds: string[];
 };
 
+/** What a project form sets beyond its name and client. */
+export type ProjectDetails = {
+  color?: string;
+  billableDefault?: boolean;
+  /** `null` clears it back to the workspace's default rate. */
+  hourlyRate?: number | null;
+};
+
+export type ProjectPatch = ProjectDetails & {
+  name?: string;
+  clientId?: string | null;
+};
+
+export type ClientPatch = { name?: string; color?: string };
+export type TagPatch = { name?: string; color?: string };
+export type TaskPatch = { name?: string };
+
 export type PopupToBackground =
   | { type: "state:get" }
   | { type: "auth:sign-in"; email: string; password: string }
@@ -196,8 +213,22 @@ export type PopupToBackground =
   | { type: "idle:answer"; answer: IdleAnswer }
   | { type: "client:create"; name: string }
   | { type: "tag:create"; name: string }
-  | { type: "project:create"; name: string; clientId: string | null }
+  | {
+      type: "project:create";
+      name: string;
+      clientId: string | null;
+      /** Absent takes the server's defaults: next colour, workspace billing. */
+      details?: ProjectDetails;
+    }
   | { type: "task:create"; name: string }
+  /**
+   * Edit a catalog row from a picker. Each patch holds only what changed —
+   * see `updateProject` in the worker for why a whole row is never sent.
+   */
+  | { type: "client:update"; id: string; patch: ClientPatch }
+  | { type: "project:update"; id: string; patch: ProjectPatch }
+  | { type: "task:update"; id: string; patch: TaskPatch }
+  | { type: "tag:update"; id: string; patch: TagPatch }
   /**
    * Use a different Track Your Time server.
    *

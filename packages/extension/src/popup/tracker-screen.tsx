@@ -16,7 +16,6 @@ import type { BackgroundState } from "../lib/messaging";
 import { formatDurationFor } from "../i18n/format";
 import { usePopupLocale, useT } from "../i18n/use-t";
 import { HeldQueue, WorkspacePicker } from "./workspace-bar";
-import { Combobox } from "./combobox";
 import { DescriptionField } from "./description-field";
 import { formatElapsed } from "./entry-format";
 import { Header } from "./header";
@@ -27,7 +26,8 @@ import { ProjectPicker } from "./project-picker";
 import { QuickStartList } from "./quick-start-list";
 import { Switch } from "./switch";
 import { describeSync } from "./sync-label";
-import { useSelectWhenCreated } from "./use-created-row";
+import { useOpenPanels } from "./catalog-edit";
+import { TaskPicker } from "./task-picker";
 import { useElapsedSec } from "./use-elapsed";
 
 /** An edit to the running entry. Absent fields are left alone. */
@@ -174,8 +174,8 @@ export function TrackerScreen({
   const [billable, setBillable] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  /** True while {@link ProjectPicker} has its new-project panel open. */
-  const [namingProject, setNamingProject] = useState(false);
+  /** Which pickers have a create or edit panel open; see the hook. */
+  const panels = useOpenPanels();
 
   // While a start/stop is in flight this holds the timer the user just asked
   // for. `null` (the outer one) means "no override" — the inner `running` is
@@ -262,11 +262,6 @@ export function TrackerScreen({
     setTaskId(updated.taskId);
     patchRunning({ taskId: updated.taskId });
   };
-
-  // A task made from the picker is the task this entry wants — see the hook.
-  const createTask = useSelectWhenCreated(state.tasks, (task) => {
-    selectTask(task.id);
-  });
 
   const selectTags = (next: string[]): void => {
     setTagIds(next);
@@ -532,21 +527,16 @@ export function TrackerScreen({
             busy={busy}
             onCreateClient={onCreateClient}
             onCreateProject={onCreateProject}
-            onPendingChange={setNamingProject}
+            onPendingChange={panels.track("project")}
             testId="tracker-project"
           />
 
-          <Combobox
-            label={t("fields.task")}
-            options={tasks.map((task) => ({ id: task.id, label: task.name }))}
+          <TaskPicker
+            tasks={tasks}
             value={taskId}
             onChange={selectTask}
-            emptyLabel={t("fields.noTask")}
-            placeholder={t("fields.searchTasks")}
-            onCreate={async (name) => {
-              await createTask(name, () => onCreateTask(name));
-            }}
-            createLabel={(name) => t("fields.createTask", { name })}
+            onCreate={onCreateTask}
+            onPendingChange={panels.track("task")}
             testId="tracker-task"
           />
 
@@ -555,6 +545,7 @@ export function TrackerScreen({
             value={tagIds}
             onChange={selectTags}
             onCreate={onCreateTag}
+            onPendingChange={panels.track("tags")}
             testId="tracker-tags"
           />
 
@@ -573,7 +564,7 @@ export function TrackerScreen({
                 : "button button--danger button--block"
             }
             type="submit"
-            disabled={busy || namingProject}
+            disabled={busy || panels.any}
             data-testid={running === null ? "tracker-start" : "tracker-stop"}
           >
             {running === null ? t("tracker.start") : t("tracker.stop")}

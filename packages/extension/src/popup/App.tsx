@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { CatalogEditProvider, type CatalogEdit } from "./catalog-edit";
 import { dayKeyInZone, deviceTimeZone, type QuickStart } from "@starter/core";
 import {
   sendToBackground,
@@ -419,6 +420,18 @@ export function App(): JSX.Element {
     [send],
   );
 
+  const catalogEdit = useMemo<CatalogEdit>(
+    () => ({
+      createProject: (name, clientId, details) =>
+        send({ type: "project:create", name, clientId, details }),
+      updateClient: (id, patch) => send({ type: "client:update", id, patch }),
+      updateProject: (id, patch) => send({ type: "project:update", id, patch }),
+      updateTask: (id, patch) => send({ type: "task:update", id, patch }),
+      updateTag: (id, patch) => send({ type: "tag:update", id, patch }),
+    }),
+    [send],
+  );
+
   const pinFavorite = useCallback(
     (quick: QuickStart): Promise<boolean> =>
       send({ type: "favorite:add", quick }),
@@ -707,131 +720,133 @@ export function App(): JSX.Element {
       <VersionBanner compatibility={state.compatibility} t={t} />
       {state.originTrusted === false ? <OriginNotTrustedNotice apiUrl={state.apiUrl} /> : null}
       {state.signedIn ? (
-        <Screens
-          route={topOf(stack)}
-          tracker={{
-            state,
-            error,
-            onStart: (description, projectId, taskId, billable, tagIds) =>
-              send({
-                type: "timer:start",
-                description,
-                projectId,
-                taskId,
-                billable,
-                tagIds,
-              }),
-            onStop: () => send({ type: "timer:stop" }),
-            onUpdateRunning: updateRunning,
-            onPinFavorite: pinFavorite,
-            onUnpinFavorite: unpinFavorite,
-            onAnswerIdle: (answer) => send({ type: "idle:answer", answer }),
-            onOpenSettings: () => openSection(null),
-            onOpenEntries: () => go({ name: "entries" }),
-            onOpenSuggestions: () => go({ name: "suggestions", day: null }),
-            onSearchDescriptions: searchDescriptions,
-            onCreateClient: createClient,
-            onCreateTag: createTag,
-            onCreateProject: createProject,
-            onCreateTask: createTask,
-            onSwitchWorkspace: (workspaceId) =>
-              send({ type: "workspace:switch", workspaceId }),
-            onDiscardHeld: (id) => send({ type: "queue:discard-held", id }),
-          }}
-          settings={{
-            state,
-            error,
-            note,
-            onOpenSection: openSection,
-            onBack: goBack,
-            onGoTracker: goTracker,
-            onUpdateSettings: updateSettings,
-            onListDevices: listDevices,
-            onRevokeDevice: revokeDevice,
-            onRevokeOtherDevices: revokeOtherDevices,
-            onSignOut: signOut,
-            onSetServer: setServer,
-            onSaveActivitySettings: saveActivitySettings,
-            onRequestActivityPermission: requestActivityPermission,
-            onWipeActivity: wipeActivity,
-          }}
-          entries={{
-            state,
-            error,
-            note,
-            onBack: goBack,
-            onGoTracker: goTracker,
-            onOpenEntry: openEntry,
-            onNewEntry: newEntry,
-            onLoadMore: loadMoreEntries,
-          }}
-          entry={{
-            state,
-            error,
-            note,
-            onBack: goBack,
-            onGoTracker: goTracker,
-            onUpdateEntry: updateEntry,
-            onDeleteEntry: deleteEntry,
-            onSearchDescriptions: searchDescriptions,
-            onCreateClient: createClient,
-            onCreateProject: createProject,
-            onCreateTag: createTag,
-            onCreateTask: createTask,
-            onMissing: entryMissing,
-          }}
-          entryNew={{
-            state,
-            error,
-            note,
-            onBack: goBack,
-            onGoTracker: goTracker,
-            onDraftChange: changeDraft,
-            onCreateEntry: createEntry,
-            onSearchDescriptions: searchDescriptions,
-            onCreateClient: createClient,
-            onCreateProject: createProject,
-            onCreateTag: createTag,
-            onCreateTask: createTask,
-          }}
-          suggestions={{
-            state,
-            error,
-            note,
-            onBack: goBack,
-            onGoTracker: goTracker,
-            onOpenActivitySettings: () => openSection("activity"),
-            onChangeDay: (day) => go({ name: "suggestions", day }),
-            onAccept: acceptSuggestion,
-            onEdit: (draft) => {
-              const top = topOf(stackRef.current);
-              go({
-                name: "suggestion-edit",
-                day: top.name === "suggestions" ? top.day : null,
-                draft,
-              });
-            },
-            onDismiss: dismissSuggestion,
-            onAddRule: addActivityRule,
-            onRemoveRule: removeActivityRule,
-            onCreateClient: createClient,
-            onCreateProject: createProject,
-          }}
-          suggestionEdit={{
-            state,
-            error,
-            note,
-            onBack: goBack,
-            onGoTracker: goTracker,
-            onDraftChange: changeSuggestionDraft,
-            onAccept: acceptEditedSuggestion,
-            onSearchDescriptions: searchDescriptions,
-            onCreateClient: createClient,
-            onCreateProject: createProject,
-            onCreateTag: createTag,
-            onCreateTask: createTask,
-          }}
-        />
+        <CatalogEditProvider value={catalogEdit}>
+          <Screens
+            route={topOf(stack)}
+            tracker={{
+              state,
+              error,
+              onStart: (description, projectId, taskId, billable, tagIds) =>
+                send({
+                  type: "timer:start",
+                  description,
+                  projectId,
+                  taskId,
+                  billable,
+                  tagIds,
+                }),
+              onStop: () => send({ type: "timer:stop" }),
+              onUpdateRunning: updateRunning,
+              onPinFavorite: pinFavorite,
+              onUnpinFavorite: unpinFavorite,
+              onAnswerIdle: (answer) => send({ type: "idle:answer", answer }),
+              onOpenSettings: () => openSection(null),
+              onOpenEntries: () => go({ name: "entries" }),
+              onOpenSuggestions: () => go({ name: "suggestions", day: null }),
+              onSearchDescriptions: searchDescriptions,
+              onCreateClient: createClient,
+              onCreateTag: createTag,
+              onCreateProject: createProject,
+              onCreateTask: createTask,
+              onSwitchWorkspace: (workspaceId) =>
+                send({ type: "workspace:switch", workspaceId }),
+              onDiscardHeld: (id) => send({ type: "queue:discard-held", id }),
+            }}
+            settings={{
+              state,
+              error,
+              note,
+              onOpenSection: openSection,
+              onBack: goBack,
+              onGoTracker: goTracker,
+              onUpdateSettings: updateSettings,
+              onListDevices: listDevices,
+              onRevokeDevice: revokeDevice,
+              onRevokeOtherDevices: revokeOtherDevices,
+              onSignOut: signOut,
+              onSetServer: setServer,
+              onSaveActivitySettings: saveActivitySettings,
+              onRequestActivityPermission: requestActivityPermission,
+              onWipeActivity: wipeActivity,
+            }}
+            entries={{
+              state,
+              error,
+              note,
+              onBack: goBack,
+              onGoTracker: goTracker,
+              onOpenEntry: openEntry,
+              onNewEntry: newEntry,
+              onLoadMore: loadMoreEntries,
+            }}
+            entry={{
+              state,
+              error,
+              note,
+              onBack: goBack,
+              onGoTracker: goTracker,
+              onUpdateEntry: updateEntry,
+              onDeleteEntry: deleteEntry,
+              onSearchDescriptions: searchDescriptions,
+              onCreateClient: createClient,
+              onCreateProject: createProject,
+              onCreateTag: createTag,
+              onCreateTask: createTask,
+              onMissing: entryMissing,
+            }}
+            entryNew={{
+              state,
+              error,
+              note,
+              onBack: goBack,
+              onGoTracker: goTracker,
+              onDraftChange: changeDraft,
+              onCreateEntry: createEntry,
+              onSearchDescriptions: searchDescriptions,
+              onCreateClient: createClient,
+              onCreateProject: createProject,
+              onCreateTag: createTag,
+              onCreateTask: createTask,
+            }}
+            suggestions={{
+              state,
+              error,
+              note,
+              onBack: goBack,
+              onGoTracker: goTracker,
+              onOpenActivitySettings: () => openSection("activity"),
+              onChangeDay: (day) => go({ name: "suggestions", day }),
+              onAccept: acceptSuggestion,
+              onEdit: (draft) => {
+                const top = topOf(stackRef.current);
+                go({
+                  name: "suggestion-edit",
+                  day: top.name === "suggestions" ? top.day : null,
+                  draft,
+                });
+              },
+              onDismiss: dismissSuggestion,
+              onAddRule: addActivityRule,
+              onRemoveRule: removeActivityRule,
+              onCreateClient: createClient,
+              onCreateProject: createProject,
+            }}
+            suggestionEdit={{
+              state,
+              error,
+              note,
+              onBack: goBack,
+              onGoTracker: goTracker,
+              onDraftChange: changeSuggestionDraft,
+              onAccept: acceptEditedSuggestion,
+              onSearchDescriptions: searchDescriptions,
+              onCreateClient: createClient,
+              onCreateProject: createProject,
+              onCreateTag: createTag,
+              onCreateTask: createTask,
+            }}
+          />
+        </CatalogEditProvider>
       ) : (
         <SignInScreen
           apiUrl={state.apiUrl}

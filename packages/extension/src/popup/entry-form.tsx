@@ -16,14 +16,14 @@ import type { Locale } from "@starter/shared";
 import type { BackgroundState } from "../lib/messaging";
 import { formatDurationFor } from "../i18n/format";
 import { usePopupLocale, useT } from "../i18n/use-t";
-import { Combobox } from "./combobox";
 import { DayStepper } from "./day-stepper";
 import { DescriptionField } from "./description-field";
 import { ProjectPicker } from "./project-picker";
 import { Switch } from "./switch";
 import { TagPicker } from "./tag-picker";
 import { TimeField } from "./time-field";
-import { useSelectWhenCreated } from "./use-created-row";
+import { useOpenPanels } from "./catalog-edit";
+import { TaskPicker } from "./task-picker";
 import type { EntryDraft } from "./route";
 
 /**
@@ -76,7 +76,7 @@ export type EntryFormProps = {
   /** Asks the worker what this person has called work like this before. */
   onSearchDescriptions: (query: string) => void;
   /**
-   * True while the project picker is naming a new project.
+   * True while any picker has a create or edit panel open.
    *
    * The create screen has a submit button, and pressing it mid-panel would
    * write the entry against the project the user is still describing.
@@ -222,6 +222,8 @@ export function EntryForm({
 
   // Tasks are workspace-wide, so the snapshot always carries the whole list.
   const tasks = state.tasks;
+  /** Which pickers have a create or edit panel open; see the hook. */
+  const panels = useOpenPanels(onNamingProject);
 
   const change = (next: Partial<EntryDraft>, patch: EntryFieldPatch): void => {
     onChange({ ...values, ...next }, patch);
@@ -307,11 +309,6 @@ export function EntryForm({
     change({ taskId: next }, { taskId: next });
   };
 
-  // A task made from the picker is the task this entry wants — see the hook.
-  const createTask = useSelectWhenCreated(tasks, (task) => {
-    selectTask(task.id);
-  });
-
   const setDay = (dayKey: DayKey): void => {
     const start = withDayInZone(values.start, dayKey, zone);
     const delta = Date.parse(start) - Date.parse(values.start);
@@ -392,23 +389,18 @@ export function EntryForm({
         disabledHint={locked ? t("entryForm.onInvoice") : t("entryForm.notSent")}
         onCreateClient={onCreateClient}
         onCreateProject={onCreateProject}
-        onPendingChange={onNamingProject}
+        onPendingChange={panels.track("project")}
         testId="entry-project"
       />
 
-      <Combobox
-        label={t("fields.task")}
-        options={tasks.map((task) => ({ id: task.id, label: task.name }))}
+      <TaskPicker
+        tasks={tasks}
         value={values.taskId}
         onChange={selectTask}
-        emptyLabel={t("fields.noTask")}
-        placeholder={t("fields.searchTasks")}
         disabled={factsLocked}
         disabledHint={locked ? t("entryForm.onInvoice") : t("entryForm.notSent")}
-        onCreate={async (name) => {
-          await createTask(name, () => onCreateTask(name));
-        }}
-        createLabel={(name) => t("fields.createTask", { name })}
+        onCreate={onCreateTask}
+        onPendingChange={panels.track("task")}
         testId="entry-task"
       />
 
@@ -417,6 +409,7 @@ export function EntryForm({
         value={values.tagIds}
         onChange={(next) => change({ tagIds: next }, { tagIds: next })}
         onCreate={onCreateTag}
+        onPendingChange={panels.track("tags")}
         testId="entry-tags"
       />
 
