@@ -15,9 +15,9 @@ That release publishes the web app and API as self-host images. The Raycast
 extension, the browser extension, the Electron desktop app and the iOS and
 Android projects are in the repository and build from source.
 
-Not part of it: no mobile app in either store. `mobile-release.yml` runs on
-manual dispatch only, so the `v0.1.0` tag does not build it, and its output is
-unsigned. The tag does run `desktop-release.yml`, which uploads the desktop
+Not part of it: no mobile app in either store. The tag runs
+`mobile-release.yml`, which with no signing secrets builds nothing and uploads
+no artifact. The tag does run `desktop-release.yml`, which uploads the desktop
 downloads and their update feeds to a **draft** GitHub Release; each channel is
 signed only where its complete secret set exists, and no certificates are
 configured yet. The feeds can offer the release to a share of installs first
