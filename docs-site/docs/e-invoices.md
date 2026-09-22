@@ -157,11 +157,29 @@ XRechnung needs more data than ZUGFeRD: a contact person, phone, email, your
 electronic address and IBAN, and the client's reference and electronic
 address. So an invoice can be ready for ZUGFeRD and not ready for XRechnung.
 
+## Manual lines and blank invoices
+
+Beside the lines rolled up from tracked time, an invoice can carry lines you
+type: a description, a quantity of hours, days or pieces, and a price per
+unit. Add them under **Additional lines** when you create an invoice over a
+range, or start from **New blank invoice** for an invoice with typed lines
+alone. A blank invoice has no billed range and claims no tracked time.
+
+In the e-invoice XML each line states its unit (`HUR` for hours, `DAY` for
+days, `C62` for pieces) and its quantity. A blank invoice writes no billing
+period; its delivery date is its issue date.
+
+While an invoice is a draft you can edit it: the number, the dates, the
+notes, the language, the VAT, the description of each time line, and the
+manual lines. A time line keeps its hours and rate, which are what the entries
+it bills add up to. Totals are computed again when you save. Once an e-invoice
+XML was issued from a draft, the draft can no longer be edited.
+
 ## Invoices do not change after you create them
 
-An invoice stores its own copy of your details, the client's details, the VAT
-of each line and the totals. A later change to your profile or to the client
-does not change an invoice you already created.
+An invoice that is no longer a draft stores its own copy of your details, the
+client's details, the VAT of each line and the totals. A later change to your
+profile or to the client does not change an invoice you already created.
 
 For a draft, each e-invoice download is made again from that stored copy. For
 an invoice that is no longer a draft, the first XRechnung or ZUGFeRD download

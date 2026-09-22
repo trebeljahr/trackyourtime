@@ -115,6 +115,13 @@ browser extension to the Chrome Web Store only when its store secrets are set.
   and served unchanged from then on.
 - CI checks every sample file with the Mustang and KoSIT validators.
   `docs-site/docs/e-invoices.md` covers the setup.
+- A draft can be edited in place: its number, dates, notes, language and VAT,
+  the description of each time line, and manual lines — a quantity of hours,
+  days or pieces at a price — added, changed or removed. Totals are computed
+  again on save. A draft that changed in another window is not overwritten.
+- A blank invoice: manual lines alone, no billed range, no tracked time. The
+  e-invoice XML writes each line's unit code (HUR, DAY, C62) and no billing
+  period for a blank invoice.
 
 #### Teams
 

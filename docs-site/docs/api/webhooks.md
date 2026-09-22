@@ -98,6 +98,16 @@ each line, `taxBreakdown` (one row per category and rate: `category`, `rate`,
 `paymentTerms` (the due sentence printed on the invoice). Each of these keys is
 absent on an invoice that has no value for it.
 
+A line is either rolled up from tracked time or typed onto a draft. A line
+typed by hand carries `kind: "manual"`, its `quantity`, its `unit` (`hour`,
+`day` or `piece`) and its `unitPrice`; its `seconds` and `hours` are 0 and
+`hourlyRate` repeats the unit price. A time line carries none of the four keys
+(read it as `hour`s of `hours` at `hourlyRate`). A blank invoice, made of
+typed lines alone, has `from` and `to` as `null` and an empty `entryIds`.
+
+Editing a draft (`invoices.update` in the web app) sends no webhook. The next
+`invoice.status_changed` carries the invoice as it stands then.
+
 A stored value never changes. "Fill missing details" in the app can add a
 value that was `null` or absent, and it never changes an amount. Each fill is
 listed in `einvoiceFills` (`at`, `by` as a user id, and the `fields` it set). It sends no
