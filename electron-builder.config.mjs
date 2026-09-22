@@ -86,7 +86,12 @@ const config = {
     target: ["dmg", "zip"],
     icon: "build/icon.icns",
     category: "public.app-category.productivity",
-    hardenedRuntime: true,
+    // Only with a real identity. An unsigned build is ad-hoc signed, and an
+    // ad-hoc signature has no Team ID; the hardened runtime's library
+    // validation then refuses Electron Framework at launch ("mapping process
+    // and mapped file (non-platform) have different Team IDs") and dyld
+    // aborts before any of our code runs.
+    hardenedRuntime: !unsigned,
     gatekeeperAssess: false,
     entitlements: "build/entitlements.mac.plist",
     entitlementsInherit: "build/entitlements.mac.plist",

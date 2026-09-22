@@ -242,6 +242,9 @@ describe("updateFeedFor", () => {
     assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "mac", TRACKYOURTIME_UNSIGNED: "1" })).publish, null);
     assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "mas", TRACKYOURTIME_UNSIGNED: "" })).publish, null);
     assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "", TRACKYOURTIME_UNSIGNED: "" })).publish, null);
+    // Ad-hoc + hardened runtime cannot load Electron Framework (no Team ID).
+    assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "", TRACKYOURTIME_UNSIGNED: "1" })).mac.hardenedRuntime, false);
+    assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "mac", TRACKYOURTIME_UNSIGNED: "" })).mac.hardenedRuntime, true);
   });
 });
 
