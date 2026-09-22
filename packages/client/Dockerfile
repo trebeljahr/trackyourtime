@@ -4,6 +4,7 @@ RUN corepack enable
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/invoice-pdf/package.json packages/invoice-pdf/
 COPY packages/server/package.json packages/server/
 COPY packages/core/package.json packages/core/
 COPY packages/client/package.json packages/client/
@@ -15,6 +16,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
+COPY packages/invoice-pdf packages/invoice-pdf
 COPY packages/server packages/server
 COPY packages/core packages/core
 COPY packages/client packages/client
@@ -50,6 +52,10 @@ ENV COMMIT_SHA=$COMMIT_SHA \
     NEXT_PUBLIC_BUILD_COMMIT=$COMMIT_SHA
 
 RUN pnpm --filter @starter/shared run build
+# The client type-checks through @starter/server/trpc into the invoice router,
+# which imports @starter/invoice-pdf; its dist has to exist to resolve, like
+# shared's and core's.
+RUN pnpm --filter @starter/invoice-pdf run build
 RUN pnpm --filter @starter/core run build
 RUN pnpm --filter @starter/client run build
 

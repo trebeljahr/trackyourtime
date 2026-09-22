@@ -4,6 +4,7 @@ RUN corepack enable
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/invoice-pdf/package.json packages/invoice-pdf/
 COPY packages/server/package.json packages/server/
 # Install all workspace deps (build stage is discarded)
 RUN pnpm install --frozen-lockfile
@@ -12,8 +13,12 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
+COPY packages/invoice-pdf packages/invoice-pdf
 COPY packages/server packages/server
 RUN pnpm --filter @starter/shared run build
+# The invoice renderer moved into its own package; the server imports it and
+# `pnpm deploy` bundles it, but its dist has to exist first, like shared's.
+RUN pnpm --filter @starter/invoice-pdf run build
 RUN pnpm --filter @starter/server run build
 # `pnpm deploy --prod` bundles the production dependency closure into
 # a self-contained directory at /prod. Crucial here: the workspace
