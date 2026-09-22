@@ -3,6 +3,6 @@ Type=Application
 Name=Track Your Time
 Comment=Free, open-source time tracking
 Exec=trackyourtime %U
-Icon=com.trebeljahr.trackyourtime
+Icon=com.ricoslabs.trackyourtime
 Categories=Office;ProjectManagement;
 Terminal=false

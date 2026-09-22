@@ -245,7 +245,7 @@ NEXT_PUBLIC_API_URL=http://localhost:51590 pnpm build:mobile ios
   `editProjectSettingsIOS` / `editProjectSettingsAndroid` immediately after,
   which rewrite `applicationId`, `namespace`, `res/values/strings.xml`,
   `PRODUCT_BUNDLE_IDENTIFIER` and `CFBundleDisplayName`. `pnpm cap:add:android`
-  produced `com.trebeljahr.trackyourtime` / "TrackYourTime" with no hand-editing at
+  produced `com.ricoslabs.trackyourtime` / "TrackYourTime" with no hand-editing at
   all. The assertions in `scripts/build-mobile.mjs` stay, because those edits
   happen exactly once and `cap sync` never revisits them — the drift they catch
   is a later `appId` change, not the initial add. What DID need hand-editing:
@@ -758,7 +758,7 @@ A tagged dry run producing a signed IPA (and, if Android shipped, a signed AAB) 
 
 ## Open questions
 
-- BUNDLE IDENTIFIER — blocks stage 1, cannot be deferred. `capacitor.config.ts:20` and the electron-builder block at package.json:96 both carry `com.example.trackyourtime`. The first `cap add ios` stamps this into `ios/App/App.xcodeproj/project.pbxproj` as PRODUCT_BUNDLE_IDENTIFIER (and into `android/app/build.gradle` as applicationId), and editing capacitor.config.ts afterwards does NOT rewrite them — it would mean hand-editing both trees and, on iOS, re-provisioning. `com.example.*` is also rejected outright by App Store Connect and Play. Suggested by convention from your other config: `com.trebeljahr.trackyourtime` — confirm or give the one you want. Also confirm the display name (`appName` is currently the lowercase `trackyourtime`) and whether the Electron appId should be changed to match at the same time.
+- BUNDLE IDENTIFIER — blocks stage 1, cannot be deferred. `capacitor.config.ts:20` and the electron-builder block at package.json:96 both carry `com.example.trackyourtime`. The first `cap add ios` stamps this into `ios/App/App.xcodeproj/project.pbxproj` as PRODUCT_BUNDLE_IDENTIFIER (and into `android/app/build.gradle` as applicationId), and editing capacitor.config.ts afterwards does NOT rewrite them — it would mean hand-editing both trees and, on iOS, re-provisioning. `com.example.*` is also rejected outright by App Store Connect and Play. Suggested by convention from your other config: `com.ricoslabs.trackyourtime` — confirm or give the one you want. Also confirm the display name (`appName` is currently the lowercase `trackyourtime`) and whether the Electron appId should be changed to match at the same time.
 
 - APPLE DEVELOPER ACCOUNT — needed for anything beyond the Simulator. The Simulator needs nothing, so stage 1 lands without it. Installing on your own iPhone needs a signing team in Xcode (a free personal team works, with a 7-day expiry). TestFlight/App Store needs a paid account plus a Team ID for the `ExportOptions.plist` in stage 10. Which of these do you want, and by when?
 

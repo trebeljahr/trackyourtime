@@ -227,7 +227,7 @@ jobs:
           for app in release/mas*/"Track Your Time.app"; do
             codesign --verify --deep --strict --verbose=2 "$app"
             codesign -d --entitlements - "$app" | grep -q "com.apple.security.app-sandbox"
-            codesign -d --entitlements - "$app" | grep -q "$APPLE_TEAM_ID.com.trebeljahr.trackyourtime"
+            codesign -d --entitlements - "$app" | grep -q "$APPLE_TEAM_ID.com.ricoslabs.trackyourtime"
             test -f "$app/Contents/embedded.provisionprofile"
           done
           ls release/*.pkg

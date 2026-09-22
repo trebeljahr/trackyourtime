@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.9.0.schema.json
 # Rendered by `node scripts/desktop-manifests.mjs`; submitted to
 # microsoft/winget-pkgs under manifests/t/Trebeljahr/TrackYourTime/{{version}}/.
-PackageIdentifier: Trebeljahr.TrackYourTime
+PackageIdentifier: ricoslabs.trackyourtime
 PackageVersion: {{version}}
 DefaultLocale: en-US
 ManifestType: version

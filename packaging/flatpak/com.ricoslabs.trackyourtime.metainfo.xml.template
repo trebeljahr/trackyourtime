@@ -6,7 +6,7 @@
   /app/track before the first submission — none exists yet (README).
 -->
 <component type="desktop-application">
-  <id>com.trebeljahr.trackyourtime</id>
+  <id>com.ricoslabs.trackyourtime</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>AGPL-3.0-or-later</project_license>
   <name>Track Your Time</name>
@@ -19,7 +19,7 @@
     <p>Start a timer from the window or the tray. It keeps counting without a connection and sends your changes when the connection comes back. Stop it on your phone or in the browser, and the desktop app shows it stopped.</p>
     <p>At the end of the month, the hours become a report, a PDF invoice, or a ZUGFeRD or XRechnung e-invoice. There is no paid plan. Use the hosted version at trackyourtime.dev, or point the app at your own server.</p>
   </description>
-  <launchable type="desktop-id">com.trebeljahr.trackyourtime.desktop</launchable>
+  <launchable type="desktop-id">com.ricoslabs.trackyourtime.desktop</launchable>
   <url type="homepage">https://trackyourtime.dev/</url>
   <url type="bugtracker">https://github.com/trebeljahr/trackyourtime/issues</url>
   <url type="vcs-browser">https://github.com/trebeljahr/trackyourtime</url>

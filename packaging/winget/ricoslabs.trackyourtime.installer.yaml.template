@@ -2,7 +2,7 @@
 # One NSIS installer carries x64 and arm64 (electron-builder combines them), so
 # both entries name the same file. Per-user, like electron-builder's one-click
 # default: no elevation prompt.
-PackageIdentifier: Trebeljahr.TrackYourTime
+PackageIdentifier: ricoslabs.trackyourtime
 PackageVersion: {{version}}
 InstallerType: nullsoft
 Scope: user

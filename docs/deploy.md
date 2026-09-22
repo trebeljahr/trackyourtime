@@ -621,7 +621,7 @@ builds the `-unsigned` version.
 
 ### macOS, Mac App Store (pkg)
 
-1. The App ID `com.trebeljahr.trackyourtime` already exists for iOS. **Decide
+1. The App ID `com.ricoslabs.trackyourtime` already exists for iOS. **Decide
    before the first upload:** a Mac build under the same App Store Connect
    record ships as a Universal Purchase with the phone app, and a separate
    record would need a different bundle id. That id is a contract (CLAUDE.md),
@@ -635,7 +635,7 @@ builds the `-unsigned` version.
    Transporter. Review and release happen in App Store Connect.
 
 What is different under the sandbox: the app group is
-`<APPLE_TEAM_ID>.com.trebeljahr.trackyourtime`, and the entitlements are
+`<APPLE_TEAM_ID>.com.ricoslabs.trackyourtime`, and the entitlements are
 generated per build by `masEntitlementsPlist`. The app gets network client
 access and read/write access to files the user picks. It has no in-app updater,
 because the store updates it (`selfUpdates` in `electron/src/distribution.ts`).
@@ -695,12 +695,12 @@ package manager.
 **Flathub:**
 
 1. Add a `<screenshots>` block to
-   `packaging/flatpak/com.trebeljahr.trackyourtime.metainfo.xml.template`,
+   `packaging/flatpak/com.ricoslabs.trackyourtime.metainfo.xml.template`,
    pointing at a committed capture. Flathub requires at least one.
 2. Once the release is published, run Desktop Manifests. Then open a pull
    request against `flathub/flathub` (branch `new-pr`) with the files from
    `manifests/flatpak/`. After acceptance, updates are commits to the
-   `flathub/com.trebeljahr.trackyourtime` repository that Flathub creates.
+   `flathub/com.ricoslabs.trackyourtime` repository that Flathub creates.
 3. The manifest repackages the release's tar.gz. Flathub reviewers can ask
    for a source build of an open-source app instead. That build would need
    every npm dependency vendored with `flatpak-node-generator`, which this

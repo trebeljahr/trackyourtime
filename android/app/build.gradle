@@ -33,10 +33,10 @@ if (!canSignRelease) {
 }
 
 android {
-    namespace = "com.trebeljahr.trackyourtime"
+    namespace = "com.ricoslabs.trackyourtime"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.trebeljahr.trackyourtime"
+        applicationId "com.ricoslabs.trackyourtime"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

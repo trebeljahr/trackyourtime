@@ -935,7 +935,7 @@ What is there:
   `ActivitySource` of `"desktop"`.
 - `package.json` scripts `dev:desktop`, `build:desktop`, `electron:build`,
   `electron:preview`, `icons:desktop`, and an electron-builder `build` block
-  (dmg/zip, nsis, AppImage, `appId com.trebeljahr.trackyourtime`).
+  (dmg/zip, nsis, AppImage, `appId com.ricoslabs.trackyourtime`).
 - `.github/workflows/desktop-release.yml`: manual dispatch, unsigned, pushes to
   itch.io when butler secrets exist (a game-starter leftover).
 

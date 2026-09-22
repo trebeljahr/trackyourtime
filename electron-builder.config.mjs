@@ -29,7 +29,7 @@ const env = (name) => {
  * @type {import("electron-builder").Configuration}
  */
 const config = {
-  appId: "com.trebeljahr.trackyourtime",
+  appId: "com.ricoslabs.trackyourtime",
   productName: "Track Your Time",
   directories: {
     output: "release",

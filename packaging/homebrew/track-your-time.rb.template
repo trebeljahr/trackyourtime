@@ -33,11 +33,11 @@ cask "track-your-time" do
 
   zap trash: [
     "~/Library/Application Support/trackyourtime",
-    "~/Library/Caches/com.trebeljahr.trackyourtime",
-    "~/Library/Caches/com.trebeljahr.trackyourtime.ShipIt",
+    "~/Library/Caches/com.ricoslabs.trackyourtime",
+    "~/Library/Caches/com.ricoslabs.trackyourtime.ShipIt",
     "~/Library/Caches/trackyourtime-updater",
     "~/Library/Logs/Track Your Time",
-    "~/Library/Preferences/com.trebeljahr.trackyourtime.plist",
-    "~/Library/Saved Application State/com.trebeljahr.trackyourtime.savedState",
+    "~/Library/Preferences/com.ricoslabs.trackyourtime.plist",
+    "~/Library/Saved Application State/com.ricoslabs.trackyourtime.savedState",
   ]
 end

@@ -1,4 +1,4 @@
-package com.trebeljahr.trackyourtime;
+package com.ricoslabs.trackyourtime;
 
 import com.getcapacitor.BridgeActivity;
 

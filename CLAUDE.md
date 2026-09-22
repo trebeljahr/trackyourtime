@@ -13,11 +13,18 @@ agree.
 
 Every identifier is `trackyourtime` too, since 2026-09-14, before any release
 or store listing existed: the GitHub repo, the GHCR images, the bundle id
-`com.trebeljahr.trackyourtime`, storage/Keychain keys, the
+`com.ricoslabs.trackyourtime`, storage/Keychain keys, the
 `x-trackyourtime-client` header and client ids, the `X-TrackYourTime-*` webhook
 headers, `TRACKYOURTIME_VERSION`, database names and export filenames. From
 here on these are contracts — a rename would break stored sessions, queued
 data, integrations and self-hosters' `.env` files.
+
+The bundle id moved once more, on 2026-09-22, from `com.trebeljahr.trackyourtime`
+to `com.ricoslabs.trackyourtime` (and winget's `ricoslabs.trackyourtime`), still
+before any store record or release: it is registered under the Ricos Labs LLC
+Apple team (`4BHY8H2J25`), beside `com.ricoslabs.raptorrunner`. Registered is
+final — the App ID, the App Store Connect record and a Play package name
+cannot be renamed.
 
 What still says `tracktime`, on purpose: the `*.tracktime.trebeljahr.com` hosts
 in the deploy history and the hatchkit dev URL, the `tracktime` slug and every
@@ -470,7 +477,7 @@ sits on a splash that `launchAutoHide: false` never hides.
 one and deploys; for a bundled build the loop is `pnpm build:mobile android`,
 then `cd android && ./gradlew :app:assembleDebug`, then `adb install -r
 app/build/outputs/apk/debug/app-debug.apk` and `adb shell am start -n
-com.trebeljahr.trackyourtime/.MainActivity`. `adb exec-out screencap -p > shot.png`
+com.ricoslabs.trackyourtime/.MainActivity`. `adb exec-out screencap -p > shot.png`
 is the screenshot. Three traps that cost real time:
 
 - A bundled build's origin is `https://localhost`, and a fetch from an https
@@ -564,7 +571,7 @@ cd ios/App && xcodebuild -project App.xcodeproj -scheme App -configuration Debug
   -sdk iphonesimulator -destination "platform=iOS Simulator,id=$UDID" \
   -derivedDataPath /tmp/dd build
 xcrun simctl install "$UDID" /tmp/dd/Build/Products/Debug-iphonesimulator/App.app
-xcrun simctl launch "$UDID" com.trebeljahr.trackyourtime
+xcrun simctl launch "$UDID" com.ricoslabs.trackyourtime
 xcrun simctl io "$UDID" screenshot --type=png out.png
 ```
 

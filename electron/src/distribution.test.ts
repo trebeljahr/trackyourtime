@@ -22,7 +22,7 @@ describe("distributionChannel", () => {
 
   it("reads the Linux sandbox from the environment its runtime sets", () => {
     assert.equal(distributionChannel({ ...base, env: { SNAP: "/snap/trackyourtime/12" } }), "snap");
-    assert.equal(distributionChannel({ ...base, env: { FLATPAK_ID: "com.trebeljahr.trackyourtime" } }), "flatpak");
+    assert.equal(distributionChannel({ ...base, env: { FLATPAK_ID: "com.ricoslabs.trackyourtime" } }), "flatpak");
     assert.equal(distributionChannel({ ...base, env: { APPIMAGE: "/home/me/T.AppImage" } }), "appimage");
     assert.equal(distributionChannel(base), "linux-package");
   });

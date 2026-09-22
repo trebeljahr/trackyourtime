@@ -155,8 +155,8 @@ describe("tagMismatch", () => {
 
 describe("masEntitlementsPlist", () => {
   it("names the app group after the team and bundle id", () => {
-    const plist = masEntitlementsPlist({ teamId: "ABCDE12345", appId: "com.trebeljahr.trackyourtime" });
-    assert.match(plist, /<string>ABCDE12345\.com\.trebeljahr\.trackyourtime<\/string>/);
+    const plist = masEntitlementsPlist({ teamId: "ABCDE12345", appId: "com.ricoslabs.trackyourtime" });
+    assert.match(plist, /<string>ABCDE12345\.com\.ricoslabs\.trackyourtime<\/string>/);
     assert.match(plist, /com\.apple\.security\.app-sandbox<\/key>\s*<true\/>/);
   });
 

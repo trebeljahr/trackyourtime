@@ -33,7 +33,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
  * of the bundled export.
  */
 const config: CapacitorConfig = {
-  appId: "com.trebeljahr.trackyourtime",
+  appId: "com.ricoslabs.trackyourtime",
   appName: "Track Time",
   webDir: "packages/client/out-mobile",
 

@@ -91,7 +91,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 function start(): void {
-  if (process.platform === "win32") app.setAppUserModelId("com.trebeljahr.trackyourtime");
+  if (process.platform === "win32") app.setAppUserModelId("com.ricoslabs.trackyourtime");
 
   registerAppScheme();
   installSecurity({ devUrl });

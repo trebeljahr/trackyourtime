@@ -310,7 +310,7 @@ if (shouldPackage) {
   mkdirSync(generated, { recursive: true });
   writeFileSync(
     join(generated, "entitlements.mas.plist"),
-    masEntitlementsPlist({ teamId: process.env.APPLE_TEAM_ID ?? "", appId: "com.trebeljahr.trackyourtime" }),
+    masEntitlementsPlist({ teamId: process.env.APPLE_TEAM_ID ?? "", appId: "com.ricoslabs.trackyourtime" }),
   );
 
   step(`electron-builder ${builderArgs.join(" ")}`.trim());
