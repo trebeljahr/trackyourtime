@@ -185,4 +185,62 @@ describe("activity service", () => {
     assert.equal(hook.files().open, null);
     assert.equal(segments()[0]?.end, T0 + 2 * MIN);
   });
+
+  it("refuses to switch capture on where the channel must not record", async () => {
+    await service.setScope({ userId: "u1", workspaceId: "w1" });
+    await hook.setSupport({ supported: false, reason: "store", hint: null });
+    const refused = await service.updateSettings({ enabled: true });
+    assert.equal(refused.settings.enabled, false);
+    assert.equal(hook.capturing(), false);
+    assert.equal((hook.files().state as { settings: { enabled: boolean } } | null)?.settings.enabled ?? false, false);
+
+    // Everything else on the card still saves there.
+    assert.equal((await service.updateSettings({ retentionDays: 30 })).settings.retentionDays, 30);
+
+    await hook.setSupport(null);
+    assert.equal((await service.updateSettings({ enabled: true })).settings.enabled, true);
+    assert.equal(hook.capturing(), true);
+  });
+
+  it("refuses window titles on an OS that cannot give them", async () => {
+    await hook.setTitlesAvailable(false);
+    const snapshot = await service.updateSettings({ enabled: true, storeTitles: true });
+    assert.equal(snapshot.settings.enabled, true);
+    assert.equal(snapshot.settings.storeTitles, false);
+    assert.equal(snapshot.titlesAvailable, false);
+
+    await hook.setTitlesAvailable(true);
+    assert.equal((await service.updateSettings({ storeTitles: true })).settings.storeTitles, true);
+  });
+
+  it("says why an enabled capture is not recording", async () => {
+    await service.updateSettings({ enabled: true });
+    // No account yet: not a pause, there is nothing to record for.
+    assert.equal((await service.snapshot()).paused, null);
+    await service.setScope({ userId: "u1", workspaceId: "w1" });
+    let snapshot = await service.snapshot();
+    assert.equal(snapshot.recording, true);
+    assert.equal(snapshot.paused, null);
+
+    await hook.idle("idle", 120);
+    snapshot = await service.snapshot();
+    assert.equal(snapshot.recording, false);
+    assert.equal(snapshot.paused, "idle");
+
+    await hook.idle("locked");
+    assert.equal((await service.snapshot()).paused, "locked");
+
+    // Unlocked, but no input yet (idle.ts samples 30 s without input as
+    // "idle", under the threshold): nothing records, and it reads as idle.
+    await hook.idle("idle", 30);
+    snapshot = await service.snapshot();
+    assert.equal(snapshot.recording, false);
+    assert.equal(snapshot.paused, "idle");
+
+    await hook.idle("active");
+    assert.equal((await service.snapshot()).recording, true);
+
+    await service.updateSettings({ enabled: false });
+    assert.equal((await service.snapshot()).paused, null);
+  });
 });

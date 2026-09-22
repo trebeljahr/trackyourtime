@@ -81,6 +81,7 @@ const snapshot: DesktopActivitySnapshot = {
   titlesAvailable: false,
   scoped: true,
   recording: true,
+  paused: null,
   storedSegments: 3,
   recentApps: [{ key: "com.example.editor", name: "Editor" }],
   rules: [],

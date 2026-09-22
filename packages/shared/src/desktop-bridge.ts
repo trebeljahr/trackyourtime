@@ -338,6 +338,12 @@ export interface DesktopActivitySnapshot {
   scoped: boolean;
   /** Enabled, supported, scoped, and the person is neither idle nor locked. */
   recording: boolean;
+  /**
+   * Why an enabled, supported, scoped capture is not recording right now:
+   * no input for a while (or none yet since an unlock), or the screen is
+   * locked. Null whenever capture would record, or could not anyway.
+   */
+  paused: "idle" | "locked" | null;
   /** Stored segments of the current scope. */
   storedSegments: number;
   /** The current scope's apps, newest first, at most 30. */

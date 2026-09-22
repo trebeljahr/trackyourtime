@@ -238,13 +238,16 @@ export function createActivityService(options: ActivityServiceOptions): Activity
     const scope = state.scope;
     const segments = scope === null ? [] : scopeSegments(scope);
     const currentSupport = support();
+    const armed = state.settings.enabled && currentSupport.supported && scope !== null;
+    // After an unlock nothing records until input is seen, so that reads as idle.
+    const paused = !armed ? null : state.locked ? "locked" : state.idle || state.awaitingInput ? "idle" : null;
     return {
       settings: { ...state.settings, excludedApps: [...state.settings.excludedApps] },
       support: currentSupport,
       titlesAvailable,
       scoped: scope !== null,
-      recording:
-        state.settings.enabled && currentSupport.supported && scope !== null && !state.idle && !state.locked,
+      recording: armed && paused === null,
+      paused,
       storedSegments: scope === null ? 0 : store.allSegments(scope).length,
       recentApps: recentApps(segments),
       rules: scope === null ? [] : store.rules(scope),
@@ -277,7 +280,14 @@ export function createActivityService(options: ActivityServiceOptions): Activity
     updateSettings: (patch) =>
       serial(() => {
         if (store.status !== "ok") return buildSnapshot();
-        apply({ kind: "settings", settings: parseActivitySettings({ ...state.settings, ...patch }) });
+        const next = parseActivitySettings({ ...state.settings, ...patch });
+        // The renderer disables both switches where they cannot work; main
+        // refuses them too, so no caller can switch capture on for a channel
+        // that must not record (the stores, Snap, Flatpak, Wayland) or store
+        // titles an OS cannot give (macOS, for now). Turning off always works.
+        if (!channelSupport().supported) next.enabled = false;
+        if (!titlesAvailable) next.storeTitles = false;
+        apply({ kind: "settings", settings: next });
         return buildSnapshot();
       }),
 
