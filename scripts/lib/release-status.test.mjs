@@ -80,6 +80,19 @@ describe("release status", () => {
     assert.deepEqual(statusRow(ext, run(), { jobs: uploaded }).facts, ["uploaded to the Chrome Web Store"]);
   });
 
+  it("reads the Play upload step whatever track the plan chose", () => {
+    const mob = channel("mobile-release.yml");
+    const jobs = (conclusion) => [
+      job("android", "success", [{ name: "Upload to Google Play (beta)", conclusion }]),
+      job("ios", "success", [{ name: "Upload to TestFlight", conclusion: "skipped" }]),
+    ];
+    assert.deepEqual(statusRow(mob, run(), { jobs: jobs("success") }).facts, [
+      "uploaded to Play",
+      "TestFlight upload skipped",
+    ]);
+    assert.deepEqual(statusRow(mob, run(), { jobs: jobs("failure") }).facts[0], "Play upload failed");
+  });
+
   it("counts desktop channels and reads the draft", () => {
     const desk = channel("desktop-release.yml");
     const jobs = [job("mac", "success"), job("win", "failure"), job("draft release", "skipped")];
@@ -122,7 +135,7 @@ describe("the workflow files", () => {
     assert.match(workflow("extension-release.yml"), /- name: Upload to the Chrome Web Store$/m);
     assert.match(workflow("extension-release.yml"), /store upload skipped/);
     assert.match(workflow("desktop-release.yml"), /^ {4}name: draft release$/m);
-    assert.match(workflow("mobile-release.yml"), /- name: Upload to Play Store \(internal track\)$/m);
+    assert.match(workflow("mobile-release.yml"), /- name: Upload to Google Play \(/m);
     assert.match(workflow("mobile-release.yml"), /- name: Upload to TestFlight$/m);
   });
 });

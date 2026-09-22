@@ -46,9 +46,13 @@ export const runState = (run) => {
 };
 
 const jobsNamed = (jobs, prefix) => jobs.filter((job) => job.name === prefix || job.name.startsWith(`${prefix} `));
+// A step is matched on its name or on the name up to " (": the Play upload
+// step names its track in parentheses, decided per run by the plan step.
 const stepOf = (jobs, name) => {
   for (const job of jobs) {
-    const step = (job.steps ?? []).find((candidate) => candidate.name === name);
+    const step = (job.steps ?? []).find(
+      (candidate) => candidate.name === name || candidate.name.startsWith(`${name} (`),
+    );
     if (step) return step;
   }
   return null;
@@ -99,7 +103,7 @@ const desktopFacts = (jobs, release) => {
 const mobileFacts = (jobs) => {
   const facts = [];
   for (const [step, label] of [
-    ["Upload to Play Store (internal track)", "Play internal track"],
+    ["Upload to Google Play", "Play"],
     ["Upload to TestFlight", "TestFlight"],
   ]) {
     const found = stepOf(jobs, step);

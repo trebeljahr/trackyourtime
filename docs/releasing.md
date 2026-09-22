@@ -128,11 +128,10 @@ of them still works by hand.
       (the copies `scripts/lib/version-sync.test.mjs` checks, so
       `pnpm run test:unit` fails until they match), the iOS
       `MARKETING_VERSION` and the Android `versionName` (which
-      `pnpm build:mobile` checks). It raises the iOS
-      `CURRENT_PROJECT_VERSION` and the Android `versionCode` by one, since
-      App Store Connect and Play each refuse a build number they have seen.
-      Releasing the version the tree already carries leaves both build
-      numbers alone.
+      `pnpm build:mobile` checks). The store build numbers
+      (`CURRENT_PROJECT_VERSION`, `versionCode`) are not touched:
+      `mobile-release.yml` sets them per run (docs/deploy.md → Mobile
+      release).
    2. In `CHANGELOG.md`, renames `## [Unreleased]` to
       `## [X.Y.Z] - <today>`, adds an empty `## [Unreleased]` above it,
       points the `[Unreleased]` link at `compare/vX.Y.Z...HEAD` and adds a

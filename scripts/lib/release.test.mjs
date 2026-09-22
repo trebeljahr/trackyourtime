@@ -121,25 +121,22 @@ describe("version copies", () => {
     assert.throws(() => setSelfhostVersion(env, "0.2.0", "docker-compose.yml"), /is not one of/);
   });
 
-  it("sets every iOS marketing version and raises the build number past the highest", () => {
+  it("sets every iOS marketing version and leaves the build number to CI", () => {
     const text =
       "CURRENT_PROJECT_VERSION = 3;\nMARKETING_VERSION = 0.1.0;\nCURRENT_PROJECT_VERSION = 5;\nMARKETING_VERSION = 0.1.0;\n";
-    const bumped = setIosVersions(text, "0.2.0", true);
-    assert.equal(bumped.build, 6);
     assert.equal(
-      bumped.text,
-      "CURRENT_PROJECT_VERSION = 6;\nMARKETING_VERSION = 0.2.0;\nCURRENT_PROJECT_VERSION = 6;\nMARKETING_VERSION = 0.2.0;\n",
+      setIosVersions(text, "0.2.0"),
+      "CURRENT_PROJECT_VERSION = 3;\nMARKETING_VERSION = 0.2.0;\nCURRENT_PROJECT_VERSION = 5;\nMARKETING_VERSION = 0.2.0;\n",
     );
-    assert.equal(setIosVersions(text, "0.1.0", false).build, 5);
+    assert.throws(() => setIosVersions("CURRENT_PROJECT_VERSION = 1;\n", "0.2.0"), /no MARKETING_VERSION/);
   });
 
-  it("sets the Android versionName and raises versionCode by one", () => {
-    const text = '    defaultConfig {\n        versionCode 7\n        // note\n        versionName "0.1.0"\n    }\n';
-    const bumped = setAndroidVersions(text, "0.2.0", true);
-    assert.equal(bumped.code, 8);
-    assert.equal(bumped.text, text.replace("versionCode 7", "versionCode 8").replace('"0.1.0"', '"0.2.0"'));
-    assert.equal(setAndroidVersions(text, "0.1.0", false).code, 7);
-    assert.throws(() => setAndroidVersions('versionName "1"\n', "0.2.0", true), /exactly one numeric versionCode/);
+  it("sets the Android versionName and leaves the env-driven versionCode alone", () => {
+    // The real file reads ANDROID_VERSION_CODE; a release must not need a literal.
+    const text =
+      '    defaultConfig {\n        versionCode ((System.getenv("ANDROID_VERSION_CODE") ?: "1") as Integer)\n        versionName "0.1.0"\n    }\n';
+    assert.equal(setAndroidVersions(text, "0.2.0"), text.replace('"0.1.0"', '"0.2.0"'));
+    assert.throws(() => setAndroidVersions("versionCode 7\n", "0.2.0"), /no versionName/);
   });
 });
 
@@ -227,7 +224,7 @@ describe("planRelease", () => {
   const readFile = (path) => files[path] ?? null;
   const workspacePackages = ["packages/a/package.json", "packages/raycast/package.json", "packages/gone/package.json"];
 
-  it("rewrites every copy, bumps both build numbers and drafts the notes", () => {
+  it("rewrites every copy and drafts the notes", () => {
     const plan = planRelease({ version: "0.2.0", date: "2026-09-22", readFile, workspacePackages });
     assert.deepEqual(
       plan.changes.map((change) => change.path),
@@ -247,8 +244,6 @@ describe("planRelease", () => {
     const compose = plan.changes.find((change) => change.path === SELFHOST_COMPOSE);
     assert.equal(compose?.after, "image: a:${TRACKYOURTIME_VERSION:-v0.2.0}\nimage: b:${TRACKYOURTIME_VERSION:-v0.2.0}\n");
     assert.equal(plan.current, "0.1.0");
-    assert.equal(plan.iosBuild, 2);
-    assert.equal(plan.androidCode, 2);
     assert.equal(plan.notesCreated, true);
     assert.equal(plan.changes.at(-1)?.before, null);
   });
@@ -260,7 +255,7 @@ describe("planRelease", () => {
     assert.equal(notes(true)?.after, "- New.\n");
   });
 
-  it("releases the untagged current version without spending build numbers", () => {
+  it("releases the untagged current version by rolling the changelog alone", () => {
     const withNotes = { ...files, [releaseNotesPath("0.1.0")]: "Notes.\n" };
     const plan = planRelease({
       version: "0.1.0",
@@ -272,8 +267,6 @@ describe("planRelease", () => {
       plan.changes.map((change) => change.path),
       [CHANGELOG],
     );
-    assert.equal(plan.iosBuild, 1);
-    assert.equal(plan.androidCode, 1);
     assert.equal(plan.notesCreated, false);
   });
 

@@ -13,8 +13,7 @@
  *     is not newer than the root package.json (the untagged current version
  *     is allowed: that is the first release).
  *  2. Plans every rewrite (`scripts/lib/release.mjs`): the root version and
- *     every hand-kept copy, the iOS and Android build numbers, the CHANGELOG
- *     roll and its links, and a draft of `docs/release-notes/vX.Y.Z.md` when
+ *     every hand-kept copy, the CHANGELOG roll and its links, and a draft of `docs/release-notes/vX.Y.Z.md` when
  *     there is none — in which case it writes only that file and stops, so a
  *     person rewrites it first (`--yes` takes the draft as it is, minus its
  *     drafting comment).
@@ -128,7 +127,6 @@ try {
 
 console.log(`Release ${tag} (from ${current}${current === version ? ", untagged" : ""})`);
 for (const { path, before } of plan.changes) console.log(`  ${before === null ? "create" : "update"} ${path}`);
-console.log(`  iOS build ${plan.iosBuild}, Android versionCode ${plan.androidCode}`);
 
 if (plan.notesCreated && !dryRun && !yes) {
   const notes = plan.changes.find((change) => change.path === plan.notesPath);

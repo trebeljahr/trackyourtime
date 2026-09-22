@@ -5,9 +5,13 @@
  *
  * What a release changes is docs/releasing.md → Steps, step 2: the root
  * version and every hand-kept copy `version-sync.test.mjs` checks (the
- * self-host `TRACKYOURTIME_VERSION` defaults among them), the iOS and Android
- * build numbers, the dated CHANGELOG section with its links, and the release
- * notes the policy check requires.
+ * self-host `TRACKYOURTIME_VERSION` defaults among them), the dated CHANGELOG
+ * section with its links, and the release notes the policy check requires.
+ *
+ * Not the store build numbers. `CURRENT_PROJECT_VERSION` and `versionCode`
+ * are set per run by mobile-release.yml (run number × 100 + attempt, see
+ * scripts/lib/mobile-release.mjs); the literals in the native trees are the
+ * local-build fallback and a release leaves them alone.
  */
 
 /** Every hand-kept copy of the version that is not a package.json. */
@@ -156,39 +160,24 @@ export const setSelfhostVersion = (text, version, path) => {
 };
 
 /**
- * The Xcode project with every `MARKETING_VERSION` set and, when `bumpBuild`,
- * every `CURRENT_PROJECT_VERSION` set to one above the highest it had.
- *
- * App Store Connect refuses a build number it has seen for the same marketing
- * version, and TestFlight sorts by it; one number for Debug and Release keeps
- * the two configurations from disagreeing about which build this is.
+ * The Xcode project with every `MARKETING_VERSION` set. `CURRENT_PROJECT_VERSION`
+ * is left alone: CI passes the run's build number to xcodebuild and the
+ * literal here only names a local build.
  */
-export const setIosVersions = (text, version, bumpBuild) => {
+export const setIosVersions = (text, version) => {
   const marketing = /(MARKETING_VERSION = )[^;]+(;)/g;
   if (![...text.matchAll(marketing)].length) throw new Error(`${IOS_PROJECT} has no MARKETING_VERSION`);
-  let next = text.replace(marketing, `$1${version}$2`);
-  const builds = [...next.matchAll(/CURRENT_PROJECT_VERSION = (\d+);/g)].map((m) => Number(m[1]));
-  if (builds.length === 0) throw new Error(`${IOS_PROJECT} has no numeric CURRENT_PROJECT_VERSION`);
-  const build = bumpBuild ? Math.max(...builds) + 1 : Math.max(...builds);
-  next = next.replace(/(CURRENT_PROJECT_VERSION = )\d+(;)/g, `$1${build}$2`);
-  return { text: next, build };
+  return text.replace(marketing, `$1${version}$2`);
 };
 
 /**
- * The Gradle file with `versionName` set and, when `bumpBuild`, `versionCode`
- * raised by one. Play refuses an upload whose versionCode is not higher than
- * every one it has seen, whatever the versionName says.
+ * The Gradle file with `versionName` set. `versionCode` is left alone: it
+ * reads `ANDROID_VERSION_CODE`, which CI sets per run.
  */
-export const setAndroidVersions = (text, version, bumpBuild) => {
+export const setAndroidVersions = (text, version) => {
   const name = /^(\s*versionName\s*=?\s*["'])[^"']+(["'])/gm;
   if (![...text.matchAll(name)].length) throw new Error(`${ANDROID_GRADLE} has no versionName`);
-  const codes = [...text.matchAll(/^[ \t]*versionCode[ \t]*=?[ \t]*(\d+)[ \t]*$/gm)].map((m) => Number(m[1]));
-  if (codes.length !== 1) throw new Error(`${ANDROID_GRADLE} must declare exactly one numeric versionCode`);
-  const code = bumpBuild ? codes[0] + 1 : codes[0];
-  const next = text
-    .replace(name, `$1${version}$2`)
-    .replace(/^([ \t]*versionCode[ \t]*=?[ \t]*)\d+([ \t]*)$/m, `$1${code}$2`);
-  return { text: next, code };
+  return text.replace(name, `$1${version}$2`);
 };
 
 // ── CHANGELOG ───────────────────────────────────────────────────────────
@@ -259,7 +248,7 @@ export const stripDraftingComment = (notes) => notes.replace(/^<!--[\s\S]*?-->\n
 
 /**
  * Every file a release of `version` writes, as `{ path, before, after }`
- * (`before` is null for a new file), plus the build numbers it chose.
+ * (`before` is null for a new file).
  *
  * @param {object} input
  * @param {string} input.version           X.Y.Z
@@ -282,10 +271,6 @@ export const planRelease = ({ version, date, readFile, workspacePackages, accept
   };
 
   const current = JSON.parse(must("package.json")).version;
-  // Build numbers move only with the version. Re-running the release of a
-  // version the tree already carries (the first release) would otherwise
-  // spend a build number on a version no store has seen.
-  const bumpBuild = current !== version;
 
   change("package.json", setPackageVersion(must("package.json"), version));
   for (const path of workspacePackages) {
@@ -300,10 +285,8 @@ export const planRelease = ({ version, date, readFile, workspacePackages, accept
   for (const path of SELFHOST_VERSION_FILES) {
     change(path, setSelfhostVersion(must(path), version, path));
   }
-  const ios = setIosVersions(must(IOS_PROJECT), version, bumpBuild);
-  change(IOS_PROJECT, ios.text);
-  const android = setAndroidVersions(must(ANDROID_GRADLE), version, bumpBuild);
-  change(ANDROID_GRADLE, android.text);
+  change(IOS_PROJECT, setIosVersions(must(IOS_PROJECT), version));
+  change(ANDROID_GRADLE, setAndroidVersions(must(ANDROID_GRADLE), version));
 
   const changelog = rollChangelog(must(CHANGELOG), version, date);
   change(CHANGELOG, changelog.text);
@@ -315,7 +298,7 @@ export const planRelease = ({ version, date, readFile, workspacePackages, accept
     change(notesPath, acceptDraft ? stripDraftingComment(scaffold) : scaffold);
   }
 
-  return { current, changes, notesPath, notesCreated, iosBuild: ios.build, androidCode: android.code };
+  return { current, changes, notesPath, notesCreated };
 };
 
 /** The local calendar date, which is what a person means by "released today". */
