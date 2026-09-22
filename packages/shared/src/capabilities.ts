@@ -40,17 +40,22 @@ export const REQUIRES_API_LEVEL = {
    */
   "tasks.color": 3,
   /**
+   * `profile.setAvatar` / `profile.removeAvatar`. An older server has no avatar
+   * endpoints, so the profile-picture control is hidden there.
+   */
+  "profile.avatar": 4,
+  /**
    * `invoices.update`, manual `lines` on `invoices.preview` / `create`, and
    * blank invoices (no `from` / `to`). An older server refuses the procedure
    * and strips `lines`, so the web app hides the editor and the blank flow.
    */
-  "invoices.lines": 4,
+  "invoices.lines": 5,
   /**
    * `settings.setBusinessLogo` / `clearBusinessLogo` and `logo` on the
    * profile. An older server answers the procedures with NOT_FOUND, so the
    * upload control is hidden there rather than offered and refused.
    */
-  "settings.businessLogo": 5,
+  "settings.businessLogo": 6,
 } as const satisfies Readonly<Record<string, number>>;
 
 export type Capability = keyof typeof REQUIRES_API_LEVEL;
