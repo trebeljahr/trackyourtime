@@ -154,6 +154,25 @@ describe("the invoice PDF and the logo", () => {
     assert.equal(withImage, without);
   });
 
+  it("draws the logo on a blank invoice, whose header has no Period row", async () => {
+    // The two features met in one header block: the logo sits top right and
+    // pushes the parties down, the missing range leaves the Period row out.
+    // Neither may disturb the other, so the page reads exactly as the blank
+    // page without a logo, plus the image.
+    const blank = einvoiceCase("blank").invoice();
+    assert.equal(blank.from, null);
+    const frozen: RenderableInvoice = { ...blank, issuer: { ...blank.issuer!, logo: fixtureLogo("rgba.png") } };
+
+    const bytes = await renderInvoicePdf(frozen, { generatedAt: GENERATED_AT });
+    assert.equal(imageObjects(bytes).length, 2, "colour image plus its SMask");
+
+    const [withImage] = pageTexts(bytes);
+    const [without] = pageTexts(await renderInvoicePdf(blank, { generatedAt: GENERATED_AT }));
+    assert.equal(withImage, without);
+    assert.ok(!withImage?.includes("Period"), withImage);
+    assert.ok(withImage?.includes("Consulting day1.50 days900.001,350.00"), withImage);
+  });
+
   it("carries the logo into the ZUGFeRD PDF/A-3b container", async () => {
     const invoice = einvoiceCase("standard-19").invoice();
     const logo = fixtureLogo("rgba.png");

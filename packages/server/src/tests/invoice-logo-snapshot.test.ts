@@ -151,6 +151,24 @@ describe("business logo: settings, snapshot, PDF and fill", { skip: skipWithoutD
     assert.ok(images.some((dict) => dict.includes("/Width 48")));
   });
 
+  it("freezes the logo onto a blank invoice too: the issuer snapshot needs no range", async () => {
+    const seeded = await seedWorkspace();
+    await settings().setBusinessLogo(upload("rgba.png", "image/png"));
+
+    const invoice = await invoices().create({
+      clientId: seeded.clientId,
+      lines: [{ label: "Retainer", quantity: 1, unit: "piece", unitPrice: 2000 }],
+      ...DATES,
+    });
+    assert.equal(invoice.from, null);
+    assert.equal(invoice.to, null);
+    assert.equal(invoice.issuer?.hasLogo, true);
+    assert.equal(((await storedIssuer(invoice.id)).logo as { sha256: string }).sha256, sha("rgba.png"));
+
+    const pdf = await invoices().exportPdf({ id: invoice.id });
+    assert.equal(imageObjects(pdf.base64).length, 2, "colour image plus its SMask");
+  });
+
   it("the e-invoice fill never adds a logo, and never touches a frozen one", async () => {
     const seeded = await seedWorkspace();
     await settings().setBusinessLogo(upload("rgba.png", "image/png"));
