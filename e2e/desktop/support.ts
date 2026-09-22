@@ -89,10 +89,14 @@ export function navDestinations(): { id: string; href: string }[] {
   const start = source.indexOf("export const NAV_SECTIONS");
   const end = source.indexOf("];", start);
   const block = source.slice(start, end);
-  const items = [...block.matchAll(/href:\s*"([^"]+)",\s*id:\s*"([^"]+)"/g)].map((m) => ({
-    href: m[1],
-    id: m[2],
-  }));
+  // Shell-only items (`shell: "electron"`) show only where their feature
+  // works on this machine; activity.spec.ts covers /app/activity itself.
+  const items = [...block.matchAll(/\{\s*href:\s*"([^"]+)",\s*id:\s*"([^"]+)"[^}]*\}/g)]
+    .filter((m) => !/\bshell:/.test(m[0]))
+    .map((m) => ({
+      href: m[1],
+      id: m[2],
+    }));
   if (items.length < 5) throw new Error(`NAV_SECTIONS parse found only ${items.length} items`);
   return items;
 }
