@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 import type { NextConfig } from "next";
 
@@ -12,15 +13,38 @@ import type { NextConfig } from "next";
  * dynamic `import()` on the first "Download PDF" click. pdfkit's default entry
  * pulls in Node builtins (`fs`, `zlib`, `Buffer`); its standalone bundle ships
  * its own Buffer/zlib/font support and needs no Node externals (see the
- * package README). The subpath is not in pdfkit's `exports` map, so the alias
- * points at the resolved absolute file rather than the package specifier —
- * which both Turbopack and webpack accept, and which bypasses the exports
- * gate. The alias is on the client bundle only; the server imports the real
- * pdfkit through its own build.
+ * package README). `pdfkit.standalone.js` is not in pdfkit's `exports` map, so
+ * the alias points at the resolved file rather than the package specifier,
+ * which bypasses the exports gate. Resolve the package's own entry (its `.`
+ * export IS in the map) and swap the filename, since the standalone build sits
+ * beside it in `js/`. The alias is on the client bundle only; the server
+ * imports the real pdfkit through its own build.
+ *
+ * The two bundlers want the target in different forms. webpack takes the
+ * absolute path. Turbopack `resolveAlias` treats an absolute path as a request
+ * relative to the project root (it prepends "./", so "/Users/…" 404s), so it
+ * gets a request relative to that root instead. The root is the pnpm
+ * workspace root, where `node_modules/.pnpm` lives — it has to be, because
+ * Turbopack refuses to compile files outside the root, and the standalone
+ * bundle sits under the store. Pinning it also silences Next's inferred-root
+ * warning.
  */
-const pdfkitStandalone = createRequire(import.meta.url)
-  .resolve("pdfkit/package.json")
-  .replace(/package\.json$/, "js/pdfkit.standalone.js");
+const clientDir = dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = findWorkspaceRoot(clientDir);
+const pdfkitEntry = createRequire(import.meta.url).resolve("pdfkit");
+const pdfkitStandalone = join(dirname(pdfkitEntry), "pdfkit.standalone.js");
+const pdfkitStandaloneRequest = `./${relative(workspaceRoot, pdfkitStandalone).split(sep).join("/")}`;
+
+/** The pnpm workspace root: the nearest ancestor with a `pnpm-workspace.yaml`. */
+function findWorkspaceRoot(from: string): string {
+  let dir = from;
+  for (;;) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return from;
+    dir = parent;
+  }
+}
 
 /**
  * The release every client build reports, from the ROOT package.json — the
@@ -93,7 +117,7 @@ const baseConfig: NextConfig = {
   // `pdfkit` import at its self-contained standalone build. Both bundlers are
   // configured because `next build` uses Turbopack by default and `--webpack`
   // switches to webpack.
-  turbopack: { resolveAlias: { pdfkit: pdfkitStandalone } },
+  turbopack: { root: workspaceRoot, resolveAlias: { pdfkit: pdfkitStandaloneRequest } },
   webpack: (webpackConfig) => {
     webpackConfig.resolve ??= {};
     webpackConfig.resolve.alias = {
