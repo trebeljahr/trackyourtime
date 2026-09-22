@@ -15,7 +15,7 @@ claims marked **(unverified)** are what Stage 0 exists to confirm or refute.
    distribution certs) and Windows code signing.
 3. **Platforms:** macOS, Windows and Linux, all verified.
 4. **Desktop activity capture:** wanted, but in a separate workflow after the
-   main app runs. Stage 8 is not part of the first build.
+   main app runs. Stage 8 is not part of the first build. Built 2026-09-22.
 5. **Tauri:** delete it. Moved into Stage 1.
 6. **Global shortcut:** ship a default that does not collide with common OS and
    app shortcuts, and make shortcuts extensible — several bindable actions, each
@@ -914,6 +914,52 @@ and it keeps running" names macOS and Windows only, which matches
 is `unsigned`, which is right: Linux artifact names carry no `-unsigned`
 suffix.
 
+### Stage 8 — desktop activity capture (2026-09-22)
+
+Built by a workflow: three rival designs (stock OS tools, an npm active-window
+library, a privacy-first JXA helper), one judged synthesis, then capture,
+suggestions, settings and docs, each reviewed. CLAUDE.md → "Desktop activity
+capture" holds the rules that fail quietly; what follows is why.
+
+- **No native module.** The library design lost on packaging: prebuilt
+  binaries outside the asar integrity fuse, an arm64 node-gyp step in CI, and
+  `!node_modules/**` in the builder config. The JXA helper lost on staleness.
+  Measured on this Mac: `lsappinfo front` and `lsappinfo info` return bundle
+  id, display name and pid with no prompt, so macOS polls it every 5 s and
+  asks `info` only when the front app changes.
+- **Windows and Linux** use one long-lived `powershell.exe` (`-EncodedCommand`,
+  `Add-Type` over user32, 90 s watchdog, three failures in ten minutes give
+  `source-failed`, retried every five) and `xprop -spy`. Constrained Language
+  Mode reports `blocked-by-policy`; a missing `xprop` reports `tool-missing`
+  with the package name.
+- **macOS window titles are deferred.** They need Screen Recording, whose
+  prompt no headless test can exercise, so Stage 8 has no code path that
+  requests any permission. On Windows and Linux titles are the app's own
+  opt-in, and turning them off strips the stored ones.
+- **Question 1 × Stage 8:** capture is unavailable in the Mac App Store and
+  Microsoft Store builds (`store`; MSIX spawning PowerShell is unchecked), in
+  Snap and Flatpak (`linux-sandbox`) and on Wayland. Main enforces it; the
+  settings card says why and the nav item is hidden.
+- **Suggestions are composed in main** with core's `mergeSegments` /
+  `buildSuggestions`; the renderer hands in tracked intervals (own entries,
+  the running timer, queued creates and starts) and gets suggestions back.
+  Accept recomputes in main first, then goes through `createManualEntry`
+  (`source: "desktop"` was already a valid source; no server change and no
+  `API_LEVEL` bump), then holds the span for five minutes.
+- **The e2e harness reuses `out-desktop`** built for the same API origin, so
+  the first activity run tested an export without the settings card and
+  failed; `DESKTOP_E2E_REBUILD=1` fixed it. Three specs pass: fake capture →
+  suggestion → Add files a desktop entry → dismiss → sign-out forgets; the
+  nav item is absent where capture cannot work; Settings turns capture on,
+  and exclusions, titles and wipe reach the stored files. `spawns` stays empty
+  throughout.
+
+Not run, because each needs a real OS surface: `lsappinfo` inside a packaged,
+signed app (an opt-in shell test covers the parser against this Mac); the
+Windows helper on x64 and arm64, under CLM and under AV/EDR; `xprop` on a real
+X11 session and Wayland detection on a real one; the store, Snap and Flatpak
+builds showing the unavailable state.
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**
@@ -1355,7 +1401,7 @@ as unsigned.
 Acceptance: install 0.1.0 from a draft-then-published release, publish 0.1.1,
 the app offers the update and installs it on quit; Linux AppImage the same.
 
-### Stage 8 — Desktop activity capture — DEFERRABLE, gated on open question 4
+### Stage 8 — Desktop activity capture — DONE (2026-09-22, see Implementation notes)
 
 A main-process capturer of the frontmost app (and window title where the OS
 permits) feeding `@starter/core/activity`'s `mergeSegments` / `buildSuggestions`

@@ -116,7 +116,7 @@ What it records, and where:
   `com.example.*`. Adding one deletes what is already recorded for that app.
   The app never records itself, the lock screen or the screen saver.
 - **Delete all activity now** removes the recorded activity. Signing out
-  removes it too.
+  removes the activity and the rules.
 
 The **Activity** page lists the untracked stretches for a day. **Add** files a
 stretch as an entry, **Edit and add** lets you change it first, and

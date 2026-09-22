@@ -335,6 +335,45 @@ desktop one needs `app://-` in the live server's `TRUSTED_ORIGINS` (or
 `TRUST_STORE_APPS=true`); `/api/health` with an `Origin: app://-` header says
 whether it is (`originTrusted`).
 
+**Desktop activity capture** (plan Stage 8, `electron/src/activity/`, the
+`/app/activity` screen in `components/activity/`, the card in
+`components/settings/desktop-activity.tsx`). The desktop counterpart of the
+extension's "Browser activity capture" below, with its rules carried over:
+off by default, scoped `<userId>:<workspaceId>`, "never record" purges the
+past, the open segment heartbeated and closed AT `lastSeen`, and nothing leaves
+the device until an entry is added. What fails quietly if broken:
+
+- **No native module, no OS prompt.** macOS polls `/usr/bin/lsappinfo` (app
+  name and bundle id, no permission); Windows runs one long-lived
+  `powershell.exe` over user32 with a watchdog; Linux runs `xprop -spy` on X11.
+  macOS window titles need Screen Recording and are deferred, so no code path
+  on any OS requests a permission. `process-runner.ts` is the only file that
+  imports `child_process`, and `headless.test.ts` greps for both rules.
+- **Headless captures from the fake source only** (`source-fake.ts`, driven by
+  `__trackYourTimeDesktop.activity`: `setFrontmost`, `setNow`, `tick`,
+  `setSupport`, `setTitlesAvailable`, `spawns`, `files`). It starts no timer,
+  and `spawns` must stay empty — the e2e spec asserts it.
+- **Where it cannot work, main refuses, whatever the renderer sends.**
+  `activityCaptureSupport` in `distribution.ts`: both stores `store`, Snap and
+  Flatpak `linux-sandbox`, Wayland `wayland`. `enabled` and `storeTitles` are
+  forced off there, and the nav item is hidden (`shell: "electron"` plus
+  `support.supported`).
+- **Suggestions are composed in main**, so raw segments never cross IPC; the
+  renderer sends tracked intervals in and gets suggestions back. Accept asks
+  main to recompute (`checkAccept`) before `createManualEntry`, which gives
+  `source: "desktop"` and the offline queue, then `markAccepted` holds the
+  span for `ACCEPTED_HOLD_MS` so a queued create is not suggested again.
+- **The store is `userData/activity/`** (folder 0700, files 0600, one JSONL
+  of segments per UTC day, `v: 1`). A newer `v` locks it: capture stops and
+  nothing is written or deleted. Turning titles off strips stored titles.
+- **Sign-out forgets it directly** in `forgetAccountOnDevice()`
+  (`lib/desktop-activity.ts`), never through a component's `onSignOut`, which
+  may already be unmounted. The scope comes from `DesktopActivityScope` in
+  `AppShell`, and never from a pending or null session.
+- **The desktop e2e reuses `out-desktop`** when it was built for the same API
+  origin, so a renderer change is not in it: run
+  `DESKTOP_E2E_REBUILD=1 pnpm test:e2e:desktop` after touching client code.
+
 **Simulator and emulator runs never take focus either.** `IOS_HEADLESS=1 pnpm
 dev:ios` drives simctl only (without it Simulator.app is opened with `open -g`),
 and `ANDROID_HEADLESS=1 pnpm dev:android` boots the emulator with `-no-window`.
