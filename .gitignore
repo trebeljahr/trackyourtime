@@ -8,6 +8,10 @@ dist-prod/
 .next/
 # Per-instance Next build dirs (scripts/dev.mjs)
 .next-*/
+# Rewritten by every `next dev` / `next build` (the two point at different
+# .next/ type dirs), so a tracked copy is always dirty. Nothing needs it on a
+# fresh checkout: typecheck passes without it, and Next writes it on first run.
+next-env.d.ts
 .turbo/
 
 # Electron bundle (electron/src/*.ts -> electron/dist/, by scripts/build-desktop.mjs)
