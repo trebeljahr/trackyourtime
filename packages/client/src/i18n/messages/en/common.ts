@@ -193,7 +193,9 @@ export const common = {
   },
   a11y: {
     close: "Close",
+    hidePassword: "Hide password",
     openMenu: "Open menu",
+    showPassword: "Show password",
     skipToContent: "Skip to content",
   },
 } as const;

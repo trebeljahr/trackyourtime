@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { AuthHeader } from "@/components/auth-header";
+import { PasswordInput } from "@/components/ui/password-input";
 import { useT } from "@/i18n/use-t";
 import { translate } from "@/i18n/translate";
 
@@ -86,14 +87,12 @@ function ResetPasswordForm() {
         <label htmlFor="newPassword" className="text-sm font-medium">
           {t("auth.newPassword")}
         </label>
-        <input
+        <PasswordInput
           id="newPassword"
-          type="password"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           required
           minLength={8}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           data-testid="reset-new-password"
         />
       </div>
@@ -102,13 +101,11 @@ function ResetPasswordForm() {
         <label htmlFor="confirmPassword" className="text-sm font-medium">
           {t("auth.confirmPassword")}
         </label>
-        <input
+        <PasswordInput
           id="confirmPassword"
-          type="password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           data-testid="reset-confirm-password"
         />
       </div>

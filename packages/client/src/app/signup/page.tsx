@@ -11,6 +11,7 @@ import {
 } from "@/lib/auth-client";
 import { AuthHeader } from "@/components/auth-header";
 import { NativeServerNote } from "@/components/server-picker";
+import { PasswordInput } from "@/components/ui/password-input";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { authPageHref, safeNextFromSearch } from "@/lib/safe-next";
 import { useT } from "@/i18n/use-t";
@@ -151,14 +152,12 @@ export default function SignupPage() {
             <label htmlFor="password" className="text-sm font-medium">
               {tc("fields.password")}
             </label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               data-testid="signup-password"
             />
           </div>
@@ -167,13 +166,11 @@ export default function SignupPage() {
             <label htmlFor="confirmPassword" className="text-sm font-medium">
               {t("auth.confirmPassword")}
             </label>
-            <input
+            <PasswordInput
               id="confirmPassword"
-              type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               data-testid="signup-confirm-password"
             />
           </div>

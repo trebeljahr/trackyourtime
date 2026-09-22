@@ -188,7 +188,9 @@ export const common: Translation<typeof source> = {
   },
   a11y: {
     close: "Schließen",
+    hidePassword: "Passwort verbergen",
     openMenu: "Menü öffnen",
+    showPassword: "Passwort anzeigen",
     skipToContent: "Zum Inhalt springen",
   },
 };

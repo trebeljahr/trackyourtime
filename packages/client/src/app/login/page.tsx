@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth-client";
 import { AuthHeader } from "@/components/auth-header";
 import { NativeServerPicker } from "@/components/server-picker";
+import { PasswordInput } from "@/components/ui/password-input";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { BrowserSignIn } from "@/components/browser-sign-in";
 import {
@@ -216,13 +217,11 @@ export default function LoginPage() {
             <label htmlFor="password" className="text-sm font-medium">
               {tc("fields.password")}
             </label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               data-testid="login-password"
             />
           </div>
