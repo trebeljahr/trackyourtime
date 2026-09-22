@@ -48,7 +48,7 @@ export type StoreListing = {
 };
 
 export const STORES: Record<StoreId, StoreListing> = {
-  chrome: { url: null },
+  chrome: { url: "https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi" },
   raycast: { url: null },
   appStore: { url: null },
   googlePlay: { url: null },

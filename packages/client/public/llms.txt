@@ -28,7 +28,7 @@ Track Your Time is for freelancers, consultants and small studios who bill clien
 - There is no timesheet approval, no client login or shared report link, and no budget alert.
 - There is no tagged release yet, so there are no published images to pull. Until the first release, self-hosting means building the images yourself, which needs about 4 GB of RAM.
 - A self-hosted instance has open sign-up. The application has no setting to close registration. The self-hosting guide lists workarounds at the proxy.
-- The Chrome extension, the Raycast extension and the phone apps are not in any store yet.
+- The Chrome extension is in the Chrome Web Store (https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). The Raycast extension and the phone apps are not in any store yet.
 
 **How to self-host**
 
