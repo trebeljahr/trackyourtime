@@ -5,6 +5,7 @@ import type {
   TaxBreakdownRow,
   TaxCategory,
 } from "./einvoice.js";
+import type { BusinessLogo } from "./business-logo.js";
 import type { InvoiceLineKind, InvoiceLineUnit } from "./invoice-lines.js";
 import type { Locale, LocalePreference } from "./locale.js";
 
@@ -319,6 +320,12 @@ export type BusinessProfile = {
   defaultTaxCategory: TaxCategory | null;
   /** Default rate with category S; null or 0 otherwise. */
   defaultTaxRate: number | null;
+  /**
+   * The logo printed top right of every new invoice, as a data URL, or
+   * `null`. Set and cleared by `settings.setBusinessLogo` /
+   * `clearBusinessLogo`, never by `updateBusinessProfile`.
+   */
+  logo: BusinessLogo | null;
   /** `null` until the profile has been saved once. */
   updatedAt: string | null;
 };
@@ -794,8 +801,8 @@ export type Invoice = {
   updatedAt: string;
 };
 
-/** Every business profile value, blanks collapsed — what `normalizeBusinessProfile` returns. */
-export type BusinessProfileValues = Omit<BusinessProfile, "workspaceId" | "updatedAt">;
+/** Every business profile value, blanks collapsed — what `normalizeBusinessProfile` returns. The logo is bytes, not a value, and is handled beside it. */
+export type BusinessProfileValues = Omit<BusinessProfile, "workspaceId" | "updatedAt" | "logo">;
 
 /**
  * Snapshot of {@link BusinessProfile} copied onto one invoice. The defaults
@@ -804,7 +811,14 @@ export type BusinessProfileValues = Omit<BusinessProfile, "workspaceId" | "updat
 export type InvoiceIssuer = Omit<
   BusinessProfileValues,
   "defaultTaxCategory" | "defaultTaxRate" | "smallBusinessNote"
->;
+> & {
+  /**
+   * On the wire only: `true` when the invoice carries the logo bytes frozen
+   * at creation. The bytes themselves never leave the server; the PDF draws
+   * them. Absent on an invoice created without a logo, or by an older server.
+   */
+  hasLogo?: boolean;
+};
 
 /** Snapshot of the client's name and {@link ClientBilling} on one invoice. */
 export type InvoiceRecipient = Omit<ClientBilling, "preferredFormat" | "defaultTaxCategory"> & {

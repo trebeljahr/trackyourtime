@@ -223,7 +223,7 @@ export function isIdentityEmpty(value: object): boolean {
 
 /** The profile `settings.businessProfile` answers before the first save. */
 export function emptyBusinessProfile(workspaceId: string): BusinessProfile {
-  return { workspaceId, ...normalizeBusinessProfile(null), updatedAt: null };
+  return { workspaceId, ...normalizeBusinessProfile(null), logo: null, updatedAt: null };
 }
 
 /**

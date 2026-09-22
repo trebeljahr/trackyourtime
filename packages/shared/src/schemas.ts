@@ -16,6 +16,7 @@ import type { IdleBehavior, RunawayBehavior } from "./types.js";
 import { API_TOKEN_SCOPES } from "./api-tokens.js";
 import { WEBHOOK_EVENTS } from "./webhooks.js";
 import { LOCALE_PREFERENCES, SUPPORTED_LOCALES } from "./locale.js";
+import { BUSINESS_LOGO_MAX_BASE64_LENGTH, BUSINESS_LOGO_MIMES } from "./business-logo.js";
 import {
   IDENTITY_LIMITS,
   bicInput,
@@ -240,6 +241,26 @@ export const updateBusinessProfileSchema = z
     originId,
   })
   .superRefine(refineBusinessProfileEinvoice);
+
+/**
+ * `settings.setBusinessLogo`: the bytes of a PNG or JPEG, base64, with the
+ * format the client believes they are. The server reads the bytes' own
+ * header and refuses when they disagree. Deliberately not a field of
+ * `updateBusinessProfileSchema`: that mutation merges text, and a stale
+ * form re-sending 300 KB on every save is the wrong shape for it.
+ */
+export const setBusinessLogoSchema = z.object({
+  mime: z.enum(BUSINESS_LOGO_MIMES),
+  base64: z
+    .string()
+    .min(1)
+    .max(BUSINESS_LOGO_MAX_BASE64_LENGTH)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/, "base64 body expected"),
+  originId,
+});
+
+/** `settings.clearBusinessLogo`: nothing but the origin. */
+export const clearBusinessLogoSchema = z.object({ originId });
 
 export const createClientSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
@@ -950,6 +971,8 @@ export type UpdateInvoiceStatusInput = z.infer<
 export type InvoiceListInput = z.infer<typeof invoiceListSchema>;
 export type InvoicePdfInput = z.infer<typeof invoicePdfSchema>;
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;
+export type SetBusinessLogoInput = z.infer<typeof setBusinessLogoSchema>;
+export type ClearBusinessLogoInput = z.infer<typeof clearBusinessLogoSchema>;
 export type MaxDurationSettingsInput = z.infer<
   typeof maxDurationSettingsSchema
 >;

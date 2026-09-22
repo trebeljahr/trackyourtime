@@ -82,6 +82,15 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
       "Blank invoices: `from` and `to` are optional on `invoices.preview` and `invoices.create`, and `null` on the invoice row.",
     ],
   },
+  {
+    level: 5,
+    release: "0.1.0",
+    added: [
+      "`settings.setBusinessLogo` and `settings.clearBusinessLogo`: the PNG or JPEG printed top right of every new invoice.",
+      "`logo` on `settings.businessProfile` (a data URL with its pixel size, or null).",
+      "`hasLogo` on an invoice's `issuer` when the invoice carries the logo frozen at its creation.",
+    ],
+  },
 ];
 
 /**

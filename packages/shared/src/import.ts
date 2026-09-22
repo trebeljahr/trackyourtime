@@ -334,8 +334,12 @@ export type WorkspaceExport = {
    * The issuer identity printed on the workspace's invoices. Absent when the
    * profile was never filled in, in files older than profiles, and in a
    * redacted export — it carries payment details, which follow the money rule.
+   *
+   * `logo` is the profile's logo as a data URL. Absent when the profile has
+   * none and in files older than logos; the restore reads it only when the
+   * file carries it, and leaves the stored logo alone when it cannot read it.
    */
-  businessProfile?: BusinessProfileValues;
+  businessProfile?: BusinessProfileValues & { logo?: string | null };
   clients: WorkspaceExportClient[];
   projects: WorkspaceExportProject[];
   tasks: WorkspaceExportTask[];
