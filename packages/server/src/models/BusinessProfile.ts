@@ -20,6 +20,8 @@ import {
   type TaxCategory,
 } from "@starter/shared";
 import { profileEinvoiceFields } from "./einvoice-schemas.js";
+import { logoSchema } from "./logo-schema.js";
+import { logoToWire, storedLogoOf, type StoredLogo } from "../services/invoice-logo.js";
 
 export interface IBusinessProfile extends Document {
   workspaceId: string;
@@ -52,6 +54,8 @@ export interface IBusinessProfile extends Document {
   smallBusinessNote?: string | null;
   defaultTaxCategory?: TaxCategory | null;
   defaultTaxRate?: number | null;
+  /** The invoice logo. Absent until one is uploaded; `$unset` when removed. */
+  logo?: StoredLogo | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -72,6 +76,7 @@ const businessProfileSchema = new Schema<IBusinessProfile>(
     paymentTermsDays: { type: Number, default: null, min: 0, max: 365 },
     invoiceFooter: { type: String, default: null, maxlength: 500 },
     ...profileEinvoiceFields,
+    logo: { type: logoSchema, default: undefined },
   },
   { timestamps: true },
 );
@@ -87,11 +92,45 @@ export async function getBusinessProfile(
 ): Promise<BusinessProfileWire> {
   const doc = await BusinessProfileModel.findOne({ workspaceId }).lean();
   if (!doc) return emptyBusinessProfile(workspaceId);
+  const logo = storedLogoOf(doc.logo);
   return {
     workspaceId,
     ...normalizeBusinessProfile(doc),
-    updatedAt: doc.updatedAt.toISOString(),
+    logo: logo ? logoToWire(logo) : null,
+    // A row a logo upload created has no timestamps (see setBusinessLogo):
+    // the identity was never saved, and the form reads null as exactly that.
+    updatedAt: doc.updatedAt ? doc.updatedAt.toISOString() : null,
   };
+}
+
+/** The stored logo bytes, for the invoice snapshot; `null` when there are none. */
+export async function getBusinessLogo(workspaceId: string): Promise<StoredLogo | null> {
+  const doc = await BusinessProfileModel.findOne({ workspaceId }).select("logo").lean();
+  return doc ? storedLogoOf(doc.logo) : null;
+}
+
+/**
+ * Store the logo. Only the logo: the identity fields are untouched, and so
+ * is `updatedAt` — the settings form re-seeds its draft on that value, and a
+ * logo upload beside a half-typed address must not throw the address away.
+ * A workspace with no profile row gets one holding only the logo.
+ */
+export async function setBusinessLogo(
+  workspaceId: string,
+  logo: StoredLogo,
+): Promise<BusinessProfileWire> {
+  await BusinessProfileModel.updateOne(
+    { workspaceId },
+    { $set: { logo }, $setOnInsert: { workspaceId } },
+    { upsert: true, timestamps: false },
+  );
+  return getBusinessProfile(workspaceId);
+}
+
+/** Remove the logo. Idempotent; a profile without one is left as it is. */
+export async function clearBusinessLogo(workspaceId: string): Promise<BusinessProfileWire> {
+  await BusinessProfileModel.updateOne({ workspaceId }, { $unset: { logo: 1 } }, { timestamps: false });
+  return getBusinessProfile(workspaceId);
 }
 
 /**

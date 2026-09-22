@@ -18,6 +18,19 @@ import {
   taxBreakdownRowSchema,
   type EinvoiceMetaDoc,
 } from "./einvoice-schemas.js";
+import { logoSchema } from "./logo-schema.js";
+import {
+  storedLogoOf,
+  type RenderableInvoice,
+  type StoredLogo,
+} from "../services/invoice-logo.js";
+
+/**
+ * The issuer as stored: the wire identity plus, when the profile had one at
+ * creation, the logo bytes. The bytes never reach the wire (`hasLogo` does);
+ * the PDF renderer is the one reader, through {@link renderableInvoice}.
+ */
+export type StoredInvoiceIssuer = InvoiceIssuer & { logo?: StoredLogo | null };
 
 /**
  * An invoice is a SNAPSHOT, not a query.
@@ -52,7 +65,7 @@ export interface IInvoice extends Document {
   /** Snapshotted at creation; absent on invoices issued before localisation (English). */
   locale?: Locale | null;
   /** Snapshotted at creation; absent on invoices issued before issuer profiles. */
-  issuer?: InvoiceIssuer | null;
+  issuer?: StoredInvoiceIssuer | null;
   /** Snapshotted at creation; absent when the client had no billing details. */
   recipient?: InvoiceRecipient | null;
   /** EN 16931 VAT breakdown; absent when the lines carry no categories. */
@@ -93,7 +106,7 @@ export type InvoiceDocLike = {
   notes: string | null;
   locale?: Locale | null;
   /** Snapshotted at creation; absent on invoices issued before issuer profiles. */
-  issuer?: InvoiceIssuer | null;
+  issuer?: StoredInvoiceIssuer | null;
   /** Snapshotted at creation; absent when the client had no billing details. */
   recipient?: InvoiceRecipient | null;
   /** EN 16931 VAT breakdown; absent when the lines carry no categories. */
@@ -133,7 +146,7 @@ const lineItemSchema = new Schema<InvoiceLineItem>(
 // Snapshot subdocuments. Every field optional; the subdocuments themselves
 // have no default, for the same reason `locale` has none: a default applied
 // to an old invoice on read would invent an issuer it was never sent with.
-const issuerSchema = new Schema<InvoiceIssuer>(
+const issuerSchema = new Schema<StoredInvoiceIssuer>(
   {
     legalName: { type: String, default: null },
     addressLines: { type: [String], default: [] },
@@ -148,6 +161,9 @@ const issuerSchema = new Schema<InvoiceIssuer>(
     paymentTermsDays: { type: Number, default: null },
     invoiceFooter: { type: String, default: null },
     ...issuerIdentityFields,
+    // The logo frozen with the rest of the issuer; a later upload or removal
+    // in Settings never reaches it. The e-invoice fill never writes it.
+    logo: { type: logoSchema, default: undefined },
   },
   { _id: false },
 );
@@ -264,7 +280,11 @@ export function toClientInvoice(doc: InvoiceDocLike): InvoiceWire {
     entryIds: doc.entryIds ?? [],
     notes: doc.notes ?? null,
     ...(doc.locale ? { locale: doc.locale } : {}),
-    issuer: doc.issuer ? normalizeIssuer(doc.issuer) : null,
+    // The logo's bytes stay here: the wire says only that they exist, so a
+    // webhook, an export or a list of invoices never carries 300 KB per row.
+    issuer: doc.issuer
+      ? { ...normalizeIssuer(doc.issuer), ...(storedLogoOf(doc.issuer.logo) ? { hasLogo: true } : {}) }
+      : null,
     recipient: doc.recipient ? normalizeRecipient(doc.recipient) : null,
     // Each e-invoice field only when the document has it, so an invoice from
     // before e-invoicing serialises exactly as it did.
@@ -311,6 +331,16 @@ export function copyLineItem(line: InvoiceLineItem): InvoiceLineItem {
       ? { taxCategory: line.taxCategory, taxRate: line.taxRate ?? 0 }
       : {}),
   };
+}
+
+/**
+ * The wire invoice with the issuer logo's bytes put back, for the PDF
+ * renderer and nothing else. Every other reader takes {@link toClientInvoice}.
+ */
+export function renderableInvoice(doc: InvoiceDocLike): RenderableInvoice {
+  const wire = toClientInvoice(doc);
+  const logo = doc.issuer ? storedLogoOf(doc.issuer.logo) : null;
+  return wire.issuer && logo ? { ...wire, issuer: { ...wire.issuer, logo } } : wire;
 }
 
 /** A plain copy of a stored breakdown row (a hydrated subdocument carries more). */

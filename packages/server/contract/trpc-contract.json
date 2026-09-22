@@ -3727,6 +3727,18 @@
       },
       "type": "query"
     },
+    "settings.clearBusinessLogo": {
+      "input": {
+        "properties": {
+          "originId": {
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "mutation"
+    },
     "settings.get": {
       "input": {
         "properties": {
@@ -3739,6 +3751,35 @@
         "type": "object"
       },
       "type": "query"
+    },
+    "settings.setBusinessLogo": {
+      "input": {
+        "properties": {
+          "base64": {
+            "maxLength": 409600,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+            "type": "string"
+          },
+          "mime": {
+            "enum": [
+              "image/png",
+              "image/jpeg"
+            ],
+            "type": "string"
+          },
+          "originId": {
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": [
+          "mime",
+          "base64"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
     },
     "settings.update": {
       "input": {

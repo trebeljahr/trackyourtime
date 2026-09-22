@@ -108,6 +108,7 @@ export function businessProfileFixture(overrides: BusinessProfileFields = {}): B
   return {
     workspaceId: "ws-fixture",
     ...normalizeBusinessProfile({ ...PROFILE_FIELDS, ...overrides }),
+    logo: null,
     updatedAt: STAMP,
   };
 }

@@ -6,6 +6,8 @@
 // shape stays merged so no client has to change for the storage split.
 import { TRPCError } from "@trpc/server";
 import {
+  clearBusinessLogoSchema,
+  setBusinessLogoSchema,
   updateBusinessProfileSchema,
   updateSettingsSchema,
   type BusinessProfile,
@@ -21,9 +23,12 @@ import {
 } from "../../models/Settings.js";
 import {
   BusinessProfileInvalidError,
+  clearBusinessLogo,
   getBusinessProfile,
   saveBusinessProfile,
+  setBusinessLogo,
 } from "../../models/BusinessProfile.js";
+import { inspectLogoUpload } from "../../services/invoice-logo.js";
 import { publishSync, publishToUser } from "../../ws/sync.js";
 import mongoose from "mongoose";
 import { env } from "../../config/env.js";
@@ -60,6 +65,15 @@ function assertMayReadBusinessProfile(ctx: RoleGateContext): void {
     code: "FORBIDDEN",
     message: "Your workspace role cannot see the business profile",
   });
+}
+
+function assertMayChangeBusinessProfile(ctx: RoleGateContext): void {
+  if (ctx.membership.role === "member") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Only an owner or admin can change the business profile",
+    });
+  }
 }
 
 export const settingsRouter = router({
@@ -181,12 +195,7 @@ export const settingsRouter = router({
   updateBusinessProfile: workspaceProcedure
     .input(updateBusinessProfileSchema)
     .mutation(async ({ ctx, input }): Promise<BusinessProfile> => {
-      if (ctx.membership.role === "member") {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Only an owner or admin can change the business profile",
-        });
-      }
+      assertMayChangeBusinessProfile(ctx);
       const { originId, ...fields } = input;
       let profile: BusinessProfile;
       try {
@@ -201,6 +210,36 @@ export const settingsRouter = router({
         throw error;
       }
       void publishSync(ctx.workspaceId, { kind: "settings.changed" }, originId);
+      return profile;
+    }),
+
+  /**
+   * Store the logo printed top right of every invoice created from now on.
+   * Its own procedure rather than a field of `updateBusinessProfile`: that
+   * one merges text, and its clients re-send the whole profile on Save. The
+   * bytes are checked here (`services/invoice-logo.ts`); a refusal is a
+   * BAD_REQUEST whose message is the stable code the client translates.
+   */
+  setBusinessLogo: workspaceProcedure
+    .input(setBusinessLogoSchema)
+    .mutation(async ({ ctx, input }): Promise<BusinessProfile> => {
+      assertMayChangeBusinessProfile(ctx);
+      const inspected = inspectLogoUpload({ mime: input.mime, base64: input.base64 });
+      if (!inspected.ok) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: inspected.refusal });
+      }
+      const profile = await setBusinessLogo(ctx.workspaceId, inspected.logo);
+      void publishSync(ctx.workspaceId, { kind: "settings.changed" }, input.originId);
+      return profile;
+    }),
+
+  /** Remove the logo. Invoices already created keep the copy they froze. */
+  clearBusinessLogo: workspaceProcedure
+    .input(clearBusinessLogoSchema)
+    .mutation(async ({ ctx, input }): Promise<BusinessProfile> => {
+      assertMayChangeBusinessProfile(ctx);
+      const profile = await clearBusinessLogo(ctx.workspaceId);
+      void publishSync(ctx.workspaceId, { kind: "settings.changed" }, input.originId);
       return profile;
     }),
 

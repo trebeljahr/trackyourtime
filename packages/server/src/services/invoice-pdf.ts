@@ -48,6 +48,7 @@ import {
 } from "@starter/shared";
 import { serverT, type ServerTranslator } from "../i18n/index.js";
 import { billedPeriodDates } from "./einvoice/format.js";
+import type { RenderableInvoice } from "./invoice-logo.js";
 import {
   bankLines,
   breakdownTotalRows,
@@ -161,7 +162,7 @@ type SizedColumn = Column & { width: number };
 
 type Sheet = {
   doc: PDFKit.PDFDocument;
-  invoice: Invoice;
+  invoice: RenderableInvoice;
   meta: InvoicePdfMeta;
   t: ServerTranslator<"invoice">;
   format: PdfFormat;
@@ -335,21 +336,49 @@ function periodRow(
   ];
 }
 
+/** The box the issuer's logo is fitted into, top right of the first page, in points. */
+const LOGO_BOX = { width: 160, height: 60 } as const;
+/** Air between the logo box and the title beside it / the parties below it. */
+const LOGO_GAP = 10;
+
+/**
+ * The issuer's logo, when the invoice froze one: fitted into {@link LOGO_BOX}
+ * with its aspect kept, flush with the right margin, level with the title.
+ * Answers the width the title may use beside it and the y the parties start
+ * at. Without a logo both are what they always were, so an invoice from
+ * before logos lays out byte for byte as before (`invoice-pdf-locale.test.ts`
+ * pins that page). The bytes were checked at upload (`invoice-logo.ts`);
+ * pdfkit embeds them as they are.
+ */
+function drawLogo(sheet: Sheet): { titleWidth: number; contentTop: number } {
+  const logo = sheet.invoice.issuer?.logo ?? null;
+  if (!logo) return { titleWidth: sheet.width, contentTop: sheet.y };
+  sheet.doc.image(logo.data, sheet.left + sheet.width - LOGO_BOX.width, sheet.y, {
+    fit: [LOGO_BOX.width, LOGO_BOX.height],
+    align: "right",
+  });
+  return {
+    titleWidth: sheet.width - LOGO_BOX.width - LOGO_GAP,
+    contentTop: sheet.y + LOGO_BOX.height + LOGO_GAP,
+  };
+}
+
 /** The masthead: title, the two parties side by side, then the dates. */
 function drawHeaderBlock(sheet: Sheet): void {
   const { doc, invoice, t, format } = sheet;
 
+  const logo = drawLogo(sheet);
   doc
     .font(FONT_BOLD)
     .fontSize(TITLE_SIZE)
     .fillColor(INK)
     .text(
-      fitText(doc, t("title", { number: invoice.number }), sheet.width),
+      fitText(doc, t("title", { number: invoice.number }), logo.titleWidth),
       sheet.left,
       sheet.y,
-      { width: sheet.width, lineBreak: false },
+      { width: logo.titleWidth, lineBreak: false },
     );
-  sheet.y += TITLE_SIZE + 10;
+  sheet.y = Math.max(sheet.y + TITLE_SIZE + 10, logo.contentTop);
 
   const half = sheet.width / 2;
   const issuer = invoice.issuer ?? null;
@@ -668,7 +697,7 @@ function drawParagraph(
  * the "end" event never fires and the promise hangs.
  */
 export async function renderInvoicePdf(
-  invoice: Invoice,
+  invoice: RenderableInvoice,
   meta: InvoicePdfMeta,
   variant?: InvoicePdfVariant,
 ): Promise<Buffer> {

@@ -38,6 +38,8 @@ import {
   type BusinessLogoMime,
   type BusinessLogoRefusal,
   type BusinessLogoUpload,
+  type Invoice,
+  type InvoiceIssuer,
 } from "@starter/shared";
 
 /** A logo as the profile and every invoice issuer store it. */
@@ -48,6 +50,17 @@ export type StoredLogo = {
   height: number;
   /** Hex SHA-256 of `data`; the identity of the bytes, for tests and audits. */
   sha256: string;
+};
+
+/**
+ * What `renderInvoicePdf` draws from: the wire invoice with the issuer
+ * logo's bytes kept. A plain wire `Invoice` satisfies it too (the key is
+ * optional), so an invoice without a logo renders exactly as before, and
+ * every caller that builds one goes through `renderableInvoice` in the
+ * Invoice model — the one place the bytes leave the document.
+ */
+export type RenderableInvoice = Omit<Invoice, "issuer"> & {
+  issuer?: (InvoiceIssuer & { logo?: StoredLogo | null }) | null;
 };
 
 export type LogoInspection =

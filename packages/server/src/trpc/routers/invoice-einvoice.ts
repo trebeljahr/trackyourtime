@@ -28,7 +28,12 @@ import {
   type Invoice as InvoiceWire,
 } from "@starter/shared";
 import mongoose from "mongoose";
-import { Invoice, toClientInvoice, type InvoiceDocLike } from "../../models/Invoice.js";
+import {
+  Invoice,
+  renderableInvoice,
+  toClientInvoice,
+  type InvoiceDocLike,
+} from "../../models/Invoice.js";
 import { buildCiiXml, xrechnungFilename } from "../../services/einvoice/cii.js";
 import { EINVOICE_GENERATOR } from "../../services/einvoice/constants.js";
 import {
@@ -262,7 +267,8 @@ export const invoiceEinvoiceProcedures = {
     .query(async ({ ctx, input }): Promise<EinvoiceExportResult> => {
       requireInvoiceById(ctx);
       const doc = await loadInvoiceDoc(ctx.workspaceId, input.id, "-einvoice.issuedXml.xrechnung");
-      const invoice = toClientInvoice(doc);
+      // With the logo bytes: the visible page draws them, the XML does not.
+      const invoice = renderableInvoice(doc);
       // The visible part renders from the snapshot fields, so they must be
       // complete even when a stored XML exists.
       const ready = assertReadyOrThrow(invoice, "en16931");

@@ -6,10 +6,12 @@
 // with the two model handles stubbed, like invoice-workspace-scope.test.ts,
 // so no database is needed.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { after, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 import { TRPCError } from "@trpc/server";
-import type { WorkspaceRole } from "@starter/shared";
+import { BUSINESS_LOGO_REFUSALS, type WorkspaceRole } from "@starter/shared";
 import {
   BusinessProfileInvalidError,
   BusinessProfileModel,
@@ -26,6 +28,7 @@ mongoose.set("bufferCommands", false);
 
 const USER = "user_bob";
 const WORKSPACE = "ws_team";
+const LOGO_PNG = readFileSync(fileURLToPath(new URL("./fixtures/logo/rgba.png", import.meta.url)));
 
 type LeanQuery<T> = { lean: () => Promise<T> };
 
@@ -50,8 +53,11 @@ memberHandle.findOne = () => ({ lean: async () => current });
 profileHandle.findOne = () => ({ lean: async () => stored });
 profileHandle.updateOne = async (_filter, update) => {
   writes += 1;
-  const set = (update as { $set: Record<string, unknown> }).$set;
-  stored = { ...set, updatedAt: new Date("2026-09-14T08:00:00.000Z") };
+  const { $set, $unset } = update as { $set?: Record<string, unknown>; $unset?: Record<string, unknown> };
+  // A profile save `$set`s the whole merged row; the logo procedures `$set`
+  // or `$unset` the one key. Merging over the last row covers both.
+  stored = { ...(stored ?? {}), ...($set ?? {}), updatedAt: new Date("2026-09-14T08:00:00.000Z") };
+  for (const key of Object.keys($unset ?? {})) delete stored[key];
   return { acknowledged: true };
 };
 
@@ -131,7 +137,40 @@ describe("business profile permissions", () => {
       assert.equal(profile.taxId, null);
       assert.equal(profile.country, "GB");
     });
+
+    it(`${label}: logo upload and removal ${row.write ? "allowed" : "refused"}`, async () => {
+      writes = 0;
+      stored = null;
+      const caller = as(row.role, row.money);
+      const set = caller.setBusinessLogo({ mime: "image/png", base64: LOGO_PNG.toString("base64") });
+      if (!row.write) {
+        await forbidden(set);
+        await forbidden(caller.clearBusinessLogo({}));
+        assert.equal(writes, 0, "a refused logo change still wrote");
+        return;
+      }
+      const withLogo = await set;
+      assert.equal(writes, 1);
+      assert.deepEqual([withLogo.logo?.width, withLogo.logo?.height], [48, 16]);
+      assert.equal(withLogo.logo?.dataUrl, `data:image/png;base64,${LOGO_PNG.toString("base64")}`);
+      const cleared = await caller.clearBusinessLogo({});
+      assert.equal(writes, 2);
+      assert.equal(cleared.logo, null);
+    });
   }
+
+  it("refuses bytes that are not a logo before any write, as BAD_REQUEST with the code", async () => {
+    writes = 0;
+    stored = null;
+    await assert.rejects(
+      as("owner", true).setBusinessLogo({ mime: "image/png", base64: Buffer.from("<svg/>").toString("base64") }),
+      (error: unknown) =>
+        error instanceof TRPCError &&
+        error.code === "BAD_REQUEST" &&
+        error.message === BUSINESS_LOGO_REFUSALS.unsupportedFormat,
+    );
+    assert.equal(writes, 0);
+  });
 });
 
 describe("saving the business profile merges over the stored row", () => {

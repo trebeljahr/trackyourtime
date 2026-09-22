@@ -50,9 +50,9 @@ import {
   type TaxBreakdownRow,
 } from "@starter/shared";
 import mongoose, { Types } from "mongoose";
-import { getBusinessProfile } from "../../models/BusinessProfile.js";
+import { getBusinessLogo, getBusinessProfile } from "../../models/BusinessProfile.js";
 import { Client } from "../../models/Client.js";
-import { Invoice, toClientInvoice, type IInvoice } from "../../models/Invoice.js";
+import { Invoice, renderableInvoice, toClientInvoice, type IInvoice } from "../../models/Invoice.js";
 import { Project } from "../../models/Project.js";
 import {
   getOrCreateWorkspaceSettings,
@@ -911,7 +911,13 @@ export const invoicesRouter = router({
 
       const locale = await invoiceLocaleFor(ctx.user.id, gathered.clientLocale, input.locale);
       const { taxed, profile } = await taxGathered(workspaceId, gathered, input, locale);
-      const issuer = issuerSnapshot(profile);
+      const identity = issuerSnapshot(profile);
+      // The logo is frozen with the rest of the issuer, bytes and all, so the
+      // PDF renders from the invoice alone and a logo changed later cannot
+      // redraw a page the customer holds. A logo on an otherwise empty
+      // profile is not printed: there is no issuer block to belong to.
+      const logo = identity ? await getBusinessLogo(workspaceId) : null;
+      const issuer = identity && logo ? { ...identity, logo } : identity;
 
       const draft = {
         workspaceId,
@@ -1362,7 +1368,8 @@ export const invoicesRouter = router({
         .lean();
       if (!doc) throw notFound();
 
-      const invoice = toClientInvoice(doc);
+      // The one reader of the logo bytes: everything else takes toClientInvoice.
+      const invoice = renderableInvoice(doc);
       const bytes = await renderInvoicePdf(invoice, {
         generatedAt: new Date().toISOString(),
       });
