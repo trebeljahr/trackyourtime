@@ -16,6 +16,10 @@ import {
   updateTask,
   type TaskWithStats,
 } from "../../services/catalog/tasks.js";
+import {
+  taskProjectLinks,
+  withProjectIds,
+} from "../../services/catalog/task-projects.js";
 import { workspaceProcedure, router } from "../trpc.js";
 import type { CatalogRemoveResult } from "./catalog-cascade.js";
 import { archiveInputSchema } from "./clients.js";
@@ -23,12 +27,24 @@ import { archiveInputSchema } from "./clients.js";
 /** Re-exported: the client imports it from here. */
 export type { TaskWithStats };
 
+/**
+ * A task plus the projects it has been booked on, which the pickers use to
+ * suggest a project's own tasks first. tRPC only: REST's task shape stays
+ * `TaskWithStats`, and the association is a hint for a picker, not data.
+ */
+export type TaskWithProjects = TaskWithStats & { projectIds: string[] };
+
 export const tasksRouter = router({
   list: workspaceProcedure
     .input(taskListSchema)
-    .query(async ({ ctx, input }): Promise<TaskWithStats[]> =>
-      listTasks(scopeFromContext(ctx), input),
-    ),
+    .query(async ({ ctx, input }): Promise<TaskWithProjects[]> => {
+      const scope = scopeFromContext(ctx);
+      const [tasks, links] = await Promise.all([
+        listTasks(scope, input),
+        taskProjectLinks(scope),
+      ]);
+      return withProjectIds(tasks, links);
+    }),
 
   create: workspaceProcedure
     .input(createTaskSchema)

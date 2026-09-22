@@ -585,6 +585,7 @@ export function useTaskMutations(
         createdAt: now,
         updatedAt: now,
         totalSec: 0,
+        projectIds: [],
       };
       writeTasks((rows) => sortByName([...rows, optimistic]));
       return context;

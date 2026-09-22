@@ -32,6 +32,12 @@ export interface ComboboxOption {
   /** Extra text the search should match on. */
   keywords?: string[];
   disabled?: boolean;
+  /**
+   * Hidden until something is typed. For options that are worth finding but
+   * not worth suggesting — and still counted as an exact match, so typing
+   * one's name never offers to create a duplicate.
+   */
+  searchOnly?: boolean;
 }
 
 export interface ComboboxFooterAction {
@@ -163,9 +169,16 @@ const Combobox = React.forwardRef<HTMLButtonElement, ComboboxProps>(
       [options, value],
     );
 
-    const groups = React.useMemo(() => groupOptions(options), [options]);
-
     const trimmedQuery = query.trim();
+    const searching = trimmedQuery.length > 0;
+
+    const groups = React.useMemo(
+      () =>
+        groupOptions(
+          searching ? options : options.filter((option) => !option.searchOnly),
+        ),
+      [options, searching],
+    );
     const hasExactMatch = React.useMemo(
       () =>
         options.some(

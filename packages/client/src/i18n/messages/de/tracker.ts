@@ -87,6 +87,8 @@ export const tracker: Translation<typeof source> = {
   taskPicker: {
     searchPlaceholder: "Tätigkeit suchen oder erstellen …",
     empty: "Noch keine Tätigkeiten.",
+    emptyForProject: "Noch keine Tätigkeiten in diesem Projekt. Tippe, um eine zu finden.",
+    otherTasks: "Andere Tätigkeiten",
     createTask: "Tätigkeit „{name}“ erstellen",
     newTask: "Neue Tätigkeit …",
     created: "Tätigkeit „{name}“ erstellt",

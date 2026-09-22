@@ -93,6 +93,8 @@ export const tracker = {
   taskPicker: {
     searchPlaceholder: "Search or create a task...",
     empty: "No tasks yet.",
+    emptyForProject: "No tasks on this project yet. Type to find one.",
+    otherTasks: "Other tasks",
     createTask: "Create task \"{name}\"",
     newTask: "New task…",
     created: "Task \"{name}\" created",

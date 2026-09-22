@@ -3,7 +3,8 @@
 import * as React from "react";
 
 import { TaskFormDialog } from "@/components/catalog/task-form-dialog";
-import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { taskPickerOptions } from "@/components/task-picker-options";
+import { Combobox } from "@/components/ui/combobox";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
 import { translate } from "@/i18n/translate";
@@ -15,6 +16,11 @@ import { userErrorMessage } from "@/lib/error-message";
 export type TaskPickerProps = {
   value: string | null;
   onChange: (taskId: string | null) => void;
+  /**
+   * The project the entry is filed under. Only its tasks are suggested; the
+   * rest stay reachable by typing. Null suggests every task.
+   */
+  projectId?: string | null;
   /** Show a "Create <name>" row for unmatched searches. */
   allowCreate?: boolean;
   disabled?: boolean;
@@ -26,9 +32,10 @@ export type TaskPickerProps = {
 /**
  * Task selector for the tracker bar and entry rows.
  *
- * Tasks are a flat, workspace-wide list, independent of whatever project the
- * entry is filed under — so this picker never depends on, or changes, the
- * project beside it. Creating one inline is the point: naming a task should
+ * Tasks are a flat, workspace-wide list and this picker never changes the
+ * project beside it. It does read it: with a project picked, only the tasks
+ * booked on that project are suggested (`taskPickerOptions`), and the rest
+ * are found by typing. Creating one inline is the point: naming a task should
  * never require a detour to the Tasks screen mid-timer.
  *
  * Two create surfaces, for the same reason the project picker has two. Typing
@@ -39,6 +46,7 @@ export type TaskPickerProps = {
 export function TaskPicker({
   value,
   onChange,
+  projectId = null,
   allowCreate = true,
   disabled = false,
   className,
@@ -65,14 +73,10 @@ export function TaskPicker({
     },
   });
 
-  const options = React.useMemo<ComboboxOption[]>(
-    () =>
-      (tasks.data ?? []).map((task) => ({
-        value: task.id,
-        label: task.name,
-        keywords: [task.name],
-      })),
-    [tasks.data],
+  const otherHeading = t("taskPicker.otherTasks");
+  const options = React.useMemo(
+    () => taskPickerOptions(tasks.data ?? [], projectId, value, otherHeading),
+    [tasks.data, projectId, value, otherHeading],
   );
 
   const handleCreate = React.useCallback(
@@ -95,7 +99,11 @@ export function TaskPicker({
         onChange={onChange}
         placeholder={tc("empty.noTask")}
         searchPlaceholder={t("taskPicker.searchPlaceholder")}
-        emptyText={t("taskPicker.empty")}
+        emptyText={
+          projectId === null
+            ? t("taskPicker.empty")
+            : t("taskPicker.emptyForProject")
+        }
         allowClear
         clearLabel={tc("empty.noTask")}
         onCreate={allowCreate ? handleCreate : undefined}

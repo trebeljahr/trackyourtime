@@ -326,6 +326,7 @@ export function TimesheetScreen(): React.JSX.Element {
             <TaskPicker
               value={draftTask}
               onChange={setDraftTask}
+              projectId={draftProject}
               size="sm"
               className="w-48"
               testId="timesheet-row-task"

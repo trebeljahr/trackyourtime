@@ -1240,7 +1240,18 @@ Three places this used to leak, each of which now deliberately does nothing:
   survives only for an import undo, which does delete the tasks it created.
 
 Task documents written before this may still carry a stray `projectId`; the
-strict mongoose schema drops it on read, so there is nothing to backfill. Task
+strict mongoose schema drops it on read, so there is nothing to backfill.
+
+The pickers still *suggest* by project. `tasks.list` (tRPC only, never REST)
+carries `projectIds`: the projects a task has been booked on, derived from
+entries under the roll-up author scope, plus that stray legacy `projectId`
+read off the raw collection (`services/catalog/task-projects.ts`). With a
+project picked, the web task picker (`task-picker-options.ts`) suggests only
+that project's tasks and keeps the rest `searchOnly` under "Other tasks" —
+hidden, not removed, because names are unique per workspace and typing an
+existing name must select it rather than offer a duplicate. No project, or a
+server that sends no `projectIds`, lists every task. It is a suggestion only:
+nothing validates or stores the pairing. Task
 names are unique per workspace rather than per project, which existing
 duplicates across projects are grandfathered past — they only block a new
 create or rename.

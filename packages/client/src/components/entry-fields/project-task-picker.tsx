@@ -62,7 +62,8 @@ export type ProjectTaskPickerProps = {
  * The two references are independent: a task names WHAT the work was, a
  * project names what it was FOR, and every combination of the two is a legal
  * entry. So changing one never touches the other, and the client between them
- * is read off the project rather than picked.
+ * is read off the project rather than picked. The project only narrows which
+ * tasks the task picker suggests.
  */
 export function ProjectTaskPicker({
   value,
@@ -154,6 +155,7 @@ export function ProjectTaskPicker({
     <TaskPicker
       value={value.taskId}
       onChange={handleTask}
+      projectId={value.projectId}
       disabled={disabled}
       size={size}
       className={cn(control, !contents && !bare && "flex-1", controlClassName)}

@@ -479,4 +479,62 @@ test.describe("Projects catalog", () => {
     await expect(page.getByTestId("task-dialog")).toBeHidden();
     await expect(page.getByTestId("tracker-task")).toContainText("Design");
   });
+
+  /**
+   * A task belongs to no project, but the picker suggests only the tasks
+   * booked on the project beside it. The others stay findable by typing, so
+   * a name that exists elsewhere is selected rather than created twice.
+   */
+  test("suggests only the picked project's tasks", async ({ page }) => {
+    await page.goto("/app/track");
+    await expect(page.getByTestId("tracker-bar")).toBeVisible();
+
+    const createProject = async (name: string): Promise<void> => {
+      await page.getByTestId("tracker-project").click();
+      await page.getByTestId("project-picker-new-project").click();
+      await page.getByTestId("project-name-input").fill(name);
+      await page.getByTestId("project-submit").click();
+      await expect(page.getByTestId("project-dialog")).toBeHidden();
+      await expect(page.getByTestId("tracker-project")).toContainText(name);
+    };
+
+    // Book "Wireframes" on Alpha.
+    await createProject("Alpha");
+    await page.getByTestId("tracker-task").click();
+    await page.getByTestId("combobox-search").fill("Wireframes");
+    await page.getByTestId("combobox-create").click();
+    await expect(page.getByTestId("tracker-task")).toContainText("Wireframes");
+    await page.getByTestId("tracker-description").fill("Sketches");
+    await startAndSettle(page);
+    await page.getByTestId("tracker-toggle").click();
+    await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
+      "data-state",
+      "idle",
+    );
+
+    const wireframes = page
+      .locator('[data-testid^="combobox-option-"]')
+      .filter({ hasText: "Wireframes" });
+
+    // On Beta it is not suggested…
+    await createProject("Beta");
+    await page.getByTestId("tracker-task").click();
+    await page.getByTestId("combobox-clear").click();
+    await page.getByTestId("tracker-task").click();
+    await expect(page.getByTestId("combobox-search")).toBeVisible();
+    await expect(wireframes).toHaveCount(0);
+
+    // …but typing finds it, and offers no duplicate to create.
+    await page.getByTestId("combobox-search").fill("Wire");
+    await expect(wireframes).toHaveCount(1);
+    await page.getByTestId("combobox-search").fill("Wireframes");
+    await expect(page.getByTestId("combobox-create")).toHaveCount(0);
+    await page.getByTestId("combobox-search").press("Escape");
+    await expect(page.getByTestId("combobox-search")).toHaveCount(0);
+
+    // Back on Alpha it is suggested without typing.
+    await pickComboboxOption(page, "tracker-project", "Alpha");
+    await page.getByTestId("tracker-task").click();
+    await expect(wireframes).toHaveCount(1);
+  });
 });
