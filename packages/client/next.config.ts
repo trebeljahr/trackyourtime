@@ -1,7 +1,26 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 import type { NextConfig } from "next";
+
+/**
+ * The self-contained pdfkit build for the browser.
+ *
+ * `@starter/invoice-pdf` renders the invoice PDF, and it runs in the browser on
+ * the public invoice generator (`/invoice-generator/`), loaded through a
+ * dynamic `import()` on the first "Download PDF" click. pdfkit's default entry
+ * pulls in Node builtins (`fs`, `zlib`, `Buffer`); its standalone bundle ships
+ * its own Buffer/zlib/font support and needs no Node externals (see the
+ * package README). The subpath is not in pdfkit's `exports` map, so the alias
+ * points at the resolved absolute file rather than the package specifier —
+ * which both Turbopack and webpack accept, and which bypasses the exports
+ * gate. The alias is on the client bundle only; the server imports the real
+ * pdfkit through its own build.
+ */
+const pdfkitStandalone = createRequire(import.meta.url)
+  .resolve("pdfkit/package.json")
+  .replace(/package\.json$/, "js/pdfkit.standalone.js");
 
 /**
  * The release every client build reports, from the ROOT package.json — the
@@ -70,6 +89,19 @@ const baseConfig: NextConfig = {
   trailingSlash: true,
   images: { unoptimized: true },
   transpilePackages: ["@starter/server", "@starter/shared", "@starter/core"],
+  // The invoice generator renders PDFs in the browser with pdfkit; point every
+  // `pdfkit` import at its self-contained standalone build. Both bundlers are
+  // configured because `next build` uses Turbopack by default and `--webpack`
+  // switches to webpack.
+  turbopack: { resolveAlias: { pdfkit: pdfkitStandalone } },
+  webpack: (webpackConfig) => {
+    webpackConfig.resolve ??= {};
+    webpackConfig.resolve.alias = {
+      ...(webpackConfig.resolve.alias as Record<string, string> | undefined),
+      pdfkit: pdfkitStandalone,
+    };
+    return webpackConfig;
+  },
   // scripts/dev.mjs gives each checkout its own build directory so that two
   // instances (a worktree and the main checkout, say) never share the .next
   // cache or the Next 16 dev-server lock.
