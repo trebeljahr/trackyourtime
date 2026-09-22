@@ -259,11 +259,24 @@ export const marketing = {
     },
     errors: {
       title: "Error reports",
-      when: "When the web app, the desktop app or a phone app hits an error it cannot recover from, it sends a report to the error tracker of Track Your Time. Nothing is sent while the app works.",
-      contains:
-        "<strong>A report contains:</strong> the error message and where in the code it happened, the page address without anything after the question mark, the addresses, methods and status codes of the last requests the app made, the app version, the platform (web, desktop, iPhone or Android), and the names of the browser and the operating system.",
-      omits:
-        "<strong>A report never contains:</strong> your name, your email address, your session token, cookies, anything you typed, the contents of any request, or a recording of the screen.",
+      when: "When the web app, the desktop app or a phone app hits an error it did not expect, it sends a report to the error tracker of Track Your Time. With no error, nothing is sent.",
+      contains: {
+        lead: "A report contains:",
+        message: "the error message and where in the code it happened",
+        page: "the page address, without anything after the question mark",
+        requests: "the addresses, methods and status codes of the last requests the app made",
+        version: "the app version",
+        platform: "the platform: web, desktop, iPhone or Android",
+        browser: "the names of the browser and the operating system",
+      },
+      omits: {
+        lead: "A report never contains:",
+        person: "your name or your email address",
+        session: "your session token or cookies",
+        input: "anything you typed",
+        body: "the contents of any request",
+        screen: "a recording of the screen",
+      },
       ip: "Like every request to the service, a report arrives with your IP address. The report itself does not name it.",
     },
     retention: {

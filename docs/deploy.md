@@ -545,6 +545,12 @@ shipped bundle either way):
 gh variable set NEXT_PUBLIC_SENTRY_DSN --body 'https://key@glitchtip.example.com/2'
 ```
 
+**The hosted deploy must set it.** The privacy page (`/privacy/`, "Error
+reports") states that the apps send a report to the error tracker of Track
+Your Time. A hosted build without the variable ships apps that report nowhere
+while the page says they do. The same page scopes itself to trackyourtime.dev,
+so a self-hosted web app built without the variable is not covered by it.
+
 Three workflows read it: `build-and-deploy.yml` passes it as a build arg of
 the client image, `desktop-release.yml` and `mobile-release.yml` carry it in
 their job env, where `next build` inherits it. Each prints a `::notice::` when
@@ -936,7 +942,7 @@ Repository variables (`gh variable set NAME`), which are not secret:
 | `HOMEBREW_TAP_REPO` | manifests | `<owner>/homebrew-tap` |
 | `NEXT_PUBLIC_API_URL` | all | optional; defaults to `https://api.trackyourtime.dev` |
 | `DESKTOP_STAGING_PERCENTAGE` | draft release | optional; 0-100, the share of installs a new tag's feeds offer the update to. Empty means every install ("Staged rollout") |
-| `NEXT_PUBLIC_SENTRY_DSN` | all | optional; empty by default, which ships no error reporting. See [Error reporting](#error-reporting) |
+| `NEXT_PUBLIC_SENTRY_DSN` | all | empty by default, which ships no error reporting; the hosted deploy must set it, because the privacy page says reporting is on. See [Error reporting](#error-reporting) |
 
 The build derives nothing from these. The Store identity in particular is never
 defaulted, because Partner Center refuses a package whose identity differs from

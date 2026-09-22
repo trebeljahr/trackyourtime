@@ -128,8 +128,27 @@ export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement 
 
       <Block title={t("privacy.errors.title")}>
         <p>{t("privacy.errors.when")}</p>
-        <p>{t.rich("privacy.errors.contains", { strong })}</p>
-        <p>{t.rich("privacy.errors.omits", { strong })}</p>
+        <p>
+          <strong>{t("privacy.errors.contains.lead")}</strong>
+        </p>
+        <ul>
+          <li>{t("privacy.errors.contains.message")}</li>
+          <li>{t("privacy.errors.contains.page")}</li>
+          <li>{t("privacy.errors.contains.requests")}</li>
+          <li>{t("privacy.errors.contains.version")}</li>
+          <li>{t("privacy.errors.contains.platform")}</li>
+          <li>{t("privacy.errors.contains.browser")}</li>
+        </ul>
+        <p>
+          <strong>{t("privacy.errors.omits.lead")}</strong>
+        </p>
+        <ul>
+          <li>{t("privacy.errors.omits.person")}</li>
+          <li>{t("privacy.errors.omits.session")}</li>
+          <li>{t("privacy.errors.omits.input")}</li>
+          <li>{t("privacy.errors.omits.body")}</li>
+          <li>{t("privacy.errors.omits.screen")}</li>
+        </ul>
         <p>{t("privacy.errors.ip")}</p>
       </Block>
 

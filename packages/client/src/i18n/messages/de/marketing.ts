@@ -256,11 +256,24 @@ export const marketing: Translation<typeof source> = {
     },
     errors: {
       title: "Fehlerberichte",
-      when: "Stößt die Web-App, die Desktop-App oder eine Handy-App auf einen Fehler, von dem sie sich nicht erholen kann, sendet sie einen Bericht an die Fehlerverfolgung von Track Your Time. Solange die App funktioniert, sendet sie nichts.",
-      contains:
-        "<strong>Ein Bericht enthält:</strong> die Fehlermeldung und die Stelle im Code, an der der Fehler aufgetreten ist, die Adresse der Seite ohne alles hinter dem Fragezeichen, die Adressen, Methoden und Statuscodes der letzten Anfragen der App, die Version der App, die Plattform (Web, Desktop, iPhone oder Android) sowie die Namen von Browser und Betriebssystem.",
-      omits:
-        "<strong>Ein Bericht enthält nie:</strong> deinen Namen, deine E-Mail-Adresse, dein Sitzungstoken, Cookies, etwas, das du eingegeben hast, den Inhalt einer Anfrage oder eine Aufzeichnung des Bildschirms.",
+      when: "Stößt die Web-App, die Desktop-App oder eine Handy-App auf einen unerwarteten Fehler, sendet sie einen Bericht an die Fehlerverfolgung von Track Your Time. Ohne Fehler sendet sie nichts.",
+      contains: {
+        lead: "Ein Bericht enthält:",
+        message: "die Fehlermeldung und die Stelle im Code, an der der Fehler aufgetreten ist",
+        page: "die Adresse der Seite, ohne alles hinter dem Fragezeichen",
+        requests: "die Adressen, Methoden und Statuscodes der letzten Anfragen der App",
+        version: "die Version der App",
+        platform: "die Plattform: Web, Desktop, iPhone oder Android",
+        browser: "die Namen von Browser und Betriebssystem",
+      },
+      omits: {
+        lead: "Ein Bericht enthält nie:",
+        person: "deinen Namen oder deine E-Mail-Adresse",
+        session: "dein Sitzungstoken oder Cookies",
+        input: "etwas, das du eingegeben hast",
+        body: "den Inhalt einer Anfrage",
+        screen: "eine Aufzeichnung des Bildschirms",
+      },
       ip: "Wie jede Anfrage an den Dienst kommt ein Bericht mit deiner IP-Adresse an. Der Bericht selbst nennt sie nicht.",
     },
     retention: {
