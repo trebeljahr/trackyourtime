@@ -20,6 +20,7 @@ import {
   ChangePasswordRow,
 } from "@/components/settings/account-credentials";
 import { DeleteAccountCard } from "@/components/settings/delete-account";
+import { ProfilePicture } from "@/components/profile/profile-picture";
 import { SettingRow } from "@/components/settings/setting-row";
 import { TwoFactorRow } from "@/components/settings/two-factor";
 import { useAuth } from "@/hooks/use-auth";
@@ -135,6 +136,14 @@ export function AccountSettings({
                 {user?.name ?? user?.email ?? ""}
               </span>
             </div>
+          </SettingRow>
+
+          <SettingRow
+            title={t("account.picture.title")}
+            description={t("account.picture.description")}
+            testId="setting-picture"
+          >
+            <ProfilePicture avatarClassName="size-12" className="sm:justify-end" />
           </SettingRow>
 
           <ChangeEmailRow

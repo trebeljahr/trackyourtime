@@ -4,12 +4,18 @@ import cors from "cors";
 import morgan from "morgan";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { toNodeHandler } from "better-auth/node";
-import { API_LEVEL, MAX_IMPORT_BYTES, MIN_CLIENT_API_LEVEL } from "@starter/shared";
+import {
+  API_LEVEL,
+  MAX_AVATAR_BYTES,
+  MAX_IMPORT_BYTES,
+  MIN_CLIENT_API_LEVEL,
+} from "@starter/shared";
 import { getAuth } from "./auth/auth.js";
 import { appRouter } from "./trpc/router.js";
 import { createContext } from "./trpc/context.js";
 import { registerNewsletterRoutes } from "./services/newsletter/routes.js";
 import { registerApiV1Routes } from "./api/v1/index.js";
+import { registerAvatarRoutes } from "./services/avatar/route.js";
 import { isDatabaseReady } from "./db/connection.js";
 import { notFoundHandler, errorHandler } from "./middleware/error-handler.js";
 import { env, getTrustedOrigins } from "./config/env.js";
@@ -20,6 +26,13 @@ import { env, getTrustedOrigins } from "./config/env.js";
  * on the way into a JSON string) and the rest of the envelope.
  */
 const IMPORT_BODY_LIMIT = `${Math.ceil((MAX_IMPORT_BYTES * 2) / 1_000_000)}mb`;
+
+/**
+ * Body ceiling for `profile.setAvatar`: {@link MAX_AVATAR_BYTES} as base64
+ * (4/3 of the bytes) plus the envelope. Scoped like the import limit below,
+ * so no other procedure gains it.
+ */
+const AVATAR_BODY_LIMIT = `${Math.ceil((MAX_AVATAR_BYTES * 1.5) / 1000)}kb`;
 
 /**
  * CORS for every route. Exported so a test can drive the exact options.
@@ -84,9 +97,13 @@ export function createApp() {
   // other route. tRPC's batch link puts the procedure names in the path, so a
   // batched call carrying the import still matches.
   const importJson = express.json({ limit: IMPORT_BODY_LIMIT });
+  const avatarJson = express.json({ limit: AVATAR_BODY_LIMIT });
   app.use("/api/trpc", (req, res, next) => {
     if (req.path.includes("data.analyze") || req.path.includes("data.commit")) {
       return importJson(req, res, next);
+    }
+    if (req.path.includes("profile.setAvatar")) {
+      return avatarJson(req, res, next);
     }
     return next();
   });
@@ -175,6 +192,11 @@ export function createApp() {
       timestamp: new Date().toISOString(),
     });
   });
+
+  // ── 6b. Profile pictures — public bytes at an unguessable address, so an
+  // <img> in any client can load them without a credential. After helmet,
+  // whose Cross-Origin-Resource-Policy it overrides for exactly this route.
+  registerAvatarRoutes(app);
 
   // ── 7. Error handlers (must be last) ───────────────────────────────
   app.use(notFoundHandler);

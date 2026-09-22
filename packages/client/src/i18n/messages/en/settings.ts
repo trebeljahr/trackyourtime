@@ -186,6 +186,22 @@ export const settings = {
     title: "Account",
     description: "The identity every client, project and time entry is scoped to.",
     signedInAs: "Signed in as",
+    picture: {
+      title: "Profile picture",
+      description: "Shown in the header and, to colleagues, beside your name. Squared and shrunk before it leaves your device.",
+      upload: "Upload picture",
+      change: "Change picture",
+      remove: "Remove",
+      toasts: {
+        saved: "Profile picture saved",
+        removed: "Profile picture removed",
+      },
+      errors: {
+        unsupported: "That file is not an image this app can use. Choose a JPEG, PNG or WebP.",
+        tooLarge: "That image is too large. Choose one under 25 MB.",
+        failed: "Could not save your profile picture",
+      },
+    },
     notifications: {
       title: "Email notifications",
       description: "Product and account emails. Timer reminders are separate.",

@@ -147,6 +147,7 @@ const seed = (): NonNullable<Parameters<typeof memoryRowStore>[0]> => ({
   ],
   userPreferences: [{ userId: ALICE }, { userId: BOB }],
   profiles: [{ userId: ALICE }, { userId: BOB }],
+  avatars: [{ userId: ALICE }, { userId: BOB }],
 });
 
 const ids = (
@@ -303,6 +304,7 @@ describe("deleteAccountData", () => {
     await deleteAccountData(store, alice);
     assert.deepEqual(store.rows.userPreferences, [{ userId: BOB }]);
     assert.deepEqual(store.rows.profiles, [{ userId: BOB }]);
+    assert.deepEqual(store.rows.avatars, [{ userId: BOB }]);
     assert.deepEqual(ids(store, "authDeviceCodes"), ["d2"]);
     assert.deepEqual(ids(store, "authTwoFactors"), ["tf2"]);
   });

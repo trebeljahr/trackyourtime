@@ -1,6 +1,8 @@
+import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
-import { updateProfileSchema } from "@starter/shared";
+import { setAvatarSchema, updateProfileSchema } from "@starter/shared";
 import { Profile } from "../../models/Profile.js";
+import { removeAvatar, storeAvatar } from "../../services/avatar/index.js";
 
 export const profileRouter = router({
   get: protectedProcedure.query(async ({ ctx }) => {
@@ -47,4 +49,28 @@ export const profileRouter = router({
         preferences: profile.preferences,
       };
     }),
+
+  /**
+   * Settings → Account / Profile → profile picture. The client sends a square
+   * of `AVATAR_SIZE` pixels as base64; the bytes are checked by magic number
+   * and size (`services/avatar`), stored, and `user.image` is pointed at the
+   * new address. Refused with BAD_REQUEST and one of `AVATAR_REFUSALS` as the
+   * message. The caller re-reads its session afterwards: the web app's cookie
+   * cache still holds the old `image` for up to five minutes.
+   */
+  setAvatar: protectedProcedure
+    .input(setAvatarSchema)
+    .mutation(async ({ ctx, input }) => {
+      const outcome = await storeAvatar(ctx.user.id, input.data);
+      if (!outcome.ok) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: outcome.refusal });
+      }
+      return { image: outcome.image };
+    }),
+
+  /** Delete the stored picture and clear `user.image`, whatever it held. */
+  removeAvatar: protectedProcedure.mutation(async ({ ctx }) => {
+    await removeAvatar(ctx.user.id);
+    return { image: null };
+  }),
 });

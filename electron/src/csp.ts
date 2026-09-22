@@ -9,14 +9,15 @@
  *   load from a third-party host do not run in the desktop app.
  * - connect-src is any https/wss origin because the server picker lets a
  *   person point the app at any Track Your Time server, plus plain http/ws on
- *   loopback for a local API.
+ *   loopback for a local API. img-src allows the same hosts, because the
+ *   profile picture is served by the API (`/api/avatars/...`).
  * - Nothing may frame the app or be framed by it, and forms post nowhere.
  */
 export const APP_CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  "img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*",
   "font-src 'self' data:",
   "connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*",
   "worker-src 'self' blob:",

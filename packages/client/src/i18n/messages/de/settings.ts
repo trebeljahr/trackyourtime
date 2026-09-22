@@ -177,6 +177,22 @@ export const settings: Translation<typeof source> = {
     title: "Konto",
     description: "Die Identität, der jeder Kunde, jedes Projekt und jeder Zeiteintrag zugeordnet ist.",
     signedInAs: "Angemeldet als",
+    picture: {
+      title: "Profilbild",
+      description: "Erscheint in der Kopfzeile und, für Kolleginnen und Kollegen, neben deinem Namen. Wird auf deinem Gerät quadratisch zugeschnitten und verkleinert.",
+      upload: "Bild hochladen",
+      change: "Bild ändern",
+      remove: "Entfernen",
+      toasts: {
+        saved: "Profilbild gespeichert",
+        removed: "Profilbild entfernt",
+      },
+      errors: {
+        unsupported: "Diese Datei ist kein Bild, das die App verwenden kann. Wähle ein JPEG, PNG oder WebP.",
+        tooLarge: "Dieses Bild ist zu groß. Wähle eines unter 25 MB.",
+        failed: "Dein Profilbild konnte nicht gespeichert werden",
+      },
+    },
     notifications: {
       title: "E-Mail-Benachrichtigungen",
       description: "E-Mails zum Produkt und zu deinem Konto. Timer-Erinnerungen sind davon getrennt.",

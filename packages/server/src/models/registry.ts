@@ -3,6 +3,7 @@
 // see only the models some route happened to load. Add a new model here.
 import mongoose from "mongoose";
 import "./ApiToken.js";
+import "./Avatar.js";
 import "./BusinessProfile.js";
 import "./Client.js";
 import "./Favorite.js";

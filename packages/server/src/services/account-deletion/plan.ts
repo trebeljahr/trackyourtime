@@ -39,6 +39,7 @@ export type DeletionCollection =
   | "workspaceMembers"
   | "userPreferences"
   | "profiles"
+  | "avatars"
   | "authOrganizations"
   | "authMembers"
   | "authInvitations"
@@ -173,6 +174,9 @@ export function userScopedSteps(user: { id: string; email?: string | null }): De
     { collection: "favorites", filter: { userId: user.id } },
     { collection: "userPreferences", filter: { userId: user.id } },
     { collection: "profiles", filter: { userId: user.id } },
+    // The stored profile picture. Its URL dies with the user row anyway, but
+    // the bytes would otherwise stay served from an address a page may cache.
+    { collection: "avatars", filter: { userId: user.id } },
     { collection: "authDeviceCodes", filter: { userId: user.id } },
     // The TOTP secret and backup codes. better-auth's `deleteUser` removes
     // only user, account and session rows, and Mongo has no foreign-key

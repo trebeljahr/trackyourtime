@@ -1168,6 +1168,33 @@ unowned ones (the reverse of sign-out, which keeps them — a deleted account ca
 never send them, and they must not replay under the next account), clears the
 running-timer mirror and the Keychain token. Rows another account queued stay.
 
+### Profile pictures
+
+Settings → Account and `/app/profile` (`components/profile/profile-picture.tsx`)
+let a person add, replace or remove a picture. The browser squares and shrinks
+it (`lib/avatar-image.ts`, `AVATAR_SIZE` 512, WebP with a JPEG fallback) and
+sends base64 to `profile.setAvatar`; `services/avatar/` checks the magic
+number and size (`MAX_AVATAR_BYTES`), stores the bytes in the `avatars`
+collection and points better-auth's `user.image` at
+`${BETTER_AUTH_URL}/api/avatars/<userId>/<key>`. Four rules:
+
+- **The bytes are public at an unguessable address.** An `<img>` sends no
+  bearer token and, from the shells' origins, no cookie, so the route is
+  unauthenticated; `key` is 128 random bits, new on every upload, so nothing
+  enumerates pictures and a cached old picture is never served for a new one.
+  The route overrides helmet's `Cross-Origin-Resource-Policy` with
+  `cross-origin`, or no other origin can load it at all.
+- **`user.image` is written through the adapter, and the client re-reads the
+  session.** The web app's cookie cache holds the old user for five minutes;
+  `refreshSession()` in `lib/auth-client.ts` asks once with
+  `disableCookieCache` and notifies `useSession`. Call it after any
+  server-side change to the user row that bypasses better-auth's endpoints.
+- **The content type comes from the bytes**, never from the client, and SVG is
+  refused: it can carry script. Refusals are `AVATAR_REFUSALS` codes, which
+  the client translates.
+- **The body limit is scoped** in `app.ts` to `profile.setAvatar`, like the
+  import limit. Account deletion removes the `avatars` row.
+
 ### Workspaces, members and invitations
 
 Membership changes only through tRPC — `workspaces`, `members` and

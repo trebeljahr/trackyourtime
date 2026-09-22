@@ -162,6 +162,20 @@ export const authClient = createAuthClient({
 export const { signIn, signUp, useSession, getSession } = authClient;
 
 /**
+ * Re-read the session from the server and push it into every `useSession()`.
+ *
+ * For a change made outside better-auth's own endpoints — `profile.setAvatar`
+ * writes `user.image` through the adapter — which therefore never refreshed
+ * the cookie cache: for up to five minutes `/get-session` would keep
+ * answering the old user out of the cookie. Asking once with the cache
+ * disabled rewrites that cookie, and the signal makes the hook refetch.
+ */
+export const refreshSession = async (): Promise<void> => {
+  await authClient.getSession({ query: { disableCookieCache: true } });
+  authClient.$store.notify("$sessionSignal");
+};
+
+/**
  * Things only a module that is not this one can forget — the timer store in
  * `hooks/use-sync.ts`, say, which imports this file and so cannot be imported
  * by it. Each runs once per sign-out, after the account is gone.

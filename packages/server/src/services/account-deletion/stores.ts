@@ -1,6 +1,7 @@
 // The two real row stores behind `deleteAccountData`.
 import type { Model } from "mongoose";
 import { ApiToken } from "../../models/ApiToken.js";
+import { Avatar } from "../../models/Avatar.js";
 import { BusinessProfileModel } from "../../models/BusinessProfile.js";
 import { Client } from "../../models/Client.js";
 import { Favorite } from "../../models/Favorite.js";
@@ -52,6 +53,7 @@ const APP_MODELS: Record<AppCollection, Model<any>> = {
   workspaceMembers: WorkspaceMember,
   userPreferences: UserPreferencesModel,
   profiles: Profile,
+  avatars: Avatar,
 };
 
 /** better-auth model names for its own tables. */

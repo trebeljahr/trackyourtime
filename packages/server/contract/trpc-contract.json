@@ -1,5 +1,5 @@
 {
-  "apiLevel": 3,
+  "apiLevel": 4,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -2350,6 +2350,26 @@
     "profile.get": {
       "input": null,
       "type": "query"
+    },
+    "profile.removeAvatar": {
+      "input": null,
+      "type": "mutation"
+    },
+    "profile.setAvatar": {
+      "input": {
+        "properties": {
+          "data": {
+            "maxLength": 341336,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
     },
     "profile.update": {
       "input": {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/hooks/use-auth";
 import { useT } from "@/i18n/use-t";
+import { ProfilePicture } from "@/components/profile/profile-picture";
 
 export default function ProfilePage() {
   const t = useT("settings");
@@ -38,15 +39,13 @@ export default function ProfilePage() {
       </div>
 
       <div className="max-w-md space-y-6">
-        {/* Avatar */}
-        <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-2xl font-bold">
-            {user?.name?.charAt(0).toUpperCase() ?? "?"}
-          </div>
+        {/* Picture and identity */}
+        <div className="space-y-3">
           <div>
             <p className="font-medium">{user?.name}</p>
             <p className="text-sm text-muted-foreground">{user?.email}</p>
           </div>
+          <ProfilePicture />
         </div>
 
         {/* Bio */}
