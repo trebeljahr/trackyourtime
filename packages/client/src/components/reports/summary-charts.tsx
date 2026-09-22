@@ -29,11 +29,14 @@ import {
   MONEY_WITHHELD,
   sumReportMoney,
 } from "@/components/reports/report-money";
+import { isDrillableKey } from "@/components/reports/drill";
 import {
   bucketTimeline,
   formatBucketLabel,
+  type TimelineBucket,
   type TimelineGranularity,
 } from "@/components/reports/timeline-buckets";
+import { cn } from "@/lib/utils";
 
 /**
  * Series colours come from the theme tokens rather than literals, so the
@@ -78,6 +81,8 @@ type ChartTooltipProps = {
   formatDurationValue?: (seconds: number) => string;
   granularity?: TimelineGranularity;
   formatMoneyValue?: (amount: number) => string;
+  /** Whether a click on the mark under the cursor narrows the report. */
+  drillable?: boolean;
 };
 
 const readString = (
@@ -110,6 +115,17 @@ const TooltipShell = ({
   </div>
 );
 
+/** The one line that tells a person the mark is a way down, not a picture. */
+function DrillHint({ show }: { show: boolean }): React.JSX.Element | null {
+  const t = useT("reports");
+  if (!show) return null;
+  return (
+    <p className="mt-1 border-t border-border pt-1 text-[11px] text-muted-foreground">
+      {t("drill.hint")}
+    </p>
+  );
+}
+
 const TooltipSwatch = ({ color }: { color: string }): React.JSX.Element => (
   <span
     aria-hidden="true"
@@ -125,6 +141,7 @@ function TimelineTooltip({
   label,
   formatDurationValue,
   granularity = "day",
+  drillable = false,
 }: ChartTooltipProps): React.JSX.Element | null {
   const tc = useT("common");
   const f = useFormat();
@@ -158,6 +175,7 @@ function TimelineTooltip({
           {asDuration(billable + nonBillable)}
         </span>
       </p>
+      <DrillHint show={drillable} />
     </TooltipShell>
   );
 }
@@ -168,6 +186,7 @@ function BreakdownTooltip({
   payload,
   formatDurationValue,
   formatMoneyValue,
+  drillable = false,
 }: ChartTooltipProps): React.JSX.Element | null {
   const t = useT("reports");
   const tc = useT("common");
@@ -214,6 +233,7 @@ function BreakdownTooltip({
           amount: amountLabel,
         })}
       </p>
+      <DrillHint show={drillable && isDrillableKey(readString(slice, "key"))} />
     </TooltipShell>
   );
 }
@@ -230,6 +250,11 @@ export type TimelineChartProps = {
   timeline: SummaryTimelinePoint[];
   duration: (seconds: number) => string;
   weekStartsOn?: WeekStart;
+  /**
+   * Called with the bar somebody clicked — the way to narrow the report to
+   * that day, week or month. Omitted, the bars are only a picture.
+   */
+  onSelectBucket?: (bucket: TimelineBucket, granularity: TimelineGranularity) => void;
 };
 
 /**
@@ -240,6 +265,7 @@ export function TimelineChart({
   timeline,
   duration,
   weekStartsOn = 1,
+  onSelectBucket,
 }: TimelineChartProps): React.JSX.Element {
   const t = useT("reports");
   const tc = useT("common");
@@ -251,6 +277,17 @@ export function TimelineChart({
 
   const hasTime = data.some(
     (point) => point.billableSec + point.nonBillableSec > 0
+  );
+
+  // Both stacked bars of a bucket share its index, which is the only thing
+  // the handler needs: the bucket is read from the data the chart was drawn
+  // from rather than from the shape recharts hands over.
+  const selectBar = React.useCallback(
+    (_: unknown, index: number): void => {
+      const bucket = data[index];
+      if (bucket !== undefined) onSelectBucket?.(bucket, granularity);
+    },
+    [data, granularity, onSelectBucket]
   );
 
   const formatHourTick = (seconds: number): string => {
@@ -283,10 +320,14 @@ export function TimelineChart({
       </CardHeader>
       <CardContent>
         <div
-          className="h-[280px] w-full"
+          className={cn(
+            "h-[280px] w-full",
+            onSelectBucket && "[&_.recharts-bar-rectangle]:cursor-pointer"
+          )}
           role="img"
           aria-label={t(`charts.timelineAria.${granularity}`, { count: data.length })}
           data-testid="timeline-chart"
+          data-drillable={onSelectBucket ? "true" : undefined}
         >
           {hasTime ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -324,6 +365,7 @@ export function TimelineChart({
                     <TimelineTooltip
                       formatDurationValue={duration}
                       granularity={granularity}
+                      drillable={onSelectBucket !== undefined}
                     />
                   }
                 />
@@ -333,6 +375,7 @@ export function TimelineChart({
                   stackId="time"
                   fill={BILLABLE_COLOR}
                   radius={[0, 0, 0, 0]}
+                  onClick={selectBar}
                 />
                 <Bar
                   dataKey="nonBillableSec"
@@ -340,6 +383,7 @@ export function TimelineChart({
                   stackId="time"
                   fill={NON_BILLABLE_COLOR}
                   radius={[3, 3, 0, 0]}
+                  onClick={selectBar}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -375,6 +419,12 @@ export type GroupBreakdownChartProps = {
   money: (amount: number) => string;
   /** What the groups are, which names the heading. */
   groupBy: ReportGroupBy;
+  /**
+   * Called with the group somebody clicked, on the slice or on its legend
+   * row — the way to narrow the report to it. Never called for the unassigned
+   * bucket or the folded "n more" slice. Omitted, the donut is only a picture.
+   */
+  onSelectGroup?: (group: SummaryGroup) => void;
 };
 
 /** Donut of the grouped breakdown, with a readable legend beside it. */
@@ -384,9 +434,20 @@ export function GroupBreakdownChart({
   duration,
   money,
   groupBy,
+  onSelectGroup,
 }: GroupBreakdownChartProps): React.JSX.Element {
   const t = useT("reports");
   const f = useFormat();
+
+  const selectSlice = React.useCallback(
+    (key: string): void => {
+      if (onSelectGroup === undefined || !isDrillableKey(key)) return;
+      const group = groups.find((candidate) => candidate.key === key);
+      if (group !== undefined) onSelectGroup(group);
+    },
+    [groups, onSelectGroup]
+  );
+
   const slices = React.useMemo<Slice[]>(() => {
     const positive = groups.filter((group) => group.seconds > 0);
     const head = positive.slice(0, MAX_SLICES);
@@ -426,10 +487,14 @@ export function GroupBreakdownChart({
       </CardHeader>
       <CardContent>
         <div
-          className="h-[280px] w-full"
+          className={cn(
+            "h-[280px] w-full",
+            onSelectGroup && "[&_.recharts-sector]:cursor-pointer"
+          )}
           role="img"
           aria-label={t("groupBy.breakdownAria", { groupBy })}
           data-testid="breakdown-chart"
+          data-drillable={onSelectGroup ? "true" : undefined}
         >
           {slices.length > 0 ? (
             <div className="flex h-full flex-col items-center gap-4 sm:flex-row">
@@ -441,6 +506,7 @@ export function GroupBreakdownChart({
                         <BreakdownTooltip
                           formatDurationValue={duration}
                           formatMoneyValue={money}
+                          drillable={onSelectGroup !== undefined}
                         />
                       }
                     />
@@ -454,6 +520,7 @@ export function GroupBreakdownChart({
                       stroke="hsl(var(--background))"
                       strokeWidth={2}
                       isAnimationActive={false}
+                      onClick={(_, index) => selectSlice(slices[index]?.key ?? "")}
                     >
                       {slices.map((slice) => (
                         <Cell key={slice.key} fill={slice.fill} />
@@ -463,24 +530,45 @@ export function GroupBreakdownChart({
                 </ResponsiveContainer>
               </div>
               <ul className="w-full space-y-1.5 overflow-y-auto text-xs sm:h-full sm:w-1/2">
-                {slices.map((slice) => (
-                  <li
-                    key={slice.key}
-                    className="flex items-center gap-2"
-                    data-testid={`breakdown-legend-${slice.key}`}
-                  >
-                    <TooltipSwatch color={slice.fill} />
-                    <span className="min-w-0 flex-1 truncate">
-                      {slice.label}
-                    </span>
-                    <span className="tabular-nums text-muted-foreground">
-                      {f.percent(slice.share / 100)}
-                    </span>
-                    <span className="w-16 text-right tabular-nums">
-                      {duration(slice.seconds)}
-                    </span>
-                  </li>
-                ))}
+                {slices.map((slice) => {
+                  const drillable =
+                    onSelectGroup !== undefined && isDrillableKey(slice.key);
+                  const row = (
+                    <>
+                      <TooltipSwatch color={slice.fill} />
+                      <span className="min-w-0 flex-1 truncate">
+                        {slice.label}
+                      </span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {f.percent(slice.share / 100)}
+                      </span>
+                      <span className="w-16 text-right tabular-nums">
+                        {duration(slice.seconds)}
+                      </span>
+                    </>
+                  );
+                  return (
+                    <li key={slice.key} data-testid={`breakdown-legend-${slice.key}`}>
+                      {/* The legend row is the keyboard's way onto a slice:
+                          a sector of an SVG cannot take focus. */}
+                      {drillable ? (
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          title={t("drill.narrowTo", { name: slice.label })}
+                          onClick={() => selectSlice(slice.key)}
+                          data-testid={`breakdown-drill-${slice.key}`}
+                        >
+                          {row}
+                        </button>
+                      ) : (
+                        <span className="flex items-center gap-2 px-1 py-0.5">
+                          {row}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : (

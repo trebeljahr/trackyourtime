@@ -308,6 +308,84 @@ test.describe("Reports", () => {
     );
   });
 
+  test("a legend row drills the report down, and Back undoes the step", async ({
+    page,
+  }) => {
+    await page.goto(`/app/reports${RANGE_QUERY}`);
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+    await expect(page.getByTestId("drill-trail")).toHaveCount(0);
+
+    const row = page.locator('[data-testid^="summary-row-"]');
+    await expect(row).toHaveCount(1);
+    const projectId = await idFromTestId(row, "summary-row-");
+
+    // The donut's legend row narrows the report to the project and re-groups
+    // it by task — the next dimension down — so it answers the next question
+    // rather than drawing one 100 % slice.
+    await page.getByTestId(`breakdown-drill-${projectId}`).click();
+    await expect(page).toHaveURL(new RegExp(`projects=${projectId}`));
+    await expect(page).toHaveURL(/group=task/);
+    await expect(page.getByTestId("groupby-task")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await expect(page.getByTestId("filter-projects")).toContainText(PROJECT_NAME);
+    await expect(page.getByTestId("kpi-total")).toHaveText(TOTAL_DURATION);
+
+    const trail = page.getByTestId("drill-trail");
+    await expect(trail).toBeVisible();
+    await expect(page.getByTestId("drill-crumb-0")).toHaveText(PROJECT_NAME);
+
+    // A second step: the "No task" row cannot be drilled (there is no filter
+    // for "entries without a task"), so it is not offered as a button.
+    await expect(page.getByTestId("breakdown-legend-none")).toBeVisible();
+    await expect(page.getByTestId("breakdown-drill-none")).toHaveCount(0);
+
+    // Back restores the report exactly as it was before the step.
+    await page.getByTestId("drill-back").click();
+    await expect(page).not.toHaveURL(/projects=/);
+    await expect(page).not.toHaveURL(/group=/);
+    await expect(page).toHaveURL(new RegExp(`from=${dayKey(-7)}`));
+    await expect(page.getByTestId("groupby-project")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await expect(page.getByTestId("drill-trail")).toHaveCount(0);
+    await expect(page.getByTestId("filter-clear")).toHaveCount(0);
+  });
+
+  test("browser Back after a drill clears the trail too", async ({ page }) => {
+    await page.goto(`/app/reports${RANGE_QUERY}`);
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+    const row = page.locator('[data-testid^="summary-row-"]');
+    const projectId = await idFromTestId(row, "summary-row-");
+
+    await page.getByTestId(`breakdown-drill-${projectId}`).click();
+    await expect(page.getByTestId("drill-trail")).toBeVisible();
+
+    await page.goBack();
+    await expect(page).not.toHaveURL(/projects=/);
+    await expect(page.getByTestId("drill-trail")).toHaveCount(0);
+  });
+
+  test("a table row's drill into Entries has a way back", async ({ page }) => {
+    await page.goto(`/app/reports${RANGE_QUERY}`);
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+    const row = page.locator('[data-testid^="summary-row-"]');
+    const projectId = await idFromTestId(row, "summary-row-");
+
+    await page.getByTestId(`summary-link-${projectId}`).click();
+    await expect(page).toHaveURL(/view=entries/);
+    await expect(page.getByTestId("detailed-report")).toBeVisible();
+    await expect(page.getByTestId("drill-crumb-0")).toHaveText(PROJECT_NAME);
+
+    await page.getByTestId("drill-back").click();
+    await expect(page).not.toHaveURL(/view=entries/);
+    await expect(page).not.toHaveURL(/projects=/);
+    await expect(page.getByTestId("summary-report")).toBeVisible();
+    await expect(page.getByTestId("drill-trail")).toHaveCount(0);
+  });
+
   test("the sidebar has one Reports link", async ({ page }) => {
     await page.goto("/app/track");
     const nav = page.getByTestId("sidebar-nav");

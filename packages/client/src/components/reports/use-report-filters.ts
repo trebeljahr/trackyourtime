@@ -14,6 +14,12 @@ import {
   REPORT_VIEW_PARAM,
   type ReportView,
 } from "@/lib/report-links";
+import {
+  pruneDrillTrail,
+  type DrillStep,
+} from "@/components/reports/drill-trail-model";
+
+export type { DrillStep } from "@/components/reports/drill-trail-model";
 
 /**
  * Query-string parameter names. Both views of `/app/reports` read and write the
@@ -148,6 +154,18 @@ export type UseReportFiltersResult = {
     options?: SetParamsOptions
   ) => void;
   clearFilters: () => void;
+  /**
+   * Narrow the report by one step — a slice, a bar, a legend row, a table row
+   * — remembering what the report was before, so `drillBack` can undo exactly
+   * that step. Lands as a history entry too, so browser Back undoes it as well.
+   */
+  drill: (patch: Record<string, string | null>, label: string) => void;
+  /** The steps drilled so far, oldest first. Empty when nothing was drilled. */
+  drillTrail: readonly DrillStep[];
+  /** Undo the last drill step. A no-op when there is none. */
+  drillBack: () => void;
+  /** Return to the report as it was after `depth` steps (0 = before any). */
+  drillBackTo: (depth: number) => void;
 };
 
 /**
@@ -338,6 +356,43 @@ export const useReportFilters = (
     [searchParams]
   );
 
+  // The drill trail is memory, not URL: a shared link carries the filters
+  // it lands on, not the clicks that led there. Each step remembers the
+  // query it started from, and a step whose starting query is the one on
+  // screen again (browser Back, a filter cleared by hand) is dropped on read
+  // — `pruneDrillTrail` — so the trail never offers to undo what the URL
+  // already shows undone.
+  const [recordedTrail, setRecordedTrail] = React.useState<readonly DrillStep[]>(
+    []
+  );
+  const drillTrail = React.useMemo(
+    () => pruneDrillTrail(recordedTrail, searchString),
+    [recordedTrail, searchString]
+  );
+
+  const drill = React.useCallback(
+    (patch: Record<string, string | null>, label: string): void => {
+      setRecordedTrail([...drillTrail, { label, query: searchString }]);
+      setParams(patch, { history: "push" });
+    },
+    [drillTrail, searchString, setParams]
+  );
+
+  const drillBackTo = React.useCallback(
+    (depth: number): void => {
+      const step = drillTrail[depth];
+      if (step === undefined) return;
+      setRecordedTrail(drillTrail.slice(0, depth));
+      const href = step.query === "" ? pathname : `${pathname}?${step.query}`;
+      router.replace(href, { scroll: false });
+    },
+    [drillTrail, pathname, router]
+  );
+
+  const drillBack = React.useCallback((): void => {
+    drillBackTo(drillTrail.length - 1);
+  }, [drillBackTo, drillTrail.length]);
+
   const isFiltered =
     state.projectIds.length > 0 ||
     state.clientIds.length > 0 ||
@@ -362,5 +417,9 @@ export const useReportFilters = (
     setParam,
     setParams,
     clearFilters,
+    drill,
+    drillTrail,
+    drillBack,
+    drillBackTo,
   };
 };

@@ -120,6 +120,14 @@ export const reports: Translation<typeof source> = {
     breakdownEmptyDescription: "Keine erfasste Zeit passt zu den aktuellen Filtern.",
   },
 
+  drill: {
+    trail: "Pfad der Eingrenzung",
+    root: "Gesamter Bericht",
+    returnTo: "Zurück zu {name}",
+    narrowTo: "Bericht auf {name} eingrenzen",
+    hint: "Klicken, um den Bericht einzugrenzen",
+  },
+
   summary: {
     overlapNote:
       "Ein Eintrag mit mehreren Schlagwörtern zählt bei jedem davon, deshalb ergeben diese Zeilen zusammen mehr als die Gesamtzeit unten.",

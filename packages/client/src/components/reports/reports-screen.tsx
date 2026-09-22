@@ -8,6 +8,7 @@ import { useFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
 import type { ReportView } from "@/lib/report-links";
 import { cn } from "@/lib/utils";
+import { DrillTrail } from "@/components/reports/drill-trail";
 import { EntriesView } from "@/components/reports/entries-view";
 import { ExportMenu } from "@/components/reports/export-menu";
 import { effectiveGroupBy } from "@/components/reports/group-by";
@@ -108,6 +109,8 @@ export function ReportsScreen(): React.JSX.Element {
           />
         }
       />
+
+      <DrillTrail filters={filters} />
 
       {view === "totals" ? (
         <TotalsView

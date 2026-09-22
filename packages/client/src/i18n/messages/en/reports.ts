@@ -139,6 +139,19 @@ export const reports = {
     breakdownEmptyDescription: "No tracked time matches the current filters.",
   },
 
+  /** The trail of drill-down steps under the filter bar, and its Back button. */
+  drill: {
+    /** Accessible name of the trail. */
+    trail: "Drill-down path",
+    /** The first crumb: the report before any step. */
+    root: "Whole report",
+    /** Title of a crumb that can be returned to. */
+    returnTo: "Back to {name}",
+    /** Title of a legend row and the last line of a chart tooltip. */
+    narrowTo: "Narrow the report to {name}",
+    hint: "Click to narrow the report",
+  },
+
   summary: {
     overlapNote:
       "An entry carrying several tags counts in each of them, so these rows add up to more than the total below.",

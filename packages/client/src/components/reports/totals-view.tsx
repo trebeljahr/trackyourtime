@@ -15,9 +15,17 @@ import { useFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
 import { userErrorMessage } from "@/lib/error-message";
 import { useFormatSettings } from "@/lib/format";
-import { reportsHref } from "@/lib/report-links";
+import { REPORT_VIEW_PARAM, reportsHref } from "@/lib/report-links";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
+import {
+  bucketRange,
+  drillIntoBucketPatch,
+  drillIntoGroupPatch,
+  isDrillableKey,
+  isTimeGrouping,
+  type ParamPatch,
+} from "@/components/reports/drill";
 import {
   DEFAULT_GROUP_BY,
   PARAM_FOR_GROUP_BY,
@@ -38,6 +46,11 @@ import {
 } from "@/components/reports/summary-charts";
 import { SummaryTable } from "@/components/reports/summary-table";
 import {
+  formatBucketLabel,
+  type TimelineBucket,
+  type TimelineGranularity,
+} from "@/components/reports/timeline-buckets";
+import {
   REPORT_PARAM,
   type ReportViewProps,
 } from "@/components/reports/use-report-filters";
@@ -48,7 +61,7 @@ export function TotalsView({
   onExportReady,
   memberReporting = false,
 }: ReportViewProps): React.JSX.Element {
-  const { filters: reportFilters, setParam, getParam } = filters;
+  const { state, filters: reportFilters, setParam, getParam, drill } = filters;
   const fmt = useFormatSettings();
   const f = useFormat();
   const t = useT("reports");
@@ -106,25 +119,97 @@ export function TotalsView({
   }, [groupBy, projectsQuery.data, fmt.durationShort, fmt.currency, f]);
 
   /**
-   * Drilling into a group keeps every filter already on screen and adds the
-   * group as one more — Entries reads the same query string, so the row's
-   * number and the log it opens describe the same set of entries. The grouping
-   * stays in the URL although Entries ignores it, so switching back to Totals
-   * lands on the dimension the drill-down started from. A link, not a view
-   * switch, so browser back returns to the unfiltered totals.
+   * A group's name in the drill trail. Catalog groups carry their own label;
+   * a time group's label from the server is a bare key ("2026-09-07"), so it
+   * is written the way the chart's tooltip writes it.
    */
-  const hrefForGroup = React.useMemo<
-    ((group: SummaryGroup) => string | null) | undefined
-  >(() => {
-    const param = PARAM_FOR_GROUP_BY[groupBy];
-    if (param === undefined) return undefined;
-    const base = searchParams.toString();
-    return (group) => {
-      const next = new URLSearchParams(base);
-      next.set(param, group.key);
+  const labelForGroup = React.useCallback(
+    (group: SummaryGroup): string =>
+      isTimeGrouping(groupBy)
+        ? formatBucketLabel(
+            group.key.length === 7 ? `${group.key}-01` : group.key,
+            groupBy,
+            true,
+            f.locale
+          )
+        : group.label,
+    [groupBy, f.locale]
+  );
+
+  /**
+   * A table row leads to the entry log behind its number. It keeps every
+   * filter already on screen and adds the group as one more (a time group
+   * narrows the date range instead) — Entries reads the same query string,
+   * so the row's number and the log it opens describe the same set of
+   * entries. The grouping stays in the URL although Entries ignores it, so
+   * switching back to Totals lands on the dimension the drill-down started
+   * from. Patch first, href second: a plain click records the patch as a
+   * drill step (so Back undoes it), a modified click follows the href.
+   */
+  const patchForGroupEntries = React.useCallback(
+    (group: SummaryGroup): ParamPatch | null => {
+      if (!isDrillableKey(group.key)) return null;
+      if (isTimeGrouping(groupBy)) {
+        const range = bucketRange(group.key, groupBy, state.range);
+        return {
+          [REPORT_PARAM.from]: range.from,
+          [REPORT_PARAM.to]: range.to,
+          [REPORT_VIEW_PARAM]: "entries",
+        };
+      }
+      const param = PARAM_FOR_GROUP_BY[groupBy];
+      if (param === undefined) return null;
+      return { [param]: group.key, [REPORT_VIEW_PARAM]: "entries" };
+    },
+    [groupBy, state.range]
+  );
+
+  const hrefForGroup = React.useCallback(
+    (group: SummaryGroup): string | null => {
+      const patch = patchForGroupEntries(group);
+      if (patch === null) return null;
+      const next = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === null) next.delete(key);
+        else next.set(key, value);
+      }
       return reportsHref("entries", next);
-    };
-  }, [groupBy, searchParams]);
+    },
+    [patchForGroupEntries, searchParams]
+  );
+
+  const drillIntoEntries = React.useCallback(
+    (group: SummaryGroup): void => {
+      const patch = patchForGroupEntries(group);
+      if (patch !== null) drill(patch, labelForGroup(group));
+    },
+    [drill, labelForGroup, patchForGroupEntries]
+  );
+
+  /**
+   * A slice or a legend row narrows the report to that group and re-groups
+   * it by the next dimension down (`drillIntoGroupPatch`), so one click on
+   * "ricos.site" answers "what was that time spent on" rather than showing a
+   * single 100 % slice.
+   */
+  const drillIntoGroup = React.useCallback(
+    (group: SummaryGroup): void => {
+      const patch = drillIntoGroupPatch(groupBy, group.key, state, memberReporting);
+      if (patch !== null) drill(patch, labelForGroup(group));
+    },
+    [drill, groupBy, labelForGroup, memberReporting, state]
+  );
+
+  /** A timeline bar narrows the date range to the day, week or month it covers. */
+  const drillIntoBucket = React.useCallback(
+    (bucket: TimelineBucket, granularity: TimelineGranularity): void => {
+      drill(
+        drillIntoBucketPatch(bucket.date, granularity, groupBy, state, memberReporting),
+        formatBucketLabel(bucket.date, granularity, true, f.locale)
+      );
+    },
+    [drill, f.locale, groupBy, memberReporting, state]
+  );
 
   const kpis = React.useMemo<KpiItem[]>(() => {
     const totalSec = result?.totalSec ?? 0;
@@ -225,6 +310,7 @@ export function TotalsView({
             timeline={result.timeline}
             duration={fmt.duration}
             weekStartsOn={fmt.weekStartsOn}
+            onSelectBucket={drillIntoBucket}
           />
           <GroupBreakdownChart
             groups={result.groups}
@@ -232,6 +318,7 @@ export function TotalsView({
             duration={fmt.duration}
             money={fmt.money}
             groupBy={groupBy}
+            onSelectGroup={drillIntoGroup}
           />
         </div>
       ) : null}
@@ -263,6 +350,7 @@ export function TotalsView({
               dimensionLabel={dimension}
               budgetFor={budgetFor}
               hrefForGroup={hrefForGroup}
+              onDrill={drillIntoEntries}
               // Stated from the grouping itself, not inferred from the label,
               // which is translated and so cannot identify the grouping.
               groupsOverlap={groupBy === "tag"}

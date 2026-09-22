@@ -2405,6 +2405,34 @@ reasons above. Four rules that fail quietly if broken:
   Every docs page also has a Markdown copy beside it (`/docs/mcp.md`,
   `/docs/index.md`), which the root `llms.txt` links.
 
+### Reports drill-down
+
+Every mark on Reports → Totals is a way down: a donut slice or its legend row
+narrows the report to that group, a timeline bar narrows the date range to
+that day, week or month, and a table row opens the entries behind it. The
+arithmetic is `components/reports/drill.ts` (pure, tested); the trail and the
+Back button are `use-report-filters.ts` (`drill`, `drillBackTo`) and
+`drill-trail.tsx`, rendered by the screen under the filter bar so the way
+back is on whichever view a step lands on. Four rules that fail quietly if
+broken:
+
+- **A drill re-groups by the next dimension down** (`nextGroupByAfterDrill`):
+  client → project → task, month → week → day, day → project, skipping any
+  dimension the report is already narrowed to. Without it a click on
+  "ricos.site" draws one 100 % slice and answers nothing.
+- **Narrowing replaces the dimension's selection, never adds to it.** A report
+  of two projects drilled into one is about that one.
+- **The trail is memory, not URL, and it is pruned on read.** Each step
+  stores the query it started from; `pruneDrillTrail` drops a step whose
+  starting query is the one on screen again, and everything after it — that
+  is how browser Back and a filter cleared by hand stay in step with the
+  Back button without an effect writing state. A drill pushes history, a
+  Back replaces it.
+- **`none` (the server's unassigned bucket) and `__other` (the folded slice)
+  are never drillable** (`isDrillableKey`): there is no filter that means
+  "entries without a project". A time group narrows the range through
+  `bucketRange`, clipped to the range on screen.
+
 ### Web command palette and description autocomplete
 
 Cmd/Ctrl+K opens `components/command-palette/` on every protected screen; the

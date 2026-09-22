@@ -43,6 +43,12 @@ export type SummaryTableProps = {
    */
   hrefForGroup?: (group: SummaryGroup) => string | null;
   /**
+   * Called instead of following `hrefForGroup` on a plain click, so the
+   * screen can record the step for its Back button before navigating. A
+   * modified click (new tab, middle button) still follows the link as is.
+   */
+  onDrill?: (group: SummaryGroup) => void;
+  /**
    * Whether the groups can overlap — true only for tags, where one entry
    * carries several. Stated by the caller from the grouping itself: the
    * heading is translated, so it can no longer stand in for the grouping.
@@ -61,6 +67,7 @@ export function SummaryTable({
   dimensionLabel,
   budgetFor,
   hrefForGroup,
+  onDrill,
   groupsOverlap = false,
 }: SummaryTableProps): React.JSX.Element {
   const t = useT("reports");
@@ -132,6 +139,21 @@ export function SummaryTable({
                     href={href}
                     className="rounded underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     title={t("summary.showEntriesFor", { name: group.label })}
+                    onClick={(event: React.MouseEvent<HTMLAnchorElement>) => {
+                      if (
+                        onDrill === undefined ||
+                        event.defaultPrevented ||
+                        event.button !== 0 ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      ) {
+                        return;
+                      }
+                      event.preventDefault();
+                      onDrill(group);
+                    }}
                     data-testid={`summary-link-${group.key}`}
                   >
                     {label}
