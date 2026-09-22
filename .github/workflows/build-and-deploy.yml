@@ -19,13 +19,18 @@ on:
 
 # The group was the constant `main-deploy`, which with cancel-in-progress
 # would have let PR runs cancel a main deploy mid-flight (and each other).
-# Including the event name and ref keeps every push to main in one
-# self-cancelling deploy group exactly as before — github.ref is always
-# refs/heads/main there — while each PR gets its own group, so a new push
-# to a PR branch cancels only that PR's own stale run.
+# Including the event name and ref keeps every push to main in one group —
+# github.ref is always refs/heads/main there — while each PR gets its own
+# group, so a new push to a PR branch cancels only that PR's own stale run.
+#
+# Pushes to main are NOT cancelled in progress any more. Cancelling a run
+# cancels its deploy job too, and the deploy job can be between pinning the
+# new images in Coolify and putting the old ones back after a failed gate.
+# A newer push waits instead; GitHub keeps only the newest waiting run, so a
+# burst of pushes still deploys once more, not once per push.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Image names are spelled out, never derived from the repository name. A
 # repository rename would otherwise move every push to a new GHCR package —
@@ -276,9 +281,9 @@ jobs:
   # Deploy job — the topology is TWO Coolify apps on TWO hosts of one zone:
   # the client on trackyourtime.dev and the server on api.trackyourtime.dev.
   # Each app owns its own host, so neither has to share a routing rule with
-  # the other. Each UUID is optional
-  # and skipped when its secret is unset, so a project still on the
-  # single-app layout keeps working by setting only COOLIFY_RESOURCE_UUID.
+  # the other. The two UUIDs come as a pair (one without the other fails the
+  # job); with neither set, a project still on the single-app layout keeps
+  # working by setting only COOLIFY_RESOURCE_UUID.
   #
   # Deploying them separately is the point of the split: the server holds
   # the WebSocket sync connections, and a client-only change must not
@@ -293,70 +298,83 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: [build-server, build-client]
+    # Shared with hosted-rollback.yml, and never cancelled: a deploy stopped
+    # between pinning the new images and restoring the old ones leaves Coolify
+    # pointing at a build nobody verified. A second deploy waits for the first.
+    concurrency:
+      group: hosted-deploy
+      cancel-in-progress: false
+    # A deploy that never lands polls for ten minutes, and its rollback polls
+    # for ten more.
+    timeout-minutes: 45
+    permissions:
+      contents: read
     steps:
-      # Pin each app to the IMMUTABLE tag before deploying it.
+      # The full history, because the rollback compares the migration registry
+      # of the commit being deployed with the one it replaces (below).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # Pin each app to the IMMUTABLE tag, deploy, gate, and roll back when
+      # the gate fails — scripts/coolify-deploy.mjs, shared with
+      # hosted-rollback.yml and tested in scripts/lib/coolify-deploy.test.mjs.
       #
-      # The compose files default to `:main`, and Docker keeps whatever image
-      # it already has for a mutable tag. On 2026-09-08 that meant Coolify
-      # started the PREVIOUS build while ghcr's `main`, the Coolify dashboard
-      # and this workflow all reported the new commit — a client that had been
-      # migrated to a new API host kept calling the old one for hours.
-      # `pull_policy: always` in the compose files covers the default; pinning
-      # the digest tag here removes the ambiguity entirely, and makes rollback
-      # "set this variable to an older sha".
+      # Why pin at all: the compose files default to `:main`, and Docker keeps
+      # whatever image it already has for a mutable tag. On 2026-09-08 that
+      # meant Coolify started the PREVIOUS build while ghcr's `main`, the
+      # Coolify dashboard and this workflow all reported the new commit — a
+      # client that had been migrated to a new API host kept calling the old
+      # one for hours. Pinning the sha tag removes the ambiguity, and it is
+      # what gives a rollback something to go back to: the script reads
+      # CLIENT_IMAGE and SERVER_IMAGE BEFORE pinning and keeps them as the
+      # rollback target.
       #
-      # PATCH, not POST: Coolify's env API only UPDATES an existing variable —
-      # a POST-less PATCH against a name that does not exist yet is accepted
-      # and silently does nothing. Both variables must therefore be created
-      # once by hand in the Coolify UI (CLIENT_IMAGE on the client app,
-      # SERVER_IMAGE on the server app); this step keeps them current.
-      - name: Pin image tags to this commit
+      # Coolify's env PATCH only UPDATES an existing variable — against a name
+      # that does not exist it is accepted and does nothing. Both variables are
+      # created once by hand (CLIENT_IMAGE on the client app, SERVER_IMAGE on
+      # the server app); the script reads each one back after the PATCH and
+      # fails when it did not stick.
+      #
+      # The gate, after both apps report this commit: /api/health says
+      # `status: ok` and `db: true`, /version.json names the expected API,
+      # GET /api/auth/get-session answers 200, and the CORS preflight from the
+      # web origin is allowed. Until the gate existed the final assertion was
+      # an HTTP 200 from a POST, and a deploy that kept the old container, an
+      # image built with an empty API URL and a container crash-looping behind
+      # the proxy all left this workflow green.
+      #
+      # When the poll or the gate fails, the previous images are pinned again,
+      # redeployed and gated, and the job still FAILS, naming the failed check,
+      # this sha and the restored one. No previous value (a first deploy, or a
+      # token that cannot read env values) or a rollback that fails its own
+      # gate fails loudly and does not try again.
+      #
+      # Migrations are forward-only. A migration whose minReaderSchema is above
+      # the previous build's SCHEMA_VERSION makes that build refuse to start
+      # (docs/versioning.md → Migrations), and nobody can tell from outside
+      # whether the new server got far enough to run it. So when this commit's
+      # registry holds such a migration — or either registry cannot be read —
+      # the SERVER is not rolled back: only the client is, and the error says
+      # why. Going back past that migration needs the database dump, which is
+      # a person's decision (docs/deploy.md → Rollback).
+      - name: Deploy, gate and roll back on failure
         env:
           COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
           COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
           COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
-        if: >-
-          env.COOLIFY_BASE_URL != '' && env.COOLIFY_SERVER_RESOURCE_UUID != ''
-          && env.COOLIFY_CLIENT_RESOURCE_UUID != ''
-        run: |
-          set -euo pipefail
-          pin() {
-            curl -fsSL -X PATCH \
-              "$COOLIFY_BASE_URL/api/v1/applications/$1/envs" \
-              -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
-              -H 'Content-Type: application/json' \
-              -d "{\"key\":\"$2\",\"value\":\"$3\",\"is_preview\":false}" >/dev/null
-            echo "pinned $2=$3"
-          }
-          pin "$COOLIFY_SERVER_RESOURCE_UUID" SERVER_IMAGE \
-            "ghcr.io/${{ env.IMAGE_OWNER_REPO }}-server:${{ github.sha }}"
-          pin "$COOLIFY_CLIENT_RESOURCE_UUID" CLIENT_IMAGE \
-            "ghcr.io/${{ env.IMAGE_OWNER_REPO }}-client:${{ github.sha }}"
+          WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
+          API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+          SHA: ${{ github.sha }}
+        if: env.COOLIFY_SERVER_RESOURCE_UUID != '' || env.COOLIFY_CLIENT_RESOURCE_UUID != ''
+        run: node scripts/coolify-deploy.mjs deploy --sha "$SHA" --which both --rollback
 
-      - name: Deploy server app via Coolify API
-        env:
-          COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
-          COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
-        if: env.COOLIFY_BASE_URL != '' && env.COOLIFY_SERVER_RESOURCE_UUID != ''
-        run: |
-          curl -fsSL -X POST \
-            "$COOLIFY_BASE_URL/api/v1/deploy?uuid=$COOLIFY_SERVER_RESOURCE_UUID&force=true" \
-            -H "Authorization: Bearer $COOLIFY_API_TOKEN"
-
-      - name: Deploy client app via Coolify API
-        env:
-          COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
-          COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
-        if: env.COOLIFY_BASE_URL != '' && env.COOLIFY_CLIENT_RESOURCE_UUID != ''
-        run: |
-          curl -fsSL -X POST \
-            "$COOLIFY_BASE_URL/api/v1/deploy?uuid=$COOLIFY_CLIENT_RESOURCE_UUID&force=true" \
-            -H "Authorization: Bearer $COOLIFY_API_TOKEN"
-
-      # Single-app fallback, for a project that has not been split.
+      # Single-app fallback, for a project that has not been split. It has no
+      # image variable to pin and so nothing to roll back to; it gets the gate.
       - name: Deploy single app via Coolify API
         env:
           COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
@@ -364,14 +382,19 @@ jobs:
           COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
           COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
+          API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+          SHA: ${{ github.sha }}
         if: >-
           env.COOLIFY_BASE_URL != '' && env.COOLIFY_RESOURCE_UUID != ''
           && env.COOLIFY_SERVER_RESOURCE_UUID == ''
           && env.COOLIFY_CLIENT_RESOURCE_UUID == ''
         run: |
+          set -euo pipefail
           curl -fsSL -X POST \
             "$COOLIFY_BASE_URL/api/v1/deploy?uuid=$COOLIFY_RESOURCE_UUID&force=true" \
             -H "Authorization: Bearer $COOLIFY_API_TOKEN"
+          node scripts/coolify-deploy.mjs verify --sha "$SHA"
 
       - name: Deploy via webhook (fallback)
         env:
@@ -380,67 +403,20 @@ jobs:
         if: env.COOLIFY_BASE_URL == '' && env.COOLIFY_WEBHOOK_URL != ''
         run: curl -fsSL "$COOLIFY_WEBHOOK_URL"
 
-      # Everything above only proves Coolify ACCEPTED a request. This proves
-      # the deployed artefacts are the ones this run built.
-      #
-      # Until this existed, the pipeline's final assertion was an HTTP 200 from
-      # a POST. A deploy that kept the old container, an image built with an
-      # empty API URL, a container crash-looping behind a proxy that reports
-      # 503 — all three happened, and all three left this workflow green.
-      #
-      # Deliberately polls, because a Coolify deploy is asynchronous: the POST
-      # returns as soon as the deployment is QUEUED.
-      - name: Verify the deployment is actually live
+      # Says so when nothing above ran, instead of a green job that reads as a
+      # deploy.
+      - name: Nothing to deploy to
         env:
-          WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
-          API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
           COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
-        if: env.COOLIFY_BASE_URL != ''
-        run: |
-          set -uo pipefail
-          SHA='${{ github.sha }}'
-
-          # `?cb=` on every request: the point is what the ORIGIN now serves,
-          # and a CDN hit would answer with exactly the stale copy being
-          # tested for.
-          poll() { # name url jq-expression
-            for i in $(seq 1 40); do
-              got=$(curl -fsSL --max-time 10 "$2?cb=$i$RANDOM" 2>/dev/null | jq -r "$3" 2>/dev/null || true)
-              if [ "$got" = "$SHA" ]; then echo "✓ $1 is $SHA"; return 0; fi
-              echo "  $1: $(printf '%.12s' "${got:-<no response>}")… waiting ($i/40)"
-              sleep 15
-            done
-            echo "::error::$1 never reported $SHA — the deploy did not land." >&2
-            echo "::error::last seen: ${got:-<no response>}" >&2
-            return 1
-          }
-
-          poll "api  $API_URL/api/health"    "$API_URL/api/health"   '.version'
-          poll "web  $WEB_URL/version.json"  "$WEB_URL/version.json" '.commit'
-
-          # The client bakes its API origin in at build time, so a correct
-          # commit can still carry the wrong URL. Assert the pairing.
-          baked=$(curl -fsSL --max-time 10 "$WEB_URL/version.json?cb=$RANDOM" | jq -r '.apiUrl')
-          if [ "$baked" != "$API_URL" ]; then
-            echo "::error::client was built against '$baked', expected '$API_URL'" >&2
-            exit 1
-          fi
-          echo "✓ client is built against $baked"
-
-          # The web app is a separate origin from the API now, so CORS is
-          # load-bearing and nothing else in CI exercises it — the e2e suite
-          # runs both on localhost.
-          allow=$(curl -fsS --max-time 10 -o /dev/null -D - -X OPTIONS \
-                    -H "Origin: $WEB_URL" \
-                    -H 'Access-Control-Request-Method: POST' \
-                    -H 'Access-Control-Request-Headers: content-type' \
-                    "$API_URL/api/auth/get-session" \
-                  | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')
-          if [ "$allow" != "$WEB_URL" ]; then
-            echo "::error::CORS preflight returned '${allow:-<none>}', expected '$WEB_URL'" >&2
-            exit 1
-          fi
-          echo "✓ CORS allows $WEB_URL"
+          COOLIFY_RESOURCE_UUID: ${{ secrets.COOLIFY_RESOURCE_UUID }}
+          COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
+          COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
+          COOLIFY_WEBHOOK_URL: ${{ secrets.COOLIFY_WEBHOOK_URL }}
+        if: >-
+          env.COOLIFY_SERVER_RESOURCE_UUID == '' && env.COOLIFY_CLIENT_RESOURCE_UUID == ''
+          && (env.COOLIFY_BASE_URL == '' || env.COOLIFY_RESOURCE_UUID == '')
+          && (env.COOLIFY_BASE_URL != '' || env.COOLIFY_WEBHOOK_URL == '')
+        run: echo "::notice::No Coolify secrets are set — images were pushed, nothing was deployed. See docs/deploy.md → One-time setup in Coolify."
 
   # DCO gate — pull requests only. Track Your Time takes Developer Certificate of
   # Origin 1.1 sign-off rather than a CLA, so the check is mechanical: every

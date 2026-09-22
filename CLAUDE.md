@@ -2292,6 +2292,21 @@ The client image serves the static export: `output: "export"` leaves no
 The E2E suite runs that same file, so the deployed and tested servers cannot
 drift apart.
 
+**A failed hosted deploy rolls itself back, and the run still fails.**
+`scripts/coolify-deploy.mjs` (logic in `scripts/lib/coolify-deploy.mjs`,
+tested against a fake Coolify) reads the current `SERVER_IMAGE` /
+`CLIENT_IMAGE` values before pinning the new sha, polls both apps for the
+commit, gates on `/api/health` (`status`, `db`), `/version.json` (`apiUrl`),
+`GET /api/auth/get-session` and the CORS preflight, and re-pins the previous
+values when any of it fails. The server is NOT rolled back past a migration
+whose `minReaderSchema` the previous build cannot read (registries compared
+with `git show`, so the deploy checkout needs `fetch-depth: 0`); only the
+client is, and the error says so. No target or a failed rollback fails loudly
+and never retries. `hosted-rollback.yml` is the manual form of the same
+script. Both jobs share the `hosted-deploy` concurrency group and are never
+cancelled in progress — a run stopped between pinning and restoring leaves
+Coolify on a build nobody verified. docs/deploy.md → Rollback.
+
 **An open tab outlives a deploy, and its chunks do not.** Each image replaces
 every hashed chunk, so a tab opened before a deploy 404s the first time it
 lazy-loads a route. Two web-only answers, both started after mount in

@@ -171,6 +171,21 @@ before this change still connects wherever `/ws` is still routed.
    neither set, the workflow falls back to the single `COOLIFY_RESOURCE_UUID`.
    All four are already set on this repo.
 
+   The token needs the `deploy` and `write` permissions (to queue a deploy
+   and to PATCH an env var) **and `read:sensitive`**: Coolify leaves `value`
+   out of `GET /applications/<uuid>/envs` without it, and that value is what
+   a failed deploy is rolled back to. Without it every deploy still runs,
+   and every failed one ends with "nothing was rolled back" (see
+   [Rollback](#rollback)).
+6. **Two env vars, created once by hand**: `SERVER_IMAGE` on the server app
+   and `CLIENT_IMAGE` on the client app, with any value (the compose file's
+   `:main` default will do).
+   The compose files read them, and the deploy job pins each to the image
+   of the commit it just built. Coolify's env API only updates a variable
+   that exists — a PATCH against a missing name is accepted and does
+   nothing — so the job reads each one back after pinning and fails when it
+   did not stick.
+
 ## Verifying a deploy
 
 ```bash
@@ -194,6 +209,109 @@ Reading the failures:
 - **TLS handshake failure** — the host is more than one label under its zone
   and the wildcard does not cover it. That is the original bug; do not
   re-create it.
+
+## Rollback
+
+Every push to main deploys through `scripts/coolify-deploy.mjs`, run by the
+`deploy` job of `.github/workflows/build-and-deploy.yml`. The pure parts
+(what counts as healthy, what can be rolled back, the sequence) are in
+`scripts/lib/coolify-deploy.mjs` and tested in
+`scripts/lib/coolify-deploy.test.mjs` against a fake Coolify; the entry
+script adds the network and git.
+
+What one deploy does, in order:
+
+1. **Reads the rollback target.** `GET /applications/<uuid>/envs` on both
+   apps, and keeps the current `SERVER_IMAGE` and `CLIENT_IMAGE` values.
+   Only a value pinned to a full commit sha counts: `:main` already points at
+   the new build after the push, so "restoring" it would redeploy the image
+   that just failed.
+2. **Pins and deploys.** PATCHes both variables to
+   `ghcr.io/trebeljahr/trackyourtime-{server,client}:<sha>`, reads them back,
+   then queues a deploy of the server, then the client.
+3. **Waits for the commit.** Polls `/api/health` (`commit`, or `version` on
+   an older image) and `/version.json` (`commit`) every 15 s for up to ten
+   minutes until both report the new sha. A Coolify deploy is queued, not
+   done, when the API answers.
+4. **Runs the gate.** `/api/health` says `status: ok` and `db: true`;
+   `/version.json` names the API the client was built against
+   (`apiUrl`, which is baked in at image build time); `GET
+   /api/auth/get-session` answers 200, which proves the auth handler is
+   mounted and reads its database; and the CORS preflight from the web origin
+   is allowed, since the two apps are separate origins and nothing else in CI
+   exercises that pairing. The gate is retried a few times, ten seconds
+   apart, for a database still connecting — and no more.
+5. **Rolls back when 3 or 4 fails.** The values from step 1 are pinned
+   again, both apps are redeployed, and the same poll and gate run against
+   the restored commit. The job then **fails** either way, with one
+   `::error::` that names the failed check (`api-db`, `web-api-url`,
+   `auth-session`, `cors`, `api-commit`, …), the new sha and the restored
+   sha. A rollback is never a green run: the commit on main is still broken.
+
+Two things stop before they start a loop:
+
+- **No target.** A first deploy, a variable still on `:main`, or a token
+  without `read:sensitive` leaves nothing to go back to. The job fails and
+  says so; the new images stay pinned. Fix forward, or run the manual
+  rollback below with a known-good sha.
+- **The rollback fails its own gate**, or a Coolify call fails while
+  restoring. The job fails and names it. Nothing tries a second time — a
+  second automatic attempt against an unknown state is how an outage grows.
+  The hosted apps need a person at that point.
+
+### Migrations are forward-only, so the server may stay
+
+The server migrates its database at boot, and a migration can raise
+`minReaderSchema` above the previous build's `SCHEMA_VERSION`
+(`docs/versioning.md` → Migration-bearing releases). The previous server then
+refuses to start on that database, and nobody can tell from outside whether
+the new server got far enough to run the migration before it failed the gate.
+
+So before rolling the server back, the job compares the migration registry
+(`packages/server/src/services/migrations/`) of the new commit with the
+previous commit's, with `git show` — the checkout uses `fetch-depth: 0` for
+this. When the new commit carries a migration the previous build cannot
+read, or either registry cannot be read (a sha not in the checkout counts as
+"unknown", and unknown is not safe), **only the client is rolled back**; the
+server stays on the new build, and the error says why. That is the decision:
+a client on the previous build against a server one commit ahead is the
+combination the version handshake already supports, while a server that
+refuses to boot is an outage. Going back past such a migration needs the
+`mongodump` from before it, which is a person's decision, never the job's.
+
+### Rolling back by hand
+
+`.github/workflows/hosted-rollback.yml` pins the images of an earlier commit
+and runs the same poll, gate and rollback:
+
+```bash
+gh workflow run hosted-rollback.yml -f sha=<commit> -f which=both
+gh workflow run hosted-rollback.yml -f sha=<commit> -f which=client
+```
+
+- `sha` must be a commit on main: only those have images, because only
+  `build-and-deploy.yml` pushes `:<sha>` tags. The run resolves an
+  abbreviated sha and refuses anything not reachable from main.
+- `which` is `both`, `client` or `server`. A one-app run gates the pair that
+  is then live, expecting the given commit from the app it moved and no
+  particular commit from the other.
+- The run reads the migration registries before it touches anything, and
+  refuses to move the server to a commit that cannot read the database the
+  current one has migrated. Use `which=client`, or restore the dump from
+  before that migration and run again with `force_server` checked.
+- When the gate fails, the images pinned before the run are put back, exactly
+  as after a failed push deploy, and the run fails.
+
+Both workflows share the `hosted-deploy` concurrency group, so a push deploy
+and a rollback never pin images at the same time, and a deploy is never
+cancelled between pinning the new images and restoring the old ones.
+`build-and-deploy.yml` therefore no longer cancels an in-progress run on a
+new push to main; the newer push waits, and GitHub keeps only the newest
+waiting run.
+
+Without any Coolify secret the scripts print a `::notice::` and deploy
+nothing; with some of them set and others missing, they fail, because half a
+deploy is worse than none.
 
 ## Email verification and the one-time backfill
 

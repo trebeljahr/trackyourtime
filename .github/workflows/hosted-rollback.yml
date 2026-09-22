@@ -1,0 +1,100 @@
+name: hosted-rollback
+
+# Put the hosted apps (trackyourtime.dev and api.trackyourtime.dev) on the
+# images of an earlier commit, by hand, with the same pin, deploy and gate as
+# build-and-deploy.yml. docs/deploy.md → Rollback says when to use it.
+#
+#   gh workflow run hosted-rollback.yml -f sha=<commit> -f which=both
+#
+# Only commits that build-and-deploy.yml built on main have images
+# (ghcr.io/trebeljahr/trackyourtime-{server,client}:<sha>), so the commit must
+# be on main. When the gate fails, the images that were pinned before this run
+# are put back, exactly as after a failed push deploy.
+#
+# The server is refused when the database it would start on carries a
+# migration it cannot read (a minReaderSchema above its SCHEMA_VERSION —
+# docs/versioning.md → Migrations): it would not start. `which: client` rolls
+# back the web app alone; `force_server` is for after the database was
+# restored from a dump taken before that migration.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit on main to deploy (full or abbreviated sha)
+        required: true
+        type: string
+      which:
+        description: Which app to move
+        required: true
+        type: choice
+        default: both
+        options: [both, client, server]
+      force_server:
+        description: Deploy the server even past a migration it cannot read (only after restoring a dump)
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    # The same group as build-and-deploy.yml's deploy job, so a push deploy
+    # and a rollback never pin images at the same time.
+    concurrency:
+      group: hosted-deploy
+      cancel-in-progress: false
+    timeout-minutes: 45
+    steps:
+      # Full history: the sha is resolved and checked against main here, and
+      # the migration registries of two commits are compared.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Resolve the commit
+        id: resolve
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$INPUT_SHA" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+            echo "::error::'$INPUT_SHA' is not a commit sha."
+            exit 1
+          fi
+          if ! sha=$(git rev-parse --verify --quiet "${INPUT_SHA}^{commit}"); then
+            echo "::error::$INPUT_SHA is not a commit in this repository."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::$sha is not on main, so build-and-deploy.yml never built images for it."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying $sha: $(git log -1 --format='%s (%cs)' "$sha")"
+
+      # The script prints a ::notice:: and does nothing when no Coolify secret
+      # is set, and fails when only some are.
+      - name: Deploy, gate and roll back on failure
+        env:
+          COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
+          COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
+          IMAGE_OWNER_REPO: trebeljahr/trackyourtime
+          WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
+          API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+          WHICH: ${{ inputs.which }}
+          FORCE_SERVER: ${{ inputs.force_server }}
+        run: |
+          set -euo pipefail
+          args=(deploy --sha "$SHA" --which "$WHICH" --rollback --guard-server-downgrade)
+          if [ "$FORCE_SERVER" = "true" ]; then args+=(--force-server); fi
+          node scripts/coolify-deploy.mjs "${args[@]}"
