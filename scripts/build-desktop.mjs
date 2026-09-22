@@ -10,6 +10,7 @@
  *   node scripts/build-desktop.mjs --package --mac zip    # + anything electron-builder takes
  *   node scripts/build-desktop.mjs --channel mac --package --mac dmg zip --arm64 --x64
  *   node scripts/build-desktop.mjs --reuse-export --channel mas --package --mac mas --universal
+ *   node scripts/build-desktop.mjs --open --package --dir  # + launch it (pnpm prod:desktop; for people, never agents)
  *
  * `--channel <mac|mas|win|win-store|linux>` is how a release is built (the
  * workflow always passes it): the signing secrets for that channel are
@@ -46,7 +47,7 @@
  *      the tag must be v<that version>. A release named 0.2.0 that reports
  *      0.1.0 would never be offered its own update.
  */
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -73,6 +74,13 @@ const ownArgs = shouldPackage ? args.slice(0, packageIndex) : args;
 const builderArgs = shouldPackage ? args.slice(packageIndex + 1) : [];
 const electronOnly = ownArgs.includes("--electron-only");
 const reuseExport = ownArgs.includes("--reuse-export");
+// Launch the unpacked app this run built. For a person trying a build by
+// hand: it shows and focuses a real window, so tests and agents never pass it.
+const openAfter = ownArgs.includes("--open");
+if (openAfter && !builderArgs.includes("--dir")) {
+  console.error("\n  build:desktop — --open launches the unpacked app, so it needs --package --dir.\n");
+  process.exit(1);
+}
 const channelIndex = ownArgs.indexOf("--channel");
 const channel = channelIndex === -1 ? null : ownArgs[channelIndex + 1];
 if (channelIndex !== -1 && (!channel || channel.startsWith("--"))) {
@@ -371,3 +379,25 @@ if (shouldPackage) {
 }
 
 console.log("\n  Desktop build ready.\n");
+
+if (openAfter) {
+  const releaseDir = resolve(repoRoot, "release");
+  // electron-builder's unpacked folders: mac(-arm64|-universal)/, win-unpacked/, linux-unpacked/.
+  const target = readdirSync(releaseDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !/^mas/.test(d.name))
+    .flatMap((d) => {
+      const dir = join(releaseDir, d.name);
+      if (process.platform === "darwin") return readdirSync(dir).filter((n) => n.endsWith(".app")).map((n) => join(dir, n));
+      if (process.platform === "win32") return readdirSync(dir).filter((n) => n.endsWith(".exe")).map((n) => join(dir, n));
+      return d.name === "linux-unpacked" ? [join(dir, "trackyourtime")] : [];
+    })
+    .filter((path) => existsSync(path))
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+  if (!target) fail(`No unpacked app for ${process.platform} under ${releaseDir}.`);
+  console.log(`  Opening ${relative(repoRoot, target)}\n`);
+  if (process.platform === "darwin") {
+    spawnSync("open", [target], { stdio: "inherit" });
+  } else {
+    spawn(target, [], { detached: true, stdio: "ignore" }).unref();
+  }
+}

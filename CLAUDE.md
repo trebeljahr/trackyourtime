@@ -166,6 +166,7 @@ NEXT_PUBLIC_API_URL=http://localhost:51591 pnpm electron:preview  # export + bun
 NEXT_PUBLIC_API_URL=… pnpm build:desktop  # export (out-desktop) + electron/dist, no packaging
 pnpm electron:build                   # the same, then electron-builder → dmg/zip/exe/AppImage
 pnpm dev:desktop                      # Next dev on 7130 + Electron window (UI iteration only)
+pnpm prod:desktop                     # unpacked app against api.trackyourtime.dev, then opens it
 pnpm test:electron                    # node:test over electron/src (part of test:unit)
 pnpm test:e2e:desktop                 # Playwright _electron harness; own mongod + API
 pnpm electron:ensure                  # download the Electron binary if it is missing
@@ -308,6 +309,15 @@ built, and the rules that fail quietly if broken:
   auth scheme and whether a Cookie was present; the harness's own Node calls
   send `user-agent: desktop-e2e-harness` so `appRequests()` excludes them.
 
+**`prod:desktop`, `prod:ios` and `prod:android` are for a person checking the
+real apps against the live servers**: each bakes `https://api.trackyourtime.dev`
+into a production-shaped bundle (the same bundle path as a release, not a dev
+server) and opens it in a visible window, Simulator or emulator. Agents and
+tests never run them — they take focus, and they write to production. The
+desktop one needs `app://-` in the live server's `TRUSTED_ORIGINS` (or
+`TRUST_STORE_APPS=true`); `/api/health` with an `Origin: app://-` header says
+whether it is (`originTrusted`).
+
 **Simulator and emulator runs never take focus either.** `IOS_HEADLESS=1 pnpm
 dev:ios` drives simctl only (without it Simulator.app is opened with `open -g`),
 and `ANDROID_HEADLESS=1 pnpm dev:android` boots the emulator with `-no-window`.
@@ -322,6 +332,8 @@ pnpm cap:add:android                  # one-time — requires Android Studio / S
 pnpm dev:ios                          # live-reload on Simulator
 pnpm dev:android                      # live-reload on emulator/device
 pnpm build:mobile [ios|android]       # build + verify + cap sync, as one step
+pnpm prod:ios                         # the real bundle against api.trackyourtime.dev, on a Simulator
+pnpm prod:android                     # the same on an emulator or device
 pnpm mobile:assets                    # generate icons/splash from resources/
 pnpm build:android:release            # AAB for Play Store
 pnpm build:ios:release                # opens Xcode for App Store archive
