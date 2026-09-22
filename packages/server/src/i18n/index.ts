@@ -18,11 +18,14 @@
 import { createTranslator, type _Translator } from "use-intl/core";
 import { DEFAULT_LOCALE, type Locale } from "@starter/shared";
 
+// The `invoice` catalog moved to `@starter/invoice-pdf` so the renderer runs
+// in the browser too; it is re-imported here so `serverT(locale, "invoice")`
+// and the catalog parity test still cover it.
+import { invoice as deInvoice } from "@starter/invoice-pdf/messages/de/invoice";
+import { invoice as enInvoice } from "@starter/invoice-pdf/messages/en/invoice";
 import { email as deEmail } from "./messages/de/email.js";
-import { invoice as deInvoice } from "./messages/de/invoice.js";
 import { report as deReport } from "./messages/de/report.js";
 import { email as enEmail } from "./messages/en/email.js";
-import { invoice as enInvoice } from "./messages/en/invoice.js";
 import { report as enReport } from "./messages/en/report.js";
 
 export const serverMessages = {

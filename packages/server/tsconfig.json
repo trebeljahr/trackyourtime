@@ -7,11 +7,14 @@
     "declarationMap": false,
     "paths": {
       "@starter/shared": ["../shared/src/index.ts"],
-      "@starter/shared/*": ["../shared/src/*"]
+      "@starter/shared/*": ["../shared/src/*"],
+      "@starter/invoice-pdf": ["../invoice-pdf/src/index.ts"],
+      "@starter/invoice-pdf/*": ["../invoice-pdf/src/*"]
     }
   },
   "include": ["src"],
   "references": [
-    { "path": "../shared" }
+    { "path": "../shared" },
+    { "path": "../invoice-pdf" }
   ]
 }

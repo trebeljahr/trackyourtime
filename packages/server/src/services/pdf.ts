@@ -52,8 +52,13 @@ import {
   type SummaryReportResult,
   type WeeklyReportResult,
 } from "@starter/shared";
+import { sanitizePdfText } from "@starter/invoice-pdf/text";
 import { serverT, type ServerTranslator } from "../i18n/index.js";
 import { pdfFormat, type PdfFormat } from "./pdf-format.js";
+
+// Moved to `@starter/invoice-pdf` (the invoice renderer and the public page
+// share it); re-exported here so the report renderer's callers still find it.
+export { sanitizePdfText };
 
 /** Page furniture shared by every report PDF. */
 export type PdfReportMeta = {
@@ -128,26 +133,8 @@ const pageOptions = (layout: PageLayout): PDFKit.PDFDocumentOptions => ({
 
 // ── text hygiene ─────────────────────────────────────────────────────
 
-/**
- * C0/C1 control characters plus the Unicode line/paragraph separators. None of
- * these have a glyph; they exist in exported text only by accident (a pasted
- * description, a stray NUL from an import) and would otherwise be handed to
- * the font's encoder as undefined code points.
- */
-const CONTROL_CHARS =
-  // eslint-disable-next-line no-control-regex
-  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u2028\u2029]/g;
-
-/**
- * One cell is one line: control chars out, runs of whitespace collapsed.
- *
- * Except U+00A0 NO-BREAK SPACE, which is kept: German figures put one between
- * a number and its unit ("19 %"), WinAnsi can draw it, and collapsing it into
- * an ordinary space would split "19" from "%" in any run that wraps.
- */
-export function sanitizePdfText(value: string): string {
-  return value.replace(CONTROL_CHARS, " ").replace(/[^\S\u00a0]+/g, " ").trim();
-}
+// `sanitizePdfText` moved to `@starter/invoice-pdf/text` — imported and
+// re-exported at the top of this file, so the report renderer keeps it.
 
 const ELLIPSIS = "...";
 
