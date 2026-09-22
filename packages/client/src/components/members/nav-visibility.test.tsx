@@ -49,6 +49,19 @@ describe("nav visibility", () => {
   });
 });
 
+describe("shell-only nav items", () => {
+  it("never lists Activity on the web, whatever the permissions", () => {
+    const owner = permissionsFor("owner", { canViewOthersTime: true, canViewOthersMoney: true });
+    expect(hrefs(visibleNavSections(NAV_SECTIONS, owner))).not.toContain("/app/activity");
+    expect(hrefs(visibleNavSections(NAV_SECTIONS, null))).not.toContain("/app/activity");
+  });
+
+  it("lists Activity after Calendar once the desktop app says capture works", () => {
+    const shown = hrefs(visibleNavSections(NAV_SECTIONS, null, { electron: true }));
+    expect(shown.indexOf("/app/activity")).toBe(shown.indexOf("/app/calendar") + 1);
+  });
+});
+
 describe("WorkspaceTab", () => {
   it("names the workspace and role and links to /members", () => {
     active = workspaceFor("admin", { name: "Studio", memberCount: 4 });

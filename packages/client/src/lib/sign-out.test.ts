@@ -89,6 +89,20 @@ describe("signOut", () => {
     unregister();
   });
 
+  it("deletes the desktop app's recorded activity, even when that fails", async () => {
+    const forget = vi.fn(async () => {
+      throw new Error("ipc");
+    });
+    (window as unknown as { electronAPI?: unknown }).electronAPI = { isDesktop: true, activity: { forget } };
+    try {
+      await signOut();
+      expect(forget).toHaveBeenCalledTimes(1);
+      expect(writeRunningMirror).toHaveBeenCalledWith(null);
+    } finally {
+      (window as unknown as { electronAPI?: unknown }).electronAPI = undefined;
+    }
+  });
+
   it("still forgets everything when the server never heard the sign-out", async () => {
     authSignOut.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     queryClient.setQueryData([["entries", "list"], { type: "query" }], ["A's entry"]);
