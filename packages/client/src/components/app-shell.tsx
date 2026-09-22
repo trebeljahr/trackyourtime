@@ -111,11 +111,15 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-/** The label is `shell.sync.<status>`, resolved at render time. */
+/**
+ * The label is `shell.sync.<status>`, resolved at render time. Traffic-light
+ * colours, not theme tokens: `--primary` is a neutral in this theme, so an
+ * "in sync" dot drawn with it read as a white dot that said nothing.
+ */
 const STATUS_DOT: Record<SyncStatus, string> = {
-  open: "bg-primary",
-  connecting: "bg-muted-foreground animate-pulse",
-  closed: "bg-destructive",
+  open: "bg-emerald-500",
+  connecting: "bg-amber-500 animate-pulse",
+  closed: "bg-red-500",
 };
 
 function SyncDot({ status }: { status: SyncStatus }): React.JSX.Element {
