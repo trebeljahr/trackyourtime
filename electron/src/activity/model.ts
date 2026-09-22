@@ -142,9 +142,12 @@ export function canRecord(state: CaptureState, ctx: CaptureContext): boolean {
   );
 }
 
-/** Whether the source should be running at all (idle still needs detections to end). */
+/**
+ * Whether the source should run at all. Not while idle or locked: presence
+ * comes from the idle monitor, never from the source, so nothing is lost.
+ */
 export function shouldCapture(state: CaptureState, ctx: CaptureContext): boolean {
-  return ctx.available && state.settings.enabled && state.scope !== null && !state.locked;
+  return ctx.available && state.settings.enabled && state.scope !== null && !state.idle && !state.locked;
 }
 
 /** The recordable identity of what is in front, or null when it must not be recorded. */

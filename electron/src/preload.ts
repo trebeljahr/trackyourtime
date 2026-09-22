@@ -12,6 +12,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import {
   DESKTOP_IPC,
+  type DesktopActivitySnapshot,
   type DesktopBridge,
   type DesktopCommand,
   type DesktopIdlePayload,
@@ -69,6 +70,31 @@ const bridge: DesktopBridge = {
       check: () => ipcRenderer.invoke(DESKTOP_IPC.updateCheck),
       restart: () => ipcRenderer.invoke(DESKTOP_IPC.updateRestart),
     },
+  },
+
+  /*
+   * Activity capture (Stage 8). Suggestions are composed in the main process;
+   * no raw segment is ever handed to the page.
+   */
+  activity: {
+    snapshot: () => ipcRenderer.invoke(DESKTOP_IPC.activitySnapshot),
+    onChanged: (listener) => {
+      const handler = (_event: unknown, snapshot: DesktopActivitySnapshot): void => listener(snapshot);
+      ipcRenderer.on(DESKTOP_IPC.activityChanged, handler);
+      return () => {
+        ipcRenderer.removeListener(DESKTOP_IPC.activityChanged, handler);
+      };
+    },
+    updateSettings: (patch) => ipcRenderer.invoke(DESKTOP_IPC.activitySettings, patch),
+    setScope: (scope) => ipcRenderer.invoke(DESKTOP_IPC.activityScope, scope),
+    forget: () => ipcRenderer.invoke(DESKTOP_IPC.activityForget),
+    wipe: () => ipcRenderer.invoke(DESKTOP_IPC.activityWipe),
+    suggestions: (input) => ipcRenderer.invoke(DESKTOP_IPC.activitySuggestions, input),
+    checkAccept: (input) => ipcRenderer.invoke(DESKTOP_IPC.activityCheckAccept, input),
+    markAccepted: (span) => ipcRenderer.invoke(DESKTOP_IPC.activityAccepted, span),
+    dismiss: (span) => ipcRenderer.invoke(DESKTOP_IPC.activityDismiss, span),
+    addRule: (rule) => ipcRenderer.invoke(DESKTOP_IPC.activityRuleAdd, rule),
+    removeRule: (id) => ipcRenderer.invoke(DESKTOP_IPC.activityRuleRemove, id),
   },
 
   /*

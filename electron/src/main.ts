@@ -17,10 +17,12 @@ import path from "node:path";
 import { app, BrowserWindow, safeStorage } from "electron";
 
 import { DESKTOP_APP_ORIGIN, DESKTOP_IPC } from "../../packages/shared/src/desktop-bridge.ts";
-import { installDesktop, type DesktopController } from "./desktop.ts";
+import { installActivity, type ActivityController } from "./activity/install.ts";
+import { DESKTOP_TEST_HOOK, installDesktop, type DesktopController, type DesktopTestHook } from "./desktop.ts";
+import { distributionChannel } from "./distribution.ts";
 import { openInOs } from "./external.ts";
 import { isHeadless } from "./headless.ts";
-import { startIdleMonitor } from "./idle.ts";
+import { onIdleChange, startIdleMonitor } from "./idle.ts";
 import { configureIpcTrust, handle } from "./ipc.ts";
 import { isHiddenLaunch } from "./login-item.ts";
 import { installApplicationMenu } from "./menu.ts";
@@ -105,6 +107,8 @@ function start(): void {
   let mainWindow: BrowserWindow | null = null;
   /** Tray, shortcuts, desktop settings, notifications (desktop.ts); set once ready. */
   let desktop: DesktopController | null = null;
+  /** Activity capture (activity/install.ts); set once ready. */
+  let activity: ActivityController | null = null;
 
   const showMain = (): void => {
     if (headless) return;
@@ -203,10 +207,36 @@ function start(): void {
       mainWindow: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null),
       reveal: showMain,
     });
+    /*
+     * Activity capture (Stage 8). Off until the person turns it on; headless
+     * runs get the fake source and the test hook, never the real frontmost app.
+     */
+    activity = installActivity({
+      headless,
+      platform: process.platform,
+      channel: distributionChannel({
+        platform: process.platform,
+        isPackaged: app.isPackaged,
+        mas: process.mas === true,
+        windowsStore: process.windowsStore === true,
+        env: process.env,
+      }),
+      env: process.env,
+      userData: app.getPath("userData"),
+      subscribeIdle: onIdleChange,
+    });
+    const hook = (globalThis as Record<string, unknown>)[DESKTOP_TEST_HOOK] as DesktopTestHook | undefined;
+    if (hook !== undefined && activity.testHook !== null) hook.activity = activity.testHook;
+
     mainWindow = openWindow({ show: !desktop.launchHidden(process.argv) });
 
     // macOS: the Dock icon brings back a window hidden by its close button.
     app.on("activate", showMain);
+  });
+
+  app.on("will-quit", () => {
+    activity?.dispose();
+    activity = null;
   });
 
   app.on("window-all-closed", () => {

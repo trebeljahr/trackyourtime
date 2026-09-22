@@ -19,6 +19,25 @@ import { handle } from "./ipc.ts";
 
 type IdleState = "active" | "idle" | "locked";
 
+export interface IdleSample {
+  state: IdleState;
+  idleSeconds: number;
+}
+
+/** In-process listeners (activity capture), fed the same samples the renderer gets. */
+const listeners = new Set<(sample: IdleSample) => void>();
+
+/**
+ * Every sample — each poll and each lock, suspend, unlock or resume — as it
+ * is broadcast to the renderer. Returns the unsubscribe.
+ */
+export function onIdleChange(listener: (sample: IdleSample) => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /** How often the idle counter is sampled. Cheap; the call is a syscall. */
 const IDLE_POLL_MS = 15_000;
 
@@ -44,6 +63,13 @@ function readIdle(): DesktopIdlePayload & { state: IdleState } {
 
 function broadcastIdle(): void {
   const payload = readIdle();
+  for (const listener of listeners) {
+    try {
+      listener(payload);
+    } catch (error) {
+      console.warn("[idle] listener failed", error);
+    }
+  }
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue;
     win.webContents.send(DESKTOP_IPC.idleState, payload);

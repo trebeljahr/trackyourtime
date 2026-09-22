@@ -52,6 +52,7 @@ import {
   type LoginItemBackend,
 } from "./login-item.ts";
 import { distributionChannel, loginItemMechanism } from "./distribution.ts";
+import type { ActivityTestHook } from "./activity/test-hook.ts";
 import { createMemoryRegistrar, createShortcutManager, type ShortcutRegistrar } from "./shortcuts.ts";
 import { createElectronTray, type TrayView } from "./tray.ts";
 import { installUpdater } from "./updater.ts";
@@ -101,6 +102,8 @@ export interface DesktopTestHook {
     installs: () => number;
     checks: () => number;
   };
+  /** Activity capture (Stage 8), attached by `activity/install.ts` in headless runs. */
+  activity?: ActivityTestHook;
 }
 
 export interface DesktopController {
