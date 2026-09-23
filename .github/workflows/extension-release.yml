@@ -163,7 +163,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "tag=${tag:-none} mode=$mode"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.resolve.outputs.tag || github.ref }}
 
@@ -323,7 +323,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "tag=${tag:-none} mode=$mode"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.resolve.outputs.tag || github.ref }}
 

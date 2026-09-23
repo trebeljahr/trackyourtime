@@ -69,7 +69,7 @@ jobs:
     outputs:
       percentage: ${{ steps.check.outputs.percentage }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: scripts
       - uses: actions/setup-node@v4
@@ -174,7 +174,7 @@ jobs:
       WINDOWS_STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.WINDOWS_STORE_PUBLISHER_DISPLAY_NAME }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No `version:` input: pnpm/action-setup reads `packageManager`.
       - uses: pnpm/action-setup@v4
@@ -348,7 +348,7 @@ jobs:
       # every install (100 is written as no key; scripts/lib/desktop-rollout.mjs).
       STAGING_PERCENTAGE: ${{ needs.rollout.outputs.percentage }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 

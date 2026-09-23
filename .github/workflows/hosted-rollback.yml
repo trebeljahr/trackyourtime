@@ -63,7 +63,7 @@ jobs:
     steps:
       # Full history: the sha is resolved and checked against main here, and
       # the migration registries of two commits are compared.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
