@@ -6,7 +6,13 @@
  * across the screen.
  *
  * Chromium keeps painting a hidden window (`paintWhenInitiallyHidden` is on by
- * default), so Playwright screenshots and `capturePage()` still work.
+ * default), but reading a frame back OUT of one is a per-platform question.
+ * On macOS the window keeps a compositor surface whatever its ordering, so
+ * Playwright screenshots and `capturePage()` work. On X11 an unmapped window
+ * has no surface to copy from: the capture is queued, never answered, and the
+ * caller hangs. That is why scripts/desktop-linux-smoke.mjs runs the window
+ * SHOWN under Xvfb rather than headless, and why the paint assertion in
+ * e2e/desktop/shell.spec.ts does not run on Linux.
  */
 
 export const HEADLESS_ENV = "TRACKYOURTIME_HEADLESS";

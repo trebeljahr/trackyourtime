@@ -296,8 +296,23 @@ test("a test launch never shows a window, a Dock icon or takes focus", async () 
     };
   });
   expect(state).toEqual({ windows: 1, visible: false, focused: false, dock: false });
-  // A hidden window still paints, which is what every screenshot relies on.
-  expect((await page.screenshot()).byteLength).toBeGreaterThan(1000);
+  // Everything above is the headless contract itself and is asserted on every
+  // platform. Whether a frame can be read back OUT of a never-shown window is
+  // not part of it, and is not the same answer everywhere: on macOS the window
+  // keeps a compositor surface whatever its ordering, so `page.screenshot()`
+  // resolves and a headless run can be screenshotted for the store and for
+  // debugging. On X11 an unmapped window has no surface to copy from, the CDP
+  // capture is queued and never answered, and the call sits there until
+  // Playwright's timeout (measured: 30s, twice, on the Linux CI runner). That
+  // is the same limitation scripts/desktop-linux-smoke.mjs already runs the
+  // window SHOWN under Xvfb to work around, and that smoke test — not this
+  // line — is the proof that the app renders on Linux.
+  //
+  // Not skipped on Linux with `test.skip`: that would report the whole test as
+  // skipped and hide the assertion above, which is the one that matters.
+  if (process.platform !== "linux") {
+    expect((await page.screenshot()).byteLength).toBeGreaterThan(1000);
+  }
 });
 
 test("DevTools cannot be opened and the menu has no reload or inspector", async () => {

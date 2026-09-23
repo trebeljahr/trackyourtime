@@ -233,9 +233,17 @@ built, and the rules that fail quietly if broken:
   (`electron/src/headless.ts`). The window is never shown or focused, and on
   macOS the app uses the accessory activation policy with no Dock icon, so a
   launch never steals focus or flashes across the screen of whoever is using
-  the machine. Hidden windows still paint, so Playwright screenshots work.
-  `e2e/desktop/support.ts` sets it on every launch and a spec asserts it.
-  Launch the packaged binary with it too; never `open` the `.app`.
+  the machine. `e2e/desktop/support.ts` sets it on every launch and a spec
+  asserts it. Launch the packaged binary with it too; never `open` the `.app`.
+  A hidden window keeps painting (`paintWhenInitiallyHidden`), but reading a
+  frame back OUT of one is per platform: on macOS it keeps a compositor
+  surface whatever its ordering, so `page.screenshot()` and `capturePage()`
+  work and a headless run can be screenshotted. On X11 an unmapped window has
+  no surface to copy from and the capture hangs until the caller times out —
+  so the paint assertion in `e2e/desktop/shell.spec.ts` does not run on Linux,
+  and the Linux smoke test runs the window shown instead (below). The headless
+  contract itself — never shown, never focused, no Dock icon — is asserted on
+  every platform.
 - **One instance per profile** (`requestSingleInstanceLock`); a second launch
   focuses the first and exits. The profile is pinned by name in `profile.ts`
   (`trackyourtime` packaged, `trackyourtime-dev` unpackaged, so `dev:desktop`
@@ -343,7 +351,9 @@ person double-clicks `run.cmd` — for people, like `prod:desktop`.
 app in a container under Xvfb (pass/fail, screenshot in
 `test-results/linux-smoke/`); safe for agents. Two rules: the smoke runs
 **without** `TRACKYOURTIME_HEADLESS`, because on X11 a never-shown window gives
-CDP no frames and the screenshot hangs; and `scripts/crossplat/` imports
+CDP no frames and the screenshot hangs — the same reason the desktop harness
+skips its paint assertion on Linux (above), and this smoke test is therefore
+the proof that the app renders there; and `scripts/crossplat/` imports
 nothing from this repo and names no app — it is shared with the other projects
 and headed for hatchkit, so project wiring stays in `package.json` and
 `scripts/desktop-linux-smoke.mjs`.
