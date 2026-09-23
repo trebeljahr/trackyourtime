@@ -80,8 +80,13 @@ export const useActivitySuggestions = (
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
 
+  // Written from an effect, never during render. `trackedBetween` is async
+  // and only ever called from a commit-or-later path, so it reads the
+  // committed viewer; the ref starts out holding the first render's value.
   const viewerRef = React.useRef(viewerId);
-  viewerRef.current = viewerId;
+  React.useEffect(() => {
+    viewerRef.current = viewerId;
+  }, [viewerId]);
 
   const trackedBetween = React.useCallback(
     async (span: DesktopActivityInterval): Promise<DesktopActivityInterval[]> => {
@@ -145,6 +150,11 @@ export const useActivitySuggestions = (
   );
 
   React.useEffect(() => {
+    // Back to the loading state before the await that follows: a new range
+    // must not keep the previous one's suggestions on screen while it
+    // resolves. The reset and the fetch it precedes are one operation, so it
+    // belongs with the fetch rather than in a render-phase adjustment.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSuggestions(null);
     setLoaded(false);
     void refresh({ fresh: true });

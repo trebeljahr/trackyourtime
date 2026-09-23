@@ -67,7 +67,12 @@ export const useIdleGuard = (): void => {
     format,
     projects: projects.data,
   });
-  contextRef.current = { running, mutations, format, projects: projects.data };
+  // Written from an effect, never during render: the detector's readings and
+  // the toast's answers both arrive after a commit, so the ref is always the
+  // committed render's values by the time anything reads it.
+  React.useEffect(() => {
+    contextRef.current = { running, mutations, format, projects: projects.data };
+  }, [running, mutations, format, projects.data]);
 
   /** Executing a plan can produce the next one, so this is reached by ref. */
   const runPlanRef = React.useRef<(plan: IdlePlan) => void>(() => undefined);
@@ -132,7 +137,9 @@ export const useIdleGuard = (): void => {
     [answerIdle]
   );
 
-  runPlanRef.current = runPlan;
+  React.useEffect(() => {
+    runPlanRef.current = runPlan;
+  }, [runPlan]);
 
   const onReading = React.useCallback((reading: IdleReading): void => {
     const context = contextRef.current;

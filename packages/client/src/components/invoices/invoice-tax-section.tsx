@@ -296,15 +296,20 @@ export function lineTaxRenderer(
   label: (line: string) => string,
 ): ((line: Pick<InvoiceLineItem, "key" | "label">, index: number) => React.ReactNode) | null {
   if (!value.perLine) return null;
-  return (line, index) => (
-    <TaxChoiceSelect
-      compact
-      value={value.lines[line.key] ?? value.all}
-      aria-label={label(line.label)}
-      onChange={(choice) =>
-        onChange({ ...value, touched: true, lines: { ...value.lines, [line.key]: choice } })
-      }
-      testId={`invoice-line-tax-${index}`}
-    />
-  );
+  // Named, because an anonymous arrow returning JSX reads to eslint-plugin-react
+  // as a component definition missing a display name. This is a cell renderer
+  // the table calls as a function, never mounted as a component.
+  return function renderLineTax(line, index) {
+    return (
+      <TaxChoiceSelect
+        compact
+        value={value.lines[line.key] ?? value.all}
+        aria-label={label(line.label)}
+        onChange={(choice) =>
+          onChange({ ...value, touched: true, lines: { ...value.lines, [line.key]: choice } })
+        }
+        testId={`invoice-line-tax-${index}`}
+      />
+    );
+  };
 }

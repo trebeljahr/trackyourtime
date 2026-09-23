@@ -1066,7 +1066,11 @@ export const useEntryMutations = (): EntryMutations => {
     [resolveRunawayMutation]
   );
 
-  removeEntryRef.current = removeEntry;
+  // Written from an effect, never during render. The only reader is a row's
+  // own click handler, which cannot fire before this commit has painted.
+  React.useEffect(() => {
+    removeEntryRef.current = removeEntry;
+  }, [removeEntry]);
 
   const isBusy =
     startMutation.isPending ||

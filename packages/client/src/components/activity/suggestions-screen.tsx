@@ -161,8 +161,17 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
   const [day, setDay] = React.useState<string | null>(null);
   React.useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("day");
+    // After mount by necessity, per the note above: `useSearchParams` would
+    // force a Suspense boundary under the static export.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (requested !== null && /^\d{4}-\d{2}-\d{2}$/.test(requested)) setDay(requested);
   }, []);
+  // Reads the clock during render, deliberately: "which day is it now" is the
+  // fallback when `?day=` names none, and freezing it at mount would leave the
+  // screen on yesterday across midnight. No hydration concern — this subtree
+  // only renders once `window.electronAPI` has answered, which never happens
+  // during the prerender.
+  // eslint-disable-next-line react-hooks/purity
   const today = dayKeyInZone(Date.now(), zone);
   const shownDay = day ?? today;
   const range = React.useMemo(
@@ -177,15 +186,24 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
   const projects = trpc.projects.list.useQuery({});
   const tasks = trpc.tasks.list.useQuery({});
   const tags = trpc.tags.list.useQuery(TAG_LIST_INPUT);
-  const catalogRef = React.useRef<KnownCatalog>({ projects: null, tasks: null, tags: null });
-  catalogRef.current = {
-    projects:
-      projects.data === undefined
-        ? null
-        : new Map(projects.data.map((project) => [project.id, { billableDefault: project.billableDefault }])),
-    tasks: tasks.data === undefined ? null : new Set(tasks.data.map((task) => task.id)),
-    tags: tags.data === undefined ? null : new Set(tags.data.map((tag) => tag.id)),
-  };
+  const catalog = React.useMemo<KnownCatalog>(
+    () => ({
+      projects:
+        projects.data === undefined
+          ? null
+          : new Map(projects.data.map((project) => [project.id, { billableDefault: project.billableDefault }])),
+      tasks: tasks.data === undefined ? null : new Set(tasks.data.map((task) => task.id)),
+      tags: tags.data === undefined ? null : new Set(tags.data.map((tag) => tag.id)),
+    }),
+    [projects.data, tasks.data, tags.data],
+  );
+  // Behind a ref so `accept` keeps one identity while the catalog queries
+  // settle; written from an effect, never during render, since the only
+  // reader is the async accept path.
+  const catalogRef = React.useRef<KnownCatalog>(catalog);
+  React.useEffect(() => {
+    catalogRef.current = catalog;
+  }, [catalog]);
   const projectName = (id: string | null | undefined): string | null =>
     id === null || id === undefined ? null : (projects.data?.find((project) => project.id === id)?.name ?? null);
 

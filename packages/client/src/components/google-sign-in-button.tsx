@@ -54,6 +54,10 @@ export function GoogleSignInButton(): React.JSX.Element {
   const t = useT("shell");
 
   React.useEffect(() => {
+    // Decided after mount, never during render — the whole point of this
+    // component, per the note above: the prerender knows neither
+    // `window.Capacitor` nor the server's configuration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setShell(isTokenShell());
     setDesktop(isElectron());
     setMounted(true);

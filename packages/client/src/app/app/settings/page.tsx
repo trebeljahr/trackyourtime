@@ -60,6 +60,10 @@ export default function SettingsPage() {
   // the whole page into a Suspense boundary under the static export.
   React.useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
+    // After mount by necessity: `useSearchParams` would force this page into
+    // a Suspense boundary under the static export, and the prerendered HTML
+    // has no query string to read (see the note above).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (requested && isTab(requested)) setTab(requested);
     // The desktop tray's Settings item, while this page is already open.
     const onRequest = (event: Event): void => {

@@ -40,9 +40,10 @@ export function ActivityRuleDialog({
   const t = useT("activity");
   const tc = useT("common");
   const open = app !== null;
-  const seedRef = React.useRef(seed);
-  seedRef.current = seed;
-  const { fields, setFields } = useEntryFields(() => seedRef.current, app?.key ?? null);
+  // The getter closes over this render's `seed` directly: `useEntryFields`
+  // calls it during render (initial state, and again on a reset), so the
+  // value it reads is already the current one — no latest-value ref needed.
+  const { fields, setFields } = useEntryFields(() => seed, app?.key ?? null);
   const [saving, setSaving] = React.useState(false);
 
   const save = React.useCallback(async (): Promise<void> => {

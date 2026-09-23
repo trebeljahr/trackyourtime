@@ -24,6 +24,9 @@ export function useDeepLink(): ReturnType<typeof parseDeepLink> {
   React.useEffect(() => {
     // Read from `location` rather than `useSearchParams`, which would force a
     // Suspense boundary under the static export (same as settings `?tab=`).
+    // After mount, therefore: the prerendered HTML has no query string, and a
+    // first client render that read one would disagree with it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLink(parseDeepLink(window.location.search));
   }, []);
   return link;

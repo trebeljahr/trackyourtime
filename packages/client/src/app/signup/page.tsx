@@ -34,6 +34,9 @@ export default function SignupPage() {
   const [next, setNext] = useState<string | null>(null);
   useEffect(() => {
     const search = window.location.search;
+    // After mount by necessity: the page is prerendered in Node, where there
+    // is no query string to read (see the note above).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNext(safeNextFromSearch(search));
     const prefill = new URLSearchParams(search).get("email");
     if (prefill) setEmail((current) => (current === "" ? prefill : current));

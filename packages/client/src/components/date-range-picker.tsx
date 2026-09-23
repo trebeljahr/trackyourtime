@@ -226,11 +226,16 @@ export function DateRangePicker({
   // range onto the half-typed year and took the other bound with it.
   const [draft, setDraft] = React.useState<DateRange>(value);
 
-  React.useEffect(() => {
-    // Primitive deps: a parent that rebuilds `value` each render must not wipe
-    // an edit in progress.
+  // Adjusted during render rather than in an effect — the same reseed pattern
+  // as `useEntryFields`, and for the same reason: an effect would paint the
+  // previous range for one frame before correcting itself. The two bounds are
+  // tracked as primitives, so a parent that rebuilds `value` each render must
+  // not wipe an edit in progress.
+  const [seen, setSeen] = React.useState({ from: value.from, to: value.to });
+  if (seen.from !== value.from || seen.to !== value.to) {
+    setSeen({ from: value.from, to: value.to });
     setDraft({ from: value.from, to: value.to });
-  }, [value.from, value.to]);
+  }
 
   const active = React.useMemo(
     () => matchPreset(value, weekStartsOn, new Date(), allTime),

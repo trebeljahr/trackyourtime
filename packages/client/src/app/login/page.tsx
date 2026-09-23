@@ -45,6 +45,10 @@ export default function LoginPage() {
   const [next, setNext] = useState<string | null>(null);
   useEffect(() => {
     const search = window.location.search;
+    // After mount by necessity: the page is prerendered in Node under
+    // `output: "export"`, where there is no query string, and a first client
+    // render that read one would disagree with the served HTML.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNext(safeNextFromSearch(search));
     const prefill = new URLSearchParams(search).get("email");
     if (prefill) setEmail((current) => (current === "" ? prefill : current));
@@ -64,6 +68,8 @@ export default function LoginPage() {
    */
   const [revoked, setRevoked] = useState<SessionRevokedNotice | null>(null);
   useEffect(() => {
+    // After mount, for the prerender reason spelled out above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRevoked(consumeSessionRevokedNotice());
   }, []);
 

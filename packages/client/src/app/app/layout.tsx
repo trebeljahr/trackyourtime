@@ -51,6 +51,11 @@ export default function ProtectedLayout({
     if (isLoading || !sessionReady) return;
 
     let cancelled = false;
+    // The verdict is decided after mount, never during render: see the
+    // `recheck` note above — neither a cached `null` nor a cached session is
+    // the authority, so the state starts at "checking" in the prerendered
+    // HTML and in the hydrating render, and only an answer moves it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRecheck(isAuthenticated ? "in" : "checking");
 
     // `hasStoredToken` is false on web by construction — `getNativeToken()`

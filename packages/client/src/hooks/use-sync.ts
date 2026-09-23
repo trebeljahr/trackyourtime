@@ -418,6 +418,13 @@ export const useRunningEntry = (): RunningEntry => {
   return {
     entry: state.running,
     elapsedSec: state.elapsedSec,
+    // Reads the clock during render, deliberately: the ticker re-renders every
+    // consumer of this hook once a second, so an impure read is exactly as
+    // fresh as `elapsedSec` beside it, and there is nowhere cheaper to put it —
+    // the store only `set`s when `elapsedSec` CHANGES, which on a skewed clock
+    // it never does. Safe for hydration: the server snapshot has no running
+    // entry, so the prerender and the hydrating render both compute `false`.
+    // eslint-disable-next-line react-hooks/purity
     clockSkewed: clockLooksWrong(state.running, Date.now()),
   };
 };

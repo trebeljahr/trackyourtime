@@ -27,6 +27,10 @@ export function AccountLinks({
 }): React.ReactElement {
   const { isAuthenticated, isLoading } = useAuth();
   const [mounted, setMounted] = React.useState(false);
+  // "Log in" / "Create an account" is what the public pages are prerendered
+  // with; swapping in "Open the app" after mount — never during hydration —
+  // is what keeps the first client render identical to the served HTML.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   React.useEffect(() => setMounted(true), []);
 
   const primary =

@@ -159,9 +159,6 @@ export function useProjectMutations(
 ): ProjectMutations {
   const utils = trpc.useUtils();
 
-  const readProjects = (): ProjectRow[] =>
-    utils.projects.list.getData(PROJECT_LIST_INPUT) ?? [];
-
   const findClient = (id: string | null | undefined): ClientRow | null => {
     if (!id) return null;
     const clients = utils.clients.list.getData(CLIENT_LIST_INPUT) ?? [];

@@ -110,7 +110,9 @@ describe("createSyncClient reconnect", () => {
 
   it("re-reads the token, so a resume after a sign-in uses the new one", () => {
     const { sockets, FakeSocket } = socketSpy();
-    let token: string | undefined;
+    // Assigned here and reassigned below: the point of the test is that the
+    // client re-reads the getter rather than capturing the first answer.
+    let token: string | undefined = undefined;
     const client = createSyncClient({
       url: "ws://api.test/api/ws",
       onEvent: () => undefined,

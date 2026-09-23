@@ -83,20 +83,19 @@ export function ManualEntryDialog({
 
   // Reseed on each open rather than in an effect, so the very first paint
   // already shows the composer's values instead of the previous block's.
-  const seedRef = React.useRef(seed);
-  seedRef.current = seed;
+  // Both seeds are read during render — by `useEntryFields` when `open`
+  // changes, and by the reopen branch below — so closing over this render's
+  // props is exactly what a latest-value ref would have held.
   const { fields, setFields } = useEntryFields(
-    () => entryFieldsFrom(seedRef.current),
+    () => entryFieldsFrom(seed),
     open
   );
 
-  const seedRangeRef = React.useRef(seedRange);
-  seedRangeRef.current = seedRange;
   const [range, setRange] = React.useState(defaultManualRange);
   const [wasOpen, setWasOpen] = React.useState(false);
   if (wasOpen !== open) {
     setWasOpen(open);
-    if (open) setRange(seedRangeRef.current ?? defaultManualRange());
+    if (open) setRange(seedRange ?? defaultManualRange());
   }
 
   const seconds = Math.max(

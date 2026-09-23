@@ -60,10 +60,14 @@ export function DeviceApproval(): React.JSX.Element {
   const [outcome, setOutcome] = React.useState<Outcome>({ kind: "idle" });
 
   // A code handed over via `verification_uri_complete` arrives after the first
-  // client render, so mirror it into the field once it appears.
-  React.useEffect(() => {
+  // client render, so mirror it into the field once it appears. Adjusted
+  // during render rather than in an effect, so the field never paints empty
+  // for a frame after the code has arrived.
+  const [seenPrefill, setSeenPrefill] = React.useState(prefill);
+  if (prefill !== seenPrefill) {
+    setSeenPrefill(prefill);
     if (prefill) setCode(prefill);
-  }, [prefill]);
+  }
 
   const parsed = deviceCodeSchema.safeParse({ userCode: code });
   const busy = outcome.kind === "working";

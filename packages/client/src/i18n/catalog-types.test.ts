@@ -10,16 +10,21 @@ import { getTranslator } from "@/i18n/translator";
  * silently stopped protecting translators and call sites.
  */
 
-const source = { greeting: "Hello {name}", nested: { count: "{count, plural, one {#} other {#}}" } } as const;
+/* Declared as a type rather than a value: nothing here runs, and a `const`
+ * that exists only to be `typeof`-ed is an unused binding. */
+type Source = {
+  readonly greeting: "Hello {name}";
+  readonly nested: { readonly count: "{count, plural, one {#} other {#}}" };
+};
 
 describe("catalog typing", () => {
   it("is enforced by tsc", () => {
-    const complete: Translation<typeof source> = { greeting: "Hallo {name}", nested: { count: "{count, plural, one {#} other {#}}" } };
+    const complete: Translation<Source> = { greeting: "Hallo {name}", nested: { count: "{count, plural, one {#} other {#}}" } };
 
     // @ts-expect-error — a translation missing a key does not compile
-    const missing: Translation<typeof source> = { greeting: "Hallo {name}" };
+    const missing: Translation<Source> = { greeting: "Hallo {name}" };
 
-    const extra: Translation<typeof source> = {
+    const extra: Translation<Source> = {
       greeting: "Hallo {name}",
       nested: { count: "#" },
       // @ts-expect-error — nor does one with a key the source lacks

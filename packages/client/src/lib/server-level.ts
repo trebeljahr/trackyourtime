@@ -116,6 +116,10 @@ export const useServerCompatibility = (): ServerCompatibilityState => {
   const state = React.useSyncExternalStore(subscribe, snapshot, serverSnapshot);
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
+    // `mounted` exists only to hold the answer back to `null` for the
+    // prerendered HTML and the hydrating render, per the note above. Setting
+    // it anywhere but after mount would defeat it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     void getServerLevelCache().hydrate();
   }, []);

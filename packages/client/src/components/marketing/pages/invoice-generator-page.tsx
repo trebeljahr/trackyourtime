@@ -77,6 +77,10 @@ export function InvoiceGeneratorPage({ locale }: { locale: Locale }): React.Reac
 
   React.useEffect(() => {
     const draft = readDraft(window.localStorage);
+    // After mount by construction, per the note above: the empty form is both
+    // the prerendered state and the first client render, and a draft read
+    // during render would disagree with the served HTML.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (draft) setForm(draft);
     setHydrated(true);
   }, []);

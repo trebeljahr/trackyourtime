@@ -35,6 +35,9 @@ export function InvoicesScreen(): React.JSX.Element {
   // Read from `location`, like settings `?tab=`, and applied once the list
   // has the invoice.
   React.useEffect(() => {
+    // After mount, per the note above: read from `location` like settings
+    // `?tab=`, which the prerendered HTML cannot have.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLinkedId(new URLSearchParams(window.location.search).get("invoice"));
   }, []);
   if (linkedId !== null && list.data) {

@@ -25,6 +25,10 @@ export function BillableGlyph({
   return (
     <span className="relative inline-flex items-center justify-center">
       {Icon ? (
+        // Not a component created during render: `currencyIcon` is a lookup in
+        // a module-level table of lucide icons, so the identity is stable per
+        // currency code and this never remounts.
+        // eslint-disable-next-line react-hooks/static-components
         <Icon className={tone} />
       ) : (
         // Codes lucide has no icon for — "kr", "zł". Sized to the icon box but
