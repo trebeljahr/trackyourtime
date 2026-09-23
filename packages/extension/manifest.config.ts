@@ -29,7 +29,7 @@ import {
 import { STORE_EXTENSION_KEY } from "@starter/shared/store-clients";
 import rootPackage from "../../package.json" with { type: "json" };
 
-export type BuildMode = "development" | "production";
+export type BuildMode = "development" | "production" | "firefox";
 
 export type BuildTarget = {
   /** Baked in as the default API origin. */
@@ -56,7 +56,40 @@ export type BuildTarget = {
    */
   defaultKey: string | undefined;
   outDir: string;
+  /**
+   * Which engine the manifest is written for. Gecko takes a different
+   * background entry, needs an add-on id of its own and supports neither
+   * `key` nor `externally_connectable` for web pages; see
+   * {@link GECKO_SETTINGS} and docs/firefox-extension-spike.md.
+   */
+  engine: "chromium" | "gecko";
 };
+
+/**
+ * The Firefox add-on's identity, and the floor it needs.
+ *
+ * `id` is PERMANENT once the add-on is listed: addons.mozilla.org keys the
+ * listing, and Firefox keys the profile's stored data, on it. A change orphans
+ * every install's offline queue, workspace choice and captured activity, the
+ * way renaming the Raycast extension would.
+ *
+ * `strict_min_version` is 140 because `data_collection_permissions` — which
+ * AMO requires on a new submission — is only read from 140 on. That is also
+ * comfortably above `storage.session` (115) and MV3 (109).
+ *
+ * The data collection list is what the extension really sends to the server
+ * the person chose: their email and password on sign-in (`authenticationInfo`,
+ * `personallyIdentifyingInfo`) and the time entries they write. Browser
+ * activity capture stays on the device, so it is not listed; only an entry the
+ * person accepts leaves, and that is the time entry they wrote.
+ */
+export const GECKO_SETTINGS = {
+  id: "trackyourtime@ricoslabs.com",
+  strict_min_version: "140.0",
+  data_collection_permissions: {
+    required: ["authenticationInfo", "personallyIdentifyingInfo"],
+  },
+} as const;
 
 export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
   development: {
@@ -73,6 +106,7 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
     // two could no longer be installed side by side, and the dev server would
     // be trusting an id no dev build has.
     defaultKey: undefined,
+    engine: "chromium",
     // Deliberately still `dist`: an unpacked extension's id is derived from
     // its path, so moving this would change the id, and with it the
     // `chrome-extension://…` origin already listed in the dev server's
@@ -99,7 +133,41 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
     // (`STORE_EXTENSION_ID`) is the id this build actually gets — unpacked,
     // uploaded, or installed from the store.
     defaultKey: STORE_EXTENSION_KEY,
+    engine: "chromium",
     outDir: "dist-prod",
+  },
+  /**
+   * The Firefox build. Same code, same hosted API, different engine rules:
+   *
+   *  - `background.scripts`, because Gecko's MV3 background is an event page
+   *    rather than a service worker.
+   *  - An add-on id in `browser_specific_settings`, because Firefox derives
+   *    nothing from a key — and `key` itself is a Chromium field Firefox
+   *    ignores, so it is left out rather than carried along.
+   *  - No `externally_connectable`: Firefox does not implement it for web
+   *    pages, so the web app ↔ extension bridge simply does not exist here.
+   *    The popup's password form and "Sign in with the web app" (the device
+   *    flow, and the way in for a two-factor or Google account) both work.
+   *  - No `minimum_chrome_version`, which Gecko does not read.
+   *
+   * Its origin is `moz-extension://<random uuid>`, which no server can list,
+   * so it can only sign in to a server whose TRUST_EXTENSION_ORIGINS (or
+   * TRUST_STORE_APPS) is on — see auth/extension-origins.ts on the server and
+   * docs/firefox-extension-spike.md for what was measured.
+   */
+  firefox: {
+    apiUrl: "https://api.trackyourtime.dev",
+    name: "Track Your Time",
+    nameMessage: "extName",
+    // No bridge on this engine at all, rather than the development list by
+    // omission.
+    bridgeTarget: "none",
+    // `key` is Chromium's way of pinning an id. Firefox's is the gecko id
+    // above, and a stray `key` in a manifest AMO reviews reads as a Chrome
+    // build somebody forgot to clean up.
+    defaultKey: undefined,
+    engine: "gecko",
+    outDir: "dist-firefox",
   },
 };
 
@@ -166,7 +234,9 @@ export function buildManifest(
   env: BuildEnv = processEnv(),
 ): Record<string, unknown> {
   const target = BUILD_TARGETS[mode];
-  const key = pinnedKey(target, env);
+  const gecko = target.engine === "gecko";
+  const key = gecko ? undefined : pinnedKey(target, env);
+  const connectable = extensionBridgeMatchPatterns(target.bridgeTarget);
 
   return {
     manifest_version: 3,
@@ -177,17 +247,21 @@ export function buildManifest(
     ...manifestVersionFields(RELEASE_VERSION),
     description: "__MSG_extDescription__",
     // WebSocket traffic only keeps an MV3 service worker alive from 116 on,
-    // and the sync socket depends on that.
-    minimum_chrome_version: "116",
+    // and the sync socket depends on that. Gecko reads neither field.
+    ...(gecko
+      ? { browser_specific_settings: { gecko: GECKO_SETTINGS } }
+      : { minimum_chrome_version: "116" }),
     ...(key ? { key } : {}),
     action: {
       default_popup: "src/popup/index.html",
       default_title: `__MSG_${target.nameMessage}__`,
     },
-    background: {
-      service_worker: "background.js",
-      type: "module",
-    },
+    // Chromium runs an MV3 background as a service worker; Gecko runs an event
+    // page and has no `service_worker` key at all, so a manifest carrying one
+    // loads with no background script and an extension that does nothing.
+    background: gecko
+      ? { scripts: ["background.js"], type: "module" }
+      : { service_worker: "background.js", type: "module" },
     // `idle` is the only way to learn that the person has walked away — a
     // service worker sees no input events of its own. No `cookies` and no host
     // permissions: see the header.
@@ -199,9 +273,11 @@ export function buildManifest(
     optional_permissions: ["tabs"],
     // The first-party web app may message the extension, so signing in there
     // signs the toolbar in too. No `ids`: other extensions cannot connect.
-    externally_connectable: {
-      matches: extensionBridgeMatchPatterns(target.bridgeTarget),
-    },
+    // Omitted entirely where the engine has no such thing (Firefox), rather
+    // than written out empty, which AMO reads as an unknown key.
+    ...(connectable.length > 0
+      ? { externally_connectable: { matches: connectable } }
+      : {}),
     icons: {
       "16": "icons/16.png",
       "32": "icons/32.png",

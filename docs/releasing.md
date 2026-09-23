@@ -424,3 +424,93 @@ so no OAuth consent screen and no refresh token are needed.
 
 To rotate the key, create a new JSON key for the same service account, replace
 `CWS_SERVICE_ACCOUNT_JSON`, and delete the old key in the Cloud Console.
+
+## Firefox Add-ons
+
+The same workflow's `firefox-add-ons` job builds the `firefox` target
+(`pnpm run build:extension:firefox` → `packages/extension/dist-firefox`) and,
+when the AMO secrets exist, signs and submits it to
+[addons.mozilla.org](https://addons.mozilla.org) with `web-ext sign`. Without
+them a tag run stops after the zip artifact, green, with a notice — the same
+fail-closed shape as the Chrome job. Half a configuration (one secret without
+the other) is an error on every event.
+
+The add-on is the same code as the Chrome extension with three manifest
+differences, all in `packages/extension/manifest.config.ts`: an event-page
+background instead of a service worker, `browser_specific_settings.gecko`
+instead of a `key`, and no `externally_connectable` — Firefox has no way for a
+web page to message an extension, so signing in on the web app does not sign
+the add-on in. The popup's password form and "Sign in with the web app" (the
+device flow) are the ways in, and the second is the one an account with
+two-factor authentication needs.
+
+### Two things that are permanent
+
+- **The add-on id, `trackyourtime@ricoslabs.com`.** AMO keys the listing on
+  it, and Firefox keys each profile's stored data on it, so changing it after
+  the first submission orphans every install's offline queue, workspace choice
+  and captured activity.
+- **A version number.** AMO refuses a version it has already seen, and a
+  submitted version cannot be re-uploaded. The manifest version comes from the
+  root `package.json`, and the job checks it against the tag before uploading.
+
+Prereleases are built and checked but never submitted, for that reason.
+
+### Server trust
+
+Firefox gives every install its own `moz-extension://<uuid>` origin, so unlike
+the Chrome extension there is nothing to add to `TRUSTED_ORIGINS`. The hosted
+server must instead have `TRUST_EXTENSION_ORIGINS=true` (or
+`TRUST_STORE_APPS=true`, which implies it) in the server app's env fields in
+Coolify, before the first release reaches anybody. Check it with any UUID:
+
+```bash
+curl -s -H 'Origin: moz-extension://42a04a0c-c28d-4f59-8694-9623ce55de3d' \
+  https://api.trackyourtime.dev/api/health
+```
+
+The JSON must contain `"originTrusted": true`. What the rule is and why it is
+narrowed to cookie-less requests: `packages/server/src/auth/extension-origins.ts`
+and docs/firefox-extension-spike.md.
+
+### One-time setup (manual)
+
+Creating the account and the listing is dashboard work; the API only adds
+versions to a listing that exists.
+
+1. Create or sign in to a Firefox Add-ons developer account at
+   <https://addons.mozilla.org/developers/>, with two-factor authentication on.
+2. Submit the **first** version by hand: Add-ons → Submit a New Add-on, upload
+   a zip of `packages/extension/dist-firefox` (`pnpm run build:extension:firefox`,
+   then zip the directory's contents with `manifest.json` at the root), choose
+   "On this site" for a listed add-on, and fill in the listing — summary,
+   description, screenshots, categories, the privacy policy URL and the data
+   collection answers. The manifest already declares
+   `data_collection_permissions` (`authenticationInfo`,
+   `personallyIdentifyingInfo`), and the answers must match it.
+3. Upload the sources when asked. AMO reviews bundled code only with readable
+   sources beside it; the workflow does this automatically afterwards
+   (`--upload-source-code` with a `git archive` of the tag).
+4. API credentials: <https://addons.mozilla.org/developers/addon/api/key/> →
+   Generate new credentials. It shows a JWT issuer and a JWT secret, the
+   secret once.
+5. In GitHub, Settings → Secrets and variables → Actions, add:
+   - `AMO_JWT_ISSUER`: the issuer (`user:12345678:123`).
+   - `AMO_JWT_SECRET`: the secret.
+6. Test it: Actions → Extension Release → Run workflow, `tag` set to the
+   newest tag, `mode: upload`. AMO has no draft-without-submission step, so
+   this really does submit that version — run it only when that version is one
+   you mean to publish. `mode: build` proves the build alone.
+7. When the listing is approved, put its URL in `STORES.firefox` in
+   `packages/client/src/lib/site-links.ts`. Until then the /extension/ page
+   says "Not on Firefox Add-ons yet" rather than linking a listing that does
+   not exist.
+
+Review takes days rather than minutes, and a first submission is reviewed by a
+person. Nothing else in the release waits for it.
+
+### Permissions, as AMO asks about them
+
+The same list as the Chrome item — `storage`, `alarms`, `idle`, and the
+optional `tabs` — with no host permissions and no content scripts. The
+justifications in [Chrome Web Store](#chrome-web-store) apply word for word.

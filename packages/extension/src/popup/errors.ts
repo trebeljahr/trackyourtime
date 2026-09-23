@@ -22,17 +22,43 @@ import type { PopupT } from "../i18n/use-t";
 import type { ErrorDetails } from "../lib/messaging";
 
 import { serverHost, TWO_FACTOR_UNSUPPORTED, type ServerInputProblem } from "@starter/core";
+import { isRandomExtensionOrigin } from "@starter/shared";
 import type { DeviceSignInError } from "../lib/messaging";
 
 /**
- * This extension's own origin, as a server admin types it into
+ * This extension's own origin, as a server admin would type it into
  * TRUSTED_ORIGINS. Read at call time, so a test without `chrome` still gets a
  * sentence.
+ *
+ * From `runtime.getURL("/")`, never from `runtime.id`: the id IS the origin's
+ * host on Chromium, and on Firefox it is the add-on id
+ * (`trackyourtime@ricoslabs.com`) while the origin is a random
+ * `moz-extension://<uuid>`. Composing one from the other names an origin that
+ * does not exist, in the one message whose whole job is to be copied.
  */
 export const extensionOrigin = (): string => {
-  const id = (globalThis as { chrome?: { runtime?: { id?: unknown } } }).chrome?.runtime?.id;
+  const runtime = (globalThis as {
+    chrome?: { runtime?: { getURL?: (path: string) => string; id?: unknown } };
+  }).chrome?.runtime;
+  const url = runtime?.getURL?.("/");
+  if (typeof url === "string" && url !== "") return url.replace(/\/$/, "");
+  const id = runtime?.id;
   return typeof id === "string" && id !== "" ? `chrome-extension://${id}` : "chrome-extension://…";
 };
+
+/**
+ * Which sentence a refusing server gets.
+ *
+ * A Chromium extension has a pinned origin, so the fix is one line in
+ * TRUSTED_ORIGINS. A Firefox or Safari one has a per-install random origin
+ * that no list can hold — naming TRUSTED_ORIGINS there sends the admin to add
+ * a value that would stop working on the next install — so it names
+ * TRUST_EXTENSION_ORIGINS, the rule that trusts the shape instead.
+ */
+export const originNotTrustedKey = (): "originNotTrusted" | "originNotTrustedRandom" =>
+  isRandomExtensionOrigin(extensionOrigin())
+    ? "originNotTrustedRandom"
+    : "originNotTrusted";
 
 const CREDENTIAL_CODES: ReadonlySet<string> = new Set([
   "INVALID_EMAIL_OR_PASSWORD",
@@ -80,7 +106,7 @@ const fixedMessage = (code: string, t: PopupT, server: string): string | null =>
     case "SUGGESTION_ALREADY_TRACKED":
       return t("errors.suggestionTracked");
     case "ORIGIN_NOT_TRUSTED":
-      return t("errors.originNotTrusted", { server, origin: extensionOrigin() });
+      return t(`errors.${originNotTrustedKey()}`, { server, origin: extensionOrigin() });
     case "DEVICE_URL_INVALID":
       return t("errors.deviceUrlInvalid");
     case "SERVER_UNREACHABLE":

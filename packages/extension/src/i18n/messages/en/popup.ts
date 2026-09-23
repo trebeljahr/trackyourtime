@@ -135,6 +135,13 @@ export const popup = {
      */
     originNotTrusted:
       "{server} does not accept requests from this extension. Ask its admin to set TRUST_STORE_APPS=true, or to add {origin} to TRUSTED_ORIGINS.",
+    /**
+     * The Firefox and Safari wording. Their origin is a different random UUID
+     * on every install, so TRUSTED_ORIGINS cannot hold it and the admin needs
+     * the rule that trusts the shape instead.
+     */
+    originNotTrustedRandom:
+      "{server} does not accept requests from this extension. Firefox gives every install its own address ({origin}), so ask its admin to set TRUST_EXTENSION_ORIGINS=true (or TRUST_STORE_APPS=true).",
     deviceUrlInvalid:
       "The server sent an approval page the extension will not open. The server’s web address has to use https://.",
     deviceDenied: "The sign-in was declined in the web app.",

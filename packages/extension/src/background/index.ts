@@ -310,9 +310,15 @@ const setServer = async (
   // does not trust this origin would look offline forever. `null` is a server
   // too old to say, which is let through.
   if (check.server.originTrusted === false) {
+    // `runtime.getURL`, never `runtime.id`: on Firefox the id is the add-on id
+    // and the ORIGIN is a random moz-extension:// UUID, which is the value an
+    // admin would be told to copy. The popup translates this code and picks
+    // the right sentence for the engine (popup/errors.ts); this string is what
+    // reaches a log.
+    const origin = chrome.runtime.getURL("/").replace(/\/$/, "");
     throw new BackgroundError(
       "ORIGIN_NOT_TRUSTED",
-      `${host} does not trust this extension. Its admin sets TRUST_STORE_APPS=true, or adds chrome-extension://${chrome.runtime.id} to TRUSTED_ORIGINS.`,
+      `${host} does not trust this extension (${origin}). Its admin sets TRUST_STORE_APPS=true or TRUST_EXTENSION_ORIGINS=true, or adds a pinned origin to TRUSTED_ORIGINS.`,
     );
   }
 

@@ -3,8 +3,9 @@ node_modules/
 
 # Build output
 dist/
-# The production extension bundle. `dist/` above does not match it.
+# The production and Firefox extension bundles. `dist/` above matches neither.
 dist-prod/
+dist-firefox/
 .next/
 # Per-instance Next build dirs (scripts/dev.mjs)
 .next-*/

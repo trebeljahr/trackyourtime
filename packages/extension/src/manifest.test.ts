@@ -1,6 +1,8 @@
 import { STORE_EXTENSION_ID, STORE_EXTENSION_KEY } from "@starter/shared";
 import { describe, expect, it } from "vitest";
 import {
+  BUILD_TARGETS,
+  GECKO_SETTINGS,
   RELEASE_VERSION,
   buildManifest,
   manifestVersionFields,
@@ -58,6 +60,63 @@ describe("development manifest", () => {
       matches: ["http://localhost/*", "http://127.0.0.1/*"],
     });
     expect(connectable).not.toHaveProperty("ids");
+  });
+});
+
+describe("firefox manifest", () => {
+  const manifest = buildManifest("firefox", {});
+
+  it("asks for no host access and no cookies, like every other build", () => {
+    expectNoHostAccess(manifest);
+  });
+
+  it("runs an event page, not a service worker", () => {
+    // Gecko has no `service_worker` key. A manifest carrying one loads with no
+    // background at all — every listener unregistered, and an extension whose
+    // popup opens and does nothing.
+    expect(manifest.background).toEqual({
+      scripts: ["background.js"],
+      type: "module",
+    });
+  });
+
+  it("carries the gecko id and the versions AMO needs", () => {
+    expect(manifest.browser_specific_settings).toEqual({ gecko: GECKO_SETTINGS });
+    // Permanent once listed: AMO keys the listing and Firefox keys the
+    // profile's stored data on it.
+    expect(GECKO_SETTINGS.id).toBe("trackyourtime@ricoslabs.com");
+    // data_collection_permissions is only read from 140 on, and AMO requires
+    // it on a new submission.
+    expect(GECKO_SETTINGS.strict_min_version).toBe("140.0");
+    expect(GECKO_SETTINGS.data_collection_permissions.required).toContain(
+      "authenticationInfo",
+    );
+  });
+
+  it("carries no Chromium-only keys", () => {
+    // `key` pins an id on Chromium and means nothing here; EXTENSION_KEY must
+    // not smuggle one in either, since AMO reviews the manifest it is sent.
+    expect(manifest).not.toHaveProperty("key");
+    expect(buildManifest("firefox", { EXTENSION_KEY: "fork-key" })).not.toHaveProperty(
+      "key",
+    );
+    expect(manifest).not.toHaveProperty("minimum_chrome_version");
+  });
+
+  it("has no bridge: Firefox does not connect web pages to extensions", () => {
+    // The key is omitted rather than written empty — AMO reads an unknown or
+    // empty key as a mistake, and an empty match list is not a narrower
+    // bridge, it is no bridge.
+    expect(manifest).not.toHaveProperty("externally_connectable");
+  });
+
+  it("points at the hosted API, like the production build", () => {
+    // Not asserted from the manifest (the URL is a vite define), but the two
+    // targets must not drift: a Firefox build pointed at localhost would ship
+    // to AMO talking to nothing.
+    expect(BUILD_TARGETS.firefox.apiUrl).toBe(BUILD_TARGETS.production.apiUrl);
+    expect(BUILD_TARGETS.firefox.outDir).toBe("dist-firefox");
+    expect(BUILD_TARGETS.firefox.bridgeTarget).toBe("none");
   });
 });
 

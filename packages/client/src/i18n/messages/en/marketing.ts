@@ -52,6 +52,7 @@ export const marketing = {
   /** Store buttons. `pending` is shown instead of a button while a listing is not live. */
   stores: {
     chrome: { pending: "Not in the Chrome Web Store yet", label: "Add to Chrome" },
+    firefox: { pending: "Not on Firefox Add-ons yet", label: "Add to Firefox" },
     raycast: { pending: "Not in the Raycast Store yet", label: "Install from the Raycast Store" },
     appStore: { pending: "Not on the App Store yet", label: "Download on the App Store" },
     googlePlay: { pending: "Not on Google Play yet", label: "Get it on Google Play" },

@@ -18,7 +18,8 @@ import { registerApiV1Routes } from "./api/v1/index.js";
 import { registerAvatarRoutes } from "./services/avatar/route.js";
 import { isDatabaseReady } from "./db/connection.js";
 import { notFoundHandler, errorHandler } from "./middleware/error-handler.js";
-import { env, getTrustedOrigins } from "./config/env.js";
+import { env, getTrustedOrigins, trustsExtensionOrigins } from "./config/env.js";
+import { extensionOriginTrusted } from "./auth/extension-origins.js";
 
 /**
  * Body ceiling for an import request. {@link MAX_IMPORT_BYTES} of file, plus
@@ -56,6 +57,45 @@ export function corsOptions(trustedOrigins: string[]): cors.CorsOptions {
   };
 }
 
+/**
+ * CORS for an extension-scheme origin: allowed, and deliberately NOT
+ * credentialed.
+ *
+ * A Firefox or Safari extension's origin is a random per-install UUID that no
+ * trust list can name, so it is trusted by shape and only for requests with no
+ * session cookie (auth/extension-origins.ts). Answering it without
+ * `Access-Control-Allow-Credentials` is the second half of that rule: a
+ * browser will not send a credentialed request to an origin whose preflight
+ * does not allow credentials, and could not read the answer if it did. The
+ * clients that use these origins send `credentials: "omit"` and a bearer
+ * token, so they lose nothing.
+ */
+export function extensionCorsOptions(origin: string): cors.CorsOptions {
+  return { origin, credentials: false, exposedHeaders: ["set-auth-token"] };
+}
+
+/**
+ * Pick the options per request, because one rule needs the request to decide.
+ *
+ * Exported so a test drives exactly what the app mounts.
+ */
+export function corsOptionsFor(req: {
+  headers: { origin?: string; cookie?: string };
+}): cors.CorsOptions {
+  const origin = req.headers.origin;
+  if (
+    typeof origin === "string" &&
+    extensionOriginTrusted({
+      origin,
+      cookie: req.headers.cookie,
+      enabled: trustsExtensionOrigins(),
+    })
+  ) {
+    return extensionCorsOptions(origin);
+  }
+  return corsOptions(getTrustedOrigins());
+}
+
 export function createApp() {
   const app = express();
 
@@ -66,7 +106,10 @@ export function createApp() {
   app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
   // ── 0. CORS — must be before all route handlers so preflight works ─
-  app.use(cors(corsOptions(getTrustedOrigins())));
+  // Per request (a delegate), not one fixed set of options: an extension
+  // origin is judged by shape and by the absence of a session cookie, and is
+  // answered without Allow-Credentials. See corsOptionsFor above.
+  app.use(cors((req, done) => done(null, corsOptionsFor(req))));
 
   // ── 1. better-auth — BEFORE express.json() ────────────────────────
   // better-auth handles its own body parsing. Mounting express.json()
@@ -170,9 +213,18 @@ export function createApp() {
       // Whether the Origin that asked may sign in here, or null when the
       // request carried none (curl, Raycast). Lets a client say "add this
       // origin to TRUSTED_ORIGINS" instead of failing later with a bare 403.
+      // An extension-scheme origin is never IN the list — it is judged per
+      // request — so ask the same rule the sign-in path will ask, with this
+      // request's own headers. Without that a Firefox extension reads
+      // "this server does not trust you" from a server that does.
       originTrusted:
         typeof origin === "string"
-          ? getTrustedOrigins().includes(origin)
+          ? getTrustedOrigins().includes(origin) ||
+            extensionOriginTrusted({
+              origin,
+              cookie: req.headers.cookie,
+              enabled: trustsExtensionOrigins(),
+            })
           : null,
       db: isDatabaseReady(),
       // Where this API's web app lives. The browser extension has only an API

@@ -2678,17 +2678,18 @@ Rules that fail quietly if broken:
 ### Browser extension build modes
 
 `packages/extension` bakes its DEFAULT API URL in at build time, so a build is
-a target. Both are declared in `packages/extension/manifest.config.ts` — not in
-`.env.*`, which is gitignored and would yield a URL-less bundle silently.
+a target. All three are declared in `packages/extension/manifest.config.ts` —
+not in `.env.*`, which is gitignored and would yield a URL-less bundle silently.
 
 ```bash
-pnpm run build:extension        # dist/      -> http://localhost:5159
-pnpm run build:extension:prod   # dist-prod/ -> https://api.trackyourtime.dev
+pnpm run build:extension          # dist/         -> http://localhost:5159
+pnpm run build:extension:prod     # dist-prod/    -> https://api.trackyourtime.dev
+pnpm run build:extension:firefox  # dist-firefox/ -> https://api.trackyourtime.dev
 pnpm run extension:id [dev|prod]  # the chrome-extension:// origin to trust
 ```
 
 Each target carries its own name and its own `externally_connectable`, so both
-can be installed at once. **Neither has `host_permissions`,
+Chromium builds can be installed at once. **Neither has `host_permissions`,
 `optional_host_permissions` or `cookies`**: the permissions are exactly
 `storage`, `alarms` and `idle`, plus the optional `tabs` for activity capture.
 That is a Web Store review decision, and `manifest.test.ts` asserts the keys
@@ -2703,6 +2704,60 @@ is `https://trackyourtime.dev/*`, development `http://localhost/*` and
 random client port needs). There is no `ids` key, so no other extension can
 connect. The target is baked in by vite (`VITE_BRIDGE_TARGET`), never read from
 storage, because it is what the worker checks every sender against.
+
+### The Firefox build
+
+Same code, `--mode firefox`, and the differences are the engine's. What Gecko
+really sends was measured, not read — `docs/firefox-extension-spike.md` — and
+each rule below fails quietly if it is broken.
+
+- **Its origin is `moz-extension://<random uuid>`, new per install**, so no
+  `TRUSTED_ORIGINS` can hold it. The server trusts the SHAPE instead
+  (`packages/server/src/auth/extension-origins.ts`), narrowed by two things:
+  the request carries **no session cookie**, and its CORS answer never carries
+  `Access-Control-Allow-Credentials`. Behind `TRUST_EXTENSION_ORIGINS`, which
+  follows `TRUST_STORE_APPS` when unset; `scripts/dev.mjs` sets it. One
+  function answers for better-auth's `trustedOrigins`, the `cors()` delegate,
+  `/api/health`'s `originTrusted` and the WebSocket upgrade — four answers
+  about one request must not differ.
+- **The cookie rule keys on the SESSION cookie, never on "any cookie".** A
+  WebSocket upgrade cannot opt out of cookies, and a `SameSite=None` cookie on
+  the API host (a CDN's `__cf_bm`) rides along on every upgrade from an
+  extension origin. "Any cookie" would kill the Firefox socket for everybody
+  behind such a CDN; better-auth's own cookie is `SameSite=Lax` and never
+  reaches a cross-site extension origin, so its presence means the request is
+  not the bearer path it claims to be. The upgrade is where this matters most:
+  WebSockets are not subject to CORS, so without it any add-on in the browser
+  could open a socket on the signed-in person's cookie.
+- **`background.scripts`, not `service_worker`.** Gecko's MV3 background is an
+  event page; a manifest with `service_worker` loads with no background at all
+  — every listener unregistered, and a popup that does nothing.
+- **No `externally_connectable`, so there is no bridge.** Firefox implements it
+  for extensions only, never for web pages. `bridgeTarget: "none"` omits the
+  key AND makes `registerBridgeListener()` register nothing, so the "the page
+  drives" rule stays true on an engine where no page can. Signing in on the web
+  app therefore never signs the add-on in; the password form and the device
+  flow are the ways in.
+- **The socket needs https.** A `moz-extension://` document is a secure
+  context and Firefox blocks insecure `ws://` from it — no loopback exception,
+  unlike Chrome, and host permissions do not change it. Against an `http://`
+  dev server the extension works and live sync does not.
+- **`browser_specific_settings.gecko.id` is permanent** once the add-on is
+  listed (AMO's listing key, and the profile's storage key — the offline queue,
+  the workspace choice, captured activity). `strict_min_version` is 140 because
+  AMO requires `data_collection_permissions` and that key is read from 140 on.
+- **`chrome.runtime.id` is NOT the origin on Firefox.** It is the add-on id;
+  the origin is the random UUID. Anything that shows a person their origin to
+  copy reads `runtime.getURL("/")` (`popup/errors.ts`), and the
+  not-trusted notice names `TRUST_EXTENSION_ORIGINS` rather than
+  `TRUSTED_ORIGINS`, which cannot hold that value.
+
+`.github/workflows/extension-release.yml`'s `firefox-add-ons` job signs and
+submits with `web-ext sign`, fails closed on half the AMO secrets exactly like
+the Chrome job, never submits a prerelease, and uploads a `git archive` of the
+tag as the sources AMO needs to review bundled code. Setup is manual:
+`docs/releasing.md` → "Firefox Add-ons". `STORES.firefox` in
+`lib/site-links.ts` stays `null` until the listing is live.
 
 The popup's server picker (`src/popup/switch-server.ts`) has **no permission
 step**: normalise, then `config:set-server`. The worker validates with

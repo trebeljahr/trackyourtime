@@ -39,7 +39,7 @@ export const DONATE_URL: string | null = null;
 /** The product name as a stranger reads it. Identifiers use `trackyourtime`. */
 export const PRODUCT_NAME = "Track Your Time";
 
-export type StoreId = "chrome" | "raycast" | "appStore" | "googlePlay";
+export type StoreId = "chrome" | "firefox" | "raycast" | "appStore" | "googlePlay";
 
 export type StoreListing = {
   /**
@@ -51,6 +51,10 @@ export type StoreListing = {
 
 export const STORES: Record<StoreId, StoreListing> = {
   chrome: { url: "https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi" },
+  // addons.mozilla.org, once a version has been submitted AND approved. The
+  // same rule as every other entry: a listing nobody can open is `null`, and
+  // the page says "not in the store yet" rather than linking a 404.
+  firefox: { url: null },
   raycast: { url: null },
   appStore: { url: null },
   googlePlay: { url: null },

@@ -13,8 +13,9 @@ hosted API. Either can then be pointed at any Track Your Time server from the
 popup — see [Choosing a server](#choosing-a-server).
 
 ```bash
-pnpm run build:extension        # development -> dist/,      http://localhost:5159
-pnpm run build:extension:prod   # production  -> dist-prod/, https://api.trackyourtime.dev
+pnpm run build:extension          # development -> dist/,         http://localhost:5159
+pnpm run build:extension:prod     # production  -> dist-prod/,    https://api.trackyourtime.dev
+pnpm run build:extension:firefox  # firefox     -> dist-firefox/, https://api.trackyourtime.dev
 ```
 
 Both targets are described in `manifest.config.ts`, in TypeScript that ships in
@@ -25,13 +26,14 @@ extension with no URL in it and no error to say so.
 Each target gets its own name (`Track Your Time` vs `Track Your Time (dev)`), so
 the two can be installed side by side. Neither asks for host access or cookies:
 
-| | development (`dist/`) | production (`dist-prod/`) |
-|---|---|---|
-| `permissions` | `storage`, `alarms`, `idle` | `storage`, `alarms`, `idle` |
-| `optional_permissions` (asked for from Settings → Activity) | `tabs` | `tabs` |
-| `externally_connectable.matches` | `http://localhost/*`, `http://127.0.0.1/*` | `https://trackyourtime.dev/*` |
-| `host_permissions`, `optional_host_permissions`, `cookies` | none | none |
-| `key` | none — id follows the load path | the Web Store key (`STORE_EXTENSION_KEY`) |
+| | development (`dist/`) | production (`dist-prod/`) | firefox (`dist-firefox/`) |
+|---|---|---|---|
+| `permissions` | `storage`, `alarms`, `idle` | `storage`, `alarms`, `idle` | `storage`, `alarms`, `idle` |
+| `optional_permissions` (asked for from Settings → Activity) | `tabs` | `tabs` | `tabs` |
+| `background` | service worker | service worker | event page (`scripts`) |
+| `externally_connectable.matches` | `http://localhost/*`, `http://127.0.0.1/*` | `https://trackyourtime.dev/*` | absent — Gecko has no such thing |
+| `host_permissions`, `optional_host_permissions`, `cookies` | none | none | none |
+| `key` | none — id follows the load path | the Web Store key (`STORE_EXTENSION_KEY`) | none — `browser_specific_settings.gecko.id` |
 
 `externally_connectable` is generated from `extensionBridgeMatchPatterns` in
 `@starter/shared/extension-bridge`, and the same target is baked into the
@@ -40,6 +42,48 @@ check cannot disagree. `manifest.test.ts` pins all of it.
 
 `VITE_API_URL=… pnpm --filter @starter/extension run build` still overrides the
 default URL for a one-off build.
+
+## The Firefox build
+
+Same code, a different engine, and three rules that come with it. What was
+measured rather than assumed is in
+[docs/firefox-extension-spike.md](../../docs/firefox-extension-spike.md).
+
+- **Its origin is `moz-extension://<uuid>`, new on every install.** No server
+  can list it, so a server trusts the SHAPE instead, and only for requests
+  carrying no session cookie — `TRUST_EXTENSION_ORIGINS=true`, which
+  `TRUST_STORE_APPS=true` implies. Without it every request is refused by CORS
+  and the popup says which setting the server's admin needs. `pnpm run dev`
+  sets it for local work.
+- **There is no web-app bridge.** Firefox implements `externally_connectable`
+  for extensions only, never for web pages, so signing in at trackyourtime.dev
+  does not sign the add-on in and `background/bridge.ts` registers no listener
+  (`bridgeTarget: "none"`). Sign in with the popup's password form, or with
+  "Sign in with the web app" — the device flow, and the way in for an account
+  with two-factor authentication.
+- **The sync socket needs an https server.** A `moz-extension://` page is a
+  secure context and Firefox blocks an insecure `ws://` from it, with no
+  loopback exception and whatever host permissions are held. Against a local
+  `http://` dev server the extension works and live updates do not; test socket
+  behaviour against https.
+
+`browser_specific_settings.gecko.id` (`trackyourtime@ricoslabs.com`) is
+permanent once the add-on is listed — AMO keys the listing on it, and Firefox
+keys the profile's stored data (the offline queue, the workspace choice,
+captured activity) on it too. `strict_min_version` is 140 because AMO requires
+`data_collection_permissions` on a new submission and that key is only read
+from 140.
+
+Loading it for development, without stealing the screen:
+
+```bash
+MOZ_HEADLESS=1 npx web-ext@8 run --source-dir packages/extension/dist-firefox \
+  --firefox-profile /tmp/tyt-firefox --profile-create-if-missing --no-input
+```
+
+`npx web-ext@8 lint --source-dir packages/extension/dist-firefox` runs the
+AMO linter. It reports zero errors and three warnings — React's `innerHTML`
+and zod's feature probe for `Function` — neither of which is a blocker.
 
 ## Choosing a server
 

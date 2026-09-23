@@ -4,7 +4,7 @@ import { bearer } from "better-auth/plugins/bearer";
 import { deviceAuthorization } from "better-auth/plugins/device-authorization";
 import { organization } from "better-auth/plugins/organization";
 import { MongoClient } from "mongodb";
-import { env, getTrustedOrigins } from "../config/env.js";
+import { env, getTrustedOrigins, trustsExtensionOrigins } from "../config/env.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { isEmailDeliveryConfigured, sendEmail } from "../services/email.js";
 import {
@@ -12,6 +12,7 @@ import {
   organizationPluginOptions,
 } from "../services/membership/organization-lockdown.js";
 import { accountDeletionOptions } from "./account-deletion.js";
+import { trustedOriginsForRequest } from "./extension-origins.js";
 import {
   emailVerificationOptions,
   sweepSocketsAfterRevocation,
@@ -76,7 +77,23 @@ export async function initAuth(): Promise<void> {
     database: mongodbAdapter(db),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
-    trustedOrigins: getTrustedOrigins(),
+    /**
+     * A function rather than the list, because one class of origin can only
+     * be judged per request: a Firefox or Safari extension's
+     * `<scheme>://<uuid>` is random per install, so it is trusted by shape,
+     * and only while the request carries no session cookie
+     * (auth/extension-origins.ts). Everything else is still the static list.
+     *
+     * better-auth calls this with the request for every origin check and
+     * merges the result with its own baseURL-derived entries, so returning
+     * the static list from inside it loses nothing.
+     */
+    trustedOrigins: (request?: Request) =>
+      trustedOriginsForRequest(
+        getTrustedOrigins(),
+        request,
+        trustsExtensionOrigins(),
+      ),
 
     emailAndPassword: {
       enabled: true,

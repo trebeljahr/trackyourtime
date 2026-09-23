@@ -12,9 +12,9 @@ const fromHere = (relative: string): string =>
  * silently building a development bundle and calling it production.
  */
 const resolveMode = (mode: string): BuildMode => {
-  if (mode === "development" || mode === "production") return mode;
+  if (mode === "development" || mode === "production" || mode === "firefox") return mode;
   throw new Error(
-    `Unknown build mode "${mode}". Use --mode development or --mode production.`,
+    `Unknown build mode "${mode}". Use --mode development, --mode production or --mode firefox.`,
   );
 };
 

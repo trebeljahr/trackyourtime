@@ -68,15 +68,26 @@ export const EXTENSION_BRIDGE_DEVELOPMENT_WEB_HOSTS: readonly string[] = [
   "127.0.0.1",
 ];
 
-export type ExtensionBridgeTarget = "development" | "production";
+/**
+ * Which web origins a build's bridge accepts.
+ *
+ * `none` is the Firefox build: Gecko implements neither
+ * `externally_connectable` for web pages nor `runtime.connect` from one, so
+ * there is no bridge to have. It is a target rather than an absent one so the
+ * checks below can refuse every origin explicitly — a build with no listed
+ * origins must not fall through to the development list.
+ */
+export type ExtensionBridgeTarget = "development" | "production" | "none";
 
 /** The `externally_connectable.matches` a build target declares. */
 export const extensionBridgeMatchPatterns = (
   target: ExtensionBridgeTarget,
-): string[] =>
-  target === "production"
+): string[] => {
+  if (target === "none") return [];
+  return target === "production"
     ? EXTENSION_BRIDGE_PRODUCTION_WEB_ORIGINS.map((origin) => `${origin}/*`)
     : EXTENSION_BRIDGE_DEVELOPMENT_WEB_HOSTS.map((host) => `http://${host}/*`);
+};
 
 /**
  * True when `origin` (a `MessageSender.origin`) may drive the extension of
@@ -87,6 +98,7 @@ export const isAllowedExtensionBridgeOrigin = (
   origin: unknown,
   target: ExtensionBridgeTarget,
 ): boolean => {
+  if (target === "none") return false;
   if (typeof origin !== "string" || origin.length > MAX_ORIGIN_LENGTH) return false;
   const parsed = parseOrigin(origin);
   if (parsed === null || parsed.origin !== origin) return false;

@@ -34,6 +34,7 @@ export function ExtensionPage({ locale }: { locale: Locale }): React.ReactElemen
         actions={
           <>
             <StoreLink store="chrome" locale={locale} />
+            <StoreLink store="firefox" locale={locale} />
             <SecondaryLink href="/signup/">{t("extension.hero.createAccount")}</SecondaryLink>
           </>
         }

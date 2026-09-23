@@ -124,6 +124,8 @@ export const popup: Translation<typeof source> = {
     suggestionTracked: "Diese Zeit ist schon erfasst oder ausgeblendet.",
     originNotTrusted:
       "{server} nimmt keine Anfragen von dieser Erweiterung an. Bitte den Admin, TRUST_STORE_APPS=true zu setzen oder {origin} zu TRUSTED_ORIGINS hinzuzufügen.",
+    originNotTrustedRandom:
+      "{server} nimmt keine Anfragen von dieser Erweiterung an. Firefox gibt jeder Installation eine eigene Adresse ({origin}), deshalb bitte den Admin, TRUST_EXTENSION_ORIGINS=true (oder TRUST_STORE_APPS=true) zu setzen.",
     deviceUrlInvalid:
       "Der Server hat eine Bestätigungsseite geschickt, die die Erweiterung nicht öffnet. Die Webadresse des Servers muss https:// verwenden.",
     deviceDenied: "Die Anmeldung wurde in der Web-App abgelehnt.",

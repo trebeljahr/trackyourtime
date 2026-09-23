@@ -323,8 +323,16 @@ export async function handleBridgeRequest(
 /**
  * Register the listener. Called at module scope from `index.ts`, like every
  * other listener: a page's message is an event that wakes a stopped worker.
+ *
+ * A build with no bridge target registers nothing. That is the Firefox build:
+ * Gecko has `onMessageExternal` (extensions may message each other) but no
+ * `externally_connectable` for web pages, so a listener there could only ever
+ * be reached by another add-on — which is exactly the sender this protocol
+ * refuses. Not registering it at all is the narrower statement, and it keeps
+ * the bridge's "the page drives" rule true on an engine where no page can.
  */
-export function registerBridgeListener(): void {
+export function registerBridgeListener(target: ExtensionBridgeTarget = BRIDGE_TARGET): void {
+  if (target === "none") return;
   chrome.runtime.onMessageExternal.addListener(
     (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (reply: unknown) => void) => {
       const screened = screenExternalMessage(message, sender);

@@ -50,6 +50,7 @@ export const marketing: Translation<typeof source> = {
 
   stores: {
     chrome: { pending: "Noch nicht im Chrome Web Store", label: "Zu Chrome hinzufügen" },
+    firefox: { pending: "Noch nicht bei Firefox Add-ons", label: "Zu Firefox hinzufügen" },
     raycast: { pending: "Noch nicht im Raycast Store", label: "Im Raycast Store installieren" },
     appStore: { pending: "Noch nicht im App Store", label: "Laden im App Store" },
     googlePlay: { pending: "Noch nicht bei Google Play", label: "Jetzt bei Google Play" },

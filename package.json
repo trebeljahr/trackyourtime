@@ -27,6 +27,7 @@
     "dev:extension": "pnpm --filter @starter/extension run dev",
     "build:extension": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/extension run build",
     "build:extension:prod": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/extension run build:prod",
+    "build:extension:firefox": "pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build && pnpm --filter @starter/extension run build:firefox",
     "extension:id": "node scripts/extension-id.mjs",
     "llms:emit": "node scripts/llms/build-llms.mjs",
     "docs:sync": "node scripts/docs/sync-self-hosting.mjs",

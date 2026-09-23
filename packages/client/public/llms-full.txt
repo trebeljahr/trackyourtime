@@ -655,6 +655,7 @@ commented out:
 | `APP_URL` | Only when the origin is not `https://${APP_DOMAIN}`: a plain-HTTP local trial, or a non-standard port. |
 | `SMTP_*`, `EMAIL_FROM` | Only for outgoing mail. See [Email](#email). |
 | `TRUST_STORE_APPS` | Only to refuse the phone apps and the store extension. It is `true` by default. See [The other clients](#the-other-clients). |
+| `TRUST_EXTENSION_ORIGINS` | Only to accept or refuse the Firefox extension on its own. Unset follows `TRUST_STORE_APPS`. See [The other clients](#the-other-clients). |
 | `TRUSTED_ORIGINS` | Only for an extension you built yourself, or a web app that copies data in directly. See [The other clients](#the-other-clients). |
 | `MONGODB_URI`, `REDIS_URL` | Only to use a managed database instead of the containers. |
 
@@ -1691,10 +1692,26 @@ origins to the trusted list:
 | Android app | `https://localhost` |
 | Chrome extension from the Web Store | `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` |
 | Desktop app | `app://-` |
+| Firefox extension | `moz-extension://<uuid>` — by shape, see below |
 | Raycast extension | None. Raycast sends no `Origin`. |
 
 To accept sign-ins from your own web app only, set `TRUST_STORE_APPS=false` in
 `.env`.
+
+**The Firefox extension is the one that cannot be listed.** Firefox gives every
+install its own `moz-extension://<uuid>` address, so no trust list can hold it
+— a value that works on your machine is wrong on everybody else's. Your server
+accepts that shape of address instead, and only for requests that carry no
+session cookie: the extension signs in with a token, and a request from such an
+address never gets a credentialed CORS answer. That is what stops any other
+extension in your browser from using your signed-in session, on the live
+connection in particular, where cookies cannot be switched off.
+
+`TRUST_EXTENSION_ORIGINS` is that switch. Unset, it follows
+`TRUST_STORE_APPS`, so the compose file accepts the Firefox extension out of
+the box. Set `TRUST_EXTENSION_ORIGINS=false` to accept the Chrome extension
+and refuse the Firefox one, or `true` on a server that keeps
+`TRUST_STORE_APPS=false` and lists its origins by hand.
 
 The Chrome extension needs this trust for every request, not only for sign-in.
 It asks Chrome for no access to any website. So its calls to your server are
@@ -1738,8 +1755,18 @@ queue holds unsent changes, the popup shows how many and discards them only
 after you confirm. The extension's queue belongs to its session.
 
 **If your server stops trusting the extension**, for example after you set
-`TRUST_STORE_APPS=false`, the popup says so and names the setting. The
-extension keeps its unsent changes until the server accepts it again.
+`TRUST_STORE_APPS=false`, the popup says so and names the setting — for
+Firefox, `TRUST_EXTENSION_ORIGINS`, because its address cannot go in
+`TRUSTED_ORIGINS`. The extension keeps its unsent changes until the server
+accepts it again.
+
+**Firefox works the same way, with two differences.** Signing in on your web
+app never signs the extension in, on any server: Firefox has no way for a page
+to message an extension. Use the popup's password form, or **Sign in with the
+web app**. And the live connection needs `https://` — Firefox blocks an
+extension from opening an insecure `ws://` connection, even to your own
+machine, so an `http://` server gives you a working extension with no live
+updates between devices.
 
 **An extension you built yourself.** `pnpm run build:extension:prod` pins the
 store key by default, so an unpacked `dist-prod/` has the store id and needs no

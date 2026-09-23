@@ -146,6 +146,15 @@ services:
       # it to false to accept the web app only.
       TRUST_STORE_APPS: ${TRUST_STORE_APPS:-true}
 
+      # The Firefox extension cannot be listed the way the Chrome one is:
+      # Firefox gives every install its own moz-extension://<uuid> address. So
+      # those origins are trusted by shape, and only for requests carrying no
+      # session cookie — the extension uses a bearer token, and such a request
+      # never gets credentialed CORS. Unset follows TRUST_STORE_APPS above;
+      # set it to false to accept the Chrome extension and refuse the Firefox
+      # one. See docs/self-hosting.md → The other clients.
+      TRUST_EXTENSION_ORIGINS: ${TRUST_EXTENSION_ORIGINS:-}
+
       # Extra origins allowed to sign in, comma-separated, on top of the web
       # app's own (APP_URL) and the store clients above. Empty is right for
       # almost everyone. Add a chrome-extension://<id> here only for an

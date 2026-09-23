@@ -8,7 +8,8 @@ import {
   SessionWatch,
   type SessionProbe,
 } from "./session-watch.js";
-import { env, getTrustedOrigins } from "../config/env.js";
+import { env, getTrustedOrigins, trustsExtensionOrigins } from "../config/env.js";
+import { extensionOriginTrusted } from "../auth/extension-origins.js";
 
 const PING_INTERVAL_MS = 10_000;
 const PONG_TIMEOUT_MS = 5_000;
@@ -125,7 +126,22 @@ export function setupWebSocket(
     if (env.isProduction) {
       const trusted = getTrustedOrigins();
       const origin = req.headers.origin;
-      if (origin && trusted.length > 0 && !trusted.includes(origin)) {
+      // A Firefox or Safari extension's origin is a random per-install UUID,
+      // so it is judged by shape — and here the cookie half of that rule is
+      // doing the real work. A WebSocket is not subject to CORS and its
+      // constructor has no `credentials` option, so cookies that are eligible
+      // cross-site ride along on the upgrade whether the extension wants them
+      // or not (measured: docs/firefox-extension-spike.md). Refusing an
+      // upgrade that carries a session cookie is what stops any other
+      // extension in the browser from opening a socket as the signed-in
+      // person. Our own extension authenticates with the `bearer.<token>`
+      // subprotocol and never needs one.
+      const extensionOrigin = extensionOriginTrusted({
+        origin,
+        cookie: req.headers.cookie,
+        enabled: trustsExtensionOrigins(),
+      });
+      if (origin && !extensionOrigin && trusted.length > 0 && !trusted.includes(origin)) {
         // Answered rather than dropped, and logged with the origin: a silent
         // destroy reaches a browser as a bare close with no code, which is
         // indistinguishable from a network failure. WebSockets are not subject

@@ -155,6 +155,9 @@ before this change still connects wherever `/ws` is still routed.
      `TRUST_STORE_APPS=true`. The extension has no host permissions, so
      every request it makes is a CORS request. Without this entry the store
      extension cannot sign in, sync or send a single entry.
+   - `TRUST_EXTENSION_ORIGINS` — the same thing for the Firefox extension,
+     whose origin is a random UUID per install and cannot be listed. Unset
+     follows `TRUST_STORE_APPS`.
 
    `.env.production` is a local convenience only — it is what
    `NODE_ENV=production pnpm --filter @starter/server start` reads — and it is
@@ -429,6 +432,24 @@ curl -s -H 'Origin: chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi' \
 The JSON must say `"originTrusted": true`. If the trust goes missing later,
 the popup shows a notice that names `TRUST_STORE_APPS`, and the extension
 keeps its unsent changes until the server trusts it again.
+
+**The Firefox extension needs a different switch**, because Firefox gives every
+install its own `moz-extension://<uuid>` origin and no list can name it. The
+server trusts that shape instead, for requests that carry no session cookie
+(`packages/server/src/auth/extension-origins.ts`, measured in
+docs/firefox-extension-spike.md). `TRUST_EXTENSION_ORIGINS` is the field;
+unset it follows `TRUST_STORE_APPS`, so turning the store switch on covers it.
+Check it the same way, with any UUID:
+
+```bash
+curl -s -H 'Origin: moz-extension://42a04a0c-c28d-4f59-8694-9623ce55de3d' \
+  https://api.trackyourtime.dev/api/health
+```
+
+`"originTrusted": true` there means every Firefox install is accepted;
+`false` means none is, and the popup says which setting to change. This is a
+release prerequisite for the Firefox add-on exactly as the line above is for
+the Chrome one.
 
 Either way, the variable goes into Coolify. Not into `packages/server/.env.production` — that file is
 untracked here and never reaches the image (step 3), so a value written there

@@ -228,6 +228,15 @@ export const env = {
   // file defaults this to true. Off unless set, so the hosted deploy's trust
   // list stays exactly what its Coolify env fields say.
   TRUST_STORE_APPS: getOptional("TRUST_STORE_APPS").trim().toLowerCase() === "true",
+  // Trust `moz-extension://<uuid>` and `safari-web-extension://<uuid>` origins
+  // for requests that carry no session cookie — the only way a Firefox (or
+  // later Safari) extension can be trusted at all, since each install gets a
+  // random origin nobody can list in advance. The rule and what narrows it are
+  // in auth/extension-origins.ts. Unset follows TRUST_STORE_APPS, because a
+  // server that already accepts the store clients means to accept the
+  // Firefox one; `false` turns it off even there, and `true` turns it on for a
+  // deploy that keeps TRUST_STORE_APPS off and lists its origins by hand.
+  TRUST_EXTENSION_ORIGINS: getOptional("TRUST_EXTENSION_ORIGINS").trim().toLowerCase(),
 
   // The git commit this image was built from, baked in as a Docker build arg
   // (see packages/server/Dockerfile). Reported by /api/health so "is the
@@ -397,10 +406,37 @@ export function buildTrustedOrigins(source: TrustedOriginSource): string[] {
   return source.isProduction ? origins : withLocalhostAliases(origins);
 }
 
+/**
+ * Whether extension-scheme origins (`moz-extension://<uuid>`,
+ * `safari-web-extension://<uuid>`) are trusted for cookie-less requests.
+ *
+ * A pure function of the two raw values, for the same reason
+ * {@link buildTrustedOrigins} is: the switch is asserted without rebooting the
+ * env module. Unset follows TRUST_STORE_APPS; an explicit value wins either
+ * way, so a server can accept the store clients and still refuse this rule.
+ */
+export function resolveTrustExtensionOrigins(
+  raw: string,
+  trustStoreApps: boolean,
+): boolean {
+  if (raw === "true" || raw === "1" || raw === "yes" || raw === "on") return true;
+  if (raw === "false" || raw === "0" || raw === "no" || raw === "off") return false;
+  return trustStoreApps;
+}
+
+/** {@link resolveTrustExtensionOrigins} for this process's environment. */
+export function trustsExtensionOrigins(): boolean {
+  return resolveTrustExtensionOrigins(
+    env.TRUST_EXTENSION_ORIGINS,
+    env.TRUST_STORE_APPS,
+  );
+}
+
 /** All origins trusted for CORS + better-auth. Merges FRONTEND_URL with
  *  the optional TRUSTED_ORIGINS CSV so native shells (Capacitor, custom
  *  Electron protocols) can authenticate against the same API, plus the store
- *  clients when TRUST_STORE_APPS is on. */
+ *  clients when TRUST_STORE_APPS is on. Extension-scheme origins are NOT in
+ *  this list — they are per-request (auth/extension-origins.ts). */
 export function getTrustedOrigins(): string[] {
   return buildTrustedOrigins({
     frontendUrl: env.FRONTEND_URL,

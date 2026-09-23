@@ -55,3 +55,36 @@ export const STORE_APP_ORIGINS: readonly string[] = [
   `chrome-extension://${STORE_EXTENSION_ID}`,
   DESKTOP_APP_ORIGIN,
 ];
+
+/**
+ * The extension schemes whose origin is a random per-install UUID.
+ *
+ * Chromium derives an extension's id from its public key, so
+ * `chrome-extension://<id>` is a constant this repo pins
+ * ({@link STORE_EXTENSION_ID}) and a server lists. Firefox and Safari hand
+ * every install a fresh UUID instead, so their origins can only ever be
+ * trusted by SHAPE — see `auth/extension-origins.ts` on the server, which
+ * narrows that trust to requests carrying no session cookie, and
+ * docs/firefox-extension-spike.md for what a Firefox extension actually sends.
+ *
+ * Here so both ends agree on what one looks like: the server decides trust
+ * with it, and the extension's popup decides which setting to name when a
+ * server refuses it.
+ */
+export const RANDOM_EXTENSION_ORIGIN_SCHEMES: readonly string[] = [
+  "moz-extension:",
+  "safari-web-extension:",
+];
+
+const RANDOM_EXTENSION_ORIGIN =
+  /^(moz-extension|safari-web-extension):\/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Whether `origin` is one of those browser-assigned extension origins —
+ * scheme, `//`, a UUID, and nothing else. A shape check rather than a scheme
+ * check, because this is what stands between a browser's own origin and a
+ * string somebody composed.
+ */
+export function isRandomExtensionOrigin(origin: string | undefined | null): boolean {
+  return typeof origin === "string" && RANDOM_EXTENSION_ORIGIN.test(origin);
+}

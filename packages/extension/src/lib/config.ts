@@ -54,7 +54,19 @@ export const DEFAULT_API_URL: string = buildTimeApiUrl;
  */
 export const BRIDGE_TARGET: ExtensionBridgeTarget = ((): ExtensionBridgeTarget => {
   const configured: unknown = import.meta.env.VITE_BRIDGE_TARGET;
-  if (configured === "development" || configured === "production") return configured;
+  // "none" is the Firefox build, which has no bridge at all: Gecko implements
+  // `externally_connectable` for extensions only, never for web pages. It is
+  // still a value that must be recognised here — the module scope of the
+  // background page reads this, so an unrecognised target throws before a
+  // single listener is registered and the extension does nothing at all, with
+  // the error only visible in the browser console.
+  if (
+    configured === "development" ||
+    configured === "production" ||
+    configured === "none"
+  ) {
+    return configured;
+  }
   throw new Error(
     "No bridge target was baked into this build — see `define` in vite.config.ts.",
   );

@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import { serverHost } from "@starter/core";
 import { useT } from "../i18n/use-t";
-import { extensionOrigin } from "./errors";
+import { extensionOrigin, originNotTrustedKey } from "./errors";
 
 export type OriginNotTrustedNoticeProps = {
   apiUrl: string;
@@ -20,7 +20,7 @@ export function OriginNotTrustedNotice({ apiUrl }: OriginNotTrustedNoticeProps):
   const t = useT("popup");
   return (
     <p className="notice origin-notice" role="alert" data-testid="origin-not-trusted">
-      {t("errors.originNotTrusted", {
+      {t(`errors.${originNotTrustedKey()}`, {
         server: serverHost(apiUrl),
         origin: extensionOrigin(),
       })}

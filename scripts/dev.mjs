@@ -373,7 +373,8 @@ console.log(`  Server:   http://${WEB_HOST}:${apiPort}`);
 console.log(`  Database: ${mongoUri}`);
 console.log(`  Next dir: packages/client/${nextDistDir}`);
 console.log(`  Trusts:   ${trustedOrigins.join(", ")}`);
-console.log(`  Bridge:   extension ids ${bridgeExtensionIds}\n`);
+console.log(`  Bridge:   extension ids ${bridgeExtensionIds}`);
+console.log("  Firefox:  moz-extension://<uuid> trusted (no session cookie)\n");
 
 if (dryRun) process.exit(0);
 
@@ -400,6 +401,13 @@ const clientEnv = [
 const serverEnv = [
   `PORT=${apiPort}`,
   `TRUSTED_ORIGINS=${trustedOrigins.join(",")}`,
+  // A Firefox (or later Safari) extension's origin is a random per-install
+  // UUID, so unlike the Chromium ids above there is nothing to derive and
+  // list — the dev server trusts the SHAPE instead, for requests carrying no
+  // session cookie (packages/server/src/auth/extension-origins.ts). Without
+  // it every request a Firefox dev build makes is refused by CORS, which
+  // presents as "the extension is offline" against a server that is up.
+  `TRUST_EXTENSION_ORIGINS=true`,
   `FRONTEND_URL=http://${WEB_HOST}:${clientPort}`,
   `MONGODB_URI=${mongoUri}`,
   `BETTER_AUTH_URL=http://${WEB_HOST}:${apiPort}`,
