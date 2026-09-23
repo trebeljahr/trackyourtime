@@ -44,7 +44,7 @@ self-hosted first start still builds from source with about 4 GB of memory.
 Capacitor projects all work from source. The production extension build pins
 the store id (`STORE_EXTENSION_KEY`), `TRUST_STORE_APPS=true` trusts the store
 clients on a self-hosted server, `.github/workflows/mobile-release.yml` builds
-and verifies a signed Android bundle, and `docs/store-assets/` holds listing
+and verifies a signed Android bundle, and `docs/marketing/` holds listing
 material for the Chrome Web Store and Google Play.
 
 **Missing.** None of the four is in its store. The desktop app's store
