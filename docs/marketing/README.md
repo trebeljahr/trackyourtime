@@ -155,12 +155,12 @@ iPhone and iPad sets share four captions: **Track time on the go, even offline**
 | Privacy policy URL | done | done |
 | Screenshots | iPhone + iPad uploaded | icon + feature + phone uploaded |
 | Content / age rating | 4+ | Everyone / PEGI 3 / USK all ages |
-| Data collection | App Privacy set, **not published** | Data safety saved |
+| Data collection | App Privacy **published** 2026-09-23 | Data safety saved |
 | Sign-in / app access | demo account entered | demo account entered |
 | Target audience | — | 18 and over |
 | Category / tags | Productivity / Business | Productivity + 3 tags |
 | Price | Free | Free |
-| **Left** | App Privacy → Publish; a signed build; Add for Review | a signed AAB; Send for review (check 12-tester rule) |
+| **Left** | a signed build; Add for Review | a signed AAB; Send for review (check 12-tester rule) |
 
 Reviewer demo account: `demo@trackyourtime.dev` on production (password in
 `~/projects/trackyourtime/.demo-account.local`, not in git). Origins
