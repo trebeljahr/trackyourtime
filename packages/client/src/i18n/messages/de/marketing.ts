@@ -45,6 +45,7 @@ export const marketing: Translation<typeof source> = {
       apiDocs: "REST-API",
       privacy: "Datenschutzerklärung",
       support: "Support",
+      press: "Presskit",
     },
   },
 
@@ -631,6 +632,100 @@ export const marketing: Translation<typeof source> = {
     },
   },
 
+  /** /de/presse/. „Presskit“ bleibt englisch; alles andere ist deutsch. */
+  press: {
+    meta: {
+      title: "Presskit — Track Your Time",
+      description:
+        "Screenshots, Markenzeichen, ein Factsheet und Texte zum Zitieren — für alle, die über Track Your Time schreiben. Ein Download, kein Konto.",
+    },
+    hero: {
+      eyebrow: "Für Journalistinnen, Blogger und Rezensenten",
+      title: "Alles, was du zum Schreiben über Track Your Time brauchst",
+      body: "Ein Download enthält die neun Screenshots dieser Website, die Markenzeichen, das App-Icon und ein Factsheet auf einer Seite.",
+      quote: "Zitiere die Texte auf dieser Seite so, wie sie hier stehen. Frag nur, wenn du sie ändern willst.",
+      download: "Presskit herunterladen",
+      sourceCode: "Quellcode lesen",
+    },
+    kit: {
+      title: "Was im Download steckt",
+      screenshots: "Neun Produkt-Screenshots als PNG, in den Größen weiter unten.",
+      brand: "Sechs Markenzeichen als SVG: die Wortmarke und fünf Icon-Varianten.",
+      icons: "Das App-Icon in 512×512 und die Social-Card in 1200×630.",
+      factSheet:
+        "fact-sheet.txt — die Lizenz, der Preis, alle Plattformen und das, was die App nicht tut.",
+    },
+    boilerplate: {
+      title: "Texte zum Zitieren",
+      intro: "Drei Längen.",
+      oneLineLabel: "Eine Zeile.",
+      oneLine:
+        "Track Your Time ist kostenlose Open-Source-Zeiterfassung für alle, die nach Stunden abrechnen — im Browser, auf dem Handy, auf dem Desktop und als Browser-Erweiterung.",
+      shortLabel: "Fünfzig Wörter.",
+      short:
+        "Track Your Time ist kostenlose Open-Source-Zeiterfassung für alle, die nach Stunden abrechnen. Starte einen Timer im Browser, auf dem Handy oder in der Mac-Menüleiste. Jeder Client läuft auch offline. Aus den Stunden werden ein Bericht, eine PDF-Rechnung oder eine E-Rechnung. AGPL-3.0, und du darfst sie selbst hosten.",
+      longLabel: "Hundert Wörter.",
+      long:
+        "Track Your Time ist kostenlose Open-Source-Zeiterfassung für alle, die nach Stunden abrechnen. Starte einen Timer in der Web-App, in der Chrome-Erweiterung, in Raycast oder in der App für iPhone und Android. Jeder Client zählt ohne Verbindung weiter. Stoppe den Timer auf dem Handy, und dein Laptop zeigt ihn gestoppt. Am Monatsende werden aus den Stunden ein Bericht, eine PDF-Rechnung oder eine E-Rechnung als ZUGFeRD oder XRechnung. Lade Kolleginnen ein, und jede Person sieht nur ihre eigene Zeit, bis du mehr erlaubst. Es gibt keinen Bezahltarif. Nutze die gehostete Version oder dieselbe App auf deinem eigenen Server.",
+    },
+    shots: {
+      title: "Screenshots",
+      intro: "Jede Datei unten steckt im Download unter marketing/, in der Größe, die daneben steht.",
+      webTrack: {
+        label: "Der Timer",
+        alt: "Ein laufender Timer in der Web-App von Track Your Time, darüber die heute erfassten Einträge",
+      },
+      webTimesheet: {
+        label: "Die Wochentabelle",
+        alt: "Eine Woche erfasster Stunden als Tabelle, mit Summe pro Tag und pro Projekt",
+      },
+      webCalendar: {
+        label: "Der Kalender",
+        alt: "Erfasste Einträge über eine Woche verteilt, nach der Uhrzeit, zu der sie entstanden",
+      },
+      webReports: {
+        label: "Berichte",
+        alt: "Ein Bericht über die Stunden des Monats, nach Kunde gruppiert, mit dem Betrag pro Kunde",
+      },
+      webInvoice: {
+        label: "Eine Rechnung",
+        alt: "Eine Rechnung aus erfassten Stunden, mit einer Zeile pro Projekt und dem Gesamtbetrag",
+      },
+      phoneTrack: { label: "Der Timer auf dem Handy", alt: "Der Timer von Track Your Time läuft auf einem Handy" },
+      phoneReports: { label: "Berichte auf dem Handy", alt: "Die Stunden einer Woche als Bericht auf einem Handy" },
+      phoneMore: { label: "Das Menü auf dem Handy", alt: "Das Menü, das jeden weiteren Bildschirm auf dem Handy öffnet" },
+      popup: {
+        label: "Die Browser-Erweiterung",
+        alt: "Das Popup der Browser-Erweiterung von Track Your Time mit einem laufenden Timer",
+      },
+    },
+    facts: {
+      title: "Die Fakten, bevor du veröffentlichst",
+      price: {
+        term: "Preis",
+        detail: "Kostenlos. Es gibt keinen Bezahltarif, jetzt nicht und später nicht. Keine Werbung, und in der App gibt es nichts zu kaufen.",
+      },
+      licence: {
+        term: "Lizenz",
+        detail: "AGPL-3.0. Lies den Code, betreibe ihn auf deinem eigenen Server und ändere ihn.",
+      },
+      platforms: {
+        term: "Wo es läuft",
+        detail:
+          "Web-App, iPhone, iPad, Android, macOS, Windows, Linux, Chrome, Firefox und Raycast. Veröffentlicht sind nur die Web-App und die Chrome-Erweiterung. Der Rest lässt sich aus dem Quellcode bauen.",
+      },
+      status: {
+        term: "Version",
+        detail: "0.1.0. Es gibt noch kein Release, also baut Self-Hosting die Images aus dem Quellcode.",
+      },
+      madeBy: { term: "Gemacht von", detail: "Rico Trebeljahr, allein." },
+      source: { term: "Quellcode", detail: "github.com/trebeljahr/trackyourtime" },
+    },
+    contact: {
+      title: "Eine Frage stellen",
+      body: "Schreib an <mail>{email}</mail>. Sag, worüber du schreibst und wann du eine Antwort brauchst, dann bekommst du eine.",
+    },
+  },
   newsletter: {
     subscribe: {
       metaTitle: "Abonnieren",

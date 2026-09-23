@@ -35,6 +35,7 @@
     "contract:emit": "pnpm --filter @starter/shared run build && pnpm --filter @starter/server exec tsx src/contract/emit-trpc-contract.ts",
     "einvoice:validate": "node scripts/einvoice-validate.mjs",
     "icons:brand": "node scripts/icons-brand.mjs",
+    "marketing:press-kit-zip": "node scripts/marketing/build-press-kit-zip.mjs",
     "test": "pnpm run test:unit && pnpm run test:client && pnpm run test:e2e",
     "test:unit": "pnpm --filter @starter/core run test && pnpm --filter trackyourtime-raycast run test && pnpm --filter @starter/server run test && pnpm --filter @starter/mcp run test && pnpm --filter @starter/extension run test && pnpm run test:electron",
     "test:client": "pnpm --filter @starter/client run test",

@@ -17,9 +17,9 @@ Last updated 2026-09-23.
 
 ## Where each asset lives, and why
 
-Three of the seven folders cannot move. `docs/marketing/` holds what is uploaded
-by hand to a console and is read by nobody at runtime, so it is free to sit in
-`docs/`. The other four ship inside a build:
+Only the three folders under `docs/marketing/` can move. They hold what somebody
+uploads by hand to a console, and nothing reads them at runtime. Everything else
+listed here ships inside a build, at a path that code or a store already names:
 
 | Folder | What it holds | Can it move? |
 | --- | --- | --- |
@@ -30,6 +30,7 @@ by hand to a console and is read by nobody at runtime, so it is free to sit in
 | `packages/client/public/brand/` | the brand SVG marks | **no** — `pnpm icons:brand` derives every shipped bitmap from them, and `render-graphics.mjs` reads `mark-tile.svg` |
 | `packages/raycast/metadata/` | Raycast store screenshots | **no** — `ray build` and store review read that exact path |
 | `packages/raycast/assets/` | the Raycast extension's runtime icons | **no** — `package.json` names them |
+| `packages/client/public/press-kit.zip` | the kit `/press/` links to | **no** — the page links that address |
 
 ## Files
 
@@ -94,6 +95,20 @@ them.
 | `mark-adaptive-foreground.svg` | the Android adaptive icon foreground |
 | `mark-bar-clock.svg` | the menu bar and tray mark |
 | `mark-timer-arc.svg` | the running-timer mark |
+
+### `packages/client/public/press-kit.zip` — the public download, cannot move
+
+The kit `/press/` links to: the nine screenshots above under `marketing/`, the
+six brand marks under `brand/`, `icon-512.png`, `og.png` and `fact-sheet.txt`.
+
+`scripts/marketing/build-press-kit-zip.mjs` writes it (`pnpm
+marketing:press-kit-zip`), deterministically, so rebuilding it after no change
+leaves an empty diff. It is **committed** although it is a build artifact:
+neither `pnpm build:web` nor `packages/client/Dockerfile` runs the builder, so
+an uncommitted zip is a 404 on the deployed site. Rebuild it after changing
+anything under `public/marketing/`, `public/brand/`, `build/icon.png`,
+`public/og.png`, or the vault press-kit note its fact sheet is read from
+(`.../projects/tracktime/trackyourtime-press-kit.md`).
 
 ### `packages/raycast/metadata/` — not captured yet
 

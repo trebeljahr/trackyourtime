@@ -8,6 +8,7 @@ import { invoiceGeneratorMetadata } from "@/components/marketing/pages/invoice-g
 import { InvoiceGeneratorPage } from "@/components/marketing/pages/invoice-generator-page";
 import { LandingPage, landingMetadata } from "@/components/marketing/pages/landing-page";
 import { MobilePage, mobileMetadata } from "@/components/marketing/pages/mobile-page";
+import { PressPage, pressMetadata } from "@/components/marketing/pages/press-page";
 import { PrivacyPage, privacyMetadata } from "@/components/marketing/pages/privacy-page";
 import { RaycastPage, raycastMetadata } from "@/components/marketing/pages/raycast-page";
 import { SupportPage, supportMetadata } from "@/components/marketing/pages/support-page";
@@ -26,6 +27,7 @@ const PAGES = [
   { name: "mobile", Page: MobilePage, meta: mobileMetadata, title: "Track time wherever the work happens" },
   { name: "download", Page: DownloadPage, meta: downloadMetadata, title: "Start the timer from any app on your computer" },
   { name: "invoiceGenerator", Page: InvoiceGeneratorPage, meta: invoiceGeneratorMetadata, title: "Make an invoice without an account" },
+  { name: "press", Page: PressPage, meta: pressMetadata, title: "Everything you need to write about Track Your Time" },
 ] as const;
 
 describe("public pages in English", () => {

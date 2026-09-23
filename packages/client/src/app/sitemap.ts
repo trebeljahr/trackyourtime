@@ -19,6 +19,7 @@ const PAGES = [
   "/raycast/",
   "/mobile/",
   "/download/",
+  "/press/",
   "/privacy/",
   "/support/",
 ];

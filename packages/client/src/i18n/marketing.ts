@@ -40,14 +40,15 @@ const OG_LOCALE: Record<Locale, string> = { en: "en_US", de: "de_DE" };
  * Pages whose German slug is not the English one. Most pages keep the English
  * slug under `/de/` (`/de/extension/`), so the language switch and the
  * hreflang alternates derive both from the one English path. A page that reads
- * as a phrase gets a German phrase for a URL, and its pair is spelled out here
- * so `localizedPath` maps `/invoice-generator/` ↔ `/de/rechnung-erstellen/`
- * both ways. Every English path is the key `marketingMetadata` and
- * `MarketingShell` already pass.
+ * as a phrase gets a German phrase for a URL, and so does one a German reader
+ * would search for by its German name. Each pair is spelled out here so
+ * `localizedPath` maps `/invoice-generator/` ↔ `/de/rechnung-erstellen/` both
+ * ways. Every English path is the key `marketingMetadata` and `MarketingShell`
+ * already pass.
  */
 const LOCALIZED_SLUGS: Record<Locale, Record<string, string>> = {
   en: {},
-  de: { "/invoice-generator/": "/rechnung-erstellen/" },
+  de: { "/invoice-generator/": "/rechnung-erstellen/", "/press/": "/presse/" },
 };
 
 /**

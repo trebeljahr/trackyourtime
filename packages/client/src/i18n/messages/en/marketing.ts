@@ -46,6 +46,7 @@ export const marketing = {
       apiDocs: "REST API",
       privacy: "Privacy policy",
       support: "Support",
+      press: "Press kit",
     },
   },
 
@@ -641,6 +642,105 @@ export const marketing = {
   },
 
   /** The newsletter pages under /sub. App-style: they follow the reader's language at runtime. */
+  /**
+   * /press/ — for somebody writing about Track Your Time. The boilerplate here
+   * is the same text as the `## Boilerplate` section of the vault's
+   * `trackyourtime-press-kit.md`, which is also what goes into the kit's
+   * fact-sheet.txt. Change one and change the other.
+   */
+  press: {
+    meta: {
+      title: "Press kit — Track Your Time",
+      description:
+        "Screenshots, brand marks, a fact sheet and text you can quote, for anybody writing about Track Your Time. One download, no account.",
+    },
+    hero: {
+      eyebrow: "For journalists, bloggers and reviewers",
+      title: "Everything you need to write about Track Your Time",
+      body: "One download holds the nine screenshots this site uses, the brand marks, the app icon and a one-page fact sheet.",
+      quote: "Quote the text on this page as it is. Ask first only if you want to change it.",
+      download: "Download the press kit",
+      sourceCode: "Read the source code",
+    },
+    kit: {
+      title: "What the download holds",
+      screenshots: "Nine product screenshots as PNG files, at the sizes listed below.",
+      brand: "Six brand marks as SVG files: the wordmark and five icon variants.",
+      icons: "The app icon at 512×512, and the social card at 1200×630.",
+      factSheet:
+        "fact-sheet.txt — the licence, the price, every platform, and what the app does not do.",
+    },
+    boilerplate: {
+      title: "Text you can quote",
+      intro: "Three lengths.",
+      oneLineLabel: "One line.",
+      oneLine:
+        "Track Your Time is free, open-source time tracking for people who bill by the hour, on the web, the phone, the desktop and the browser.",
+      shortLabel: "Fifty words.",
+      short:
+        "Track Your Time is free, open-source time tracking for people who bill by the hour. Start a timer in the browser, on your phone or from the Mac menu bar. Each client works offline. The hours become a report, a PDF invoice or a German e-invoice. AGPL-3.0, and yours to host.",
+      longLabel: "A hundred words.",
+      long:
+        "Track Your Time is free, open-source time tracking for people who bill by the hour. Start a timer in the web app, the Chrome extension, Raycast, or the iPhone and Android apps. Every client keeps counting without a connection. Stop a timer on your phone, and your laptop shows it stopped. At the end of the month the hours become a report, a PDF invoice, or a ZUGFeRD or XRechnung e-invoice. Invite colleagues, and each person sees only their own time until you allow more. There is no paid plan. Run the hosted version, or the same app on your own server.",
+    },
+    shots: {
+      title: "Screenshots",
+      intro: "Every file below is in the download, under marketing/, at the size given beside it.",
+      webTrack: {
+        label: "The timer",
+        alt: "A timer running in the Track Your Time web app, above the entries logged today",
+      },
+      webTimesheet: {
+        label: "The weekly timesheet",
+        alt: "A week of tracked hours in a grid, with a total per day and per project",
+      },
+      webCalendar: {
+        label: "The calendar",
+        alt: "Tracked entries laid out across a week by the time of day they happened",
+      },
+      webReports: {
+        label: "Reports",
+        alt: "A report of the month's hours, grouped by client, with the amount each one earned",
+      },
+      webInvoice: {
+        label: "An invoice",
+        alt: "An invoice built from tracked hours, with one line per project and the total due",
+      },
+      phoneTrack: { label: "The timer on a phone", alt: "The Track Your Time timer running on a phone" },
+      phoneReports: { label: "Reports on a phone", alt: "A week's tracked hours as a report on a phone" },
+      phoneMore: { label: "The phone menu", alt: "The menu that opens every other screen on a phone" },
+      popup: {
+        label: "The browser extension",
+        alt: "The Track Your Time browser extension popup with a timer running",
+      },
+    },
+    facts: {
+      title: "The facts, before you publish",
+      price: {
+        term: "Price",
+        detail: "Free. There is no paid plan, now or later. No ads, and nothing to buy inside the app.",
+      },
+      licence: {
+        term: "Licence",
+        detail: "AGPL-3.0. Read the code, run it on your own server, and change it.",
+      },
+      platforms: {
+        term: "Where it runs",
+        detail:
+          "The web app, iPhone, iPad, Android, macOS, Windows, Linux, Chrome, Firefox and Raycast. Only the web app and the Chrome extension are published. The rest build and run from source.",
+      },
+      status: {
+        term: "Version",
+        detail: "0.1.0. No release is tagged yet, so self-hosting builds the images from source.",
+      },
+      madeBy: { term: "Made by", detail: "Rico Trebeljahr, on his own." },
+      source: { term: "Source code", detail: "github.com/trebeljahr/trackyourtime" },
+    },
+    contact: {
+      title: "Ask a question",
+      body: "Write to <mail>{email}</mail>. Say what you are writing and when you need an answer, and you will get one.",
+    },
+  },
   newsletter: {
     subscribe: {
       metaTitle: "Subscribe",

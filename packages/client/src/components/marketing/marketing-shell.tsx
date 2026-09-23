@@ -88,6 +88,7 @@ export function MarketingShell({
             <li><a href={API_DOCS_URL} hrefLang="en" className="hover:text-foreground">{t("shell.footer.apiDocs")}</a></li>
             <li><Link href={href("/privacy/")} className="hover:text-foreground">{t("shell.footer.privacy")}</Link></li>
             <li><Link href={href("/support/")} className="hover:text-foreground">{t("shell.footer.support")}</Link></li>
+            <li><Link href={href("/press/")} className="hover:text-foreground">{t("shell.footer.press")}</Link></li>
           </ul>
           <LanguageSwitch locale={locale} path={path} />
         </div>
