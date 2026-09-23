@@ -7,6 +7,8 @@ import {
 
 const web = { hasStoredToken: false };
 const phone = { hasStoredToken: true };
+/** A web browser whose session hook has already resolved a session. */
+const webSignedIn = { hasStoredToken: false, hasSession: true };
 
 describe("verdictForResult", () => {
   it("signs a user in when the server returns a session", () => {
@@ -32,6 +34,19 @@ describe("verdictForResult", () => {
 
     expect(verdictForResult(proxyError, phone)).toBe("in");
     expect(verdictForResult(proxyError, web)).toBe("out");
+    // The protected layout confirms even a session it already holds, so the
+    // same rule has to cover the browser: a 502 must not evict a signed-in
+    // web user who was rendering the app a moment ago.
+    expect(verdictForResult(proxyError, webSignedIn)).toBe("in");
+  });
+
+  it("signs a held session out when the server cleanly says it is gone", () => {
+    // The account was deleted elsewhere. A session in hand is evidence, never
+    // proof — better-auth serves one out of a five-minute cookie cache — so a
+    // clean null from a cache-bypassing check outranks it.
+    expect(verdictForResult({ data: null, error: null }, webSignedIn)).toBe(
+      "out",
+    );
   });
 
   it("treats a missing result as no answer", () => {
@@ -47,7 +62,11 @@ describe("verdictForRejection", () => {
     expect(verdictForRejection(phone)).toBe("in");
   });
 
-  it("still sends a tokenless client to /login", () => {
+  it("keeps a browser in when it holds a session and the request failed", () => {
+    expect(verdictForRejection(webSignedIn)).toBe("in");
+  });
+
+  it("still sends a tokenless client with no session to /login", () => {
     expect(verdictForRejection(web)).toBe("out");
   });
 });

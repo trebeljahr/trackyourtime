@@ -8,6 +8,8 @@ const CLIENT_NAME = "Acme Inc.";
 const PROJECT_NAME = "Website redesign";
 const PROJECT_COLOR = "#14b8a6";
 const PROJECT_RATE = "120";
+/** The workspace default, which a project with no rate of its own falls back to. */
+const WORKSPACE_RATE = "90";
 const TASK_NAME = "Homepage hero";
 
 let sequence = 0;
@@ -348,6 +350,28 @@ test.describe("Projects catalog", () => {
   test("edits billing in the table and asks before rewriting booked time", async ({
     page,
   }) => {
+    // A fresh workspace bills at 0, and `projectBillableByDefault` reads a
+    // project that bills 0 as not billable at all — so with the default left
+    // alone a project with no rate of its own has no rate cell to name it.
+    // Give the workspace a rate: the fallback is what the first assertion is
+    // about, and the entry booked below has to be billable for "apply to
+    // entries" to have anything to reprice.
+    await page.goto("/app/settings?tab=billing");
+    // Matched on the body, not the path: the theme and locale syncs write
+    // through `settings.update` too, and one of those in flight on page load
+    // satisfies a URL-only wait before the rate has been sent at all.
+    const rateSaved = page.waitForResponse(
+      (response) =>
+        response.url().includes("settings.update") &&
+        (response.request().postData() ?? "").includes("defaultHourlyRate") &&
+        response.ok(),
+    );
+    await page.getByTestId("default-hourly-rate").fill(WORKSPACE_RATE);
+    await page.getByTestId("default-hourly-rate").press("Enter");
+    await rateSaved;
+
+    await page.goto("/app/projects");
+    await expect(page.getByTestId("projects-page")).toBeVisible();
     await page.getByTestId("new-project").click();
     await page.getByTestId("project-name-input").fill(PROJECT_NAME);
     await page.getByTestId("project-submit").click();
@@ -358,9 +382,13 @@ test.describe("Projects catalog", () => {
       .filter({ hasText: PROJECT_NAME });
     const projectId = await idFromTestId(projectRow, "project-row-");
 
-    // No rate of its own: the cell names the workspace default it falls back to.
+    // No rate of its own: the cell names the workspace default it falls back
+    // to, and the row bills at that rate.
     await expect(page.getByTestId(`project-rate-${projectId}`)).toContainText(
       "default",
+    );
+    await expect(page.getByTestId(`project-rate-${projectId}`)).toContainText(
+      WORKSPACE_RATE,
     );
 
     // Book one entry so there is history for a billing change to reach.
@@ -400,7 +428,8 @@ test.describe("Projects catalog", () => {
     await expect(page.getByTestId(`project-rate-${projectId}`)).not.toContainText(
       "default",
     );
-    expect(await entryRate()).not.toBe(Number(PROJECT_RATE));
+    // Still the workspace rate it was booked at, not the project's new one.
+    expect(await entryRate()).toBe(Number(WORKSPACE_RATE));
 
     // Accepting carries the new rate onto the entry already booked.
     await billing.click();

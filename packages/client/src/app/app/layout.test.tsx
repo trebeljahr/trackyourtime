@@ -20,7 +20,11 @@ const useAuth = vi.fn();
 vi.mock("@/hooks/use-auth", () => ({ useAuth: () => useAuth() }));
 
 const getSession = vi.fn();
-vi.mock("@/lib/auth-client", () => ({ getSession: () => getSession() }));
+vi.mock("@/lib/auth-client", () => ({
+  // Arguments forwarded: whether the recheck bypasses better-auth's cookie
+  // cache is the difference between noticing a deleted account and not.
+  getSession: (options?: unknown) => getSession(options),
+}));
 
 // AppShell drags in the whole nav, the tracker bar and tRPC. What is under
 // test is which of the three branches the layout takes, so stand in for it.
@@ -47,6 +51,7 @@ const renderLayout = () =>
 describe("ProtectedLayout on web", () => {
   it("does not get stuck on Loading waiting for a native session", async () => {
     useAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+    getSession.mockResolvedValue({ data: { session: { id: "s1" } }, error: null });
 
     renderLayout();
 
@@ -57,8 +62,63 @@ describe("ProtectedLayout on web", () => {
     });
     expect(screen.getByText("protected content")).toBeTruthy();
     expect(replace).not.toHaveBeenCalled();
-    // The cached session was enough; no server round trip was needed.
-    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it("renders the app at once when a session is already in hand", async () => {
+    // The confirmation below can only take a user out, so it must not put a
+    // loading screen in front of every protected page load while it runs.
+    useAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+    getSession.mockReturnValue(new Promise(() => {}));
+
+    renderLayout();
+
+    expect(screen.getByTestId("app-shell")).toBeTruthy();
+    expect(screen.queryByText("Loading…")).toBeNull();
+  });
+
+  it("confirms a session in hand with the cookie cache off", async () => {
+    // better-auth answers `/get-session` from a five-minute signed cookie, so
+    // a cached session outlives the account it belongs to. Asking with the
+    // cache on would keep a deleted account inside the app for that long.
+    useAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+    getSession.mockResolvedValue({ data: { session: { id: "s1" } }, error: null });
+
+    renderLayout();
+
+    await waitFor(() => {
+      expect(getSession).toHaveBeenCalledWith({
+        query: { disableCookieCache: true },
+      });
+    });
+  });
+
+  it("signs out a session the server no longer has", async () => {
+    // The account was deleted on another device. The session hook still says
+    // signed in, out of the cookie cache; the server says otherwise.
+    useAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+    getSession.mockResolvedValue({ data: null, error: null });
+
+    renderLayout();
+
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalledWith("/login");
+    });
+    expect(screen.queryByTestId("app-shell")).toBeNull();
+  });
+
+  it("keeps a signed-in user in when the confirmation cannot be made", async () => {
+    // A 502 mid-redeploy, or a dead network. Nothing has said the session is
+    // gone, and the session in hand is the evidence it is not.
+    useAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+    getSession.mockRejectedValue(new Error("network down"));
+
+    renderLayout();
+
+    await waitFor(() => {
+      expect(getSession).toHaveBeenCalled();
+    });
+    expect(screen.getByTestId("app-shell")).toBeTruthy();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("shows Loading while the auth hook is still resolving", () => {

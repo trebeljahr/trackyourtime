@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { logManualEntry, signUpViaUI, LOGIN_URL } from "./helpers";
+import { logManualEntry, signInViaUI, signUpViaUI, LOGIN_URL } from "./helpers";
 import { cleanDatabase, closeDbConnection, getDb } from "./db-utils";
 
 const PASSWORD = "SecurePassword123!";
@@ -84,10 +84,26 @@ test.describe("Account deletion", () => {
 
   test("works with a bearer token and no cookie, and requires the password", async ({
     page,
+    browser,
     playwright,
   }) => {
     const email = `delete-bearer-${Date.now()}@example.com`;
     await signUpViaUI(page, { name: "Phone User", email, password: PASSWORD });
+
+    // A second browser on the same account, with its live-sync socket blocked
+    // so no revocation can ever be pushed to it. It has to notice on its own
+    // that the account is gone, and better-auth answers `/get-session` out of
+    // a five-minute signed cookie — so it only notices if the protected
+    // layout confirms with that cache off. The signed-in tab above is no
+    // proof of that: its socket is closed with 4401 the moment the account
+    // goes, and it signs itself out on that alone.
+    const quiet = await browser.newContext();
+    const quietPage = await quiet.newPage();
+    await quietPage.routeWebSocket(/.*/, () => {
+      // Handled and then left alone: never connected to the server.
+    });
+    await signInViaUI(quietPage, { email, password: PASSWORD });
+    await expect(quietPage.getByTestId("tracker-bar")).toBeVisible();
 
     // A client with no cookie jar at all — what the mobile shells are.
     const api = await playwright.request.newContext({ baseURL: API });
@@ -116,6 +132,11 @@ test.describe("Account deletion", () => {
     const session = await bare.get("/api/auth/get-session", { headers });
     expect(await session.json()).toBeNull();
     await bare.dispose();
+
+    // The socket-less browser lands on /login by itself.
+    await quietPage.goto("/app/track");
+    await quietPage.waitForURL(LOGIN_URL, { timeout: 10_000 });
+    await quiet.close();
 
     // The browser's own session died with the account too.
     await page.goto("/app/track");

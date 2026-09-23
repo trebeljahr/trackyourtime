@@ -29,12 +29,23 @@ async function openTracker(page: Page, prefix: string): Promise<void> {
   await expect(page.getByTestId("entries-empty")).toBeVisible();
 }
 
-/** A billable-by-default project, created through the projects screen. */
+/**
+ * A billable-by-default project, created through the projects screen.
+ *
+ * The rate is what makes it billable, not the switch: `projectBillableByDefault`
+ * reads a project billing at 0 as not billable, and a fresh workspace's default
+ * rate is 0 — so a project left on the default here would book non-billable
+ * time and the suggestion below would carry a flag that is honestly off.
+ */
+const PROJECT_RATE = "120";
+
 async function createProject(page: Page, name: string): Promise<void> {
   await page.goto("/app/projects");
   await expect(page.getByTestId("projects-page")).toBeVisible();
   await page.getByTestId("new-project").click();
   await page.getByTestId("project-name-input").fill(name);
+  await page.getByTestId("project-advanced-toggle").click();
+  await page.getByTestId("project-rate-input").fill(PROJECT_RATE);
   await page.getByTestId("project-submit").click();
   await expect(page.getByTestId("project-dialog")).toBeHidden();
 }
@@ -174,7 +185,8 @@ test.describe("Tracker description autocomplete", () => {
     await createProject(page, "Lighthouse App");
     await page.goto("/app/track");
 
-    // History: one entry filed under the project, billable by default.
+    // History: one entry filed under the project, which bills above 0 and is
+    // therefore billable by default.
     const description = page.getByTestId("tracker-description");
     await description.fill("Design review");
     await page.getByTestId("tracker-project").click();

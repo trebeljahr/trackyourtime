@@ -31,7 +31,23 @@ export type Verdict = "in" | "out";
 export type VerdictContext = {
   /** True when a bearer token is stored, i.e. this device has signed in. */
   hasStoredToken: boolean;
+  /**
+   * True when the session hook already resolved a session for this device.
+   *
+   * It is the web's counterpart of a stored token: evidence that this device
+   * is signed in, which a check that never reached the server does not
+   * overturn. It is deliberately NOT proof of being signed in — better-auth
+   * answers `/get-session` out of its five-minute cookie cache, so a session
+   * in hand can belong to an account that has since been deleted or revoked.
+   * Only a cache-bypassing answer settles that, and a clean `null` from one
+   * signs the user out however fresh the cached session looks.
+   */
+  hasSession?: boolean;
 };
+
+/** Evidence of a live sign-in that a failed check must not overturn. */
+const signedInBefore = (context: VerdictContext): boolean =>
+  context.hasStoredToken || context.hasSession === true;
 
 /** Verdict for a `getSession()` that resolved. */
 export const verdictForResult = (
@@ -39,12 +55,13 @@ export const verdictForResult = (
   context: VerdictContext,
 ): Verdict => {
   if (result?.data?.session) return "in";
-  // The request did not get a clean answer. A stored token says this device
-  // has signed in and nothing has told us otherwise — keep the user inside.
-  if (result?.error != null && context.hasStoredToken) return "in";
+  // The request did not get a clean answer. A stored token, or a session the
+  // hook already resolved, says this device has signed in and nothing has
+  // told us otherwise — keep the user inside.
+  if (result?.error != null && signedInBefore(context)) return "in";
   return "out";
 };
 
 /** Verdict for a `getSession()` that rejected — the transport failed. */
 export const verdictForRejection = (context: VerdictContext): Verdict =>
-  context.hasStoredToken ? "in" : "out";
+  signedInBefore(context) ? "in" : "out";

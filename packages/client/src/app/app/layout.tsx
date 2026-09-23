@@ -30,30 +30,39 @@ export default function ProtectedLayout({
   // first render on web, where there is no token to wait for.
   const { token: nativeToken, ready: sessionReady } = useNativeSession();
 
-  // The session hook is mounted at the root, so a `null` it cached while the
-  // user sat on /login or /signup survives the navigation that follows a
-  // successful sign-in. Trusting it directly would bounce a freshly
-  // authenticated user straight back to /login. Before redirecting anyone,
-  // confirm with the server once.
+  // The session hook is not the authority, in either direction.
+  //
+  // A `null` it cached while the user sat on /login or /signup survives the
+  // navigation that follows a successful sign-in, so trusting that would
+  // bounce a freshly authenticated user straight back to /login. And a
+  // session it DID resolve can be a ghost: better-auth answers
+  // `/get-session` out of its five-minute cookie cache, so a browser whose
+  // account was deleted — or whose session was revoked — on another device
+  // keeps being told it is signed in, and keeps rendering the app, for as
+  // long as that cache is warm.
+  //
+  // So confirm with the server once per load, with the cookie cache off, and
+  // let only a clean "no session" sign anyone out. A session already in hand
+  // renders the app straight away, so the common case shows no loading
+  // screen and the check can only ever take a user out.
   const [recheck, setRecheck] = React.useState<Verdict>("checking");
 
   React.useEffect(() => {
     if (isLoading || !sessionReady) return;
 
-    if (isAuthenticated) {
-      setRecheck("in");
-      return;
-    }
-
     let cancelled = false;
-    setRecheck("checking");
+    setRecheck(isAuthenticated ? "in" : "checking");
 
     // `hasStoredToken` is false on web by construction — `getNativeToken()`
-    // only ever returns a value under Capacitor — so the web verdict is
-    // exactly what it was: session or /login.
-    const context = { hasStoredToken: nativeToken !== null };
+    // only ever returns a value under Capacitor. `hasSession` is the web's
+    // equivalent evidence, and keeps a signed-in user inside when the check
+    // below cannot reach the server at all.
+    const context = {
+      hasStoredToken: nativeToken !== null,
+      hasSession: isAuthenticated,
+    };
 
-    void getSession()
+    void getSession({ query: { disableCookieCache: true } })
       .then((result) => {
         if (cancelled) return;
         setRecheck(verdictForResult(result, context));
