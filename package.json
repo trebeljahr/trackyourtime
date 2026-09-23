@@ -46,6 +46,7 @@
     "dev:infra:stop": "docker-compose -f docker-compose.dev.yml down",
     "dev:infra:reset": "docker-compose -f docker-compose.dev.yml down -v",
     "typecheck": "pnpm --filter @starter/shared run build && pnpm --filter @starter/invoice-pdf run build && pnpm --filter @starter/core run build && pnpm -r --filter '!@starter/shared' --filter '!@starter/invoice-pdf' --filter '!@starter/core' run typecheck && pnpm typecheck:electron",
+    "lint": "pnpm --filter @starter/client run lint && pnpm --filter trackyourtime-raycast run lint",
     "typecheck:electron": "tsc -p electron --noEmit",
     "dev:desktop": "concurrently -k -n next,electron -c blue,magenta \"PORT=7130 pnpm --filter @starter/client dev\" \"wait-on http://localhost:7130 && node scripts/ensure-electron.mjs && pnpm electron:compile && ELECTRON_DEV_URL=http://localhost:7130 electron electron/dist/main.js\"",
     "build:desktop": "node scripts/build-desktop.mjs",
@@ -78,7 +79,8 @@
     "newsletter:verify": "tsx scripts/newsletter-verify.ts",
     "electron:ensure": "node scripts/ensure-electron.mjs",
     "test:electron": "node --import tsx --test \"electron/src/**/*.test.ts\"",
-    "test:e2e:desktop": "npx playwright test --config e2e/desktop/playwright.config.ts"
+    "test:e2e:desktop": "npx playwright test --config e2e/desktop/playwright.config.ts",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
@@ -90,6 +92,7 @@
     "electron-builder": "^26.8.1",
     "electron-updater": "6.8.9",
     "esbuild": "^0.28.0",
+    "husky": "^9.1.7",
     "icon-gen": "^5.0.0",
     "mongodb": "^7.2.0",
     "sharp": "^0.34.5",

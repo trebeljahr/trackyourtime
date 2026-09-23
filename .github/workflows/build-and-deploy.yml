@@ -79,6 +79,12 @@ jobs:
       # browser extension, the Raycast extension or the Electron main process
       # would otherwise go green through the entire pipeline.
       - run: pnpm run typecheck
+      # Before the build, so a lint failure costs seconds rather than the full
+      # compile. This is the only place eslint is enforced for everyone: the
+      # husky pre-push hook runs the same `pnpm run lint`, but a hook lives in
+      # a working copy and `--no-verify` skips it, so CI is what keeps the
+      # backlog from growing back.
+      - run: pnpm run lint
       - run: pnpm run build
       - run: pnpm run test:unit
         env:

@@ -1,0 +1,15 @@
+# Lint before a push, not before every commit: eslint over the client is a
+# few seconds, which is noise on a commit and cheap once per push. CI's
+# `verify` job runs the same `pnpm run lint`, so this is the fast copy of a
+# check that is enforced either way — it just saves the round trip.
+#
+# `git push --no-verify` skips it, as does HUSKY=0.
+
+# A GUI git client may have no pnpm on PATH. Say so rather than failing the
+# push with "command not found", which reads as a lint failure.
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "pre-push: pnpm is not on PATH, skipping lint (CI still runs it)." >&2
+  exit 0
+fi
+
+pnpm run lint
