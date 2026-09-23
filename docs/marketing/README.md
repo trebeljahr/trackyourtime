@@ -122,6 +122,16 @@ expects screenshots from an extension with view commands. The shot list, the
 Window Capture setup and the size check are in
 `packages/raycast/PUBLISHING.md` → "Store screenshots".
 
+Deliberately still open, and not a task an agent can pick up unattended. Raycast
+is a launcher: its window only accepts input in the foreground, so capturing
+these takes over the screen for several minutes. It also changes the machine —
+`pnpm dev:raycast` replaces whatever development copy of the extension Raycast
+already holds, including its stored session and preferences, and the recipe
+needs a Window Capture hotkey and "Save to Metadata" switched on in Raycast
+Settings. They are only needed before the first Raycast Store publish, which is
+not queued. Do them at the desk, seeding the demo data immediately beforehand —
+the running timer and today's entries are relative to the moment of seeding.
+
 ### `packages/raycast/assets/` — extension runtime, not store material
 
 | File | Size | Used for |
