@@ -165,8 +165,15 @@ for (const platform of requestedPlatforms) {
 function toolchainProblem(platform) {
   if (platform === "ios") {
     if (process.platform !== "darwin") return "iOS builds need macOS.";
+    // A full Xcode rather than the Command Line Tools alone. The capability is
+    // probed, never the path's NAME: a runner selects a versioned bundle
+    // (`/Applications/Xcode_26.6.app/Contents/Developer`), which a literal
+    // "Xcode.app" test reads as no Xcode at all — it failed every CI iOS build
+    // while the runner had Xcode all along. `xcodebuild -version` is the thing
+    // itself: with only the Command Line Tools selected it exits non-zero with
+    // "tool 'xcodebuild' requires Xcode".
     const xcodePath = capture("xcode-select", ["-p"]);
-    if (!xcodePath.ok || !xcodePath.out.includes("Xcode.app")) {
+    if (!xcodePath.ok || !capture("xcodebuild", ["-version"]).ok) {
       return (
         `xcode-select points at ${xcodePath.out.trim() || "nothing"} — a full Xcode install is\n` +
         "    needed:  sudo xcode-select -s /Applications/Xcode.app"
