@@ -13,6 +13,7 @@ import {
   MIN_APP_BUILDER_LIB,
   MANIFEST_FAMILIES,
   manifestArtifacts,
+  manifestFamilyPlan,
   renderManifestTemplate,
   artifactPatterns,
   builderEnvFor,
@@ -25,6 +26,9 @@ import {
   targetChannelProblem,
   WINDOWS_STORE_IDENTITY,
   windowsStoreIdentityState,
+  WINGET_PACKAGE_IDENTIFIER,
+  wingetManifestPath,
+  wingetPrTitle,
 } from "./desktop-release.mjs";
 
 const all = (names, value = "x") => Object.fromEntries(names.map((n) => [n, value]));
@@ -190,6 +194,27 @@ describe("manifests", () => {
     assert.throws(() => renderManifestTemplate("{{version}} {{sha}}", { version: "1", sha: "" }), /\{\{sha\}\}/);
   });
 
+  it("renders only the families whose release files are there, and names the rest", () => {
+    const files = manifestArtifacts("1.2.3");
+    const families = Object.keys(MANIFEST_FAMILIES);
+    const all = new Set(Object.values(files));
+    assert.deepEqual(manifestFamilyPlan({ version: "1.2.3", families, has: (n) => all.has(n) }), {
+      render: families,
+      skipped: [],
+    });
+
+    // An unsigned Windows leg attaches no installer; only winget is lost.
+    const withoutWindows = new Set([...all].filter((n) => n !== files.sha256_win_nsis));
+    const plan = manifestFamilyPlan({ version: "1.2.3", families, has: (n) => withoutWindows.has(n) });
+    assert.deepEqual(plan.render, ["homebrew", "flatpak"]);
+    assert.deepEqual(plan.skipped, [{ family: "winget", missing: ["TrackYourTime-Setup-1.2.3.exe"] }]);
+  });
+
+  it("does not ask the release for the Flathub icon, which comes from the checkout", () => {
+    const plan = manifestFamilyPlan({ version: "1.2.3", families: ["flatpak"], has: (n) => n.endsWith(".tar.gz") });
+    assert.deepEqual(plan.render, ["flatpak"]);
+  });
+
   it("the committed templates use only placeholders the renderer can fill", async () => {
     const { readdirSync, readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
@@ -336,5 +361,44 @@ describe("the electron-builder that signs macOS", () => {
         "`security set-key-partition-list -k`, which takes the keychain's own password, and every " +
         "signed macOS build fails on a macOS 26 runner. Raise the electron-builder range in package.json.",
     );
+  });
+});
+
+describe("winget", () => {
+  it("partitions by the identifier's first character and keeps its case", () => {
+    assert.equal(WINGET_PACKAGE_IDENTIFIER, "ricoslabs.trackyourtime");
+    assert.equal(wingetManifestPath("0.1.0"), "manifests/r/ricoslabs/trackyourtime/0.1.0");
+    assert.equal(wingetManifestPath("1.0.0", "Microsoft.WingetCreate"), "manifests/m/Microsoft/WingetCreate/1.0.0");
+    // More than two parts is a real winget shape, and each is its own folder.
+    assert.equal(wingetManifestPath("1", "Microsoft.VisualStudio.2022.Community"), "manifests/m/Microsoft/VisualStudio/2022/Community/1");
+  });
+
+  it("refuses an identifier that is not Publisher.Package", () => {
+    assert.throws(() => wingetManifestPath("1", "trackyourtime"), /PackageIdentifier/);
+    assert.throws(() => wingetManifestPath("1", "ricoslabs."), /PackageIdentifier/);
+  });
+
+  it("titles the first submission as a new package and the rest as a new version", () => {
+    assert.equal(wingetPrTitle({ version: "0.1.0", exists: false }), "New package: ricoslabs.trackyourtime version 0.1.0");
+    assert.equal(wingetPrTitle({ version: "0.2.0", exists: true }), "New version: ricoslabs.trackyourtime version 0.2.0");
+  });
+
+  it("the committed manifests carry the identifier this path is derived from", async () => {
+    const { readdirSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const dir = new URL("../../packaging/winget/", import.meta.url).pathname;
+    const names = readdirSync(dir);
+    assert.deepEqual(names.sort(), [
+      `${WINGET_PACKAGE_IDENTIFIER}.installer.yaml.template`,
+      `${WINGET_PACKAGE_IDENTIFIER}.locale.en-US.yaml.template`,
+      `${WINGET_PACKAGE_IDENTIFIER}.yaml.template`,
+    ].sort());
+    for (const name of names) {
+      const text = readFileSync(join(dir, name), "utf8");
+      assert.match(text, new RegExp(`^PackageIdentifier: ${WINGET_PACKAGE_IDENTIFIER}$`, "m"), name);
+      assert.match(text, /^PackageVersion: \{\{version\}\}$/m, name);
+      // The installer URL must name a file a release really attaches.
+      assert.doesNotMatch(text, /-unsigned/, name);
+    }
   });
 });

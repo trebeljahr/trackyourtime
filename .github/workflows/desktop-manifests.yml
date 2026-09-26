@@ -3,9 +3,16 @@ name: Desktop Manifests
 # The package-manager bump after a desktop release is PUBLISHED on GitHub:
 # renders the Homebrew cask, the winget manifests and the Flathub manifest from
 # that release's real files (scripts/desktop-manifests.mjs) and uploads them as
-# an artifact. When the tap is configured it also commits the cask there.
-# winget and Flathub stay manual pull requests (docs/deploy.md → "Desktop
+# an artifact. When the tap is configured it also commits the cask there, and
+# when WINGET_PKGS_TOKEN is set the `winget` job opens the microsoft/winget-pkgs
+# pull request. Flathub stays a manual pull request (docs/deploy.md → "Desktop
 # release" → Homebrew, winget, Flathub).
+#
+# Every channel is all-or-none: with no token the step prints a notice and the
+# run still succeeds, because the rendered manifests in the artifact are the
+# fallback. A family whose release files are missing — an unsigned leg attaches
+# no download — is skipped with a notice and never submitted; `families` is what
+# the rendering step decided, and each submitting step is gated on it.
 #
 # Run it from the release tag (Use workflow from → Tags → vX.Y.Z): the version
 # is that checkout's package.json, and the refusal below keeps a branch run from
@@ -20,6 +27,8 @@ permissions:
 jobs:
   render:
     runs-on: ubuntu-24.04
+    outputs:
+      families: ${{ steps.render.outputs.families }}
     env:
       # Variable: the tap repository, e.g. "<owner>/homebrew-tap". Secret: a
       # fine-grained token with contents write on that repository only.
@@ -58,8 +67,13 @@ jobs:
             --pattern "TrackYourTime-$VERSION-linux-*.tar.gz"
           ls -l release-files
 
+      # --skip-missing: a family whose files the release does not carry is
+      # skipped with a notice rather than failing the run. An unsigned Windows
+      # leg attaches no installer, and that must not also cost a signed macOS
+      # build its cask.
       - name: Render the manifests
-        run: node scripts/desktop-manifests.mjs --artifacts release-files --out manifests
+        id: render
+        run: node scripts/desktop-manifests.mjs --artifacts release-files --out manifests --skip-missing
 
       - uses: actions/upload-artifact@v4
         with:
@@ -67,7 +81,7 @@ jobs:
           path: manifests/
 
       - name: Commit the cask to the tap
-        if: env.HOMEBREW_TAP_REPO != '' && env.HOMEBREW_TAP_TOKEN != ''
+        if: contains(steps.render.outputs.families, 'homebrew') && env.HOMEBREW_TAP_REPO != '' && env.HOMEBREW_TAP_TOKEN != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -84,3 +98,59 @@ jobs:
           git add Casks/track-your-time.rb
           git commit -m "track-your-time $VERSION"
           git push
+
+  # ── winget (the microsoft/winget-pkgs pull request) ───────────────────
+  # `wingetcreate submit` is Microsoft's own tool and the only Windows build of
+  # it, so this job needs a Windows runner. It validates the rendered manifests
+  # against the manifest schema, derives
+  # manifests/r/ricoslabs/trackyourtime/<version>/ from the PackageIdentifier
+  # itself, forks winget-pkgs under the token's account and opens the pull
+  # request. Rationale and the manual fallback: scripts/winget-submit.mjs and
+  # docs/deploy.md → "Windows, NSIS and winget".
+  winget:
+    name: winget
+    needs: render
+    if: contains(needs.render.outputs.families, 'winget')
+    runs-on: windows-2025
+    env:
+      # Secret: a CLASSIC personal access token with the `public_repo` scope and
+      # nothing else. wingetcreate does not accept fine-grained tokens, and a
+      # fine-grained token cannot open a pull request against a repository its
+      # owner does not own. Unset: a notice, and the run still succeeds.
+      WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+      # Only to ask winget-pkgs whether the package is already listed, which
+      # decides the pull request title.
+      GH_TOKEN: ${{ github.token }}
+      # microsoft/winget-create, pinned with the sha256 its release publishes
+      # beside the binary — the same value winget-pkgs itself records as
+      # Microsoft.WingetCreate's InstallerSha256. Bump both together.
+      WINGETCREATE_VERSION: 1.12.13.0
+      WINGETCREATE_SHA256: 24042BD37915805615E6CF969AC57C6439124C3FE85823327F5F3FB24BD9FFEA
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-manifests-${{ github.ref_name }}
+          path: manifests
+
+      - name: Download wingetcreate
+        if: env.WINGET_PKGS_TOKEN != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://github.com/microsoft/winget-create/releases/download/v$env:WINGETCREATE_VERSION/wingetcreate.exe"
+          Invoke-WebRequest -Uri $url -OutFile wingetcreate.exe
+          $hash = (Get-FileHash wingetcreate.exe -Algorithm SHA256).Hash
+          if ($hash -ne $env:WINGETCREATE_SHA256) {
+            throw "wingetcreate.exe is $hash, expected $env:WINGETCREATE_SHA256."
+          }
+
+      # With no token this prints a notice and exits 0: the manifests are in the
+      # artifact above and the pull request stays a manual step.
+      - name: Submit the manifests
+        run: node scripts/winget-submit.mjs --manifests manifests/winget --wingetcreate ./wingetcreate.exe

@@ -971,6 +971,7 @@ Secrets (`gh secret set NAME`, which prompts and does not echo):
 | `AZURE_TRUSTED_SIGNING_ENDPOINT`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, `AZURE_TRUSTED_SIGNING_PROFILE`, `AZURE_TRUSTED_SIGNING_PUBLISHER_NAME` | win | the signing account, certificate profile and the publisher name on it |
 | `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` | win | the alternative to Azure: base64 `.pfx` and its password. Set one Windows set, never both |
 | `HOMEBREW_TAP_TOKEN` | manifests | fine-grained token, contents write on the tap repository only |
+| `WINGET_PKGS_TOKEN` | manifests | **classic** personal access token, `public_repo` scope only. See [Windows, NSIS and winget](#windows-nsis-and-winget) |
 
 Repository variables (`gh variable set NAME`), which are not secret:
 
@@ -1043,11 +1044,95 @@ Open at login works through SMAppService, as in the Developer ID build.
      not have.
 2. Dispatch the workflow. The `win` leg verifies the installer and the
    unpacked executables with `signtool verify /pa`.
-3. **winget**, once the release is published: run Desktop Manifests (below),
-   then copy `manifests/winget/*.yaml` to
-   `manifests/t/Trebeljahr/TrackYourTime/<version>/` in a fork of
-   `microsoft/winget-pkgs`. Run `winget validate` on that folder and open the
-   pull request. `wingetcreate submit <folder>` does the same.
+3. **winget**, once the release is published: run Desktop Manifests (below).
+   With `WINGET_PKGS_TOKEN` set, its `winget` job opens the
+   `microsoft/winget-pkgs` pull request; without it the manifests are still in
+   the run's artifact for a manual submission. Details below.
+
+#### winget
+
+| Fact | Value |
+| --- | --- |
+| Package identifier | `ricoslabs.trackyourtime` (`WINGET_PACKAGE_IDENTIFIER`) |
+| Manifests path | `manifests/r/ricoslabs/trackyourtime/<version>/` |
+| Files | `ricoslabs.trackyourtime.yaml`, `.installer.yaml`, `.locale.en-US.yaml` |
+| Templates | `packaging/winget/*.template`, rendered by `scripts/desktop-manifests.mjs` |
+| Submitted by | `scripts/winget-submit.mjs`, the `winget` job of Desktop Manifests |
+| Secret | `WINGET_PKGS_TOKEN` |
+| Install command, once merged | `winget install ricoslabs.trackyourtime` |
+
+The identifier is **permanent**. winget keys an installed package by it, so a
+rename leaves every install pinned to a package that receives no further
+versions — the same rule as the bundle id and the Raycast extension name
+(CLAUDE.md → "Product name"). The path is derived from the identifier by
+`wingetManifestPath`, never written out by hand.
+
+**The secret.** `WINGET_PKGS_TOKEN` is a **classic** personal access token with
+the **`public_repo`** scope and nothing else:
+
+- Classic, because `wingetcreate` rejects fine-grained tokens outright, and a
+  fine-grained token cannot be granted write on `microsoft/winget-pkgs`
+  anyway — GitHub only grants those on repositories the token's owner owns.
+  A cross-fork pull request against somebody else's public repository needs
+  `public_repo` either way, so a hand-rolled fork-and-push would need the same
+  token.
+- `public_repo` is broader than this job: it can push to every public
+  repository the account can push to. That is the cost of the winget route, it
+  is why the secret exists for this one job only, and it is why the step is
+  gated rather than run on every release by default.
+- `delete_repo` is optional and NOT set here: it only lets `wingetcreate`
+  delete the fork it made afterwards. Leave the fork.
+
+**Why `wingetcreate submit` and not `wingetcreate update`.** `update` starts
+from the manifests winget-pkgs already holds — which a first submission has
+none of — and re-derives the installer entries from URLs handed to it.
+`submit` publishes exactly the manifests this repo rendered from the real
+release files, validated against the manifest schema, into a path it derives
+from the `PackageIdentifier` itself. So what CI opens is what was reviewed in
+this repo's diff, for the first version and every one after it. The tool is a
+Windows `.NET` executable with no other build, which is why the job runs on a
+Windows runner; it is pinned by version and sha256 in the workflow.
+
+**Signing.** `microsoft/winget-pkgs` has no code-signing requirement, and
+unsigned installers are listed there. `winget install` also does not apply
+Mark of the Web, so it does not raise the "Windows protected your PC" dialog a
+browser download of the same file would. What unsigned still costs:
+
+- SmartScreen's **application reputation** is separate from Mark of the Web and
+  does block unrecognised apps. vim's winget package hit exactly that with an
+  unsigned installer (`vim/vim-win32-installer#319`). An unsigned binary
+  accumulates no publisher reputation, so every version starts from zero.
+- The validation pipeline scans the installer URL for reputation and the binary
+  with several antivirus engines, and installs it in a VM. Unsigned packages
+  reach manual review more often.
+
+None of that is the blocker here. **This repo's own rule is stronger:** a
+`-unsigned` file is never attached to a release (`releasePlan` in
+`scripts/lib/desktop-release.mjs`), so an unsigned Windows build leaves no
+installer URL for a manifest to point at. Windows signing is therefore a hard
+prerequisite for winget, whatever winget's policy says. Until Azure Trusted
+Signing is in place, the Desktop Manifests run skips the winget family with a
+notice and renders Homebrew and Flathub as usual (`--skip-missing`).
+
+**What is still manual**, in order, and each of these is a person's decision:
+
+1. Finish Windows signing (the seven `AZURE_*` secrets above), so the `win` leg
+   produces `TrackYourTime-Setup-<version>.exe` rather than the `-unsigned`
+   name.
+2. Tag, and **publish** the resulting draft release. winget's `InstallerUrl`
+   points at a published release asset; nothing before that step is
+   downloadable.
+3. Create `WINGET_PKGS_TOKEN` as described above and
+   `gh secret set WINGET_PKGS_TOKEN`.
+4. Run Actions → Desktop Manifests from the `v<version>` tag. The `winget` job
+   opens the pull request.
+5. Watch the pull request. winget-pkgs runs its own validation and a human
+   reviews it; a first submission (`New package: …`) gets more scrutiny than
+   the versions after it. Nothing in this repo retries or forces it.
+
+Locally, `node scripts/winget-submit.mjs --manifests manifests/winget --dry-run`
+prints the identifier, the path, the manifests and the pull request title, and
+submits nothing.
 
 ### Windows, Microsoft Store (appx)
 
@@ -1104,8 +1189,11 @@ the same as in the stores.
 2. After a release with signed dmgs is **published** (not a draft), run
    Actions → Desktop Manifests → Use workflow from → the `v<version>` tag. It
    downloads the release files, renders the cask, winget and Flathub
-   manifests with real checksums, uploads them as an artifact, and commits
-   `Casks/track-your-time.rb` to the tap.
+   manifests with real checksums, uploads them as an artifact, commits
+   `Casks/track-your-time.rb` to the tap, and — with `WINGET_PKGS_TOKEN` set —
+   opens the winget pull request. A family whose release files are missing (an
+   unsigned leg attaches none) is skipped with a notice, so one unsigned
+   platform never costs another its manifest.
 3. Install with `brew install --cask <owner>/tap/track-your-time`. The cask
    says `auto_updates true`, because the app updates itself; `brew upgrade`
    then skips it unless run with `--greedy`. The official

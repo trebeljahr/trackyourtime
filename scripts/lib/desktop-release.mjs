@@ -358,6 +358,69 @@ export const MANIFEST_FAMILIES = Object.freeze({
 });
 
 /**
+ * A family renders only when the release really carries every file its
+ * checksums come from. `sha256_icon_png` is not one of them: it is hashed out
+ * of the checkout at the tag, not out of the release.
+ *
+ * This is what lets one unsigned leg cost that leg alone. A release attaches no
+ * `-unsigned` file (`releasePlan`), so an unsigned Windows build leaves no
+ * installer for winget to point at — and before this the whole manifest run
+ * failed on it, taking the Homebrew cask of a perfectly signed macOS build with
+ * it.
+ *
+ * @param {{ version: string, families: string[], has: (fileName: string) => boolean }} input
+ * @returns {{ render: string[], skipped: { family: string, missing: string[] }[] }}
+ */
+export function manifestFamilyPlan({ version, families, has }) {
+  const files = manifestArtifacts(version);
+  const render = [];
+  const skipped = [];
+  for (const family of families) {
+    const keys = MANIFEST_FAMILIES[family];
+    if (!keys) throw new Error(`Unknown manifest family "${family}".`);
+    const missing = keys.filter((key) => key in files && !has(files[key])).map((key) => files[key]);
+    if (missing.length > 0) skipped.push({ family, missing });
+    else render.push(family);
+  }
+  return { render, skipped };
+}
+
+/**
+ * The winget package identifier. Permanent, like every other identifier in
+ * CLAUDE.md → "Product name": winget keys an installed package by it, so a
+ * rename leaves every install pinned to a package that no longer receives
+ * versions. It is `<Publisher>.<Package>` and it is NOT the Homebrew cask
+ * token, the bundle id or the Flatpak app id.
+ */
+export const WINGET_PACKAGE_IDENTIFIER = "ricoslabs.trackyourtime";
+
+/**
+ * Where microsoft/winget-pkgs keeps one version's manifests: the identifier's
+ * first character lowercased as the partition folder, then every dot-separated
+ * part of the identifier verbatim, then the version. `wingetcreate submit`
+ * derives the same path from the manifests themselves, so this exists to say
+ * in one place what a reviewer is looking at — and to keep a comment from
+ * naming a path the identifier does not produce.
+ */
+export function wingetManifestPath(version, identifier = WINGET_PACKAGE_IDENTIFIER) {
+  const parts = identifier.split(".");
+  if (parts.length < 2 || parts.some((part) => part === "")) {
+    throw new Error(`A winget PackageIdentifier is "<Publisher>.<Package>"; got "${identifier}".`);
+  }
+  return ["manifests", parts[0][0].toLowerCase(), ...parts, version].join("/");
+}
+
+/**
+ * The pull request title in the shape winget-pkgs uses, which its reviewers
+ * scan. A package's first version is announced differently from the ones after
+ * it — a fact about that repository rather than about this release, so it is
+ * decided from whether the package is already listed, never assumed.
+ */
+export function wingetPrTitle({ version, exists, identifier = WINGET_PACKAGE_IDENTIFIER }) {
+  return `${exists ? "New version" : "New package"}: ${identifier} version ${version}`;
+}
+
+/**
  * Fill `{{key}}` placeholders. Refuses a placeholder with no value, and a
  * value that is empty, so a manifest can never be written with a blank
  * checksum that a package manager would reject only after submission.

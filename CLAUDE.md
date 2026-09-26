@@ -323,6 +323,21 @@ built, and the rules that fail quietly if broken:
   `-unsigned` files or store packages, and never touches a published release.
   electron-updater reads only published releases, so publishing is the release
   decision. The Homebrew cask says `auto_updates true` for the same reason.
+- **The package managers are bumped from a PUBLISHED release, per family.**
+  Desktop Manifests renders `packaging/<family>/*.template` against the real
+  release files; `--skip-missing` skips a family whose files are absent, because
+  an unsigned leg attaches no download and must not cost a signed platform its
+  manifest. Homebrew commits to the tap, `scripts/winget-submit.mjs` opens the
+  `microsoft/winget-pkgs` pull request with `wingetcreate submit`, Flathub is by
+  hand; each is all-or-none on its token and never fails the run without one.
+  `ricoslabs.trackyourtime` is winget's permanent identifier (winget keys
+  installs by it) and the path under it is derived by `wingetManifestPath`, never
+  written by hand. `WINGET_PKGS_TOKEN` must be a **classic** token with
+  `public_repo`: wingetcreate refuses fine-grained ones, and no fine-grained
+  token can open a pull request against a repository its owner does not own.
+  winget itself does not require signing, but this repo's `-unsigned` rule means
+  there is no installer URL until Windows signing lands
+  (docs/deploy.md → winget).
 - **A staged rollout is one line in each feed, and electron-updater decides.**
   `stagingPercentage` comes from the dispatch input or
   `DESKTOP_STAGING_PERCENTAGE` on a tag, and from `pnpm desktop:rollout` after
