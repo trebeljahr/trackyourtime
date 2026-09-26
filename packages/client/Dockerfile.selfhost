@@ -29,6 +29,7 @@ RUN corepack enable
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/invoice-pdf/package.json packages/invoice-pdf/
 COPY packages/core/package.json packages/core/
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
@@ -39,6 +40,10 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
+# The invoice PDF renderer is a real build input, not only a server one: the
+# public invoice generator imports `@starter/invoice-pdf/totals` into the
+# client bundle. Leaving it out fails the export with "Module not found".
+COPY packages/invoice-pdf packages/invoice-pdf
 COPY packages/core packages/core
 # packages/server is source-only input: packages/client/tsconfig.json maps
 # `@starter/server/trpc` to ../server/src/trpc/router.ts for the AppRouter
@@ -84,6 +89,7 @@ COPY scripts/write-version-json.mjs scripts/write-version-json.mjs
 # runtime dependency of the client and resolves through its dist/, so it has
 # to be compiled before Next resolves the import.
 RUN pnpm --filter @starter/shared run build \
+ && pnpm --filter @starter/invoice-pdf run build \
  && pnpm --filter @starter/core run build \
  && pnpm --filter @starter/client run build \
  && node scripts/write-version-json.mjs packages/client/out/version.json
