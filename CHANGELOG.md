@@ -7,22 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing is tagged yet. Everything below will be `v0.1.0`, the first tagged
-release, and [`docs/releasing.md`](docs/releasing.md) renames this heading
-when the tag is cut.
+The first tagged release. It publishes the web app and the API as self-host
+images, which is the only channel anybody can install from today.
 
-That release publishes the web app and API as self-host images. The Raycast
-extension, the browser extension, the Electron desktop app and the iOS and
-Android projects are in the repository and build from source.
+The tag builds the other clients too. `mobile-release.yml` signs an Android
+bundle and uploads it to Play's internal track, and signs an iOS build for
+TestFlight. `desktop-release.yml` uploads the desktop downloads and their
+update feeds to a **draft** GitHub Release: signed and notarized for macOS,
+signed for the Mac App Store, unsigned on Windows until a certificate exists,
+and unsigned on Linux by design. The feeds can offer the release to a share of
+installs first (`DESKTOP_STAGING_PERCENTAGE`, raised later with
+`pnpm desktop:rollout`). `extension-release.yml` uploads the browser extension
+to the Chrome Web Store and to addons.mozilla.org only when those stores'
+secrets are set; they are not, so it attaches an artifact instead.
 
-Not part of it: no mobile app in either store. The tag runs
-`mobile-release.yml`, which with no signing secrets builds nothing and uploads
-no artifact. The tag does run `desktop-release.yml`, which uploads the desktop
-downloads and their update feeds to a **draft** GitHub Release; each channel is
-signed only where its complete secret set exists, and no certificates are
-configured yet. The feeds can offer the release to a share of installs first
-(`DESKTOP_STAGING_PERCENTAGE`, raised later with `pnpm desktop:rollout`). The tag also runs `extension-release.yml`, which submits the
-browser extension to the Chrome Web Store only when its store secrets are set.
+Not part of it: no listing is live in any store. Nothing reaches a person
+until somebody publishes the draft release, sends the Play listing for review
+and submits the App Store version.
 
 ### Added
 
