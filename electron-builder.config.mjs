@@ -195,6 +195,26 @@ const config = {
   rpm: {
     artifactName: "${name}-${version}.${arch}.${ext}",
   },
+  // x64 only, and there is no `base` here on purpose. electron-builder builds
+  // this snap from its prebuilt template (`isUseTemplateApp` in
+  // app-builder-lib/out/targets/snap.js), which writes meta/snap.yaml and runs
+  // mksquashfs — snapcraft is never invoked, so nothing here is subject to
+  // snapcraft 9 dropping core20. The template's own `base: core20` is the
+  // default, and it is a description of the template rather than a choice:
+  // the staged libraries and the `gnome-3-28-1804` content plug inside it are
+  // core20-era. Setting `base` to core22 or core24 would change only the line
+  // snapd reads, leaving it naming a runtime the packed files were not built
+  // against — a snap that builds green and is broken on install.
+  //
+  // arm64 gets no snap: no arm64 template is published, so that arch falls
+  // through to real snapcraft, which refuses core20 (workflow header, and
+  // docs/desktop-app-plan.md → Stage 6). Moving the base would not rescue it
+  // either — snapcraft does not validate `base` under --destructive-mode
+  // (canonical/snapcraft#4562), so core22 on the noble runner would stage
+  // noble's libraries into a snap claiming jammy's runtime, and core24 would
+  // still be built from this core20-shaped template. A correct arm64 snap
+  // needs a hand-written snapcraft.yaml, which is upstream's own advice
+  // (electron-userland/electron-builder#9233) and is not done here.
   snap: {
     artifactName: "${name}_${version}_${arch}.${ext}",
     grade: "stable",

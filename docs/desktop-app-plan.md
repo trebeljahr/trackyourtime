@@ -640,8 +640,10 @@ What the stage text got wrong or left out:
   `org.electronjs.Electron2.BaseApp` 25.08, using zypak. Flathub reviewers may
   ask for a source build instead (`flatpak-node-generator`), which is not done.
   Snap is built by electron-builder with `password-manager-service` for
-  safeStorage (not auto-connected) and `autoStart`. arm64 Linux runs on an
-  arm64 runner, because snapcraft does not cross-build.
+  safeStorage (not auto-connected) and `autoStart`, and is **x64 only** — the
+  measured reason is under "snap on linux-arm64" below. arm64 Linux runs on an
+  arm64 runner so rpm, deb and AppImage are built natively rather than
+  cross-built.
 - **No apt or rpm repository.** The deb and rpm files are downloads, so the
   package manager does not update them. `distribution.ts` still leaves updates
   to the package manager for those files. Stage 7 must decide whether they
@@ -711,12 +713,58 @@ for mas (`if (!isMas)` in macPackager). The NSIS uninstaller is unlinked from
 `strip-components: 1` removes. The secret names match `mobile-release.yml`, and
 `build/icon.png` is tracked at 512×512.
 
-Not verified: **snap on linux-arm64.** electron-builder uses its prebuilt snap
-template only for x64 and armv7l (`isUseTemplateApp` in `targets/snap.js`).
-On arm64 it runs snapcraft, which usually wants LXD or Multipass, so the
-workflow comment "LXD is not used" is true only for x64. The leg may fail
-until it passes `--destructive-mode` or drops snap on arm64. The first
-dispatch will show which.
+Measured, and answered: **snap on linux-arm64 is dropped.** The first tag run
+(v0.1.0, run 36108136377) failed the `linux-arm64` leg, and it was the second
+of the two options above, not the first. app-builder already passes
+`--destructive-mode` (it is in the binary's strings), so LXD was never the
+problem. What failed is the base:
+
+```
+Base 'core20' is not supported by this version of Snapcraft.
+Recommended resolution: Use Snapcraft 8 from the '8.x' channel of snapcraft
+where 'core20' was last supported.
+```
+
+The `app-builder process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE` line
+under it is not a second fault and says nothing about the arm64 binary, which
+is a valid aarch64 ELF that ran and printed a Go stack trace from
+`snap.buildWithoutTemplate`. That error is what builder-util raises for any
+non-zero exit of app-builder (`ExecError` in `builder-util/out/util.js`), so it
+is the core20 refusal being reported one frame out.
+
+The base cannot simply move to core22 or core24, for three reasons:
+
+- **It is one static config value, shared with the x64 leg**, where snapcraft
+  is never invoked at all: `isUseTemplateApp` is true there, so app-builder
+  assembles the snap from its prebuilt template and writes `meta/snap.yaml`
+  directly. core20 there is a description of the template — its staged
+  libraries and its `gnome-3-28-1804` content plug — rather than a choice.
+  Changing it would leave the one line snapd reads naming a runtime the packed
+  files were not built against: a snap that builds green and breaks on install.
+  There is no arch-dependent `base`, and the x64 leg currently passes.
+- **core22 on the arm64 runner would also build green and be wrong.**
+  snapcraft does not validate `base` under `--destructive-mode`
+  (canonical/snapcraft#4562), so a core22 build on ubuntu-24.04-arm would stage
+  noble's libraries into a snap claiming jammy's runtime.
+- **core24 would still be built from a core20-shaped template.** The generated
+  `snapcraft.yaml` is that template with a few keys overridden, so it keeps the
+  `gnome-3-28-1804` content plug and `$SNAPCRAFT_PART_INSTALL`, neither of
+  which is right for core24. The base is necessary but not sufficient.
+
+And there is no arm64 template to fall back on: the two template URLs are
+hardcoded in app-builder as amd64 and armhf
+(`snap-template-electron-4.0-2-amd64`, `snap-template-electron-4.0-1-armhf`).
+Upstream treats arm64 snaps as needing a hand-written `snapcraft.yaml`
+(electron-userland/electron-builder#9233, closed), which is a piece of
+machinery of its own and is not built here.
+
+So the `linux-arm64` leg builds AppImage, deb, rpm and tar.gz, and no snap.
+Nothing promised one: `desktop-release.mjs`'s `STORE_ONLY` already keeps every
+snap out of the draft release, `site-links.ts` has `snapStore: { url: null }`,
+and deploy.md's Snap Store steps upload the amd64 file. `snap install
+snapcraft` is now on the x64 leg only, as a fallback for a config change that
+switches the template path off. A real arm64 snap is a later feature, and it
+starts with a `snapcraft.yaml` rather than with a config flag.
 
 ### Stage 7 — auto-update, the draft release and /download (2026-09-17)
 
@@ -815,7 +863,7 @@ What the stage text got wrong or left out:
 - **The workflow now runs on `v*` tags.** Stage 6 said to wait for a green
   signed dispatch first. A tag builds a draft only, and with no certificates
   the mac and win legs are unsigned. The draft then holds Linux files only,
-  with warnings. A failing leg (the arm64 snap is the likely one) blocks the
+  with warnings. A failing leg blocks the
   draft until "Re-run failed jobs" passes. `release.yml` runs on the same tag.
 - **The Homebrew cask says `auto_updates true`**, and zaps
   `trackyourtime-updater` and the ShipIt cache. `brew upgrade` skips it

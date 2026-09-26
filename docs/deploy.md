@@ -795,7 +795,8 @@ channel:
 | `mas` | macos-latest | pkg, universal | Apple Distribution + Mac Installer Distribution |
 | `win` | windows-latest | one NSIS exe, x64 + arm64 | Azure Trusted Signing or a certificate file |
 | `win-store` | windows-latest | appx, x64 and arm64 | Partner Center, on upload |
-| `linux-x64`, `linux-arm64` | ubuntu-24.04(-arm) | AppImage, deb, rpm, tar.gz, snap | not signed |
+| `linux-x64` | ubuntu-24.04 | AppImage, deb, rpm, tar.gz, snap | not signed |
+| `linux-arm64` | ubuntu-24.04-arm | AppImage, deb, rpm, tar.gz (no snap) | not signed |
 
 Every leg follows the all-or-none rule of [Android release signing](#android-release-signing):
 
@@ -1160,8 +1161,8 @@ the `snapcraft register trackyourtime` step, the one CI secret
 `flathub/flathub`'s `new-pr` branch, both listings' copy, and what stays manual.
 The short version:
 
-- On a `v*` tag the Linux legs run `scripts/snap-publish.mjs`, which uploads
-  that leg's snap to the Snap Store's **`candidate`** channel — and only when
+- On a `v*` tag the `linux-x64` leg runs `scripts/snap-publish.mjs`, which
+  uploads its snap to the Snap Store's **`candidate`** channel — and only when
   `SNAPCRAFT_STORE_CREDENTIALS` is set. Unset is a notice and a green leg, the
   all-or-none rule of every other channel. `snapcraft release … stable` is a
   person's step, after the draft release is published.
@@ -1174,6 +1175,14 @@ The short version:
   the same as in the stores. In both, desktop activity capture is off and
   cannot be turned on (`activityCaptureSupport` → `linux-sandbox`), so neither
   listing offers it.
+- **There is no arm64 snap, so only the x64 leg publishes one.**
+  electron-builder assembles the snap from a prebuilt template published for
+  amd64 and armhf only; on arm64 it falls back to real snapcraft, which refuses
+  the template's `base: core20`. The base cannot move on its own — see
+  `electron-builder.config.mjs` → `snap` and "What the first tag run showed"
+  above. An arm64 snap needs a hand-written `snapcraft.yaml`. The Snap Store
+  step is therefore scoped to `linux-x64`: `snap-publish.mjs` requires exactly
+  one `.snap` and would fail a leg that builds none.
 
 ### Homebrew
 

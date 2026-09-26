@@ -8,11 +8,29 @@ name: Desktop Release
 #   win        NSIS installer, x64 + arm64 in one exe
 #   win-store  AppX for the Microsoft Store (Partner Center signs it)
 #   linux-x64  AppImage, deb, rpm, tar.gz (Flathub's input) and snap
-#   linux-arm64 the same on an arm64 runner (snapcraft cannot cross-build)
+#   linux-arm64 the same minus the snap, on an arm64 runner
 #
-# On a v* tag the two Linux legs also upload their snap to the Snap Store's
+# The snap is x64 only, and that is a property of electron-builder, not a
+# preference (measured on tag v0.1.0, run 36108136377; docs/desktop-app-plan.md
+# → Stage 6, "snap on linux-arm64"). electron-builder assembles a snap from a
+# prebuilt template — no snapcraft run at all — but that template is published
+# for amd64 and armhf only (the two URLs are hardcoded in app-builder), so
+# `isUseTemplateApp` in app-builder-lib/out/targets/snap.js is true for x64 and
+# armv7l and false for arm64. On arm64 it therefore writes a snapcraft.yaml and
+# shells out to real snapcraft (with --destructive-mode already, so LXD was
+# never the problem), and snapcraft 9 — what `snap install snapcraft` now gives
+# — refuses the template's `base: core20`. The base cannot simply move: it is
+# one static config value shared with the x64 template path, where core20 is
+# what the template's staged libraries and gnome-3-28-1804 content plug
+# actually are. See electron-builder.config.mjs → `snap`.
+#
+# The arm64 runner stays: rpm, deb and AppImage are built natively here rather
+# than cross-built, which is the same trade the other legs make.
+#
+# On a v* tag the linux-x64 leg also uploads its snap to the Snap Store's
 # `candidate` channel, when SNAPCRAFT_STORE_CREDENTIALS is set; with it unset
-# they print a notice and stay green. Promotion to `stable` and the Flathub
+# it prints a notice and stays green. Only that leg, because only that leg
+# builds a snap. Promotion to `stable` and the Flathub
 # pull request are manual (docs/linux-stores.md).
 #
 # Signing follows the Android rule: no secrets for a channel builds an artifact
@@ -138,13 +156,14 @@ jobs:
           - channel: linux-arm64
             signing-channel: linux
             os: ubuntu-24.04-arm
-            builder: --linux AppImage deb rpm tar.gz snap --arm64
+            # No snap: electron-builder has no arm64 template and snapcraft 9
+            # refuses the core20 one it falls back to (see the header).
+            builder: --linux AppImage deb rpm tar.gz --arm64
             artifacts: |
               release/*.AppImage
               release/*.deb
               release/*.rpm
               release/*.tar.gz
-              release/*.snap
               release/latest-linux-arm64.yml
 
     runs-on: ${{ matrix.os }}
@@ -219,14 +238,24 @@ jobs:
         if: steps.signing.outputs.mode != 'skip'
         run: pnpm install --frozen-lockfile
 
-      # rpm builds need rpmbuild; the snap target needs snapcraft (LXD is not
-      # used: electron-builder builds from its prebuilt template).
+      # rpm builds need rpmbuild, on both Linux legs.
       - name: Install Linux packaging tools
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y rpm
-          sudo snap install snapcraft --classic
+
+      # Only the leg that builds a snap, and only as a fallback: electron-builder
+      # assembles the x64 snap from its prebuilt template and never invokes
+      # snapcraft, so this normally goes unused. It stays because the template
+      # path is an electron-builder internal (`isUseTemplateApp`) that a config
+      # change can switch off — adding `snap.buildPackages`, or a
+      # `stagePackages` that differs from the default, drops this leg onto real
+      # snapcraft. Without the tool that is "snapcraft is not installed"; with
+      # it, the core20 refusal the arm64 leg hit, which is the louder failure.
+      - name: Install snapcraft
+        if: matrix.channel == 'linux-x64'
+        run: sudo snap install snapcraft --classic
 
       # One script, the same one `pnpm electron:build` runs: export into
       # out-desktop (API URL asserted in a chunk), bundle electron/src,
@@ -331,8 +360,12 @@ jobs:
       # cannot hand the app to every install on its own
       # (docs/linux-stores.md → "Promote the snap"). The draft-release job
       # still attaches no snap.
+      #
+      # linux-x64 only: it is the one leg that builds a snap, and
+      # snap-publish.mjs requires exactly one .snap in the directory — on arm64
+      # it would find none and fail the leg as soon as the credential is set.
       - name: Upload to the Snap Store
-        if: runner.os == 'Linux' && steps.signing.outputs.mode != 'skip'
+        if: matrix.channel == 'linux-x64' && steps.signing.outputs.mode != 'skip'
         shell: bash
         run: node scripts/snap-publish.mjs --dir release
 
