@@ -849,30 +849,23 @@ file. Every store upload is manual.
 
 #### What the first tag run (v0.1.0) showed
 
-Run 36108136377 built `linux-x64` and nothing else. Two of the five failures
-were code and are fixed; the other three are credential state in this
-repository's settings, and only the account owner can change them.
+Run 36108136377 built `linux-x64` and nothing else. All five failures were
+code, in four separate causes, and each is fixed:
 
 - **`linux-arm64`** — the snap target, on `base: core20` under snapcraft 9.
-  Fixed: that leg no longer builds a snap. See the workflow header and
+  That leg no longer builds a snap. See the workflow header and
   `electron-builder.config.mjs` → `snap`.
-- **`win-store`** — decided `skip` correctly, built nothing, then failed in
+- **`win-store`** — decided `skip` correctly and built nothing, then failed in
   `actions/setup-node`'s post-job cache save, because a leg that never runs
-  `pnpm install` has no pnpm store to save. Fixed: the cache is enabled only
-  when the leg installs.
-- **`mac` and `mas`** — both resolved to `signed`, so the secrets are all
-  present; `security` then refused the certificate with `SecKeychainUnlock:
-  The user name or passphrase you entered is not correct.` The certificate and
-  its password do not match. Re-export the `.p12` and set `MAC_CSC_LINK` +
-  `MAC_CSC_KEY_PASSWORD` (and `MAS_CSC_LINK` + `MAS_CSC_KEY_PASSWORD`) together
-  — `CSC_LINK` is the base64 of the file, with no newlines. Until then, delete
-  those four secrets and both legs build unsigned rather than failing.
+  `pnpm install` has no pnpm store to save. The cache is now enabled only when
+  the leg installs.
+- **`mac` and `mas`** — the `set-key-partition-list` bug above, not the
+  certificates or their passwords. Fixed by the electron-builder floor.
 - **`win`** — a partial Azure Trusted Signing set, which the all-or-none rule
-  above correctly refuses: `AZURE_TRUSTED_SIGNING_ENDPOINT` and
-  `AZURE_TRUSTED_SIGNING_ACCOUNT` are set, and `AZURE_TENANT_ID`,
-  `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TRUSTED_SIGNING_PROFILE`
-  and `AZURE_TRUSTED_SIGNING_PUBLISHER_NAME` are missing. Either set all seven
-  or delete the two, which builds an unsigned NSIS installer.
+  above correctly refused: `AZURE_TRUSTED_SIGNING_ENDPOINT` and
+  `AZURE_TRUSTED_SIGNING_ACCOUNT` were set while the other five were missing.
+  Those two have since been removed, so the leg resolves to `unsigned` and
+  passes. Signing it means setting all seven, never a subset.
 
 ### Tags, the draft release and updates
 
