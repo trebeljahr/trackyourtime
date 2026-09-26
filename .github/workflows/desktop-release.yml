@@ -10,6 +10,11 @@ name: Desktop Release
 #   linux-x64  AppImage, deb, rpm, tar.gz (Flathub's input) and snap
 #   linux-arm64 the same on an arm64 runner (snapcraft cannot cross-build)
 #
+# On a v* tag the two Linux legs also upload their snap to the Snap Store's
+# `candidate` channel, when SNAPCRAFT_STORE_CREDENTIALS is set; with it unset
+# they print a notice and stay green. Promotion to `stable` and the Flathub
+# pull request are manual (docs/linux-stores.md).
+#
 # Signing follows the Android rule: no secrets for a channel builds an artifact
 # whose file name says -unsigned; a complete set signs and the signature is
 # verified; anything in between fails the leg before the export is built
@@ -168,6 +173,11 @@ jobs:
       AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ matrix.channel == 'win' && secrets.AZURE_TRUSTED_SIGNING_ACCOUNT || '' }}
       AZURE_TRUSTED_SIGNING_PROFILE: ${{ matrix.channel == 'win' && secrets.AZURE_TRUSTED_SIGNING_PROFILE || '' }}
       AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ matrix.channel == 'win' && secrets.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME || '' }}
+      # The Snap Store credential, on the Linux legs only. One secret, so
+      # "not set" is a repo that does not publish to the Snap Store: the
+      # publish step then prints a notice and the leg stays green
+      # (scripts/lib/desktop-release.mjs, snapPublishPlan).
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ matrix.signing-channel == 'linux' && secrets.SNAPCRAFT_STORE_CREDENTIALS || '' }}
       # Not secrets: Partner Center shows them on the product identity page.
       WINDOWS_STORE_IDENTITY_NAME: ${{ vars.WINDOWS_STORE_IDENTITY_NAME }}
       WINDOWS_STORE_PUBLISHER: ${{ vars.WINDOWS_STORE_PUBLISHER }}
@@ -313,6 +323,18 @@ jobs:
             if command -v sha256sum >/dev/null; then sha256sum "${files[@]}"; else shasum -a 256 "${files[@]}"; fi > SHA256SUMS-${{ matrix.channel }}.txt
             cat SHA256SUMS-${{ matrix.channel }}.txt
           fi
+
+      # ── Snap Store ─────────────────────────────────────────────────
+      # Uploads this leg's one .snap to the `candidate` channel on a v* tag,
+      # and only when SNAPCRAFT_STORE_CREDENTIALS is set. Never `stable`: a
+      # person publishes the draft release and promotes the snap, so a tag run
+      # cannot hand the app to every install on its own
+      # (docs/linux-stores.md → "Promote the snap"). The draft-release job
+      # still attaches no snap.
+      - name: Upload to the Snap Store
+        if: runner.os == 'Linux' && steps.signing.outputs.mode != 'skip'
+        shell: bash
+        run: node scripts/snap-publish.mjs --dir release
 
       - name: Upload artifacts
         if: steps.signing.outputs.mode != 'skip'

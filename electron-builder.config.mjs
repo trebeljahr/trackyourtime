@@ -200,6 +200,15 @@ const config = {
     grade: "stable",
     confinement: "strict",
     summary: "Free, open-source time tracking",
+    // One line, and one line only. electron-builder writes the snap's
+    // description into the snapcraft.yaml AND into the desktop entry's
+    // `Comment=` (LinuxTargetHelper.computeDesktopEntry, reached by both the
+    // core24 and the legacy snap strategies), where a newline is escaped to a
+    // literal `\n` — so a paragraph here reads as one run-on tooltip with
+    // `\n` in it, and before 26.17 escaped nothing and broke the file outright.
+    // The full Snap Store listing text is pasted into the listing page by hand
+    // (docs/linux-stores.md → "The listing").
+    description: "Free, open-source time tracking for people who bill by the hour.",
     // `password-manager-service` lets safeStorage reach the Secret Service; it
     // is not auto-connected, and without it the app keeps the session in
     // memory and says so in Settings → Devices (secure-store.ts).

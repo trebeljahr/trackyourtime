@@ -972,6 +972,7 @@ Secrets (`gh secret set NAME`, which prompts and does not echo):
 | `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` | win | the alternative to Azure: base64 `.pfx` and its password. Set one Windows set, never both |
 | `HOMEBREW_TAP_TOKEN` | manifests | fine-grained token, contents write on the tap repository only |
 | `WINGET_PKGS_TOKEN` | manifests | **classic** personal access token, `public_repo` scope only. See [Windows, NSIS and winget](#windows-nsis-and-winget) |
+| `SNAPCRAFT_STORE_CREDENTIALS` | linux-x64, linux-arm64 | `snapcraft export-login` output, scoped to `trackyourtime` and the `candidate,beta` channels. Unset means the snap is only a CI artifact ([Linux stores](linux-stores.md)) |
 
 Repository variables (`gh variable set NAME`), which are not secret:
 
@@ -1153,33 +1154,26 @@ The AppImage, deb, rpm and tar.gz files are for the GitHub Release. No apt or
 rpm repository is hosted, so a deb or rpm install is not updated by the
 package manager.
 
-**Snap Store:**
+**The two Linux stores are `docs/linux-stores.md`**: the Ubuntu One account and
+the `snapcraft register trackyourtime` step, the one CI secret
+(`SNAPCRAFT_STORE_CREDENTIALS`), the Flathub pull request against
+`flathub/flathub`'s `new-pr` branch, both listings' copy, and what stays manual.
+The short version:
 
-1. Create a Snapcraft account and run `snapcraft register trackyourtime`.
-2. Upload: `snapcraft upload --release=stable trackyourtime_<version>_amd64.snap`,
-   and do the same for arm64.
-3. The `password-manager-service` plug is not auto-connected. Until the
-   Snapcraft forum grants auto-connection, the user runs
-   `snap connect trackyourtime:password-manager-service`. Without it, the app
-   keeps the session in memory only and says so in Settings → Devices.
-
-**Flathub:**
-
-1. Add a `<screenshots>` block to
-   `packaging/flatpak/com.ricoslabs.trackyourtime.metainfo.xml.template`,
-   pointing at a committed capture. Flathub requires at least one.
-2. Once the release is published, run Desktop Manifests. Then open a pull
-   request against `flathub/flathub` (branch `new-pr`) with the files from
-   `manifests/flatpak/`. After acceptance, updates are commits to the
-   `flathub/com.ricoslabs.trackyourtime` repository that Flathub creates.
-3. The manifest repackages the release's tar.gz. Flathub reviewers can ask
-   for a source build of an open-source app instead. That build would need
-   every npm dependency vendored with `flatpak-node-generator`, which this
-   repo has not done.
-4. Verifying the app id (the badge) needs control of `trebeljahr.com`.
-
-In the Flatpak, open at login is unsupported and the in-app updater is off,
-the same as in the stores.
+- On a `v*` tag the Linux legs run `scripts/snap-publish.mjs`, which uploads
+  that leg's snap to the Snap Store's **`candidate`** channel — and only when
+  `SNAPCRAFT_STORE_CREDENTIALS` is set. Unset is a notice and a green leg, the
+  all-or-none rule of every other channel. `snapcraft release … stable` is a
+  person's step, after the draft release is published.
+- The draft release still attaches no snap (`releasePlan`'s `STORE_ONLY`).
+- Flathub builds from `packaging/flatpak/`, rendered by Desktop Manifests. The
+  app id is `com.ricoslabs.trackyourtime`, and the verification badge needs a
+  `.well-known` file on **`ricoslabs.com`** — the domain the id is built from,
+  not `trebeljahr.com`.
+- In the Flatpak, open at login is unsupported and the in-app updater is off,
+  the same as in the stores. In both, desktop activity capture is off and
+  cannot be turned on (`activityCaptureSupport` → `linux-sandbox`), so neither
+  listing offers it.
 
 ### Homebrew
 

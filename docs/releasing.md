@@ -255,6 +255,18 @@ of them still works by hand.
    Then, for the package managers, run Desktop Manifests from the tag
    (docs/deploy.md → "Desktop release").
 
+   The two Linux stores are the same decision, one step later
+   (docs/linux-stores.md). Once the release is published:
+
+   ```bash
+   snapcraft status trackyourtime                      # a revision per architecture
+   snapcraft release trackyourtime <revision> stable   # both of them
+   ```
+
+   The tag run already uploaded each snap to `candidate`. Flathub takes the
+   rendered `manifests/flatpak/` files — a pull request for the first release,
+   and its own checker bot afterwards.
+
 7. **On the first release only, remove the "no release yet" statements.**
    They are true until step 5 passes and false after it. Find them with:
 

@@ -31,7 +31,7 @@
  * have seen, and "Re-run all jobs" keeps the run number.
  */
 
-import { tagMismatch } from "./desktop-release.mjs";
+import { isPrereleaseTag, tagMismatch } from "./desktop-release.mjs";
 
 /** What android/app/build.gradle's signing block needs, as GitHub secrets. */
 export const ANDROID_SIGNING_SECRETS = Object.freeze([
@@ -78,12 +78,10 @@ export function secretSetState(env, names) {
 }
 
 /**
- * @param {string} refName
- * @returns {boolean} true for `v1.2.0-rc.1` and any other tag with a prerelease part
+ * Re-exported, not defined here: `desktop-release.mjs` owns it, so the desktop
+ * and mobile release paths cannot disagree about what a prerelease tag is.
  */
-export function isPrereleaseTag(refName) {
-  return /^v\d+\.\d+\.\d+-/.test(refName);
-}
+export { isPrereleaseTag };
 
 /**
  * The store build number for a run: versionCode on Android,

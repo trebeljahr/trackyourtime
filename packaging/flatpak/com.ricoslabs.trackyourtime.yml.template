@@ -5,8 +5,23 @@
 # It repackages the release's linux tar.gz rather than building from source:
 # the app is a static export plus Electron, and rebuilding the Next.js export
 # offline inside flatpak-builder would need every npm dependency vendored as a
-# source. Flathub accepts prebuilt Electron apps built on
-# org.electronjs.Electron2.BaseApp when the project is open source.
+# source. Flathub's own requirements page says source-available submissions are
+# built from source, and its moderators say a manifest may repackage the
+# upstream binary instead
+# (https://discourse.flathub.org/t/best-way-to-submit-new-app-sources-or-binary/8668).
+# What the rule forbids is a binary committed INTO the pull request, which this
+# manifest has none of. com.vscodium.codium — open source, Electron — is on
+# Flathub repackaging its own release .deb per architecture, which is the
+# precedent this follows. A reviewer may still ask for a source build; that
+# build needs flatpak-node-generator, which this repo has not run
+# (docs/linux-stores.md).
+#
+# Every `x-checker-data` block lets Flathub's flatpak-external-data-checker
+# raise the version by itself after the first submission. It reads
+# `releases/latest`, which is the newest PUBLISHED, non-prerelease release —
+# the same decision point as the draft release a person publishes. The bot
+# rewrites these URLs and checksums; it does not touch the metainfo's
+# screenshots.
 app-id: com.ricoslabs.trackyourtime
 runtime: org.freedesktop.Platform
 runtime-version: "25.08"
@@ -37,6 +52,9 @@ modules:
       - install -Dm644 com.ricoslabs.trackyourtime.desktop /app/share/applications/com.ricoslabs.trackyourtime.desktop
       - install -Dm644 com.ricoslabs.trackyourtime.metainfo.xml /app/share/metainfo/com.ricoslabs.trackyourtime.metainfo.xml
       - install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/com.ricoslabs.trackyourtime.png
+      # Flathub requires the licence in the build, and the tar.gz carries only
+      # Electron's and Chromium's.
+      - install -Dm644 LICENSE /app/share/licenses/com.ricoslabs.trackyourtime/LICENSE
     sources:
       - type: archive
         only-arches:
@@ -44,12 +62,26 @@ modules:
         url: https://github.com/trebeljahr/trackyourtime/releases/download/v{{version}}/TrackYourTime-{{version}}-linux-x64.tar.gz
         sha256: {{sha256_linux_x64_targz}}
         dest: app
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/trebeljahr/trackyourtime/releases/latest
+          tag-query: .tag_name
+          version-query: .tag_name | sub("^v"; "")
+          timestamp-query: .published_at
+          url-query: .assets[] | select(.name|test("-linux-x64\\.tar\\.gz$")).browser_download_url
       - type: archive
         only-arches:
           - aarch64
         url: https://github.com/trebeljahr/trackyourtime/releases/download/v{{version}}/TrackYourTime-{{version}}-linux-arm64.tar.gz
         sha256: {{sha256_linux_arm64_targz}}
         dest: app
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/trebeljahr/trackyourtime/releases/latest
+          tag-query: .tag_name
+          version-query: .tag_name | sub("^v"; "")
+          timestamp-query: .published_at
+          url-query: .assets[] | select(.name|test("-linux-arm64\\.tar\\.gz$")).browser_download_url
       - type: script
         dest-filename: trackyourtime.sh
         commands:
@@ -60,7 +92,23 @@ modules:
         path: com.ricoslabs.trackyourtime.desktop
       - type: file
         path: com.ricoslabs.trackyourtime.metainfo.xml
+      # Both are read from the repository at the release tag, so they move with
+      # the archives above rather than with whatever main holds today.
       - type: file
         url: https://raw.githubusercontent.com/trebeljahr/trackyourtime/v{{version}}/build/icon.png
         sha256: {{sha256_icon_png}}
         dest-filename: icon.png
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/trebeljahr/trackyourtime/releases/latest
+          version-query: .tag_name | sub("^v"; "")
+          url-query: '"https://raw.githubusercontent.com/trebeljahr/trackyourtime/" + .tag_name + "/build/icon.png"'
+      - type: file
+        url: https://raw.githubusercontent.com/trebeljahr/trackyourtime/v{{version}}/LICENSE
+        sha256: {{sha256_license}}
+        dest-filename: LICENSE
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/trebeljahr/trackyourtime/releases/latest
+          version-query: .tag_name | sub("^v"; "")
+          url-query: '"https://raw.githubusercontent.com/trebeljahr/trackyourtime/" + .tag_name + "/LICENSE"'

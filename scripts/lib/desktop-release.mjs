@@ -295,6 +295,63 @@ export function tagMismatch({ refType, refName, version }) {
 }
 
 /**
+ * Defined here rather than in `mobile-release.mjs`, which re-exports it: that
+ * module already imports `tagMismatch` from this one, and a second definition
+ * is how two release paths start disagreeing about what a prerelease is.
+ *
+ * @param {string} refName
+ * @returns {boolean} true for `v1.2.0-rc.1` and any other tag with a prerelease part
+ */
+export function isPrereleaseTag(refName) {
+  return /^v\d+\.\d+\.\d+-/.test(refName);
+}
+
+/** The snap's registered Snap Store name, and the one credential that publishes it. */
+export const SNAP_NAME = "trackyourtime";
+export const SNAP_CREDENTIALS_VAR = "SNAPCRAFT_STORE_CREDENTIALS";
+
+/**
+ * Where a tag's snap is released.
+ *
+ * **Never `stable` from CI.** A tag builds a DRAFT GitHub release and a person
+ * publishes it, and publishing is the release decision (`releasePlan` above,
+ * docs/deploy.md → "Desktop release"). A `stable` upload would hand the snap to
+ * every installed copy before that decision, so the tag run uploads to
+ * `candidate` and `snapcraft release` promotes it afterwards
+ * (docs/linux-stores.md). A prerelease tag stops at `beta`, the same rule that
+ * keeps `mobile-release.yml` on Play's internal track.
+ */
+export const SNAP_RELEASE_CHANNEL = "candidate";
+export const SNAP_PRERELEASE_CHANNEL = "beta";
+
+/**
+ * Whether this run uploads the snap it just built, and to which channel.
+ *
+ * All-or-none, like every other channel — and with one secret, "none" is
+ * simply "not set", so it is a notice and a green leg rather than a failure.
+ * A repo that does not publish to the Snap Store has nothing to fix, exactly
+ * as a Microsoft Store leg with no Partner Center identity is skipped.
+ *
+ * @param {{ refType: string, refName: string, version: string, env: Record<string, string | undefined> }} input
+ * @returns {{ publish: boolean, channel: string | null, skip: string | null, problem: string | null }}
+ */
+export function snapPublishPlan({ refType, refName, version, env }) {
+  const skip = (reason) => ({ publish: false, channel: null, skip: reason, problem: null });
+  if (!isSet(env, SNAP_CREDENTIALS_VAR)) {
+    return skip(`${SNAP_CREDENTIALS_VAR} is not set, so the snap stays a CI artifact (docs/linux-stores.md).`);
+  }
+  if (refType !== "tag") return skip(`${refName || refType} is not a tag: the Snap Store is only uploaded to from a v* tag.`);
+  const mismatch = tagMismatch({ refType, refName, version });
+  if (mismatch) return { publish: false, channel: null, skip: null, problem: mismatch };
+  return {
+    publish: true,
+    channel: isPrereleaseTag(refName) ? SNAP_PRERELEASE_CHANNEL : SNAP_RELEASE_CHANNEL,
+    skip: null,
+    problem: null,
+  };
+}
+
+/**
  * The Mac App Store entitlements for the main app.
  *
  * Electron under the App Sandbox needs an application group named
@@ -350,11 +407,25 @@ export function manifestArtifacts(version) {
   });
 }
 
+/**
+ * Placeholders whose checksum is computed from a file in THIS checkout rather
+ * than from a release artifact: the Flathub manifest fetches both at the
+ * release tag, and the workflow renders from that tag. Keyed by placeholder so
+ * `desktop-manifests.mjs` and its test read one list.
+ */
+export const REPO_FILE_CHECKSUMS = Object.freeze({
+  sha256_icon_png: "build/icon.png",
+  // Flathub requires the licence inside the build
+  // (/app/share/licenses/<app id>), and the tar.gz carries only Electron's and
+  // Chromium's.
+  sha256_license: "LICENSE",
+});
+
 /** Which placeholders each manifest family needs, so one family renders alone. */
 export const MANIFEST_FAMILIES = Object.freeze({
   homebrew: ["sha256_mac_arm64_dmg", "sha256_mac_x64_dmg"],
   winget: ["sha256_win_nsis"],
-  flatpak: ["sha256_linux_x64_targz", "sha256_linux_arm64_targz", "sha256_icon_png"],
+  flatpak: ["sha256_linux_x64_targz", "sha256_linux_arm64_targz", "sha256_icon_png", "sha256_license"],
 });
 
 /**

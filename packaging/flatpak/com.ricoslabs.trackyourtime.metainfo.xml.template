@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   AppStream metadata for Flathub (and any software centre that reads it).
-  Rendered by `node scripts/desktop-manifests.mjs`. Flathub requires at least
-  one screenshot: add a <screenshots> block pointing at a committed capture of
-  /app/track before the first submission — none exists yet (README).
+  Rendered by `node scripts/desktop-manifests.mjs`.
+
+  Two rules that fail quietly if they are broken:
+
+  - **Every claim here must be true of the FLATPAK.** The Flatpak has no
+    in-app updater, no "open at login" and no desktop activity capture
+    (`selfUpdates`, `loginItemMechanism` and `activityCaptureSupport` in
+    electron/src/distribution.ts all refuse the `flatpak` channel), so none of
+    the three is named below. A unit test greps for the activity wording.
+  - **The screenshot URLs are not versioned.** Flathub downloads them when it
+    builds, and its update bot rewrites the manifest's source URLs, never
+    these. They are the committed captures the live site serves from
+    packages/client/public/marketing/ (docs/marketing/README.md), which is why
+    the path is stable across deploys.
 -->
 <component type="desktop-application">
   <id>com.ricoslabs.trackyourtime</id>
@@ -11,18 +22,53 @@
   <project_license>AGPL-3.0-or-later</project_license>
   <name>Track Your Time</name>
   <summary>Free, open-source time tracking</summary>
-  <developer id="com.trebeljahr">
+  <!-- The reverse-DNS of the domain the app id is built from, so the id, the
+       developer and Flathub's website verification all name ricoslabs.com. -->
+  <developer id="com.ricoslabs">
     <name>Rico Trebeljahr</name>
   </developer>
   <description>
     <p>Free, open-source time tracking for freelancers and small teams who bill by the hour.</p>
     <p>Start a timer from the window or the tray. It keeps counting without a connection and sends your changes when the connection comes back. Stop it on your phone or in the browser, and the desktop app shows it stopped.</p>
+    <p>An entry carries a client, a project, a task and tags. The task is not a child of the project, so "Design review" is one name you use for every client.</p>
     <p>At the end of the month, the hours become a report, a PDF invoice, or a ZUGFeRD or XRechnung e-invoice. There is no paid plan. Use the hosted version at trackyourtime.dev, or point the app at your own server.</p>
   </description>
   <launchable type="desktop-id">com.ricoslabs.trackyourtime.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://trackyourtime.dev/marketing/web-track.png</image>
+      <caption>One timer, filed under a client, a project and a task</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://trackyourtime.dev/marketing/web-timesheet.png</image>
+      <caption>Fill in a whole week in the timesheet</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://trackyourtime.dev/marketing/web-reports.png</image>
+      <caption>See where the month went, and what it earned</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://trackyourtime.dev/marketing/web-invoice.png</image>
+      <caption>Turn billable hours into an invoice</caption>
+    </screenshot>
+  </screenshots>
   <url type="homepage">https://trackyourtime.dev/</url>
+  <url type="help">https://trackyourtime.dev/docs/</url>
+  <url type="contact">https://trackyourtime.dev/support/</url>
   <url type="bugtracker">https://github.com/trebeljahr/trackyourtime/issues</url>
   <url type="vcs-browser">https://github.com/trebeljahr/trackyourtime</url>
+  <keywords>
+    <keyword>time tracking</keyword>
+    <keyword>timesheet</keyword>
+    <keyword>billable hours</keyword>
+    <keyword>invoice</keyword>
+    <keyword>timer</keyword>
+    <keyword>freelance</keyword>
+  </keywords>
+  <supports>
+    <control>pointer</control>
+    <control>keyboard</control>
+  </supports>
   <branding>
     <color type="primary" scheme_preference="light">#c7d2fe</color>
     <color type="primary" scheme_preference="dark">#4f46e5</color>

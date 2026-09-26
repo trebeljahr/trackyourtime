@@ -5,4 +5,10 @@ Comment=Free, open-source time tracking
 Exec=trackyourtime %U
 Icon=com.ricoslabs.trackyourtime
 Categories=Office;ProjectManagement;
+Keywords=time;tracking;timesheet;billable;invoice;timer;freelance;
+# Electron sets WM_CLASS from the product name, which is what electron-builder
+# writes into the deb, rpm, AppImage and snap entries as well
+# (LinuxTargetHelper.computeDesktopEntry). Without it a running window is not
+# matched to this entry, and the shell shows a generic icon.
+StartupWMClass=Track Your Time
 Terminal=false

@@ -29,7 +29,7 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, read
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { MANIFEST_FAMILIES, manifestArtifacts, manifestFamilyPlan, renderManifestTemplate } from "./lib/desktop-release.mjs";
+import { MANIFEST_FAMILIES, manifestArtifacts, manifestFamilyPlan, REPO_FILE_CHECKSUMS, renderManifestTemplate } from "./lib/desktop-release.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -84,10 +84,10 @@ if (rendering.length === 0) {
 
 const values = { version, release_date: date };
 for (const key of new Set(rendering.flatMap((family) => MANIFEST_FAMILIES[family]))) {
-  if (key === "sha256_icon_png") {
-    // Flathub fetches build/icon.png at the release tag; the checkout the
-    // workflow runs from is that tag.
-    values[key] = sha256(join(repoRoot, "build/icon.png"));
+  if (key in REPO_FILE_CHECKSUMS) {
+    // Flathub fetches these from the repository at the release tag, and the
+    // checkout the workflow runs from is that tag.
+    values[key] = sha256(join(repoRoot, REPO_FILE_CHECKSUMS[key]));
     continue;
   }
   values[key] = sha256(join(artifactsDir, files[key]));

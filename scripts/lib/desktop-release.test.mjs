@@ -10,10 +10,17 @@ import {
   UPDATE_FEED,
   ALL_SIGNING_VARS,
   compareVersionNumbers,
+  isPrereleaseTag,
   MIN_APP_BUILDER_LIB,
   MANIFEST_FAMILIES,
   manifestArtifacts,
   manifestFamilyPlan,
+  REPO_FILE_CHECKSUMS,
+  SNAP_CREDENTIALS_VAR,
+  SNAP_NAME,
+  SNAP_PRERELEASE_CHANNEL,
+  SNAP_RELEASE_CHANNEL,
+  snapPublishPlan,
   renderManifestTemplate,
   artifactPatterns,
   builderEnvFor,
@@ -185,7 +192,15 @@ describe("manifests", () => {
   it("every placeholder a family needs has a file or a computed value", () => {
     const files = manifestArtifacts("1.2.3");
     for (const keys of Object.values(MANIFEST_FAMILIES)) {
-      for (const key of keys) assert.ok(key in files || key === "sha256_icon_png", key);
+      for (const key of keys) assert.ok(key in files || key in REPO_FILE_CHECKSUMS, key);
+    }
+  });
+
+  it("every repo file a checksum is computed from is in the checkout", async () => {
+    const { existsSync } = await import("node:fs");
+    const root = new URL("../../", import.meta.url).pathname;
+    for (const [key, file] of Object.entries(REPO_FILE_CHECKSUMS)) {
+      assert.ok(existsSync(root + file), `${key} names ${file}, which does not exist`);
     }
   });
 
@@ -210,9 +225,37 @@ describe("manifests", () => {
     assert.deepEqual(plan.skipped, [{ family: "winget", missing: ["TrackYourTime-Setup-1.2.3.exe"] }]);
   });
 
-  it("does not ask the release for the Flathub icon, which comes from the checkout", () => {
+  it("does not ask the release for the files that come from the checkout", () => {
     const plan = manifestFamilyPlan({ version: "1.2.3", families: ["flatpak"], has: (n) => n.endsWith(".tar.gz") });
     assert.deepEqual(plan.render, ["flatpak"]);
+    // The icon and the licence are hashed out of the checkout at the tag, so
+    // neither may be looked for among the release's files.
+    const files = manifestArtifacts("1.2.3");
+    for (const key of Object.keys(REPO_FILE_CHECKSUMS)) assert.ok(!(key in files), key);
+  });
+
+  it("the Flathub metadata promises nothing the Flatpak refuses", async () => {
+    const { readFileSync } = await import("node:fs");
+    const root = new URL("../../packaging/flatpak/", import.meta.url).pathname;
+    const source = readFileSync(root + "com.ricoslabs.trackyourtime.metainfo.xml.template", "utf8");
+    // The XML comments explain the rules and name what is left out; only what a
+    // software centre shows is checked.
+    const metainfo = source.replace(/<!--[\s\S]*?-->/g, "");
+    // activityCaptureSupport answers "linux-sandbox" for flatpak, selfUpdates
+    // and loginItemMechanism refuse it too (electron/src/distribution.ts), so
+    // the listing must not offer any of the three.
+    for (const promise of [/activity/i, /which app/i, /open at login/i, /updates itself/i, /automatic update/i]) {
+      assert.doesNotMatch(metainfo, promise, `the metainfo promises ${promise}`);
+    }
+    // Flathub needs at least one screenshot, and it downloads them by URL.
+    const shots = [...metainfo.matchAll(/<image>(.+?)<\/image>/g)].map((m) => m[1]);
+    assert.ok(shots.length >= 1, "no screenshot");
+    for (const url of shots) {
+      assert.match(url, /^https:\/\//, url);
+      // The bot rewrites source URLs, never these, so a version in one goes stale.
+      assert.doesNotMatch(url, /\{\{/, `${url} is versioned; Flathub's checker never rewrites a screenshot URL`);
+    }
+    assert.match(metainfo, /<launchable type="desktop-id">com\.ricoslabs\.trackyourtime\.desktop</);
   });
 
   it("the committed templates use only placeholders the renderer can fill", async () => {
@@ -274,6 +317,20 @@ describe("updateFeedFor", () => {
     // Ad-hoc + hardened runtime cannot load Electron Framework (no Team ID).
     assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "", TRACKYOURTIME_UNSIGNED: "1" })).mac.hardenedRuntime, false);
     assert.strictEqual((await load({ TRACKYOURTIME_DESKTOP_CHANNEL: "mac", TRACKYOURTIME_UNSIGNED: "" })).mac.hardenedRuntime, true);
+  });
+
+  it("the snap description is one line, because it is also the desktop entry's Comment", async () => {
+    const config = (await import(new URL("../../electron-builder.config.mjs?snap", import.meta.url).href)).default;
+    // LinuxTargetHelper.computeDesktopEntry writes `Comment=<description>`,
+    // escaping a newline to a literal `\n`, so a paragraph here reads as one
+    // run-on tooltip in the snap's desktop entry. The Snap Store listing text
+    // is pasted by hand (docs/linux-stores.md).
+    assert.equal(typeof config.snap.description, "string");
+    assert.doesNotMatch(config.snap.description, /[\r\n]/);
+    assert.ok(config.snap.description.length > 0);
+    // The listing must not offer what snap confinement refuses.
+    assert.doesNotMatch(config.snap.description, /activity/i);
+    assert.equal(config.snap.confinement, "strict");
   });
 });
 
@@ -400,5 +457,49 @@ describe("winget", () => {
       // The installer URL must name a file a release really attaches.
       assert.doesNotMatch(text, /-unsigned/, name);
     }
+  });
+});
+
+describe("snapPublishPlan", () => {
+  const tag = { refType: "tag", refName: "v1.2.3", version: "1.2.3" };
+  const creds = { [SNAP_CREDENTIALS_VAR]: "AgIL..." };
+
+  it("skips with a reason, never a failure, when the credential is not set", () => {
+    for (const env of [{}, { [SNAP_CREDENTIALS_VAR]: "" }, { [SNAP_CREDENTIALS_VAR]: "   " }]) {
+      const plan = snapPublishPlan({ ...tag, env });
+      assert.equal(plan.publish, false);
+      assert.equal(plan.problem, null);
+      assert.match(plan.skip, new RegExp(SNAP_CREDENTIALS_VAR));
+    }
+  });
+
+  it("uploads nothing outside a tag, even with the credential set", () => {
+    const plan = snapPublishPlan({ refType: "branch", refName: "main", version: "1.2.3", env: creds });
+    assert.equal(plan.publish, false);
+    assert.equal(plan.problem, null);
+    assert.match(plan.skip, /not a tag/);
+  });
+
+  it("uploads a tag to candidate, never to stable", () => {
+    const plan = snapPublishPlan({ ...tag, env: creds });
+    assert.deepEqual(plan, { publish: true, channel: SNAP_RELEASE_CHANNEL, skip: null, problem: null });
+    assert.notEqual(SNAP_RELEASE_CHANNEL, "stable");
+    assert.notEqual(SNAP_PRERELEASE_CHANNEL, "stable");
+  });
+
+  it("stops a prerelease tag at beta", () => {
+    const plan = snapPublishPlan({ refType: "tag", refName: "v1.2.3-rc.1", version: "1.2.3-rc.1", env: creds });
+    assert.equal(plan.channel, SNAP_PRERELEASE_CHANNEL);
+    assert.equal(isPrereleaseTag("v1.2.3-rc.1"), true);
+  });
+
+  it("is a problem when the tag does not name the version being packaged", () => {
+    const plan = snapPublishPlan({ refType: "tag", refName: "v1.2.4", version: "1.2.3", env: creds });
+    assert.equal(plan.publish, false);
+    assert.match(plan.problem, /expected v1\.2\.3/);
+  });
+
+  it("names the registered snap", () => {
+    assert.equal(SNAP_NAME, "trackyourtime");
   });
 });

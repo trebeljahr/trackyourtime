@@ -6,7 +6,11 @@ name: Desktop Manifests
 # an artifact. When the tap is configured it also commits the cask there, and
 # when WINGET_PKGS_TOKEN is set the `winget` job opens the microsoft/winget-pkgs
 # pull request. Flathub stays a manual pull request (docs/deploy.md → "Desktop
-# release" → Homebrew, winget, Flathub).
+# release" → Homebrew, winget; docs/linux-stores.md for the Flathub submission).
+#
+# The Flathub family's icon and LICENSE checksums are read from THIS checkout
+# (REPO_FILE_CHECKSUMS), which the tag rule below makes the release's tag — the
+# same tag the manifest fetches both files from.
 #
 # Every channel is all-or-none: with no token the step prints a notice and the
 # run still succeeds, because the rendered manifests in the artifact are the
