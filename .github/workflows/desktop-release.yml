@@ -205,15 +205,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # No `version:` input: pnpm/action-setup reads `packageManager`.
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          # Node 26's electron download leaves a truncated binary (CLAUDE.md).
-          node-version: 24
-          cache: pnpm
-
+      # Before the signing check, which reads APPLE_API_KEY and
+      # MAS_PROVISIONING_PROFILE as the paths these write.
       - name: Decode the Apple key files
         if: runner.os == 'macOS'
         shell: bash
@@ -227,12 +220,36 @@ jobs:
             echo "MAS_PROVISIONING_PROFILE=$RUNNER_TEMP/embedded.provisionprofile" >> "$GITHUB_ENV"
           fi
 
-      # Decides signed / unsigned / store before anything slow runs, with the
-      # same function build-desktop.mjs calls. A partial set fails here.
+      # Decides signed / unsigned / store / skip before anything slow runs, with
+      # the same function build-desktop.mjs calls. A partial set fails here.
+      #
+      # It runs before setup-node, on whatever Node the runner ships, so that
+      # the pnpm cache below can be gated on its answer. That is safe because
+      # the script reads environment variables and imports one pure module —
+      # `node:fs` and `scripts/lib/desktop-release.mjs`, no dependencies and
+      # nothing version-sensitive. Everything that cares which Node it gets
+      # (the Electron download) runs after setup-node.
       - name: Check the signing secrets
         id: signing
         shell: bash
         run: node scripts/desktop-signing-mode.mjs ${{ matrix.signing-channel }}
+
+      # No `version:` input: pnpm/action-setup reads `packageManager`.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 26's electron download leaves a truncated binary (CLAUDE.md).
+          node-version: 24
+          # Only when this leg installs. A skipped leg never runs `pnpm
+          # install`, so the pnpm store does not exist, and setup-node's
+          # post-job cache SAVE then fails the whole job with "Path Validation
+          # Error: Path(s) specified in the action for caching do(es) not
+          # exist" — which is how win-store failed on tag v0.1.0 even though it
+          # had correctly decided to skip and had built nothing. There is one
+          # rule for skipping and it is the step above, not a copy of its
+          # condition here.
+          cache: ${{ steps.signing.outputs.mode != 'skip' && 'pnpm' || '' }}
 
       - name: Install deps
         if: steps.signing.outputs.mode != 'skip'
