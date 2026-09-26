@@ -840,6 +840,28 @@ electron-builder still points at 26.15.3, below the fix, so a `pnpm update`
 can walk back into it and the next place that would show up is a tagged
 release that cannot sign macOS at all.
 
+**A signed macOS build must not set `CSC_IDENTITY_AUTO_DISCOVERY=false`.**
+It reads like "pin the identity to the certificate we named" and means "do not
+sign macOS at all": app-builder-lib checks it before it looks at `CSC_LINK`,
+logs
+
+```
+• skipped macOS application code signing  reason=, see https://electron.build/code-signing CSC_IDENTITY_AUTO_DISCOVERY=false
+```
+
+and packages an **ad-hoc signed** app — no entitlements, no hardened runtime —
+under a file name that does not say `-unsigned`, because the mode really is
+signed. `builderEnvFor` therefore sets it only for an unsigned or Store build,
+where not signing is the point, and a unit test pins that. Nothing replaces it
+on a signed build: the flag only governs searching a keychain for an identity,
+and `CSC_LINK` does not go through that search — electron-builder imports the
+p12 into a throwaway keychain and signs with the identity inside it.
+
+The "Verify the Developer ID signature" step is what caught this, on the first
+run that ever got past `security` (run 36273933100). Keep those checks: a
+macOS build that is quietly not signed passes every other step, and `codesign
+--verify` alone reports an ad-hoc signature as `valid on disk`.
+
 An AppX is built only with `--channel win-store`, and that channel builds
 nothing else. Outside it electron-builder fills the identity with `CN=ms` and
 the package name, so `build-desktop.mjs` refuses before anything is built.
@@ -859,8 +881,10 @@ code, in four separate causes, and each is fixed:
   `actions/setup-node`'s post-job cache save, because a leg that never runs
   `pnpm install` has no pnpm store to save. The cache is now enabled only when
   the leg installs.
-- **`mac` and `mas`** — the `set-key-partition-list` bug above, not the
-  certificates or their passwords. Fixed by the electron-builder floor.
+- **`mac` and `mas`** — two faults, one behind the other. First the
+  `set-key-partition-list` bug above, fixed by the electron-builder floor;
+  past that, `CSC_IDENTITY_AUTO_DISCOVERY=false` meant neither leg was signing
+  at all, fixed in `builderEnvFor`. Both are described above.
 - **`win`** — a partial Azure Trusted Signing set, which the all-or-none rule
   above correctly refused: `AZURE_TRUSTED_SIGNING_ENDPOINT` and
   `AZURE_TRUSTED_SIGNING_ACCOUNT` were set while the other five were missing.

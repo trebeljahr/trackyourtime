@@ -101,6 +101,21 @@ describe("builderEnvFor", () => {
     assert.equal(env.TRACKYOURTIME_UNSIGNED, undefined);
   });
 
+  // app-builder-lib reads CSC_IDENTITY_AUTO_DISCOVERY before CSC_LINK and
+  // treats "false" as "do not sign macOS", so setting it on a signed build
+  // ships an ad-hoc signed app under a name that does not say -unsigned.
+  it("leaves keychain discovery alone on a signed build, whatever it was set to", () => {
+    for (const inherited of [undefined, "false", "true"]) {
+      const env = builderEnvFor(
+        "mac",
+        { ...(inherited === undefined ? {} : { CSC_IDENTITY_AUTO_DISCOVERY: inherited }), CSC_LINK: "p12", CSC_KEY_PASSWORD: "pw" },
+        { mode: "signed", set: ["CSC_LINK", "CSC_KEY_PASSWORD"] },
+      );
+      assert.notEqual(env.CSC_IDENTITY_AUTO_DISCOVERY, "false", `inherited ${inherited}`);
+      assert.equal(env.CSC_LINK, "p12");
+    }
+  });
+
   it("strips every credential electron-builder would sign with on its own from an unsigned build", () => {
     // WIN_CSC_LINK falls back to CSC_LINK in electron-builder, so a Developer ID
     // p12 in the shell used to sign a Windows build still named -unsigned.

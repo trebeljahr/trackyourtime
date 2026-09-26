@@ -171,8 +171,21 @@ export function builderEnvFor(channel, env, signing) {
     next.CSC_IDENTITY_AUTO_DISCOVERY = "false";
   }
   if (signing.mode === "signed") {
-    // Never fall back to a keychain identity when the set names a certificate.
-    next.CSC_IDENTITY_AUTO_DISCOVERY = "false";
+    // Deliberately NOT CSC_IDENTITY_AUTO_DISCOVERY=false, which reads like
+    // "pin the identity to the certificate we named" and means "do not sign
+    // macOS at all": app-builder-lib checks that variable before it looks at
+    // CSC_LINK, logs `skipped macOS application code signing reason=,` and
+    // packages an ad-hoc signed app — with no entitlements and no hardened
+    // runtime, under a file name that does NOT say -unsigned, because the mode
+    // really is signed. Both Apple legs did exactly that on run 36273933100,
+    // and it was the signature verification, not the build, that caught it.
+    //
+    // Nothing is needed here instead. The flag only governs searching a
+    // keychain for an identity, and CSC_LINK does not go through that search:
+    // electron-builder imports the p12 into a throwaway keychain and signs
+    // with the identity inside it, so a developer's login keychain is not a
+    // fallback for a signed build either way.
+    delete next.CSC_IDENTITY_AUTO_DISCOVERY;
   }
   return next;
 }
