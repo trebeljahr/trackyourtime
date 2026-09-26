@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-27
+
 The first tagged release. It publishes the web app and the API as self-host
 images, which is the only channel anybody can install from today.
 
@@ -498,4 +500,5 @@ tag.
   and admins who may see both. An invoice id answers "not found" to anyone
   else.
 
-[Unreleased]: https://github.com/trebeljahr/trackyourtime/commits/main
+[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.0
