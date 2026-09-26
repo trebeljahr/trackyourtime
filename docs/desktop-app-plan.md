@@ -94,6 +94,9 @@ Step 1, `RELATIVE_ASSET_PREFIX=1 NEXT_PUBLIC_API_URL=… pnpm electron:preview`:
   (notarization skipped). A preview build should set
   `CSC_IDENTITY_AUTO_DISCOVERY=false` (or `mac.identity: null` for `--dir`) so it
   is fast and identical on every machine; Stage 6 turns signing on explicitly.
+  A **signed** build must not set it — app-builder-lib reads it as "do not sign
+  macOS at all", which is the trap under "what the first signed runs showed"
+  below.
 - `/` renders from `file://` (screenshot: landing page, but the root-absolute
   `/marketing/popup.png` hero image is broken — `file:///marketing/popup.png`
   not found). Within about a second `ShellEntryRedirect` does
@@ -765,6 +768,38 @@ and deploy.md's Snap Store steps upload the amd64 file. `snap install
 snapcraft` is now on the x64 leg only, as a fallback for a config change that
 switches the template path off. A real arm64 snap is a later feature, and it
 starts with a `snapcraft.yaml` rather than with a config flag.
+
+#### What the first signed runs showed (2026-09-26)
+
+Stage 6's signing was written but never exercised: the first tag run died
+before `security`, so every check after it ran for the first time here. Four
+faults were stacked, each hidden by the one in front, and the last two were
+caught by the signature verification rather than by the build.
+
+1. `security set-key-partition-list` got the p12's password where the
+   keychain's own belongs. Fixed by the `MIN_APP_BUILDER_LIB` floor.
+2. `builderEnvFor` set `CSC_IDENTITY_AUTO_DISCOVERY=false` for **signed** mode
+   too. app-builder-lib reads that before `CSC_LINK` and skips macOS signing
+   entirely, so both Apple legs packaged an ad-hoc signed app — no
+   entitlements, no hardened runtime — under a file name that does *not* say
+   `-unsigned`, because the mode really was signed. A tagged release could have
+   attached a dmg that looked signed and was not. The flag now applies only to
+   unsigned and Store builds, with a unit test.
+3. The MAS pkg is written by `createMasInstaller` into the target's own output
+   directory, `release/mas-universal/`, not `release/`. Every `release/*.pkg`
+   path — verify, upload, checksums — read `release/mas*/*.pkg` instead.
+4. `linux-arm64`'s snap, and `win-store`'s cache save; both above.
+
+Two things worth keeping from this. `codesign --verify` calls an ad-hoc
+signature `valid on disk`, so the entitlement and `flags=…(runtime)` greps are
+the only steps that noticed fault 2 — a "verification" that only ran
+`--verify` would have shipped it. And a fault that makes a build produce
+*nothing* (no pkg) is as important to fail on as a wrong file, which is why
+the pkg check now names the problem instead of leaving a bare `ls` error.
+
+Verified green on run 36276092054, from a branch: `mac` signed and notarized,
+`mas` signed with a pkg, `win` unsigned, `win-store` skipped, both Linux legs
+built.
 
 ### Stage 7 — auto-update, the draft release and /download (2026-09-17)
 
