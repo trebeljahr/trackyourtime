@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The self-hosted client image builds again. It never copied or built
+  `@starter/invoice-pdf`, which the public invoice generator imports into the
+  client bundle, so the static export failed with
+  `Can't resolve '@starter/invoice-pdf/totals'` and v0.1.0 published a server
+  image with no client image beside it.
+
 ## [0.1.0] - 2026-09-27
 
 The first tagged release. It publishes the web app and the API as self-host
