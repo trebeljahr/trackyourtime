@@ -820,6 +820,25 @@ local `--channel` build refuses in the same way. The API key and team id are
 shared with the iOS release, so they do not start signing on their own. Only
 the certificate does.
 
+**macOS signing needs electron-builder 26.16.1 or newer.** Up to 26.16.0,
+electron-builder built its throwaway keychain with a random password and then
+ran `security set-key-partition-list … -k <the p12's password>`. That flag takes
+the *keychain's* password. macOS 14 and 15 ignored the mismatch; macOS 26 — the
+image `macos-latest` now resolves to — verifies the unlock and answers
+
+```
+security: SecKeychainUnlock: The user name or passphrase you entered is not correct.
+```
+
+so both Apple legs died at "Build and package" with `⨯ /usr/bin/security
+process failed 1`, with the certificates and passwords never involved (tag
+v0.1.0, run 36108136377). It is fixed upstream in 26.16.1. The floor is
+`MIN_APP_BUILDER_LIB` in `scripts/lib/desktop-release.mjs` and a unit test
+reads the *resolved* app-builder-lib against it — npm's `latest` dist-tag for
+electron-builder still points at 26.15.3, below the fix, so a `pnpm update`
+can walk back into it and the next place that would show up is a tagged
+release that cannot sign macOS at all.
+
 An AppX is built only with `--channel win-store`, and that channel builds
 nothing else. Outside it electron-builder fills the identity with `CN=ms` and
 the package name, so `build-desktop.mjs` refuses before anything is built.

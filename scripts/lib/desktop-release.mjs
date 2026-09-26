@@ -466,3 +466,48 @@ export function feedProblems(feeds, attached) {
   }
   return problems;
 }
+
+/**
+ * The lowest electron-builder (app-builder-lib) this repo may sign a macOS
+ * build with.
+ *
+ * Through 26.16.0, `createKeychain` created its throwaway keychain with a
+ * random 32-byte password and then ran
+ *
+ *   security set-key-partition-list -S apple-tool:,apple: -s -k <p12 password> <keychain>
+ *
+ * `-k` takes the KEYCHAIN's password, not the password `security import -P`
+ * used for the p12. macOS 14 and 15 let the mismatch through; macOS 26 — the
+ * `macos-26-arm64` image `macos-latest` now resolves to — verifies the unlock
+ * and answers
+ *
+ *   security: SecKeychainUnlock: The user name or passphrase you entered is not correct.
+ *
+ * so both Apple channels died at "Build and package" with
+ * `⨯ /usr/bin/security process failed 1` on the first run with real signing
+ * secrets (tag v0.1.0, run 36108136377). The certificates and passwords were
+ * never involved. Fixed upstream in 26.16.1 (electron-userland/electron-builder#10172),
+ * which passes the keychain's own password.
+ *
+ * Asserted rather than assumed (`desktop-release.test.mjs`) because npm's
+ * `latest` dist-tag for electron-builder still points at 26.15.3, below the
+ * fix: a `pnpm update` or a hand-edited range can walk back into it, and the
+ * next place that shows up is a tagged release that cannot sign macOS at all.
+ */
+export const MIN_APP_BUILDER_LIB = "26.16.1";
+
+/**
+ * Compare two `x.y.z` versions on their numbers alone, ignoring any
+ * prerelease suffix (`27.0.0-alpha.9` counts as 27.0.0). Enough for a floor
+ * check, and no semver dependency for a two-line comparison.
+ *
+ * @returns {number} negative when a < b, 0 when equal, positive when a > b
+ */
+export function compareVersionNumbers(a, b) {
+  const parts = (v) => String(v).split("-")[0].split(".").map((n) => Number.parseInt(n, 10) || 0);
+  const [x, y] = [parts(a), parts(b)];
+  for (let i = 0; i < 3; i++) {
+    if (x[i] !== y[i]) return (x[i] ?? 0) - (y[i] ?? 0);
+  }
+  return 0;
+}

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -7,6 +9,8 @@ import {
   updateFeedFor,
   UPDATE_FEED,
   ALL_SIGNING_VARS,
+  compareVersionNumbers,
+  MIN_APP_BUILDER_LIB,
   MANIFEST_FAMILIES,
   manifestArtifacts,
   renderManifestTemplate,
@@ -305,5 +309,32 @@ describe("feedProblems", () => {
     assert.match(problems[1], /sha512/);
     assert.match(problems[2], /size/);
     assert.match(problems[3], /no files/);
+  });
+});
+
+describe("the electron-builder that signs macOS", () => {
+  it("compares version numbers, prerelease suffix and all", () => {
+    assert.ok(compareVersionNumbers("26.15.3", "26.16.1") < 0);
+    assert.ok(compareVersionNumbers("26.9.0", "26.16.1") < 0, "9 < 16, not \"9\" > \"1\"");
+    assert.equal(compareVersionNumbers("26.16.1", "26.16.1"), 0);
+    assert.ok(compareVersionNumbers("26.17.0", "26.16.1") > 0);
+    assert.ok(compareVersionNumbers("27.0.0-alpha.9", "26.16.1") > 0);
+  });
+
+  // The floor, against what is actually installed rather than against the
+  // range in package.json: the range is what a person writes and the lockfile
+  // is what CI and a release build run. Below it, every signed mac and mas
+  // build dies in `security set-key-partition-list` on a macOS 26 runner —
+  // see MIN_APP_BUILDER_LIB.
+  it("resolves app-builder-lib at or above the set-key-partition-list fix", () => {
+    const require = createRequire(import.meta.url);
+    const manifest = require.resolve("app-builder-lib/package.json", { paths: [require.resolve("electron-builder/package.json")] });
+    const { version } = JSON.parse(readFileSync(manifest, "utf8"));
+    assert.ok(
+      compareVersionNumbers(version, MIN_APP_BUILDER_LIB) >= 0,
+      `app-builder-lib ${version} is below ${MIN_APP_BUILDER_LIB}: it passes the p12 password to ` +
+        "`security set-key-partition-list -k`, which takes the keychain's own password, and every " +
+        "signed macOS build fails on a macOS 26 runner. Raise the electron-builder range in package.json.",
+    );
   });
 });

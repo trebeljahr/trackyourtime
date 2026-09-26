@@ -290,7 +290,13 @@ built, and the rules that fail quietly if broken:
 - **Every channel is built by one workflow, and signing fails closed**
   (`.github/workflows/desktop-release.yml`, `scripts/lib/desktop-release.mjs`,
   docs/deploy.md → "Desktop release"). No secrets for a channel builds files
-  named `-unsigned`; a partial set refuses before the export. Which channel a
+  named `-unsigned`; a partial set refuses before the export. **electron-builder
+  must stay at or above `MIN_APP_BUILDER_LIB`** (26.16.1): below it,
+  `createKeychain` hands the p12's password to `security set-key-partition-list
+  -k`, which takes the keychain's own, and every signed mac and mas build dies
+  on a macOS 26 runner with `SecKeychainUnlock: … not correct` — the floor is
+  asserted against the resolved app-builder-lib in `desktop-release.test.mjs`,
+  because npm's `latest` dist-tag is still below it. Which channel a
   running copy came from is `distribution.ts` (`process.mas`,
   `process.windowsStore`, `SNAP`, `FLATPAK_ID`, `APPIMAGE`), and it decides
   both open at login and updates.
