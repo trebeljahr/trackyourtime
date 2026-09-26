@@ -126,8 +126,11 @@ jobs:
             signing-channel: mas
             os: macos-latest
             builder: --mac mas --universal
+            # electron-builder writes the MAS pkg into the target's own output
+            # directory (release/mas-universal/), not release/ — it comes from
+            # createMasInstaller, not from a normal target.
             artifacts: |
-              release/*.pkg
+              release/mas*/*.pkg
           - channel: win
             signing-channel: win
             os: windows-latest
@@ -341,8 +344,14 @@ jobs:
             codesign -d --entitlements - "$app" | grep -q "$APPLE_TEAM_ID.com.ricoslabs.trackyourtime"
             test -f "$app/Contents/embedded.provisionprofile"
           done
-          ls release/*.pkg
-          for pkg in release/*.pkg; do pkgutil --check-signature "$pkg"; done
+          # Under release/mas*/, not release/ — see the matrix comment.
+          shopt -s nullglob
+          pkgs=(release/mas*/*.pkg)
+          [ ${#pkgs[@]} -gt 0 ] || { echo "::error::No MAS pkg was written. A signed mas build must produce one."; exit 1; }
+          for pkg in "${pkgs[@]}"; do
+            echo "$pkg"
+            pkgutil --check-signature "$pkg"
+          done
 
       - name: Verify the Windows signature
         if: matrix.channel == 'win' && steps.signing.outputs.mode == 'signed'
@@ -364,7 +373,7 @@ jobs:
         run: |
           shopt -s nullglob
           cd release
-          files=(*.dmg *.zip *.pkg *.exe *.appx *.AppImage *.deb *.rpm *.tar.gz *.snap)
+          files=(*.dmg *.zip *.pkg mas*/*.pkg *.exe *.appx *.AppImage *.deb *.rpm *.tar.gz *.snap)
           if [ ${#files[@]} -gt 0 ]; then
             if command -v sha256sum >/dev/null; then sha256sum "${files[@]}"; else shasum -a 256 "${files[@]}"; fi > SHA256SUMS-${{ matrix.channel }}.txt
             cat SHA256SUMS-${{ matrix.channel }}.txt

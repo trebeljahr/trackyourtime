@@ -881,10 +881,15 @@ code, in four separate causes, and each is fixed:
   `actions/setup-node`'s post-job cache save, because a leg that never runs
   `pnpm install` has no pnpm store to save. The cache is now enabled only when
   the leg installs.
-- **`mac` and `mas`** — two faults, one behind the other. First the
-  `set-key-partition-list` bug above, fixed by the electron-builder floor;
-  past that, `CSC_IDENTITY_AUTO_DISCOVERY=false` meant neither leg was signing
-  at all, fixed in `builderEnvFor`. Both are described above.
+- **`mac` and `mas`** — faults stacked behind one another, each hidden by the
+  one in front. First the `set-key-partition-list` bug above, fixed by the
+  electron-builder floor; then `CSC_IDENTITY_AUTO_DISCOVERY=false`, which meant
+  neither leg was signing at all, fixed in `builderEnvFor`. `mac` passes from
+  there. `mas` then needed its **pkg path**: electron-builder writes the MAS
+  installer into the target's own output directory, `release/mas-universal/`,
+  because it comes from `createMasInstaller` rather than a normal target, so
+  `release/*.pkg` found nothing. The verify step, the artifact upload and the
+  checksum list all read `release/mas*/*.pkg` now.
 - **`win`** — a partial Azure Trusted Signing set, which the all-or-none rule
   above correctly refused: `AZURE_TRUSTED_SIGNING_ENDPOINT` and
   `AZURE_TRUSTED_SIGNING_ACCOUNT` were set while the other five were missing.
