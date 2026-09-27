@@ -416,7 +416,13 @@ jobs:
             "Set :provisioningProfiles:com.ricoslabs.trackyourtime ${APPLE_PROVISIONING_PROFILE_NAME}" \
             "$RENDERED"
           plutil -lint "$RENDERED"
-          RENDERED_NAME=$(plutil -extract provisioningProfiles.com\.ricoslabs\.trackyourtime raw -o - "$RENDERED")
+          # Single-quoted so the backslashes reach plutil. plutil splits a key
+          # path on ".", and the bundle id contains two — unquoted, the shell
+          # strips the escapes and plutil looks for com → ricoslabs →
+          # trackyourtime, three nested keys that do not exist. PlistBuddy had
+          # written the value correctly; only this read was wrong, and it failed
+          # the whole iOS leg.
+          RENDERED_NAME=$(plutil -extract 'provisioningProfiles.com\.ricoslabs\.trackyourtime' raw -o - "$RENDERED")
           if [ "$RENDERED_NAME" != "$APPLE_PROVISIONING_PROFILE_NAME" ]; then
             echo "::error::ExportOptions.plist names '$RENDERED_NAME', not the profile the archive was signed with." >&2
             exit 1
