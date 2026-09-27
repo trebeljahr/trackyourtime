@@ -790,25 +790,36 @@ section for why):
    signed with either.
 3. App ID `com.ricoslabs.trackyourtime` (`VLUP27P577`), then the **Apple
    Distribution** certificate the `APPLE_CERTIFICATE_BASE64` `.p12` holds.
-4. Name it — anything, but the name is the secret, so keep it stable. Download
-   the `.mobileprovision`.
-5. Set both secrets:
+4. Name it — anything, but the name is the secret, so keep it stable. The one
+   in use is **`Track Your Time iOS App Store`**, beside the existing
+   `Track Your Time Mac App Store`. Download the `.mobileprovision`.
+5. Set both secrets, reading the name out of the file rather than retyping it,
+   so the two cannot disagree:
 
 ```bash
-gh secret set APPLE_PROVISIONING_PROFILE_BASE64 < <(base64 -i ~/Downloads/TrackYourTime_App_Store.mobileprovision)
-gh secret set APPLE_PROVISIONING_PROFILE_NAME --body "TrackYourTime App Store"
+P=~/Downloads/Track_Your_Time_iOS_App_Store.mobileprovision
+base64 -i "$P" | gh secret set APPLE_PROVISIONING_PROFILE_BASE64
+security cms -D -i "$P" | plutil -extract Name raw - | tr -d '\n' | gh secret set APPLE_PROVISIONING_PROFILE_NAME
 ```
 
 The name must match the profile's `Name` field byte for byte — `xcodebuild`
 matches on it, and a mismatch is refused by "Check the provisioning profile"
-before anything is built. Read the field back with:
+before anything is built.
+
+**Pick the certificate the CI secret holds.** The portal offers the team's
+distribution certificates as a radio group, so exactly one goes into the
+profile, and it must be the one inside `APPLE_CERTIFICATE_BASE64`
+(`MTQD5355Z8`) — the other, `QM2KDD28ND`, produces a profile the runner has no
+private key for. Check a downloaded profile against the recorded SHA-1:
 
 ```bash
-security cms -D -i ~/Downloads/TrackYourTime_App_Store.mobileprovision | plutil -extract Name raw -
+security cms -D -i "$P" | plutil -extract DeveloperCertificates.0 raw - \
+  | base64 -d | openssl x509 -inform DER -noout -fingerprint -sha1
 ```
 
-A profile expires after a year. Renewing it means repeating steps 1–5; the
-build fails at the profile check, naming the expiry, rather than at upload.
+A profile expires after a year — this one on **2027-09-23**, the same day as
+the certificate in it. Renewing means repeating steps 1–5; the build fails at
+the profile check, naming the expiry, rather than at upload.
 
 #### Why iOS signs manually in CI, and the project does not
 

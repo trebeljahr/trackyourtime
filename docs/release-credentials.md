@@ -17,8 +17,8 @@ below; the keys themselves live in `~/keys/`.
 | `APPLE_API_ISSUER_ID` | `fe992c77-dd56-4ec2-9552-9ffb12bed05f` | From App Store Connect → Users and Access → Integrations. |
 | `APPLE_CERTIFICATE_BASE64` | `~/keys/trackyourtime-ci-distribution.p12` | Apple Distribution cert `MTQD5355Z8`, created 2026-09-23 via the ASC API, expires 2027-09-23. Dedicated to CI. |
 | `APPLE_CERTIFICATE_PASSWORD` | `.apple-ci-cert.local` | — |
-| `APPLE_PROVISIONING_PROFILE_BASE64` | **NOT SET YET** | The App Store distribution profile for `com.ricoslabs.trackyourtime` (`VLUP27P577`). No iOS profile exists on the team — `GET /v1/profiles` returns only the Mac one, `5DXY6J8BU5`. Create it by hand: docs/deploy.md → "Creating the App Store provisioning profile". |
-| `APPLE_PROVISIONING_PROFILE_NAME` | **NOT SET YET** | That profile's exact `Name`. `xcodebuild` matches on it. |
+| `APPLE_PROVISIONING_PROFILE_BASE64` | `~/Downloads/Track_Your_Time_iOS_App_Store.mobileprovision` | iOS App Store profile `G9LQ8PL7K5`, created 2026-09-27 in the portal, expires 2027-09-23. Carries certificate `MTQD5355Z8` (SHA-1 `D509CE2C014417752654D5FC84B56A2EAEE41D82`, the same one `APPLE_CERTIFICATE_BASE64` holds), no provisioned devices, `get-task-allow` false, `beta-reports-active` true. |
+| `APPLE_PROVISIONING_PROFILE_NAME` | `Track Your Time iOS App Store` | That profile's exact `Name`. `xcodebuild` matches on it. |
 | `APPLE_TEAM_ID` | `4BHY8H2J25` | Only the `mas` desktop channel reads it; set anyway. |
 | `ANDROID_KEYSTORE_BASE64` | `~/keys/trackyourtime-upload.keystore` | PKCS12, RSA 4096, alias `trackyourtime`, 10000 days, created 2026-09-23. |
 | `ANDROID_KEYSTORE_PASSWORD` | `.android-upload-keystore.local` | Same password for store and key. |
@@ -33,11 +33,16 @@ for both configurations, and `ios/App/ExportOptions.plist.template` is
 committed with `app-store-connect` / **manual** signing (the project itself
 stays automatic — docs/deploy.md → "Why iOS signs manually in CI").
 
-**The iOS leg is red until the two profile secrets are set.** Five of the seven
-are set, and a partial set is an error on every event by design, so "Plan"
-fails in seconds naming the two that are missing. That is the intended
-behaviour: the alternative is a twenty-minute build that dies at Archive, which
-is exactly what the `v0.1.0` tag did.
+All seven iOS secrets are set as of 2026-09-27. The signed archive, the export
+and the TestFlight upload have still never run — the `v0.1.0` tag died at
+Archive before signing, and nothing has exercised the manual-signing path on a
+runner since. The next dispatch of Mobile Release is the first real test of it.
+
+**The portal offers two Apple Distribution certificates as a radio group**, so
+a profile carries exactly one: `MTQD5355Z8` (expires 2027-09-23, in CI) and
+`QM2KDD28ND` (expires 2027-06-09). A profile built on the wrong one leaves the
+runner with no private key for the identity it is told to sign with. Compare
+the fingerprint, not the expiry date — docs/deploy.md → iOS release.
 
 **Back these up off-machine.** The Play upload keystore is enrolled once in
 Play App Signing; losing it means a key-reset request to Google before you can
