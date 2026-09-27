@@ -347,10 +347,22 @@ if docker buildx version >/dev/null 2>&1; then
     platforms="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' 2>&1)" \
       || fail "docker buildx imagetools inspect $ref failed without credentials: $platforms"
     platforms="$(jq -r '[.manifests[] | .platform // {} | select(.os == "linux") | "linux/" + .architecture] | unique | join(" ")' <<<"$platforms")"
-    case " $platforms " in
-      *" linux/amd64 "*" linux/arm64 "*) note "imagetools: $ref -> $platforms" ;;
-      *) fail "imagetools: $ref lists [$platforms], expected linux/amd64 and linux/arm64." ;;
-    esac
+    # Each platform is tested on its own. One pattern asking for both
+    # (`*" linux/amd64 "*" linux/arm64 "*`) can never match a correct image:
+    # `jq … join(" ")` separates the two with a SINGLE space, which the first
+    # half consumes as its trailing delimiter, leaving the second half without
+    # the leading space it demands. It failed every two-platform image and
+    # reported "lists [linux/amd64 linux/arm64], expected linux/amd64 and
+    # linux/arm64" — the same set twice.
+    missing=""
+    for want in linux/amd64 linux/arm64; do
+      case " $platforms " in
+        *" $want "*) ;;
+        *) missing="${missing:+$missing }$want" ;;
+      esac
+    done
+    [ -z "$missing" ] || fail "imagetools: $ref lists [$platforms], missing $missing."
+    note "imagetools: $ref -> $platforms"
   done
 else
   warn "docker buildx is not installed; the manifest list was checked over the registry API in step 1 only."
