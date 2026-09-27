@@ -17,6 +17,8 @@ below; the keys themselves live in `~/keys/`.
 | `APPLE_API_ISSUER_ID` | `fe992c77-dd56-4ec2-9552-9ffb12bed05f` | From App Store Connect → Users and Access → Integrations. |
 | `APPLE_CERTIFICATE_BASE64` | `~/keys/trackyourtime-ci-distribution.p12` | Apple Distribution cert `MTQD5355Z8`, created 2026-09-23 via the ASC API, expires 2027-09-23. Dedicated to CI. |
 | `APPLE_CERTIFICATE_PASSWORD` | `.apple-ci-cert.local` | — |
+| `APPLE_PROVISIONING_PROFILE_BASE64` | **NOT SET YET** | The App Store distribution profile for `com.ricoslabs.trackyourtime` (`VLUP27P577`). No iOS profile exists on the team — `GET /v1/profiles` returns only the Mac one, `5DXY6J8BU5`. Create it by hand: docs/deploy.md → "Creating the App Store provisioning profile". |
+| `APPLE_PROVISIONING_PROFILE_NAME` | **NOT SET YET** | That profile's exact `Name`. `xcodebuild` matches on it. |
 | `APPLE_TEAM_ID` | `4BHY8H2J25` | Only the `mas` desktop channel reads it; set anyway. |
 | `ANDROID_KEYSTORE_BASE64` | `~/keys/trackyourtime-upload.keystore` | PKCS12, RSA 4096, alias `trackyourtime`, 10000 days, created 2026-09-23. |
 | `ANDROID_KEYSTORE_PASSWORD` | `.android-upload-keystore.local` | Same password for store and key. |
@@ -27,8 +29,15 @@ below; the keys themselves live in `~/keys/`.
 
 Both preconditions the workflow's plan step checks are satisfied:
 `ios/App/App.xcodeproj/project.pbxproj` sets `DEVELOPMENT_TEAM = 4BHY8H2J25`
-for both configurations, and `ios/App/ExportOptions.plist` is committed with
-`app-store-connect` / automatic signing.
+for both configurations, and `ios/App/ExportOptions.plist.template` is
+committed with `app-store-connect` / **manual** signing (the project itself
+stays automatic — docs/deploy.md → "Why iOS signs manually in CI").
+
+**The iOS leg is red until the two profile secrets are set.** Five of the seven
+are set, and a partial set is an error on every event by design, so "Plan"
+fails in seconds naming the two that are missing. That is the intended
+behaviour: the alternative is a twenty-minute build that dies at Archive, which
+is exactly what the `v0.1.0` tag did.
 
 **Back these up off-machine.** The Play upload keystore is enrolled once in
 Play App Signing; losing it means a key-reset request to Google before you can

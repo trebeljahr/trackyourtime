@@ -754,28 +754,112 @@ behind `PLAY_SERVICE_ACCOUNT_JSON` needs release permissions for the app
 
 ### iOS release
 
-The iOS job signs only when all five secrets are set:
+The iOS job signs only when all seven secrets are set:
 
 | Secret | Value |
 | --- | --- |
 | `APPLE_CERTIFICATE_BASE64` | base64 of the Apple Distribution certificate `.p12` |
 | `APPLE_CERTIFICATE_PASSWORD` | that `.p12`'s password |
+| `APPLE_PROVISIONING_PROFILE_BASE64` | base64 of the **App Store** distribution profile `.mobileprovision` |
+| `APPLE_PROVISIONING_PROFILE_NAME` | that profile's exact `Name` |
 | `APPLE_API_KEY_BASE64` | base64 of the App Store Connect API key `.p8` |
 | `APPLE_API_KEY_ID` | that key's id |
 | `APPLE_API_ISSUER_ID` | the issuer id |
 
-With all five set, two project files are also required, or "Plan" fails:
+With all seven set, two project facts are also required, or "Plan" fails:
 
 - `DEVELOPMENT_TEAM` in `ios/App/App.xcodeproj` for the Debug and Release
   configurations (Xcode → App target → Signing & Capabilities → Team).
-- `ios/App/ExportOptions.plist`, committed, with `method` `app-store-connect`,
-  your `teamID` and `signingStyle` `automatic`.
+- `ios/App/ExportOptions.plist.template`, committed. It is a template, not a
+  plist: the workflow substitutes the profile name into `$RUNNER_TEMP` before
+  exporting.
 
-The archive and the export use the API key with `-allowProvisioningUpdates`,
-so Xcode creates or fetches the provisioning profile itself. Creating a profile
-needs a key with the Admin role. The IPA goes to TestFlight from a stable tag
-or a dispatch; a prerelease tag is skipped (above), and the workflow never
-submits for review.
+The API key is used for the TestFlight upload only. The IPA goes to TestFlight
+from a stable tag or a dispatch; a prerelease tag is skipped (above), and the
+workflow never submits for review.
+
+#### Creating the App Store provisioning profile
+
+One manual, one-time step, because nothing in CI may mint it (see the next
+section for why):
+
+1. [developer.apple.com](https://developer.apple.com/account/resources/profiles/list)
+   → Certificates, Identifiers & Profiles → Profiles → **+**.
+2. Distribution → **App Store Connect** → Continue. Not "iOS App Development",
+   and not Ad Hoc: both list devices, and App Store Connect refuses an upload
+   signed with either.
+3. App ID `com.ricoslabs.trackyourtime` (`VLUP27P577`), then the **Apple
+   Distribution** certificate the `APPLE_CERTIFICATE_BASE64` `.p12` holds.
+4. Name it — anything, but the name is the secret, so keep it stable. Download
+   the `.mobileprovision`.
+5. Set both secrets:
+
+```bash
+gh secret set APPLE_PROVISIONING_PROFILE_BASE64 < <(base64 -i ~/Downloads/TrackYourTime_App_Store.mobileprovision)
+gh secret set APPLE_PROVISIONING_PROFILE_NAME --body "TrackYourTime App Store"
+```
+
+The name must match the profile's `Name` field byte for byte — `xcodebuild`
+matches on it, and a mismatch is refused by "Check the provisioning profile"
+before anything is built. Read the field back with:
+
+```bash
+security cms -D -i ~/Downloads/TrackYourTime_App_Store.mobileprovision | plutil -extract Name raw -
+```
+
+A profile expires after a year. Renewing it means repeating steps 1–5; the
+build fails at the profile check, naming the expiry, rather than at upload.
+
+#### Why iOS signs manually in CI, and the project does not
+
+`ios/App/App.xcodeproj` stays on `CODE_SIGN_STYLE = Automatic`, so opening it
+in Xcode and running on a device is unchanged. The workflow overrides that on
+the command line for the archive and the export, and only there.
+
+The reason is measured, not stylistic. The `v0.1.0` tag failed the Archive step
+with a valid Apple Distribution certificate imported and an App Manager API
+key:
+
+```
+error: Communication with Apple failed: Your team has no devices from which to
+       generate a provisioning profile.
+error: No profiles for 'com.ricoslabs.trackyourtime' were found: Xcode couldn't
+       find any iOS App Development provisioning profiles ...
+```
+
+It asks for a **Development** profile, and for registered devices, on a build
+whose only destination is the App Store. `xcodebuild archive` with automatic
+signing resolves a development profile, and `-allowProvisioningUpdates` then
+asks Apple to create one — which Apple will not do for a team with no devices.
+Xcode.app hides this because the Organizer re-signs for distribution when you
+press "Distribute App"; `xcodebuild archive` has no such second pass.
+
+Run against this project with the same distribution-only identity the runner
+has, and with no App Store Connect calls at all:
+
+| Archive settings | What it asked for |
+| --- | --- |
+| as committed (`CODE_SIGN_IDENTITY = "iPhone Developer"`) | iOS App Development profile |
+| plus a shared `App.xcscheme` with `ArchiveAction` = `Release` | iOS App Development profile |
+| `CODE_SIGN_IDENTITY` deleted (resolves `Apple Development`) | iOS App Development profile |
+| `CODE_SIGN_IDENTITY = "Apple Distribution"`, still automatic | refused: "conflicting provisioning settings" |
+| `CODE_SIGN_STYLE=Manual` + profile specifier + `Apple Distribution` | exactly the named profile |
+
+So the scheme was never the cause — the Archive step has always passed
+`-configuration Release` — and no value of `CODE_SIGN_IDENTITY` makes automatic
+signing archive for distribution. Registering a device would satisfy Apple and
+is the wrong fix: an App Store build must not need one.
+
+Three consequences to keep:
+
+- The archive's three overrides are one decision and move together. Automatic
+  style plus an explicit `Apple Distribution` identity is refused outright, and
+  Manual style with no `PROVISIONING_PROFILE_SPECIFIER` has nothing to match.
+- Neither the archive nor the export passes `-allowProvisioningUpdates` or the
+  authentication key. Manual signing asks Apple for nothing, and the flag is
+  precisely what failed the tag. `mobile-release.test.mjs` asserts their absence.
+- `ExportOptions.plist` signs manually too, with the same profile, so the export
+  re-signs against what the archive already carries.
 
 **Submitting to the App Store is manual.** In App Store Connect, pick the
 TestFlight build for the new version and submit it for review. To roll out in

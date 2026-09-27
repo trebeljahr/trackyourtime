@@ -45,13 +45,28 @@ export const ANDROID_SIGNING_SECRETS = Object.freeze([
 export const PLAY_SECRETS = Object.freeze(["PLAY_SERVICE_ACCOUNT_JSON", "ANDROID_PACKAGE_NAME"]);
 
 /**
- * The iOS set. The API key is part of it, not an optional upload extra: the
- * archive and export fetch their provisioning profiles with it
- * (`-allowProvisioningUpdates`), so a certificate alone cannot build an IPA.
+ * The iOS set. All of it is required together, because each part is useless
+ * without the rest:
+ *
+ *   - the Apple Distribution certificate and its password sign the archive;
+ *   - the provisioning profile and its NAME are what the archive and the export
+ *     are pointed at. Both CI steps sign MANUALLY, which is the one measured
+ *     decision in here — `xcodebuild archive` with automatic signing resolves an
+ *     *iOS App Development* profile, and Apple will not create one for a team
+ *     with no registered devices ("Your team has no devices from which to
+ *     generate a provisioning profile"), which is what failed the v0.1.0 tag.
+ *     The long version is in mobile-release.yml; the profile NAME is a secret
+ *     rather than a constant because it is a string typed in the Developer
+ *     portal, which nothing in this repo can derive;
+ *   - the App Store Connect API key uploads the IPA to TestFlight (`altool`).
+ *     It no longer fetches profiles: manual signing asks Apple for nothing, so
+ *     neither the archive nor the export talks to App Store Connect at all.
  */
 export const IOS_SECRETS = Object.freeze([
   "APPLE_CERTIFICATE_BASE64",
   "APPLE_CERTIFICATE_PASSWORD",
+  "APPLE_PROVISIONING_PROFILE_BASE64",
+  "APPLE_PROVISIONING_PROFILE_NAME",
   "APPLE_API_KEY_BASE64",
   "APPLE_API_KEY_ID",
   "APPLE_API_ISSUER_ID",
@@ -291,7 +306,7 @@ export function planIos({ event, refType, refName, version, env, developmentTeam
   if (secrets.state === "partial") {
     errors.push(
       `The iOS signing secrets are incomplete. Set: ${secrets.present.join(", ")}. Missing: ${secrets.missing.join(", ")}. ` +
-        "Set all five to sign, or none of them.",
+        `Set all ${IOS_SECRETS.length} to sign, or none of them.`,
     );
   } else if (prerelease) {
     // Whatever the event: a dispatch of the tag would fail the same way, at
@@ -307,7 +322,7 @@ export function planIos({ event, refType, refName, version, env, developmentTeam
       errors.push("The iOS secrets are set but ios/App/App.xcodeproj has no DEVELOPMENT_TEAM for every configuration.");
     }
     if (!exportOptions) {
-      errors.push("The iOS secrets are set but ios/App/ExportOptions.plist is not committed.");
+      errors.push("The iOS secrets are set but ios/App/ExportOptions.plist.template is not committed.");
     }
     build = "signed";
   } else if (tagPush) {

@@ -50,7 +50,7 @@ if (platform === "android") {
     ...ref,
     env,
     developmentTeam: existsSync(pbxPath) && developmentTeamConfigured(readFileSync(pbxPath, "utf8")),
-    exportOptions: existsSync(resolve(repoRoot, "ios/App/ExportOptions.plist")),
+    exportOptions: existsSync(resolve(repoRoot, "ios/App/ExportOptions.plist.template")),
   });
   outputs = {
     build: plan.build,

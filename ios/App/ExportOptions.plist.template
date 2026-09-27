@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Rendered by mobile-release.yml into $RUNNER_TEMP and read by
+	     `xcodebuild -exportArchive`. A TEMPLATE, not a usable plist: the profile
+	     name is a secret (APPLE_PROVISIONING_PROFILE_NAME), because it is a
+	     string a person typed in the Developer portal and not derivable from
+	     anything in this repo.
+
+	     `signingStyle` is MANUAL, and the archive step signs manually too. That
+	     is a measured decision, not a preference — see the long note in
+	     mobile-release.yml. In one line: `xcodebuild archive` with automatic
+	     signing resolves an *iOS App Development* profile, and creating one
+	     needs a registered device, which an App Store build must not. Automatic
+	     signing in Xcode.app works because the Organizer re-signs for
+	     distribution on "Distribute App"; `xcodebuild archive` has no such
+	     second pass.
+
+	     The Xcode PROJECT stays on CODE_SIGN_STYLE = Automatic, so opening
+	     ios/App in Xcode and running on a device is unchanged. Only these two CI
+	     steps override it.
+
+	     `destination` stays `export` because altool uploads the IPA afterwards. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>export</string>
+	<key>teamID</key>
+	<string>4BHY8H2J25</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>signingCertificate</key>
+	<string>Apple Distribution</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.ricoslabs.trackyourtime</key>
+		<string>__APPLE_PROVISIONING_PROFILE_NAME__</string>
+	</dict>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>stripSwiftSymbols</key>
+	<true/>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

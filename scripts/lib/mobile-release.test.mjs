@@ -233,7 +233,33 @@ describe("developmentTeamConfigured", () => {
   it("accepts the committed project, which names the team on both configurations", () => {
     const pbxproj = readFileSync(resolve(repoRoot, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
     assert.equal(developmentTeamConfigured(pbxproj), true);
-    assert.ok(existsSync(resolve(repoRoot, "ios/App/ExportOptions.plist")));
+    assert.ok(existsSync(resolve(repoRoot, "ios/App/ExportOptions.plist.template")));
+  });
+});
+
+describe("ios/App/ExportOptions.plist.template", () => {
+  const template = readFileSync(resolve(repoRoot, "ios/App/ExportOptions.plist.template"), "utf8");
+
+  it("exports to the App Store with MANUAL signing and the distribution identity", () => {
+    // Automatic here would ask App Store Connect for a profile, which is the
+    // path that failed the v0.1.0 tag. See the header of mobile-release.yml.
+    assert.match(template, /<key>method<\/key>\s*\n\s*<string>app-store-connect<\/string>/);
+    assert.match(template, /<key>signingStyle<\/key>\s*\n\s*<string>manual<\/string>/);
+    assert.match(template, /<key>signingCertificate<\/key>\s*\n\s*<string>Apple Distribution<\/string>/);
+  });
+
+  it("maps the real bundle id to the placeholder the workflow substitutes", () => {
+    // A renamed key, or a placeholder spelled differently here and in the
+    // workflow, exports an unsigned-then-refused IPA rather than failing.
+    assert.match(
+      template,
+      /<key>com\.ricoslabs\.trackyourtime<\/key>\s*\n\s*<string>__APPLE_PROVISIONING_PROFILE_NAME__<\/string>/,
+    );
+  });
+
+  it("is not a usable plist, so nothing can export with it by accident", () => {
+    assert.ok(!existsSync(resolve(repoRoot, "ios/App/ExportOptions.plist")));
+    assert.match(template, /__APPLE_PROVISIONING_PROFILE_NAME__/);
   });
 });
 
@@ -262,6 +288,73 @@ describe("mobile-release.yml", () => {
     assert.match(workflow, /CURRENT_PROJECT_VERSION=\$\{\{ steps\.plan\.outputs\.build_number \}\}/);
     // The expression, not a mention: the header comment explains the rule.
     assert.doesNotMatch(workflow, /\$\{\{[^}]*github\.run_number/);
+  });
+
+  it("archives and exports with MANUAL signing, and asks Apple for nothing", () => {
+    // The whole point of the change. `xcodebuild archive` with automatic signing
+    // resolves an *iOS App Development* profile; -allowProvisioningUpdates then
+    // asks Apple to create one, and Apple refuses a team with no registered
+    // devices — which is how the v0.1.0 tag failed with a valid distribution
+    // certificate in the keychain. Measured table in the workflow header.
+    const archive = workflow.split(/\n\s{6}- name: /).find((step) => step.startsWith("Archive\n"));
+    assert.ok(archive, "no Archive step");
+    assert.match(archive, /CODE_SIGN_STYLE=Manual/);
+    assert.match(archive, /PROVISIONING_PROFILE_SPECIFIER="\$APPLE_PROVISIONING_PROFILE_NAME"/);
+    assert.match(archive, /CODE_SIGN_IDENTITY="Apple Distribution"/);
+
+    // Neither step may reach App Store Connect: with manual signing there is
+    // nothing to fetch, and the flag is precisely the regression.
+    const exportStep = workflow.split(/\n\s{6}- name: /).find((step) => step.startsWith("Export IPA\n"));
+    assert.ok(exportStep, "no Export IPA step");
+    for (const step of [archive, exportStep]) {
+      assert.doesNotMatch(step, /-allowProvisioningUpdates/);
+      assert.doesNotMatch(step, /-authenticationKey/);
+    }
+
+    // The API key survives for the TestFlight upload alone.
+    const upload = workflow.split(/\n\s{6}- name: /).find((step) => step.startsWith("Upload to TestFlight\n"));
+    assert.match(upload ?? "", /--apiKey "\$APPLE_API_KEY_ID"/);
+  });
+
+  it("exports with the RENDERED plist, never the committed template", () => {
+    // Exporting with the template would name a profile called
+    // __APPLE_PROVISIONING_PROFILE_NAME__ and fail at the last step.
+    assert.match(workflow, /-exportOptionsPlist "\$RUNNER_TEMP\/ExportOptions\.plist"/);
+    assert.doesNotMatch(workflow, /-exportOptionsPlist ExportOptions\.plist/);
+    assert.match(workflow, /cp ios\/App\/ExportOptions\.plist\.template "\$RENDERED"/);
+    // PlistBuddy, never sed: `&` in a sed replacement means the matched text,
+    // and a profile name is a string somebody typed.
+    assert.match(workflow, /PlistBuddy -c \\\n\s*"Set :provisioningProfiles:com\.ricoslabs\.trackyourtime /);
+    assert.doesNotMatch(workflow, /sed .*__APPLE_PROVISIONING_PROFILE_NAME__/);
+  });
+
+  it("refuses a profile that is not this app's App Store profile before building", () => {
+    // A Development or Ad Hoc profile signs a build and is then refused by App
+    // Store Connect, twenty minutes later. Devices are the tell: an App Store
+    // profile has none.
+    const check = workflow.split(/\n\s{6}- name: /).find((step) => step.startsWith("Check the provisioning profile\n"));
+    assert.ok(check, "no profile check step");
+    assert.match(check, /ProvisionedDevices/);
+    assert.match(check, /4BHY8H2J25\.com\.ricoslabs\.trackyourtime/);
+    assert.match(check, /\$APPLE_PROVISIONING_PROFILE_NAME/);
+  });
+
+  it("names the same team and bundle id as the Xcode project", () => {
+    // The archive passes DEVELOPMENT_TEAM explicitly, because manual signing
+    // matches a profile on team AND name, and the profile check hard-codes the
+    // app id. Both are permanent contracts (CLAUDE.md), but a copy that can
+    // drift from the project is still a copy — so pin them together.
+    const pbxproj = readFileSync(resolve(repoRoot, "ios/App/App.xcodeproj/project.pbxproj"), "utf8");
+    const teams = new Set([...pbxproj.matchAll(/DEVELOPMENT_TEAM = ([^;]+);/g)].map((m) => m[1].trim()));
+    assert.equal(teams.size, 1, "the project names more than one team");
+    const [team] = teams;
+    const bundleIds = new Set(
+      [...pbxproj.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)].map((m) => m[1].trim()),
+    );
+    assert.equal(bundleIds.size, 1, "the project names more than one bundle id");
+    const [bundleId] = bundleIds;
+    assert.match(workflow, new RegExp(`DEVELOPMENT_TEAM=${team}\\b`));
+    assert.match(workflow, new RegExp(`${team}\\.${bundleId.replace(/\./g, "\\.")}`));
   });
 
   it("reads every secret the plan checks", () => {
