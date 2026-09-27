@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-27
+
 ### Fixed
 
 - The self-hosted client image builds again. It never copied or built
@@ -508,5 +510,6 @@ tag.
   and admins who may see both. An invoice id answers "not found" to anyone
   else.
 
-[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.1
 [0.1.0]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.0
