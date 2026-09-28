@@ -8,4 +8,4 @@
  * define. `scripts/lib/version-sync.test.mjs` fails the moment this and the
  * root version disagree, so a release bump cannot forget it.
  */
-export const APP_VERSION = "0.1.1";
+export const APP_VERSION = "0.1.2";

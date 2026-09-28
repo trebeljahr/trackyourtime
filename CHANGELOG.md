@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-28
+
 Two release-pipeline fixes. Neither changes the app: both are checks that
 refused correct input and stopped a release leg after it had already built.
 
@@ -529,6 +531,7 @@ tag.
   and admins who may see both. An invoice id answers "not found" to anyone
   else.
 
-[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.2
 [0.1.1]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.1
 [0.1.0]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.0
