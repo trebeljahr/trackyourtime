@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   type EmailTransportEnv,
+  listmonkTxBody,
   resolveFromAddress,
   resolveSmtpSecure,
   selectEmailTransport,
@@ -122,6 +123,29 @@ describe("resolveFromAddress", () => {
 
   it("is empty when no sender is configured anywhere", () => {
     assert.equal(resolveFromAddress(empty), "");
+  });
+});
+
+describe("listmonkTxBody", () => {
+  const params = { to: "new@example.com", subject: "Verify", text: "a < b" };
+
+  // Listmonk's default mode answers 400 for a recipient who is not a
+  // subscriber, and nobody signing up, resetting a password or accepting an
+  // invitation is one. The failure only shows once hosted mail is switched on.
+  it("sends to people who are not newsletter subscribers", () => {
+    const body = listmonkTxBody(params, fullListmonk);
+    assert.equal(body.subscriber_mode, "external");
+    assert.equal(body.subscriber_email, "new@example.com");
+  });
+
+  it("names the sender and template, and escapes a plain-text body", () => {
+    const body = listmonkTxBody(params, {
+      ...fullListmonk,
+      LISTMONK_FROM: "Track Your Time <noreply@mail.trackyourtime.dev>",
+    });
+    assert.equal(body.from_email, "Track Your Time <noreply@mail.trackyourtime.dev>");
+    assert.equal(body.template_id, 1);
+    assert.deepEqual(body.data, { subject: "Verify", body: "<pre>a &lt; b</pre>" });
   });
 });
 
