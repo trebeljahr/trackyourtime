@@ -348,8 +348,10 @@ which relays over Amazon SES SMTP in `eu-west-1`. The sender is
 | Bounces, complaints | SNS `arn:aws:sns:eu-west-1:586817505631:ses-feedback-listmonk` → Listmonk `/webhooks/service/ses` |
 
 It replaced `mail.tracktime.trebeljahr.com` on 2026-09-29, which production
-had never sent from. All records are in the Cloudflare `trackyourtime.dev`
-zone; `.hatchkit.json` → `ses` records the identity.
+had never sent from; that identity and its five DNS records in the
+`trebeljahr.com` zone were deleted the same day. All current records are in
+the Cloudflare `trackyourtime.dev` zone; `.hatchkit.json` → `ses` records the
+identity.
 
 Three rules, each of which fails quietly if broken:
 
