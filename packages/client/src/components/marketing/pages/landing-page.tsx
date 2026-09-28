@@ -14,7 +14,14 @@ import {
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { ShellEntryRedirect } from "@/components/marketing/shell-entry-redirect";
 import { localizedPath, marketingMetadata, marketingT, type Locale } from "@/i18n/marketing";
-import { API_REFERENCE_URL, DONATE_URL, MCP_DOCS_URL, REPO_URL, SELF_HOSTING_URL } from "@/lib/site-links";
+import {
+  API_REFERENCE_URL,
+  DONATE_URL,
+  LANDING_DONATE_ASK,
+  MCP_DOCS_URL,
+  REPO_URL,
+  SELF_HOSTING_URL,
+} from "@/lib/site-links";
 
 /** Metadata for one locale of this page. `path` stays the English path. */
 export const landingMetadata = (locale: Locale): Metadata => {
@@ -205,12 +212,12 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
                 </a>
               ),
             })}
-            {DONATE_URL && (
+            {LANDING_DONATE_ASK && (
               <>
                 {" "}
                 {t.rich("landing.free.donate", {
                   donate: (chunks) => (
-                    <a href={DONATE_URL ?? undefined} className={link}>
+                    <a href={DONATE_URL} className={link}>
                       {chunks}
                     </a>
                   ),

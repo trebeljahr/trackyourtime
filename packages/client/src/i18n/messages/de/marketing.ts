@@ -46,6 +46,7 @@ export const marketing: Translation<typeof source> = {
       privacy: "Datenschutzerklärung",
       support: "Support",
       press: "Presskit",
+      donate: "Spenden",
     },
   },
 

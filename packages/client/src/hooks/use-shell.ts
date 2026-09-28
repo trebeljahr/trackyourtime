@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { isElectron, isTokenShell } from "@/lib/shell";
+import { isCapacitor, isElectron, isTokenShell } from "@/lib/shell";
 
 const subscribe = (): (() => void) => () => undefined;
 const serverSnapshot = (): boolean => false;
@@ -27,3 +27,7 @@ export const useIsTokenShell = (): boolean =>
 /** `isElectron()` after hydration. */
 export const useIsElectron = (): boolean =>
   React.useSyncExternalStore(subscribe, isElectron, serverSnapshot);
+
+/** `isCapacitor()` after hydration: the iOS or Android app. */
+export const useIsCapacitor = (): boolean =>
+  React.useSyncExternalStore(subscribe, isCapacitor, serverSnapshot);

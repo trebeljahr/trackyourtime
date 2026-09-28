@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { BrandMark } from "@/components/brand-mark";
 import { AccountLinks } from "@/components/marketing/account-links";
+import { DonateLink, DonationReturn } from "@/components/marketing/donate-link";
 import { FixedLocale } from "@/i18n/locale-root";
 import { localizedPath, marketingT, MARKETING_LOCALES, type Locale } from "@/i18n/marketing";
 import { API_DOCS_URL, DOCS_URL, REPO_URL } from "@/lib/site-links";
@@ -21,6 +22,10 @@ const NAV = [
  * The docs links are plain `<a>`: /docs/ is a separate Docusaurus build copied
  * into the export, not a Next route, so `<Link>` would try a client-side
  * navigation to a page the router does not have. The docs are English only.
+ *
+ * The footer's "Donate" link is web-only (`DonateLink`), and a return from the
+ * donate page with `?supported=1` is recorded on any public page
+ * (`DonationReturn`).
  *
  * `data-marketing` is what `styles/native.css` hides inside the Capacitor
  * shell. The native app opens on `/`, and the first frame it paints must not be
@@ -67,6 +72,7 @@ export function MarketingShell({
         </div>
       </header>
 
+      <DonationReturn />
       <main className="flex-1">{children}</main>
 
       <footer className="border-t text-sm text-muted-foreground">
@@ -89,6 +95,7 @@ export function MarketingShell({
             <li><Link href={href("/privacy/")} className="hover:text-foreground">{t("shell.footer.privacy")}</Link></li>
             <li><Link href={href("/support/")} className="hover:text-foreground">{t("shell.footer.support")}</Link></li>
             <li><Link href={href("/press/")} className="hover:text-foreground">{t("shell.footer.press")}</Link></li>
+            <DonateLink label={t("shell.footer.donate")} />
           </ul>
           <LanguageSwitch locale={locale} path={path} />
         </div>

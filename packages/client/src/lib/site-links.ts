@@ -30,11 +30,19 @@ export const ISSUES_URL = `${REPO_URL}/issues`;
 export const CONTACT_EMAIL = "ricotrebeljahr@gmail.com";
 
 /**
- * Where people can support development. `null` until a donation page exists;
- * the "Support development" block renders only when this is set, so a page
- * never asks for money through a link that goes nowhere.
+ * The one donate page for all of Rico's projects, on ricos.site. `from` names
+ * this project there and tags the payment; after paying, the page links back
+ * to `/?supported=1` (lib/donation-return.ts). The footer's "Donate" link, and
+ * the repo's FUNDING.yml, point here. Never linked inside the phone apps
+ * (App Store 3.1.1, Google Play payments policy).
  */
-export const DONATE_URL: string | null = null;
+export const DONATE_URL = "https://ricos.site/donate?from=track-your-time";
+/**
+ * The landing page's "you can support development" sentence, an inline ask.
+ * Off until an ask can stay quiet for 90 days after a donation, which
+ * `donation-supported-at` is recorded for.
+ */
+export const LANDING_DONATE_ASK: boolean = false;
 
 /** The product name as a stranger reads it. Identifiers use `trackyourtime`. */
 export const PRODUCT_NAME = "Track Your Time";

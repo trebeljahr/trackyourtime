@@ -47,6 +47,7 @@ export const marketing = {
       privacy: "Privacy policy",
       support: "Support",
       press: "Press kit",
+      donate: "Donate",
     },
   },
 
