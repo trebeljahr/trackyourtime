@@ -27,9 +27,12 @@ final — the App ID, the App Store Connect record and a Play package name
 cannot be renamed.
 
 What still says `tracktime`, on purpose: the `*.tracktime.trebeljahr.com` hosts
-in the deploy history and the hatchkit dev URL, the `tracktime` slug and every
-provisioned resource in `.hatchkit.json` (the SES identity), because those name live infrastructure that code cannot move;
-and the on-disk checkout path `~/projects/tracktime`.
+in the deploy history and the hatchkit dev URL, the `tracktime` slug in
+`.hatchkit.json` and the Listmonk lists and templates named after it, because
+those name live infrastructure that code cannot move; and the on-disk checkout
+path `~/projects/tracktime`. Mail moved on 2026-09-29: the sender is
+`noreply@mail.trackyourtime.dev` (SES identity `mail.trackyourtime.dev`), and
+`docs/deploy.md` → "Email: Listmonk over Amazon SES" has its records and rules.
 
 ## Hatchkit Context
 

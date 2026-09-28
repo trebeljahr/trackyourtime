@@ -333,6 +333,70 @@ Without any Coolify secret the scripts print a `::notice::` and deploy
 nothing; with some of them set and others missing, they fail, because half a
 deploy is worse than none.
 
+## Email: Listmonk over Amazon SES
+
+Account email (verification, password reset, workspace invitations) and the
+newsletter go through the shared Listmonk at `https://listmonk.trebeljahr.com`,
+which relays over Amazon SES SMTP in `eu-west-1`. The sender is
+`noreply@mail.trackyourtime.dev`:
+
+| Part | Value |
+| --- | --- |
+| SES domain identity | `mail.trackyourtime.dev`, Easy DKIM (three CNAMEs under `_domainkey.mail.trackyourtime.dev`) |
+| Custom MAIL FROM | `bounce.mail.trackyourtime.dev`: MX `10 feedback-smtp.eu-west-1.amazonses.com`, TXT `v=spf1 include:amazonses.com ~all` |
+| DMARC | `_dmarc.trackyourtime.dev` TXT `v=DMARC1; p=none;` |
+| Bounces, complaints | SNS `arn:aws:sns:eu-west-1:586817505631:ses-feedback-listmonk` → Listmonk `/webhooks/service/ses` |
+
+It replaced `mail.tracktime.trebeljahr.com` on 2026-09-29, which production
+had never sent from. All records are in the Cloudflare `trackyourtime.dev`
+zone; `.hatchkit.json` → `ses` records the identity.
+
+Three rules, each of which fails quietly if broken:
+
+- **The app names its sender on every send.** `LISTMONK_FROM` goes out as
+  `from_email` with each `/api/tx` call and each campaign. Listmonk's own
+  `app.from_email` is one setting for every project on the instance, so never
+  change it for this app. `hatchkit migrate-domain` has a `listmonk` step that
+  rewrites it: run that command with `--only ses`.
+- **A new SES identity needs its notification topics set again.** SES routes
+  bounce and complaint notices per identity, and hatchkit does not wire them.
+  Without them, bounces never reach Listmonk's bounce records (the
+  account-level suppression list still stops repeat sends). In AWS CloudShell:
+
+  ```bash
+  TOPIC=arn:aws:sns:eu-west-1:586817505631:ses-feedback-listmonk
+  for TYPE in Bounce Complaint; do
+    aws ses set-identity-notification-topic --region eu-west-1 \
+      --identity mail.trackyourtime.dev --notification-type "$TYPE" --sns-topic "$TOPIC"
+  done
+  aws ses get-identity-notification-attributes --region eu-west-1 \
+    --identities mail.trackyourtime.dev
+  ```
+
+- **Turn mail on only after SES leaves the sandbox, and run the backfill
+  below in the same deploy.** The variables below make
+  `isEmailDeliveryConfigured()` true, which makes every password sign-in
+  require a verified address. In the sandbox SES delivers only to verified
+  recipients. Listmonk's `/api/tx` still answers 200, and the rejection shows
+  only in Listmonk → Settings → Logs, so every new account waits for a link
+  that never arrives.
+
+The server app's env fields in Coolify. URL, user, token, tx template and a
+sender together select the transport (`selectEmailTransport`); the campaign
+template and list ids are the newsletter's. Set all nine in one deploy:
+
+```
+LISTMONK_URL=https://listmonk.trebeljahr.com
+LISTMONK_API_USER=<Listmonk API user>
+LISTMONK_API_TOKEN=<its token>
+LISTMONK_FROM=Track Your Time <noreply@mail.trackyourtime.dev>
+LISTMONK_FROM_EMAIL=noreply@mail.trackyourtime.dev
+LISTMONK_TX_TEMPLATE_ID=7         # tracktime-tx
+LISTMONK_CAMPAIGN_TEMPLATE_ID=8   # tracktime-campaign
+LISTMONK_LIVE_LIST_ID=9           # tracktime
+LISTMONK_TEST_LIST_ID=10          # tracktime-test
+```
+
 ## Email verification and the one-time backfill
 
 The server requires a verified email address before a password sign-in
