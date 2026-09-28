@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Two release-pipeline fixes. Neither changes the app: both are checks that
+refused correct input and stopped a release leg after it had already built.
+
+### Fixed
+
+- The self-host smoke test accepts a two-platform image again. One `case`
+  pattern asked for `linux/amd64` and `linux/arm64` in a single match, and the
+  first half consumed the single space between them, so a correct manifest
+  never matched and every release failed with "lists [linux/amd64
+  linux/arm64], expected linux/amd64 and linux/arm64" — the same set twice.
+  Each platform is now tested on its own. This is what stopped `promote` on
+  v0.1.1, so no release has ever moved the `latest` and `0.1` tags onto an
+  image. The documented install pins `TRACKYOURTIME_VERSION` to an exact
+  release and was never affected.
+- The iOS release leg reads its own `ExportOptions.plist` again. The key path
+  was passed to `plutil` unquoted, the shell stripped the escapes that keep the
+  bundle id's dots from being read as key separators, and the check failed a
+  file PlistBuddy had just written correctly.
+
 ## [0.1.1] - 2026-09-27
 
 ### Fixed
