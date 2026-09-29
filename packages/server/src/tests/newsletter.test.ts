@@ -18,7 +18,12 @@ import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import express from "express";
 
-import { describeListTarget, findSubscriber, resolveListId } from "../services/newsletter/listmonk.js";
+import {
+  describeListTarget,
+  findSubscriber,
+  resolveListId,
+  sendTransactional,
+} from "../services/newsletter/listmonk.js";
 import { registerNewsletterRoutes } from "../services/newsletter/routes.js";
 import { _resetRateLimit, mintConfirmToken } from "../services/newsletter/subscribe.js";
 
@@ -46,6 +51,7 @@ type WriteBody = {
   ids?: number[];
   target_list_ids?: number[];
   status?: Membership["subscription_status"];
+  from_email?: string;
 };
 type Write = { call: string; body: WriteBody | undefined };
 
@@ -333,5 +339,55 @@ describe("the list NODE_ENV selects", () => {
         assert.throws(() => resolveListId(), /Missing required env var: LISTMONK_TEST_LIST_ID/);
       },
     );
+  });
+});
+
+describe("the /api/tx sender", () => {
+  // Without `from_email` Listmonk falls back to its global
+  // `app.from_email`, which on the shared instance was another project's
+  // sender on 2026-09-29. Same env names, same order, as `listmonkTxBody`.
+  const FROM = "Track Your Time <noreply@mail.trackyourtime.dev>";
+
+  test("sends LISTMONK_FROM in the body", async () => {
+    await withEnv({ LISTMONK_FROM: FROM, LISTMONK_FROM_EMAIL: "noreply@example.com" }, async () => {
+      const lm = fakeListmonk();
+
+      await sendTransactional({ to: "Reader@Example.com", subject: "Confirm", html: "<p>Hi</p>" });
+
+      assert.deepEqual(lm.writes, [
+        {
+          call: "POST /api/tx",
+          body: {
+            subscriber_email: "reader@example.com",
+            template_id: 5,
+            from_email: FROM,
+            data: { subject: "Confirm", body: "<p>Hi</p>" },
+            content_type: "html",
+            messenger: "email",
+          },
+        },
+      ]);
+    });
+  });
+
+  test("falls back to LISTMONK_FROM_EMAIL", async () => {
+    await withEnv({ LISTMONK_FROM: undefined, LISTMONK_FROM_EMAIL: "noreply@example.com" }, async () => {
+      const lm = fakeListmonk();
+
+      await sendTransactional({ to: "reader@example.com", subject: "Confirm", html: "<p>Hi</p>" });
+
+      assert.equal(lm.writes[0]!.body?.from_email, "noreply@example.com");
+    });
+  });
+
+  test("the double-opt-in email carries the sender", async () => {
+    await withEnv({ LISTMONK_FROM: FROM, LISTMONK_FROM_EMAIL: undefined }, async () => {
+      const lm = fakeListmonk();
+
+      assert.equal((await subscribe("new@example.com")).status, 200);
+
+      const tx = lm.writes.find((w) => w.call === "POST /api/tx");
+      assert.equal(tx?.body?.from_email, FROM);
+    });
   });
 });

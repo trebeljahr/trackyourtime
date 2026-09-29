@@ -246,7 +246,12 @@ export type SendTransactionalParams = {
  *  `{{ .Tx.Data.subject }}` + `{{ .Tx.Data.body }}` raw (tx templates
  *  use Go `text/template`, which doesn't auto-escape HTML and doesn't
  *  register `safeHTML`). The recipient must exist as a subscriber —
- *  call `ensureSubscriber` first. */
+ *  call `ensureSubscriber` first.
+ *
+ *  `from_email` is set on every send. Without it Listmonk uses its
+ *  global `app.from_email`, which on a shared instance belongs to
+ *  whichever project set it last. Same names as the account-email
+ *  transport (`listmonkTxBody` in services/email.ts). */
 export async function sendTransactional(params: SendTransactionalParams): Promise<void> {
   const templateId = Number(required("LISTMONK_TX_TEMPLATE_ID"));
   await listmonkFetch("/api/tx", {
@@ -254,6 +259,7 @@ export async function sendTransactional(params: SendTransactionalParams): Promis
     body: JSON.stringify({
       subscriber_email: params.to.toLowerCase(),
       template_id: templateId,
+      from_email: process.env.LISTMONK_FROM || process.env.LISTMONK_FROM_EMAIL,
       data: { subject: params.subject, body: params.html },
       content_type: "html",
       messenger: "email",
