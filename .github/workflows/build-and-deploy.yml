@@ -5,8 +5,9 @@ on:
     branches: [main]
   # Pull requests reach `dco`, `verify` and `e2e` — the jobs that only read
   # the checkout and run the test suites. They must NEVER reach build-server,
-  # build-client or deploy: this file pushes :main image tags to ghcr.io and
-  # POSTs to the Coolify deploy API, and neither is a thing a PR gets to do.
+  # build-client or deploy: this file pushes image tags to ghcr.io, moves
+  # `:live` and signs Coolify deploy webhooks, and none of that is a thing a
+  # PR gets to do.
   #
   # That boundary is enforced per job, not by the `needs:` chain. build-server,
   # build-client and deploy each carry their own
@@ -24,8 +25,8 @@ on:
 # group, so a new push to a PR branch cancels only that PR's own stale run.
 #
 # Pushes to main are NOT cancelled in progress any more. Cancelling a run
-# cancels its deploy job too, and the deploy job can be between pinning the
-# new images in Coolify and putting the old ones back after a failed gate.
+# cancels its deploy job too, and the deploy job can be between promoting the
+# new images to `:live` and putting the old ones back after a failed gate.
 # A newer push waits instead; GitHub keeps only the newest waiting run, so a
 # burst of pushes still deploys once more, not once per push.
 concurrency:
@@ -300,34 +301,35 @@ jobs:
   # Deploy job — the topology is TWO Coolify apps on TWO hosts of one zone:
   # the client on trackyourtime.dev and the server on api.trackyourtime.dev.
   # Each app owns its own host, so neither has to share a routing rule with
-  # the other. The two UUIDs come as a pair (one without the other fails the
-  # job); with neither set, a project still on the single-app layout keeps
-  # working by setting only COOLIFY_RESOURCE_UUID.
+  # the other.
   #
   # Deploying them separately is the point of the split: the server holds
   # the WebSocket sync connections, and a client-only change must not
   # restart it and drop every connected device's socket.
   #
-  # PUSH ONLY, and the `if:` below is the only thing enforcing that. Note that
-  # the per-step `if: env.COOLIFY_* != ''` guards are NOT a PR safety net: on a
-  # fork every COOLIFY_* secret resolves to an empty string, so every step
-  # would skip and the job would report GREEN having deployed nothing — a
-  # silent false pass, which is worse than a loud failure.
+  # PUSH ONLY, and the `if:` below is the only thing enforcing that. On a
+  # fork every COOLIFY_* secret resolves to an empty string and the script
+  # prints a ::notice:: that nothing was deployed — that is not a PR safety
+  # net, it is how a fork without Coolify behaves.
   deploy:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: [build-server, build-client]
     # Shared with hosted-rollback.yml, and never cancelled: a deploy stopped
-    # between pinning the new images and restoring the old ones leaves Coolify
-    # pointing at a build nobody verified. A second deploy waits for the first.
+    # between promoting the new images and restoring the old ones leaves the
+    # apps' `:live` tag on a build nobody verified. A second deploy waits for
+    # the first.
     concurrency:
       group: hosted-deploy
       cancel-in-progress: false
     # A deploy that never lands polls for ten minutes, and its rollback polls
     # for ten more.
     timeout-minutes: 45
+    # `packages: write` is what moves `:live` (below), with this job's own
+    # GITHUB_TOKEN: it can write this repository's packages and nothing else.
     permissions:
       contents: read
+      packages: write
     steps:
       # The full history, because the rollback compares the migration registry
       # of the commit being deployed with the one it replaces (below).
@@ -338,31 +340,39 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # Pin each app to the IMMUTABLE tag, deploy, gate, and roll back when
-      # the gate fails — scripts/coolify-deploy.mjs, shared with
-      # hosted-rollback.yml and tested in scripts/lib/coolify-deploy.test.mjs.
+      # Promote this commit's images to `:live`, deploy each app through its
+      # own signed Coolify webhook, gate, and roll back when the gate fails —
+      # scripts/coolify-deploy.mjs, shared with hosted-rollback.yml and tested
+      # in scripts/lib/coolify-deploy.test.mjs. hatchkit generalised it into
+      # the scripts/hatchkit-deploy.mjs its other projects get, and it looks
+      # for that name or a `:live` promote step in this file to know these
+      # apps pull `:live`; keep the mention, or `hatchkit sync` points
+      # SERVER_IMAGE / CLIENT_IMAGE back at `:main`.
       #
-      # Why pin at all: the compose files default to `:main`, and Docker keeps
-      # whatever image it already has for a mutable tag. On 2026-09-08 that
-      # meant Coolify started the PREVIOUS build while ghcr's `main`, the
-      # Coolify dashboard and this workflow all reported the new commit — a
-      # client that had been migrated to a new API host kept calling the old
-      # one for hours. Pinning the sha tag removes the ambiguity, and it is
-      # what gives a rollback something to go back to: the script reads
-      # CLIENT_IMAGE and SERVER_IMAGE BEFORE pinning and keeps them as the
-      # rollback target.
+      # There is NO Coolify API token here. Coolify cannot scope one below
+      # "every app in the team", and on this one-server install `write` is
+      # root on the host, so a token in this repository was a key to every
+      # other project on it. Instead:
       #
-      # Coolify's env PATCH only UPDATES an existing variable — against a name
-      # that does not exist it is accepted and does nothing. Both variables are
-      # created once by hand (CLIENT_IMAGE on the client app, SERVER_IMAGE on
-      # the server app); the script reads each one back after the PATCH and
-      # fails when it did not stick.
+      # - The image is chosen in GHCR. SERVER_IMAGE and CLIENT_IMAGE in
+      #   Coolify name `:live`, and the compose files pull with
+      #   `pull_policy: always`, so pointing `:live` at this commit's
+      #   immutable `:<sha>` image is the pin. (Docker keeps whatever it has
+      #   for a moving tag without that pull policy: on 2026-09-08 Coolify
+      #   started the PREVIOUS build while everything reported the new one.)
+      # - Each app has its own webhook secret (COOLIFY_<APP>_DEPLOY_SECRET).
+      #   A `push` payload signed with it queues a deploy of that one app —
+      #   it can read nothing and reach no other app. The payload names
+      #   `.hatchkit/deploy-webhook`, the apps' only watch path, so an
+      #   ordinary push that reaches Coolify through its GitHub App never
+      #   deploys a build that does not exist yet.
       #
-      # A Coolify Docker Image app (what `hatchkit migrate-runtime` turns each
-      # compose app into, so a deploy is a rolling update instead of an
-      # outage) ignores those variables: it pulls its own image name and tag.
-      # The script sees `build_pack: dockerimage` and pins and rolls back
-      # `docker_registry_image_tag` there instead.
+      # `hatchkit secrets isolate trackyourtime` sets the secrets, watch paths
+      # and `:live`; docs/deploy.md → One-time setup.
+      #
+      # The rollback target is the commit each app was SERVING before this
+      # run (`/api/health`, `/version.json`), provided GHCR still has its
+      # `:<sha>` image. Once `:live` moves, nothing else names it.
       #
       # The gate, after both apps report this commit: /api/health says
       # `status: ok` and `db: true`, /version.json names the expected API,
@@ -372,11 +382,12 @@ jobs:
       # image built with an empty API URL and a container crash-looping behind
       # the proxy all left this workflow green.
       #
-      # When the poll or the gate fails, the previous images are pinned again,
-      # redeployed and gated, and the job still FAILS, naming the failed check,
-      # this sha and the restored one. No previous value (a first deploy, or a
-      # token that cannot read env values) or a rollback that fails its own
-      # gate fails loudly and does not try again.
+      # When the poll or the gate fails, `:live` is pointed back at the
+      # previous commits, both apps are redeployed and gated, and the job
+      # still FAILS, naming the failed check, this sha and the restored one.
+      # No target (a first deploy, an app that was not answering, an image
+      # pruned from GHCR) or a rollback that fails its own gate fails loudly
+      # and does not try again.
       #
       # Migrations are forward-only. A migration whose minReaderSchema is above
       # the previous build's SCHEMA_VERSION makes that build refuse to start
@@ -386,62 +397,25 @@ jobs:
       # the SERVER is not rolled back: only the client is, and the error says
       # why. Going back past that migration needs the database dump, which is
       # a person's decision (docs/deploy.md → Rollback).
+      #
+      # With no Coolify secret set the script prints a ::notice:: and deploys
+      # nothing; with some set and others missing it fails.
       - name: Deploy, gate and roll back on failure
         env:
           COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
           COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
+          COOLIFY_SERVER_DEPLOY_SECRET: ${{ secrets.COOLIFY_SERVER_DEPLOY_SECRET }}
+          COOLIFY_SERVER_DEPLOY_REPOSITORY: ${{ secrets.COOLIFY_SERVER_DEPLOY_REPOSITORY }}
+          COOLIFY_SERVER_DEPLOY_BRANCH: ${{ secrets.COOLIFY_SERVER_DEPLOY_BRANCH }}
           COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
+          COOLIFY_CLIENT_DEPLOY_SECRET: ${{ secrets.COOLIFY_CLIENT_DEPLOY_SECRET }}
+          COOLIFY_CLIENT_DEPLOY_REPOSITORY: ${{ secrets.COOLIFY_CLIENT_DEPLOY_REPOSITORY }}
+          COOLIFY_CLIENT_DEPLOY_BRANCH: ${{ secrets.COOLIFY_CLIENT_DEPLOY_BRANCH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
           API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
           SHA: ${{ github.sha }}
-        if: env.COOLIFY_SERVER_RESOURCE_UUID != '' || env.COOLIFY_CLIENT_RESOURCE_UUID != ''
         run: node scripts/coolify-deploy.mjs deploy --sha "$SHA" --which both --rollback
-
-      # Single-app fallback, for a project that has not been split. It has no
-      # image variable to pin and so nothing to roll back to; it gets the gate.
-      - name: Deploy single app via Coolify API
-        env:
-          COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
-          COOLIFY_RESOURCE_UUID: ${{ secrets.COOLIFY_RESOURCE_UUID }}
-          COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
-          COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
-          WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
-          API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
-          SHA: ${{ github.sha }}
-        if: >-
-          env.COOLIFY_BASE_URL != '' && env.COOLIFY_RESOURCE_UUID != ''
-          && env.COOLIFY_SERVER_RESOURCE_UUID == ''
-          && env.COOLIFY_CLIENT_RESOURCE_UUID == ''
-        run: |
-          set -euo pipefail
-          curl -fsSL -X POST \
-            "$COOLIFY_BASE_URL/api/v1/deploy?uuid=$COOLIFY_RESOURCE_UUID&force=true" \
-            -H "Authorization: Bearer $COOLIFY_API_TOKEN"
-          node scripts/coolify-deploy.mjs verify --sha "$SHA"
-
-      - name: Deploy via webhook (fallback)
-        env:
-          COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
-          COOLIFY_WEBHOOK_URL: ${{ secrets.COOLIFY_WEBHOOK_URL }}
-        if: env.COOLIFY_BASE_URL == '' && env.COOLIFY_WEBHOOK_URL != ''
-        run: curl -fsSL "$COOLIFY_WEBHOOK_URL"
-
-      # Says so when nothing above ran, instead of a green job that reads as a
-      # deploy.
-      - name: Nothing to deploy to
-        env:
-          COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
-          COOLIFY_RESOURCE_UUID: ${{ secrets.COOLIFY_RESOURCE_UUID }}
-          COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
-          COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
-          COOLIFY_WEBHOOK_URL: ${{ secrets.COOLIFY_WEBHOOK_URL }}
-        if: >-
-          env.COOLIFY_SERVER_RESOURCE_UUID == '' && env.COOLIFY_CLIENT_RESOURCE_UUID == ''
-          && (env.COOLIFY_BASE_URL == '' || env.COOLIFY_RESOURCE_UUID == '')
-          && (env.COOLIFY_BASE_URL != '' || env.COOLIFY_WEBHOOK_URL == '')
-        run: echo "::notice::No Coolify secrets are set — images were pushed, nothing was deployed. See docs/deploy.md → One-time setup in Coolify."
 
   # DCO gate — pull requests only. Track Your Time takes Developer Certificate of
   # Origin 1.1 sign-off rather than a CLA, so the check is mechanical: every

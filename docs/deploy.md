@@ -168,35 +168,37 @@ before this change still connects wherever `/ws` is still routed.
    the app points at them any more. `assets.tracktime.trebeljahr.com` was the
    custom domain of the unused R2 bucket `tracktime-assets`; it goes when that
    bucket is deleted.
-5. **GitHub secrets** so CI can trigger both deploys:
-   `COOLIFY_SERVER_RESOURCE_UUID` and `COOLIFY_CLIENT_RESOURCE_UUID`
-   (alongside the existing `COOLIFY_BASE_URL` and `COOLIFY_API_TOKEN`). With
-   neither set, the workflow falls back to the single `COOLIFY_RESOURCE_UUID`.
-   All four are already set on this repo.
+5. **Deploy hooks and GitHub secrets — no Coolify API token.** Run
+   `hatchkit secrets isolate trackyourtime` (with `--dry-run` first). For
+   each app it sets a random webhook secret (`manual_webhook_secret_github`,
+   plus random values in the GitLab, Gitea and Bitbucket slots, which would
+   otherwise accept a signature made with an empty key), `watch_paths` =
+   `.hatchkit/deploy-webhook` and auto-deploy on. It then sets the repo's
+   Actions secrets: `COOLIFY_BASE_URL` and, per app,
+   `COOLIFY_{SERVER,CLIENT}_RESOURCE_UUID`, `_DEPLOY_SECRET`,
+   `_DEPLOY_REPOSITORY` and `_DEPLOY_BRANCH`.
 
-   The token needs the `deploy` and `write` permissions (to queue a deploy
-   and to PATCH an env var) **and `read:sensitive`**: Coolify leaves `value`
-   out of `GET /applications/<uuid>/envs` without it, and that value is what
-   a failed deploy is rolled back to. Without it every deploy still runs,
-   and every failed one ends with "nothing was rolled back" (see
-   [Rollback](#rollback)).
-6. **Two env vars, created once by hand**: `SERVER_IMAGE` on the server app
-   and `CLIENT_IMAGE` on the client app, with any value (the compose file's
-   `:main` default will do).
-   The compose files read them, and the deploy job pins each to the image
-   of the commit it just built. Coolify's env API only updates a variable
-   that exists — a PATCH against a missing name is accepted and does
-   nothing — so the job reads each one back after pinning and fails when it
-   did not stick.
+   CI holds no Coolify API token, on purpose. Coolify cannot scope a token
+   below "every app in the team", and on this one-server install `write` is
+   root on the host: a token in this repo reached every other project on it.
+   A deploy secret queues a deploy of its own app and can do nothing else.
+   The watch path is one no commit touches, so a push that reaches Coolify
+   through its GitHub App never deploys; only the payload CI signs names it.
+6. **`SERVER_IMAGE` and `CLIENT_IMAGE` name `:live`**
+   (`ghcr.io/trebeljahr/trackyourtime-{server,client}:live`), on the server
+   and the client app. The compose files read them and pull with
+   `pull_policy: always`. The deploy job points `:live` at the image of the
+   commit it just built, with its own `GITHUB_TOKEN` (`packages: write`),
+   and only then tells Coolify to deploy. `hatchkit secrets isolate` seeds
+   `:live` from the image each app runs and points the variables at it, so
+   the switch alone changes nothing that runs.
 
-   A Docker Image app ignores both variables. Coolify never rolls a Docker
-   Compose app: each deploy stops the old container before the new one
-   answers, so every push is a short outage. `hatchkit migrate-runtime`
-   moves each app to a Docker Image app with a health check, which Coolify
-   deploys as a rolling update. On such an app the job reads, pins and rolls
-   back `docker_registry_image_tag` (`PATCH /applications/<uuid>`) instead of
-   the variable. The runtime images install curl because Coolify runs its
-   health check with `curl … || wget …` inside the container.
+   A Docker Image app (what `hatchkit migrate-runtime` makes of a compose
+   app, so Coolify deploys it as a rolling update) pulls
+   `docker_registry_image_name:docker_registry_image_tag` instead; its tag
+   is `live` too, and the deploy is the same. The runtime images install
+   curl because Coolify runs its health check with `curl … || wget …`
+   inside the container.
 
 ## Verifying a deploy
 
@@ -228,24 +230,26 @@ Every push to main deploys through `scripts/coolify-deploy.mjs`, run by the
 `deploy` job of `.github/workflows/build-and-deploy.yml`. The pure parts
 (what counts as healthy, what can be rolled back, the sequence) are in
 `scripts/lib/coolify-deploy.mjs` and tested in
-`scripts/lib/coolify-deploy.test.mjs` against a fake Coolify; the entry
-script adds the network and git.
+`scripts/lib/coolify-deploy.test.mjs` against a fake GHCR and a fake Coolify
+webhook; the entry script adds the network and git.
 
 What one deploy does, in order:
 
-1. **Reads the rollback target.** `GET /applications/<uuid>/envs` on both
-   apps, and keeps the current `SERVER_IMAGE` and `CLIENT_IMAGE` values — or,
-   on a Docker Image app, its `docker_registry_image_tag`.
-   Only a value pinned to a full commit sha counts: `:main` already points at
-   the new build after the push, so "restoring" it would redeploy the image
-   that just failed.
-2. **Pins and deploys.** PATCHes both variables (or image tags) to
-   `ghcr.io/trebeljahr/trackyourtime-{server,client}:<sha>`, reads them back,
-   then queues a deploy of the server, then the client.
-3. **Waits for the commit.** Polls `/api/health` (`commit`, or `version` on
-   an older image) and `/version.json` (`commit`) every 15 s for up to ten
-   minutes until both report the new sha. A Coolify deploy is queued, not
-   done, when the API answers.
+1. **Reads the rollback target.** The commit each app is serving now —
+   `/api/health` (`commit`, or `version` on an older image) and
+   `/version.json` (`commit`) — and whether GHCR still holds its `:<sha>`
+   image. Once `:live` moves, nothing else names the previous build. It also
+   checks that this commit's images exist, and stops with nothing changed
+   when they do not.
+2. **Promotes and deploys.** Points
+   `ghcr.io/trebeljahr/trackyourtime-{server,client}:live` at this commit's
+   `:<sha>` images (the manifest bytes copied verbatim, then read back), then
+   sends each app's signed webhook: the server's, then the client's. Coolify
+   answers for every app on the repo; only an entry for the app's own uuid
+   with status `success` counts as queued.
+3. **Waits for the commit.** Polls `/api/health` and `/version.json` every
+   15 s for up to ten minutes until both report the new sha. A Coolify
+   deploy is queued, not done, when the webhook answers.
 4. **Runs the gate.** `/api/health` says `status: ok` and `db: true`;
    `/version.json` names the API the client was built against
    (`apiUrl`, which is baked in at image build time); `GET
@@ -254,23 +258,24 @@ What one deploy does, in order:
    is allowed, since the two apps are separate origins and nothing else in CI
    exercises that pairing. The gate is retried a few times, ten seconds
    apart, for a database still connecting — and no more.
-5. **Rolls back when 3 or 4 fails.** The values from step 1 are pinned
-   again, both apps are redeployed, and the same poll and gate run against
-   the restored commit. The job then **fails** either way, with one
-   `::error::` that names the failed check (`api-db`, `web-api-url`,
-   `auth-session`, `cors`, `api-commit`, …), the new sha and the restored
-   sha. A rollback is never a green run: the commit on main is still broken.
+5. **Rolls back when 2, 3 or 4 fails.** `:live` is pointed back at the
+   commits from step 1, both apps are redeployed, and the same poll and gate
+   run against the restored commit. The job then **fails** either way, with
+   one `::error::` that names the failed check (`api-db`, `web-api-url`,
+   `auth-session`, `cors`, `api-commit`, `promote-or-deploy`, …), the new sha
+   and the restored sha. A rollback is never a green run: the commit on main
+   is still broken.
 
 Two things stop before they start a loop:
 
-- **No target.** A first deploy, a variable still on `:main`, or a token
-  without `read:sensitive` leaves nothing to go back to. The job fails and
-  says so; the new images stay pinned. Fix forward, or run the manual
-  rollback below with a known-good sha.
-- **The rollback fails its own gate**, or a Coolify call fails while
-  restoring. The job fails and names it. Nothing tries a second time — a
-  second automatic attempt against an unknown state is how an outage grows.
-  The hosted apps need a person at that point.
+- **No target.** A first deploy, an app that was not answering before the
+  deploy, or a previous image pruned from GHCR leaves nothing to go back to.
+  The job fails and says so; `:live` stays on the new images. Fix forward,
+  or run the manual rollback below with a known-good sha.
+- **The rollback fails its own gate**, or a registry or webhook call fails
+  while restoring. The job fails and names it. Nothing tries a second time —
+  a second automatic attempt against an unknown state is how an outage
+  grows. The hosted apps need a person at that point.
 
 ### Migrations are forward-only, so the server may stay
 
@@ -294,8 +299,9 @@ refuses to boot is an outage. Going back past such a migration needs the
 
 ### Rolling back by hand
 
-`.github/workflows/hosted-rollback.yml` pins the images of an earlier commit
-and runs the same poll and gate:
+`.github/workflows/hosted-rollback.yml` points `:live` at the images of an
+earlier commit, deploys through the same signed webhooks and runs the same
+poll and gate:
 
 ```bash
 gh workflow run hosted-rollback.yml -f sha=<commit> -f which=both
@@ -323,17 +329,17 @@ re-dispatches it.
   refuses to move the server to a commit that cannot read the database the
   current one has migrated. Use `which=client`, or restore the dump from
   before that migration and run again with `force_server` checked.
-- When the gate fails, the run fails and the images of `sha` stay pinned.
-  The images pinned before the run are usually the build being escaped, so
-  putting them back would re-pin it; the error names the failed check, and
-  the next step is another run with a different sha or a fix forward.
-  `restore_on_failure=true` puts the previous images back instead, exactly
+- When the gate fails, the run fails and `:live` stays on the images of
+  `sha`. The build served before the run is usually the one being escaped,
+  so putting it back would redeploy it; the error names the failed check,
+  and the next step is another run with a different sha or a fix forward.
+  `restore_on_failure=true` puts the previous commits back instead, exactly
   as after a failed push deploy — for a rollback that is a trial of an older
   build, not an escape from the current one.
 
 Both workflows share the `hosted-deploy` concurrency group, so a push deploy
-and a rollback never pin images at the same time, and a deploy is never
-cancelled between pinning the new images and restoring the old ones.
+and a rollback never move `:live` at the same time, and a deploy is never
+cancelled between promoting the new images and restoring the old ones.
 `build-and-deploy.yml` therefore no longer cancels an in-progress run on a
 new push to main; the newer push waits, and GitHub keeps only the newest
 waiting run — of either workflow, which is why a queued manual rollback has

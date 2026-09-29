@@ -1,22 +1,25 @@
 #!/usr/bin/env node
 /**
- * Pin, deploy, gate and — when the gate fails — roll back the hosted apps in
- * Coolify.
+ * Promote, deploy, gate and — when the gate fails — roll back the hosted apps
+ * in Coolify.
  *
  *   node scripts/coolify-deploy.mjs deploy --sha <sha> [--which both|client|server]
  *        [--rollback] [--guard-server-downgrade] [--force-server]
  *   node scripts/coolify-deploy.mjs verify --sha <sha>
  *
- * `deploy` is the split layout (two Coolify apps): build-and-deploy.yml runs
- * it with `--rollback` on every push to main, hosted-rollback.yml runs it by
- * hand with `--guard-server-downgrade` and adds `--rollback` only when
- * `restore_on_failure` is set (the images pinned before a manual rollback are
- * usually the build being escaped). `verify` is the gate alone, for the
- * single-app and webhook layouts, which have no image variable to pin.
+ * `deploy` points `:live` of each app's image at `:<sha>` in GHCR and queues
+ * each app through its own signed Coolify webhook — no Coolify API token.
+ * build-and-deploy.yml runs it with `--rollback` on every push to main,
+ * hosted-rollback.yml runs it by hand with `--guard-server-downgrade` and adds
+ * `--rollback` only when `restore_on_failure` is set (the build served before
+ * a manual rollback is usually the one being escaped). `verify` is the gate
+ * alone, against whatever is serving.
  *
- * Environment: COOLIFY_BASE_URL, COOLIFY_API_TOKEN,
- * COOLIFY_SERVER_RESOURCE_UUID, COOLIFY_CLIENT_RESOURCE_UUID (deploy only),
- * IMAGE_OWNER_REPO (deploy only), WEB_URL, API_URL.
+ * Environment: COOLIFY_BASE_URL; per app moved, COOLIFY_<APP>_RESOURCE_UUID,
+ * COOLIFY_<APP>_DEPLOY_SECRET, COOLIFY_<APP>_DEPLOY_REPOSITORY and
+ * COOLIFY_<APP>_DEPLOY_BRANCH (APP is SERVER or CLIENT; `hatchkit secrets
+ * isolate` sets them); GITHUB_TOKEN with `packages: write` and GITHUB_ACTOR,
+ * which move `:live`; IMAGE_OWNER_REPO; WEB_URL, API_URL.
  *
  * With no Coolify configured the command prints a ::notice:: and exits 0, as
  * extension-release.yml does without its store secrets; with half of what a
@@ -131,31 +134,53 @@ const main = async () => {
 
   const apps = parseWhich(values.which);
   const coolifyBaseUrl = env("COOLIFY_BASE_URL").replace(/\/+$/, "");
-  const coolifyToken = env("COOLIFY_API_TOKEN");
-  const uuids = { server: env("COOLIFY_SERVER_RESOURCE_UUID"), client: env("COOLIFY_CLIENT_RESOURCE_UUID") };
-  const needed = [
-    ["COOLIFY_BASE_URL", coolifyBaseUrl],
-    ["COOLIFY_API_TOKEN", coolifyToken],
-    ...apps.map((app) => [`COOLIFY_${app.toUpperCase()}_RESOURCE_UUID`, uuids[app]]),
-  ];
+  const hooks = {};
+  const needed = [["COOLIFY_BASE_URL", coolifyBaseUrl]];
+  for (const app of apps) {
+    const prefix = `COOLIFY_${app.toUpperCase()}_`;
+    hooks[app] = {
+      uuid: env(`${prefix}RESOURCE_UUID`),
+      secret: env(`${prefix}DEPLOY_SECRET`),
+      repository: env(`${prefix}DEPLOY_REPOSITORY`),
+      branch: env(`${prefix}DEPLOY_BRANCH`),
+    };
+    needed.push(
+      [`${prefix}RESOURCE_UUID`, hooks[app].uuid],
+      [`${prefix}DEPLOY_SECRET`, hooks[app].secret],
+      [`${prefix}DEPLOY_REPOSITORY`, hooks[app].repository],
+      [`${prefix}DEPLOY_BRANCH`, hooks[app].branch],
+    );
+  }
   const missing = needed.filter(([, value]) => value === "").map(([name]) => name);
   if (missing.length === needed.length) {
     notice("No Coolify secrets are set — nothing deployed. See docs/deploy.md → One-time setup in Coolify.");
     return 0;
   }
   if (missing.length > 0) {
-    error(`${missing.join(", ")} not set, while the other Coolify secrets are. Set all of them or none.`);
+    error(`${missing.join(", ")} not set, while the other Coolify secrets are. Set all of them (hatchkit secrets isolate) or none.`);
     return 1;
   }
   const ownerRepo = env("IMAGE_OWNER_REPO");
   if (ownerRepo === "") {
-    error("IMAGE_OWNER_REPO must be set: it names the images to pin.");
+    error("IMAGE_OWNER_REPO must be set: it names the images to promote.");
+    return 2;
+  }
+  const registryPassword = env("GITHUB_TOKEN");
+  if (registryPassword === "") {
+    error("GITHUB_TOKEN must be set (with packages: write): it moves the :live tags.");
     return 2;
   }
 
   const result = await deployWithRollback(
     deps,
-    { coolifyBaseUrl, coolifyToken, uuids, ownerRepo, webUrl, apiUrl },
+    {
+      coolifyBaseUrl,
+      hooks,
+      registryAuth: { username: env("GITHUB_ACTOR") || "x-access-token", password: registryPassword },
+      ownerRepo,
+      webUrl,
+      apiUrl,
+    },
     {
       targetSha: sha,
       apps,

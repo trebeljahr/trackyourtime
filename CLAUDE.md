@@ -2536,18 +2536,22 @@ drift apart.
 
 **A failed hosted deploy rolls itself back, and the run still fails.**
 `scripts/coolify-deploy.mjs` (logic in `scripts/lib/coolify-deploy.mjs`,
-tested against a fake Coolify) reads the current `SERVER_IMAGE` /
-`CLIENT_IMAGE` values before pinning the new sha, polls both apps for the
-commit, gates on `/api/health` (`status`, `db`), `/version.json` (`apiUrl`),
-`GET /api/auth/get-session` and the CORS preflight, and re-pins the previous
-values when any of it fails. The server is NOT rolled back past a migration
+tested against a fake GHCR and Coolify) reads the commit each app serves
+before promoting, points `ghcr.io/…-{server,client}:live` at the new sha with
+the job's GITHUB_TOKEN, queues each app through its own signed Coolify
+webhook, polls both apps for the commit, gates on `/api/health` (`status`,
+`db`), `/version.json` (`apiUrl`), `GET /api/auth/get-session` and the CORS
+preflight, and points `:live` back at the previous commits when any of it
+fails. CI holds NO Coolify API token (it cannot be scoped below the whole
+team, and `write` is root on the host): the per-app webhook secrets and
+`:live` come from `hatchkit secrets isolate`. The server is NOT rolled back past a migration
 whose `minReaderSchema` the previous build cannot read (registries compared
 with `git show`, so the deploy checkout needs `fetch-depth: 0`); only the
 client is, and the error says so. No target or a failed rollback fails loudly
 and never retries. `hosted-rollback.yml` is the manual form of the same
 script. Both jobs share the `hosted-deploy` concurrency group and are never
-cancelled in progress — a run stopped between pinning and restoring leaves
-Coolify on a build nobody verified. docs/deploy.md → Rollback.
+cancelled in progress — a run stopped between promoting and restoring leaves
+`:live` on a build nobody verified. docs/deploy.md → Rollback.
 
 **An open tab outlives a deploy, and its chunks do not.** Each image replaces
 every hashed chunk, so a tab opened before a deploy 404s the first time it

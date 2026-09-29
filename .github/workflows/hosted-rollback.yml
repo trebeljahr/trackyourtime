@@ -1,18 +1,21 @@
 name: hosted-rollback
 
 # Put the hosted apps (trackyourtime.dev and api.trackyourtime.dev) on the
-# images of an earlier commit, by hand, with the same pin, deploy and gate as
-# build-and-deploy.yml. docs/deploy.md → Rollback says when to use it.
+# images of an earlier commit, by hand, with the same promote, signed deploy
+# and gate as build-and-deploy.yml: `:live` is pointed at the commit's images
+# with this run's GITHUB_TOKEN, and each app is queued through its own signed
+# Coolify webhook. No Coolify API token. docs/deploy.md → Rollback says when
+# to use it.
 #
 #   gh workflow run hosted-rollback.yml -f sha=<commit> -f which=both
 #
 # Only commits that build-and-deploy.yml built on main have images
 # (ghcr.io/trebeljahr/trackyourtime-{server,client}:<sha>), so the commit must
-# be on main. When the gate fails, the run fails and the images of `sha` stay
-# pinned: the images that were pinned before this run are usually the build
-# being escaped, and putting them back would re-pin it. `restore_on_failure`
-# puts them back instead, exactly as after a failed push deploy — for a
-# rollback that is a trial rather than an escape.
+# be on main. When the gate fails, the run fails and `:live` stays on the
+# images of `sha`: the build served before this run is usually the one being
+# escaped, and putting it back would redeploy it. `restore_on_failure` puts it
+# back instead, exactly as after a failed push deploy — for a rollback that is
+# a trial rather than an escape.
 #
 # Both workflows share one concurrency group, and GitHub keeps one waiting run
 # per group: a rollback queued behind a running push deploy is cancelled by a
@@ -43,19 +46,22 @@ on:
         type: boolean
         default: false
       restore_on_failure:
-        description: When the gate fails, pin the images that were live before this run again (off, since those are usually the build being escaped)
+        description: When the gate fails, point :live back at the commits served before this run (off, since those are usually the build being escaped)
         required: false
         type: boolean
         default: false
 
+# `packages: write` moves `:live` in this repository's own GHCR packages and
+# nothing else.
 permissions:
   contents: read
+  packages: write
 
 jobs:
   rollback:
     runs-on: ubuntu-latest
     # The same group as build-and-deploy.yml's deploy job, so a push deploy
-    # and a rollback never pin images at the same time.
+    # and a rollback never move `:live` at the same time.
     concurrency:
       group: hosted-deploy
       cancel-in-progress: false
@@ -97,9 +103,15 @@ jobs:
       - name: Deploy, gate and roll back on failure
         env:
           COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
           COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
+          COOLIFY_SERVER_DEPLOY_SECRET: ${{ secrets.COOLIFY_SERVER_DEPLOY_SECRET }}
+          COOLIFY_SERVER_DEPLOY_REPOSITORY: ${{ secrets.COOLIFY_SERVER_DEPLOY_REPOSITORY }}
+          COOLIFY_SERVER_DEPLOY_BRANCH: ${{ secrets.COOLIFY_SERVER_DEPLOY_BRANCH }}
           COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
+          COOLIFY_CLIENT_DEPLOY_SECRET: ${{ secrets.COOLIFY_CLIENT_DEPLOY_SECRET }}
+          COOLIFY_CLIENT_DEPLOY_REPOSITORY: ${{ secrets.COOLIFY_CLIENT_DEPLOY_REPOSITORY }}
+          COOLIFY_CLIENT_DEPLOY_BRANCH: ${{ secrets.COOLIFY_CLIENT_DEPLOY_BRANCH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_OWNER_REPO: trebeljahr/trackyourtime
           WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
           API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
