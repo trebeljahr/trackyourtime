@@ -358,6 +358,12 @@ jobs:
       # the server app); the script reads each one back after the PATCH and
       # fails when it did not stick.
       #
+      # A Coolify Docker Image app (what `hatchkit migrate-runtime` turns each
+      # compose app into, so a deploy is a rolling update instead of an
+      # outage) ignores those variables: it pulls its own image name and tag.
+      # The script sees `build_pack: dockerimage` and pins and rolls back
+      # `docker_registry_image_tag` there instead.
+      #
       # The gate, after both apps report this commit: /api/health says
       # `status: ok` and `db: true`, /version.json names the expected API,
       # GET /api/auth/get-session answers 200, and the CORS preflight from the

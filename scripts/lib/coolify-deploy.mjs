@@ -308,10 +308,41 @@ const coolify = async (deps, config, method, path, body) => {
   return text === "" ? null : JSON.parse(text);
 };
 
+/**
+ * The image a Coolify Docker Image app runs, as `<name>:<tag>`, or null for
+ * any other kind of app.
+ *
+ * Where the image lives depends on the app. A Docker Compose app reads it from
+ * the env variable its compose file interpolates (SERVER_IMAGE, CLIENT_IMAGE).
+ * A Docker Image app — the kind Coolify deploys as a rolling update, the old
+ * container serving until the new one is healthy — has no compose file: it
+ * pulls its own `docker_registry_image_name:docker_registry_image_tag`, and an
+ * env variable of the same name is ignored. Pinning or reading the variable
+ * there would pin nothing and roll back nothing.
+ *
+ * Only these three fields are read, and the answer is never logged: the same
+ * `GET /applications/<uuid>` body carries the app's interpolated compose,
+ * secrets included.
+ */
+export const imageAppRef = (application) =>
+  application && application.build_pack === "dockerimage" && application.docker_registry_image_name
+    ? `${application.docker_registry_image_name}:${application.docker_registry_image_tag || "latest"}`
+    : null;
+
+const tagOf = (ref) => ref.slice(ref.lastIndexOf(":") + 1);
+
+const imageAppOf = async (deps, config, app) =>
+  imageAppRef(await coolify(deps, config, "GET", `/applications/${config.uuids[app]}`));
+
 /** The current image value of each app, or null where it cannot be read. */
 export const readPinned = async (deps, config, apps) => {
   const pinned = {};
   for (const app of apps) {
+    const ref = await imageAppOf(deps, config, app);
+    if (ref !== null) {
+      pinned[app] = ref;
+      continue;
+    }
     const envs = await coolify(deps, config, "GET", `/applications/${config.uuids[app]}/envs`);
     pinned[app] = findEnvValue(envs, IMAGE_ENV[app]);
   }
@@ -319,26 +350,38 @@ export const readPinned = async (deps, config, apps) => {
 };
 
 /**
- * PATCH each app's image variable, then read it back where the token can.
+ * Point each app at its image, then read it back where the token can.
  *
- * Coolify's PATCH accepts a key that does not exist and does nothing, so the
+ * A Docker Image app gets its tag PATCHed; the name stays as Coolify
+ * normalised it. A compose app gets its image variable PATCHed — and Coolify's
+ * env PATCH accepts a key that does not exist and does nothing, so the
  * read-back is what turns "the variable was never created" into an error
  * instead of a deploy of whatever was there before.
  */
 export const pin = async (deps, config, values) => {
   for (const [app, value] of Object.entries(values)) {
-    await coolify(deps, config, "PATCH", `/applications/${config.uuids[app]}/envs`, {
-      key: IMAGE_ENV[app],
-      value,
-      is_preview: false,
-    });
+    const imageApp = (await imageAppOf(deps, config, app)) !== null;
+    if (imageApp) {
+      await coolify(deps, config, "PATCH", `/applications/${config.uuids[app]}`, {
+        docker_registry_image_tag: tagOf(value),
+      });
+    } else {
+      await coolify(deps, config, "PATCH", `/applications/${config.uuids[app]}/envs`, {
+        key: IMAGE_ENV[app],
+        value,
+        is_preview: false,
+      });
+    }
     const after = (await readPinned(deps, config, [app]))[app];
-    if (after !== null && after !== value) {
+    if (imageApp && (after === null || tagOf(after) !== tagOf(value))) {
+      throw new Error(`the ${app} app's image tag still reads ${after === null ? "nothing" : tagOf(after)} after the PATCH`);
+    }
+    if (!imageApp && after !== null && after !== value) {
       throw new Error(
         `${IMAGE_ENV[app]} on the ${app} app still reads ${after} after the PATCH; create it once in the Coolify UI (docs/deploy.md → One-time setup)`,
       );
     }
-    deps.log(`pinned ${IMAGE_ENV[app]}=${value}`);
+    deps.log(`pinned ${imageApp ? `the ${app} image tag` : IMAGE_ENV[app]}=${value}`);
   }
 };
 
@@ -399,7 +442,7 @@ export const deployWithRollback = async (deps, config, request) => {
   if (!isFullSha(targetSha)) return { ok: false, errors: [`${targetSha} is not a full 40-character commit sha`] };
 
   const previous = await readPinned(deps, config, apps);
-  for (const app of apps) deps.log(`${IMAGE_ENV[app]} before: ${previous[app] ?? "<unreadable>"}`);
+  for (const app of apps) deps.log(`${app} image before: ${previous[app] ?? "<unreadable>"}`);
 
   // Deploying an OLDER server by hand is the same question as rolling one
   // back: can that build read the database the current one has migrated?

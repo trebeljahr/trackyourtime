@@ -13,6 +13,7 @@ import {
   findEnvValue,
   gateProblems,
   healthProblems,
+  imageAppRef,
   imageRef,
   parseWhich,
   planRollback,
@@ -45,9 +46,16 @@ const sameSchema = contractsFrom({
 /**
  * A fake Coolify plus the two apps it runs. A deploy makes the app serve the
  * commit its image variable names; `broken` makes a commit answer badly.
+ *
+ * `imageApps` names the apps that are Coolify Docker Image apps: each runs its
+ * own `docker_registry_image_name:docker_registry_image_tag`, and its image
+ * variable (still present, as after `hatchkit migrate-runtime`) is ignored.
+ * The others stay compose apps, as between migrating one and the other.
  */
-const fakeWorld = ({ pinned = { server: imageRef(OWNER, "server", OLD), client: imageRef(OWNER, "client", OLD) }, broken = {}, readableEnvs = true, failPatchFor = null } = {}) => {
+const fakeWorld = ({ pinned = { server: imageRef(OWNER, "server", OLD), client: imageRef(OWNER, "client", OLD) }, broken = {}, readableEnvs = true, failPatchFor = null, imageApps = [] } = {}) => {
   const envs = { "srv-uuid": { SERVER_IMAGE: pinned.server }, "cli-uuid": { CLIENT_IMAGE: pinned.client } };
+  const split = (ref) => ({ name: ref.slice(0, ref.lastIndexOf(":")), tag: ref.slice(ref.lastIndexOf(":") + 1) });
+  const images = { "srv-uuid": split(pinned.server), "cli-uuid": split(pinned.client) };
   const live = { server: shaFromImage(pinned.server), client: shaFromImage(pinned.client) };
   const calls = [];
   const appOf = { "srv-uuid": "server", "cli-uuid": "client" };
@@ -65,6 +73,28 @@ const fakeWorld = ({ pinned = { server: imageRef(OWNER, "server", OLD), client: 
     const u = new URL(url);
     if (u.origin === "https://coolify.test") {
       calls.push(`${method} ${u.pathname}${u.search}`);
+      const appMatch = /^\/api\/v1\/applications\/([^/]+)$/.exec(u.pathname);
+      if (appMatch && method === "GET") {
+        // The real answer also carries the interpolated compose, secrets and
+        // all; the script must read only the image fields.
+        return reply(
+          200,
+          imageApps.includes(appOf[appMatch[1]])
+            ? {
+                build_pack: "dockerimage",
+                docker_registry_image_name: images[appMatch[1]].name,
+                docker_registry_image_tag: images[appMatch[1]].tag,
+                docker_compose: "MONGODB_URI=mongodb://secret",
+              }
+            : { build_pack: "dockercompose", docker_compose: "MONGODB_URI=mongodb://secret" },
+        );
+      }
+      if (appMatch && method === "PATCH") {
+        const body = JSON.parse(init.body);
+        if (failPatchFor === appOf[appMatch[1]]) return reply(500, { message: "nope" });
+        if (typeof body.docker_registry_image_tag === "string") images[appMatch[1]].tag = body.docker_registry_image_tag;
+        return reply(200, { uuid: appMatch[1] });
+      }
       const envMatch = /^\/api\/v1\/applications\/([^/]+)\/envs$/.exec(u.pathname);
       if (envMatch && method === "GET") {
         const rows = Object.entries(envs[envMatch[1]]).map(([key, value]) => ({
@@ -84,7 +114,7 @@ const fakeWorld = ({ pinned = { server: imageRef(OWNER, "server", OLD), client: 
       if (u.pathname === "/api/v1/deploy" && method === "POST") {
         const uuid = u.searchParams.get("uuid");
         const app = appOf[uuid];
-        live[app] = shaFromImage(envs[uuid][envKey[app]]);
+        live[app] = shaFromImage(imageApps.includes(app) ? `${images[uuid].name}:${images[uuid].tag}` : envs[uuid][envKey[app]]);
         return reply(200, { deployments: [] });
       }
       return reply(404, "not found");
@@ -104,7 +134,7 @@ const fakeWorld = ({ pinned = { server: imageRef(OWNER, "server", OLD), client: 
     }
     return reply(404, "not found");
   };
-  return { fetch, calls, envs, live };
+  return { fetch, calls, envs, images, live };
 };
 
 const config = {
@@ -395,6 +425,91 @@ describe("deployWithRollback", () => {
     const { deps } = depsFor(fakeWorld());
     const result = await deployWithRollback(deps, config, { targetSha: NEW.slice(0, 12), apps: ["client"], rollback: true });
     assert.equal(result.ok, false);
+  });
+});
+
+describe("Docker Image apps", () => {
+  const BOTH = ["server", "client"];
+
+  it("reads an image only from a Docker Image app", () => {
+    const name = `ghcr.io/${OWNER}-server`;
+    assert.equal(imageAppRef({ build_pack: "dockerimage", docker_registry_image_name: name, docker_registry_image_tag: OLD }), `${name}:${OLD}`);
+    assert.equal(imageAppRef({ build_pack: "dockerimage", docker_registry_image_name: name }), `${name}:latest`);
+    assert.equal(imageAppRef({ build_pack: "dockercompose", docker_registry_image_name: name }), null);
+    assert.equal(imageAppRef({ build_pack: "dockerimage" }), null);
+    assert.equal(imageAppRef(null), null);
+  });
+
+  it("pins the image tag, not the variable the app ignores", async () => {
+    const world = fakeWorld({ imageApps: BOTH });
+    const { deps, lines } = depsFor(world);
+    const result = await deployWithRollback(deps, config, { targetSha: NEW, apps: BOTH, rollback: true });
+    assert.deepEqual(result, { ok: true, errors: [] });
+    assert.deepEqual(world.images["srv-uuid"], { name: `ghcr.io/${OWNER}-server`, tag: NEW });
+    assert.deepEqual(world.images["cli-uuid"], { name: `ghcr.io/${OWNER}-client`, tag: NEW });
+    assert.equal(world.envs["srv-uuid"].SERVER_IMAGE, imageRef(OWNER, "server", OLD), "the ignored variable is left alone");
+    assert.ok(!world.calls.some((call) => call.startsWith("PATCH") && call.endsWith("/envs")), world.calls.join("\n"));
+    assert.ok(!lines.some((line) => line.includes("secret")), "the application body is never logged");
+  });
+
+  it("rolls the image tag back when the gate fails", async () => {
+    const world = fakeWorld({ imageApps: BOTH, broken: { [NEW]: { noDb: true } } });
+    const { deps } = depsFor(world);
+    const result = await deployWithRollback(deps, config, { targetSha: NEW, apps: BOTH, rollback: true });
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], new RegExp(`\\(api-db\\); rolled back to server ${OLD}, client ${OLD}, which passed the gate`));
+    assert.equal(world.images["srv-uuid"].tag, OLD);
+    assert.equal(world.images["cli-uuid"].tag, OLD);
+    assert.deepEqual(world.live, { server: OLD, client: OLD });
+  });
+
+  it("has no rollback target from a mutable tag", async () => {
+    const world = fakeWorld({
+      imageApps: BOTH,
+      pinned: { server: `ghcr.io/${OWNER}-server:main`, client: `ghcr.io/${OWNER}-client:main` },
+      broken: { [NEW]: { authDown: true } },
+    });
+    const { deps } = depsFor(world);
+    const result = await deployWithRollback(deps, config, { targetSha: NEW, apps: BOTH, rollback: true });
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /\(auth-session\); nothing was rolled back/);
+    assert.equal(world.images["srv-uuid"].tag, NEW);
+  });
+
+  it("restores a half-applied pin", async () => {
+    const world = fakeWorld({ imageApps: BOTH, failPatchFor: "client" });
+    const { deps } = depsFor(world);
+    const result = await deployWithRollback(deps, config, { targetSha: NEW, apps: BOTH, rollback: true });
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /\(coolify-api\)/);
+    assert.equal(world.images["srv-uuid"].tag, OLD);
+  });
+
+  it("fails a tag PATCH that did not stick", async () => {
+    const world = fakeWorld({ imageApps: ["server"] });
+    const fetch = world.fetch;
+    const ignored = {
+      ...world,
+      fetch: async (url, init = {}) =>
+        init.method === "PATCH" && url.endsWith("/applications/srv-uuid")
+          ? { status: 200, ok: true, headers: { get: () => null }, text: async () => "{}" }
+          : fetch(url, init),
+    };
+    const { deps } = depsFor(ignored);
+    const result = await deployWithRollback(deps, config, { targetSha: NEW, apps: ["server"], rollback: false });
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /\(coolify-api\)/);
+    assert.match(result.errors.join("\n"), new RegExp(`server app's image tag still reads ${OLD}`));
+  });
+
+  it("deploys a pair half-way through migration: server image app, client compose app", async () => {
+    const world = fakeWorld({ imageApps: ["server"] });
+    const { deps } = depsFor(world);
+    const result = await deployWithRollback(deps, config, { targetSha: NEW, apps: BOTH, rollback: true });
+    assert.deepEqual(result, { ok: true, errors: [] });
+    assert.equal(world.images["srv-uuid"].tag, NEW);
+    assert.equal(world.envs["cli-uuid"].CLIENT_IMAGE, imageRef(OWNER, "client", NEW));
+    assert.deepEqual(world.live, { server: NEW, client: NEW });
   });
 });
 

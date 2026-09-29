@@ -189,6 +189,15 @@ before this change still connects wherever `/ws` is still routed.
    nothing — so the job reads each one back after pinning and fails when it
    did not stick.
 
+   A Docker Image app ignores both variables. Coolify never rolls a Docker
+   Compose app: each deploy stops the old container before the new one
+   answers, so every push is a short outage. `hatchkit migrate-runtime`
+   moves each app to a Docker Image app with a health check, which Coolify
+   deploys as a rolling update. On such an app the job reads, pins and rolls
+   back `docker_registry_image_tag` (`PATCH /applications/<uuid>`) instead of
+   the variable. The runtime images install curl because Coolify runs its
+   health check with `curl … || wget …` inside the container.
+
 ## Verifying a deploy
 
 ```bash
@@ -225,11 +234,12 @@ script adds the network and git.
 What one deploy does, in order:
 
 1. **Reads the rollback target.** `GET /applications/<uuid>/envs` on both
-   apps, and keeps the current `SERVER_IMAGE` and `CLIENT_IMAGE` values.
+   apps, and keeps the current `SERVER_IMAGE` and `CLIENT_IMAGE` values — or,
+   on a Docker Image app, its `docker_registry_image_tag`.
    Only a value pinned to a full commit sha counts: `:main` already points at
    the new build after the push, so "restoring" it would redeploy the image
    that just failed.
-2. **Pins and deploys.** PATCHes both variables to
+2. **Pins and deploys.** PATCHes both variables (or image tags) to
    `ghcr.io/trebeljahr/trackyourtime-{server,client}:<sha>`, reads them back,
    then queues a deploy of the server, then the client.
 3. **Waits for the commit.** Polls `/api/health` (`commit`, or `version` on
