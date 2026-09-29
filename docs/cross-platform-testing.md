@@ -1,17 +1,26 @@
 # Trying the desktop app on Windows and Linux
 
-Two commands, built on the project-agnostic tools in `scripts/crossplat/`:
+Three commands, built on the project-agnostic tools in `scripts/crossplat/`:
 
 ```bash
-pnpm prod:win            # Windows arm64 build against api.trackyourtime.dev, dropped for a UTM VM
-pnpm test:desktop:linux  # Linux build, started in Docker under Xvfb: pass/fail + screenshot
+pnpm prod:win                       # Windows arm64 build against api.trackyourtime.dev, dropped for a UTM VM
+pnpm desktop:try-release 0.1.2      # the file a release published, downloaded and dropped for a VM
+pnpm test:desktop:linux             # Linux build, started in Docker under Xvfb: pass/fail + screenshot
 ```
 
-`prod:win` is for a person, like `prod:desktop`: it points the app at the live
-API and you run it by hand inside a VM. `test:desktop:linux` is safe for
-agents and CI, because nothing opens on the host's screen.
+`prod:win` and `desktop:try-release` are for a person, like `prod:desktop`:
+they put an app in front of you in a VM and you run it by hand.
+`test:desktop:linux` is safe for agents and CI, because nothing opens on the
+host's screen.
 
-Both need Node 24, like every desktop build (`nvm use 24`).
+The first two answer different questions. `prod:win` cross-builds an **unpacked**
+app on this Mac, which tests the code; `desktop:try-release` downloads the
+**installer or AppImage a user downloads**, which tests what the release
+workflow actually produced — the packaging, the launcher, the file's own
+integrity. Use it before publishing a draft release.
+
+`prod:win` and `test:desktop:linux` need Node 24, like every desktop build
+(`nvm use 24`). `desktop:try-release` builds nothing and needs only `gh`.
 
 ## pnpm prod:win
 
@@ -52,6 +61,67 @@ API_PORT=51590 PORT=33920 pnpm run dev
 ```bash
 NEXT_PUBLIC_API_URL=http://192.168.64.1:51590 node scripts/build-desktop.mjs --package --win --arm64 --dir && node scripts/crossplat/vm-drop.mjs --project trackyourtime --platform windows-arm64 --source release/win-arm64-unpacked --launch "Track Your Time.exe" --note "local API"
 ```
+
+## pnpm desktop:try-release
+
+```bash
+pnpm desktop:try-release 0.1.2                  # Linux arm64 AppImage (the default)
+pnpm desktop:try-release v0.1.2 linux-x64
+pnpm desktop:try-release 0.1.2 --start-vm "Ubuntu 24.04"
+```
+
+1. It asks `gh` for that release — a **draft** counts, which is where every
+   release sits until a person publishes it (CLAUDE.md → desktop release).
+2. It downloads the one asset that platform can start by itself, and the
+   release's `SHA256SUMS.txt`, and refuses the drop if the sha256 does not
+   match. A 120 MB AppImage that arrived short should fail here, not in the VM.
+3. It hands the file to `scripts/crossplat/vm-drop.mjs`, which writes
+   `~/VMShare/trackyourtime/<platform>/` with the asset, a `run.sh` (or
+   `run.cmd`) and a `DROP.json` noting the tag.
+4. In the VM, double-click the launcher. It copies the file to the guest's own
+   disk, marks it executable and starts it.
+
+The version may be written `0.1.2` or `v0.1.2`. No VM is started unless
+`--start-vm` names one (or `CROSSPLAT_UTM_VM` is exported), because that opens
+UTM's window.
+
+| Flag | Effect |
+|---|---|
+| `--repo owner/name` | Read the release from a fork instead of `trebeljahr/trackyourtime` |
+| `--note "…"` | Replace the `DROP.json` note, which defaults to `<tag>, from the GitHub release` |
+| `--start-vm "<UTM VM>"` | Start that UTM VM after the drop |
+
+### One asset per platform
+
+| Platform | Asset |
+|---|---|
+| `linux-arm64` | `TrackYourTime-<version>-linux-arm64.AppImage` |
+| `linux-x64` | `TrackYourTime-<version>-linux-x86_64.AppImage` (electron-builder writes the machine's own arch string) |
+| `windows-x64`, `windows-arm64` | `TrackYourTime-Setup-<version>.exe` — one installer carries both |
+
+The deb, rpm and tar.gz on a release are installs and archives, not files a
+launcher can execute, so the command does not offer them. Fetch one by hand
+with `gh release download <tag> --repo trebeljahr/trackyourtime --pattern
+"*.deb"`.
+
+### Windows asks for a file that does not exist yet
+
+```
+pnpm desktop:try-release 0.1.2 windows-arm64
+```
+
+```
+desktop:try-release — v0.1.2 publishes no Windows asset (TrackYourTime-Setup-0.1.2.exe
+  is not there), so there is nothing a Windows VM can install.
+```
+
+That is not a bug in the command. Windows signing is not set up: with no
+certificate (`WIN_CSC_LINK` + `WIN_CSC_KEY_PASSWORD`, or Azure Trusted
+Signing) the release workflow builds Windows as `-unsigned`, and it never
+attaches an `-unsigned` file to a release (docs/deploy.md → "Desktop release",
+and → winget, which waits on the same installer). So until signing lands,
+`pnpm prod:win` is the way to try the app on Windows, and the command says so
+and exits non-zero.
 
 ## pnpm test:desktop:linux
 
@@ -121,8 +191,13 @@ Set them up once, not once per project.
 
 A Linux desktop VM (Ubuntu 24.04 arm64 in UTM) works the same way. Mount the
 share with `sudo mount -t cifs //192.168.64.1/VMShare /mnt/vmshare -o user=<you>`
-and run the `run.sh` files. No `prod:linux` script exists yet; the Docker smoke
-test covers start-up.
+and run the `run.sh` files. That VM is what `pnpm desktop:try-release` drops
+for. There is no `prod:linux`, which would build one on the Mac: the Docker
+smoke test covers start-up, and the release's own AppImage is the thing worth
+clicking.
+
+An AppImage needs FUSE. On Ubuntu 24.04, `sudo apt install libfuse2t64` once;
+without it the AppImage exits saying so.
 
 ## Other projects
 

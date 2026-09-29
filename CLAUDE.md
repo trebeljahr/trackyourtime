@@ -394,6 +394,22 @@ nothing from this repo and names no app — it is shared with the other projects
 and headed for hatchkit, so project wiring stays in `package.json` and
 `scripts/desktop-linux-smoke.mjs`.
 
+`pnpm desktop:try-release <version> [platform]` is the third one, and the only
+one that tries what a release **published** rather than a local build: it reads
+the release with `gh` (a draft counts — that is where every release of this app
+sits), downloads the one asset that platform can start by itself, checks it
+against the release's own `SHA256SUMS.txt`, and drops it through the same
+`vm-drop.mjs`. `scripts/lib/desktop-try-release.mjs` holds everything decidable
+without `gh`, and asset names come from `artifactPatterns()` in
+`desktop-release.mjs` rather than being written out again. Three rules: it
+offers only the AppImage and the NSIS installer, because a deb, rpm or tar.gz
+is not a file a launcher can execute; it starts no VM unless `--start-vm` names
+one; and **Windows names the missing installer as a policy, not an error** —
+with no certificate the workflow builds Windows `-unsigned` and never attaches
+an `-unsigned` file, so the command says that, points at `pnpm prod:win` and
+exits non-zero rather than failing obscurely. It stays right once Windows
+signing lands: the refusal only fires when the asset is genuinely absent.
+
 **Desktop activity capture** (plan Stage 8, `electron/src/activity/`, the
 `/app/activity` screen in `components/activity/`, the card in
 `components/settings/desktop-activity.tsx`). The desktop counterpart of the
