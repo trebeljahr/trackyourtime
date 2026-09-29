@@ -28,7 +28,7 @@ describe("DonateLink", () => {
   it("links the shared donate page, in the same tab", () => {
     render(list());
     const link = screen.getByTestId("marketing-donate");
-    expect(link.getAttribute("href")).toBe("https://ricos.site/donate?from=track-your-time");
+    expect(link.getAttribute("href")).toBe("https://ricos.site/donate/track-your-time");
     expect(link.textContent).toBe("Donate");
     expect(link.hasAttribute("target")).toBe(false);
   });

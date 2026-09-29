@@ -36,7 +36,7 @@ export const CONTACT_EMAIL = "ricotrebeljahr@gmail.com";
  * the repo's FUNDING.yml, point here. Never linked inside the phone apps
  * (App Store 3.1.1, Google Play payments policy).
  */
-export const DONATE_URL = "https://ricos.site/donate?from=track-your-time";
+export const DONATE_URL = "https://ricos.site/donate/track-your-time";
 /**
  * The landing page's "you can support development" sentence, an inline ask.
  * Off until an ask can stay quiet for 90 days after a donation, which

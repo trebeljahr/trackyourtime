@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { ProjectDonateLink } from "@/components/marketing/project-donate-link";
 import { useIsCapacitor } from "@/hooks/use-shell";
 import { recordDonationReturn } from "@/lib/donation-return";
 import { DONATE_URL } from "@/lib/site-links";
@@ -22,9 +23,9 @@ export function DonateLink({ label }: { label: string }): React.ReactElement | n
   if (useIsCapacitor()) return null;
   return (
     <li>
-      <a href={DONATE_URL} className="hover:text-foreground" data-testid="marketing-donate">
+      <ProjectDonateLink href={DONATE_URL} className="hover:text-foreground" data-testid="marketing-donate">
         {label}
-      </a>
+      </ProjectDonateLink>
     </li>
   );
 }

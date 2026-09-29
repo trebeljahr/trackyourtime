@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ProjectDonateLink } from "@/components/marketing/project-donate-link";
 
 import {
   Feature,
@@ -217,9 +218,9 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
                 {" "}
                 {t.rich("landing.free.donate", {
                   donate: (chunks) => (
-                    <a href={DONATE_URL} className={link}>
+                    <ProjectDonateLink href={DONATE_URL} className={link}>
                       {chunks}
-                    </a>
+                    </ProjectDonateLink>
                   ),
                 })}
               </>
