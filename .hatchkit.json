@@ -51,5 +51,10 @@
         "value": "v=spf1 include:amazonses.com ~all"
       }
     ]
+  },
+  "coolifyRuntime": "image",
+  "containerPorts": {
+    "client": 6477,
+    "server": 5159
   }
 }
