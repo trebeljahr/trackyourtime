@@ -1,0 +1,25 @@
+# Fedora image for testing an .rpm (scripts/crossplat/README.md).
+#
+# The sibling of Dockerfile.deb, and for the same reason: it carries only the
+# harness — a virtual display, a session bus, Node and playwright-core — so
+# `dnf install ./app.rpm` has to resolve gtk3, nss and the rest from the
+# package's own Requires. A dependency the package forgot fails the install.
+#
+# Project-agnostic on purpose: nothing here names an app. Build it for the
+# Docker host's architecture; the installer refuses a package built for another.
+FROM fedora:41
+
+# Fedora 41 ships Node 22, new enough for the probe. Weak dependencies are left
+# out here for the same reason the installer leaves them out of the package's
+# own transaction: this image is meant to be bare.
+RUN dnf install -y --setopt=install_weak_deps=False \
+    xorg-x11-server-Xvfb xorg-x11-xauth dbus-daemon dbus-x11 \
+    liberation-fonts \
+    ca-certificates file \
+    nodejs npm \
+  && dnf clean all
+
+# Keep in step with the repo's Playwright; connectOverCDP only needs the core.
+ARG PLAYWRIGHT_VERSION=1.60.0
+RUN npm install -g "playwright-core@${PLAYWRIGHT_VERSION}" && npm cache clean --force
+ENV NODE_PATH=/usr/local/lib/node_modules

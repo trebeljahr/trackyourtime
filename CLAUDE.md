@@ -410,6 +410,37 @@ an `-unsigned` file, so the command says that, points at `pnpm prod:win` and
 exits non-zero rather than failing obscurely. It stays right once Windows
 signing lands: the refusal only fires when the asset is genuinely absent.
 
+`test:desktop:linux` runs the UNPACKED app, so it proves nothing about the
+packaging. `pnpm test:desktop:packages`
+(`scripts/desktop-packages-smoke.mjs` over `scripts/crossplat/linux-package-smoke.mjs`)
+takes the files a release ships and installs each one: `apt-get install
+./x.deb` on Debian, `dnf install ./x.rpm` on Fedora, `chmod +x` and
+`--appimage-extract` for an AppImage. It then reads the installed `.desktop`
+entry, checks its `Exec` and `Icon` resolve, and hands that program to the same
+probe, so the pass criteria are identical. Four rules that fail quietly if
+broken:
+
+- **The deb and rpm images carry no Electron runtime library** (`Dockerfile.deb`,
+  `Dockerfile.rpm`): only Xvfb, dbus, Node and playwright-core. That bareness IS
+  the test — `apt`/`dnf` must pull GTK, NSS and the rest from the package's own
+  `Depends`/`Requires`. Adding a runtime library to either image, or passing
+  `--with-recommends` by default, hides the bug it exists to find. The AppImage
+  is the opposite case and uses the `linux-smoke` image, which has a desktop.
+- **`deb.depends` / `rpm.depends` REPLACE electron-builder's defaults**, so
+  `electron-builder.config.mjs` repeats the whole list. v0.1.2 shipped a `.deb`
+  that died on `libgbm.so.1` and an `.rpm` that died on `libasound.so.2`;
+  `libsecret` is dlopened by `safeStorage`, so `ldd` never names it and only the
+  rpm's list had to gain it. A dependency satisfied transitively today (Fedora's
+  `gtk3` happens to pull `mesa-libgbm`) is one the next base image drops.
+- **A container has no `/dev/fuse`,** so an AppImage is unpacked rather than
+  mounted; `--appimage-mode fuse` tests mounting and adds the device. The
+  arm64 AppImage runtime electron-builder bundles needs `libz.so` — the
+  unversioned symlink from `zlib1g-dev`, absent on a user's machine — so that
+  artifact fails on any normal desktop while its payload is sound.
+- **Only the Docker daemon's own architecture is testable**, and the package
+  must sit under a path the daemon shares (colima shares `$HOME`, not `/tmp`).
+  The other architecture is skipped with a notice, never emulated.
+
 **Desktop activity capture** (plan Stage 8, `electron/src/activity/`, the
 `/app/activity` screen in `components/activity/`, the card in
 `components/settings/desktop-activity.tsx`). The desktop counterpart of the

@@ -8,7 +8,7 @@
  * /out/result.json, /out/screenshot.png and /out/app.log; exits 0 on a pass.
  */
 import { spawn } from "node:child_process";
-import { createWriteStream, writeFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(`${process.env.NODE_PATH ?? "/usr/local/lib/node_modules"}/`);
@@ -21,14 +21,28 @@ const settleMs = Number(process.env.SMOKE_SETTLE_MS ?? "5000");
 const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS ?? "60000");
 const port = 9222;
 
-const result = { ok: false, url: null, title: null, consoleErrors: [], pageErrors: [], screenshot: false, problem: null };
+const result = { ok: false, url: null, title: null, consoleErrors: [], pageErrors: [], screenshot: false, problem: null, appLogTail: [] };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** The app's last words, so a failure explains itself without a second look. */
+function appLogTail(lines = 12) {
+  try {
+    return readFileSync("/out/app.log", "utf8").split("\n").filter((line) => line.trim() !== "").slice(-lines);
+  } catch {
+    return [];
+  }
+}
 
 function finish(problem) {
   result.problem = problem;
   result.ok = problem === null;
+  if (!result.ok) result.appLogTail = appLogTail();
   writeFileSync("/out/result.json", `${JSON.stringify(result, null, 2)}\n`);
-  console.log(result.ok ? "PASS" : `FAIL: ${problem}`);
+  if (result.ok) console.log("PASS");
+  else {
+    console.log(`FAIL: ${problem}`);
+    for (const line of result.appLogTail) console.log(`    | ${line}`);
+  }
   process.exit(result.ok ? 0 : 1);
 }
 
@@ -43,13 +57,32 @@ const bus = spawn("dbus-daemon", ["--session", "--nofork", `--address=${busAddre
 process.on("exit", () => bus.kill());
 await sleep(500);
 
-const log = createWriteStream("/out/app.log");
+// Written synchronously, not piped into a stream: every finish() ends in
+// process.exit(), which drops whatever a stream still had buffered — and the
+// one line that explains a failed start ("error while loading shared libraries:
+// libgbm.so.1") is written by the loader immediately before the app dies, so it
+// is exactly the line a buffered write loses.
+const logFd = openSync("/out/app.log", "a");
+process.on("exit", () => {
+  try {
+    closeSync(logFd);
+  } catch {
+    // Already closed, or never opened: nothing to report at exit.
+  }
+});
+const record = (chunk) => {
+  try {
+    writeSync(logFd, chunk);
+  } catch {
+    // A full or closed /out must not take the verdict down with it.
+  }
+};
 const app = spawn(exec, ["--no-sandbox", `--remote-debugging-port=${port}`, ...extraArgs], {
   env: { ...process.env, DISPLAY: ":99", DBUS_SESSION_BUS_ADDRESS: busAddress },
   stdio: ["ignore", "pipe", "pipe"],
 });
-app.stdout.pipe(log);
-app.stderr.pipe(log);
+app.stdout.on("data", record);
+app.stderr.on("data", record);
 let exited = null;
 app.on("exit", (code, signal) => {
   exited = { code, signal };

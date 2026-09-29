@@ -10,6 +10,7 @@ generates can use the same flow. Keep it self-contained until then.
 |---|---|---|
 | `vm-drop.mjs` | Copies a build into one shared drop folder, `~/VMShare`, next to a double-click launcher. A Windows or Linux VM opens that folder. | People |
 | `linux-smoke.mjs` | Starts an unpacked Electron Linux build in Docker under Xvfb, drives it over CDP and saves a screenshot. Passes or fails. | Agents, CI, people |
+| `linux-package-smoke.mjs` | Installs ONE packaged artifact — `.AppImage`, `.deb` or `.rpm` — in Docker under Xvfb, then drives it with the same probe. Passes or fails. | Agents, CI, people |
 
 Requires Node 20 or later. Uses no npm dependencies on the host.
 
@@ -90,6 +91,78 @@ Requirements and rules:
   on the first run and cached after that. Change the tag when the Dockerfile
   changes.
 
+## linux-package-smoke.mjs
+
+```bash
+node scripts/crossplat/linux-package-smoke.mjs \
+  --package release/myapp_1.2.3_arm64.deb \
+  [--expect-url-prefix app://-] [--exec "/opt/My App/myapp"] \
+  [--appimage-mode extract|fuse] [--with-recommends] \
+  [--env KEY=VALUE]... [--arg --flag]... \
+  [--settle-ms 5000] [--timeout-ms 90000] [--out <dir>]
+```
+
+`linux-smoke.mjs` takes an **unpacked** build, so it never exercises the
+packaging itself: the desktop entry, the icon paths, the AppImage runtime, the
+declared dependencies and the install scriptlets. This one takes a **packaged**
+file and installs it the way a person would.
+
+| Kind | Image | How it is installed |
+|---|---|---|
+| `.deb` | `Dockerfile.deb` (`node:24-bookworm-slim`) | `apt-get install ./file.deb` |
+| `.rpm` | `Dockerfile.rpm` (`fedora:41`) | `dnf install ./file.rpm` |
+| `.AppImage` | the `linux-smoke` image | `chmod +x`, then `--appimage-extract` and run the AppDir |
+
+**The deb and rpm images carry no Electron runtime library on purpose.** They
+have a virtual display, a session bus, Node and playwright-core, and nothing
+else — so `apt`/`dnf` has to pull GTK, NSS and the rest out of the package's own
+`Depends`/`Requires`. A dependency the package forgot then fails the install
+instead of being satisfied by accident, which is the bug this tool exists to
+find. Do not add a runtime library to either Dockerfile. Weak dependencies
+(deb `Recommends`, rpm `Recommends`) are left out for the same reason;
+`--with-recommends` asks for the plain `apt install ./x.deb` a person gets.
+
+The AppImage image is the other way round: an AppImage bundles the app and
+expects an ordinary desktop underneath it, so it is tested in the image that has
+one.
+
+**AppImage and FUSE.** A container has no `/dev/fuse`, so the AppImage runtime
+cannot mount itself. The default mode, `extract`, unpacks the image with its own
+`--appimage-extract` and starts the AppDir — what `--appimage-extract-and-run`
+does. `--appimage-mode fuse` tests the mounting path instead, and the runner
+adds `--device /dev/fuse --cap-add SYS_ADMIN` for it. The difference is a flag
+rather than an accident, because an AppImage that only works one way is worth
+knowing about.
+
+After the install it reads the installed `.desktop` file, checks that its `Exec`
+resolves to an executable that exists and that its `Icon` matches a real icon
+file, and starts that program — so the launcher's own path is what gets tested.
+`--exec` overrides it. The program is then handed to `linux-smoke/probe.mjs`,
+reused byte-for-byte, so the pass criteria are the unpacked runner's:
+
+- the app opens its CDP port;
+- a page with the expected URL prefix appears;
+- the page throws no uncaught error;
+- a screenshot succeeds;
+- the process is still running after the settle time.
+
+It writes `install.json` beside the probe's `result.json`, `screenshot.png` and
+`app.log`.
+
+Requirements and rules, beyond `linux-smoke.mjs`'s:
+
+- **The package must sit under a path the Docker daemon shares with the host.**
+  colima shares the home directory but not `/tmp`, so a package downloaded to
+  `/tmp` is invisible inside the container; the installer says so rather than
+  reporting a missing file.
+- **The container runs as root**, because installing a package does. The output
+  directory is given back to the calling user before it exits.
+- **The architecture is read with the package's own tool** — `dpkg-deb -f`,
+  `rpm -qp`, the ELF header — and a package for the other architecture is
+  refused rather than emulated.
+- The images are `crossplat-linux-deb-smoke:1` and `crossplat-linux-rpm-smoke:1`,
+  built on the first run and cached. Change the tag when a Dockerfile changes.
+
 ## Per stack
 
 | Stack | Windows build on a Mac | Linux smoke |
@@ -103,7 +176,12 @@ Requirements and rules:
 2. Add a `prod:win` script that builds the app and runs `vm-drop.mjs`.
 3. For Electron apps, add a smoke script that builds for the Docker host's
    architecture and runs `linux-smoke.mjs`.
+4. For Electron apps that ship Linux packages, add a second smoke script that
+   runs `linux-package-smoke.mjs` over each built package, skipping the
+   architectures the local daemon cannot run.
 
 Track Your Time's wiring is in its `package.json` (`prod:win`,
-`test:desktop:linux`) and `scripts/desktop-linux-smoke.mjs`. The one-time VM
-setup is in `docs/cross-platform-testing.md`.
+`test:desktop:linux`, `test:desktop:packages`), `scripts/desktop-linux-smoke.mjs`
+and `scripts/desktop-packages-smoke.mjs` — which is where the app's names, paths
+and release-file naming live, never in this folder. The one-time VM setup is in
+`docs/cross-platform-testing.md`.

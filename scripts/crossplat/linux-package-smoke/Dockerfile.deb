@@ -1,0 +1,26 @@
+# Debian image for testing a .deb (scripts/crossplat/README.md).
+#
+# The point of this image is what it does NOT contain. It carries only what the
+# TEST needs — a virtual display, a session bus, Node and playwright-core — and
+# none of the libraries an Electron app needs to start. `apt-get install
+# ./app.deb` therefore has to pull libgtk-3-0, libnss3 and the rest out of the
+# package's own Depends field, so a missing or misspelled dependency fails the
+# install instead of being satisfied by accident.
+#
+# Project-agnostic on purpose: nothing here names an app. Build it for the
+# Docker host's architecture; the installer refuses a package built for another.
+FROM node:24-bookworm-slim
+
+# xvfb/xauth/dbus are the harness, not the app: `file` reads a package's
+# architecture when dpkg cannot, and fonts-liberation gives the screenshot text.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    xvfb xauth dbus dbus-x11 \
+    fonts-liberation \
+    ca-certificates file \
+  && rm -r /var/lib/apt/lists
+
+# Keep in step with the repo's Playwright; connectOverCDP only needs the core.
+ARG PLAYWRIGHT_VERSION=1.60.0
+RUN npm install -g "playwright-core@${PLAYWRIGHT_VERSION}" && npm cache clean --force
+ENV NODE_PATH=/usr/local/lib/node_modules

@@ -162,6 +162,76 @@ colima start
 The first run builds the `crossplat-linux-smoke:1` image, which takes a few
 minutes. Later runs take about 15 seconds plus the app build.
 
+## pnpm test:desktop:packages
+
+`test:desktop:linux` above runs the **unpacked** app, so it never touches the
+packaging: the desktop entry, the icon paths, the AppImage runtime, the declared
+dependencies and the install scriptlets are all untested by it. This command
+takes the files a release actually ships — `.AppImage`, `.deb`, `.rpm` — and
+proves each one installs and starts.
+
+```bash
+pnpm test:desktop:packages                 # every package in release/
+pnpm test:desktop:packages --dir <dir>     # e.g. a `gh release download` folder
+pnpm test:desktop:packages <file>...       # exactly these
+```
+
+Each kind is installed the way a person installs it, in an image that carries
+**only the test harness** — a virtual display, a session bus, Node and
+playwright-core, and no Electron runtime library at all:
+
+| Kind | Image | How it is installed |
+|---|---|---|
+| `.deb` | Debian (`node:24-bookworm-slim`) | `apt-get install ./file.deb`, so `Depends` is really resolved |
+| `.rpm` | Fedora 41 | `dnf install ./file.rpm`, so `Requires` is really resolved |
+| `.AppImage` | the `linux-smoke` image, which has the desktop libraries an AppImage expects to find | `chmod +x`, then `--appimage-extract` and run the AppDir |
+
+That bareness is the point: a dependency the package forgot to declare fails the
+install here instead of being satisfied by accident.
+
+It then reads the installed `.desktop` file, checks its `Exec` and `Icon`
+resolve to files that exist, and hands the program to the same probe
+`test:desktop:linux` uses — so the pass criteria are identical: a page at
+`app://-`, no uncaught page error, a screenshot, and still running after the
+settle time. Output is `test-results/linux-packages/<kind>-<arch>/`, with
+`install.json` beside the usual `result.json`, `screenshot.png` and `app.log`.
+
+| Flag | Effect |
+|---|---|
+| `--dir <dir>` | Look for packages here instead of `release/` |
+| `--with-recommends` | Plain `apt install ./x.deb` — weak dependencies allowed. Off by default, because a `Recommends` entry can satisfy a dependency that `Depends` should have declared |
+| `--appimage-mode fuse` | Mount the AppImage through FUSE instead of unpacking it. Needs `--device /dev/fuse`, which the runner adds |
+
+Two limits:
+
+- **Only the Docker daemon's own architecture.** A package built for the other
+  one is skipped with a notice rather than emulated, because emulating it tests
+  qemu rather than the package. The other architecture belongs on a runner of
+  that architecture.
+- **The package must sit under a path the daemon shares with the host.** colima
+  shares the home directory but not `/tmp`, so a `gh release download --dir
+  /tmp/...` is invisible inside the container. The runner says so when it
+  happens.
+
+Like `test:desktop:linux`, the app runs without `TRACKYOURTIME_HEADLESS`, for
+the same reason: on X11 a never-shown window gives CDP no frames.
+
+### What it found
+
+Run against the v0.1.2 arm64 artifacts, all three failed, each for its own
+reason. The `.deb` and `.rpm` are fixed in `electron-builder.config.mjs`
+(`deb.depends`, `rpm.depends`); the AppImage one is upstream.
+
+| Artifact | Verdict | Cause |
+|---|---|---|
+| `trackyourtime_0.1.2_arm64.deb` | failed | `libgbm.so.1: cannot open shared object file` — `libgbm1` and `libasound2` are DT_NEEDED and were in neither `Depends` nor electron-builder's default list |
+| `trackyourtime-0.1.2.aarch64.rpm` | failed | `libasound.so.2` — `alsa-lib` undeclared. `mesa-libgbm` only arrived because `gtk3` happens to pull it, and `libsecret` (dlopened by `safeStorage`, so invisible to `ldd`) was missing entirely |
+| `TrackYourTime-0.1.2-linux-arm64.AppImage` | failed | The AppImage **runtime** has `DT_NEEDED: libz.so` — the unversioned symlink, which ships in `zlib1g-dev` and is not on a user's machine. The payload is sound: with that symlink present the app extracts and reaches `app://-` |
+
+`depends` **replaces** electron-builder's defaults rather than adding to them,
+so the config repeats the whole list. Dropping one is silent until an install
+fails.
+
 ## One-time setup: a Windows 11 VM in UTM
 
 This VM and the share serve every project that uses `scripts/crossplat/`.

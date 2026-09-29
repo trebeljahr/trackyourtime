@@ -187,13 +187,58 @@ const config = {
     vendor: "Rico Trebeljahr",
     artifactName: names.linux,
   },
+  // `depends` REPLACES electron-builder's default list rather than adding to
+  // it, so each of these repeats the defaults and then names what Electron
+  // really links against and the defaults leave out. Measured on a bare
+  // Debian and a bare Fedora with `pnpm test:desktop:packages`, which installs
+  // the package in an image carrying no desktop libraries at all: v0.1.2 shipped
+  // a .deb that died on `libgbm.so.1: cannot open shared object file` and an
+  // .rpm that died on `libasound.so.2`, because gtk3 happens to pull libgbm on
+  // Fedora and nothing pulls ALSA on either. Adding a target here means
+  // checking it the same way; a dependency satisfied only transitively today is
+  // one the next base-image change removes.
   deb: {
     // electron-builder's default names (trackyourtime_0.1.0_amd64.deb), which
     // is what apt users expect.
     artifactName: "${name}_${version}_${arch}.${ext}",
+    depends: [
+      // electron-builder's defaults.
+      "libgtk-3-0",
+      "libnotify4",
+      "libnss3",
+      "libxss1",
+      "libxtst6",
+      "xdg-utils",
+      "libatspi2.0-0",
+      "libuuid1",
+      "libsecret-1-0",
+      // Both are DT_NEEDED of the Electron binary and in neither default list:
+      // libgbm for the GPU/compositor path, ALSA for audio.
+      "libgbm1",
+      "libasound2",
+    ],
   },
   rpm: {
     artifactName: "${name}-${version}.${arch}.${ext}",
+    depends: [
+      // electron-builder's defaults.
+      "gtk3",
+      "libnotify",
+      "nss",
+      "libXScrnSaver",
+      "(libXtst or libXtst6)",
+      "xdg-utils",
+      "at-spi2-core",
+      "(libuuid or libuuid1)",
+      // alsa-lib is DT_NEEDED; mesa-libgbm is too and only arrives because
+      // gtk3 happens to pull it, which is not a dependency anyone declared.
+      "alsa-lib",
+      "mesa-libgbm",
+      // safeStorage dlopens libsecret, so ldd never names it and the app
+      // silently keeps the session in memory instead (electron/src/secure-store.ts).
+      // The .deb has always declared it; the rpm default list does not.
+      "libsecret",
+    ],
   },
   // x64 only, and there is no `base` here on purpose. electron-builder builds
   // this snap from its prebuilt template (`isUseTemplateApp` in
