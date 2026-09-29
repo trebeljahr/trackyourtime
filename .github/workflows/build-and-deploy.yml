@@ -354,12 +354,14 @@ jobs:
       # root on the host, so a token in this repository was a key to every
       # other project on it. Instead:
       #
-      # - The image is chosen in GHCR. SERVER_IMAGE and CLIENT_IMAGE in
-      #   Coolify name `:live`, and the compose files pull with
-      #   `pull_policy: always`, so pointing `:live` at this commit's
-      #   immutable `:<sha>` image is the pin. (Docker keeps whatever it has
-      #   for a moving tag without that pull policy: on 2026-09-08 Coolify
-      #   started the PREVIOUS build while everything reported the new one.)
+      # - The image is chosen in GHCR. Both apps are Coolify Docker Image
+      #   apps pulling `ghcr.io/trebeljahr/trackyourtime-{server,client}:live`,
+      #   and Coolify pulls the image again on every deploy, so pointing
+      #   `:live` at this commit's immutable `:<sha>` image is the pin. (The
+      #   stopped `*-legacy-compose` apps read SERVER_IMAGE / CLIENT_IMAGE
+      #   and pull with `pull_policy: always` for the same reason: on
+      #   2026-09-08 Docker kept a cached moving tag and Coolify started the
+      #   PREVIOUS build while everything reported the new one.)
       # - Each app has its own webhook secret (COOLIFY_<APP>_DEPLOY_SECRET).
       #   A `push` payload signed with it queues a deploy of that one app —
       #   it can read nothing and reach no other app. The payload names

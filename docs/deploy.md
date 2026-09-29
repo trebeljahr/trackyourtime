@@ -184,21 +184,23 @@ before this change still connects wherever `/ws` is still routed.
    A deploy secret queues a deploy of its own app and can do nothing else.
    The watch path is one no commit touches, so a push that reaches Coolify
    through its GitHub App never deploys; only the payload CI signs names it.
-6. **`SERVER_IMAGE` and `CLIENT_IMAGE` name `:live`**
-   (`ghcr.io/trebeljahr/trackyourtime-{server,client}:live`), on the server
-   and the client app. The compose files read them and pull with
-   `pull_policy: always`. The deploy job points `:live` at the image of the
-   commit it just built, with its own `GITHUB_TOKEN` (`packages: write`),
-   and only then tells Coolify to deploy. `hatchkit secrets isolate` seeds
-   `:live` from the image each app runs and points the variables at it, so
-   the switch alone changes nothing that runs.
+6. **Both apps pull `:live`.** Since 2026-09-30 both are Coolify Docker
+   Image apps (`hatchkit migrate-runtime`), which Coolify deploys as rolling
+   updates behind a health check: `tracktime-server` pulls
+   `ghcr.io/trebeljahr/trackyourtime-server:live` and `tracktime-client`
+   pulls `…-client:live`, and Coolify pulls the image again on every
+   deploy. The deploy job points `:live` at the image of the commit it just
+   built, with its own `GITHUB_TOKEN` (`packages: write`), and only then
+   tells Coolify to deploy. The runtime images install curl because Coolify
+   runs its health check with `curl … || wget …` inside the container.
 
-   A Docker Image app (what `hatchkit migrate-runtime` makes of a compose
-   app, so Coolify deploys it as a rolling update) pulls
-   `docker_registry_image_name:docker_registry_image_tag` instead; its tag
-   is `live` too, and the deploy is the same. The runtime images install
-   curl because Coolify runs its health check with `curl … || wget …`
-   inside the container.
+   The compose apps they replaced are kept, stopped, as
+   `tracktime-{server,client}-legacy-compose` for
+   `hatchkit migrate-runtime --rollback`. Those read `SERVER_IMAGE` /
+   `CLIENT_IMAGE` (pulled with `pull_policy: always`), which must name
+   `:live` too; `hatchkit secrets isolate` seeds `:live` and points them at
+   it. After such a rollback, run `hatchkit secrets isolate trackyourtime`
+   again, so the repo's deploy secrets name the apps that are serving.
 
 ## Verifying a deploy
 
