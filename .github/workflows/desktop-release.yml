@@ -299,6 +299,21 @@ jobs:
         shell: bash
         run: node scripts/build-desktop.mjs --channel ${{ matrix.signing-channel }} --package ${{ matrix.builder }}
 
+      # Building a package does not prove it starts on a clean machine. Run
+      # each native Linux package in an isolated install before it can enter
+      # the draft release (including its declared dependencies and runtime).
+      - name: Smoke-test Linux packages
+        if: runner.os == 'Linux' && steps.signing.outputs.mode != 'skip'
+        run: pnpm test:desktop:packages
+
+      - name: Upload Linux package QA
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-qa-${{ matrix.channel }}
+          path: test-results/linux-packages/
+          if-no-files-found: ignore
+
       # An unsigned leg must say so in every file a person could download, and a
       # signed leg must not: the names come from TRACKYOURTIME_UNSIGNED, which
       # build-desktop.mjs sets from the same decision as above.

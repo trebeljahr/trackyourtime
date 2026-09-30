@@ -93,15 +93,47 @@ describe("release status", () => {
     assert.deepEqual(statusRow(mob, run(), { jobs: jobs("failure") }).facts[0], "Play upload failed");
   });
 
+  it("reports Firefox submission separately from Chrome", () => {
+    const jobs = [job("firefox-add-ons", "success", [
+      { name: "Sign and submit to addons.mozilla.org", conclusion: "skipped" },
+    ])];
+    assert.deepEqual(statusRow(channel("extension-release.yml"), run(), {
+      jobs,
+      annotations: ["AMO_JWT_ISSUER and AMO_JWT_SECRET are not set — built, submission skipped."],
+    }).facts, ["Firefox submission skipped: no store secrets"]);
+  });
+
   it("counts desktop channels and reads the draft", () => {
     const desk = channel("desktop-release.yml");
-    const jobs = [job("mac", "success"), job("win", "failure"), job("draft release", "skipped")];
+    const jobs = [
+      job("staging percentage", "success"),
+      job("mac", "success", [{ name: "Build and package", conclusion: "success" }]),
+      job("win", "failure", [{ name: "Build and package", conclusion: "failure" }]),
+      job("draft release", "skipped"),
+    ];
     assert.deepEqual(statusRow(desk, run(), { jobs, release: { draft: true } }).facts, [
       "1/2 channels built",
       "draft release exists: publishing it is the desktop release",
     ]);
     assert.deepEqual(statusRow(desk, run(), { jobs: [], release: { draft: false } }).facts, ["GitHub Release published"]);
     assert.deepEqual(statusRow(desk, null, { release: null }).facts, ["expected a run for this tag"]);
+  });
+
+  it("does not count a green skipped store job as a build or an unsigned installer as a release download", () => {
+    const jobs = [
+      job("staging percentage", "success"),
+      job("win-store", "success", [{ name: "Build and package", conclusion: "skipped" }]),
+      job("win", "success", [
+        { name: "Build and package", conclusion: "success" },
+        { name: "Verify the Windows signature", conclusion: "skipped" },
+      ]),
+      job("draft release", "success"),
+    ];
+    assert.deepEqual(statusRow(channel("desktop-release.yml"), run(), { jobs }).facts, [
+      "1/2 channels built",
+      "build skipped: win-store",
+      "Windows built unsigned: Actions artifact only, excluded from the release",
+    ]);
   });
 
   it("notes a dispatched or re-run run", () => {
@@ -134,7 +166,10 @@ describe("the workflow files", () => {
     assert.match(workflow("release.yml"), /^ {2}promote:$/m);
     assert.match(workflow("extension-release.yml"), /- name: Upload to the Chrome Web Store$/m);
     assert.match(workflow("extension-release.yml"), /store upload skipped/);
+    assert.match(workflow("extension-release.yml"), /- name: Sign and submit to addons.mozilla.org$/m);
     assert.match(workflow("desktop-release.yml"), /^ {4}name: draft release$/m);
+    assert.match(workflow("desktop-release.yml"), /- name: Build and package$/m);
+    assert.match(workflow("desktop-release.yml"), /- name: Verify the Windows signature$/m);
     assert.match(workflow("mobile-release.yml"), /- name: Upload to Google Play \(/m);
     assert.match(workflow("mobile-release.yml"), /- name: Upload to TestFlight$/m);
   });

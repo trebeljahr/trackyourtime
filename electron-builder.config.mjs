@@ -29,6 +29,9 @@ const env = (name) => {
  * @type {import("electron-builder").Configuration}
  */
 const config = {
+  // The legacy ARM64 runtime links to libz.so, a development-only symlink.
+  // The static runtime starts without that library on the host.
+  toolsets: { appimage: "1.0.3" },
   appId: "com.ricoslabs.trackyourtime",
   productName: "Track Your Time",
   directories: {

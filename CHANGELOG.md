@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Linux AppImages use a static runtime so ARM64 installs no longer need the
+  development-only `libz.so` symlink. Release CI checks AppImage, deb and rpm
+  startup on each native Linux architecture before creating a desktop draft.
+- Release status excludes skipped desktop builds and the rollout check from
+  its build count. It reports unsigned Windows artifacts and Firefox
+  submissions separately.
+
 ## [0.1.2] - 2026-09-28
 
 Two release-pipeline fixes. Neither changes the app: both are checks that

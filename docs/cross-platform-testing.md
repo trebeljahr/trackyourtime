@@ -220,7 +220,8 @@ the same reason: on X11 a never-shown window gives CDP no frames.
 
 Run against the v0.1.2 arm64 artifacts, all three failed, each for its own
 reason. The `.deb` and `.rpm` are fixed in `electron-builder.config.mjs`
-(`deb.depends`, `rpm.depends`); the AppImage one is upstream.
+(`deb.depends`, `rpm.depends`). The AppImage fix selects the static runtime
+with `toolsets.appimage: "1.0.3"`, instead of the legacy runtime below.
 
 | Artifact | Verdict | Cause |
 |---|---|---|
@@ -231,6 +232,12 @@ reason. The `.deb` and `.rpm` are fixed in `electron-builder.config.mjs`
 `depends` **replaces** electron-builder's defaults rather than adding to them,
 so the config repeats the whole list. Dropping one is silent until an install
 fails.
+
+On 30 September 2026, the original v0.1.2 ARM64 packages failed again after
+their checksums were verified. The rebuilt AppImage and deb passed clean
+install/startup tests with the fixes. See [release readiness](release-readiness.md)
+for the full results and remaining platform checks. Release CI now runs these
+package tests on both Linux architectures before creating the draft.
 
 ## One-time setup: a Windows 11 VM in UTM
 

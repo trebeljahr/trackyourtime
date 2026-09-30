@@ -74,7 +74,7 @@ const selfHostFacts = (jobs) => {
 };
 
 /** extension-release.yml: whether the store upload ran, and why not. */
-const extensionFacts = (jobs, annotations) => {
+const chromeFacts = (jobs, annotations) => {
   const upload = stepOf(jobs, "Upload to the Chrome Web Store");
   if (!upload) return [];
   if (upload.conclusion === "success") return ["uploaded to the Chrome Web Store"];
@@ -85,12 +85,31 @@ const extensionFacts = (jobs, annotations) => {
   return ["store upload skipped"];
 };
 
+const extensionFacts = (jobs, annotations) => {
+  const facts = chromeFacts(jobs, annotations);
+  const firefox = stepOf(jobs, "Sign and submit to addons.mozilla.org");
+  if (firefox?.conclusion === "success") facts.push("submitted to Firefox Add-ons (approval not checked)");
+  else if (firefox?.conclusion === "failure") facts.push("Firefox submission failed");
+  else if (firefox?.conclusion === "skipped") {
+    const noSecrets = annotations.some((text) => /AMO_JWT_ISSUER.*not set/.test(text));
+    facts.push(`Firefox submission skipped${noSecrets ? ": no store secrets" : ""}`);
+  }
+  return facts;
+};
+
 /** desktop-release.yml: how many channels built, and the draft's state. */
 const desktopFacts = (jobs, release) => {
   const facts = [];
-  const legs = jobs.filter((job) => job.name !== "draft release");
+  const legs = jobs.filter((job) => ["mac", "mas", "win", "win-store", "linux-x64", "linux-arm64"].includes(job.name));
   if (legs.length > 0) {
-    facts.push(`${legs.filter((job) => job.conclusion === "success").length}/${legs.length} channels built`);
+    const built = legs.filter((job) => stepOf([job], "Build and package")?.conclusion === "success");
+    facts.push(`${built.length}/${legs.length} channels built`);
+    const skipped = legs.filter((job) => job.conclusion === "skipped" || stepOf([job], "Build and package")?.conclusion === "skipped");
+    if (skipped.length) facts.push(`build skipped: ${skipped.map((job) => job.name).join(", ")}`);
+    const win = built.find((job) => job.name === "win");
+    if (win && stepOf([win], "Verify the Windows signature")?.conclusion === "skipped") {
+      facts.push("Windows built unsigned: Actions artifact only, excluded from the release");
+    }
   }
   if (release === undefined) return facts;
   if (release === null) facts.push("no GitHub Release visible (a draft needs write access to see)");
