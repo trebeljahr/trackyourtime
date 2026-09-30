@@ -118,9 +118,9 @@
     }
   ],
   "dependencies": {
-    "@raycast/api": "^2.4.1",
-    "@raycast/utils": "^2.3.1",
-    "zod": "^4.4.3"
+    "@raycast/api": "^2.5.3",
+    "@raycast/utils": "^2.3.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^2.2.0",

@@ -15,9 +15,9 @@
   "dependencies": {
     "@starter/core": "workspace:*",
     "@starter/shared": "workspace:*",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "use-intl": "^4.14.4"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "use-intl": "^4.14.7"
   },
   "devDependencies": {
     "@types/chrome": "^0.2.7",
@@ -27,7 +27,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "fake-indexeddb": "^6.2.5",
     "typescript": "^6.0.3",
-    "vite": "^8.0.0",
-    "vitest": "4.1.6"
+    "vite": "^8.0.16",
+    "vitest": "^4.1.11"
   }
 }
