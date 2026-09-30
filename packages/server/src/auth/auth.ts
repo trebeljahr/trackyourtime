@@ -1,3 +1,4 @@
+import { logAuthLink as logAuthUrl } from "./link-policy.js";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { bearer } from "better-auth/plugins/bearer";
@@ -33,22 +34,6 @@ import {
   SESSION_UPDATE_AGE_SECONDS,
   TOKEN_CLIENT_SESSION_SECONDS,
 } from "./session-lifetime.js";
-
-/**
- * Put an auth link in the server log.
- *
- * Two callers per send site, and both matter. With no transport configured
- * this line *is* the delivery mechanism — the documented way back into a
- * single-user instance whose owner locked themselves out. With a transport
- * that is configured but broken (SMTP_HOST set and EMAIL_FROM missing is the
- * easy mistake, wrong credentials the next one) the send throws, and without
- * this the one recovery path is removed by exactly the misconfiguration that
- * needs it. The throw is still propagated — a silent delivery failure is the
- * worse outcome — the URL just goes to the log on the way out.
- */
-function logAuthUrl(label: string, recipient: string, url: string): void {
-  console.log(`[auth] ${label} URL for ${recipient}: ${url}`);
-}
 
 /** Sweep sockets whose session is gone, without a static import cycle. */
 function sweepRevokedSockets(): void {
@@ -152,6 +137,7 @@ export async function initAuth(): Promise<void> {
       },
       // The recipient's explicit preference; English when there is none.
       (userId) => preferredLocale([userId]),
+      isEmailDeliveryConfigured(),
     ),
 
     user: {

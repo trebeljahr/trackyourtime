@@ -129,6 +129,7 @@ services:
       # cookie and the origin check are concerned.
       APP_URL: ${APP_URL:-https://${APP_DOMAIN}}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env — openssl rand -base64 32}
+      AUTH_LOG_LINKS: ${AUTH_LOG_LINKS:-false}
 
       # ── Data stores ──────────────────────────────────────────────────
       # Override either to point at a managed database instead; the local

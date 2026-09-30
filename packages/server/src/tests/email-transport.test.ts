@@ -202,7 +202,7 @@ describe("auth.ts email guards", () => {
     );
   });
 
-  it("keeps the link in the log when a configured transport fails", () => {
+  it("routes missing and failed delivery through the explicit link policy", () => {
     const logged = source.match(/logAuthUrl\("/g) ?? [];
     const sends = source.match(/await sendEmail\(/g) ?? [];
     // Two per send site: once when no transport is configured, once in the
@@ -212,7 +212,7 @@ describe("auth.ts email guards", () => {
     assert.equal(
       logged.length,
       sends.length * 2,
-      "every send needs the URL logged on both the unconfigured and the failed path",
+      "every send must consult the guarded link policy on missing or failed delivery",
     );
   });
 

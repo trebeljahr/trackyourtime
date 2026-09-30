@@ -104,6 +104,7 @@ export function emailVerificationOptions(
    * none.
    */
   localeFor: (userId: string | undefined) => Promise<Locale> = async () => DEFAULT_LOCALE,
+  sendOnSignUp = true,
 ): {
   sendOnSignUp: boolean;
   sendOnSignIn: boolean;
@@ -114,7 +115,7 @@ export function emailVerificationOptions(
   }) => Promise<void>;
 } {
   return {
-    sendOnSignUp: true,
+    sendOnSignUp,
     // /login asks for the link itself (`sendVerificationEmail`) so it can
     // point it at the web app: the sign-in body's `callbackURL` would do the
     // same, but better-auth's client follows that URL as a redirect.

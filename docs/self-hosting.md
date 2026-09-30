@@ -897,7 +897,7 @@ to you.
 
 **If you lock yourself out**, set a new password with
 [`reset-password`](#reset-password). The server log also holds a reset link
-when no mail provider is configured. See [Email](#email).
+when `AUTH_LOG_LINKS=true` explicitly enables owner recovery. See [Email](#email).
 
 ### The admin CLI
 
@@ -1010,7 +1010,7 @@ docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js
 ```text
 PASS  database         MongoDB answered a ping in 3 ms
 PASS  redis            Redis answered PING
-WARN  mail             no mail transport; password-reset links are written to the server log
+WARN  mail             no mail transport; use the admin reset-password command or explicitly enable AUTH_LOG_LINKS
                        fix: set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD and EMAIL_FROM to send mail
 PASS  trusted-origins  https://track.example.com is trusted
 PASS  auth-url         https://track.example.com is well-formed and is the app origin
@@ -1078,28 +1078,21 @@ docker compose -f docker-compose.selfhost.yml up -d server
 A missing `EMAIL_FROM` does not count as "email is not configured". A send
 then fails with an error that names the host. The server does not fall back to
 the log in silence. An operator who set up a relay should not have to guess why
-nothing arrives. The server still writes the link to the log, so the
-recovery below keeps working while you fix the relay.
+nothing arrives. The server writes the link only when `AUTH_LOG_LINKS=true` explicitly enables
+owner recovery. Otherwise use the admin `reset-password` command while fixing mail.
 
 ### When it is not configured
 
-Nothing breaks and nothing is queued. Sign-up needs no verification. A change
-of email in **Settings → Account** writes its confirmation link to the log as
-`[auth] Verification URL for …`, and the email changes when that link is
-opened. A password-reset request returns the usual "if this email exists…" response, and
-the server prints the reset link to its log. That is how you get back into a
-single-user instance you locked yourself out of:
+Sign-up needs no verification on a mail-free self-host. Password resets and
+email changes require delivery or explicit owner recovery. Use the admin
+[`reset-password`](#reset-password) command with shell access; it needs neither
+mail nor a bearer link in logs.
 
-```bash
-docker compose -f docker-compose.selfhost.yml logs server | grep 'Password reset URL'
-```
-
-The line looks like `[auth] Password reset URL for you@example.com: https://…`.
-Open that URL in a browser. It carries a `?token=` query parameter and lands on
-`https://track.example.com/reset-password`, a real page in the web app.
-
-With shell access to the server, [`reset-password`](#reset-password) is faster.
-It needs no link and no browser.
+To deliberately enable the log-based recovery path, set `AUTH_LOG_LINKS=true`
+in `.env` and recreate the server during a planned rollout. Request a password
+reset, then read the link from your private server log. This also applies when
+configured mail fails. Anyone who can read these logs can use the link.
+Disable the option after recovery and restrict log access and retention.
 
 ### Configuring mail on an instance that already has accounts
 
@@ -1715,7 +1708,7 @@ to skip old lines, and leave out `-f` to read once and exit. Which log to read:
 
 | Symptom | Log |
 |---|---|
-| Sign-in, API errors, mail, password-reset links | `server` |
+| Sign-in, API errors, mail, opt-in recovery links | `server` |
 | Certificates, routing, `502`s, `404`s from the proxy | `caddy` |
 | The web app does not load at all | `client` |
 | `db: false` from `/api/health` | `mongo`, then `server` |

@@ -48,6 +48,7 @@ services:
       MONGODB_URI: ${MONGODB_URI}
       REDIS_URL: ${REDIS_URL:-}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      AUTH_LOG_LINKS: ${AUTH_LOG_LINKS:-false}
       # The API's OWN origin — https://api.trackyourtime.dev, not the web
       # app's. better-auth mounts itself at /api/auth of this host and signs
       # cookies for it, so a value pointing at the client's host breaks

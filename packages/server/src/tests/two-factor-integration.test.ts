@@ -396,3 +396,23 @@ describe("backfill-email-verified", () => {
     assert.equal(second, 0, "a re-run changes nothing");
   });
 });
+
+it("mail-free owner signup succeeds without logging a verification link", async () => {
+  const store = { user: [], session: [], account: [], verification: [] };
+  let sends = 0;
+  const localAuth = betterAuth({
+    database: memoryAdapter(store),
+    secret: "mail-free-recovery-test-secret-0123456789abcdef",
+    baseURL: "http://localhost:3000",
+    emailAndPassword: { enabled: true, requireEmailVerification: false },
+    emailVerification: emailVerificationOptions(async () => {
+      sends += 1;
+      throw new Error("Mail and log recovery are disabled");
+    }, undefined, false),
+  });
+  const result = await localAuth.api.signUpEmail({
+    body: { name: "Owner", email: "owner-recovery@example.test", password: PASSWORD },
+  });
+  assert.ok(result.token);
+  assert.equal(sends, 0);
+});
