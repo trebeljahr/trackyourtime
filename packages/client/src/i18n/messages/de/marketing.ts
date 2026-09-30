@@ -717,7 +717,7 @@ export const marketing: Translation<typeof source> = {
       },
       status: {
         term: "Version",
-        detail: "0.1.0. Es gibt noch kein Release, also baut Self-Hosting die Images aus dem Quellcode.",
+        detail: "0.1.2. Veröffentlichte Docker-Images stehen für Self-Hosting bereit. Desktop-Downloads sind noch Entwürfe; mobile Builds liegen in Testkanälen.",
       },
       madeBy: { term: "Gemacht von", detail: "Rico Trebeljahr, allein." },
       source: { term: "Quellcode", detail: "github.com/trebeljahr/trackyourtime" },

@@ -732,7 +732,7 @@ export const marketing = {
       },
       status: {
         term: "Version",
-        detail: "0.1.0. No release is tagged yet, so self-hosting builds the images from source.",
+        detail: "0.1.2. Published Docker images support self-hosting. Desktop downloads remain draft; mobile builds are in testing channels.",
       },
       madeBy: { term: "Made by", detail: "Rico Trebeljahr, on his own." },
       source: { term: "Source code", detail: "github.com/trebeljahr/trackyourtime" },

@@ -73,7 +73,7 @@ ${PRODUCT_NAME} is for freelancers, consultants and small studios who bill clien
 
 - Rates belong to projects and the workspace, not to people. Everyone in a workspace bills a project at the same rate.
 - There is no timesheet approval, no client login or shared report link, and no budget alert.
-- There is no tagged release yet, so there are no published images to pull. Until the first release, self-hosting means building the images yourself, which needs about 4 GB of RAM.
+- Self-host images are published through v0.1.2 for amd64 and arm64. Desktop downloads remain in draft releases pending package QA.
 - A self-hosted instance has open sign-up. The application has no setting to close registration. The self-hosting guide lists workarounds at the proxy.
 - The Chrome extension is in the Chrome Web Store (https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). The Raycast extension and the phone apps are not in any store yet.
 

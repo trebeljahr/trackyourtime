@@ -19,39 +19,29 @@ built. Both were checked against the source, not remembered.
 
 ---
 
+## Delivered
+
+- **Tagged self-host images:** v0.1.2 passed unauthenticated pulls and smoke checks on amd64 and arm64. The `0.1` and `latest` tags were promoted.
+- **Chrome listing:** version 0.1.0 is available in the Chrome Web Store.
+- **Firefox build:** a separate MV3 target, device-flow sign-in and server-origin support exist. AMO publication remains pending.
+- **Profile pictures:** upload, replace and remove pictures from Account or Profile. MongoDB stores the bytes; no separate bucket is required.
+- **Teams and offline clients:** invitations, membership roles, workspace switching and account-scoped offline queues are implemented, including Raycast.
+- **Public integrations:** REST `/api/v1`, scoped API tokens, signed webhooks and the MCP server replace the earlier session-token-only direction. API tokens let integrations use explicit scopes without borrowing an interactive session.
+
+See [release readiness](docs/release-readiness.md) for the checked distribution state.
+
 ## Next
 
 Things the code is already shaped for, where the gap is a defined piece of
 work rather than a design question.
 
-### The first tagged release
-
-**Exists.** `.github/workflows/release.yml` builds and publishes the server and
-self-host client images for linux/amd64 and linux/arm64 on a `v*` tag, with
-provenance and an SBOM. `docker-compose.selfhost.yml` already pulls
-`TRACKYOURTIME_VERSION`, [`docs/releasing.md`](docs/releasing.md) is the
-checklist, and [`docs/release-notes/v0.1.0.md`](docs/release-notes/v0.1.0.md)
-is drafted.
-
-**Missing.** The tag. No `v*` tag exists, so no image has been published and a
-self-hosted first start still builds from source with about 4 GB of memory.
-
-**Would have to be built.** Nothing in code — the release steps, run once.
-
 ### Store listings
 
-**Exists.** The Chrome extension, the Raycast extension and the iOS and Android
-Capacitor projects all work from source. The production extension build pins
-the store id (`STORE_EXTENSION_KEY`), `TRUST_STORE_APPS=true` trusts the store
-clients on a self-hosted server, `.github/workflows/mobile-release.yml` builds
-and verifies a signed Android bundle, and `docs/marketing/` holds listing
-material for the Chrome Web Store and Google Play.
+**Exists.** Chrome version 0.1.0 is live. The v0.1.2 workflow signed mobile builds and uploaded them to Play testing and TestFlight. Chrome and Firefox packages build in CI; automatic submission needs store credentials.
 
-**Missing.** None of the four is in its store. The desktop app's store
-channels are under "Shipping the desktop app" above.
+**Missing.** Public mobile listings, Firefox and Raycast listings, and desktop store submissions. Raycast's licensing decision remains recorded in the launch notes.
 
-**Would have to be built.** Store listings, review, signing for iOS, and a
-release process per store. Blocked more by paperwork than by code.
+**Next steps.** Finish device QA and listing information, then submit through the store accounts. A successful test-channel upload does not mean a public listing is approved.
 
 ### Shipping the desktop app
 
@@ -67,16 +57,9 @@ published releases and never restart on their own. `/download` and
 [`docs-site/docs/desktop.md`](docs-site/docs/desktop.md) describe it.
 [`docs/desktop-app-plan.md`](docs/desktop-app-plan.md) records each stage.
 
-**Missing.** A published release. There are no signing certificates yet, and
-the Windows route (Azure Trusted Signing or a certificate) is undecided. The
-workflow has never run, so nothing has been built or launched on Windows or
-Linux. No store lists the app. An update from one published release to the next
-has not been observed, because it needs two signed releases.
+**Missing.** A published desktop release. v0.1.2 produced signed and notarized macOS downloads, a signed Mac App Store package, Linux packages and an unsigned Windows installer. Windows Store packaging skipped because its identity is not configured. Unsigned Windows downloads stay in Actions artifacts.
 
-**Would have to be built.** Nothing large in code: the certificates, one
-dispatch per channel to fix what the first run finds, and the store
-submissions. Desktop activity capture (plan Stage 8) is a separate, later
-piece of work.
+**Next steps.** Resolve the Linux package failures, verify corrected artifacts and finish interactive platform QA before publishing. Choose Windows signing and supply the Store identity if those channels will launch. A real update between two published releases still needs verification.
 
 ### Two-factor sign-in in the phone apps and the extension's password form
 
@@ -112,22 +95,6 @@ closed rather than failing.
 **Would have to be built.** An env switch read in `auth.ts`, a flag in
 `/api/health` or `health.check` so the clients can hide the sign-up link, and
 an answer for invitations to an address with no account.
-
-### Avatar upload
-
-**Exists.** `avatarUrl` is a field on the `Profile` model, on the shared
-`User` type, in the profile zod schema, and the `profile` tRPC router already
-reads and writes it as a string.
-
-**Missing.** Any file storage. The server has no object-storage client and no
-S3 configuration — an unused storage module was removed. So `avatarUrl` is a
-URL you can only set by handing the API one you hosted yourself.
-
-**Would have to be built.** A storage module and its optional configuration, a
-tRPC procedure that returns a presigned upload URL scoped to the caller, the
-client-side upload, and a picker in the profile screen. Self-hosted instances
-run without a bucket, so the feature has to degrade cleanly when storage is not
-configured.
 
 ---
 
@@ -166,18 +133,6 @@ XRechnung.
 **Missing / undecided.** No client login and no shared link. A read-only link
 is the smaller answer; a client portal is the larger one. Both need a decision
 about which money a client may see.
-
-### A Firefox extension
-
-**Exists.** The Chrome MV3 extension, whose logic lives mostly in
-`packages/core` and the extension's background worker.
-
-**Missing.** A Firefox build and its manifest differences (background scripts,
-`browser_specific_settings`, permission prompts).
-
-**Would have to be built.** A second build target in
-`packages/extension/manifest.config.ts`, a check of every `chrome.*` call the
-worker makes, and an origin entry for the server trust list.
 
 ### A CLI
 
