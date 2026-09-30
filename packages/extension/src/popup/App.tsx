@@ -695,8 +695,17 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
         <div className="popup__body boot">
           {error === null ? (
             <div className="boot__status" data-testid="popup-loading" role="status">
-              <img className="boot__mark" src="/icons/48.png" alt="" width="40" height="40" />
-              <span className="boot__spinner" aria-hidden="true" />
+              <svg className="boot__timer" viewBox="0 0 80 88" width="72" height="80" aria-hidden="true">
+                <ellipse className="boot__shadow" cx="40" cy="81" rx="19" ry="3" />
+                <g className="boot__watch">
+                  <path d="M40 10v8m-6-9h12m13 14 5-5" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+                  <circle className="boot__face" cx="40" cy="46" r="27" stroke="currentColor" strokeWidth="3" />
+                  <path d="M40 24v3m22 19h-3M40 68v-3M18 46h3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity=".4" />
+                  <path className="boot__hand" d="M40 46V32" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  <circle cx="40" cy="46" r="3" fill="currentColor" />
+                  <path d="M34 55q6 6 12 0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </g>
+              </svg>
               <span className="boot__label">{t("app.loading")}</span>
             </div>
           ) : (

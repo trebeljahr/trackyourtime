@@ -553,27 +553,49 @@ button.tag:hover .tag__x {
   }
 }
 
-.boot__mark {
-  border-radius: 10px;
+/* A little stopwatch keeps the wait tied to the timer it is opening. */
+.boot__timer {
+  color: var(--accent);
+  overflow: visible;
 }
 
-.boot__spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: boot-spin 700ms linear infinite;
+.boot__face {
+  fill: var(--accent-soft);
 }
 
-@keyframes boot-spin {
-  to {
-    transform: rotate(360deg);
-  }
+.boot__watch {
+  animation: boot-bob 2.4s ease-in-out infinite;
+}
+
+.boot__hand {
+  transform-origin: 40px 46px;
+  animation: boot-tick 6s steps(12, end) infinite;
+}
+
+.boot__shadow {
+  fill: currentColor;
+  opacity: .12;
+  transform-origin: 40px 81px;
+  animation: boot-shadow 2.4s ease-in-out infinite;
+}
+
+@keyframes boot-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes boot-tick {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes boot-shadow {
+  50% { transform: scaleX(.8); opacity: .07; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .boot__spinner {
+  .boot__watch,
+  .boot__hand,
+  .boot__shadow {
     animation: none;
   }
 
