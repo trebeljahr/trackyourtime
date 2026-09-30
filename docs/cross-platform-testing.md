@@ -375,7 +375,8 @@ Portrait masked entry, rotation, dismissal and reopening passed with no overflow
 or captured errors. Evidence is in
 `test-results/release-qa/native-2026-09-30/ipad-keyboard/`; the same patched build
 also passed all nine native iPhone checks in `ios-rotation-fix-suite/`.
-Interactive window resizing and signed-in iPad landscape remain unverified.
+The XCUITest follow-up below now covers native window resizing and signed-in
+Tracker/Reports landscape navigation.
 
 Headless WKWebView checks do not establish iOS software-keyboard behavior,
 physical-device performance, or signed distribution-build acceptance. Keep those
@@ -411,3 +412,46 @@ physical radio behavior, or the APK Google Play signs and distributes. Android
 relaunch first backgrounds the app so pending asynchronous Preferences writes
 can flush; killing the process in the middle of a write is a separate durability
 case and is not covered by the normal-relaunch assertion.
+
+## Native iPad XCUITest QA
+
+`pnpm test:ios:ui` builds an isolated simulator app and a standalone XCUITest
+runner, starts a disposable local API/database and fake account, then tests:
+
+- Native server selection and email/password login.
+- Landscape layout, Reports navigation, timer start/stop and cold relaunch.
+- Native iPad window-handle dragging, changed WebView viewport dimensions, and
+  a running timer that remains usable after resizing, followed by expansion.
+  Both stopped mobile entries must also exist on the local API.
+
+First export the current client with
+`NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev pnpm build:mobile ios`.
+Requires Xcode with an iPadOS 26 simulator runtime, Node, project dependencies
+and `mongod` on PATH. Run one simulator suite at a time. The default runner
+creates and deletes its own iPad mini. Reusing an iPad is deliberately unsupported:
+iPadOS retains window geometry even after uninstalling an app.
+`IOS_UI_DEVICE_NAME` chooses another installed iPad type. `IOS_UI_OUTPUT` chooses
+an empty evidence directory; by default each run has a timestamped directory
+under `test-results/ios-xcuitest/`.
+
+The shipping Xcode project is never edited. The temporary app excludes the real
+secure-storage package and uses the existing fake UserDefaults plugin. The UI
+runner is simulator-only and uses ad-hoc signing without a developer identity.
+A simulator-only accessibility element exposes read-only DOM geometry, layout
+errors and timer state. XCUITest performs every tap, keystroke, rotation and
+drag; the diagnostics do not click elements or alter layout. Screenshot, state
+and accessibility attachments are retained in `UIQA.xcresult`, alongside the
+Xcode log and a JSON summary. An unchanged viewport, skipped test or nonzero
+Xcode exit cannot count as a pass. Device, QA app and local backend cleanup runs
+on success or failure.
+
+These checks establish native simulator UI behavior, not real secure-storage,
+physical radio behavior, or signed TestFlight/Play-build acceptance. Window
+resizing requires a simulator windowing mode that allows it; a failed gesture
+is recorded as a failure, not silently replaced with CSS resizing.
+
+The 1 October 2026 iPad mini / iOS 26.5 run passed both scenarios with no skips.
+Verified viewport sizes were 1133×744 (landscape), 384×464 (floating window), and
+375×744 (expanded vertically). Both timer records persisted with `source=mobile`
+and non-null end times. Results and exported screenshots are retained at
+`test-results/release-qa/ipad-xcuitest-2026-10-01/run-5/` in the primary checkout.

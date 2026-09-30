@@ -84,6 +84,7 @@
     "test:e2e:desktop": "npx playwright test --config e2e/desktop/playwright.config.ts",
     "prepare": "husky",
     "test:ios:simulator": "node scripts/ios-simulator-smoke.mjs",
+    "test:ios:ui": "node scripts/ios-xcuitest.mjs",
     "test:android:emulator": "node scripts/android-emulator-smoke.mjs"
   },
   "devDependencies": {
