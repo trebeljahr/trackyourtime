@@ -129,3 +129,9 @@ Long-form launch and manual QA tasks live in the project vault's `trackyourtime`
 The user selected only their own account for Play testing. Created the `Rico only` email list with one owner account, selected it for Track Your Time internal testing, and saved. Console now reports the track **Active**, latest release **0.1.2**. The opt-in URL is https://play.google.com/apps/internaltest/4701618739995568640. No production release was made.
 
 Microsoft Partner Center sign-in now succeeds. Apple’s Free Apps Agreement is Active. The DSA contact form has the LLC address prefilled but still requires a calling code, contact phone and email. Existing LLC notes list the registered agent’s contact details, not a dedicated public developer contact. The form remains unsubmitted pending the user’s public contact choice. Notify the user when an actual agreement or identity-verification step needs their action.
+
+### Shared signing account discovery (30 September 2026)
+
+The separate **Check landing page status** chat found the existing Azure Basic `ricoslabs-signing` account in West Europe (`https://weu.codesigning.azure.net/`). Its recorded audit shows no identity validations or certificate profiles. A scoped Identity Verifier role assignment is staged for user approval there. Avoid creating a duplicate account; Track Your Time still needs its own CI configuration after the shared identity/profile setup succeeds. GitHub credential-name inspection reconfirmed no Windows signing set in this repository.
+
+Partner Center sign-in works, but its Home page shows no app workspace. Enrollment remains unverified. Further navigation was blocked when the Chrome browser connection disappeared and native navigation stopped responding. Play listing review remains unfinished. Mac review-detail transfer was blocked by automatic approval review pending explicit user approval to reuse the existing iOS reviewer contact and demo credentials; no transfer occurred.
