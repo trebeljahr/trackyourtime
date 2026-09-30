@@ -1,3 +1,4 @@
+import { webCallbackUrl } from "./auth-callback";
 import { getApiOrigin, whenApiOriginReady } from "@/lib/api-origin";
 
 /**
@@ -6,7 +7,7 @@ import { getApiOrigin, whenApiOriginReady } from "@/lib/api-origin";
  * Two things here are load-bearing and both fail silently when got wrong,
  * which is why they live in one named function rather than inline in the page.
  *
- * **`redirectTo` must be absolute.** It is where the user lands after
+ * **Web `redirectTo` must be absolute.** It is where the user lands after
  * better-auth has validated the token, and better-auth resolves it against
  * its OWN base URL — `new URL(callbackURL, ctx.baseURL)`, where `ctx.baseURL`
  * is `<BETTER_AUTH_URL>/api/auth`. A relative `/reset-password` therefore
@@ -16,6 +17,9 @@ import { getApiOrigin, whenApiOriginReady } from "@/lib/api-origin";
  * origin in the server's trusted origins, which is what makes better-auth's
  * `originCheck` accept an absolute one rather than rejecting it as
  * `INVALID_REDIRECT_URL`.
+ *
+ * Native shells send a relative path instead. The selected server rewrites
+ * the emailed callback against its own FRONTEND_URL before delivery.
  *
  * **The endpoint is `/request-password-reset`.** `/forget-password` is the
  * pre-1.6 name and is not mounted any more, so a POST to it 404s — and since
@@ -35,7 +39,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email,
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: webCallbackUrl("/reset-password"),
     }),
     credentials: "include",
   });

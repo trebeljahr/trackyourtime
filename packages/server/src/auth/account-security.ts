@@ -37,6 +37,7 @@
 import { createAuthMiddleware } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { DEFAULT_LOCALE, type Locale } from "@starter/shared";
+import { emailLinkForWeb } from "./email-link.js";
 import { verificationEmail } from "../services/transactional-email.js";
 
 /** The account name an authenticator app shows beside the code. */
@@ -103,8 +104,10 @@ export function emailVerificationOptions(
    * Defaults to English so a caller with no preference store (a test) needs
    * none.
    */
-  localeFor: (userId: string | undefined) => Promise<Locale> = async () => DEFAULT_LOCALE,
+  localeFor: (userId: string | undefined) => Promise<Locale> = async () =>
+    DEFAULT_LOCALE,
   sendOnSignUp = true,
+  frontendUrl?: string,
 ): {
   sendOnSignUp: boolean;
   sendOnSignIn: boolean;
@@ -122,8 +125,12 @@ export function emailVerificationOptions(
     sendOnSignIn: false,
     autoSignInAfterVerification: false,
     async sendVerificationEmail({ user, url }) {
+      if (frontendUrl) url = emailLinkForWeb(url, frontendUrl);
       const locale = await localeFor(user.id);
-      await send(url, { to: user.email, ...verificationEmail(locale, url) });
+      await send(url, {
+        to: user.email,
+        ...verificationEmail(locale, url, frontendUrl),
+      });
     },
   };
 }

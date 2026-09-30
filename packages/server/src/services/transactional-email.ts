@@ -36,34 +36,54 @@ export type RenderedEmail = {
   html: string;
 };
 
-const paragraph = (text: string): string => `<p>${escapeHtml(text)}</p>`;
-const link = (url: string, label: string): string =>
-  `<p><a href="${escapeHtml(url)}">${escapeHtml(label)}</a></p>`;
-
-export function passwordResetEmail(locale: Locale, url: string): RenderedEmail {
+/** Self-contained branding: no remote images, tracking pixels or hosted-service links. */
+function accountEmail(
+  locale: Locale,
+  kind: "verification" | "passwordReset",
+  url: string,
+  frontendUrl?: string,
+): RenderedEmail {
   const t = serverT(locale, "email");
+  const subject = t(`${kind}.subject`);
+  const intro = t(`${kind}.intro`);
+  const action = t(`${kind}.action`);
+  const ignore = t(`${kind}.ignore`);
+  const instance = frontendUrl ? new URL(frontendUrl).host : "Track Your Time";
+  const esc = escapeHtml;
   return {
-    subject: t("passwordReset.subject"),
-    text: `${t("passwordReset.intro")}\n${url}\n\n${t("passwordReset.ignore")}`,
-    html: [
-      paragraph(t("passwordReset.intro")),
-      link(url, t("passwordReset.action")),
-      paragraph(t("passwordReset.ignore")),
-    ].join(""),
+    subject,
+    text: `Track Your Time · ${instance}\n\n${intro}\n${url}\n\n${ignore}`,
+    html: `<!doctype html>
+<html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;background:#f5f5f7;color:#18181b;font-family:Arial,Helvetica,sans-serif;line-height:1.6;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #e4e4e7;border-radius:16px;">
+<tr><td style="padding:32px;border-top:4px solid #4f46e5;">
+<p style="margin:0 0 8px;font-size:22px;font-weight:700;">Track Your <span style="color:#4f46e5;">Time</span></p>
+<p style="margin:0 0 28px;color:#71717a;font-size:13px;">${esc(instance)}</p>
+<h1 style="font-size:24px;line-height:1.25;margin:0 0 16px;">${esc(subject)}</h1>
+<p>${esc(intro)}</p>
+<p style="margin:28px 0;"><a href="${esc(url)}" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700;">${esc(action)}</a></p>
+<p style="font-size:12px;word-break:break-all;"><a href="${esc(url)}" style="color:#4f46e5;">${esc(url)}</a></p>
+<p style="border-top:1px solid #e4e4e7;padding-top:20px;margin-top:28px;font-size:13px;color:#71717a;">${esc(ignore)}</p>
+</td></tr></table></td></tr></table></body></html>`,
   };
 }
 
-export function verificationEmail(locale: Locale, url: string): RenderedEmail {
-  const t = serverT(locale, "email");
-  return {
-    subject: t("verification.subject"),
-    text: `${t("verification.intro")}\n${url}\n\n${t("verification.ignore")}`,
-    html: [
-      paragraph(t("verification.intro")),
-      link(url, t("verification.action")),
-      paragraph(t("verification.ignore")),
-    ].join(""),
-  };
+export function passwordResetEmail(
+  locale: Locale,
+  url: string,
+  frontendUrl?: string,
+): RenderedEmail {
+  return accountEmail(locale, "passwordReset", url, frontendUrl);
+}
+
+export function verificationEmail(
+  locale: Locale,
+  url: string,
+  frontendUrl?: string,
+): RenderedEmail {
+  return accountEmail(locale, "verification", url, frontendUrl);
 }
 
 /**

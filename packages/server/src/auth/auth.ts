@@ -1,3 +1,4 @@
+import { emailLinkForWeb } from "./email-link.js";
 import { logAuthLink as logAuthUrl } from "./link-policy.js";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
@@ -5,7 +6,11 @@ import { bearer } from "better-auth/plugins/bearer";
 import { deviceAuthorization } from "better-auth/plugins/device-authorization";
 import { organization } from "better-auth/plugins/organization";
 import { MongoClient } from "mongodb";
-import { env, getTrustedOrigins, trustsExtensionOrigins } from "../config/env.js";
+import {
+  env,
+  getTrustedOrigins,
+  trustsExtensionOrigins,
+} from "../config/env.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { isEmailDeliveryConfigured, sendEmail } from "../services/email.js";
 import {
@@ -97,6 +102,7 @@ export async function initAuth(): Promise<void> {
         user: { id: string; email: string };
         url: string;
       }) {
+        url = emailLinkForWeb(url, env.FRONTEND_URL);
         // Branch on whether *any* transport is configured, never on one
         // provider's variables: a Listmonk-shaped check would log the reset
         // URL and return on a self-host that has SMTP set up perfectly well,
@@ -109,7 +115,10 @@ export async function initAuth(): Promise<void> {
         }
         try {
           const locale = await preferredLocale([user.id]);
-          await sendEmail({ to: user.email, ...passwordResetEmail(locale, url) });
+          await sendEmail({
+            to: user.email,
+            ...passwordResetEmail(locale, url, env.FRONTEND_URL),
+          });
         } catch (error) {
           logAuthUrl("Password reset", user.email, url);
           throw error;
@@ -138,6 +147,7 @@ export async function initAuth(): Promise<void> {
       // The recipient's explicit preference; English when there is none.
       (userId) => preferredLocale([userId]),
       isEmailDeliveryConfigured(),
+      env.FRONTEND_URL,
     ),
 
     user: {
@@ -329,7 +339,11 @@ export async function initAuth(): Promise<void> {
            * workspace could not be created. `ensurePersonalWorkspace` repairs
            * the gap on the next read.
            */
-          after: async (user: { id: string; name?: string; email?: string }) => {
+          after: async (user: {
+            id: string;
+            name?: string;
+            email?: string;
+          }) => {
             await createPersonalWorkspace(getAuth().api, user);
           },
         },

@@ -1,3 +1,4 @@
+import { fetchAuthWithTimeout } from "./auth-request";
 import { createAuthClient } from "better-auth/react";
 import {
   deviceAuthorizationClient,
@@ -9,7 +10,10 @@ import {
   getNativeToken,
   setNativeToken,
 } from "@/lib/native-session";
-import { ACCOUNT_DELETION_PASSWORD_REQUIRED, versionHeaders } from "@starter/shared";
+import {
+  ACCOUNT_DELETION_PASSWORD_REQUIRED,
+  versionHeaders,
+} from "@starter/shared";
 import { APP_VERSION } from "@/lib/app-version";
 import {
   discardDeletedAccountQueue,
@@ -91,7 +95,7 @@ const authFetch: typeof fetch = (input, init) => {
     ? { ...init, credentials: "omit" }
     : init;
   return whenApiOriginReady().then(() =>
-    fetch(rebaseApiUrl(String(input)), sent),
+    fetchAuthWithTimeout(rebaseApiUrl(String(input)), sent),
   );
 };
 
@@ -182,7 +186,9 @@ export const refreshSession = async (): Promise<void> => {
  */
 const signOutCleanups = new Set<() => void | Promise<void>>();
 
-export const onSignOut = (cleanup: () => void | Promise<void>): (() => void) => {
+export const onSignOut = (
+  cleanup: () => void | Promise<void>,
+): (() => void) => {
   signOutCleanups.add(cleanup);
   return () => {
     signOutCleanups.delete(cleanup);
@@ -258,7 +264,9 @@ export type AccountDeletionRefusal =
   /** Anything else, the network included. The account still exists. */
   | "failed";
 
-export const accountDeletionRefusal = (code: unknown): AccountDeletionRefusal => {
+export const accountDeletionRefusal = (
+  code: unknown,
+): AccountDeletionRefusal => {
   switch (code) {
     case ACCOUNT_DELETION_PASSWORD_REQUIRED:
       return "password-required";
@@ -336,10 +344,10 @@ export const isTwoFactorChallenge = (data: unknown): boolean =>
 /**
  * Where a link in a mail (verification, change of email) or a Google
  * redirect should land. The API is a different origin from the web app, so a
- * relative path would be resolved against the API and land on its 404.
+ * web callbacks must be absolute. Native mail callbacks are resolved by the
+ * selected server before delivery.
  */
-export const webCallbackUrl = (path: string): string =>
-  typeof window === "undefined" ? path : `${window.location.origin}${path}`;
+export { webCallbackUrl } from "./auth-callback";
 
 /** Where a freshly authenticated user lands. */
 export const POST_AUTH_REDIRECT = "/app/track";

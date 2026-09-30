@@ -144,6 +144,14 @@ describe("the two-factor step on /login", () => {
     });
   });
 
+  it("does not claim an email was sent when delivery fails", async () => {
+    signInEmail.mockResolvedValue({ error: { code: "EMAIL_NOT_VERIFIED", message: "Email not verified" } });
+    sendVerificationEmail.mockRejectedValueOnce(new Error("Mail provider unavailable"));
+    await submitPassword();
+    expect(await screen.findByTestId("login-error")).toHaveTextContent("could not send the link");
+    expect(screen.getByTestId("login-error")).not.toHaveTextContent("We sent a new verification link");
+  });
+
   it("never sends a callbackURL with the password, which would reload the page", async () => {
     signInEmail.mockResolvedValue({ data: { token: "t", user: {} }, error: null });
     await submitPassword();

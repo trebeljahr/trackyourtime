@@ -85,7 +85,7 @@ export default function LoginPage() {
       const result = await signIn.email({ email, password });
       if (result.error?.code === "EMAIL_NOT_VERIFIED") {
         // A fresh link, pointed at the web app rather than the API origin.
-        await authClient
+        const verification = await authClient
           .sendVerificationEmail({
             email,
             // Back to this page with its `next`, so an invitee who has to
@@ -96,8 +96,14 @@ export default function LoginPage() {
               }),
             ),
           })
-          .catch(() => undefined);
-        setError(translate("shell")("auth.login.emailNotVerified"));
+          .catch(() => ({ error: { code: "DELIVERY_FAILED" } }));
+        setError(
+          translate("shell")(
+            verification.error
+              ? "auth.login.verificationFailed"
+              : "auth.login.emailNotVerified",
+          ),
+        );
       } else if (result.error) {
         setError(authErrorMessage(result.error, "login"));
       } else if (isTwoFactorChallenge(result.data)) {
@@ -177,7 +183,10 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center p-8">
       <div className="mx-auto w-full max-w-sm space-y-6">
-        <AuthHeader title={t("auth.login.title")} subtitle={t("auth.login.subtitle")} />
+        <AuthHeader
+          title={t("auth.login.title")}
+          subtitle={t("auth.login.subtitle")}
+        />
 
         {/* Renders nothing on web — the web app has no server to choose. */}
         <NativeServerPicker />
@@ -199,7 +208,10 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive" data-testid="login-error">
+            <div
+              className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+              data-testid="login-error"
+            >
               {error}
             </div>
           )}
@@ -248,7 +260,10 @@ export default function LoginPage() {
         <GoogleSignInButton />
 
         <div className="text-center text-sm">
-          <Link href="/forgot-password" className="text-primary hover:underline">
+          <Link
+            href="/forgot-password"
+            className="text-primary hover:underline"
+          >
             {t("auth.login.forgotPassword")}
           </Link>
         </div>

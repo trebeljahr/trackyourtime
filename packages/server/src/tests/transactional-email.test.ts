@@ -39,7 +39,7 @@ describe("password reset", () => {
   it("is German for a German recipient", () => {
     const email = passwordResetEmail("de", URL);
     assert.equal(email.subject, "Passwort zurücksetzen");
-    assert.ok(email.text.startsWith("Öffne diesen Link"));
+    assert.ok(email.text.includes("Öffne diesen Link"));
     assert.ok(email.text.includes(URL));
     assert.ok(!email.html.includes("Reset"));
   });
@@ -48,7 +48,10 @@ describe("password reset", () => {
 describe("verification", () => {
   it("has a subject in each language", () => {
     assert.equal(verificationEmail("en", URL).subject, "Verify your email");
-    assert.equal(verificationEmail("de", URL).subject, "E-Mail-Adresse bestätigen");
+    assert.equal(
+      verificationEmail("de", URL).subject,
+      "E-Mail-Adresse bestätigen",
+    );
   });
 });
 
@@ -57,9 +60,13 @@ describe("newsletter confirmation", () => {
     const en = newsletterConfirmationEmail("en", { confirmUrl: URL, days: 21 });
     assert.equal(en.subject, "Confirm your subscription · this newsletter");
     assert.ok(en.html.includes("The link is good for 21 days."));
-    assert.ok(en.html.startsWith("<!doctype html>\n<html lang=\"en\">"));
+    assert.ok(en.html.startsWith('<!doctype html>\n<html lang="en">'));
 
-    const one = newsletterConfirmationEmail("en", { confirmUrl: URL, days: 1, siteName: "Notes" });
+    const one = newsletterConfirmationEmail("en", {
+      confirmUrl: URL,
+      days: 1,
+      siteName: "Notes",
+    });
     assert.ok(one.html.includes("The link is good for 1 day."));
 
     const de = newsletterConfirmationEmail("de", { confirmUrl: URL, days: 21 });
@@ -69,3 +76,20 @@ describe("newsletter confirmation", () => {
     assert.ok(de.html.includes('<html lang="de">'));
   });
 });
+
+for (const render of [verificationEmail, passwordResetEmail]) {
+  it("brands self-hosted account mail without hosted assets or tracking", () => {
+    const mail = render(
+      "en",
+      "https://time.example.test/api/auth/verify-email?token=a&x=2",
+      "https://time.example.test",
+    );
+    assert.match(mail.html, /Track Your/);
+    assert.match(mail.html, /time.example.test/);
+    assert.match(mail.html, /#4f46e5/);
+    assert.ok(!mail.html.includes("trackyourtime.dev"));
+    assert.ok(!mail.html.includes("<img"));
+    assert.ok(mail.html.includes("token=a&amp;x=2"));
+    assert.ok(mail.text.includes("token=a&x=2"));
+  });
+}

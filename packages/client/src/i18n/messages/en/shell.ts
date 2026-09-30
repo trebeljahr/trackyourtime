@@ -7,6 +7,7 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const shell = {
+  startup: { slow: "This is taking longer than usual. Check your connection and try again." },
   workspace: {
     open: "Switch workspace",
     current: "Workspace: {name}",
@@ -134,6 +135,7 @@ export const shell = {
       noAccount: "Don't have an account? <link>Sign up</link>",
       /** The two-factor challenge ran out; the password step starts over. */
       challengeExpired: "The sign-in took too long. Enter your password again.",
+      verificationFailed: "Your email still needs verification, but we could not send the link. Please try signing in again.",
       emailNotVerified: "Verify your email address first. We sent a new verification link to your inbox.",
     },
     twoFactor: {

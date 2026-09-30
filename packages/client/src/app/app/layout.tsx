@@ -5,13 +5,11 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { getSession } from "@/lib/auth-client";
 import { useNativeSession } from "@/hooks/use-native-session";
-import {
-  verdictForRejection,
-  verdictForResult,
-} from "@/lib/session-verdict";
+import { verdictForRejection, verdictForResult } from "@/lib/session-verdict";
+import { StartupScreen } from "@/components/startup-screen";
+import { isTokenShell } from "@/lib/shell";
 import { AppShell } from "@/components/app-shell";
 import { loginRedirectHref } from "@/lib/safe-next";
-import { useT } from "@/i18n/use-t";
 
 type Verdict = "checking" | "in" | "out";
 
@@ -22,7 +20,6 @@ export default function ProtectedLayout({
 }) {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
-  const tc = useT("common");
   // On native the bearer token comes out of the Keychain asynchronously, so
   // the very first `useSession()` at the root fires without it and resolves
   // null. Deciding on that would bounce a signed-in phone to /login on every
@@ -48,7 +45,12 @@ export default function ProtectedLayout({
   const [recheck, setRecheck] = React.useState<Verdict>("checking");
 
   React.useEffect(() => {
-    if (isLoading || !sessionReady) return;
+    if (!sessionReady) return;
+    // A fresh native install has no bearer token. No network request is needed
+    // to know it must sign in; do not wait behind two session round trips.
+    const signedOutNative =
+      isTokenShell() && nativeToken === null && !isAuthenticated;
+    if (isLoading && !signedOutNative) return;
 
     let cancelled = false;
     // The verdict is decided after mount, never during render: see the
@@ -56,7 +58,8 @@ export default function ProtectedLayout({
     // the authority, so the state starts at "checking" in the prerendered
     // HTML and in the hydrating render, and only an answer moves it.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRecheck(isAuthenticated ? "in" : "checking");
+    setRecheck(signedOutNative ? "out" : isAuthenticated ? "in" : "checking");
+    if (signedOutNative) return;
 
     // `hasStoredToken` is false on web by construction — `getNativeToken()`
     // only ever returns a value under Capacitor. `hasSession` is the web's
@@ -86,15 +89,11 @@ export default function ProtectedLayout({
     if (recheck === "out") router.replace(loginRedirectHref(window.location));
   }, [recheck, router]);
 
-  if (isLoading || !sessionReady || recheck === "checking") {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">{tc("status.loading")}</p>
-      </div>
-    );
-  }
-
   if (recheck === "out") return null;
+
+  if (isLoading || !sessionReady || recheck === "checking") {
+    return <StartupScreen />;
+  }
 
   return <AppShell>{children}</AppShell>;
 }

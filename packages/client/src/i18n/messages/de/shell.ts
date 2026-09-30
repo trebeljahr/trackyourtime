@@ -4,6 +4,7 @@ import type { shell as source } from "../en/shell";
 
 /** German `shell`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const shell: Translation<typeof source> = {
+  startup: { slow: "Das dauert länger als erwartet. Prüfe deine Verbindung und versuche es erneut." },
   workspace: {
     open: "Arbeitsbereich wechseln",
     current: "Arbeitsbereich: {name}",
@@ -127,6 +128,7 @@ export const shell: Translation<typeof source> = {
       forgotPassword: "Passwort vergessen?",
       noAccount: "Noch kein Konto? <link>Registrieren</link>",
       challengeExpired: "Die Anmeldung hat zu lange gedauert. Gib dein Passwort noch einmal ein.",
+      verificationFailed: "Deine E-Mail-Adresse muss noch bestätigt werden, aber der Link konnte nicht gesendet werden. Versuche die Anmeldung erneut.",
       emailNotVerified:
         "Bestätige zuerst deine E-Mail-Adresse. Wir haben dir einen neuen Bestätigungslink geschickt.",
     },
