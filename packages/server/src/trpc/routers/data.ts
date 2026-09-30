@@ -1421,9 +1421,9 @@ export const dataRouter = router({
   /**
    * Roll one import back.
    *
-   * Entries go unconditionally — they came from the file and nothing else
-   * created them. Catalog documents only go if nothing else has come to use
-   * them since, because a project invented by an import is an ordinary project
+   * Only the importing author may roll back their entries. Catalog documents
+   * only go if nothing else has come to use them since, because a project
+   * invented by an import is an ordinary project
    * the moment somebody tracks against it by hand.
    *
    * Workspace settings a restore rewrote are NOT put back: everything written
@@ -1435,17 +1435,15 @@ export const dataRouter = router({
     .input(importUndoSchema)
     .mutation(async ({ ctx, input }): Promise<ImportUndoResult> => {
       const workspaceId = ctx.workspaceId;
-      // Scoped exactly as `history` lists them, and NOT_FOUND rather than
-      // FORBIDDEN for a batch outside that scope: a distinguishable refusal
-      // would answer "does this import id exist" for somebody who may not
-      // see the import, and undo is a delete — a batch a member cannot list
-      // is not one they may roll back by guessing its id.
-      const authorScope = authorScopeFilter(ctx.visibility);
-      const batch = await ImportBatch.findOne({
+      // Reading team time never grants permission to delete another author's
+      // import. Missing, foreign, and unowned batches all fail closed, including
+      // legacy batches with no recorded creator.
+      const batchFilter = {
         _id: assertObjectId(input.batchId),
         workspaceId,
-        ...(authorScope ? { createdBy: authorScope.authorId } : {}),
-      });
+        createdBy: ctx.user.id,
+      };
+      const batch = await ImportBatch.findOne(batchFilter);
       if (!batch) throw new TRPCError({ code: "NOT_FOUND" });
 
       const invoiced = await TimeEntry.exists({
@@ -1464,19 +1462,19 @@ export const dataRouter = router({
       const removed = await TimeEntry.deleteMany({
         workspaceId,
         importId: input.batchId,
+        authorId: ctx.user.id,
       });
 
-      // Pins go unconditionally, like the entries and unlike the catalog:
-      // nothing else can have come to depend on one person's shortcut, and a
-      // restore that left fifty of them behind after an undo would be litter
-      // this batch can see and nobody else can explain.
+      // Remove only the caller's restored pins. Other people's shortcuts
+      // survive, even if a stale batch happens to reference their IDs.
       const unpinned = await Favorite.deleteMany({
         workspaceId,
+        userId: ctx.user.id,
         _id: { $in: batch.favoriteIds ?? [] },
       });
-      if ((unpinned.deletedCount ?? 0) > 0 && batch.createdBy !== "") {
+      if ((unpinned.deletedCount ?? 0) > 0) {
         publishToUser(
-          batch.createdBy,
+          ctx.user.id,
           { kind: "favorites.changed" },
           input.originId,
         );
@@ -1493,6 +1491,8 @@ export const dataRouter = router({
       };
 
       if (input.includeCatalog) {
+        // Usage checks cover the whole workspace, including other authors'
+        // entries and surviving pins; read visibility must not narrow them.
         for (const id of batch.tagIds) {
           const used = await TimeEntry.exists({ workspaceId, tagIds: id });
           if (used) continue;
@@ -1501,13 +1501,15 @@ export const dataRouter = router({
         }
         for (const id of batch.taskIds) {
           const used = await TimeEntry.exists({ workspaceId, taskId: id });
-          if (used) continue;
+          const pinned = await Favorite.exists({ workspaceId, taskId: id });
+          if (used || pinned) continue;
           await Task.deleteOne({ _id: id, workspaceId });
           result.tasksDeleted += 1;
         }
         for (const id of batch.projectIds) {
           const used = await TimeEntry.exists({ workspaceId, projectId: id });
-          if (used) continue;
+          const pinned = await Favorite.exists({ workspaceId, projectId: id });
+          if (used || pinned) continue;
           await Project.deleteOne({ _id: id, workspaceId });
           result.projectsDeleted += 1;
         }
@@ -1520,17 +1522,15 @@ export const dataRouter = router({
       }
 
       await ImportBatch.updateOne(
-        { _id: batch._id },
+        batchFilter,
         { $set: { undoneAt: new Date() } },
       );
 
-      // A batch written before `createdBy` existed has no author to name, and
-      // the fan-out then fails closed: members who may see everybody's time.
       void publishSync(
         workspaceId,
         { kind: "data.imported", batchId: input.batchId, undone: true },
         input.originId,
-        batch.createdBy ? { authorId: batch.createdBy } : undefined,
+        { authorId: ctx.user.id },
       );
       if (
         result.clientsDeleted +
