@@ -296,3 +296,83 @@ without it the AppImage exits saying so.
 
 `scripts/crossplat/README.md` lists what another project copies, and how an
 Electron app and a Tauri app each feed the same drop folder.
+
+
+## Isolated iOS simulator QA
+
+Build the current mobile export, then run native WKWebView checks:
+
+```bash
+NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev pnpm build:mobile ios
+pnpm test:ios:simulator
+```
+
+Requires macOS, Xcode with an available iOS simulator runtime, Node 24, installed
+workspace dependencies, and `mongod` on PATH. Run one simulator suite at a time.
+The runner refuses to boot while another simulator is running.
+
+The runner copies the native project to a temporary directory, removes the real
+secure-storage package from SPM and Capacitor registration, and substitutes a
+fake store inside a separate app container. A binary-symbol check rejects builds
+that still link the real plugin. The QA bridge is compiled only into this
+throwaway project; it cannot compile for a physical device. Shipping source and
+release credentials stay outside the harness.
+
+The suite checks packaged launch, login layout, native plugin calls, fake-store
+and Preferences persistence, lifecycle events, appearance, the iPhone portrait policy, auth-page
+navigation, local-server selection, bearer login, timer start/stop and relaunch,
+offline queue recovery, and remote session revocation. Signed-in checks use a
+fresh local API and MongoDB directory, with email, payments, Redis and background
+scheduling disabled. Transport failure is injected inside the QA webview;
+physical radio changes and the OS keychain are not tested.
+
+Evidence is written to `test-results/ios-simulator/`: JSON outcomes, screenshots,
+build logs, and API request metadata with credential values omitted. The runner
+shuts down/deletes its simulator and stops its API/database, including on test
+failure. Temporary build files remain available for diagnosis. To rerun checks
+without rebuilding, set `IOS_QA_APP` to the isolated app path in `result.json`.
+`IOS_QA_OUTPUT` selects another evidence directory. For repeated checks,
+`IOS_QA_DEVICE=<udid>` can use a stopped simulator. The default model is iPhone
+17; `IOS_QA_DEVICE_NAME="iPad mini (A17 Pro)"` selects iPad layout and landscape
+checks. Match the name when supplying an existing UDID. The runner refuses
+to overwrite an existing QA app, uninstalls its own app afterward, and shuts
+down the reused simulator without deleting it.
+
+If iPad windowing rejects programmatic orientation changes, the runner records
+that check as blocked, keeps a nonzero exit status, and continues the independent
+app-flow checks. It does not change the shipping windowing policy to force a pass.
+
+Headless WKWebView checks do not establish iOS software-keyboard behavior,
+physical-device performance, or signed distribution-build acceptance. Keep those
+release checklist items open until their corresponding checks have run.
+
+
+## Isolated Android emulator QA
+
+```bash
+source scripts/android-env.sh
+NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev pnpm build:mobile android
+pnpm test:android:emulator
+```
+
+The Android runner shares the iOS app-flow checks and uses a temporary native
+project with a separate application ID. It removes the secure-storage Gradle
+dependency and plugin registration, injects a fake SharedPreferences store, and
+rejects an APK containing the original plugin classes. Its JavaScript evaluation
+bridge exists only in the temporary debug app. That app permits loopback HTTP
+for the disposable API; release network configuration remains unchanged.
+
+Requires the Android SDK, its command-line tools, the JDK, `mongod`, and the
+`Medium_Phone_API_35` AVD (override with `ANDROID_QA_AVD`). The runner refuses to
+start with any Android device already connected, then starts one headless,
+read-only emulator without audio or saved snapshots. It uses `adb reverse` for
+the local API, removes its own app, stops its own backend, and terminates its
+emulator afterward. It does not stop another emulator or the shared ADB server.
+
+Evidence goes to `test-results/android-emulator/`. `ANDROID_QA_OUTPUT` overrides
+the destination; `ANDROID_QA_APK` reruns an existing isolated APK without building.
+These checks cover the native WebView and app flows, not Android Keystore,
+physical radio behavior, or the APK Google Play signs and distributes. Android
+relaunch first backgrounds the app so pending asynchronous Preferences writes
+can flush; killing the process in the middle of a write is a separate durability
+case and is not covered by the normal-relaunch assertion.

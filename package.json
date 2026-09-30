@@ -82,7 +82,9 @@
     "electron:ensure": "node scripts/ensure-electron.mjs",
     "test:electron": "node --import tsx --test \"electron/src/**/*.test.ts\"",
     "test:e2e:desktop": "npx playwright test --config e2e/desktop/playwright.config.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:ios:simulator": "node scripts/ios-simulator-smoke.mjs",
+    "test:android:emulator": "node scripts/android-emulator-smoke.mjs"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

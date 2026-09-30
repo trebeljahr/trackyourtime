@@ -52,7 +52,9 @@ Limits: package startup QA does not prove login, offline replay, updates, tray b
 
 The Linux x64 desktop harness passed **36 tests** in [main CI](https://github.com/trebeljahr/trackyourtime/actions/runs/36652122609), at `8c2ad037`. It covers the source app's authentication, session handling, offline/tray flows, shell and activity behavior. That source-app result complements the six native package startup tests; it does not establish interactive desktop/device QA.
 
-Read-only local inventory found no UTM VMs and no connected iOS or Android devices. iOS 26.5 simulators and Android AVDs exist but are stopped. No simulator was booted while swap use was high. Phone-width browser tests are not native-device QA.
+Native simulator QA ran on 30 September against app source `c435dae6`: iPhone 17 / iOS 26.5 passed 9 checks; Android 15 / API 35 passed 10, including the software keyboard; iPad mini / iOS 26.5 passed 8, with landscape blocked because its windowing mode rejects programmatic rotation. The checks cover packaged WebViews, native plugins, fake credential persistence, lifecycle, auth navigation, local-server selection, bearer HTTP/WebSocket authentication, timer relaunch, offline replay and session revocation. All owned simulators, emulators and test backends were stopped.
+
+These are isolated debug QA builds with the real credential-store plugins excluded, not the signed TestFlight/Play artifacts. Physical secure storage, iOS software keyboards, actual radio changes, native sharing and signed-build acceptance remain open. Android normal relaunch first backgrounds the app; abrupt termination during an asynchronous Preferences write is a separate unresolved durability case. See [the native QA commands](cross-platform-testing.md#isolated-ios-simulator-qa). JSON results and screenshots are under `test-results/ios-simulator`, `test-results/ios-ipad` and `test-results/android-emulator` in the QA worktree.
 
 Record the exact artifact version, OS/device and result for each remaining check:
 
@@ -105,7 +107,7 @@ Chrome/AMO and Snap submission credentials remain unset. Homebrew's token and `t
 - `actionlint .github/workflows/desktop-release.yml` and `git diff --check` passed.
 - Desktop static export and Electron bundling succeeded. macOS cannot package rpm without `rpmbuild`, so RPM packaging uses a disposable Linux container.
 - Read-only production deployment gate passed. The per-app webhook deployment completed in CI and both live services passed the gate at `8c2ad037`. No Coolify API token was needed.
-- Follow-up validation: 98 package/release unit tests passed. Both Linux QA/release workflows pass `actionlint`; electron-builder accepts the updated configuration schema. Native CI then passed all six packages with gzip RPM compression. Physical-device tests remain unrun; no device was connected and local emulators stayed stopped because swap use was high.
+- Follow-up validation: 98 package/release unit tests passed. Both Linux QA/release workflows pass `actionlint`; electron-builder accepts the updated configuration schema. Native CI then passed all six packages with gzip RPM compression. Physical-device tests remain unrun. Native simulator results and their limits are recorded above.
 
 ## Before publishing
 
