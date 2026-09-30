@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release status excludes skipped desktop builds and the rollout check from
   its build count. It reports unsigned Windows artifacts and Firefox
   submissions separately.
+- RPM packaging uses gzip to reduce compression memory use. A separate
+  Linux Package QA workflow checks native x64 and ARM64 installers before
+  tagging, without publishing a release or uploading to stores.
 
 ## [0.1.2] - 2026-09-28
 

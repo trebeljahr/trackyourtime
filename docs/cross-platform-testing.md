@@ -239,6 +239,22 @@ install/startup tests with the fixes. See [release readiness](release-readiness.
 for the full results and remaining platform checks. Release CI now runs these
 package tests on both Linux architectures before creating the draft.
 
+For package QA before tagging, use **Linux Package QA**
+(`.github/workflows/linux-package-qa.yml`) after the workflow reaches main.
+It builds and tests all three packages on native x64 and ARM64 runners.
+Results and tested packages stay in Actions artifacts. It does not publish a
+release or upload to a store. After authorization to push and dispatch:
+
+```bash
+gh workflow run linux-package-qa.yml --ref main
+```
+
+The local RPM rebuild exposed a separate resource failure: Colima's kernel
+killed `rpmbuild` during multithreaded xz compression in its 2 GB VM. The RPM
+configuration now uses gzip to reduce memory use, at the cost of a larger
+archive. This change still needs a successful package build and smoke test.
+Do not restart shared Docker services to make room for QA.
+
 ## One-time setup: a Windows 11 VM in UTM
 
 This VM and the share serve every project that uses `scripts/crossplat/`.

@@ -28,11 +28,48 @@ Downloaded the original v0.1.2 ARM64 AppImage, deb and rpm. All three matched th
 | deb | Fails to start with missing shared libraries. | Explicit `deb.depends`, including `libgbm1` and `libasound2`, already landed on main. |
 | rpm | Fails to start with missing shared libraries. | Explicit `rpm.depends`, including `alsa-lib`, `mesa-libgbm` and `libsecret`, already landed on main. |
 
-The rebuilt ARM64 AppImage and deb both install and reach `app://-/login/` with no console or page errors. The corrected RPM remains unverified locally: this Mac lacks `rpmbuild`; isolated Linux rebuilds reached file processing, then `rpmbuild` exited without an exit status. No replacement RPM was produced. The native Linux release CI must build and smoke-test it before publication. These are local builds from current source, not replacements for the tagged release artifacts.
+The rebuilt ARM64 AppImage and deb both install and reach `app://-/login/` with no console or page errors. These are local builds from current source, not replacements for the tagged release artifacts.
+
+The corrected RPM remains unverified. Colima's kernel log confirms that its 2 GB VM killed `rpmbuild` during payload compression. The builder now selects `rpm.compression: "gzip"` instead of FPM's default multithreaded xz. This trades archive size for lower compression memory use. A new RPM still needs installation and startup verification. Further local builds paused when host swap use reached 9.5 GB. No shared Docker services were restarted.
 
 Release CI now runs `pnpm test:desktop:packages` on both native Linux architectures before the draft release job. It uploads screenshots and diagnostic logs even on failure. A new release must pass these checks; the old v0.1.2 run did not contain them.
 
-Limits: startup QA does not prove login, offline replay, updates, tray behavior, FUSE mounting or a real Wayland desktop. Those remain platform QA steps. This Mac verified ARM64 only; x64 runs in CI after a push.
+The separate [Linux Package QA workflow](../.github/workflows/linux-package-qa.yml) can run from main after these changes are pushed. It builds and tests AppImage, deb and rpm on native x64 and ARM64 runners, one architecture at a time. Every expected package must exist. It saves packages, screenshots and logs as Actions artifacts and has no store credentials or release-writing steps.
+
+Limits: package startup QA does not prove login, offline replay, updates, tray behavior, FUSE mounting or a real Wayland desktop. Those remain platform QA steps. This Mac verified ARM64 packages only.
+
+## Desktop and device QA
+
+The Linux x64 desktop harness passed **36 tests** in [main CI](https://github.com/trebeljahr/trackyourtime/actions/runs/36623447711), at `c879975f`. It covers the source app's authentication, session handling, offline/tray flows, shell and activity behavior. That result predates these package changes and does not verify rebuilt installers.
+
+Read-only local inventory found no UTM VMs and no connected iOS or Android devices. iOS 26.5 simulators and Android AVDs exist but are stopped. No simulator was booted while swap use was high. Phone-width browser tests are not native-device QA.
+
+Record the exact artifact version, OS/device and result for each remaining check:
+
+| Environment | Remaining checks |
+| --- | --- |
+| Linux x64 and ARM64 | Run the native package workflow; then test desktop entry/icon, tray and FUSE on a real desktop. |
+| macOS ARM64 and x64 | Install the signed/notarized artifact; check login, relaunch, tray, permission prompts and uninstall. |
+| Windows x64 and ARM64 | Install the Actions NSIS artifact in an isolated test machine; check login, relaunch, tray and uninstall. Verify the signed installer again once signing exists. |
+| Physical iPhone/iPad and Android | Install through TestFlight/Play testing; check login, background/resume, offline start/stop/reconnect, session expiry, keyboard/safe areas and native sharing. |
+| Desktop updater | Observe an update between two published versions, preserving the session and queued work. No published desktop release exists yet. |
+
+Use disposable QA accounts and profiles. Automated desktop tests must keep the headless mock keychain enabled; a separate user-data directory alone does not isolate the OS keychain.
+
+## Signing and store audit
+
+App Store Connect was queried with read-only GET requests on 30 September. Credential values, reviewer credentials and contact details were not printed or changed.
+
+| Channel | Verified state | Next step |
+| --- | --- | --- |
+| iOS | 0.1.2 build **501** is `VALID`, unexpired and `READY_FOR_BETA_TESTING` internally. External testing is `READY_FOR_BETA_SUBMISSION`. | Complete device QA. Match the submission version to the chosen build, then select that build. |
+| iOS listing | Version **0.1.1**, `PREPARE_FOR_SUBMISSION`, no selected build. Review contact/demo fields and notes are populated. English metadata exists; all eight screenshots are `COMPLETE`. | Resolve version/build mismatch and the outstanding trader/contact tasks from the vault before submitting. |
+| Mac App Store | Version **1.0**, `PREPARE_FOR_SUBMISSION`, no selected build. English description, keywords, support URL and screenshots are absent; review details are absent. No Mac build appeared in the app's returned build list. | Prepare matching-version metadata, screenshots and review details; upload the signed pkg after QA and authorization. |
+| macOS direct | CI verified signatures, hardened runtime, notarization and stapling for v0.1.2. Signing secrets are configured. | Complete installed-app QA and publish only a verified new desktop release. |
+| Windows | No certificate/Azure signing secrets or Partner Center identity variables are configured. | Choose or supply the existing signing setup and Store identity. No account was purchased or configured. |
+| Google Play | v0.1.2 CI signed and uploaded to testing. Current Console review/production state was not rechecked. | Complete device QA and inspect the Console's remaining review tasks before production submission. |
+
+Chrome/AMO and Snap submission credentials remain unset. Homebrew's token and `trebeljahr/homebrew-tap` repository variable are configured. Their presence does not prove a package-manager submission ran.
 
 ## Local validation
 
@@ -42,10 +79,11 @@ Limits: startup QA does not prove login, offline replay, updates, tray behavior,
 - `actionlint .github/workflows/desktop-release.yml` and `git diff --check` passed.
 - Desktop static export and Electron bundling succeeded. macOS cannot package rpm without `rpmbuild`, so RPM packaging uses a disposable Linux container.
 - Read-only production deployment gate passed. Required per-app webhook secret names exist in GitHub; no Coolify API token is present. Secret values and webhook execution were not tested.
+- Follow-up validation: 98 package/release unit tests passed. Both Linux QA/release workflows pass `actionlint`; electron-builder accepts the updated configuration schema. No new package build or native device test ran after the gzip change because host swap use was high.
 
 ## Before publishing
 
-- [ ] Deploy the project donation route on ricos.site first. `https://ricos.site/donate/track-your-time` returned 404 during this audit. Its local source is in the separate ricos.site checkout. Track Your Time's prepared links use that route and carry `returnTo`.
+- [ ] Donation route/deployment: owned by the user's separate chat. The earlier audit found a 404 at `https://ricos.site/donate/track-your-time`; this follow-up did not recheck or change it.
 - [ ] Push the integrated local main and confirm its CI and hosted deployment. The deployed commit above predates the per-app webhook deployment changes.
 - [ ] Prepare a new patch release containing the Linux fixes. Do not replace or retag v0.1.2. Keep its draft unpublished.
 - [ ] Verify both Linux architectures with the new CI package checks. Finish interactive macOS/Linux/Windows QA and test an update between published versions before claiming that path verified.

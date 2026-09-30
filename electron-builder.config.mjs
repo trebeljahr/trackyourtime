@@ -223,6 +223,9 @@ const config = {
   },
   rpm: {
     artifactName: "${name}-${version}.${arch}.${ext}",
+    // FPM's default xzmt compression exhausts a 2 GB Linux builder while
+    // packing Electron. gzip uses less memory; the larger RPM is intentional.
+    compression: "gzip",
     depends: [
       // electron-builder's defaults.
       "gtk3",

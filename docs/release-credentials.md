@@ -1,6 +1,7 @@
 # Release credentials — what is set, where it came from, what is missing
 
-Written 2026-09-23. The companion to `docs/deploy.md`, which explains how to
+Written 2026-09-23; configuration and release evidence rechecked 2026-09-30.
+The companion to `docs/deploy.md`, which explains how to
 *create* each credential. This file records what is **actually configured on
 `trebeljahr/trackyourtime` today**, the material it was built from, and the
 traps that cost time — so the next run does not rediscover them.
@@ -33,10 +34,12 @@ for both configurations, and `ios/App/ExportOptions.plist.template` is
 committed with `app-store-connect` / **manual** signing (the project itself
 stays automatic — docs/deploy.md → "Why iOS signs manually in CI").
 
-All seven iOS secrets are set as of 2026-09-27. The signed archive, the export
-and the TestFlight upload have still never run — the `v0.1.0` tag died at
-Archive before signing, and nothing has exercised the manual-signing path on a
-runner since. The next dispatch of Mobile Release is the first real test of it.
+All seven iOS secrets are set. The v0.1.2 [mobile release run](https://github.com/trebeljahr/trackyourtime/actions/runs/36388919330)
+successfully signed, exported and uploaded both mobile builds. App Store
+Connect confirms iOS 0.1.2 build 501 is valid and ready for internal beta
+testing. The submission record still says 0.1.1 and has no selected build.
+See [release readiness](release-readiness.md) for the store audit and device
+QA still required before public submission.
 
 **The portal offers two Apple Distribution certificates as a radio group**, so
 a profile carries exactly one: `MTQD5355Z8` (expires 2027-09-23, in CI) and
@@ -67,9 +70,9 @@ clone does not inherit it — re-add the three lines, or move them to
   `MAC verification failed during PKCS12 import (wrong password?)` — the
   password is fine, the MAC algorithm is not. Build the p12 with
   **`/usr/bin/openssl`** (LibreSSL), which macOS and the GitHub runners read.
-  Verify before trusting it: import into a throwaway keychain and check
-  `security find-identity -v -p codesigning <keychain>` prints one identity.
-  A silent `2>/dev/null` on the import hides exactly this failure.
+  Verify imports on the isolated signing runner. Local automated tests must
+  use fake credential stores, not the OS keychain. A silent `2>/dev/null` on
+  the import hides exactly this failure.
 - **Include the WWDR intermediate in the p12** (`-certfile`, from
   `https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer`), or the
   imported identity may not chain to a trusted root on the runner.
@@ -111,22 +114,35 @@ using Node's `sign("sha256", …, { key, dsaEncoding: "ieee-p1363" })`. The same
 token authenticates the screenshot uploads described in
 `docs/marketing/README.md`.
 
+## Desktop and package-manager credentials now configured
+
+Checked secret/variable names, without reading their values:
+
+| Channel | Configuration | Verification |
+| --- | --- | --- |
+| macOS direct download | `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD` and shared Apple API credentials | v0.1.2 CI verified signing, notarization and stapling. |
+| Mac App Store | `MAS_CSC_LINK`, `MAS_CSC_KEY_PASSWORD`, `MAS_PROVISIONING_PROFILE_BASE64`, `APPLE_TEAM_ID` | v0.1.2 CI verified the signed pkg. Upload and listing preparation remain separate. |
+| Homebrew cask | `HOMEBREW_TAP_TOKEN`; `HOMEBREW_TAP_REPO=trebeljahr/homebrew-tap` | Presence verified only. No tap write performed during this audit. |
+
+The [desktop run](https://github.com/trebeljahr/trackyourtime/actions/runs/36388919353)
+contains the signature verification steps. Signing success does not establish
+installed-app QA or public availability.
+
 ## Not set — what each channel still needs
 
 None of these blocks the iOS or Android store submission.
 
 | Channel | Secrets | What has to exist first |
 | --- | --- | --- |
-| Desktop, macOS direct download | `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD` | A Developer ID Application p12. The cert exists (`4T3QKPKL7R`); its key is in the Keychain, so either export it by hand or mint a CI one through the API as above. |
-| Desktop, Mac App Store | `MAS_CSC_LINK`, `MAS_CSC_KEY_PASSWORD`, `MAS_PROVISIONING_PROFILE_BASE64` | One p12 holding **both** Apple Distribution and Mac Installer Distribution, plus a Mac App Store provisioning profile. `APPLE_TEAM_ID` is already set. |
 | Desktop, Windows | `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`, or the Azure set (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TRUSTED_SIGNING_ENDPOINT`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, `AZURE_TRUSTED_SIGNING_PROFILE`, `AZURE_TRUSTED_SIGNING_PUBLISHER_NAME`) | A paid Azure Trusted Signing account, or a bought code-signing certificate. |
-| Homebrew cask | `HOMEBREW_TAP_TOKEN`, var `HOMEBREW_TAP_REPO` | A tap repository and a token that can push to it. |
+| Microsoft Store | Variables `WINDOWS_STORE_IDENTITY_NAME`, `WINDOWS_STORE_PUBLISHER`, `WINDOWS_STORE_PUBLISHER_DISPLAY_NAME` | The reserved app's identity from Partner Center. All three remain unset; the store build skips. |
 | Chrome Web Store | `CWS_SERVICE_ACCOUNT_JSON`, `CWS_PUBLISHER_ID` | A Google Cloud service account authorised for the Chrome Web Store API. Without both, a tag only uploads an artifact. |
 | Firefox add-ons | `AMO_JWT_ISSUER`, `AMO_JWT_SECRET` | An addons.mozilla.org API credential. |
+| Snap Store | `SNAPCRAFT_STORE_CREDENTIALS` | Store credentials for the registered snap. A successful skipped-upload step is not evidence of submission. |
 
 `docs/deploy.md` has the step-by-step for creating each.
 
-## What a first mobile release run does now
+## What a mobile release run does
 
 `.github/workflows/mobile-release.yml` on a `v*` tag: signs the AAB, uploads it
 to the Play track in the `MOBILE_PLAY_TRACK` variable (unset, so `internal`),
@@ -142,9 +158,9 @@ android: build=signed upload=true track=internal status=completed version=0.1.0
 ios:     build=signed upload=true version=0.1.0
 ```
 
-So a `v0.1.0` tag now produces a signed bundle on both stores rather than the
-`-unsigned` artifacts it would have produced before. Re-run it after changing
-any secret:
+The planner output above is historical configuration evidence. The v0.1.2
+run and App Store Connect audit now provide actual upload evidence. Re-run
+the local planner with placeholder values after changing a secret set:
 
 ```bash
 GITHUB_EVENT_NAME=push GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v0.1.0 \

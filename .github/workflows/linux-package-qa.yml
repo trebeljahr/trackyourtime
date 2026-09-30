@@ -1,0 +1,82 @@
+name: Linux Package QA
+
+# Explicit pre-release QA on native runners. No signing/store secrets,
+# release creation or uploads to a store; results stay in Actions artifacts.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    name: ${{ matrix.arch }} packages
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - arch: x64
+            os: ubuntu-24.04
+            appimage-arch: x86_64
+            deb-arch: amd64
+            rpm-arch: x86_64
+          - arch: arm64
+            os: ubuntu-24.04-arm
+            appimage-arch: arm64
+            deb-arch: arm64
+            rpm-arch: aarch64
+    runs-on: ${{ matrix.os }}
+    env:
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install RPM packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+      - name: Build native packages
+        run: node scripts/build-desktop.mjs --package --channel linux --linux AppImage deb rpm --${{ matrix.arch }}
+      - name: Install and launch every package
+        env:
+          APPIMAGE_ARCH: ${{ matrix.appimage-arch }}
+          DEB_ARCH: ${{ matrix.deb-arch }}
+          RPM_ARCH: ${{ matrix.rpm-arch }}
+        run: |
+          case "$(docker info --format '{{.Architecture}}')" in
+            x86_64|amd64) daemon_arch=x86_64 ;;
+            aarch64|arm64) daemon_arch=aarch64 ;;
+            *) echo "Unsupported Docker architecture" >&2; exit 1 ;;
+          esac
+          test "$(uname -m)" = "$RPM_ARCH"
+          test "$daemon_arch" = "$RPM_ARCH"
+          version=$(node -p 'require("./package.json").version')
+          pnpm test:desktop:packages \
+            "release/TrackYourTime-${version}-linux-${APPIMAGE_ARCH}.AppImage" \
+            "release/trackyourtime_${version}_${DEB_ARCH}.deb" \
+            "release/trackyourtime-${version}.${RPM_ARCH}.rpm"
+      - name: Upload QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-package-qa-${{ matrix.arch }}
+          path: |
+            test-results/linux-packages/
+            release/builder-effective-config.yaml
+          if-no-files-found: warn
+      - name: Upload tested packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages-${{ matrix.arch }}
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+          if-no-files-found: error
