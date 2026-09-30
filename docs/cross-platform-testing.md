@@ -252,7 +252,7 @@ gh workflow run linux-package-qa.yml --ref main
 The local RPM rebuild exposed a separate resource failure: Colima's kernel
 killed `rpmbuild` during multithreaded xz compression in its 2 GB VM. The RPM
 configuration now uses gzip to reduce memory use, at the cost of a larger
-archive. This change still needs a successful package build and smoke test.
+archive. Native CI run [36651056513](https://github.com/trebeljahr/trackyourtime/actions/runs/36651056513) passed RPM build, installation and startup on x64 and ARM64, alongside AppImage and deb.
 Do not restart shared Docker services to make room for QA.
 
 ## One-time setup: a Windows 11 VM in UTM
