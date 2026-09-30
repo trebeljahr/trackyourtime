@@ -341,6 +341,10 @@ down the reused simulator without deleting it.
 If iPad windowing rejects programmatic orientation changes, the runner records
 that check as blocked, keeps a nonzero exit status, and continues the independent
 app-flow checks. It does not change the shipping windowing policy to force a pass.
+An interactive follow-up can use Simulator’s Rotate toolbar to test device
+rotation independently. This passed the iPad login landscape layout at 1133×744
+on 30 September 2026, without horizontal overflow or captured errors. Keep the
+headless blocked result separate from that interactive result.
 
 Headless WKWebView checks do not establish iOS software-keyboard behavior,
 physical-device performance, or signed distribution-build acceptance. Keep those
