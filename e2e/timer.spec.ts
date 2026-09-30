@@ -396,11 +396,24 @@ test.describe("Timer", () => {
     );
     await start.fill("00:00");
     await start.press("Enter");
-    await started;
-    await expect(page.getByTestId("tracker-elapsed")).toHaveText(
-      /^(?:[1-9]|1\d|2[0-3]):\d{2}:\d{2}$/,
-      { timeout: 15_000 },
-    );
+    const response = await started;
+    type UpdatedEntryResponse = { result: { data: { start: string } } };
+    const body = (await response.json()) as UpdatedEntryResponse | UpdatedEntryResponse[];
+    const updated = Array.isArray(body) ? body[0] : body;
+    const startMs = Date.parse(updated.result.data.start);
+    expect(Number.isFinite(startMs)).toBe(true);
+
+    // Midnight is less than an hour ago before 01:00. Compare against the
+    // saved timestamp, which also keeps this valid across a date rollover.
+    await expect
+      .poll(async () => {
+        const elapsed = await page.getByTestId("tracker-elapsed").innerText();
+        const [hours, minutes, seconds] = elapsed.split(":").map(Number);
+        const displayed = hours * 3600 + minutes * 60 + seconds;
+        const now = await page.evaluate(() => Date.now());
+        return Math.abs(displayed - Math.floor((now - startMs) / 1000));
+      }, { timeout: 15_000 })
+      .toBeLessThanOrEqual(2);
 
     await page.getByTestId("tracker-toggle").click();
     await expect(runningBar(page)).toHaveCount(0);
