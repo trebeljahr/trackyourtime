@@ -14,16 +14,18 @@
 // Subpath imports from @starter/shared, not the bare specifier: a bare named
 // import throws under tsx, and a module that cannot be loaded by node:test is
 // a module whose money-stripping nobody checks. See ws-sync.test.ts:5-8.
-import type { Visibility } from "@starter/shared/types";
+import type { Visibility, WorkspaceRole } from "@starter/shared/types";
 import type { WebhookEnvelope } from "@starter/shared/webhooks";
 import {
   canSeeEntry,
+  canUseInvoices,
   projectEntryForVisibility,
 } from "@starter/shared/visibility";
 
 /**
  * The envelope as this subscription's owner may see it, or `null` when they
  * may not see the event at all (the caller records `skipped_visibility`).
+ * An omitted role denies invoices while preserving entry-only callers.
  *
  * Three rules, each of which leaks quietly if broken:
  *
@@ -33,10 +35,9 @@ import {
  *  - No `canViewOthersMoney` → a colleague's entry is delivered without its
  *    `hourlyRate`. `projectEntryForVisibility` owns that rule so the REST
  *    responses and this stream cannot disagree about it.
- *  - `invoice.*` is money end to end — a total, a set of line amounts, a rate
- *    per line. There is no non-money residue worth sending, so the whole
- *    event is withheld from an owner without `canViewOthersMoney` rather than
- *    delivered with holes punched in it.
+ *  - `invoice.*` requires owner/admin role and both time and money visibility,
+ *    matching the invoice routes. Check the live role as well as the flags
+ *    so queued events stop being deliverable after a downgrade.
  *
  * The switch is exhaustive with NO default arm: a new `WebhookEventData` kind
  * must fail to compile here, because the alternative is a new event shape
@@ -45,6 +46,7 @@ import {
 export function projectWebhookEnvelope(
   envelope: WebhookEnvelope,
   visibility: Visibility,
+  role: WorkspaceRole = "member",
 ): WebhookEnvelope | null {
   const data = envelope.data;
 
@@ -63,7 +65,7 @@ export function projectWebhookEnvelope(
     }
     case "invoice":
     case "invoice-status": {
-      if (!visibility.canViewOthersMoney) return null;
+      if (!canUseInvoices(role, visibility)) return null;
       return envelope;
     }
   }

@@ -6,8 +6,8 @@
 //
 // The order of operations is load-bearing:
 //   1. claim the row (so two sweeps cannot send it twice),
-//   2. project against the owner's LIVE visibility (permission changes since
-//      enqueue are honoured),
+//   2. project against the owner's LIVE role and visibility (permission
+//      changes since enqueue are honoured),
 //   3. re-resolve the URL and PIN the resolved address (DNS rebinding — a
 //      create-time check is decorative, and so is a check-then-`fetch`),
 //   4. serialize ONCE, sign that exact string, send that exact string.
@@ -15,7 +15,7 @@ import { lookup } from "node:dns/promises";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest, type RequestOptions } from "node:https";
 import { isIP } from "node:net";
-import type { Visibility } from "@starter/shared/types";
+import type { Visibility, WorkspaceRole } from "@starter/shared/types";
 import type { WebhookEnvelope } from "@starter/shared/webhooks";
 import { env } from "../../config/env.js";
 import { visibilityOf, WorkspaceMember } from "../../models/WorkspaceMember.js";
@@ -229,7 +229,7 @@ export function postSignedDelivery(
 }
 
 /**
- * The visibility a subscription's deliveries are projected against.
+ * The live role and visibility a subscription's deliveries are projected against.
  *
  * LIVE, read per delivery: the whole point of projecting at send time is that
  * this answer may have changed since the subscription was created. `null`
@@ -238,17 +238,17 @@ export function postSignedDelivery(
  * the delivery is skipped. Fail closed: a subscription created before
  * `createdBy` existed has an empty creator and matches no membership.
  */
-async function ownerVisibility(
+async function ownerMembership(
   workspaceId: string,
   userId: string,
-): Promise<Visibility | null> {
+): Promise<{ role: WorkspaceRole; visibility: Visibility } | null> {
   if (!userId) return null;
   const membership = await WorkspaceMember.findOne({
     workspaceId,
     userId,
   }).lean();
   if (!membership) return null;
-  return visibilityOf(membership);
+  return { role: membership.role, visibility: visibilityOf(membership) };
 }
 
 /** Record a terminal outcome that is not a failure of the endpoint. */
@@ -395,18 +395,19 @@ export async function deliverWebhook(deliveryId: string): Promise<void> {
     return;
   }
 
-  const visibility = await ownerVisibility(
+  const membership = await ownerMembership(
     subscription.workspaceId,
     subscription.createdBy,
   );
-  if (!visibility) {
+  if (!membership) {
     await markSkipped(target.deliveryId);
     return;
   }
 
   const envelope: WebhookEnvelope | null = projectWebhookEnvelope(
     delivery.envelope,
-    visibility,
+    membership.visibility,
+    membership.role,
   );
   if (!envelope) {
     await markSkipped(target.deliveryId);

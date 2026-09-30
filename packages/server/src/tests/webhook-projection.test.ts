@@ -180,32 +180,56 @@ describe("projectWebhookEnvelope — invoices", () => {
     { kind: "invoice" }
   >["invoice"];
 
-  it("withholds invoice.created without money visibility", () => {
-    const result = projectWebhookEnvelope(
-      envelopeFor("invoice.created", { kind: "invoice", invoice }),
-      visibility(true, false),
-    );
-    assert.equal(result, null);
-  });
+  const envelopes = [
+    envelopeFor("invoice.created", { kind: "invoice", invoice }),
+    envelopeFor("invoice.status_changed", {
+      kind: "invoice-status",
+      invoice,
+      from: "draft",
+      to: "sent",
+    }),
+  ];
 
-  it("withholds invoice.status_changed without money visibility", () => {
-    const result = projectWebhookEnvelope(
-      envelopeFor("invoice.status_changed", {
-        kind: "invoice-status",
-        invoice,
-        from: "draft",
-        to: "sent",
-      }),
-      visibility(true, false),
-    );
-    assert.equal(result, null);
-  });
+  for (const envelope of envelopes) {
+    for (const role of ["owner", "admin", "member"] as const) {
+      for (const time of [false, true]) {
+        for (const money of [false, true]) {
+          it(`${envelope.event}: ${role}, time=${time}, money=${money}`, () => {
+            const result = projectWebhookEnvelope(
+              envelope,
+              visibility(time, money),
+              role,
+            );
+            assert.equal(
+              result,
+              role !== "member" && time && money ? envelope : null,
+            );
+          });
+        }
+      }
+    }
 
-  it("delivers an invoice when money is visible", () => {
-    const result = projectWebhookEnvelope(
-      envelopeFor("invoice.created", { kind: "invoice", invoice }),
-      visibility(false, true),
-    );
-    assert.ok(result);
-  });
+    it(`${envelope.event}: missing role fails closed`, () => {
+      assert.equal(projectWebhookEnvelope(envelope, visibility(true, true)), null);
+    });
+
+    it(`${envelope.event}: reprojects queued payload after a downgrade`, () => {
+      assert.equal(
+        projectWebhookEnvelope(envelope, visibility(true, true), "admin"),
+        envelope,
+      );
+      assert.equal(
+        projectWebhookEnvelope(envelope, visibility(true, true), "member"),
+        null,
+      );
+      assert.equal(
+        projectWebhookEnvelope(envelope, visibility(false, true), "admin"),
+        null,
+      );
+      assert.equal(
+        projectWebhookEnvelope(envelope, visibility(true, false), "admin"),
+        null,
+      );
+    });
+  }
 });
