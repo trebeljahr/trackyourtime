@@ -346,6 +346,23 @@ rotation independently. This passed the iPad login landscape layout at 1133×744
 on 30 September 2026, without horizontal overflow or captured errors. Keep the
 headless blocked result separate from that interactive result.
 
+### Recovering native Simulator input
+
+If computer control returns `noWindowsAvailable` while Simulator screenshots
+still work, reset the computer-control session, reacquire Simulator by bundle ID
+(`com.apple.iphonesimulator`), choose **Window → Fit Screen**, and obtain a fresh
+screenshot before sending coordinate input. This sequence restored native taps
+on 30 September 2026. It is a verified recovery, not a root-cause diagnosis or a
+patch to the external control service.
+
+The interactive iPhone 17 / iOS 26.5 follow-up passed email entry through actual
+software keys, password focus/masked entry, keyboard dismissal and reopening.
+Both focused fields stayed visible; viewport height changed from 874 to 539
+points and back, with scale 1, no horizontal overflow and no captured errors.
+No login was submitted. Evidence is in
+`test-results/release-qa/native-2026-09-30/ios-keyboard/` in the primary checkout.
+These checks use the isolated QA build, not the signed distribution build.
+
 Headless WKWebView checks do not establish iOS software-keyboard behavior,
 physical-device performance, or signed distribution-build acceptance. Keep those
 release checklist items open until their corresponding checks have run.
