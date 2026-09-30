@@ -37,6 +37,7 @@ import { TRPCError } from "@trpc/server";
 import mongoose from "mongoose";
 import { randomBytes } from "node:crypto";
 import {
+  canUseInvoices,
   createWebhookSchema,
   idInputSchema,
   updateWebhookSchema,
@@ -44,11 +45,14 @@ import {
   type CreatedWebhookSubscription,
   type WebhookDeliveryWire,
   type WebhookSubscriptionWire,
+  type Visibility,
+  type WorkspaceRole,
   workspaceScopeSchema,
 } from "@starter/shared";
 import {
   WebhookDelivery,
   toClientWebhookDelivery,
+  type IWebhookDelivery,
 } from "../../models/WebhookDelivery.js";
 import {
   WebhookSubscription,
@@ -113,6 +117,35 @@ export function ownWebhookByIdFilter(
   createdBy: string,
 ): OwnWebhookByIdFilter {
   return { _id: id, ...ownWebhookFilter(workspaceId, createdBy) };
+}
+
+/** Filter event existence before pagination, including its look-ahead row. */
+function visibleDeliveryFilter(
+  role: WorkspaceRole,
+  visibility: Visibility,
+): mongoose.QueryFilter<IWebhookDelivery> {
+  // Allowlist known payload kinds: future kinds need an explicit policy.
+  // Use the stored author for deletions, whose entry no longer exists.
+  const visible: mongoose.QueryFilter<IWebhookDelivery>[] = [
+    {
+      "envelope.data.kind": "entry",
+      ...(visibility.canViewOthersTime
+        ? {}
+        : { "envelope.data.entry.authorId": visibility.userId }),
+    },
+    {
+      "envelope.data.kind": "entry-deleted",
+      ...(visibility.canViewOthersTime
+        ? {}
+        : { "envelope.data.authorId": visibility.userId }),
+    },
+  ];
+  if (canUseInvoices(role, visibility)) {
+    visible.push({
+      "envelope.data.kind": { $in: ["invoice", "invoice-status"] },
+    });
+  }
+  return { $or: visible };
 }
 
 export const webhooksRouter = router({
@@ -272,6 +305,11 @@ export const webhooksRouter = router({
         const rows = await WebhookDelivery.find({
           workspaceId: ctx.workspaceId,
           subscriptionId,
+          // Status is not authorization: pending/failed/delivered rows can
+          // now be hidden after a permission loss, while a previously skipped
+          // event may be visible after a grant. Filter every status using the
+          // current request's membership, before counts and cursors are made.
+          $and: [visibleDeliveryFilter(ctx.membership.role, ctx.visibility)],
           ...(decoded
             ? {
                 $or: [
