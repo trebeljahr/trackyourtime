@@ -77,7 +77,7 @@ App Store Connect was queried with read-only GET requests on 30 September. Crede
 | Mac App Store | Version **1.0**, `PREPARE_FOR_SUBMISSION`, no selected build. English description, keywords, support and marketing URLs were saved and verified through the API on 30 September. Screenshots and review details remain absent. No Mac build appeared in the returned build list. | Resolve the version/build choice, prepare Mac screenshots and review details, then upload the signed pkg after QA. |
 | macOS direct | CI verified signatures, hardened runtime, notarization and stapling for v0.1.2. Signing secrets are configured. | Complete installed-app QA and publish only a verified new desktop release. |
 | Windows | No certificate/Azure signing secrets or Partner Center identity variables are configured. | Choose or supply the existing signing setup and Store identity. No account was purchased or configured. |
-| Google Play | Console rechecked on 30 September: draft app, internal testing, production inactive. Setup showed 10/11 tasks complete; listing descriptions were blank despite existing icon, feature graphic and four phone screenshots. Both descriptions are now saved as draft changes. | Finish listing review, choose internal testers (the dashboard showed this task incomplete), complete device QA, then prepare production submission. |
+| Google Play | Console rechecked on 30 September: draft app, internal testing, production inactive. Setup showed 10/11 tasks complete; listing descriptions were blank despite existing icon, feature graphic and four phone screenshots. Both descriptions are now saved as draft changes. | Finish listing review, complete device QA, then prepare production submission. |
 
 ### Store preparation follow-up (30 September 2026)
 
@@ -123,3 +123,9 @@ Chrome/AMO and Snap submission credentials remain unset. Homebrew's token and `t
 An earlier dependency-update check failed typecheck because the newer two-factor enable response may be OTP-only. Main's pinned dependencies pass. That separate branch was not merged or validated by this QA work.
 
 Long-form launch and manual QA tasks live in the project vault's `trackyourtime` folder, in `tracktime-launch-checklist.md`, `tracktime-human-tasks.md` and `1-tracktime-manual-notes.md`.
+
+### Owner-only testing follow-up (30 September 2026)
+
+The user selected only their own account for Play testing. Created the `Rico only` email list with one owner account, selected it for Track Your Time internal testing, and saved. Console now reports the track **Active**, latest release **0.1.2**. The opt-in URL is https://play.google.com/apps/internaltest/4701618739995568640. No production release was made.
+
+Microsoft Partner Center sign-in now succeeds. Apple’s Free Apps Agreement is Active. The DSA contact form has the LLC address prefilled but still requires a calling code, contact phone and email. Existing LLC notes list the registered agent’s contact details, not a dedicated public developer contact. The form remains unsubmitted pending the user’s public contact choice. Notify the user when an actual agreement or identity-verification step needs their action.
