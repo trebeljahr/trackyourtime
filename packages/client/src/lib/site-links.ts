@@ -30,11 +30,10 @@ export const ISSUES_URL = `${REPO_URL}/issues`;
 export const CONTACT_EMAIL = "ricotrebeljahr@gmail.com";
 
 /**
- * The one donate page for all of Rico's projects, on ricos.site. `from` names
- * this project there and tags the payment; after paying, the page links back
- * to `/?supported=1` (lib/donation-return.ts). The footer's "Donate" link, and
- * the repo's FUNDING.yml, point here. Never linked inside the phone apps
- * (App Store 3.1.1, Google Play payments policy).
+ * The project's donate page on ricos.site. ProjectDonateLink adds the current
+ * web address as returnTo; after paying, that page adds supported=1 on return.
+ * Deploy the corresponding ricos.site route before deploying this address.
+ * Never linked inside the phone apps.
  */
 export const DONATE_URL = "https://ricos.site/donate/track-your-time";
 /**

@@ -1,7 +1,7 @@
 /**
  * The return trip from the shared donate page on ricos.site.
  *
- * After a payment that page links back to `https://trackyourtime.dev/?supported=1`.
+ * After a payment that page returns to the originating web page with `supported=1`.
  * On arrival the marketing site records when that happened and takes the
  * parameter out of the address bar, so a bookmark or a shared link does not
  * carry it on.
