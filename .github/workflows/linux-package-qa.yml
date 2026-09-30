@@ -43,7 +43,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rpm
       - name: Build native packages
-        run: node scripts/build-desktop.mjs --package --channel linux --linux AppImage deb rpm --${{ matrix.arch }}
+        run: node scripts/build-desktop.mjs --channel linux --package --linux AppImage deb rpm --${{ matrix.arch }}
       - name: Install and launch every package
         env:
           APPIMAGE_ARCH: ${{ matrix.appimage-arch }}
