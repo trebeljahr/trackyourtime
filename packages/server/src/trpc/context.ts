@@ -41,6 +41,10 @@ export async function createContext({ req, res }: CreateExpressContextOptions) {
   const auth = getAuth();
   const session = await auth.api.getSession({
     headers: fromNodeHeaders(req.headers),
+    // Authorization (including API-token creation) must observe revocation,
+    // not the five-minute session-data cookie. Keep normal session refresh
+    // enabled for active cookie and bearer/device clients.
+    query: { disableCookieCache: true },
   });
 
   if (session?.user) {
