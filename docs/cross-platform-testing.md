@@ -363,6 +363,20 @@ No login was submitted. Evidence is in
 `test-results/release-qa/native-2026-09-30/ios-keyboard/` in the primary checkout.
 These checks use the isolated QA build, not the signed distribution build.
 
+The iPad follow-up reproduced a focused password field below the visible area
+when rotating portrait to landscape with the keyboard open. The iOS-only
+`watchKeyboardVisibility` bridge watches focus and viewport resize events,
+waits for resizing to settle, and centers an editable field only when occluded.
+It ignores pinch zoom and does not subscribe to scroll events. Regression tests
+use the observed 316-point viewport and the original field bounds (369–409).
+The patched native build kept the field at 138–178 points after rotation and
+keyboard reopening. Dismissal restored the full 744-point landscape viewport.
+Portrait masked entry, rotation, dismissal and reopening passed with no overflow
+or captured errors. Evidence is in
+`test-results/release-qa/native-2026-09-30/ipad-keyboard/`; the same patched build
+also passed all nine native iPhone checks in `ios-rotation-fix-suite/`.
+Interactive window resizing and signed-in iPad landscape remain unverified.
+
 Headless WKWebView checks do not establish iOS software-keyboard behavior,
 physical-device performance, or signed distribution-build acceptance. Keep those
 release checklist items open until their corresponding checks have run.

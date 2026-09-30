@@ -9,6 +9,8 @@
 
 import type { StatusBar as StatusBarPlugin, Style as StyleEnum } from "@capacitor/status-bar";
 
+import { watchKeyboardVisibility } from "./keyboard-visibility";
+
 export interface MobileHandlers {
   /**
    * Android's hardware back button. Return `true` when the app consumed the
@@ -92,6 +94,9 @@ export async function initMobile(next: MobileHandlers = {}): Promise<void> {
   ]);
 
   if (!Capacitor.isNativePlatform()) return;
+
+  // WKWebView can leave the focused field below the keyboard after rotation.
+  if (Capacitor.getPlatform() === "ios") watchKeyboardVisibility();
 
   // app/layout.tsx already did both of these before the first paint — every
   // `html.cap` rule in styles/native.css has to be in force by then or the
