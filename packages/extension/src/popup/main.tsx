@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { loadPopupSnapshot } from "../lib/popup-snapshot";
 import { applyTheme, cachedTheme } from "./theme";
 import { resolveExtensionLocale } from "../i18n";
 import "./popup.css";
@@ -19,8 +20,12 @@ if (!container) {
   throw new Error("popup root element is missing from index.html");
 }
 
-createRoot(container).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+// Read the memory-only cache before mounting: an effect always paints the
+// loading screen first, even when the previous timer is already available.
+void loadPopupSnapshot().then((initialState) => {
+  createRoot(container).render(
+    <StrictMode>
+      <App initialState={initialState} />
+    </StrictMode>,
+  );
+});

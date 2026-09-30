@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { CatalogEditProvider, type CatalogEdit } from "./catalog-edit";
-import { loadPopupSnapshot } from "../lib/popup-snapshot";
 import { dayKeyInZone, deviceTimeZone, type QuickStart } from "@starter/core";
 import {
   sendToBackground,
@@ -68,9 +67,9 @@ const REFRESH_MS = 3000;
  */
 const DRAFT_MEMORY_DEBOUNCE_MS = 500;
 
-export function App(): JSX.Element {
+export function App({ initialState = null }: { initialState?: BackgroundState | null }): JSX.Element {
   const t = useT("popup");
-  const [state, setState] = useState<BackgroundState | null>(null);
+  const [state, setState] = useState<BackgroundState | null>(initialState);
   const [error, setError] = useState<string | null>(null);
 
   // `send` must keep a stable identity (it is a mount-effect dependency), yet
@@ -102,7 +101,7 @@ export function App(): JSX.Element {
   // it from state would make `send` change identity on every snapshot — and a
   // `send` that changes identity re-runs the mount effect below. A ref keeps
   // the message current and the callback stable.
-  const apiUrlRef = useRef(DEFAULT_API_URL);
+  const apiUrlRef = useRef(initialState?.apiUrl ?? DEFAULT_API_URL);
 
   /** True once the stack has been set by anything at all: a tap, or a restore. */
   const navigatedRef = useRef(false);
@@ -148,16 +147,7 @@ export function App(): JSX.Element {
   );
 
   useEffect(() => {
-    // Paint the last snapshot at once, then let the fresh one replace it —
-    // only if nothing fresher has landed first. See lib/popup-snapshot.ts.
-    void loadPopupSnapshot().then((snapshot) => {
-      if (snapshot === null) return;
-      setState((current) => {
-        if (current !== null) return current;
-        apiUrlRef.current = snapshot.apiUrl;
-        return snapshot;
-      });
-    });
+    // Refresh the cached first frame without blocking it on worker startup.
     void send({ type: "state:get" });
   }, [send]);
 
