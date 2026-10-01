@@ -116,6 +116,13 @@
       "type": "textfield",
       "required": false,
       "placeholder": "https://trackyourtime.dev"
+    },
+    {
+      "name": "errorReportDsn",
+      "title": "Error Report DSN",
+      "description": "Optional Sentry-compatible DSN for diagnostic errors. Leave empty to send no reports.",
+      "type": "password",
+      "required": false
     }
   ],
   "dependencies": {

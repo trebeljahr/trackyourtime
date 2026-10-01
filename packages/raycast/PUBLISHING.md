@@ -2,6 +2,12 @@
 
 This file is for maintainers and is not part of the store copy. The extension is developed in the Track Your Time monorepo, in `packages/raycast`. The store copy is exported into `packages/raycast/store`, a gitignored folder, and published from there.
 
+## Error reporting
+
+Raycast error reporting is opt-in per installation. The extension preference **Error Report DSN** accepts an HTTPS Sentry-compatible project DSN, including a self-hosted GlitchTip DSN. It is empty by default. An empty or invalid DSN causes no report request. A standalone Store export needs no environment variable or extra package; the export stamps its source commit into `src/lib/report-build.ts` for the release and build tags. To collect reports, configure the DSN in Raycast's extension preferences after installation.
+
+Only unexpected failures caught by command actions and the cached data loader are reported. Authentication, API and ordinary network failures stay in the existing user-facing error flow. The report contains an error type, scrubbed message, sanitized source file names and line numbers, the command source, Raycast platform tag, extension version and build ID. It contains no user, session token, request body, headers, breadcrumbs, descriptions from app state, or full local file paths. Message URLs lose query strings and fragments; bearer tokens and email addresses are redacted. The configured endpoint receives reports directly from Raycast when an unexpected error occurs. Raycast may also collect its own extension issues independently of this preference.
+
 **The code under `src/vendor/` is generated.** `scripts/vendor-core.mjs` copies it from `packages/core` and `packages/shared`, because the store installs the extension with `npm ci` and cannot resolve workspace packages. Never edit `src/vendor/`. Change `packages/core` or `packages/shared`, then run `pnpm vendor:raycast`. `scripts/vendor-core.test.mjs` fails when the copy is out of date.
 
 1. Export the store copy from the monorepo root. The Raycast Store requires the MIT license and your Raycast username:

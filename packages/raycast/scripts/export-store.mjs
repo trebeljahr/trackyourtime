@@ -405,14 +405,32 @@ export function exportStore(opts) {
     }
     fs.cpSync(from, path.join(outDir, name), { recursive: true, filter: (src) => path.basename(src) !== ".DS_Store" });
   }
-  const commit = (process.env.BUILD_COMMIT || process.env.GITHUB_SHA || spawnSync("git", ["rev-parse", "--short=12", "HEAD"], { cwd: REPO_DIR, encoding: "utf8" }).stdout).trim();
+  const commit = (
+    process.env.BUILD_COMMIT ||
+    process.env.GITHUB_SHA ||
+    spawnSync("git", ["rev-parse", "--short=12", "HEAD"], { cwd: REPO_DIR, encoding: "utf8" }).stdout
+  ).trim();
   if (!/^[0-9a-f]{7,40}$/i.test(commit)) throw new Error("Cannot stamp Raycast export: Git commit is unavailable.");
   const versionFile = path.join(outDir, "src/lib/version.ts");
-  fs.writeFileSync(versionFile, fs.readFileSync(versionFile, "utf8").replace('BUILD_ID = "development"', `BUILD_ID = "${commit.slice(0, 12)}"`));
+  fs.writeFileSync(
+    versionFile,
+    fs.readFileSync(versionFile, "utf8").replace('BUILD_ID = "development"', `BUILD_ID = "${commit.slice(0, 12)}"`),
+  );
   fs.writeFileSync(path.join(outDir, ".gitignore"), STORE_GITIGNORE);
   fs.writeFileSync(path.join(outDir, ".prettierignore"), STORE_PRETTIERIGNORE);
   const localDefaults = path.join(outDir, "src/lib/local-defaults.ts");
   fs.writeFileSync(localDefaults, storeLocalDefaults(fs.readFileSync(localDefaults, "utf8")));
+  const reportBuild = path.join(outDir, "src/lib/report-build.ts");
+  const sourceCommit = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], {
+    cwd: REPO_DIR,
+    encoding: "utf8",
+  }).stdout?.trim();
+  if (!/^[0-9a-f]{7,12}$/i.test(sourceCommit ?? ""))
+    throw new Error("Cannot stamp Raycast error reports: Git commit is unavailable.");
+  fs.writeFileSync(
+    reportBuild,
+    `/** Source commit of this Store export. */\nexport const REPORT_BUILD_ID = ${JSON.stringify(sourceCommit)};\n`,
+  );
   const vendorOut = path.join(outDir, "src/vendor");
   const walkVendor = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

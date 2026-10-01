@@ -11,7 +11,9 @@ type ExtensionPreferences = {
   /** API URL - Address of your Track Your Time server, for example https://api.example.com. Leave empty for the hosted server. */
   "apiUrl"?: string,
   /** Web App URL - Address of the matching web app, where you approve sign-in. Leave empty for the hosted web app. */
-  "webUrl"?: string
+  "webUrl"?: string,
+  /** Error Report DSN - Optional Sentry-compatible DSN for diagnostic errors. Leave empty to send no reports. */
+  "errorReportDsn"?: string
 }
 
 /** Preferences accessible in all the extension's commands */

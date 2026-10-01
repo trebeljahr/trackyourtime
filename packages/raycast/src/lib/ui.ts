@@ -2,6 +2,7 @@ import { LaunchType, Toast, launchCommand, openExtensionPreferences, showToast }
 import { ApiError, AuthError } from "../vendor/index.js";
 import { NotSignedInError, StillSyncingError } from "./errors.js";
 import { apiUrl } from "./preferences.js";
+import { reportRaycastError } from "./error-reporting-runtime.js";
 
 /**
  * Nudge the menu bar to re-read the timer.
@@ -99,6 +100,12 @@ export async function showFailureToast(error: unknown, title: string): Promise<v
       },
     });
     return;
+  }
+
+  // Server, network and sign-in failures are expected operational states.
+  // Only unexpected command failures produce diagnostic reports.
+  if (!(error instanceof ApiError) && !(error instanceof TypeError && error.message === "fetch failed")) {
+    reportRaycastError(error, title);
   }
 
   await showToast({
