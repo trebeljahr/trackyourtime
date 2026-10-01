@@ -99,7 +99,7 @@ describe("GoogleSignInButton", () => {
       expect(screen.getByTestId("google-sign-in")).toHaveAttribute("data-availability", "shell"),
     );
     expect(screen.getByTestId("google-sign-in-button")).toBeDisabled();
-    expect(screen.getByTestId("google-sign-in-note")).toHaveTextContent(/web app only/);
+    expect(screen.getByTestId("google-sign-in-note")).toHaveTextContent(/Sign in with your browser/);
     expect(useQuery.mock.calls.every(([, options]) => options.enabled === false)).toBe(true);
   });
 });

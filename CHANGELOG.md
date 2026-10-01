@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+This patch restored the hosted deployment and self-host client image builds
+for the 0.2 release. It did not change app behavior.
+
+### Fixed
+
+- Client tests include the new email-link auth plugin in their mocks and use
+  the current mobile Google sign-in text.
+- The self-host client image includes extension translations needed by the
+  client type checker.
+
 ## [0.2.0] - 2026-10-02
 
 The phone and desktop apps gained browser-based sign-in with an emailed link.

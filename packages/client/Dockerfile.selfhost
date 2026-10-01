@@ -50,6 +50,8 @@ COPY packages/core packages/core
 # type. Nothing from it is built or shipped.
 COPY packages/server packages/server
 COPY packages/client packages/client
+# Client catalog parity tests import these messages during Next type checking.
+COPY packages/extension/src/i18n/messages packages/extension/src/i18n/messages
 
 # Declared with an empty default so a plain `docker compose build` produces the
 # portable same-origin bundle without anyone having to remember the flag.

@@ -29,6 +29,7 @@ vi.mock("better-auth/react", () => ({
   }),
 }));
 vi.mock("better-auth/client/plugins", () => ({
+  magicLinkClient: () => ({}),
   deviceAuthorizationClient: () => ({}),
   twoFactorClient: () => ({}),
 }));
