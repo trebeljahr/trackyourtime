@@ -552,9 +552,12 @@ export function TrackerScreen({
                     onCommit={(start) => patchRunning({ start })}
                     testId="tracker-start-time"
                   />
-                  <span className="elapsed" data-testid="tracker-elapsed">
-                    {formatElapsed(elapsedSec, durationFormat, locale)}
-                  </span>
+                  <div className="tracker-clock__total">
+                    <span className="field__label">{t("fields.elapsedTime")}</span>
+                    <span className="elapsed" data-testid="tracker-elapsed">
+                      {formatElapsed(elapsedSec, durationFormat, locale)}
+                    </span>
+                  </div>
                 </div>
                 <button
                   className="button button--danger button--block"

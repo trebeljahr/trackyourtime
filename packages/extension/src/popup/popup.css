@@ -1822,6 +1822,14 @@ button.tag:hover .tag__x {
   flex: 0 0 100px;
 }
 
+.tracker-clock__total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
 /* Keep catalog colors visible after the picker closes. */
 .combobox--colored > .input {
   padding-left: 32px;

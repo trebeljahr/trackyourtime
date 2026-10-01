@@ -61,6 +61,7 @@ export const popup: Translation<typeof source> = {
   fields: {
     clientNeedsUpdate: "Server aktualisieren, um Kunden unabhängig zu wählen.",
     startTime: "Startzeit",
+    elapsedTime: "Vergangene Zeit",
     editProjectClient: "Projekt bearbeiten",
     clientFromProject: "Der Kunde wird im Projekt festgelegt.",
     description: "Beschreibung",

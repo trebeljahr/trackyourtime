@@ -70,6 +70,7 @@ export const popup = {
   fields: {
     clientNeedsUpdate: "Update the server to choose clients independently.",
     startTime: "Start time",
+    elapsedTime: "Elapsed time",
     editProjectClient: "Edit project",
     clientFromProject: "The client is set on the project.",
     description: "Description",

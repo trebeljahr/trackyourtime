@@ -244,6 +244,7 @@ describe("popup timer controls", () => {
     const startTime = controls.querySelector('[data-testid="tracker-start-time"]')!;
     const elapsed = controls.querySelector('[data-testid="tracker-elapsed"]')!;
     const stop = controls.querySelector('[data-testid="tracker-stop"]')!;
+    expect(controls.querySelector('.tracker-clock__total .field__label')?.textContent).toBe("Elapsed time");
     expect(startTime.compareDocumentPosition(elapsed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(elapsed.compareDocumentPosition(stop) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(host.querySelector('.timer-shortcuts')).toBeNull();
