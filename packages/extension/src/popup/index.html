@@ -4,12 +4,13 @@
     <meta charset="UTF-8" />
     <title>Track Your Time</title>
     <style>
-      /* The popup has no viewport of its own — Chrome sizes it to content,
-         so the width has to come from the document. */
+      /* Chrome sizes the popup to its document before CSS and React load.
+         Reserve the final size from the first frame. */
       html,
       body {
         margin: 0;
-        width: 380px;
+        width: 360px;
+        height: 580px;
       }
     </style>
   </head>
