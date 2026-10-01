@@ -47,7 +47,7 @@ android {
         // template's own "1.0" here and `cap sync` never touches it again.
         // scripts/build-mobile.mjs asserts the two agree, the same way it does
         // for MARKETING_VERSION on iOS.
-        versionName "0.2.1"
+        versionName "0.2.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
