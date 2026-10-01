@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from "../loading-skeleton";
 import type { JSX } from "react";
 import type {
   DurationFormat,
@@ -126,7 +127,7 @@ export function GeneralSection({
   const t = useT("popup");
   const locale = usePopupLocale();
   if (settings === null) {
-    return <p className="loading">{t("settings.loading")}</p>;
+    return <LoadingSkeleton variant="settings" label={t("settings.loading")} />;
   }
 
   // A currency the workspace already uses but that is not in the curated list

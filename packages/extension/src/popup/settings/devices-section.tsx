@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from "../loading-skeleton";
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { ClientKind, DeviceSession } from "@starter/core";
 import type { Locale } from "@starter/shared";
@@ -110,7 +111,7 @@ export function DevicesSection({
   };
 
   if (devices === null) {
-    return <p className="loading">{t("devices.loading")}</p>;
+    return <LoadingSkeleton variant="devices" label={t("devices.loading")} />;
   }
 
   return (

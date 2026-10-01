@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from "../loading-skeleton";
 import type { JSX } from "react";
 import {
   DEFAULT_MAX_DURATION_SETTINGS,
@@ -86,7 +87,7 @@ export function LimitsSection({
 }: LimitsSectionProps): JSX.Element {
   const t = useT("popup");
   if (settings === null) {
-    return <p className="loading">{t("settings.loading")}</p>;
+    return <LoadingSkeleton variant="settings" label={t("settings.loading")} />;
   }
 
   const { maxDuration } = settings;

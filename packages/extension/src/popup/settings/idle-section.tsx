@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from "../loading-skeleton";
 import type { JSX } from "react";
 import {
   IDLE_BEHAVIORS,
@@ -65,7 +66,7 @@ export function idleHint(settings: ResolvedSettings | null, t: PopupT): string {
 export function IdleSection({ settings, onSave }: IdleSectionProps): JSX.Element {
   const t = useT("popup");
   if (settings === null) {
-    return <p className="loading">{t("settings.loading")}</p>;
+    return <LoadingSkeleton variant="settings" label={t("settings.loading")} />;
   }
 
   const { idle } = settings;

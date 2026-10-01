@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from "./loading-skeleton";
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from "react";
 import {
   dayKeyInZone,
@@ -205,9 +206,7 @@ export function EntriesScreen({
           ) : null}
 
           {page === null ? (
-            <p className="loading" data-testid="entries-loading">
-              {t("app.loading")}
-            </p>
+            <LoadingSkeleton variant="entries" label={t("app.loading")} testId="entries-loading" />
           ) : page.entries.length === 0 ? (
             <>
               {/* A list screen the user deliberately navigated to has to

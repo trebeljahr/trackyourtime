@@ -526,10 +526,39 @@ button.tag:hover .tag__x {
   background: var(--warn);
 }
 
-.loading {
-  padding: 28px 12px;
-  text-align: center;
-  color: var(--muted);
+/* Content-shaped placeholders share the popup's light and dark palette. */
+.skeleton-block {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--border);
+}
+
+.loading-skeleton { width: 100%; }
+.loading-skeleton__heading { padding: 12px 0 8px; }
+.loading-skeleton__heading .skeleton-block { width: 84px; height: 8px; }
+.loading-skeleton__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 0;
+}
+.loading-skeleton__row + .loading-skeleton__row { border-top: 1px solid var(--border); }
+.loading-skeleton__text { flex: 1; min-width: 0; }
+.loading-skeleton__hint { width: 80%; height: 7px; margin-top: 9px; opacity: .6; }
+.loading-skeleton__icon { width: 30px; height: 30px; flex: none; border-radius: 8px; }
+.loading-skeleton--devices .loading-skeleton__icon { border-radius: 50%; }
+.loading-skeleton__value { width: 46px; height: 12px; flex: none; }
+.loading-skeleton__control { width: 88px; height: 30px; flex: none; }
+.loading-skeleton__input { width: 100%; height: 34px; margin-top: 10px; opacity: .6; }
+.loading-skeleton--detail .loading-skeleton__title { max-width: 88px; height: 8px; }
+.loading-skeleton--detail .loading-skeleton__row + .loading-skeleton__row { border-top: 0; }
+
+@keyframes skeleton-pulse {
+  50% { opacity: .45; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .loading-skeleton > div { animation: skeleton-pulse 2s ease-in-out infinite; }
 }
 
 .boot {

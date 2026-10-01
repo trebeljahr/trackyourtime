@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from "./loading-skeleton";
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from "react";
 import {
   dayKeyInZone,
@@ -210,9 +211,7 @@ export function EntryDetailScreen({
         ) : null}
 
         {entry === null || values === null ? (
-          <p className="loading" data-testid="entry-loading">
-            {t("app.loading")}
-          </p>
+          <LoadingSkeleton variant="detail" label={t("app.loading")} testId="entry-loading" />
         ) : (
           <div className="detail">
             {queued ? (

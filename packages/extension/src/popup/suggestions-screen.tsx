@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from "./loading-skeleton";
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from "react";
 import {
   dayKeyInZone,
@@ -383,9 +384,7 @@ export function SuggestionsScreen(props: SuggestionsScreenProps): JSX.Element {
         />
 
         {current === null ? (
-          <p className="loading" data-testid="suggestions-loading">
-            {t("app.loading")}
-          </p>
+          <LoadingSkeleton variant="suggestions" label={t("app.loading")} testId="suggestions-loading" />
         ) : current.length === 0 ? (
           <p className="entries__empty" data-testid="suggestions-empty">
             {t("suggestions.empty")}
