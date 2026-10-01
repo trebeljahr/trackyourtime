@@ -206,7 +206,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on">
           {error && (
             <div
               className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
@@ -222,7 +222,10 @@ export default function LoginPage() {
             </label>
             <input
               id="email"
+              name="username"
               type="email"
+              autoComplete="username"
+              autoCapitalize="none"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -237,6 +240,8 @@ export default function LoginPage() {
             </label>
             <PasswordInput
               id="password"
+              name="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

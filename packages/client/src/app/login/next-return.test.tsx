@@ -81,6 +81,14 @@ afterEach(() => {
 });
 
 describe("login ?next=", () => {
+  it("marks the login fields for password managers", () => {
+    render(<LoginPage />);
+    expect(screen.getByTestId("login-email")).toHaveAttribute("autocomplete", "username");
+    expect(screen.getByTestId("login-email")).toHaveAttribute("name", "username");
+    expect(screen.getByTestId("login-password")).toHaveAttribute("type", "password");
+    expect(screen.getByTestId("login-password")).toHaveAttribute("autocomplete", "current-password");
+  });
+
   it("returns to the invitation after signing in", async () => {
     visit(`?next=${encodeURIComponent("/invite/?id=inv1")}`);
     render(<LoginPage />);

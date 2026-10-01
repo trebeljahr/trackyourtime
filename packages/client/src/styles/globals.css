@@ -225,3 +225,23 @@ html[data-locale-pending] [data-locale-fixed] {
     );
   }
 }
+@keyframes startup-timer-bob {
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes startup-timer-tick {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes startup-timer-shadow {
+  50% { transform: scaleX(.8); opacity: .07; }
+}
+
+.startup-timer__face { fill: hsl(var(--brand) / .12); }
+.startup-timer__watch { animation: startup-timer-bob 2.4s ease-in-out infinite; }
+.startup-timer__hand { transform-origin: 40px 46px; animation: startup-timer-tick 6s steps(12, end) infinite; }
+.startup-timer__shadow { fill: currentColor; opacity: .12; transform-origin: 40px 81px; animation: startup-timer-shadow 2.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .startup-timer__watch, .startup-timer__hand, .startup-timer__shadow { animation: none; }
+}
