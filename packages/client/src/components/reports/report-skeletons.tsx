@@ -19,11 +19,11 @@ export function FilterBarSkeleton(): React.JSX.Element {
       {[10, 9.5, 9.5, 9.5, 9.5].map((width, index) => (
         <Skeleton
           key={index}
-          className="h-9 rounded-md"
+          className={index > 1 ? "hidden h-9 rounded-md sm:block" : "h-11 rounded-md"}
           style={{ width: `${width}rem` }}
         />
       ))}
-      <Skeleton className="h-9 w-56 rounded-md" />
+      <Skeleton className="hidden h-9 w-56 rounded-md sm:block" />
     </div>
   );
 }

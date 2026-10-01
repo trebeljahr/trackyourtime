@@ -72,23 +72,8 @@ export default defineConfig({
       testIgnore: [/[\\/]desktop[\\/]/, /mobile-shell\.spec\.ts/],
     },
     {
-      /*
-       * A phone-sized viewport against the SAME servers — no second build.
-       * What it guards is the one thing the Simulator cannot show: that
-       * styles/native.css is inert on web. Every rule in that file is under
-       * `html.cap`, and this asserts at 390pt that the class is absent and
-       * the web layout is intact.
-       *
-       * `Pixel 5` (chromium), not `iPhone 14` (webkit), for one boring
-       * reason: .github/workflows/build-and-deploy.yml installs only
-       * chromium, so a webkit project would fail the E2E job at startup for
-       * every PR in the repo, mobile or not. The assertions here are about
-       * CSS scoping and layout width, which no engine disagrees about.
-       *
-       * `testMatch` is not optional either: the config runs `workers: 1,
-       * fullyParallel: false`, so an unscoped second project would re-run
-       * the entire suite serially in a second browser.
-       */
+      // Shared mobile UX on the same export as desktop/native. Chromium is
+      // installed in CI; native safe areas retain their own platform markers.
       name: "phone",
       use: { ...devices["Pixel 5"] },
       testMatch: /mobile-shell\.spec\.ts/,

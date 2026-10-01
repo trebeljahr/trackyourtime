@@ -5,7 +5,15 @@ import { useSearchParams } from "next/navigation";
 import { BarChart3, Clock, Receipt } from "lucide-react";
 import type { SummaryGroup } from "@starter/shared";
 
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import { EmptyState } from "@/components/empty-state";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PROJECT_LIST_INPUT } from "@/components/catalog/types";
@@ -62,12 +70,17 @@ export function TotalsView({
   memberReporting = false,
 }: ReportViewProps): React.JSX.Element {
   const { state, filters: reportFilters, setParam, getParam, drill } = filters;
+  const phone = usePhoneLayout();
+  const [section, setSection] = React.useState("groups");
   const fmt = useFormatSettings();
   const f = useFormat();
   const t = useT("reports");
   const tc = useT("common");
   const searchParams = useSearchParams();
-  const groupBy = effectiveGroupBy(getParam(REPORT_PARAM.groupBy), memberReporting);
+  const groupBy = effectiveGroupBy(
+    getParam(REPORT_PARAM.groupBy),
+    memberReporting,
+  );
 
   const groupByOptions = groupByOptionsFor(memberReporting);
 
@@ -77,7 +90,7 @@ export function TotalsView({
 
   const query = trpc.reports.summary.useQuery(
     { ...reportFilters, groupBy },
-    { staleTime: 15_000, placeholderData: (previous) => previous }
+    { staleTime: 15_000, placeholderData: (previous) => previous },
   );
 
   const result = query.data;
@@ -102,7 +115,8 @@ export function TotalsView({
   >(() => {
     if (groupBy !== "project") return undefined;
     const projects = projectsQuery.data ?? [];
-    if (projects.every((project) => project.progress === null)) return undefined;
+    if (projects.every((project) => project.progress === null))
+      return undefined;
 
     const views = new Map<string, BudgetView | null>(
       projects.map((project) => [
@@ -130,10 +144,10 @@ export function TotalsView({
             group.key.length === 7 ? `${group.key}-01` : group.key,
             groupBy,
             true,
-            f.locale
+            f.locale,
           )
         : group.label,
-    [groupBy, f.locale]
+    [groupBy, f.locale],
   );
 
   /**
@@ -161,7 +175,7 @@ export function TotalsView({
       if (param === undefined) return null;
       return { [param]: group.key, [REPORT_VIEW_PARAM]: "entries" };
     },
-    [groupBy, state.range]
+    [groupBy, state.range],
   );
 
   const hrefForGroup = React.useCallback(
@@ -175,7 +189,7 @@ export function TotalsView({
       }
       return reportsHref("entries", next);
     },
-    [patchForGroupEntries, searchParams]
+    [patchForGroupEntries, searchParams],
   );
 
   const drillIntoEntries = React.useCallback(
@@ -183,7 +197,7 @@ export function TotalsView({
       const patch = patchForGroupEntries(group);
       if (patch !== null) drill(patch, labelForGroup(group));
     },
-    [drill, labelForGroup, patchForGroupEntries]
+    [drill, labelForGroup, patchForGroupEntries],
   );
 
   /**
@@ -194,21 +208,32 @@ export function TotalsView({
    */
   const drillIntoGroup = React.useCallback(
     (group: SummaryGroup): void => {
-      const patch = drillIntoGroupPatch(groupBy, group.key, state, memberReporting);
+      const patch = drillIntoGroupPatch(
+        groupBy,
+        group.key,
+        state,
+        memberReporting,
+      );
       if (patch !== null) drill(patch, labelForGroup(group));
     },
-    [drill, groupBy, labelForGroup, memberReporting, state]
+    [drill, groupBy, labelForGroup, memberReporting, state],
   );
 
   /** A timeline bar narrows the date range to the day, week or month it covers. */
   const drillIntoBucket = React.useCallback(
     (bucket: TimelineBucket, granularity: TimelineGranularity): void => {
       drill(
-        drillIntoBucketPatch(bucket.date, granularity, groupBy, state, memberReporting),
-        formatBucketLabel(bucket.date, granularity, true, f.locale)
+        drillIntoBucketPatch(
+          bucket.date,
+          granularity,
+          groupBy,
+          state,
+          memberReporting,
+        ),
+        formatBucketLabel(bucket.date, granularity, true, f.locale),
       );
     },
-    [drill, f.locale, groupBy, memberReporting, state]
+    [drill, f.locale, groupBy, memberReporting, state],
   );
 
   const kpis = React.useMemo<KpiItem[]>(() => {
@@ -216,7 +241,9 @@ export function TotalsView({
     const billableSec = result?.billableSec ?? 0;
     const nonBillableSec = Math.max(0, totalSec - billableSec);
     const percent = (part: number, whole: number): string =>
-      whole > 0 ? t("kpi.shareOfTracked", { percent: f.percent(part / whole) }) : "";
+      whole > 0
+        ? t("kpi.shareOfTracked", { percent: f.percent(part / whole) })
+        : "";
     return [
       {
         label: t("kpi.totalTracked"),
@@ -269,8 +296,40 @@ export function TotalsView({
         project has a budget set.
       */}
 
+      <div className="flex items-center gap-3 sm:hidden">
+        <label
+          id="mobile-group-label"
+          className="shrink-0 text-sm text-muted-foreground"
+        >
+          {t("groupBy.label")}
+        </label>
+        <Select
+          value={groupBy}
+          onValueChange={(value) =>
+            setParam(
+              REPORT_PARAM.groupBy,
+              value === DEFAULT_GROUP_BY ? null : value,
+            )
+          }
+        >
+          <SelectTrigger
+            aria-labelledby="mobile-group-label"
+            className="flex-1"
+            data-testid="mobile-groupby"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {groupByOptions.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {tc(option.labelKey)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <div
-        className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1"
+        className="hidden flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1 sm:flex"
         role="group"
         aria-label={t("groupBy.label")}
         data-testid="groupby-switch"
@@ -285,11 +344,14 @@ export function TotalsView({
             size="sm"
             variant={option.id === groupBy ? "secondary" : "ghost"}
             aria-pressed={option.id === groupBy}
-            className={cn("font-normal", option.id === groupBy && "font-medium")}
+            className={cn(
+              "font-normal",
+              option.id === groupBy && "font-medium",
+            )}
             onClick={() =>
               setParam(
                 REPORT_PARAM.groupBy,
-                option.id === DEFAULT_GROUP_BY ? null : option.id
+                option.id === DEFAULT_GROUP_BY ? null : option.id,
               )
             }
             data-testid={`groupby-${option.id}`}
@@ -299,31 +361,64 @@ export function TotalsView({
         ))}
       </div>
 
-      {isLoading ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ChartSkeleton testId="timeline-chart-skeleton" />
-          <ChartSkeleton testId="breakdown-chart-skeleton" />
+      <div
+        className="report-section-switch grid grid-cols-3 rounded-lg bg-muted p-1 sm:hidden"
+        role="group"
+        aria-label={t("screen.sections.label")}
+      >
+        {(["groups", "timeline", "breakdown"] as const).map((value) => (
+          <Button
+            key={value}
+            className={cn(section === value && "bg-background shadow-sm")}
+            variant="ghost"
+            aria-pressed={section === value}
+            onClick={() => setSection(value)}
+            data-testid={`report-section-${value}`}
+          >
+            {t(`screen.sections.${value}`)}
+          </Button>
+        ))}
+      </div>
+      <div
+        className={cn(
+          "gap-4 sm:grid lg:grid-cols-2",
+          section === "groups" && "hidden",
+        )}
+      >
+        <div className={cn(section !== "timeline" && "hidden sm:block")}>
+          {isLoading ? (
+            <ChartSkeleton testId="timeline-chart-skeleton" />
+          ) : result && (!phone || section === "timeline") ? (
+            <TimelineChart
+              timeline={result.timeline}
+              duration={fmt.duration}
+              weekStartsOn={fmt.weekStartsOn}
+              onSelectBucket={drillIntoBucket}
+            />
+          ) : null}
         </div>
-      ) : result ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <TimelineChart
-            timeline={result.timeline}
-            duration={fmt.duration}
-            weekStartsOn={fmt.weekStartsOn}
-            onSelectBucket={drillIntoBucket}
-          />
-          <GroupBreakdownChart
-            groups={result.groups}
-            totalSec={result.totalSec}
-            duration={fmt.duration}
-            money={fmt.money}
-            groupBy={groupBy}
-            onSelectGroup={drillIntoGroup}
-          />
+        <div className={cn(section !== "breakdown" && "hidden sm:block")}>
+          {isLoading ? (
+            <ChartSkeleton testId="breakdown-chart-skeleton" />
+          ) : result && (!phone || section === "breakdown") ? (
+            <GroupBreakdownChart
+              groups={result.groups}
+              totalSec={result.totalSec}
+              duration={fmt.duration}
+              money={fmt.money}
+              groupBy={groupBy}
+              onSelectGroup={drillIntoGroup}
+            />
+          ) : null}
         </div>
-      ) : null}
+      </div>
 
-      <Card>
+      <Card
+        className={cn(
+          "report-groups",
+          section !== "groups" && "hidden sm:block",
+        )}
+      >
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">
             {t("groupBy.totalsTitle", { groupBy })}
@@ -331,7 +426,11 @@ export function TotalsView({
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <TableSkeleton rows={6} columns={5} testId="summary-table-skeleton" />
+            <TableSkeleton
+              rows={6}
+              columns={5}
+              testId="summary-table-skeleton"
+            />
           ) : isEmpty || result === undefined ? (
             <EmptyState
               icon={BarChart3}

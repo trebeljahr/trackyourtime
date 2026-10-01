@@ -135,7 +135,7 @@ export function ProjectsTable({
   return (
     <>
       <div className="rounded-lg border border-border">
-        <Table data-testid="projects-table">
+        <Table className="mobile-records" data-testid="projects-table">
           <TableHeader>
             <TableRow>
               <TableHead>{tc("fields.project")}</TableHead>
@@ -155,7 +155,7 @@ export function ProjectsTable({
                     data-testid={`project-row-${project.id}`}
                     data-archived={project.archived ? "true" : "false"}
                   >
-                    <TableCell>
+                    <TableCell data-mobile-primary="true" data-label={tc("fields.project")}>
                       <CatalogName
                         name={project.name}
                         color={project.color}
@@ -166,7 +166,7 @@ export function ProjectsTable({
                       />
                     </TableCell>
 
-                    <TableCell className="text-muted-foreground">
+                    <TableCell data-label={tc("fields.client")} className="text-muted-foreground">
                       {project.clientName ? (
                         <CatalogName
                           name={project.clientName}
@@ -190,7 +190,7 @@ export function ProjectsTable({
                       )}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell data-label={t("columns.billing")}>
                       <ProjectBillingCell
                         project={project}
                         prompt={applyPrompt}
@@ -198,7 +198,7 @@ export function ProjectsTable({
                       />
                     </TableCell>
 
-                    <TableCell
+                    <TableCell data-label={t("columns.tracked")}
                       className="text-right tabular-nums"
                       data-testid={`project-tracked-${project.id}`}
                     >
@@ -212,7 +212,7 @@ export function ProjectsTable({
                       </EntriesLink>
                     </TableCell>
 
-                    <TableCell data-testid={`project-budget-${project.id}`}>
+                    <TableCell data-label={t("columns.budget")} data-testid={`project-budget-${project.id}`}>
                       <BudgetMeterCell
                         view={budgetView(project.progress, budgetFormat)}
                         emptyLabel={t("projects.noBudget")}
@@ -220,7 +220,7 @@ export function ProjectsTable({
                       />
                     </TableCell>
 
-                    <TableCell
+                    <TableCell data-label={t("columns.entries")}
                       className="text-right tabular-nums text-muted-foreground"
                       data-testid={`project-entries-${project.id}`}
                     >
@@ -234,7 +234,7 @@ export function ProjectsTable({
                       </EntriesLink>
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell data-mobile-actions="true">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button

@@ -49,6 +49,7 @@ import { formatDayRangeLabel } from "./day-range-label";
 import { EntryCreateDialog, type CreateDraft } from "./entry-create-dialog";
 import { MonthView } from "./month-view";
 import { TimeGrid } from "./time-grid";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import { useCoarsePointer } from "./use-coarse-pointer";
 import { YearView } from "./year-view";
 import {
@@ -135,11 +136,12 @@ export function CalendarScreen(): React.JSX.Element {
   // Seven columns after a 3.5rem gutter leave ~44px per day at 390pt, which
   // is a week grid nobody can read, let alone tap.
   const coarsePointer = useCoarsePointer();
+  const phone = usePhoneLayout();
 
   const viewParam = searchParams.get("view");
   const view: CalendarView = isCalendarView(viewParam)
     ? viewParam
-    : coarsePointer
+    : coarsePointer || phone
       ? "day"
       : "week";
   const anchor = parseDateParam(searchParams.get("date"));

@@ -13,6 +13,7 @@ export const reports: Translation<typeof source> = {
   },
 
   screen: {
+    sections: { label: "Berichtsbereich", groups: "Gruppen", timeline: "Verlauf", breakdown: "Verteilung" },
     title: "Berichte",
     viewLabel: "Berichtsansicht",
     views: {
@@ -46,6 +47,8 @@ export const reports: Translation<typeof source> = {
   },
 
   filters: {
+    label: "Filter",
+    showResults: "Ergebnisse anzeigen",
     allEntries: "Alle Einträge",
     searchDescriptions: "Beschreibungen durchsuchen",
     clients: {
@@ -141,6 +144,7 @@ export const reports: Translation<typeof source> = {
   },
 
   detailed: {
+    details: "Details",
     selectAll: "Alle geladenen Einträge auswählen",
     selectEntry: "Eintrag „{description}“ auswählen",
     selectEntryUntitled: "Eintrag ohne Beschreibung auswählen",
@@ -193,6 +197,7 @@ export const reports: Translation<typeof source> = {
   },
 
   invoices: {
+    backToList: "Alle Rechnungen",
     description:
       "Rechne erfasste Zeit aus einem Zeitraum mit einem Kunden ab. Schon abgerechnete Zeit wird nie ein zweites Mal angeboten.",
     count: "{count, plural, one {# Rechnung} other {# Rechnungen}}",

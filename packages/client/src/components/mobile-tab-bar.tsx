@@ -8,21 +8,9 @@ import { useT } from "@/i18n/use-t";
 import { isActiveRoute } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
-/**
- * The native shell's bottom tab bar.
- *
- * THREE tabs, and the third is not a screen: More opens the app's EXISTING
- * nav drawer with the EXISTING `NAV_SECTIONS`. There is deliberately no
- * second list of destinations to keep in step — a screen added to the web
- * sidebar appears on the phone the same day, one level down, instead of
- * silently not existing there.
- *
- * It is rendered unconditionally and hidden with `hidden` (display: none),
- * which styles/native.css undoes under `html.cap`. Returning `null` on
- * `!isCapacitor()` instead would be a hydration mismatch: `output: "export"`
- * prerenders every page in Node, where `window.Capacitor` cannot exist, so
- * the served HTML has the bar and the native hydration would not.
- */
+/** Shared bottom navigation, revealed by mobile.css below the sidebar
+ * breakpoint and by native.css on Capacitor tablets. Always rendered so the
+ * static export and hydration agree. More opens the existing full nav drawer. */
 
 type Tab = {
   /** Test id suffix and message key under `shell.tabBar`, resolved at render. */
@@ -81,8 +69,6 @@ export function MobileTabBar({
 
   return (
     <nav
-      // `hidden` is the whole web story: display:none everywhere, undone only
-      // by `html.cap [data-testid="mobile-tab-bar"]` in styles/native.css.
       className="hidden fixed inset-x-0 bottom-0 z-40 items-stretch border-t border-border bg-background/95 backdrop-blur"
       data-testid="mobile-tab-bar"
       aria-label={t("tabBar.label")}
@@ -99,7 +85,7 @@ export function MobileTabBar({
         const className = cn(
           "flex flex-1 flex-col items-center justify-center gap-1 py-2 text-xs transition-colors",
           active
-            ? "font-medium text-foreground"
+            ? "font-semibold text-brand"
             : "text-muted-foreground"
         );
 

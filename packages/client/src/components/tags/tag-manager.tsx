@@ -153,7 +153,7 @@ export function TagManager(): React.JSX.Element {
         />
       ) : (
         <div className="rounded-lg border border-border">
-          <Table data-testid="tags-table">
+          <Table className="mobile-records" data-testid="tags-table">
             <TableHeader>
               <TableRow>
                 <TableHead>{tc("fields.tag")}</TableHead>
@@ -169,7 +169,7 @@ export function TagManager(): React.JSX.Element {
                   data-testid={`tag-row-${tag.id}`}
                   data-archived={tag.archived ? "true" : "false"}
                 >
-                  <TableCell>
+                  <TableCell data-mobile-primary="true" data-label={tc("fields.tag")}>
                     <CatalogName
                       name={tag.name}
                       color={tag.color}
@@ -180,7 +180,7 @@ export function TagManager(): React.JSX.Element {
                     />
                   </TableCell>
 
-                  <TableCell
+                  <TableCell data-label={t("columns.entries")}
                     className="text-right tabular-nums text-muted-foreground"
                     data-testid={`tag-entries-${tag.id}`}
                   >
@@ -194,7 +194,7 @@ export function TagManager(): React.JSX.Element {
                     </EntriesLink>
                   </TableCell>
 
-                  <TableCell
+                  <TableCell data-label={t("columns.tracked")}
                     className="text-right tabular-nums"
                     data-testid={`tag-tracked-${tag.id}`}
                   >
@@ -208,7 +208,7 @@ export function TagManager(): React.JSX.Element {
                     </EntriesLink>
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell data-mobile-actions="true">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button

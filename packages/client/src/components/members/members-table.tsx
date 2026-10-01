@@ -72,7 +72,7 @@ export function MembersTable({
 
   return (
     <div className="overflow-x-auto" data-testid="members-table">
-      <Table>
+      <Table className="mobile-records mobile-member-records">
         <TableHeader>
           <TableRow>
             <TableHead>{t("table.name")}</TableHead>
@@ -90,7 +90,7 @@ export function MembersTable({
             const id = row.memberId;
             return (
               <TableRow key={id} data-testid={`member-row-${id}`} data-role={row.role}>
-                <TableCell>
+                <TableCell data-label={t("table.name")} data-mobile-primary="true">
                   <div className="flex min-w-0 flex-col">
                     <span className="flex items-center gap-2 font-medium">
                       <span className="truncate" data-testid={`member-name-${id}`}>
@@ -111,7 +111,7 @@ export function MembersTable({
                   </div>
                 </TableCell>
 
-                <TableCell>
+                <TableCell data-label={t("table.role")}>
                   {controls.roleSelect ? (
                     <select
                       className={NATIVE_SELECT_CLASS}
@@ -140,7 +140,7 @@ export function MembersTable({
                   )}
                 </TableCell>
 
-                <TableCell>
+                <TableCell data-label={t("table.time")}>
                   {controls.timeToggle ? (
                     <Switch
                       checked={row.canViewOthersTime}
@@ -161,7 +161,7 @@ export function MembersTable({
                   )}
                 </TableCell>
 
-                <TableCell>
+                <TableCell data-label={t("table.money")}>
                   {controls.moneyToggle ? (
                     <Switch
                       checked={row.canViewOthersMoney}
@@ -182,11 +182,11 @@ export function MembersTable({
                   )}
                 </TableCell>
 
-                <TableCell className="whitespace-nowrap text-muted-foreground">
+                <TableCell data-label={t("table.joined")} className="whitespace-nowrap text-muted-foreground">
                   {format.date(row.joinedAt, "medium")}
                 </TableCell>
 
-                <TableCell className="text-right">
+                <TableCell data-label={t("table.actions")} className="text-right">
                   <div className="flex justify-end gap-2">
                     {controls.transfer ? (
                       <Button

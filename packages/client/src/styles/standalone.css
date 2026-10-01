@@ -27,19 +27,8 @@
  * browser, with no marker class at all. Keeping them in their own file keeps
  * the other file's rule absolute.
  *
- * WHAT IS AND IS NOT COPIED. Only the safe-area geometry: the header, the
- * sticky tracker bar under it, the bottom of the page, the drawer and the
- * dialog. NOT the tab bar (the PWA has none — it uses the web app's own
- * hamburger drawer), NOT the 16px field override (a browser PWA still lets the
- * user pinch out of an iOS focus zoom; the WebView does not), NOT `.cap-touch`
- * or the two-row composer, which are native-app layout decisions rather than
- * safe-area correctness.
- *
- * `html:not(.cap)` on every selector so these can never stack with
- * `native.css`: an Android WebView may well report `display-mode: standalone`,
- * and `--app-main`'s padding is the one value that legitimately differs
- * between the two (the native app has a tab bar to clear, the PWA does not).
- * On a desktop installed PWA every inset is 0px and the whole file is inert.
+ * Shared phone content, inputs and navigation live in mobile.css. This file
+ * only supplies installed-browser safe areas; it never matches Capacitor.
  */
 
 @media (display-mode: standalone) {
@@ -67,7 +56,7 @@
    * 3.5rem for a bar the PWA never shows.
    */
   html:not(.cap) [data-testid="app-main"] {
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(1rem + var(--app-tab-bar-offset, env(safe-area-inset-bottom, 0px)));
   }
 
   html:not(.cap) [data-testid="sidebar-mobile"] {

@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { FilePlus, Plus } from "lucide-react";
+import { ArrowLeft, FilePlus, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/use-t";
 import { useServerSupports } from "@/lib/server-level";
+import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { InvoiceDetail } from "./invoice-detail";
 import { InvoiceList } from "./invoice-list";
@@ -24,6 +25,13 @@ export function InvoicesScreen(): React.JSX.Element {
   const t = useT("reports");
   const list = trpc.invoices.list.useQuery(INVOICE_LIST_INPUT);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const detailRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (selectedId && window.matchMedia("(width < 40rem)").matches) {
+      detailRef.current?.focus({ preventScroll: true });
+      detailRef.current?.scrollIntoView({ block: "start" });
+    }
+  }, [selectedId]);
   // Which create flow is open: over tracked time, or a blank invoice.
   const [creating, setCreating] = React.useState<"time" | "blank" | null>(null);
   const [linkedId, setLinkedId] = React.useState<string | null>(null);
@@ -42,19 +50,24 @@ export function InvoicesScreen(): React.JSX.Element {
   }, []);
   if (linkedId !== null && list.data) {
     setLinkedId(null);
-    if (list.data.invoices.some((invoice) => invoice.id === linkedId)) setSelectedId(linkedId);
+    if (list.data.invoices.some((invoice) => invoice.id === linkedId))
+      setSelectedId(linkedId);
   }
 
   const invoices: InvoiceRow[] = list.data?.invoices ?? [];
   // Resolved from the list rather than held as its own object, so a status
   // change or a delete landing in the cache is reflected here immediately
   // instead of leaving a stale copy on screen.
-  const selected = invoices.find((invoice) => invoice.id === selectedId) ?? null;
+  const selected =
+    invoices.find((invoice) => invoice.id === selectedId) ?? null;
 
   return (
     <div className="space-y-6" data-testid="invoices-screen">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground" data-testid="invoices-count">
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="invoices-count"
+        >
           {t("invoices.count", { count: invoices.length })}
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -75,20 +88,36 @@ export function InvoicesScreen(): React.JSX.Element {
         </div>
       </div>
 
-      <InvoiceList
-        invoices={invoices}
-        isLoading={list.isPending}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-        onCreate={() => setCreating("time")}
-      />
-
-      {selected ? (
-        <InvoiceDetail
-          invoice={selected}
-          onClose={() => setSelectedId(null)}
-          onDeleted={() => setSelectedId(null)}
+      <div className={cn(selected && "hidden sm:block")}>
+        <InvoiceList
+          invoices={invoices}
+          isLoading={list.isPending}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onCreate={() => setCreating("time")}
         />
+      </div>
+      {selected ? (
+        <div
+          ref={detailRef}
+          tabIndex={-1}
+          className="space-y-3 scroll-mt-[calc(var(--app-header-offset,3.5rem)+1rem)] outline-none"
+        >
+          <Button
+            variant="ghost"
+            className="sm:hidden"
+            onClick={() => setSelectedId(null)}
+            data-testid="invoice-back"
+          >
+            <ArrowLeft className="size-4" />
+            {t("invoices.backToList")}
+          </Button>
+          <InvoiceDetail
+            invoice={selected}
+            onClose={() => setSelectedId(null)}
+            onDeleted={() => setSelectedId(null)}
+          />
+        </div>
       ) : null}
 
       <NewInvoiceDialog

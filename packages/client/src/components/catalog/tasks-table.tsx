@@ -106,7 +106,7 @@ export function TasksTable({
   return (
     <>
       <div className="rounded-lg border border-border">
-        <Table data-testid="tasks-table">
+        <Table className="mobile-records" data-testid="tasks-table">
           <TableHeader>
             <TableRow>
               <TableHead>{tc("fields.task")}</TableHead>
@@ -122,7 +122,7 @@ export function TasksTable({
                 data-testid={`task-row-${task.id}`}
                 data-archived={task.archived ? "true" : "false"}
               >
-                <TableCell>
+                <TableCell data-mobile-primary="true" data-label={tc("fields.task")}>
                   <CatalogName
                     name={task.name}
                     color={task.color}
@@ -133,7 +133,7 @@ export function TasksTable({
                   />
                 </TableCell>
 
-                <TableCell
+                <TableCell data-label={t("columns.tracked")}
                   className="text-right tabular-nums"
                   data-testid={`task-total-${task.id}`}
                 >
@@ -147,7 +147,7 @@ export function TasksTable({
                   </EntriesLink>
                 </TableCell>
 
-                <TableCell
+                <TableCell data-label={t("columns.entries")}
                   className="text-right tabular-nums text-muted-foreground"
                   data-testid={`task-entries-${task.id}`}
                 >
@@ -161,7 +161,7 @@ export function TasksTable({
                   </EntriesLink>
                 </TableCell>
 
-                <TableCell>
+                <TableCell data-mobile-actions="true">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountSettings } from "@/components/settings/account-settings";
 import { ExportPanel } from "@/components/data/export-panel";
@@ -101,9 +102,17 @@ export default function SettingsPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+        <div className="sm:hidden">
+          <Select value={tab} onValueChange={setTab}>
+            <SelectTrigger aria-label={t("page.title")} className="w-full" data-testid="settings-section-select"><SelectValue /></SelectTrigger>
+            <SelectContent>{tabs.map((value) => (
+              <SelectItem key={value} value={value}>{t(`page.tabs.${value as (typeof TABS)[number] | typeof DESKTOP_TAB}`)}</SelectItem>
+            ))}</SelectContent>
+          </Select>
+        </div>
         <TabsList
           ref={tabsRef}
-          className="w-full justify-start overflow-x-auto"
+          className="hidden w-full justify-start overflow-x-auto sm:inline-flex"
           data-testid="settings-tabs"
         >
           {tabs.map((value) => (

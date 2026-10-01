@@ -237,7 +237,7 @@ function SidebarNav({
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors",
+                  "flex min-h-11 items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors",
                   active
                     ? "bg-accent font-medium text-accent-foreground"
                     : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
@@ -459,7 +459,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
               data-testid="sidebar-backdrop"
             />
             <aside
-              className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-border bg-background shadow-lg"
+              className="absolute inset-y-0 left-0 flex w-80 max-w-[90vw] flex-col overflow-y-auto border-r border-border bg-background shadow-lg"
               data-testid="sidebar-mobile"
             >
               <div className="flex h-14 items-center justify-between px-4">

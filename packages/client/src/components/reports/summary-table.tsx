@@ -95,7 +95,7 @@ export function SummaryTable({
         </p>
       ) : null}
 
-      <Table data-testid="summary-table">
+      <Table className="mobile-records" data-testid="summary-table">
       <TableHeader>
         <TableRow>
           <TableHead>{dimensionLabel}</TableHead>
@@ -133,7 +133,7 @@ export function SummaryTable({
             <TableRow key={group.key} data-testid={`summary-row-${group.key}`}>
               {/* A grouped total and the entries under it are the same fact at
                   two zoom levels, so the row itself is the way down to them. */}
-              <TableCell className="font-medium">
+              <TableCell data-mobile-primary="true" data-label={dimensionLabel} className="font-medium">
                 {href === null ? (
                   label
                 ) : (
@@ -162,7 +162,7 @@ export function SummaryTable({
                   </Link>
                 )}
               </TableCell>
-              <TableCell>
+              <TableCell data-label={t("summary.share")}>
                 <span className="flex items-center gap-2">
                   <span
                     aria-hidden="true"
@@ -185,17 +185,17 @@ export function SummaryTable({
                   </span>
                 </span>
               </TableCell>
-              <TableCell className="text-right tabular-nums text-muted-foreground">
+              <TableCell data-label={tc("fields.billable")} className="text-right tabular-nums text-muted-foreground">
                 {duration(group.billableSec)}
               </TableCell>
-              <TableCell className="text-right font-medium tabular-nums">
+              <TableCell data-label={tc("fields.duration")} className="text-right font-medium tabular-nums">
                 {duration(group.seconds)}
               </TableCell>
-              <TableCell className="text-right tabular-nums">
+              <TableCell data-label={tc("fields.amount")} className="text-right tabular-nums">
                 {formatReportMoney(group.amount, money)}
               </TableCell>
               {budgetFor ? (
-                <TableCell data-testid={`summary-budget-${group.key}`}>
+                <TableCell data-label={t("summary.budget")} data-testid={`summary-budget-${group.key}`}>
                   {/*
                    * A budget is a lifetime target while these totals are
                    * range-scoped, so the meter deliberately reports the whole
@@ -217,17 +217,19 @@ export function SummaryTable({
         <TableRow data-testid="summary-total-row">
           <TableCell>{tc("fields.total")}</TableCell>
           <TableCell />
-          <TableCell className="text-right tabular-nums">
+          <TableCell data-label={tc("fields.billable")} className="text-right tabular-nums">
             {duration(billableSec)}
           </TableCell>
           <TableCell
             className="text-right tabular-nums"
+            data-label={tc("fields.duration")}
             data-testid="summary-total-duration"
           >
             {duration(totalSec)}
           </TableCell>
           <TableCell
             className="text-right tabular-nums"
+            data-label={tc("fields.amount")}
             data-testid="summary-total-amount"
           >
             {formatReportMoney(totalAmount, money)}

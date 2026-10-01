@@ -774,9 +774,11 @@ is quietly wrong:
 **Native chrome lives in `packages/client/src/styles/native.css`**, imported by
 one line from `globals.css`. Every selector in it is under `html.cap` — safe-area
 padding, 16px fields, `.cap-touch`, the two-row tracker composer, the top-anchored
-dialog — so it is inert on web *by construction*, and `e2e/mobile-shell.spec.ts`
-(the `phone` Playwright project, `devices["Pixel 5"]`) asserts that at 393pt.
-Rules that would also be right on web belong in `globals.css` instead.
+dialog — so it is inert on web *by construction*. Shared responsive content
+lives in `styles/mobile.css`: compact reports with expandable filters and section
+switches, labelled record tables, a daily timesheet, touch targets and bounded
+dialogs. `e2e/mobile-shell.spec.ts` checks the shared phone layout while keeping
+the native marker and safe-area contract separate.
 
 `html.cap` is set twice on purpose: by an inline script in `<head>` in
 `app/layout.tsx`, before the first paint, and again by `mobile/bridge.ts` after
@@ -812,8 +814,9 @@ on top of it). And `native.css` is unlayered while Tailwind's utilities are in
 adding one would only hide the fact that the cascade is doing the work.
 
 **The bottom tab bar renders on every platform.** `components/mobile-tab-bar.tsx`
-ships in the web bundle too and is `display: none` there — Tailwind's `hidden`,
-undone by the one `html.cap` rule in `native.css`. It must not branch on
+ships in every bundle, revealed below 1024px by `mobile.css` and at every native
+width by `native.css`. Main padding and sticky bulk actions clear its height,
+including in an installed PWA. It must not branch on
 `isCapacitor()`: under `output: "export"` every page is prerendered in Node, where
 `window.Capacitor` cannot exist, so a tree that differs at hydration is a
 mismatch React resolves by discarding the served DOM. The same argument applies

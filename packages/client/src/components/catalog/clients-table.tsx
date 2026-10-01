@@ -151,7 +151,7 @@ export function ClientsTable({
   return (
     <>
       <div className="rounded-lg border border-border">
-        <Table data-testid="clients-table">
+        <Table className="mobile-records" data-testid="clients-table">
           <TableHeader>
             <TableRow>
               <TableHead>{tc("fields.client")}</TableHead>
@@ -170,7 +170,7 @@ export function ClientsTable({
                   data-testid={`client-row-${client.id}`}
                   data-archived={client.archived ? "true" : "false"}
                 >
-                  <TableCell>
+                  <TableCell data-mobile-primary="true" data-label={tc("fields.client")}>
                     <CatalogName
                       name={client.name}
                       color={client.color}
@@ -181,14 +181,14 @@ export function ClientsTable({
                     />
                   </TableCell>
 
-                  <TableCell
+                  <TableCell data-label={tc("fields.projects")}
                     className="text-right tabular-nums text-muted-foreground"
                     data-testid={`client-projects-${client.id}`}
                   >
                     {f.number(rollup.projectCount)}
                   </TableCell>
 
-                  <TableCell
+                  <TableCell data-label={t("columns.tracked")}
                     className="text-right tabular-nums"
                     data-testid={`client-tracked-${client.id}`}
                   >
@@ -202,7 +202,7 @@ export function ClientsTable({
                     </EntriesLink>
                   </TableCell>
 
-                  <TableCell
+                  <TableCell data-label={t("columns.entries")}
                     className="text-right tabular-nums text-muted-foreground"
                     data-testid={`client-entries-${client.id}`}
                   >
@@ -216,7 +216,7 @@ export function ClientsTable({
                     </EntriesLink>
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell data-mobile-actions="true">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button

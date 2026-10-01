@@ -17,6 +17,7 @@ export const reports = {
 
   /** The one Reports screen: its header and the Totals / Entries switch. */
   screen: {
+    sections: { label: "Report section", groups: "Groups", timeline: "Timeline", breakdown: "Breakdown" },
     title: "Reports",
     viewLabel: "Report view",
     views: {
@@ -57,6 +58,8 @@ export const reports = {
 
   /** The filter bar every report shares. */
   filters: {
+    label: "Filters",
+    showResults: "Show results",
     allEntries: "All entries",
     searchDescriptions: "Search descriptions",
     clients: {
@@ -165,6 +168,7 @@ export const reports = {
   },
 
   detailed: {
+    details: "Details",
     selectAll: "Select all loaded entries",
     selectEntry: "Select entry {description}",
     selectEntryUntitled: "Select entry without description",
@@ -218,6 +222,7 @@ export const reports = {
   },
 
   invoices: {
+    backToList: "All invoices",
     description:
       "Bill a client for a range of tracked time. Time that has already been invoiced is never offered a second time.",
     count: "{count, plural, one {# invoice} other {# invoices}}",

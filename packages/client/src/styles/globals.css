@@ -25,6 +25,7 @@
  * native.css, it is inert on the web and in the phone apps by construction.
  */
 @import "./desktop.css";
+@import "./mobile.css";
 
 /*
  * The pre-paint language gate — see LOCALE_SCRIPT in app/pre-paint.ts.

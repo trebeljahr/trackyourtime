@@ -80,7 +80,7 @@ export function InvoiceList({
 
   return (
     <div className="rounded-lg border border-border">
-      <Table data-testid="invoices-table">
+      <Table className="mobile-records" data-testid="invoices-table">
         <TableHeader>
           <TableRow>
             <TableHead>{t("invoices.columns.number")}</TableHead>
@@ -103,7 +103,7 @@ export function InvoiceList({
               data-testid={`invoice-row-${invoice.id}`}
               data-status={invoice.status}
             >
-              <TableCell className="font-medium">
+              <TableCell data-mobile-primary="true" data-label={t("invoices.columns.number")} className="font-medium">
                 <button
                   type="button"
                   className="underline-offset-2 hover:underline"
@@ -116,22 +116,22 @@ export function InvoiceList({
                   {invoice.number}
                 </button>
               </TableCell>
-              <TableCell data-testid={`invoice-client-${invoice.id}`}>
+              <TableCell data-label={tc("fields.client")} data-testid={`invoice-client-${invoice.id}`}>
                 {invoice.clientName}
               </TableCell>
-              <TableCell className="text-muted-foreground">
+              <TableCell data-label={t("invoices.columns.issued")} className="text-muted-foreground">
                 {formatDate(invoice.issueDate, f.locale)}
               </TableCell>
-              <TableCell className="text-muted-foreground">
+              <TableCell data-label={t("invoices.columns.due")} className="text-muted-foreground">
                 {formatDate(invoice.dueDate, f.locale)}
               </TableCell>
-              <TableCell
+              <TableCell data-label={tc("fields.total")}
                 className="text-right tabular-nums"
                 data-testid={`invoice-total-${invoice.id}`}
               >
                 {f.money(invoice.total, invoice.currency)}
               </TableCell>
-              <TableCell>
+              <TableCell data-label={t("invoices.columns.status")}>
                 <Badge
                   variant={statusBadgeTone(invoice.status)}
                   data-testid={`invoice-status-${invoice.id}`}

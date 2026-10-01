@@ -52,7 +52,7 @@ export function ReportsScreen(): React.JSX.Element {
         return current === view ? null : current;
       });
     },
-    [view]
+    [view],
   );
   const exportReady = readyView === view;
 
@@ -66,8 +66,24 @@ export function ReportsScreen(): React.JSX.Element {
           </p>
         </div>
 
+        <div className="ml-auto sm:order-last sm:ml-0">
+          <ExportMenu
+            report={view === "totals" ? "summary" : "detailed"}
+            filters={reportFilters}
+            groupBy={
+              view === "totals"
+                ? effectiveGroupBy(
+                    getParam(REPORT_PARAM.groupBy),
+                    memberReporting,
+                  )
+                : undefined
+            }
+            disabled={!exportReady}
+          />
+        </div>
+
         <div
-          className="flex items-center gap-1 rounded-lg border border-border bg-card p-1"
+          className="flex w-full items-center gap-1 rounded-lg bg-muted p-1 sm:w-auto"
           role="tablist"
           aria-label={t("screen.viewLabel")}
           data-testid="report-view-switch"
@@ -80,7 +96,10 @@ export function ReportsScreen(): React.JSX.Element {
               role="tab"
               variant={option === view ? "secondary" : "ghost"}
               aria-selected={option === view}
-              className={cn("font-normal", option === view && "font-medium")}
+              className={cn(
+                "flex-1 font-normal sm:flex-none",
+                option === view && "bg-background font-medium shadow-sm",
+              )}
               onClick={() => setView(option)}
               data-testid={`report-view-${option}`}
             >
@@ -90,25 +109,7 @@ export function ReportsScreen(): React.JSX.Element {
         </div>
       </header>
 
-      <ReportFiltersBar
-        filters={filters}
-        memberFilter={memberReporting}
-        trailing={
-          <ExportMenu
-            report={view === "totals" ? "summary" : "detailed"}
-            filters={reportFilters}
-            groupBy={
-              view === "totals"
-                ? effectiveGroupBy(
-                    getParam(REPORT_PARAM.groupBy),
-                    memberReporting
-                  )
-                : undefined
-            }
-            disabled={!exportReady}
-          />
-        }
-      />
+      <ReportFiltersBar filters={filters} memberFilter={memberReporting} />
 
       <DrillTrail filters={filters} />
 

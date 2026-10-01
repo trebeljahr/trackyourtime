@@ -294,7 +294,7 @@ function EntryRowImpl({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-8 cap-touch"
+          className="hidden size-8 cap-touch sm:inline-flex"
           disabled={syncing}
           aria-label={
             entry.billable ? tc("fields.billable") : t("fields.notBillable")
@@ -309,7 +309,7 @@ function EntryRowImpl({
           <BillableGlyph billable={entry.billable} />
         </Button>
 
-        <div className="flex w-auto items-center gap-1 lg:w-[13.5rem]">
+        <div className="hidden w-auto items-center gap-1 sm:flex lg:w-[13.5rem]">
           <TimeField
             value={entry.start}
             timeFormat={format.timeFormat}
@@ -432,7 +432,7 @@ function EntryRowImpl({
           type="button"
           variant="ghost"
           size="icon"
-          className="hidden size-8 cap-touch lg:inline-flex"
+          className="size-8 cap-touch sm:hidden lg:inline-flex"
           disabled={syncing}
           aria-label={tc("actions.edit")}
           title={tc("actions.edit")}

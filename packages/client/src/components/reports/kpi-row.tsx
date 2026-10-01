@@ -27,6 +27,7 @@ export function KpiRow({ items, className }: KpiRowProps): React.JSX.Element {
     <div
       className={cn("grid gap-3 sm:grid-cols-2 xl:grid-cols-4", className)}
       data-testid="kpi-row"
+      data-count={items.length}
     >
       {items.map((item) => {
         const Icon = item.icon;

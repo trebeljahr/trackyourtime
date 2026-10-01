@@ -41,7 +41,7 @@ export const DEFAULT_DETAILED_SORT: DetailedSort = {
  */
 export const sortDetailedEntries = (
   entries: DetailedEntry[],
-  sort: DetailedSort
+  sort: DetailedSort,
 ): DetailedEntry[] => {
   const factor = sort.direction === "asc" ? 1 : -1;
   return [...entries].sort((a, b) => {
@@ -137,7 +137,7 @@ export function DetailedTable({
   const someSelected = selected.size > 0 && !allSelected;
 
   return (
-    <Table data-testid="detailed-table">
+    <Table className="mobile-entry-table" data-testid="detailed-table">
       <TableHeader>
         <TableRow>
           <TableHead className="w-10">
@@ -163,7 +163,9 @@ export function DetailedTable({
           <TableHead className="w-32">{tc("fields.client")}</TableHead>
           <TableHead className="w-32">{tc("fields.task")}</TableHead>
           <TableHead className="w-24">{tc("fields.billable")}</TableHead>
-          <TableHead className="w-32 text-right">{t("detailed.startEnd")}</TableHead>
+          <TableHead className="w-32 text-right">
+            {t("detailed.startEnd")}
+          </TableHead>
           <TableHead className="w-24 text-right">
             <SortButton
               label={tc("fields.duration")}
@@ -173,7 +175,9 @@ export function DetailedTable({
               className="ml-auto"
             />
           </TableHead>
-          <TableHead className="w-24 text-right">{tc("fields.amount")}</TableHead>
+          <TableHead className="w-24 text-right">
+            {tc("fields.amount")}
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -192,10 +196,14 @@ export function DetailedTable({
               <TableCell>
                 <Checkbox
                   checked={isSelected}
-                  onCheckedChange={(value) => onToggle(entry.id, value === true)}
+                  onCheckedChange={(value) =>
+                    onToggle(entry.id, value === true)
+                  }
                   aria-label={
                     entry.description
-                      ? t("detailed.selectEntry", { description: entry.description })
+                      ? t("detailed.selectEntry", {
+                          description: entry.description,
+                        })
                       : t("detailed.selectEntryUntitled")
                   }
                   data-testid={`detailed-select-${entry.id}`}
@@ -204,7 +212,7 @@ export function DetailedTable({
               <TableCell className="whitespace-nowrap text-muted-foreground">
                 {f.date(entry.start, "dayLabel") || entry.start}
               </TableCell>
-              <TableCell className="max-w-0">
+              <TableCell className="max-w-0" data-mobile-description>
                 <span className="block truncate">
                   {entry.description === "" ? (
                     <span className="text-muted-foreground">
@@ -228,7 +236,9 @@ export function DetailedTable({
                     name={entry.projectName}
                     color={entry.projectColor}
                     nameClassName="font-normal"
-                    editLabel={t("detailed.editProject", { name: entry.projectName })}
+                    editLabel={t("detailed.editProject", {
+                      name: entry.projectName,
+                    })}
                     onEdit={() => onEditProject(projectId)}
                     testId={`detailed-project-${entry.id}`}
                   />
@@ -254,19 +264,69 @@ export function DetailedTable({
               </TableCell>
               <TableCell>
                 <Badge variant={entry.billable ? "default" : "outline"}>
-                  {entry.billable ? tc("fields.billable") : tc("fields.nonBillable")}
+                  {entry.billable
+                    ? tc("fields.billable")
+                    : tc("fields.nonBillable")}
                 </Badge>
               </TableCell>
               <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">
                 {clock(entry.start)}
                 {" – "}
-                {running ? t("detailed.running") : clock(entry.end ?? entry.start)}
+                {running
+                  ? t("detailed.running")
+                  : clock(entry.end ?? entry.start)}
               </TableCell>
-              <TableCell className="text-right font-medium tabular-nums">
+              <TableCell
+                className="text-right font-medium tabular-nums"
+                data-mobile-duration
+              >
                 {duration(entry.durationSec)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {formatReportMoney(entry.amount, money)}
+              </TableCell>
+              <TableCell className="hidden" data-mobile-details>
+                <details>
+                  <summary className="cursor-pointer py-2 text-sm text-muted-foreground">
+                    {entry.projectName ?? tc("empty.noProject")} ·{" "}
+                    {t("detailed.details")}
+                  </summary>
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 py-2 text-sm">
+                    <dt>{tc("fields.project")}</dt>
+                    <dd className="break-words">
+                      {entry.projectName ?? tc("empty.noProject")}
+                    </dd>
+                    <dt>{tc("fields.client")}</dt>
+                    <dd className="break-words">{entry.clientName ?? "—"}</dd>
+                    <dt>{tc("fields.task")}</dt>
+                    <dd className="break-words">{entry.taskName ?? "—"}</dd>
+                    <dt>{tc("fields.billable")}</dt>
+                    <dd>
+                      {entry.billable
+                        ? tc("fields.billable")
+                        : tc("fields.nonBillable")}
+                    </dd>
+                    <dt>{t("detailed.startEnd")}</dt>
+                    <dd>
+                      {clock(entry.start)} –{" "}
+                      {running
+                        ? t("detailed.running")
+                        : clock(entry.end ?? entry.start)}
+                    </dd>
+                    <dt>{tc("fields.amount")}</dt>
+                    <dd>{formatReportMoney(entry.amount, money)}</dd>
+                  </dl>
+                  {onEditProject && projectId !== null ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => onEditProject(projectId)}
+                    >
+                      {t("detailed.editProject", {
+                        name: entry.projectName ?? "",
+                      })}
+                    </Button>
+                  ) : null}
+                </details>
               </TableCell>
             </TableRow>
           );

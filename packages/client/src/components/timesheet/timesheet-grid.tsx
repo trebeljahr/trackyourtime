@@ -51,7 +51,7 @@ export type TimesheetGridProps = {
 /** Column heading for a "YYYY-MM-DD" key, e.g. "Tue" over "3 Feb". */
 const dayHeading = (
   f: LocaleFormat,
-  day: string
+  day: string,
 ): { weekday: string; date: string } => {
   const date = f.date(day, "dayMonth");
   if (date === "") return { weekday: day, date: "" };
@@ -79,6 +79,12 @@ export function TimesheetGrid({
   // Cells are found by their testid inside this container rather than through
   // a ref registry: the registry has to be written during render, and every
   // cell already carries a stable identifier for the E2E tests anyway.
+  const [chosenDay, setChosenDay] = React.useState<string | null>(null);
+  const selectedDay = grid.days.includes(chosenDay ?? "")
+    ? chosenDay
+    : grid.days.includes(todayKey ?? "")
+      ? todayKey
+      : grid.days[0];
   const container = React.useRef<HTMLDivElement>(null);
   const f = useFormat();
   const t = useT("calendar");
@@ -96,18 +102,45 @@ export function TimesheetGrid({
       if (row === undefined) return;
       const testId = cellTestId(
         timesheetRowKey(row.projectId, row.taskId),
-        next.col
+        next.col,
       );
-      container.current
-        ?.querySelector<HTMLElement>(`[data-testid="${testId}"]`)
-        ?.focus();
+      // Reveal the target day before focusing it on a phone, including when
+      // an external keyboard moves across days hidden by the mobile layout.
+      setChosenDay(grid.days[next.col] ?? null);
+      requestAnimationFrame(() => {
+        container.current
+          ?.querySelector<HTMLElement>(`[data-testid="${testId}"]`)
+          ?.focus();
+      });
     },
-    [grid.days.length, grid.rows]
+    [grid.days, grid.rows],
   );
 
   return (
-    <div className="overflow-x-auto" ref={container}>
-      <Table data-testid="timesheet-grid">
+    <div ref={container}>
+      <div
+        className="mb-3 grid grid-cols-7 gap-1 sm:hidden"
+        role="group"
+        aria-label={tc("fields.date")}
+      >
+        {grid.days.map((day) => (
+          <Button
+            key={day}
+            variant={day === selectedDay ? "secondary" : "ghost"}
+            className="h-auto min-w-0 flex-col gap-1 px-0 py-2 text-xs"
+            aria-pressed={day === selectedDay}
+            aria-label={f.date(day, "dayLabel")}
+            onClick={() => setChosenDay(day)}
+            data-testid={`timesheet-pick-${day}`}
+          >
+            <span>{dayHeading(f, day).weekday}</span>
+            <span className="font-semibold">
+              {f.date(day, { day: "numeric" })}
+            </span>
+          </Button>
+        ))}
+      </div>
+      <Table className="mobile-timesheet" data-testid="timesheet-grid">
         <TableHeader>
           <TableRow>
             <TableHead className="min-w-44">
@@ -118,9 +151,10 @@ export function TimesheetGrid({
               return (
                 <TableHead
                   key={day}
+                  data-mobile-hidden={day !== selectedDay || undefined}
                   className={cn(
                     "w-24 text-center",
-                    day === todayKey && "text-foreground"
+                    day === todayKey && "text-foreground",
                   )}
                   data-testid={`timesheet-head-${day}`}
                 >
@@ -177,7 +211,11 @@ export function TimesheetGrid({
                   const cell = row.cells[dayIndex];
                   if (cell === undefined) return <TableCell key={day} />;
                   return (
-                    <TableCell key={day} className="p-1 text-center">
+                    <TableCell
+                      key={day}
+                      data-mobile-hidden={day !== selectedDay || undefined}
+                      className="p-1 text-center"
+                    >
                       <TimesheetCellField
                         cell={cell}
                         label={`${row.label}, ${f.date(day, "dayLabel") || day}`}
@@ -216,6 +254,9 @@ export function TimesheetGrid({
             {grid.dayTotals.map((seconds, index) => (
               <TableCell
                 key={grid.days[index] ?? index}
+                data-mobile-hidden={
+                  grid.days[index] !== selectedDay || undefined
+                }
                 className="text-center tabular-nums"
                 data-testid={`timesheet-day-total-${index}`}
               >

@@ -73,7 +73,7 @@ export function InvoiceLines({
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-border">
-        <Table data-testid={`${testIdPrefix}-lines`}>
+        <Table className="mobile-records" data-testid={`${testIdPrefix}-lines`}>
           <TableHeader>
             <TableRow>
               <TableHead>{t("invoices.columns.line")}</TableHead>
@@ -94,19 +94,19 @@ export function InvoiceLines({
           <TableBody>
             {lineItems.map((line, index) => (
               <TableRow key={line.key} data-testid={`${testIdPrefix}-line`}>
-                <TableCell className="font-medium">{line.label}</TableCell>
-                <TableCell className="text-right tabular-nums" data-testid={`${testIdPrefix}-line-quantity`}>
+                <TableCell data-label={t("invoices.columns.line")} data-mobile-primary="true" className="font-medium">{line.label}</TableCell>
+                <TableCell data-label={withUnits ? t("invoices.columns.quantity") : t("invoices.columns.hours")} className="text-right tabular-nums" data-testid={`${testIdPrefix}-line-quantity`}>
                   {withUnits ? formatQuantity(line, f.locale) : formatHours(line.hours, f.locale)}
                 </TableCell>
-                <TableCell className="text-right tabular-nums text-muted-foreground">
+                <TableCell data-label={withUnits ? t("invoices.columns.unitPrice") : tc("fields.rate")} className="text-right tabular-nums text-muted-foreground">
                   {money(lineUnitPrice(line))}
                 </TableCell>
                 {renderLineTax ? (
-                  <TableCell data-testid={`${testIdPrefix}-line-tax`}>
+                  <TableCell data-label={te("lines.vatColumn")} data-testid={`${testIdPrefix}-line-tax`}>
                     {renderLineTax(line, index)}
                   </TableCell>
                 ) : null}
-                <TableCell className="text-right tabular-nums">
+                <TableCell data-label={tc("fields.amount")} className="text-right tabular-nums">
                   {money(line.amount)}
                 </TableCell>
               </TableRow>

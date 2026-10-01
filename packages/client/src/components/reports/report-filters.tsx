@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Search, X } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 
 import { ClientFormDialog } from "@/components/catalog/client-form-dialog";
 import { ProjectFormDialog } from "@/components/catalog/project-form-dialog";
@@ -62,7 +62,7 @@ function SearchField({
     () => () => {
       if (timer.current !== null) window.clearTimeout(timer.current);
     },
-    []
+    [],
   );
 
   const schedule = React.useCallback(
@@ -73,7 +73,7 @@ function SearchField({
         onChange(next);
       }, SEARCH_DEBOUNCE_MS);
     },
-    [onChange]
+    [onChange],
   );
 
   const flush = React.useCallback(
@@ -84,7 +84,7 @@ function SearchField({
       }
       onChange(next);
     },
-    [onChange]
+    [onChange],
   );
 
   return (
@@ -169,6 +169,17 @@ export function ReportFiltersBar({
     no: tc("fields.nonBillable"),
   };
 
+  const [expanded, setExpanded] = React.useState(false);
+  const filterId = React.useId();
+  const toggleRef = React.useRef<HTMLButtonElement>(null);
+  const activeCount =
+    state.clientIds.length +
+    state.projectIds.length +
+    state.taskIds.length +
+    state.tagIds.length +
+    (state.memberIds?.length ?? 0) +
+    Number(state.billable !== "all") +
+    Number(state.search.trim() !== "");
   const trackedSpan = useTrackedSpan();
   const clientsQuery = trpc.clients.list.useQuery({});
   const projectsQuery = trpc.projects.list.useQuery({});
@@ -184,7 +195,7 @@ export function ReportFiltersBar({
         label: client.name,
         color: client.color,
       })),
-    [clientsQuery.data]
+    [clientsQuery.data],
   );
 
   const projectOptions = React.useMemo<MultiSelectOption[]>(
@@ -195,7 +206,7 @@ export function ReportFiltersBar({
         color: project.color,
         group: project.clientName ?? tc("empty.noClient"),
       })),
-    [projectsQuery.data, tc]
+    [projectsQuery.data, tc],
   );
 
   const taskOptions = React.useMemo<MultiSelectOption[]>(
@@ -204,7 +215,7 @@ export function ReportFiltersBar({
         value: task.id,
         label: task.name,
       })),
-    [tasksQuery.data]
+    [tasksQuery.data],
   );
 
   // Every filter list doubles as the catalog surface for what it filters by:
@@ -226,8 +237,8 @@ export function ReportFiltersBar({
     <>
       <div
         className={cn(
-          "flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2",
-          className
+          "report-filter-bar flex flex-wrap items-center gap-2",
+          className,
         )}
         data-testid="report-filters"
       >
@@ -239,125 +250,168 @@ export function ReportFiltersBar({
           testId="filter-range"
         />
 
-        <MultiSelect
-          label={tc("fields.clients")}
-          options={clientOptions}
-          value={state.clientIds}
-          onChange={(ids) => setIds("clientIds", ids)}
-          emptyText={t("filters.clients.empty")}
-          searchPlaceholder={t("filters.clients.search")}
-          className="w-auto min-w-[9.5rem] max-w-[14rem]"
-          testId="filter-clients"
-          editLabel={t("filters.clients.edit")}
-          onEditOption={(option) =>
-            setCatalogDialog({ kind: "client", row: findClient(option.value) })
-          }
-          footerActions={[
-            {
-              label: t("filters.clients.create"),
-              onSelect: () => setCatalogDialog({ kind: "client", row: null }),
-              testId: "filter-clients-new",
-            },
-          ]}
-        />
-
-        <MultiSelect
-          label={tc("fields.projects")}
-          options={projectOptions}
-          value={state.projectIds}
-          onChange={(ids) => setIds("projectIds", ids)}
-          emptyText={t("filters.projects.empty")}
-          searchPlaceholder={t("filters.projects.search")}
-          className="w-auto min-w-[9.5rem] max-w-[14rem]"
-          testId="filter-projects"
-          editLabel={t("filters.projects.edit")}
-          onEditOption={(option) =>
-            setCatalogDialog({
-              kind: "project",
-              row: findProject(option.value),
-            })
-          }
-          footerActions={[
-            {
-              label: t("filters.projects.create"),
-              onSelect: () => setCatalogDialog({ kind: "project", row: null }),
-              testId: "filter-projects-new",
-            },
-          ]}
-        />
-
-        <MultiSelect
-          label={tc("fields.tasks")}
-          options={taskOptions}
-          value={state.taskIds}
-          onChange={(ids) => setIds("taskIds", ids)}
-          emptyText={t("filters.tasks.empty")}
-          searchPlaceholder={t("filters.tasks.search")}
-          className="w-auto min-w-[9.5rem] max-w-[14rem]"
-          testId="filter-tasks"
-          editLabel={t("filters.tasks.edit")}
-          onEditOption={(option) =>
-            setCatalogDialog({ kind: "task", row: findTask(option.value) })
-          }
-          footerActions={[
-            {
-              label: t("filters.tasks.create"),
-              onSelect: () => setCatalogDialog({ kind: "task", row: null }),
-              testId: "filter-tasks-new",
-            },
-          ]}
-        />
-
-        <TagFilter
-          value={state.tagIds}
-          onChange={(ids) => setIds("tagIds", ids)}
-        />
-
-        {memberFilter ? (
-          <MemberFilter
-            value={state.memberIds ?? []}
-            onChange={(ids) => setIds("memberIds", ids)}
-          />
-        ) : null}
-
-        <Select
-          value={state.billable}
-          onValueChange={(next) => setBillable(next as BillableFilter)}
+        <Button
+          type="button"
+          variant={isFiltered ? "secondary" : "outline"}
+          className="sm:hidden"
+          aria-expanded={expanded}
+          aria-controls={filterId}
+          ref={toggleRef}
+          onClick={() => setExpanded((value) => !value)}
+          data-testid="filter-toggle"
         >
-          <SelectTrigger className="w-auto min-w-[9.5rem] gap-2" data-testid="filter-billable">
-            <SelectValue>{billableLabel[state.billable]}</SelectValue>
-          </SelectTrigger>
-          <SelectContent data-testid="filter-billable-content">
-            <SelectItem value="all" data-testid="filter-billable-all">
-              {billableLabel.all}
-            </SelectItem>
-            <SelectItem value="yes" data-testid="filter-billable-yes">
-              {billableLabel.yes}
-            </SelectItem>
-            <SelectItem value="no" data-testid="filter-billable-no">
-              {billableLabel.no}
-            </SelectItem>
-          </SelectContent>
-        </Select>
+          <SlidersHorizontal className="size-4" />
+          {t("filters.label")}
+          {activeCount > 0 ? ` · ${activeCount}` : ""}
+        </Button>
+        {trailing ? (
+          <div className="ml-auto" data-testid="report-export">
+            {trailing}
+          </div>
+        ) : null}
+        <div
+          id={filterId}
+          className={cn(
+            "report-filter-fields w-full flex-wrap items-center gap-2 sm:flex",
+            expanded ? "flex" : "hidden",
+          )}
+          data-testid="report-filter-fields"
+        >
+          <MultiSelect
+            label={tc("fields.clients")}
+            options={clientOptions}
+            value={state.clientIds}
+            onChange={(ids) => setIds("clientIds", ids)}
+            emptyText={t("filters.clients.empty")}
+            searchPlaceholder={t("filters.clients.search")}
+            className="w-auto min-w-[9.5rem] max-w-[14rem]"
+            testId="filter-clients"
+            editLabel={t("filters.clients.edit")}
+            onEditOption={(option) =>
+              setCatalogDialog({
+                kind: "client",
+                row: findClient(option.value),
+              })
+            }
+            footerActions={[
+              {
+                label: t("filters.clients.create"),
+                onSelect: () => setCatalogDialog({ kind: "client", row: null }),
+                testId: "filter-clients-new",
+              },
+            ]}
+          />
 
-        <SearchField value={state.search} onChange={setSearch} />
+          <MultiSelect
+            label={tc("fields.projects")}
+            options={projectOptions}
+            value={state.projectIds}
+            onChange={(ids) => setIds("projectIds", ids)}
+            emptyText={t("filters.projects.empty")}
+            searchPlaceholder={t("filters.projects.search")}
+            className="w-auto min-w-[9.5rem] max-w-[14rem]"
+            testId="filter-projects"
+            editLabel={t("filters.projects.edit")}
+            onEditOption={(option) =>
+              setCatalogDialog({
+                kind: "project",
+                row: findProject(option.value),
+              })
+            }
+            footerActions={[
+              {
+                label: t("filters.projects.create"),
+                onSelect: () =>
+                  setCatalogDialog({ kind: "project", row: null }),
+                testId: "filter-projects-new",
+              },
+            ]}
+          />
 
-        {isFiltered ? (
+          <MultiSelect
+            label={tc("fields.tasks")}
+            options={taskOptions}
+            value={state.taskIds}
+            onChange={(ids) => setIds("taskIds", ids)}
+            emptyText={t("filters.tasks.empty")}
+            searchPlaceholder={t("filters.tasks.search")}
+            className="w-auto min-w-[9.5rem] max-w-[14rem]"
+            testId="filter-tasks"
+            editLabel={t("filters.tasks.edit")}
+            onEditOption={(option) =>
+              setCatalogDialog({ kind: "task", row: findTask(option.value) })
+            }
+            footerActions={[
+              {
+                label: t("filters.tasks.create"),
+                onSelect: () => setCatalogDialog({ kind: "task", row: null }),
+                testId: "filter-tasks-new",
+              },
+            ]}
+          />
+
+          <TagFilter
+            value={state.tagIds}
+            onChange={(ids) => setIds("tagIds", ids)}
+          />
+
+          {memberFilter ? (
+            <MemberFilter
+              value={state.memberIds ?? []}
+              onChange={(ids) => setIds("memberIds", ids)}
+            />
+          ) : null}
+
+          <Select
+            value={state.billable}
+            onValueChange={(next) => setBillable(next as BillableFilter)}
+          >
+            <SelectTrigger
+              className="w-auto min-w-[9.5rem] gap-2"
+              data-testid="filter-billable"
+            >
+              <SelectValue>{billableLabel[state.billable]}</SelectValue>
+            </SelectTrigger>
+            <SelectContent data-testid="filter-billable-content">
+              <SelectItem value="all" data-testid="filter-billable-all">
+                {billableLabel.all}
+              </SelectItem>
+              <SelectItem value="yes" data-testid="filter-billable-yes">
+                {billableLabel.yes}
+              </SelectItem>
+              <SelectItem value="no" data-testid="filter-billable-no">
+                {billableLabel.no}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          <SearchField value={state.search} onChange={setSearch} />
+
+          {isFiltered ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={clearFilters}
+              data-testid="filter-clear"
+            >
+              <X className="size-4" />
+              {tc("actions.clear")}
+            </Button>
+          ) : null}
+
           <Button
             type="button"
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-            data-testid="filter-clear"
+            variant="secondary"
+            className="w-full sm:hidden"
+            onClick={() => {
+              setExpanded(false);
+              toggleRef.current?.focus();
+            }}
           >
-            <X className="size-4" />
-            {tc("actions.clear")}
+            {t("filters.showResults")}
           </Button>
-        ) : null}
-
-        {trailing ? (
-          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">{trailing}</div>
-        ) : null}
+        </div>
       </div>
 
       {/*

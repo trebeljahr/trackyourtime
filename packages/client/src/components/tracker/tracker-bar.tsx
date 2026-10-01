@@ -317,7 +317,7 @@ export function TrackerBar(): React.JSX.Element {
              is false, but React never serialises `autoFocus` into the markup
              — it focuses imperatively on mount — so the native value is the
              one that decides. */
-          autoFocus={!isCapacitor()}
+          autoFocus={!isCapacitor() && (typeof window === "undefined" || !window.matchMedia?.("(pointer: coarse)").matches)}
           className="min-w-0 flex-1 basis-48"
           inputClassName="h-10 border-0 bg-transparent px-2 text-base shadow-none focus-visible:ring-0"
           testId="tracker-description"
@@ -394,7 +394,7 @@ export function TrackerBar(): React.JSX.Element {
         {/* Start and + stay one unit: the bar wraps on narrow screens, and
             an orphaned + on its own line reads like it belongs to the row
             below it. */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2" data-testid="tracker-actions">
           <Button
             type="button"
             className={cn(

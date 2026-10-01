@@ -239,18 +239,8 @@ html.cap [data-testid="tracker-composer"] [data-testid="tracker-toggle"] {
 
 /* ── The bottom tab bar ─────────────────────────────────────────────── */
 
-/*
- * components/mobile-tab-bar.tsx renders unconditionally with Tailwind's
- * `hidden`, so it is `display: none` for every web user and every desktop
- * shell. This is the only rule that reveals it — and it can only match under
- * `html.cap`, which is the whole reason the component does not branch on
- * `isNative()` instead: `output: "export"` prerenders in Node, where
- * `window.Capacitor` cannot exist, so a tree that differs at hydration is a
- * mismatch React resolves by throwing the served HTML away.
- *
- * `display: flex` beats the utility's `display: none` because this file is
- * unlayered and Tailwind's utilities are in `@layer utilities`.
- */
+/* Native tablets keep the bottom bar at every width. mobile.css reveals the
+ * same prerendered navigation on narrow web/PWA screens. */
 html.cap [data-testid="mobile-tab-bar"] {
   display: flex;
   padding-bottom: env(safe-area-inset-bottom, 0px);
