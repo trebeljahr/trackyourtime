@@ -1,4 +1,4 @@
-import { readBrowserAccount, approveBrowserDevice } from "./browser-account";
+import { readBrowserAccount, approveBrowserDevice, clearBrowserAccountOfferCache } from "./browser-account";
 /**
  * Trusted web pages offer an account; only a popup confirmation starts a
  * device authorization. Each app keeps its own session after that sign-in.
@@ -191,6 +191,7 @@ const handleSync = async (
   // Discard legacy cross-app logout instructions; they no longer have authority.
   await clearSignOutMarker();
   await clearLinkBlock();
+  clearBrowserAccountOfferCache();
   await saveWebAccount(current.apiUrl, web.userId !== null && web.sessionCreatedAt !== null && web.profile ? {
     userId: web.userId,
     sessionCreatedAt: web.sessionCreatedAt,

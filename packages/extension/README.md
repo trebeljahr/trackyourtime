@@ -308,9 +308,10 @@ Three ways in, on the sign-in screen:
   popup closes: the pending authorization is kept in `chrome.storage.session`,
   and an alarm, the popup opening or any other wake-up makes one token
   exchange. It never long-polls — MV3 stops the worker mid-wait.
-- **Use a web account** (below). The extension shows the signed-in web account's
-  profile photo and email, then asks for confirmation. **Open Track Your Time**
-  lets the web app refresh that offer. Manual sign-in remains available.
+- **Log In From Web App** (below). When the web app has a signed-in account,
+  the extension shows its photo and email above the confirmation button.
+  This option stays hidden without an account offer. Manual sign-in remains
+  available.
 
 Every session token is kept in `chrome.storage.session` — memory-only, so it
 never touches disk and is gone after a browser restart. A fresh confirmation or

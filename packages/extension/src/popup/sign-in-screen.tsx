@@ -1,10 +1,9 @@
 import { useState, type FormEvent, type JSX } from "react";
 import { Pencil } from "lucide-react";
 import { sameServerOrigin } from "@starter/core";
-import { BRIDGE_TARGET } from "../lib/config";
 import type { DeviceSignInError, PendingDeviceSignIn } from "../lib/messaging";
 import { describeDeviceSignInError } from "./errors";
-import { join, openTab } from "./open-tab";
+import { openTab } from "./open-tab";
 import { ServerPicker } from "./server-picker";
 import { Header } from "./header";
 import type { WebAccount } from "../lib/web-account";
@@ -41,7 +40,6 @@ export function SignInScreen({
   apiUrl,
   webAccount = null,
   onConfirmWebAccount,
-  webUrl,
   pendingSync,
   pendingDeviceAuth,
   deviceSignInError,
@@ -72,15 +70,6 @@ export function SignInScreen({
     setBusy(false);
   };
 
-  // Use the known hosted URL even before server discovery finishes. A custom
-  // server or a build without the web bridge must retain manual sign-in.
-  const automaticWebUrl =
-    (BRIDGE_TARGET === "production" || BRIDGE_TARGET === "development") &&
-    sameServerOrigin(apiUrl, "https://api.trackyourtime.dev") &&
-    (webUrl === null || sameServerOrigin(webUrl, "https://trackyourtime.dev"))
-      ? "https://trackyourtime.dev"
-      : null;
-
   const notice =
     error ?? (deviceSignInError !== null ? describeDeviceSignInError(deviceSignInError, t) : null);
 
@@ -103,17 +92,6 @@ export function SignInScreen({
         </button>
       } />
       <div className="popup__body">
-        {webAccount !== null && pendingDeviceAuth === null && !changingServer && onConfirmWebAccount ? (
-          <div className="web-account__identity" data-testid="web-account-identity">
-            <span className="web-account__avatar" aria-hidden="true">
-              {webAccount.email.charAt(0).toUpperCase()}
-              {webAccount.image ? <img key={webAccount.image} src={webAccount.image} alt="" referrerPolicy="no-referrer"
-                onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
-            </span>
-            <strong className="web-account__email">{webAccount.email}</strong>
-          </div>
-        ) : null}
-
         {pendingDeviceAuth !== null ? (
           <div className="panel" data-testid="device-sign-in-waiting">
             <p className="panel__title">{t(pendingDeviceAuth.webAccount ? "signIn.webAccountWaitingTitle" : "signIn.deviceTitle")}</p>
@@ -211,22 +189,26 @@ export function SignInScreen({
             >
               {t("signIn.withWebApp")}
             </button>
-            {(automaticWebUrl || (webAccount && onConfirmWebAccount)) ? (
-              <button
-                type="button"
-                className="button button--block"
-                disabled={busy}
-                onClick={() => {
-                  if (webAccount && onConfirmWebAccount) {
-                    void runDevice(() => onConfirmWebAccount(webAccount.userId, webAccount.sessionCreatedAt));
-                  } else if (automaticWebUrl) {
-                    openTab(join(automaticWebUrl, "/app/track"));
-                  }
-                }}
-                data-testid="open-web-app"
-              >
-                {busy ? t("signIn.submitting") : t("signIn.openWebApp")}
-              </button>
+            {webAccount && onConfirmWebAccount ? (
+              <div className="web-account__offer">
+                <div className="web-account__identity" data-testid="web-account-identity">
+                  <span className="web-account__avatar" aria-hidden="true">
+                    {webAccount.email.charAt(0).toUpperCase()}
+                    {webAccount.image ? <img key={webAccount.image} src={webAccount.image} alt="" referrerPolicy="no-referrer"
+                      onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
+                  </span>
+                  <strong className="web-account__email">{webAccount.email}</strong>
+                </div>
+                <button
+                  type="button"
+                  className="button button--block"
+                  disabled={busy}
+                  onClick={() => void runDevice(() => onConfirmWebAccount(webAccount.userId, webAccount.sessionCreatedAt))}
+                  data-testid="open-web-app"
+                >
+                  {busy ? t("signIn.submitting") : t("signIn.openWebApp")}
+                </button>
+              </div>
             ) : null}
           </>
         )}

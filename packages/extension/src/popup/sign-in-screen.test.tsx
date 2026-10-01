@@ -2,16 +2,13 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, test, vi } from "vitest";
-import { BUILD_TARGETS } from "../../manifest.config";
+import { describe, expect, test, vi } from "vitest";
 import { SignInScreen, type SignInScreenProps } from "./sign-in-screen";
 
-const config = vi.hoisted(() => ({
+vi.mock("../lib/config", () => ({
   DEFAULT_API_URL: "https://api.trackyourtime.dev",
   BRIDGE_TARGET: "production",
 }));
-vi.mock("../lib/config", () => config);
-beforeEach(() => { config.BRIDGE_TARGET = "production"; });
 
 const props: SignInScreenProps = {
   apiUrl: "https://api.trackyourtime.dev",
@@ -28,9 +25,9 @@ const props: SignInScreenProps = {
 };
 
 describe("extension sign-in choices", () => {
-  test("hosted Chrome offers email, device code, and a web connection retry", () => {
+  test("without a web account, offers email and device code only", () => {
     const html = renderToStaticMarkup(<SignInScreen {...props} />);
-    expect(html).toContain('data-testid="open-web-app"');
+    expect(html).not.toContain('data-testid="open-web-app"');
     expect(html).toContain("Using cloud");
     expect(html).not.toContain("Use your own server");
     expect(html).not.toContain("Signing in to");
@@ -38,28 +35,24 @@ describe("extension sign-in choices", () => {
     expect(html).toContain('data-testid="sign-in-form"');
     expect(html).toContain("Sign in with email");
     expect(html).toContain("Sign in with a device code");
-    expect(html).toContain("Log In From Web App");
+    expect(html).not.toContain("Log In From Web App");
     expect(html).not.toContain("Get a code, then");
     expect(html).not.toContain("Already signed in on the web?");
   });
 
-  test("shows the web account beside the persistent web login button", () => {
+  test("shows the web account directly above its login button, after other choices", () => {
     const html = renderToStaticMarkup(<SignInScreen {...props} webAccount={{ userId: "reader", sessionCreatedAt: 123, email: "reader@example.test", image: "https://example.test/avatar.png" }} onConfirmWebAccount={vi.fn()} />);
     expect(html).toContain('data-testid="open-web-app"');
     expect(html).toContain('data-testid="web-account-identity"');
     expect(html).toContain("reader@example.test");
     expect(html).toContain('src="https://example.test/avatar.png"');
+    expect(html.indexOf('data-testid="sign-in-web-app"')).toBeLessThan(html.indexOf('data-testid="web-account-identity"'));
+    expect(html.indexOf('data-testid="web-account-identity"')).toBeLessThan(html.indexOf('data-testid="open-web-app"'));
   });
 
-  test("hosted connection is available before server metadata arrives", () => {
+  test("no account offer stays hidden before server metadata arrives", () => {
     expect(renderToStaticMarkup(<SignInScreen {...props} webUrl={null} />))
-      .toContain('data-testid="open-web-app"');
-  });
-
-  test("development build pointed at cloud shows the web login button", () => {
-    config.BRIDGE_TARGET = "development";
-    expect(renderToStaticMarkup(<SignInScreen {...props} />))
-      .toContain('data-testid="open-web-app"');
+      .not.toContain('data-testid="open-web-app"');
   });
 
   test("self-hosted servers offer manual sign-in", () => {
@@ -76,14 +69,6 @@ describe("extension sign-in choices", () => {
       onConfirmWebAccount={vi.fn()} />);
     expect(html).toContain('data-testid="open-web-app"');
     expect(html).toContain("reader@example.test");
-  });
-
-  test("Firefox offers the hosted web connection alongside explicit sign-in", () => {
-    config.BRIDGE_TARGET = BUILD_TARGETS.firefox.bridgeTarget;
-    const html = renderToStaticMarkup(<SignInScreen {...props} />);
-    expect(html).toContain('data-testid="sign-in-web-app"');
-    expect(html).toContain('data-testid="sign-in-form"');
-    expect(html).toContain('data-testid="open-web-app"');
   });
 
   test("does not offer automatic connection for an unexpected web origin", () => {

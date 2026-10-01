@@ -407,7 +407,7 @@ export const marketing = {
     },
     login: {
       title: "No second login",
-      body: "Logged in at trackyourtime.dev in Chrome? The extension logs in too. There’s no extra password and no API key to copy. Log out of the web app, and the extension logs out with it.",
+      body: "Logged in at trackyourtime.dev in Chrome? Confirm that account in the extension. There’s no extra password or API key to copy. Signing out of either app leaves the other signed in.",
     },
     browsers: {
       title: "Not using Chrome?",

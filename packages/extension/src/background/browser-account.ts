@@ -103,6 +103,11 @@ export async function browserAccountImage(apiUrl: string, image: string | null):
 
 let lastOffer: { apiUrl: string; until: number; account: WebAccount | null | undefined } | null = null;
 
+/** A bridge update can make the cached cookie lookup stale before its five seconds expire. */
+export function clearBrowserAccountOfferCache(): void {
+  lastOffer = null;
+}
+
 /** Polling the popup refreshes offers without fetching the web session every second. */
 export async function discoverBrowserAccount(apiUrl: string): Promise<WebAccount | null | undefined> {
   if (lastOffer?.apiUrl === apiUrl && lastOffer.until > Date.now()) return lastOffer.account;

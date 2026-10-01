@@ -1990,6 +1990,12 @@ button.tag:hover .tag__x {
 }
 
 /* Confirm an existing web account without sharing either app's session. */
+.web-account__offer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .web-account__identity {
   display: flex;
   align-items: center;
