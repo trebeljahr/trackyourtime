@@ -298,7 +298,6 @@ export const popup = {
 
     ownServer: "Use your own server",
     openWebApp: "Log In From Web App",
-    autoLoginAs: "Auto Log In From Web As",
     title: "Sign in to Track Your Time",
     email: "Email",
     password: "Password",

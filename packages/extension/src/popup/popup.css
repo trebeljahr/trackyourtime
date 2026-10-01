@@ -2024,8 +2024,6 @@ button.tag:hover .tag__x {
   min-width: 0;
 }
 
-.sign-in__web-login { display: flex; flex-direction: column; gap: 8px; }
-
 .sign-in__server {
   display: inline-flex;
   align-items: center;

@@ -282,7 +282,6 @@ export const popup: Translation<typeof source> = {
 
     ownServer: "Eigenen Server verwenden",
     openWebApp: "Über Web-App anmelden",
-    autoLoginAs: "Automatisch über Web anmelden als",
     title: "Bei Track Your Time anmelden",
     email: "E-Mail",
     password: "Passwort",

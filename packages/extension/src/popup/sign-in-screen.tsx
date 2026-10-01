@@ -104,19 +104,14 @@ export function SignInScreen({
       } />
       <div className="popup__body">
         {webAccount !== null && pendingDeviceAuth === null && !changingServer && onConfirmWebAccount ? (
-          <button type="button" className="button button--primary button--block sign-in__web-login" disabled={busy}
-            data-testid="confirm-web-account"
-            onClick={() => void runDevice(() => onConfirmWebAccount(webAccount.userId, webAccount.sessionCreatedAt))}>
-            <span>{busy ? t("signIn.submitting") : t("signIn.autoLoginAs")}</span>
-            <span className="web-account__identity">
-              <span className="web-account__avatar" aria-hidden="true">
-                {webAccount.email.charAt(0).toUpperCase()}
-                {webAccount.image ? <img key={webAccount.image} src={webAccount.image} alt="" referrerPolicy="no-referrer"
-                  onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
-              </span>
-              <strong className="web-account__email">{webAccount.email}</strong>
+          <div className="web-account__identity" data-testid="web-account-identity">
+            <span className="web-account__avatar" aria-hidden="true">
+              {webAccount.email.charAt(0).toUpperCase()}
+              {webAccount.image ? <img key={webAccount.image} src={webAccount.image} alt="" referrerPolicy="no-referrer"
+                onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
             </span>
-          </button>
+            <strong className="web-account__email">{webAccount.email}</strong>
+          </div>
         ) : null}
 
         {pendingDeviceAuth !== null ? (
@@ -216,17 +211,22 @@ export function SignInScreen({
             >
               {t("signIn.withWebApp")}
             </button>
-            {automaticWebUrl && !webAccount ? (
-              <>
-                <button
-                  type="button"
-                  className="button button--block"
-                  onClick={() => openTab(join(automaticWebUrl, "/app/track"))}
-                  data-testid="open-web-app"
-                >
-                  {t("signIn.openWebApp")}
-                </button>
-              </>
+            {(automaticWebUrl || (webAccount && onConfirmWebAccount)) ? (
+              <button
+                type="button"
+                className="button button--block"
+                disabled={busy}
+                onClick={() => {
+                  if (webAccount && onConfirmWebAccount) {
+                    void runDevice(() => onConfirmWebAccount(webAccount.userId, webAccount.sessionCreatedAt));
+                  } else if (automaticWebUrl) {
+                    openTab(join(automaticWebUrl, "/app/track"));
+                  }
+                }}
+                data-testid="open-web-app"
+              >
+                {busy ? t("signIn.submitting") : t("signIn.openWebApp")}
+              </button>
             ) : null}
           </>
         )}

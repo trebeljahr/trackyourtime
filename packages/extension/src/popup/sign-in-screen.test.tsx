@@ -43,9 +43,10 @@ describe("extension sign-in choices", () => {
     expect(html).not.toContain("Already signed in on the web?");
   });
 
-  test("shows the web account inside the login button", () => {
+  test("shows the web account beside the persistent web login button", () => {
     const html = renderToStaticMarkup(<SignInScreen {...props} webAccount={{ userId: "reader", sessionCreatedAt: 123, email: "reader@example.test", image: "https://example.test/avatar.png" }} onConfirmWebAccount={vi.fn()} />);
-    expect(html).toContain("Auto Log In From Web As");
+    expect(html).toContain('data-testid="open-web-app"');
+    expect(html).toContain('data-testid="web-account-identity"');
     expect(html).toContain("reader@example.test");
     expect(html).toContain('src="https://example.test/avatar.png"');
   });
@@ -60,6 +61,15 @@ describe("extension sign-in choices", () => {
     expect(html).toContain('data-testid="sign-in-web-app"');
     expect(html).toContain('data-testid="sign-in-form"');
     expect(html).not.toContain('data-testid="open-web-app"');
+  });
+
+  test("a self-hosted web account can also use the background sign-in button", () => {
+    const html = renderToStaticMarkup(<SignInScreen {...props}
+      apiUrl="https://api.example.test" webUrl="https://example.test"
+      webAccount={{ userId: "reader", sessionCreatedAt: 123, email: "reader@example.test", image: null }}
+      onConfirmWebAccount={vi.fn()} />);
+    expect(html).toContain('data-testid="open-web-app"');
+    expect(html).toContain("reader@example.test");
   });
 
   test("Firefox offers the hosted web connection alongside explicit sign-in", () => {
@@ -98,11 +108,11 @@ test("shows the offered photo and email, and signs in only after confirmation", 
   const account = { userId: "u1", email: "rico@example.com", image: "https://example.com/avatar.png", sessionCreatedAt: 123 };
   try {
     await act(async () => root.render(<SignInScreen {...props} webAccount={account} onConfirmWebAccount={confirm} />));
-    const offer = container.querySelector<HTMLButtonElement>('[data-testid="confirm-web-account"]')!;
-    expect(offer.textContent).toContain("Auto Log In From Web As");
-    expect(container.querySelector('[data-testid="open-web-app"]')).toBeNull();
-    expect(offer.textContent).toContain(account.email);
-    expect(offer.querySelector("img")?.getAttribute("src")).toBe(account.image);
+    const offer = container.querySelector<HTMLButtonElement>('[data-testid="open-web-app"]')!;
+    const identity = container.querySelector('[data-testid="web-account-identity"]')!;
+    expect(offer.textContent).toContain("Log In From Web App");
+    expect(identity.textContent).toContain(account.email);
+    expect(identity.querySelector("img")?.getAttribute("src")).toBe(account.image);
     expect(confirm).not.toHaveBeenCalled();
     await act(async () => offer.click());
     expect(confirm).toHaveBeenCalledExactlyOnceWith("u1", 123);
@@ -118,6 +128,7 @@ test("accounts without a photo keep an initial and manual sign-in options", () =
     webAccount={{ userId: "u1", email: "rico@example.com", image: null, sessionCreatedAt: 123 }}
     onConfirmWebAccount={vi.fn()} />);
   expect(html).toContain('aria-hidden="true">R</span>');
+  expect(html).toContain('data-testid="open-web-app"');
   expect(html).toContain('data-testid="sign-in-form"');
   expect(html).toContain('data-testid="sign-in-web-app"');
 });
