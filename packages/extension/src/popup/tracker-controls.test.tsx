@@ -45,6 +45,8 @@ const state = {
   serverReachable: true,
   webUrl: null,
   email: "tester@example.test",
+  profileName: "Test User",
+  profileImage: "https://example.test/avatar.png",
   sessionSource: "credentials",
 } as unknown as BackgroundState;
 
@@ -145,6 +147,21 @@ describe("popup timer controls", () => {
       host.querySelector<HTMLButtonElement>('[data-testid="tracker-start"]')
         ?.disabled,
     ).toBe(true);
+  });
+
+  test("account avatar replaces footer identity and settings cog", async () => {
+    await render();
+    const avatar = host.querySelector<HTMLImageElement>('.header .menu__avatar');
+    expect(avatar?.getAttribute("src")).toBe("https://example.test/avatar.png");
+    expect(host.querySelector('.footer .menu')).toBeNull();
+    expect(host.querySelector('.footer__email')).toBeNull();
+    expect(host.querySelector('[data-testid="header-settings"]')).toBeNull();
+    await act(async () => avatar!.dispatchEvent(new Event("error")));
+    expect(host.querySelector('.menu__avatar')?.textContent).toBe("TU");
+    await click('[data-testid="menu-trigger"]');
+    expect(host.querySelector('[data-testid="menu-settings"]')).not.toBeNull();
+    await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(host.querySelector('[data-testid="menu-list"]')).toBeNull();
   });
 
   test("sign out remains available before the web URL is known", async () => {

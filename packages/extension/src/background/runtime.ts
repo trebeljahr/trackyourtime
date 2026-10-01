@@ -269,12 +269,8 @@ let cachedWebUrl: string | null = null;
  */
 let cachedServerInfo: ServerInfo | null = null;
 
-/**
- * The signed-in address. A password sign-in returns it and the device flow
- * stores it from `get-session`; a session whose record has none (a lookup that
- * failed at sign-in) asks once rather than leaving the popup's footer blank.
- */
-let cachedEmail: string | null = null;
+/** Profile details for the account menu, scoped to the current runtime. */
+let cachedProfile: { email: string | null; name: string | null; image: string | null } | null = null;
 
 let queue: OfflineQueue | null = null;
 
@@ -913,7 +909,7 @@ export async function reload(): Promise<Runtime> {
   settingsLookup = null;
   cachedWebUrl = null;
   cachedServerInfo = null;
-  cachedEmail = null;
+  cachedProfile = null;
   cachedEntries = null;
   entriesStale = false;
   cachedDevices = null;
@@ -1568,36 +1564,29 @@ export const invalidateRecents = (): void => {
  * because "Open Track Your Time" is exactly what someone with no session wants. A
  * failure is cached as `null` and simply hides the menu item.
  */
-/**
- * The signed-in address, from better-auth's own session endpoint.
- *
- * Only needed for a session whose record has no address; a password or
- * device sign-in already stored one. Returns null rather than throwing — a footer with no address is a
- * cosmetic loss, not a reason to fail the snapshot.
- */
-export async function resolveEmail(): Promise<string | null> {
+/** Account details are cached per runtime and cleared on account/server changes. */
+export async function resolveProfile(): Promise<{ email: string | null; name: string | null; image: string | null }> {
   const current = await ensureReady();
-  if (!current.session) return null;
-  if (current.session.email !== null) return current.session.email;
-  if (cachedEmail !== null) return cachedEmail;
-
+  const fallback = { email: current.session?.email ?? null, name: null, image: null };
+  if (!current.session) return fallback;
+  if (cachedProfile !== null) return cachedProfile;
   try {
     const response = await fetch(
       `${current.apiUrl.replace(/\/$/, "")}/api/auth/get-session`,
-      { headers: { authorization: `Bearer ${current.session.token}` } },
+      { headers: { authorization: `Bearer ${current.session.token}` }, credentials: "omit" },
     );
-    if (!response.ok) return null;
-    const body: unknown = await response.json();
-    const user =
-      typeof body === "object" && body !== null
-        ? (body as { user?: { email?: unknown } }).user
-        : undefined;
-    const email = user?.email;
-    if (typeof email !== "string" || email === "") return null;
-    cachedEmail = email;
-    return email;
+    if (!response.ok) return fallback;
+    const body = await response.json() as { user?: { email?: unknown; name?: unknown; image?: unknown } } | null;
+    const value = (field: unknown): string | null => typeof field === "string" && field.trim() !== "" ? field : null;
+    const profile = {
+      email: value(body?.user?.email) ?? fallback.email,
+      name: value(body?.user?.name),
+      image: value(body?.user?.image),
+    };
+    if (runtime === current) cachedProfile = profile;
+    return profile;
   } catch {
-    return null;
+    return fallback;
   }
 }
 

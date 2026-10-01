@@ -407,7 +407,17 @@ export function TrackerScreen({
         title="Track Your Time"
         branded
         onOpenEntries={onOpenEntries}
-        onOpenSettings={onOpenSettings}
+        accountMenu={
+          <Menu
+            webUrl={state.webUrl}
+            email={state.email}
+            name={state.profileName}
+            image={state.profileImage}
+            onOpenSettings={onOpenSettings}
+            onSignOut={onSignOut}
+            sharedSession={state.sessionSource === "web"}
+          />
+        }
         // Off by default, so by default the tracker looks exactly as it did.
         onOpenSuggestions={
           state.activity.settings.enabled ? onOpenSuggestions : undefined
@@ -579,9 +589,6 @@ export function TrackerScreen({
           {running === null ? t("tracker.start") : t("tracker.stop")}
         </button>
         <div className="footer__row">
-          <span className="footer__email" title={state.email ?? ""}>
-            {state.email ?? t("app.signedIn")}
-          </span>
           <span
             className="status"
             data-testid="tracker-sync-status"
@@ -590,11 +597,6 @@ export function TrackerScreen({
             <span className={`status__dot status__dot--${sync.tone}`} />
             {sync.label}
           </span>
-          <Menu
-            webUrl={state.webUrl}
-            onSignOut={onSignOut}
-            sharedSession={state.sessionSource === "web"}
-          />
         </div>
       </div>
     </div>

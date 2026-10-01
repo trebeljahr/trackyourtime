@@ -250,6 +250,8 @@ export const popup = {
     wipeHint: "Entries you already accepted are not touched. This cannot be undone.",
   },
   menu: {
+    account: "Account menu for {name}",
+    newTab: "Opens in a new tab",
     more: "More",
     reports: "Reports",
   },

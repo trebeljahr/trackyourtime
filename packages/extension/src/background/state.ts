@@ -72,7 +72,7 @@ import {
   pendingSyncCount,
   peekRunning,
   queuedRowCount,
-  resolveEmail,
+  resolveProfile,
   resolveOriginTrusted,
   resolveRunning,
   resolveSettings,
@@ -325,7 +325,7 @@ export async function buildState(): Promise<BackgroundState> {
   // the popup is told them apart so it stops crying wolf.
   //
   // Only reads that genuinely go to the network may set these. `pendingIdle`
-  // reads `chrome.storage`, `resolveEmail` swallows its own failure, and
+  // reads `chrome.storage`, `resolveProfile` swallows its own failure, and
   // `resolveRunning` can answer from cache — count any of them as evidence and
   // the extension would call itself online with the cable pulled out.
   let answered = false;
@@ -379,7 +379,7 @@ export async function buildState(): Promise<BackgroundState> {
   const [
     running,
     settings,
-    email,
+    profile,
     projects,
     clients,
     tags,
@@ -391,7 +391,7 @@ export async function buildState(): Promise<BackgroundState> {
   ] = await Promise.all([
     localRead(resolveRunning, peekRunning()),
     settingsRead,
-    localRead(resolveEmail, session.email),
+    localRead(resolveProfile, { email: session.email, name: null, image: null }),
     softRead(() => fetchProjects(current.api), getCachedProjects() ?? []),
     softRead(() => fetchClients(current.api), getCachedClients() ?? []),
     softRead(() => fetchTags(current.api), getCachedTags() ?? []),
@@ -451,7 +451,9 @@ export async function buildState(): Promise<BackgroundState> {
     sessionSource: current.sessionSource,
     pendingDeviceAuth: null,
     deviceSignInError: null,
-    email,
+    email: profile.email,
+    profileName: profile.name,
+    profileImage: profile.image,
     running,
     projects,
     clients,

@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import { useT } from "../i18n/use-t";
 import { Icon } from "./icons";
 import type { SyncLabel } from "./sync-label";
@@ -10,9 +10,6 @@ import type { SyncLabel } from "./sync-label";
  * the old 14px glyphs they were hard to hit and harder to read. The tracker
  * uses the product name; deeper screens show their destination.
  *
- * Nothing here opens a popover. The overflow menu's list opens *upward*
- * because it lives in the footer, and a header-anchored dropdown would need a
- * second flip case for no gain; the actions are all direct.
  */
 
 export type HeaderProps = {
@@ -25,6 +22,7 @@ export type HeaderProps = {
   /** Rendered only when supplied, so a screen opts into each action. */
   onOpenEntries?: () => void;
   onOpenSettings?: () => void;
+  accountMenu?: ReactNode;
   onNewEntry?: () => void;
   /** Only offered while activity capture is on — see the tracker. */
   onOpenSuggestions?: () => void;
@@ -44,6 +42,7 @@ export function Header({
   onNewEntry,
   onOpenSuggestions,
   sync,
+  accountMenu,
 }: HeaderProps): JSX.Element {
   const t = useT("popup");
   return (
@@ -130,6 +129,7 @@ export function Header({
             <Icon name="settings" />
           </button>
         ) : null}
+        {accountMenu}
       </div>
     </div>
   );

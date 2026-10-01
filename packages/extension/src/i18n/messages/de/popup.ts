@@ -234,6 +234,8 @@ export const popup: Translation<typeof source> = {
     wipeHint: "Einträge, die du schon übernommen hast, bleiben unberührt. Das lässt sich nicht rückgängig machen.",
   },
   menu: {
+    account: "Kontomenü für {name}",
+    newTab: "Öffnet in einem neuen Tab",
     more: "Mehr",
     reports: "Berichte",
   },

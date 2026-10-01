@@ -499,6 +499,8 @@ export type BackgroundState = {
   /** Why the last popup-started device sign-in ended without a session. */
   deviceSignInError: DeviceSignInError | null;
   email: string | null;
+  profileName?: string | null;
+  profileImage?: string | null;
   running: TimeEntry | null;
   projects: Project[];
   clients: Client[];

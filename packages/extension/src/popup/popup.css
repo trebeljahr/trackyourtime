@@ -1113,7 +1113,7 @@ button.tag:hover .tag__x {
   position: absolute;
   z-index: 30;
   right: 0;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   min-width: 200px;
   padding: 4px;
   background: var(--raised);
@@ -1123,7 +1123,10 @@ button.tag:hover .tag__x {
 }
 
 .menu__item {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
   padding: 8px;
   border: 0;
@@ -1880,3 +1883,8 @@ button.tag:hover .tag__x {
 .project-client > .popup__hint {
   grid-column: 1 / -1;
 }
+
+.menu__trigger { display: grid; place-items: center; padding: 4px; border-radius: 50%; }
+.menu__avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
+.menu__avatar--fallback { display: grid; place-items: center; background: var(--accent-soft); color: var(--fg); font-size: 12px; font-weight: 600; }
+.menu__item svg { flex-shrink: 0; }
