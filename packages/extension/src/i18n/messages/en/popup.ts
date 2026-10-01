@@ -284,6 +284,9 @@ export const popup = {
     create: "Create tag “{name}”",
   },
   signIn: {
+    ownServer: "Use your own server",
+    openWebApp: "Open Track Your Time",
+    openWebAppHint: "Sign in or create an account in the web app. If you’re already signed in, the extension connects automatically when it opens.",
     title: "Sign in to Track Your Time",
     email: "Email",
     password: "Password",

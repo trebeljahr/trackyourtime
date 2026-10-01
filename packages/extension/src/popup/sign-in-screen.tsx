@@ -1,9 +1,10 @@
 import { useState, type FormEvent, type JSX } from "react";
-import { DEFAULT_API_URL } from "../lib/config";
+import { sameServerOrigin } from "@starter/core";
+import { BRIDGE_TARGET, DEFAULT_API_URL } from "../lib/config";
 import type { DeviceSignInError, PendingDeviceSignIn } from "../lib/messaging";
 import { describeServer } from "../lib/server-label";
 import { describeDeviceSignInError } from "./errors";
-import { openTab } from "./open-tab";
+import { join, openTab } from "./open-tab";
 import { ServerPicker } from "./server-picker";
 import type { SetServerOutcome } from "./switch-server";
 import { useT } from "../i18n/use-t";
@@ -31,10 +32,11 @@ export type SignInScreenProps = {
   ) => Promise<SetServerOutcome>;
 };
 
-/** Email/password or one web-app sign-in path, with the code shown before navigation. */
+/** Hosted Chrome sign-in uses the web bridge; other servers keep manual sign-in. */
 export function SignInScreen({
   apiUrl,
   serverVersion,
+  webUrl,
   pendingSync,
   pendingDeviceAuth,
   deviceSignInError,
@@ -65,6 +67,15 @@ export function SignInScreen({
     setBusy(false);
   };
 
+  // Use the known hosted URL even before server discovery finishes. A custom
+  // server or a build without the web bridge must retain manual sign-in.
+  const automaticWebUrl =
+    BRIDGE_TARGET === "production" &&
+    sameServerOrigin(apiUrl, "https://api.trackyourtime.dev") &&
+    (webUrl === null || sameServerOrigin(webUrl, "https://trackyourtime.dev"))
+      ? "https://trackyourtime.dev"
+      : null;
+
   const notice =
     error ?? (deviceSignInError !== null ? describeDeviceSignInError(deviceSignInError, t) : null);
 
@@ -91,7 +102,7 @@ export function SignInScreen({
             onClick={() => setChangingServer((open) => !open)}
             data-testid="sign-in-change-server"
           >
-            {changingServer ? t("signIn.keepServer") : t("signIn.changeServer")}
+            {changingServer ? t("signIn.keepServer") : automaticWebUrl ? t("signIn.ownServer") : t("signIn.changeServer")}
           </button>
         ) : null}
       </div>
@@ -136,61 +147,77 @@ export function SignInScreen({
             />
           ) : null}
 
-          <form className="form" onSubmit={submit} data-testid="sign-in-form">
-            <div className="field">
-              <label className="field__label" htmlFor="email">
-                {t("signIn.email")}
-              </label>
-              <input
-                id="email"
-                className="input"
-                type="email"
-                autoComplete="username"
-                autoFocus
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                data-testid="sign-in-email"
-              />
-            </div>
+          {automaticWebUrl ? (
+            <>
+              <button
+                type="button"
+                className="button button--primary button--block"
+                onClick={() => openTab(join(automaticWebUrl, "/app/track"))}
+                data-testid="open-web-app"
+              >
+                {t("signIn.openWebApp")}
+              </button>
+              <p className="popup__hint">{t("signIn.openWebAppHint")}</p>
+            </>
+          ) : (
+            <>
+              <form className="form" onSubmit={submit} data-testid="sign-in-form">
+                <div className="field">
+                  <label className="field__label" htmlFor="email">
+                    {t("signIn.email")}
+                  </label>
+                  <input
+                    id="email"
+                    className="input"
+                    type="email"
+                    autoComplete="username"
+                    autoFocus
+                    required
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    data-testid="sign-in-email"
+                  />
+                </div>
 
-            <div className="field">
-              <label className="field__label" htmlFor="password">
-                {t("signIn.password")}
-              </label>
-              <input
-                id="password"
-                className="input"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                data-testid="sign-in-password"
-              />
-            </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="password">
+                    {t("signIn.password")}
+                  </label>
+                  <input
+                    id="password"
+                    className="input"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    data-testid="sign-in-password"
+                  />
+                </div>
 
-            <button
-              className="button button--primary button--block"
-              type="submit"
-              disabled={busy}
-              data-testid="sign-in-submit"
-            >
-              {busy ? t("signIn.submitting") : t("signIn.submit")}
-            </button>
-          </form>
+                <button
+                  className="button button--primary button--block"
+                  type="submit"
+                  disabled={busy}
+                  data-testid="sign-in-submit"
+                >
+                  {busy ? t("signIn.submitting") : t("signIn.submit")}
+                </button>
+              </form>
 
-          <p className="sign-in__or">{t("signIn.or")}</p>
-          <button
-            type="button"
-            className="button button--block"
-            disabled={busy}
-            onClick={() => void runDevice(onStartDeviceSignIn)}
-            data-testid="sign-in-web-app"
-          >
-            {t("signIn.withWebApp")}
-          </button>
-          <p className="popup__hint">{t("signIn.withWebAppHint")}</p>
+              <p className="sign-in__or">{t("signIn.or")}</p>
+              <button
+                type="button"
+                className="button button--block"
+                disabled={busy}
+                onClick={() => void runDevice(onStartDeviceSignIn)}
+                data-testid="sign-in-web-app"
+              >
+                {t("signIn.withWebApp")}
+              </button>
+              <p className="popup__hint">{t("signIn.withWebAppHint")}</p>
+            </>
+          )}
         </>
       )}
 

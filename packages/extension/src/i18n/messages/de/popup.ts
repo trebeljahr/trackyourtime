@@ -268,6 +268,9 @@ export const popup: Translation<typeof source> = {
     create: "Schlagwort „{name}“ erstellen",
   },
   signIn: {
+    ownServer: "Eigenen Server verwenden",
+    openWebApp: "Track Your Time öffnen",
+    openWebAppHint: "Melde dich in der Web-App an oder erstelle ein Konto. Wenn du bereits angemeldet bist, verbindet sich die Erweiterung beim Öffnen automatisch.",
     title: "Bei Track Your Time anmelden",
     email: "E-Mail",
     password: "Passwort",
