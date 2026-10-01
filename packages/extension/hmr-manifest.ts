@@ -1,4 +1,4 @@
-import { buildManifest, type BuildEnv } from "./manifest.config";
+import { buildManifest, type BuildEnv } from "./manifest.config.ts";
 
 export const HMR_OUT_DIR = "dist-hmr";
 

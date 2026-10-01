@@ -4,9 +4,9 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { crx, type ManifestV3Export } from "@crxjs/vite-plugin";
 import { defineConfig } from "vite";
-import { BUILD_TARGETS, RELEASE_VERSION } from "./manifest.config";
+import { BUILD_TARGETS, RELEASE_VERSION } from "./manifest.config.ts";
 
-import { buildHmrManifest, HMR_OUT_DIR } from "./hmr-manifest";
+import { buildHmrManifest, HMR_OUT_DIR } from "./hmr-manifest.ts";
 
 const fromHere = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 

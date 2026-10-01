@@ -6,6 +6,7 @@
     // nothing is emitted — tsc is only ever run as a type checker here.
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["chrome", "vite/client"],

@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { extensionOrigin } from "../../../scripts/lib/extension-id.mjs";
 import { hmrOptions } from "./hmr-options.mjs";
 
 try {
@@ -31,7 +32,7 @@ use Change server in the popup to change an existing saved selection.`);
     console.log(`HMR backend default: ${options.apiUrl ?? (options.mode === "local-api" ? "http://localhost:5159" : "https://api.trackyourtime.dev")}`);
     console.log("An existing popup server selection takes precedence; use Change server if needed.");
     console.log("Load packages/extension/dist-hmr unpacked as Track Your Time (dev). Production stays in dist-prod.");
-    console.log("Remote backends must explicitly trust this development ID (pnpm extension:id hmr).");
+    console.log(`Remote backend setup: append ${extensionOrigin(fileURLToPath(new URL("../dist-hmr", import.meta.url)))} to TRUSTED_ORIGINS, then restart the API. TRUST_STORE_APPS does not include this development ID.`);
     server.printUrls();
   }
 } catch (error) {

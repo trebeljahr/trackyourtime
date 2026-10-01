@@ -138,7 +138,7 @@ export const popup = {
      * extension's `chrome-extension://…` origin, for the admin to copy.
      */
     originNotTrusted:
-      "{server} does not accept requests from this extension. Ask its admin to set TRUST_STORE_APPS=true, or to add {origin} to TRUSTED_ORIGINS.",
+      "{server} does not accept requests from this extension. Ask its admin to add {origin} to TRUSTED_ORIGINS and restart the API.",
     /**
      * The Firefox and Safari wording. Their origin is a different random UUID
      * on every install, so TRUSTED_ORIGINS cannot hold it and the admin needs
