@@ -17,7 +17,7 @@ export const privacyMetadata = (locale: Locale): Metadata => {
 };
 
 /** Bump when the policy changes in substance. Store listings link to this page. */
-const LAST_UPDATED = Date.UTC(2026, 8, 22);
+const LAST_UPDATED = Date.UTC(2026, 9, 2);
 
 /**
  * The date in the page's language, identical on every build machine.
@@ -65,6 +65,9 @@ export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement 
       >
         <p>{t("privacy.hero.scope")}</p>
         <p>{t.rich("privacy.hero.contact", { email: PRIVACY_EMAIL, mail })}</p>
+        <address className="not-italic">
+          Rico Trebeljahr, c/o Block Services, Stuttgarter Str. 106, 70736 Fellbach, Germany
+        </address>
       </Hero>
 
       <Block title={t("privacy.summary.title")}>

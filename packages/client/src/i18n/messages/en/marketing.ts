@@ -45,6 +45,7 @@ export const marketing = {
       docs: "Documentation",
       apiDocs: "REST API",
       privacy: "Privacy policy",
+      imprint: "Imprint",
       support: "Support",
       press: "Press kit",
       donate: "Donate",

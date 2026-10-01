@@ -44,6 +44,7 @@ export const marketing: Translation<typeof source> = {
       docs: "Dokumentation",
       apiDocs: "REST-API",
       privacy: "Datenschutzerklärung",
+      imprint: "Impressum",
       support: "Support",
       press: "Presskit",
       donate: "Spenden",

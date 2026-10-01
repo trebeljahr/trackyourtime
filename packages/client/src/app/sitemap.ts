@@ -21,6 +21,7 @@ const PAGES = [
   "/download/",
   "/press/",
   "/privacy/",
+  "/imprint/",
   "/support/",
 ];
 
