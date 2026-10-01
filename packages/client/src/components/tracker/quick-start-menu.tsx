@@ -267,9 +267,7 @@ export function QuickStartMenu({
           data-testid="quick-start-trigger"
         >
           <Zap className="size-4" />
-          {/* On its own line the label is never the thing competing for room,
-              so it stays even on a phone, where an unlabelled bolt was the
-              least guessable control on the bar. */}
+          {/* Keep the label on small screens so the action stays clear. */}
           <span>{t("quickStart.trigger")}</span>
         </Button>
       </DropdownMenuTrigger>

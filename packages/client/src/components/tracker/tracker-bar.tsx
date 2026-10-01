@@ -22,7 +22,6 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { ProjectTaskPicker } from "@/components/entry-fields/project-task-picker";
 import { TagPicker } from "@/components/tags/tag-picker";
 import { BillableGlyph } from "@/components/tracker/billable-glyph";
@@ -290,155 +289,129 @@ export function TrackerBar(): React.JSX.Element {
       data-running={isRunning ? "true" : "false"}
       data-running-id={running?.id ?? ""}
     >
-      {/* Its own line above the composer. Sharing the row meant it was the
-          first thing before the description field and shifted every control
-          after it by its own width; on a line of its own the composer row
-          starts at the same place whether or not there is anything to quick
-          start. Hidden while a timer runs, where it would only offer to stop
-          this one and start another. */}
-      {isRunning ? null : (
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <QuickStartMenu mutations={mutations} />
-        </div>
-      )}
-
       <div
-        className="flex flex-wrap items-center gap-2"
+        className="flex flex-col gap-2"
         data-testid="tracker-composer"
       >
-        <DescriptionCombobox
-          value={description}
-          committed={running?.description ?? ""}
-          onValueChange={setDescription}
-          onCommit={commitDescription}
-          onSubmit={toggle}
-          onFill={fillFromSuggestion}
-          /* On a phone this opened the software keyboard on every mount of
-             /track — half the screen gone, over the entries the user came to
-             read, before they had done anything. Focus-on-mount is a
-             keyboard-first affordance and a phone has no keyboard to be first
-             with. Evaluated at render rather than baked in: under
-             `output: "export"` the prerender runs in Node where `isCapacitor()`
-             is false, but React never serialises `autoFocus` into the markup
-             — it focuses imperatively on mount — so the native value is the
-             one that decides. */
-          autoFocus={!isCapacitor() && (typeof window === "undefined" || !window.matchMedia?.("(pointer: coarse)").matches)}
-          className="min-w-0 flex-1 basis-48"
-          inputClassName="h-10 border-0 bg-transparent px-2 text-base shadow-none focus-visible:ring-0"
-          testId="tracker-description"
-        />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <QuickStartMenu mutations={mutations} />
+          <DescriptionCombobox
+            value={description}
+            committed={running?.description ?? ""}
+            onValueChange={setDescription}
+            onCommit={commitDescription}
+            onSubmit={toggle}
+            onFill={fillFromSuggestion}
+            /* On a phone this opened the software keyboard on every mount of
+               /track — half the screen gone, over the entries the user came to
+               read, before they had done anything. Focus-on-mount is a
+               keyboard-first affordance and a phone has no keyboard to be first
+               with. Evaluated at render rather than baked in: under
+               `output: "export"` the prerender runs in Node where `isCapacitor()`
+               is false, but React never serialises `autoFocus` into the markup
+               — it focuses imperatively on mount — so the native value is the
+               one that decides. */
+            autoFocus={!isCapacitor() && (typeof window === "undefined" || !window.matchMedia?.("(pointer: coarse)").matches)}
+            className="min-w-0 flex-1 basis-64"
+            inputClassName="h-10 border-0 bg-transparent px-2 text-base shadow-none focus-visible:ring-0"
+            testId="tracker-description"
+          />
 
-        {/* On a phone the two pickers share one line — `flex-1 min-w-0` lets
-            them shrink out of their `min-w-48`/`min-w-40` defaults, which
-            otherwise total more than 351pt and force each onto a line of its
-            own. From `sm` up they take their fixed widths again. */}
-        <ProjectTaskPicker
-          value={fields}
-          onChange={applyFields}
-          bare
-          className="flex-1 basis-full sm:basis-auto sm:flex-none"
-          controlClassName="h-10 min-w-0 flex-1 sm:min-w-48 sm:flex-none"
-          testIdPrefix="tracker"
-        />
+          <div className="flex shrink-0 items-center gap-3 sm:ml-auto">
+            {editsRunning && running ? (
+              <label className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                {t("fields.startTime")}
+                <TimeField
+                  value={running.start}
+                  timeFormat={format.timeFormat}
+                  timeZone={running.timeZone ?? deviceTimeZone()}
+                  aria-label={t("fields.startTime")}
+                  testId="tracker-start"
+                  onCommit={(iso) => mutations.updateEntry({ id: running.id, start: iso })}
+                />
+              </label>
+            ) : null}
+            <span
+              className="w-24 shrink-0 text-right font-mono text-lg tabular-nums"
+              data-testid="tracker-elapsed"
+              data-running={isRunning ? "true" : "false"}
+            >
+              {format.duration(isRunning ? elapsedSec : 0)}
+            </span>
 
-        <TagPicker
-          value={tagIds}
-          onChange={handleTagsChange}
-          maxChips={2}
-          className="h-10 border-0 shadow-none"
-          testId="tracker-tags"
-        />
+            <div className="flex shrink-0 items-center gap-2" data-testid="tracker-actions">
+              <Button
+                type="button"
+                className={cn(
+                  "w-24 shrink-0",
+                  isRunning &&
+                    "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                )}
+                onClick={toggle}
+                data-testid="tracker-toggle"
+                data-state={isRunning ? "running" : "idle"}
+              >
+                {isRunning ? (
+                  <><Square /> {tc("actions.stop")}</>
+                ) : (
+                  <><Play /> {tc("actions.start")}</>
+                )}
+              </Button>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={billable ? tc("fields.billable") : t("fields.notBillable")}
-          aria-pressed={billable}
-          title={billable ? tc("fields.billable") : t("fields.notBillable")}
-          className="cap-touch"
-          onClick={handleBillableToggle}
-          data-testid="tracker-billable"
-          data-billable={billable ? "true" : "false"}
-        >
-          <BillableGlyph billable={billable} />
-        </Button>
+              {isRunning ? null : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="cap-touch shrink-0"
+                  aria-label={t("bar.addEntry")}
+                  title={t("bar.addEntry")}
+                  onClick={() => setManualOpen(true)}
+                  data-testid="tracker-manual-open"
+                >
+                  <Plus />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
 
-        <Separator orientation="vertical" className="hidden h-8 sm:block" />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/60 pt-2">
+          {/* On a phone the two pickers share one line — `flex-1 min-w-0` lets
+              them shrink out of their `min-w-48`/`min-w-40` defaults, which
+              otherwise total more than 351pt and force each onto a line of its
+              own. From `sm` up they take their fixed widths again. */}
+          <ProjectTaskPicker
+            value={fields}
+            onChange={applyFields}
+            bare
+            className="flex-1 basis-full sm:basis-auto sm:flex-none"
+            controlClassName="h-10 min-w-0 flex-1 sm:min-w-48 sm:flex-none"
+            testIdPrefix="tracker"
+          />
 
-        {/* The running entry has no row in the list below — this bar is its
-            only editor — so the start time a forgotten Start needs moving
-            back is edited here. Read and written in the zone the entry was
-            recorded in, like every other time field. */}
-        {editsRunning && running ? (
-          <label className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-            {t("fields.startTime")}
-            <TimeField
-              value={running.start}
-              timeFormat={format.timeFormat}
-              timeZone={running.timeZone ?? deviceTimeZone()}
-              aria-label={t("fields.startTime")}
-              testId="tracker-start"
-              onCommit={(iso) => mutations.updateEntry({ id: running.id, start: iso })}
-            />
-          </label>
-        ) : null}
+          <TagPicker
+            value={tagIds}
+            onChange={handleTagsChange}
+            maxChips={2}
+            className="h-10 border-0 shadow-none"
+            testId="tracker-tags"
+          />
 
-        <span
-          className="w-24 shrink-0 text-right font-mono text-lg tabular-nums"
-          data-testid="tracker-elapsed"
-          data-running={isRunning ? "true" : "false"}
-        >
-          {format.duration(isRunning ? elapsedSec : 0)}
-        </span>
-
-        {/* Start and + stay one unit: the bar wraps on narrow screens, and
-            an orphaned + on its own line reads like it belongs to the row
-            below it. */}
-        <div className="flex shrink-0 items-center gap-2" data-testid="tracker-actions">
           <Button
             type="button"
-            className={cn(
-              "w-24 shrink-0",
-              isRunning &&
-                "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            )}
-            onClick={toggle}
-            data-testid="tracker-toggle"
-            data-state={isRunning ? "running" : "idle"}
+            variant="ghost"
+            size="icon"
+            aria-label={billable ? tc("fields.billable") : t("fields.notBillable")}
+            aria-pressed={billable}
+            title={billable ? tc("fields.billable") : t("fields.notBillable")}
+            className="cap-touch"
+            onClick={handleBillableToggle}
+            data-testid="tracker-billable"
+            data-billable={billable ? "true" : "false"}
           >
-            {isRunning ? (
-              <>
-                <Square /> {tc("actions.stop")}
-              </>
-            ) : (
-              <>
-                <Play /> {tc("actions.start")}
-              </>
-            )}
+            <BillableGlyph billable={billable} />
           </Button>
-
-          {/* A button, not a mode: logging past work is one action that ends
-              when the dialog closes, so the bar can never be left sitting in a
-              state where Start has quietly turned into Add.
-
-              Gone entirely while a timer runs. Sitting next to Stop it read
-              like it would add something TO the running entry, and logging a
-              past block is never what you reach for mid-timer anyway. */}
-          {isRunning ? null : (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="cap-touch shrink-0"
-              aria-label={t("bar.addEntry")}
-              title={t("bar.addEntry")}
-              onClick={() => setManualOpen(true)}
-              data-testid="tracker-manual-open"
-            >
-              <Plus />
-            </Button>
-          )}
         </div>
       </div>
 
