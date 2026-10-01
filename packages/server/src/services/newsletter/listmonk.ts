@@ -21,6 +21,14 @@
  * project gets a working list + templates out of the box.
  */
 
+function replyHeaders(): { headers?: Array<Record<string, string>> } {
+  const raw = process.env.LISTMONK_REPLY_TO ?? "";
+  if (/[\r\n]/.test(raw)) throw new Error("Invalid LISTMONK_REPLY_TO");
+  const replyTo = raw.trim();
+  if (!replyTo) return {};
+  return { headers: [{ "Reply-To": replyTo }] };
+}
+
 function required(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`Missing required env var: ${name}`);
@@ -259,6 +267,7 @@ export async function sendTransactional(params: SendTransactionalParams): Promis
     body: JSON.stringify({
       subscriber_email: params.to.toLowerCase(),
       template_id: templateId,
+      ...replyHeaders(),
       from_email: process.env.LISTMONK_FROM || process.env.LISTMONK_FROM_EMAIL,
       data: { subject: params.subject, body: params.html },
       content_type: "html",
@@ -300,6 +309,7 @@ export async function sendCampaign(params: SendCampaignParams): Promise<Campaign
       name: params.name,
       subject: params.subject,
       lists: [listId],
+      ...replyHeaders(),
       from_email: fromEmail,
       content_type: "html",
       body: params.html,

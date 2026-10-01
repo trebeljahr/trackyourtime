@@ -298,3 +298,11 @@ describe("auth.ts email guards", () => {
     );
   });
 });
+
+it("Reply-To preserves the sole recipient and rejects header injection", () => {
+  const message = { to: "one@example.com", subject: "fixture", text: "fixture", html: "<p>fixture</p>" };
+  const body = listmonkTxBody(message, { ...fullListmonk, LISTMONK_REPLY_TO: "Owner <hi@example.com>" });
+  assert.deepEqual(body.headers, [{ "Reply-To": "Owner <hi@example.com>" }]);
+  assert.equal(body.subscriber_email, "one@example.com");
+  assert.throws(() => listmonkTxBody(message, { ...fullListmonk, LISTMONK_REPLY_TO: "hi@example.com\r\nBcc: other@example.com" }), /Invalid LISTMONK_REPLY_TO/);
+});
