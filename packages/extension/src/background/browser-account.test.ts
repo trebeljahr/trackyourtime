@@ -33,6 +33,10 @@ describe("background web account", () => {
     expect(cookies).toHaveBeenCalledTimes(1);
   });
 
+  test("development build can offer the hosted web account", () => {
+    expect(canReadBrowserAccount("https://api.trackyourtime.dev")).toBe(true);
+  });
+
   test("does not use unrelated or partitioned cookies", async () => {
     cookies.mockResolvedValue([{ name: "analytics", value: "x" }, { ...cookie, partitionKey: { topLevelSite: "https://example.com" } }]);
     const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);

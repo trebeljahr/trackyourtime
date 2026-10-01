@@ -52,7 +52,7 @@ describe("development manifest", () => {
 
   it("scopes web-account cookie access to its own API", () => {
     expectScopedAccountAccess(buildManifest("development", {}));
-    expect(buildManifest("development", {}).host_permissions).toEqual(["http://localhost/*", "http://127.0.0.1/*"]);
+    expect(buildManifest("development", {}).host_permissions).toEqual(["http://localhost/*", "http://127.0.0.1/*", "https://api.trackyourtime.dev/*"]);
   });
 
   it("lets a local web app on any port message the extension, and no other extension", () => {

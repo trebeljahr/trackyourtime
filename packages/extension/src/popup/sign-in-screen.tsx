@@ -75,7 +75,7 @@ export function SignInScreen({
   // Use the known hosted URL even before server discovery finishes. A custom
   // server or a build without the web bridge must retain manual sign-in.
   const automaticWebUrl =
-    BRIDGE_TARGET === "production" &&
+    (BRIDGE_TARGET === "production" || BRIDGE_TARGET === "development") &&
     sameServerOrigin(apiUrl, "https://api.trackyourtime.dev") &&
     (webUrl === null || sameServerOrigin(webUrl, "https://trackyourtime.dev"))
       ? "https://trackyourtime.dev"

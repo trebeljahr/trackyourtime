@@ -56,6 +56,12 @@ describe("extension sign-in choices", () => {
       .toContain('data-testid="open-web-app"');
   });
 
+  test("development build pointed at cloud shows the web login button", () => {
+    config.BRIDGE_TARGET = "development";
+    expect(renderToStaticMarkup(<SignInScreen {...props} />))
+      .toContain('data-testid="open-web-app"');
+  });
+
   test("self-hosted servers offer manual sign-in", () => {
     const html = renderToStaticMarkup(<SignInScreen {...props} apiUrl="https://api.example.test" webUrl="https://example.test" />);
     expect(html).toContain('data-testid="sign-in-web-app"');

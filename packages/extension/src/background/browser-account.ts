@@ -10,10 +10,11 @@ const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 export function canReadBrowserAccount(apiUrl: string): boolean {
   try {
     const url = new URL(apiUrl);
-    return BRIDGE_TARGET === "production"
-      ? url.origin === "https://api.trackyourtime.dev"
-      : BRIDGE_TARGET === "development" && url.protocol === "http:" &&
-        (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+    if (url.origin === "https://api.trackyourtime.dev") {
+      return BRIDGE_TARGET === "production" || BRIDGE_TARGET === "development";
+    }
+    return BRIDGE_TARGET === "development" && url.protocol === "http:" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1");
   } catch { return false; }
 }
 

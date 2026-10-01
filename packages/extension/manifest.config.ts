@@ -260,7 +260,7 @@ export function buildManifest(
     // service worker sees no input events of its own.
     permissions: ["storage", "alarms", "idle", "cookies"],
     host_permissions: target.bridgeTarget === "development"
-      ? ["http://localhost/*", "http://127.0.0.1/*"]
+      ? ["http://localhost/*", "http://127.0.0.1/*", "https://api.trackyourtime.dev/*"]
       : ["https://api.trackyourtime.dev/*"],
     // Requested only when somebody turns on Settings → Activity, from that
     // click — never at install. `tabs` is what exposes a tab's URL and title

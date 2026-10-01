@@ -10,6 +10,7 @@ describe("isolated HMR extension", () => {
     expect(manifest).toHaveProperty("icons.32", "icons/dev/32.png");
     expect(buildManifest("production", {})).toHaveProperty("icons.32", "icons/32.png");
     expect(manifest).toHaveProperty("externally_connectable", { matches: ["http://localhost/*", "http://127.0.0.1/*"] });
+    expect(manifest.host_permissions).toContain("https://api.trackyourtime.dev/*");
   });
   it("keeps its loader outside every standalone build directory", () => {
     for (const target of Object.values(BUILD_TARGETS)) expect(HMR_OUT_DIR).not.toBe(target.outDir);
