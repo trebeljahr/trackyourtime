@@ -10,63 +10,8 @@ export interface EmailParams {
   html?: string;
 }
 
-export type EmailTransportKind = "smtp" | "listmonk" | "console";
-
-/** The subset of the environment that decides how mail leaves this server.
- *  Declared as its own shape so the selection can be unit-tested without a
- *  process env, a socket or a database. */
-export interface EmailTransportEnv {
-  SMTP_HOST: string;
-  EMAIL_FROM: string;
-  LISTMONK_URL: string;
-  LISTMONK_API_USER: string;
-  LISTMONK_API_TOKEN: string;
-  LISTMONK_TX_TEMPLATE_ID: string;
-  LISTMONK_FROM_EMAIL: string;
-  LISTMONK_FROM: string;
-}
-
-/**
- * Which transport a given environment selects, in a fixed order:
- *
- *   1. SMTP      — whenever SMTP_HOST is set. First, deliberately: a host
- *                  typed into SMTP_HOST is an explicit choice, and silently
- *                  preferring a Listmonk left over from an earlier setup
- *                  would send mail through a service the operator thought
- *                  they had replaced.
- *   2. Listmonk  — only when its whole set is present. A partial Listmonk
- *                  config is a misconfiguration, not a transport; treating
- *                  it as one turns every send into a 401 at delivery time.
- *   3. console   — no mail provider at all. Sends are logged, not delivered,
- *                  which is right for local dev and is the state a fresh
- *                  self-host boots in.
- *
- * Note that EMAIL_FROM does NOT participate: an SMTP host with no From
- * address must still select SMTP and then fail loudly at send time, because
- * falling back to console logging would look like "email is not configured"
- * to an operator who plainly configured it.
- */
-export function selectEmailTransport(source: EmailTransportEnv): EmailTransportKind {
-  if (source.SMTP_HOST.trim()) return "smtp";
-
-  const listmonkReady =
-    source.LISTMONK_URL &&
-    source.LISTMONK_API_USER &&
-    source.LISTMONK_API_TOKEN &&
-    source.LISTMONK_TX_TEMPLATE_ID &&
-    (source.LISTMONK_FROM_EMAIL || source.LISTMONK_FROM);
-  return listmonkReady ? "listmonk" : "console";
-}
-
-/** The From address for an SMTP send. EMAIL_FROM wins; the Listmonk sender is
- *  accepted as a fallback so an instance migrating off Listmonk keeps sending
- *  from the identity its recipients already recognise. Empty means unset —
- *  the SMTP branch turns that into a thrown error rather than a guess. */
-export function resolveFromAddress(source: EmailTransportEnv): string {
-  return (
-    source.EMAIL_FROM || source.LISTMONK_FROM || source.LISTMONK_FROM_EMAIL || ""
-  );
-}
+import { selectEmailTransport, resolveFromAddress, type EmailTransportEnv } from "../config/email-transport.js";
+export { selectEmailTransport, resolveFromAddress, type EmailTransportEnv, type EmailTransportKind } from "../config/email-transport.js";
 
 /** Implicit TLS (SMTPS) or STARTTLS. SMTP_SECURE overrides; unset follows the
  *  port, 465 being the only implicit-TLS port in practice. */
@@ -113,10 +58,9 @@ function getTransporter(): Transporter {
 /**
  * Send a transactional email.
  *
- * Three transports, chosen by selectEmailTransport(): plain SMTP (the
- * default, and all a self-host needs), Listmonk's /api/tx endpoint (opt-in,
+ * Three transports, chosen by selectEmailTransport(): plain SMTP (all a self-host needs), Listmonk's /api/tx endpoint (opt-in,
  * used by the hosted deploy, which relays through its SES identity), or a
- * console log when neither is configured.
+ * console log when EMAIL_TRANSPORT=none.
  *
  * Delivery failures throw. A password reset that fails silently is the worst
  * outcome here — the user waits for mail that was never sent, and the log

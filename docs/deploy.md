@@ -402,10 +402,11 @@ Three rules, each of which fails quietly if broken:
   that never arrives.
 
 The server app's env fields in Coolify. URL, user, token, tx template and a
-sender together select the transport (`selectEmailTransport`); the campaign
+sender are required for `EMAIL_TRANSPORT=listmonk`; the campaign
 template and list ids are the newsletter's. Set all nine in one deploy:
 
 ```
+EMAIL_TRANSPORT=listmonk
 LISTMONK_URL=https://listmonk.trebeljahr.com
 LISTMONK_API_USER=<Listmonk API user>
 LISTMONK_API_TOKEN=<its token>
@@ -416,6 +417,11 @@ LISTMONK_CAMPAIGN_TEMPLATE_ID=8   # tracktime-campaign
 LISTMONK_LIVE_LIST_ID=9           # tracktime
 LISTMONK_TEST_LIST_ID=10          # tracktime-test
 ```
+
+Before upgrading an existing deployment, set `EMAIL_TRANSPORT=listmonk` in the
+server environment. Provider credentials no longer select delivery implicitly;
+missing the selector with existing mail settings stops startup. Use `smtp` for
+an independent SMTP relay or `none` to deliberately disable account mail.
 
 ## Email verification and the one-time backfill
 

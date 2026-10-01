@@ -15,6 +15,7 @@ import {
 // Transport selection is a pure function of the environment precisely so it
 // can be asserted here — no socket, no database, no process env mutation.
 const empty: EmailTransportEnv = {
+  EMAIL_TRANSPORT: "",
   SMTP_HOST: "",
   EMAIL_FROM: "",
   LISTMONK_URL: "",
@@ -27,6 +28,7 @@ const empty: EmailTransportEnv = {
 
 const fullListmonk: EmailTransportEnv = {
   ...empty,
+  EMAIL_TRANSPORT: "listmonk",
   LISTMONK_URL: "https://listmonk.example.com",
   LISTMONK_API_USER: "api",
   LISTMONK_API_TOKEN: "token",
@@ -34,94 +36,160 @@ const fullListmonk: EmailTransportEnv = {
   LISTMONK_FROM_EMAIL: "noreply@example.com",
 };
 
+const smtp = {
+  ...empty,
+  EMAIL_TRANSPORT: "smtp",
+  SMTP_HOST: "smtp.example.test",
+  EMAIL_FROM: "time@example.test",
+};
+
 describe("selectEmailTransport", () => {
-  it("logs to the console when nothing is configured", () => {
+  it("allows a fresh mail-free instance and explicit none", () => {
     assert.equal(selectEmailTransport(empty), "console");
-  });
-
-  it("selects SMTP as soon as a host is set", () => {
-    assert.equal(
-      selectEmailTransport({ ...empty, SMTP_HOST: "smtp.example.com" }),
-      "smtp",
-    );
-  });
-
-  it("selects SMTP even without a From address, so the failure is loud", () => {
-    // The alternative — falling back to console logging — would look like
-    // "email is not configured" to an operator who plainly configured it.
-    const source = { ...empty, SMTP_HOST: "smtp.example.com", EMAIL_FROM: "" };
-    assert.equal(selectEmailTransport(source), "smtp");
-    assert.equal(resolveFromAddress(source), "");
-  });
-
-  it("prefers an explicitly configured SMTP host over a complete Listmonk", () => {
-    assert.equal(
-      selectEmailTransport({ ...fullListmonk, SMTP_HOST: "smtp.example.com" }),
-      "smtp",
-    );
-  });
-
-  it("ignores a whitespace-only SMTP host", () => {
-    assert.equal(selectEmailTransport({ ...empty, SMTP_HOST: "   " }), "console");
-    assert.equal(
-      selectEmailTransport({ ...fullListmonk, SMTP_HOST: "  " }),
-      "listmonk",
-    );
-  });
-
-  it("selects Listmonk when its whole set is present", () => {
-    assert.equal(selectEmailTransport(fullListmonk), "listmonk");
     assert.equal(
       selectEmailTransport({
         ...fullListmonk,
-        LISTMONK_FROM_EMAIL: "",
-        LISTMONK_FROM: "Track Your Time <noreply@example.com>",
+        EMAIL_TRANSPORT: "none",
+        SMTP_HOST: "smtp.example.test",
       }),
+      "console",
+    );
+  });
+  it("requires migration to an explicit choice when mail settings already exist", () => {
+    for (const source of [
+      { ...smtp, EMAIL_TRANSPORT: "" },
+      { ...fullListmonk, EMAIL_TRANSPORT: "" },
+    ]) {
+      assert.throws(
+        () => selectEmailTransport(source),
+        /set EMAIL_TRANSPORT explicitly/,
+      );
+    }
+  });
+  it("uses only the selected provider when both are configured", () => {
+    const both = {
+      ...fullListmonk,
+      SMTP_HOST: smtp.SMTP_HOST,
+      EMAIL_FROM: smtp.EMAIL_FROM,
+    };
+    assert.equal(
+      selectEmailTransport({ ...both, EMAIL_TRANSPORT: "smtp" }),
+      "smtp",
+    );
+    assert.equal(
+      selectEmailTransport({ ...both, EMAIL_TRANSPORT: "listmonk" }),
       "listmonk",
     );
   });
-
-  it("falls back to the console on a partial Listmonk config", () => {
-    for (const missing of [
+  it("does not fall back from incomplete SMTP to ready Listmonk", () => {
+    assert.throws(
+      () =>
+        selectEmailTransport({
+          ...fullListmonk,
+          EMAIL_TRANSPORT: "smtp",
+          SMTP_HOST: "smtp.example.test",
+        }),
+      /requires EMAIL_FROM/,
+    );
+  });
+  it("does not fall back from incomplete Listmonk to ready SMTP", () => {
+    for (const key of [
       "LISTMONK_URL",
       "LISTMONK_API_USER",
       "LISTMONK_API_TOKEN",
       "LISTMONK_TX_TEMPLATE_ID",
       "LISTMONK_FROM_EMAIL",
     ] as const) {
-      assert.equal(
-        selectEmailTransport({ ...fullListmonk, [missing]: "" }),
-        "console",
-        `expected a missing ${missing} to disqualify Listmonk`,
+      assert.throws(
+        () =>
+          selectEmailTransport({
+            ...fullListmonk,
+            SMTP_HOST: smtp.SMTP_HOST,
+            EMAIL_FROM: smtp.EMAIL_FROM,
+            [key]: " ",
+          }),
+        /requires/,
       );
     }
+  });
+  it("ignores invalid inactive provider settings", () => {
+    assert.equal(
+      selectEmailTransport({ ...smtp, LISTMONK_URL: "bad" }),
+      "smtp",
+    );
+    assert.equal(
+      selectEmailTransport({ ...fullListmonk, SMTP_PORT: "bad" }),
+      "listmonk",
+    );
+  });
+  it("validates the selector without exposing its value", () => {
+    assert.throws(
+      () => selectEmailTransport({ ...empty, EMAIL_TRANSPORT: "secret-typo" }),
+      (error) =>
+        error instanceof Error &&
+        error.message === "EMAIL_TRANSPORT must be smtp, listmonk or none",
+    );
+  });
+  it("requires valid selected SMTP settings", () => {
+    assert.throws(
+      () => selectEmailTransport({ ...smtp, SMTP_HOST: " " }),
+      /SMTP_HOST/,
+    );
+    assert.throws(
+      () => selectEmailTransport({ ...smtp, SMTP_USER: "user" }),
+      /both SMTP_USER and SMTP_PASSWORD/,
+    );
+    assert.throws(
+      () => selectEmailTransport({ ...smtp, SMTP_PORT: "587junk" }),
+      /SMTP_PORT/,
+    );
+    assert.throws(
+      () => selectEmailTransport({ ...smtp, SMTP_SECURE: "yes" }),
+      /SMTP_SECURE/,
+    );
+    assert.equal(selectEmailTransport(smtp), "smtp");
+  });
+  it("requires valid selected Listmonk settings", () => {
+    assert.throws(
+      () =>
+        selectEmailTransport({
+          ...fullListmonk,
+          LISTMONK_URL: "file:///tmp/mail",
+        }),
+      /LISTMONK_URL/,
+    );
+    assert.throws(
+      () =>
+        selectEmailTransport({ ...fullListmonk, LISTMONK_TX_TEMPLATE_ID: "0" }),
+      /positive integer/,
+    );
+    assert.equal(selectEmailTransport(fullListmonk), "listmonk");
+    assert.equal(
+      selectEmailTransport({
+        ...fullListmonk,
+        LISTMONK_FROM_EMAIL: "",
+        LISTMONK_FROM: "Time <time@example.test>",
+      }),
+      "listmonk",
+    );
   });
 });
 
 describe("resolveFromAddress", () => {
-  it("prefers EMAIL_FROM", () => {
+  it("does not borrow the other provider's sender", () => {
     assert.equal(
       resolveFromAddress({
         ...fullListmonk,
-        EMAIL_FROM: "hello@example.com",
-        LISTMONK_FROM: "Listmonk <lm@example.com>",
+        EMAIL_TRANSPORT: "smtp",
+        EMAIL_FROM: "",
       }),
-      "hello@example.com",
+      "",
     );
-  });
-
-  it("falls back to the Listmonk sender identity", () => {
     assert.equal(
-      resolveFromAddress({
-        ...fullListmonk,
-        LISTMONK_FROM: "Track Your Time <noreply@example.com>",
-      }),
-      "Track Your Time <noreply@example.com>",
+      resolveFromAddress({ ...fullListmonk, EMAIL_FROM: "smtp@example.test" }),
+      "noreply@example.com",
     );
-    assert.equal(resolveFromAddress(fullListmonk), "noreply@example.com");
-  });
-
-  it("is empty when no sender is configured anywhere", () => {
+    assert.equal(resolveFromAddress(smtp), smtp.EMAIL_FROM);
     assert.equal(resolveFromAddress(empty), "");
   });
 });
@@ -143,9 +211,15 @@ describe("listmonkTxBody", () => {
       ...fullListmonk,
       LISTMONK_FROM: "Track Your Time <noreply@mail.trackyourtime.dev>",
     });
-    assert.equal(body.from_email, "Track Your Time <noreply@mail.trackyourtime.dev>");
+    assert.equal(
+      body.from_email,
+      "Track Your Time <noreply@mail.trackyourtime.dev>",
+    );
     assert.equal(body.template_id, 1);
-    assert.deepEqual(body.data, { subject: "Verify", body: "<pre>a &lt; b</pre>" });
+    assert.deepEqual(body.data, {
+      subject: "Verify",
+      body: "<pre>a &lt; b</pre>",
+    });
   });
 });
 

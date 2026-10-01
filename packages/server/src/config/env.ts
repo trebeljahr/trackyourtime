@@ -1,3 +1,4 @@
+import { selectEmailTransport } from "./email-transport.js";
 import { config as dotenvxConfig } from "@dotenvx/dotenvx";
 import { existsSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
@@ -262,12 +263,10 @@ export const env = {
   STRIPE_PUBLISHABLE_KEY: getOptional("STRIPE_PUBLISHABLE_KEY"),
   STRIPE_WEBHOOK_SECRET: getOptional("STRIPE_WEBHOOK_SECRET"),
 
-  // Email — plain SMTP. The default transport, and the only one a self-host
-  // needs: any mailbox provider or relay works. SMTP_HOST alone selects it
-  // (see selectEmailTransport in services/email.ts); the rest are refinements.
-  // SMTP_USER/SMTP_PASSWORD are optional because an unauthenticated relay on
-  // a private network is a legitimate setup — omit both and no AUTH is
-  // attempted, rather than offering empty credentials and being rejected.
+  // Exactly one account-mail provider is active. Empty is allowed only for
+  // a fresh install with no provider settings; migrations must choose.
+  EMAIL_TRANSPORT: getOptional("EMAIL_TRANSPORT"),
+  // SMTP credentials may both be omitted for a private unauthenticated relay.
   SMTP_HOST: getOptional("SMTP_HOST"),
   SMTP_PORT: getOptional("SMTP_PORT", "587"),
   SMTP_USER: getOptional("SMTP_USER"),
@@ -350,6 +349,9 @@ export const env = {
   isProduction: getOptional("NODE_ENV") === "production",
   isTest: getOptional("NODE_ENV") === "test",
 } as const;
+
+// Fail before opening database connections or accepting requests.
+selectEmailTransport(env);
 
 /**
  * In development the same dev server is reachable as both http://localhost:PORT

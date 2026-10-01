@@ -188,7 +188,7 @@ export function checkMail(state: MailState): CheckResult {
       name,
       status: "warn",
       detail: "no mail transport; use the admin reset-password command or explicitly enable AUTH_LOG_LINKS",
-      fix: "set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD and EMAIL_FROM to send mail",
+      fix: "set EMAIL_TRANSPORT=smtp, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD and EMAIL_FROM to send mail",
     };
   }
   if (state.transport === "smtp" && !state.fromAddress) {

@@ -1078,12 +1078,13 @@ unauthenticated relay on your own network. Set these in `.env`:
 
 | Variable | Meaning |
 |---|---|
-| `SMTP_HOST` | The relay host. Setting it selects SMTP as the transport. |
+| `EMAIL_TRANSPORT` | Set to `smtp` to use these settings. `listmonk` selects your own Listmonk; `none` disables account mail. |
+| `SMTP_HOST` | The relay host. Required for SMTP. |
 | `SMTP_PORT` | Defaults to `587` (STARTTLS). `465` is implicit TLS. `25` is an unencrypted relay. |
 | `SMTP_USER` | Leave out **both** user and password for an unauthenticated relay. The server then attempts no AUTH, instead of offering empty credentials that the relay rejects. |
 | `SMTP_PASSWORD` | Type it into `.env` on the server. Do not paste it into a chat. |
 | `SMTP_SECURE` | `true` or `false`. When unset, it follows the port (`465` means implicit TLS). That default is right for nearly every provider. |
-| `EMAIL_FROM` | Required whenever `SMTP_HOST` is set. Most relays accept only a domain they are configured to send for, so there is no useful default. |
+| `EMAIL_FROM` | Required when `EMAIL_TRANSPORT=smtp`. Most relays accept only a domain they are configured to send for, so there is no useful default. |
 
 Apply the change:
 
@@ -1091,8 +1092,7 @@ Apply the change:
 docker compose -f docker-compose.selfhost.yml up -d server
 ```
 
-A missing `EMAIL_FROM` does not count as "email is not configured". A send
-then fails with an error that names the host. The server does not fall back to
+A missing `EMAIL_FROM` stops startup when SMTP is selected. The server does not fall back to
 the log in silence. An operator who set up a relay should not have to guess why
 nothing arrives. The server writes the link only when `AUTH_LOG_LINKS=true` explicitly enables
 owner recovery. Otherwise use the admin `reset-password` command while fixing mail.
@@ -1128,10 +1128,19 @@ nothing and prints 0.
 
 ### Which transport is used
 
-SMTP wins over Listmonk whenever `SMTP_HOST` is set. The three places that send
-account mail (password reset, verification and invitation) check whether *any*
-transport is configured, never one provider's variables. So an instance with
-SMTP set and Listmonk unset sends real mail with no further wiring.
+Set `EMAIL_TRANSPORT` to exactly one of `smtp`, `listmonk`, or `none`.
+Only that provider sends account mail. Inactive provider settings are ignored,
+and delivery failures never switch providers. SMTP requires its own `EMAIL_FROM`;
+it does not borrow the Listmonk sender.
+
+A fresh installation with no mail settings can omit the selector and sends no
+mail. Existing installations with provider settings must set the selector before
+upgrading. Missing or invalid selected-provider settings stop server startup
+with an error naming the settings to fix. For the hosted deployment, set
+`EMAIL_TRANSPORT=listmonk`; for an independent SMTP relay, use `smtp`.
+
+`none` disables account mail even when credentials remain configured. Newsletter
+campaigns are a separate Listmonk feature and are not disabled by this selector.
 
 ### Verifying a send
 
