@@ -1,16 +1,12 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { Check, Monitor, Moon, Sun } from "lucide-react";
-import type { ThemePreference } from "@starter/core";
 import { useT } from "../i18n/use-t";
-import { rememberTheme } from "./theme";
+import { rememberTheme, useTheme } from "./theme";
 
-export function ThemeToggle({ theme, onChange }: {
-  theme: ThemePreference;
-  onChange?: (theme: ThemePreference) => Promise<boolean>;
-}) {
+export function ThemeToggle() {
+  const theme = useTheme();
   const t = useT("popup");
   const menu = useRef<HTMLDetailsElement>(null);
-  const [busy, setBusy] = useState(false);
   const Icon = theme === "system" ? Monitor : theme === "dark" ? Moon : Sun;
   return (
     <details className="menu theme-toggle" ref={menu}
@@ -27,20 +23,14 @@ export function ThemeToggle({ theme, onChange }: {
         <Icon size={16} aria-hidden="true" />
       </summary>
       <div className="menu__list" role="group" aria-label={t("general.theme")}>
-        {(["light", "dark", "system"] as const).map((choice) => {
+        {(["system", "dark", "light"] as const).map((choice) => {
           const OptionIcon = choice === "system" ? Monitor : choice === "dark" ? Moon : Sun;
           return <button key={choice} type="button" className="menu__item"
-            aria-pressed={theme === choice} disabled={busy || !onChange}
+            aria-pressed={theme === choice}
             data-testid={`theme-option-${choice}`}
-            onClick={async () => {
-              if (!onChange || busy) return;
-              setBusy(true);
-              try {
-                if (await onChange(choice)) {
-                  rememberTheme(choice);
-                  if (menu.current) menu.current.open = false;
-                }
-              } finally { setBusy(false); }
+            onClick={() => {
+              rememberTheme(choice);
+              if (menu.current) menu.current.open = false;
             }}>
             <OptionIcon size={16} aria-hidden="true" />
             {t(`general.themes.${choice}`)}

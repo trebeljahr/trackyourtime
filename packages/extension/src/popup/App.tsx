@@ -31,7 +31,7 @@ import {
 } from "./route";
 import { forgetRoute, loadRoute, rememberRoute } from "./route-memory";
 import { Screens } from "./screens";
-import { rememberTheme } from "./theme";
+import { applyTheme, cachedTheme } from "./theme";
 import { OriginNotTrustedNotice } from "./origin-not-trusted-notice";
 import { VersionBanner } from "./version-banner";
 import { applyLocalePreference, useT } from "../i18n/use-t";
@@ -249,24 +249,14 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
     go({ name: "tracker" });
   }, [go]);
 
-  /**
-   * Follow the account's theme.
-   *
-   * `theme` is a synced user preference, so picking dark in the web app
-   * darkens this popup on the next snapshot — including one taken three
-   * seconds after another device changed it. Remembered as it is applied, so
-   * the next open paints in the right theme before React runs at all.
-   */
   useEffect(() => {
-    const theme = state?.settings?.theme;
-    if (theme === undefined) return;
-    rememberTheme(theme);
-    if (theme !== "system") return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const followSystem = () => rememberTheme("system");
+    const followSystem = () => {
+      if (cachedTheme() === "system") applyTheme("system");
+    };
     media.addEventListener("change", followSystem);
     return () => media.removeEventListener("change", followSystem);
-  }, [state?.settings?.theme]);
+  }, []);
 
   /**
    * Follow the account's language, for the same reasons as the theme: it is
@@ -789,7 +779,6 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
                   tagIds,
                 }),
               onStop: () => send({ type: "timer:stop" }),
-              onUpdateTheme: (theme) => updateSettings({ theme }),
               onUpdateRunning: updateRunning,
               onPinFavorite: pinFavorite,
               onUnpinFavorite: unpinFavorite,
@@ -840,7 +829,6 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
                 else openSection("account");
               },
               onSignOut: signOut,
-              onUpdateTheme: (theme) => updateSettings({ theme }),
               onRestartEntry: (entry) => send({
                 type: "timer:start",
                 description: entry.description,

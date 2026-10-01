@@ -1,19 +1,7 @@
 import type { ThemePreference } from "@starter/core";
+import { useSyncExternalStore } from "react";
 
-/**
- * The popup's copy of the account's theme.
- *
- * The preference itself is synced — it arrives on every {@link BackgroundState}
- * snapshot, so choosing dark in the web app darkens this popup too. What lives
- * here is only the local cache and the DOM plumbing, and the cache is what
- * makes it usable: the popup is destroyed on every close and rebuilt on every
- * open, so painting the light theme first and correcting it when the worker
- * answers would flash white in a dark browser several times a day.
- *
- * `localStorage` rather than `chrome.storage`, and that is the whole point —
- * it is synchronous, so the class is on `<html>` before React's first render.
- * The extension popup has its own origin, so nothing else can see it.
- */
+/** Local extension theme. Read synchronously before the popup first paints. */
 
 const STORAGE_KEY = "trackyourtime.theme";
 
@@ -23,7 +11,7 @@ const isTheme = (value: unknown): value is ThemePreference =>
 const prefersDark = (): boolean =>
   window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-/** The last theme this popup was told about, or "system" until it is told one. */
+/** The saved extension theme, or the system setting by default. */
 export const cachedTheme = (): ThemePreference => {
   try {
     const stored: unknown = window.localStorage.getItem(STORAGE_KEY);
@@ -53,7 +41,18 @@ export const rememberTheme = (theme: ThemePreference): void => {
   try {
     window.localStorage.setItem(STORAGE_KEY, theme);
   } catch {
-    /* the popup just re-learns it from the next snapshot */
+    /* Keep the current popup themed even if storage is unavailable. */
   }
   applyTheme(theme);
+  window.dispatchEvent(new Event("trackyourtime:theme-change"));
 };
+
+export const useTheme = (): ThemePreference =>
+  useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener("trackyourtime:theme-change", onChange);
+      return () => window.removeEventListener("trackyourtime:theme-change", onChange);
+    },
+    cachedTheme,
+    () => "system",
+  );

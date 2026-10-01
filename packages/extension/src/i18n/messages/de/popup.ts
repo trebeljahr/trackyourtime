@@ -419,14 +419,14 @@ export const popup: Translation<typeof source> = {
     hint: "{clock} · {duration} · {currency}",
     workspaceNote: "Gilt für den ganzen Arbeitsbereich",
     language: "Sprache",
-    languageNote: "Gilt auch für die Web-App und deine anderen Geräte.",
+    languageNote: "Gilt nur für diese Erweiterung.",
     languages: {
       system: "Wie im System",
       en: "English",
       de: "Deutsch",
     },
     theme: "Design",
-    themeNote: "Gilt auch für die Web-App und deine anderen Geräte.",
+    themeNote: "Gilt nur für diese Erweiterung.",
     themes: {
       system: "Wie im System",
       light: "Hell",

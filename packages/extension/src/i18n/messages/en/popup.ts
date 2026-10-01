@@ -442,9 +442,9 @@ export const popup = {
       de: "Deutsch",
     },
     theme: "Theme",
-    themeNote: "Shared with the web app and your other machines.",
+    themeNote: "Applies to this extension only.",
     themes: {
-      system: "Match the system",
+      system: "System",
       light: "Light",
       dark: "Dark",
     },

@@ -13,12 +13,12 @@ import { usePopupLocale, useT, type PopupT } from "../../i18n/use-t";
 import type { SettingsPatch } from "../../lib/messaging";
 import { NumberField } from "../number-field";
 import { SettingRow } from "../accordion";
+import { rememberTheme, useTheme } from "../theme";
 
 /**
  * Language, theme, clock, duration, week, money.
  *
- * Language and theme are personal and synced; the popup follows both from the
- * snapshot rather than applying a pick locally.
+ * Language follows account settings. Theme is local to this extension.
  *
  * The last three are WORKSPACE fields, and `settings.update` refuses them with
  * FORBIDDEN when the caller's membership role is "member". They are rendered
@@ -38,7 +38,7 @@ export type GeneralSectionProps = {
   onSave: (patch: SettingsPatch) => Promise<boolean>;
 };
 
-const THEMES: readonly ThemePreference[] = ["system", "light", "dark"];
+const THEMES: readonly ThemePreference[] = ["system", "dark", "light"];
 
 const LANGUAGES: readonly LocalePreference[] = ["system", "en", "de"];
 
@@ -124,6 +124,7 @@ export function GeneralSection({
   settings,
   onSave,
 }: GeneralSectionProps): JSX.Element {
+  const theme = useTheme();
   const t = useT("popup");
   const locale = usePopupLocale();
   if (settings === null) {
@@ -176,14 +177,8 @@ export function GeneralSection({
         <select
           id="setting-theme"
           className="select"
-          value={settings.theme}
-          onChange={(event) => {
-            // Not applied here: the popup follows `state.settings.theme`, so
-            // the successful mutation's snapshot is what repaints it — and a
-            // refusal therefore leaves the theme where it really is rather
-            // than where the <select> briefly said it was.
-            void onSave({ theme: event.target.value as ThemePreference });
-          }}
+          value={theme}
+          onChange={(event) => rememberTheme(event.target.value as ThemePreference)}
           data-testid="theme-select"
         >
           {THEMES.map((theme) => (

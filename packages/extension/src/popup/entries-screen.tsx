@@ -8,7 +8,6 @@ import {
   type DetailedEntry,
   type DurationFormat,
   type TimeFormat,
-  type ThemePreference,
 } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
 import { formatDurationFor, formatIdleSpanFor } from "../i18n/format";
@@ -49,7 +48,6 @@ export type EntriesScreenProps = {
   onNewEntry: () => void;
   onOpenSettings?: () => void;
   onSignOut?: () => Promise<boolean>;
-  onUpdateTheme?: (theme: ThemePreference) => Promise<boolean>;
   onRestartEntry?: (entry: DetailedEntry) => Promise<boolean>;
   onLoadMore: () => Promise<boolean>;
 };
@@ -111,7 +109,6 @@ export function EntriesScreen({
   onNewEntry,
   onOpenSettings,
   onSignOut,
-  onUpdateTheme,
   onRestartEntry,
   onLoadMore,
 }: EntriesScreenProps): JSX.Element {
@@ -205,7 +202,7 @@ export function EntriesScreen({
         sync={sync}
         accountMenu={
           <>
-            {onUpdateTheme && <ThemeToggle theme={state.settings?.theme ?? "system"} onChange={onUpdateTheme} />}
+            <ThemeToggle />
             <Menu
               webUrl={state.webUrl}
               email={state.email}

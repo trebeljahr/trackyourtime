@@ -81,7 +81,6 @@ const render = async (overrides: Partial<BackgroundState> = {}) => {
   const ok = vi.fn(async () => true);
   const onStart = vi.fn(async () => true);
   const onSignOut = vi.fn(async () => true);
-  const onUpdateTheme = vi.fn(async () => true);
   const onOpenEntries = vi.fn();
   const props: TrackerScreenProps = {
     state: { ...state, ...overrides },
@@ -94,7 +93,6 @@ const render = async (overrides: Partial<BackgroundState> = {}) => {
     onAnswerIdle: ok,
     onOpenSettings: vi.fn(),
     onOpenEntries,
-    onUpdateTheme,
     onOpenSuggestions: vi.fn(),
     onSearchDescriptions: vi.fn(),
     onCreateClient: ok,
@@ -120,7 +118,7 @@ const render = async (overrides: Partial<BackgroundState> = {}) => {
       </CatalogEditProvider>,
     ),
   );
-  return { onStart, onSignOut, onUpdateRunning: ok, onUpdateTheme, onOpenEntries };
+  return { onStart, onSignOut, onUpdateRunning: ok, onOpenEntries };
 };
 
 describe("popup timer controls", () => {
@@ -222,15 +220,15 @@ describe("popup timer controls", () => {
     expect(host.querySelector('[data-testid="menu-list"]')).toBeNull();
   });
 
-  test("theme choice persists through account settings and updates the popup", async () => {
-    const { onUpdateTheme } = await render();
+  test("theme choice applies locally and persists", async () => {
+    await render();
     await click('[data-testid="theme-toggle"]');
     await click('[data-testid="theme-option-dark"]');
-    expect(onUpdateTheme).toHaveBeenCalledWith("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
     await click('[data-testid="theme-toggle"]');
     await click('[data-testid="theme-option-light"]');
     expect(document.documentElement.dataset.theme).toBe("light");
+    expect(window.localStorage.getItem("trackyourtime.theme")).toBe("light");
   });
 
   test("running timer shows start time, total, then Stop before its fields", async () => {
@@ -275,14 +273,12 @@ describe("popup timer controls", () => {
   test("standalone entries keep theme and account navigation", async () => {
     const onOpenSettings = vi.fn();
     const onSignOut = vi.fn(async () => true);
-    const onUpdateTheme = vi.fn(async () => true);
     const history = { ...state, entries: { entries: [], pendingIds: [], hasMore: false,
       from: new Date().toISOString(), to: new Date().toISOString() } } as BackgroundState;
     await act(async () => root.render(<EntriesScreen state={history} error={null}
       onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
       onNewEntry={vi.fn()} onLoadMore={vi.fn(async () => true)}
-      onOpenSettings={onOpenSettings} onSignOut={onSignOut}
-      onUpdateTheme={onUpdateTheme} />));
+      onOpenSettings={onOpenSettings} onSignOut={onSignOut} />));
     expect(host.querySelector('.theme-toggle')).not.toBeNull();
     await click('[data-testid="menu-trigger"]');
     await click('[data-testid="menu-settings"]');

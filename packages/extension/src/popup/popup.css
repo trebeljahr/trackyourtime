@@ -2109,9 +2109,9 @@ button.tag:hover .tag__x {
 .header__status .status__dot { flex: none; }
 .theme-toggle > summary { list-style: none; width: 30px; height: 30px; }
 .theme-toggle > summary::-webkit-details-marker { display: none; }
-.theme-toggle .menu__list { min-width: 160px; }
-.theme-toggle .menu__item { gap: 8px; }
-.theme-toggle .menu__item svg:last-child { margin-left: auto; }
+.theme-toggle .menu__list { min-width: 132px; }
+.theme-toggle .menu__item { justify-content: flex-start; gap: 8px; white-space: nowrap; }
+.theme-toggle .menu__item svg + svg { margin-left: auto; }
 .form > .field > .tags { margin-top: 6px; margin-bottom: 0; }
 .tracker-entries { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px; }
 .tracker-entries__header { margin-bottom: 12px; }

@@ -14,7 +14,6 @@ import {
   type Project,
   type QuickStart,
   type TimeEntry,
-  type ThemePreference,
 } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
 import { usePopupLocale, useT } from "../i18n/use-t";
@@ -69,7 +68,6 @@ export type TrackerScreenProps = {
   /** Opens account settings in the web app. */
   onOpenSettings: () => void;
   onOpenEntries: () => void;
-  onUpdateTheme?: (theme: ThemePreference) => Promise<boolean>;
   entries?: ReactNode;
   renderEntries?: (running: TimeEntry | null) => ReactNode;
   /** The Suggestions screen. Its header button shows only while capture is on. */
@@ -155,7 +153,6 @@ export function TrackerScreen({
   onOpenSettings,
   onSignOut,
   onOpenEntries,
-  onUpdateTheme,
   entries,
   renderEntries,
   onOpenSuggestions,
@@ -437,7 +434,7 @@ export function TrackerScreen({
             >
               <span className={`status__dot status__dot--${sync.tone}`} aria-hidden="true" />
             </span>
-            <ThemeToggle theme={state.settings?.theme ?? "system"} onChange={onUpdateTheme} />
+            <ThemeToggle />
             <Menu
               webUrl={state.webUrl}
               email={state.email}
