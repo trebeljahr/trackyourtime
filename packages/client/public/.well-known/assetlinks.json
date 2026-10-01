@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.get_login_creds"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ricoslabs.trackyourtime",
+      "sha256_cert_fingerprints": [
+        "9E:E0:29:5F:45:85:23:8B:5C:35:8E:6F:D0:06:8F:4E:5D:E5:E9:C9:F7:62:47:6B:93:49:39:71:43:51:B1:36"
+      ]
+    }
+  }
+]

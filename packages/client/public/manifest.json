@@ -1,6 +1,6 @@
 {
   "name": "Track Your Time",
-  "short_name": "Track Time",
+  "short_name": "Track Your Time",
   "description": "Free, open-source time tracking that works offline and syncs across your devices",
   "start_url": "/app/track",
   "display": "standalone",
