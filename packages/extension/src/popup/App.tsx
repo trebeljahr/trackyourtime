@@ -244,6 +244,11 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
     const theme = state?.settings?.theme;
     if (theme === undefined) return;
     rememberTheme(theme);
+    if (theme !== "system") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const followSystem = () => rememberTheme("system");
+    media.addEventListener("change", followSystem);
+    return () => media.removeEventListener("change", followSystem);
   }, [state?.settings?.theme]);
 
   /**
@@ -767,6 +772,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
                   tagIds,
                 }),
               onStop: () => send({ type: "timer:stop" }),
+              onUpdateTheme: (theme) => updateSettings({ theme }),
               onUpdateRunning: updateRunning,
               onPinFavorite: pinFavorite,
               onUnpinFavorite: unpinFavorite,

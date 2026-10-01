@@ -360,7 +360,8 @@ export async function buildState(): Promise<BackgroundState> {
   // refetch has to fall back to the OVERLAID cache, because a failed fetch is
   // the offline case and the queued edits it stands for are the only version of
   // the list the user has seen.
-  const entriesFallback = view === "entries" ? await cachedEntryPage() : null;
+  const showEntries = view === "entries" || view === "tracker";
+  const entriesFallback = showEntries ? await cachedEntryPage() : null;
 
   // Before any workspace-scoped read, and awaited: every request below is
   // addressed to the resolved workspace, and a stored choice the person is no
@@ -420,7 +421,7 @@ export async function buildState(): Promise<BackgroundState> {
   // `softRead`, because this one genuinely hits the network once the window's
   // TTL has expired.
   const entries =
-    view === "entries"
+    showEntries
       ? await softRead(resolveEntryPage, entriesFallback)
       : null;
 

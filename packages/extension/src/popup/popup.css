@@ -1178,12 +1178,7 @@ button.tag:hover .tag__x {
   margin-left: auto;
 }
 
-.header__status {
-  margin: 0 6px;
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-}
+
 
 .header__back {
   margin-left: -4px;
@@ -2046,3 +2041,27 @@ button.tag:hover .tag__x {
   color: var(--fg);
 }
 .sign-in__server:disabled { opacity: 0.5; cursor: default; }
+
+/* Compact account controls and the continuous timer/history workspace. */
+.header__status {
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 0 2px;
+}
+.header__status .status__dot { flex: none; }
+.theme-toggle > summary { list-style: none; width: 30px; height: 30px; }
+.theme-toggle > summary::-webkit-details-marker { display: none; }
+.theme-toggle .menu__list { min-width: 160px; }
+.theme-toggle .menu__item { gap: 8px; }
+.theme-toggle .menu__item svg:last-child { margin-left: auto; }
+.form > .field > .tags { margin-top: 6px; margin-bottom: 0; }
+.tracker-entries { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px; }
+.tracker-entries__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.tracker-entries__header h2 { margin: 0; font-size: 13px; font-weight: 600; }
+.tracker-entries__header button { font-size: 11px; }
+.theme-toggle > summary { transition: background-color 120ms ease; }
+.theme-toggle[open] > summary { background: var(--accent-soft); }
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle > summary { transition: none; }
+}

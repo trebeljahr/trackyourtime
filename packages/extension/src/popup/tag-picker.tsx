@@ -12,7 +12,7 @@ import { useSelectWhenCreated } from "./use-created-row";
  * The picker only ever offers tags that are NOT already on the entry, and a
  * pick means "add this one". That keeps one search-and-create control in the
  * extension instead of two, and the selected tags render as removable chips
- * above it — at 380px a list of checkboxes would push Start off the popup.
+ * below it — at 380px a list of checkboxes would push Start off the popup.
  */
 
 export type TagPickerProps = {
@@ -67,43 +67,6 @@ export function TagPicker({
 
   return (
     <div className="field">
-      {selected.length > 0 && (
-        <div className="tags" data-testid={`${testId}-selected`}>
-          {selected.map((tag) => (
-            <span key={tag.id} className="tag-chip">
-              <button
-                type="button"
-                className="tag"
-                style={{ borderColor: tag.color }}
-                title={t("tagPicker.remove", { name: tag.name })}
-                onClick={() =>
-                  onChange(value.filter((id) => id !== tag.id))
-                }
-                data-testid={`${testId}-remove-${tag.id}`}
-              >
-                <span aria-hidden="true" className="project__dot" style={{ backgroundColor: tag.color }} />
-                <span className="tag__label">{tag.name}</span>
-                <span aria-hidden="true" className="tag__x">
-                  ×
-                </span>
-              </button>
-              {edit !== null && panel === null && (
-                <button
-                  type="button"
-                  className="tag-chip__edit"
-                  title={t("catalogEdit.editTag", { name: tag.name })}
-                  aria-label={t("catalogEdit.editTag", { name: tag.name })}
-                  onClick={() => open({ mode: "edit", tag })}
-                  data-testid={`${testId}-pencil-${tag.id}`}
-                >
-                  ✎
-                </button>
-              )}
-            </span>
-          ))}
-        </div>
-      )}
-
       {panel?.mode === "create" ? (
         <RenamePanel
           title={t("catalogEdit.newTagTitle")}
@@ -155,7 +118,7 @@ export function TagPicker({
           onNew={() => open({ mode: "create" })}
           newLabel={t("catalogEdit.newTag")}
           // Only tags not on the entry are listed; one that is has its pencil
-          // beside its chip above.
+          // beside its chip below.
           onEdit={
             edit === null
               ? undefined
@@ -168,6 +131,43 @@ export function TagPicker({
           testId={testId}
         />
       )}
+      {selected.length > 0 && (
+        <div className="tags" data-testid={`${testId}-selected`}>
+          {selected.map((tag) => (
+            <span key={tag.id} className="tag-chip">
+              <button
+                type="button"
+                className="tag"
+                style={{ borderColor: tag.color }}
+                title={t("tagPicker.remove", { name: tag.name })}
+                onClick={() =>
+                  onChange(value.filter((id) => id !== tag.id))
+                }
+                data-testid={`${testId}-remove-${tag.id}`}
+              >
+                <span aria-hidden="true" className="project__dot" style={{ backgroundColor: tag.color }} />
+                <span className="tag__label">{tag.name}</span>
+                <span aria-hidden="true" className="tag__x">
+                  ×
+                </span>
+              </button>
+              {edit !== null && panel === null && (
+                <button
+                  type="button"
+                  className="tag-chip__edit"
+                  title={t("catalogEdit.editTag", { name: tag.name })}
+                  aria-label={t("catalogEdit.editTag", { name: tag.name })}
+                  onClick={() => open({ mode: "edit", tag })}
+                  data-testid={`${testId}-pencil-${tag.id}`}
+                >
+                  ✎
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+
     </div>
   );
 }

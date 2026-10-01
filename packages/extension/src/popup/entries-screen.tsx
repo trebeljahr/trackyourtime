@@ -34,6 +34,7 @@ import { useElapsedSec } from "./use-elapsed";
 
 export type EntriesScreenProps = {
   state: BackgroundState;
+  embedded?: boolean;
   /** The last failure, already translated into human terms. */
   error: string | null;
   /** A one-line outcome carried in by the transition that landed here. */
@@ -94,6 +95,7 @@ const windowDays = (from: string, to: string): number => {
 
 export function EntriesScreen({
   state,
+  embedded = false,
   error,
   note = null,
   onBack,
@@ -109,9 +111,9 @@ export function EntriesScreen({
   const elapsedSec = useElapsedSec(state.running);
 
   useEffect(() => {
-    if (error === null) return;
+    if (embedded || error === null) return;
     alertRef.current?.scrollIntoView({ block: "nearest" });
-  }, [error]);
+  }, [error, embedded]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -149,15 +151,20 @@ export function EntriesScreen({
   const pending = new Set(page?.pendingIds ?? []);
 
   return (
-    <div className="screen" onKeyDown={onKeyDown} data-testid="entries-screen">
-      <Header
+    <div className={embedded ? "tracker-entries" : "screen"} onKeyDown={embedded ? undefined : onKeyDown} data-testid="entries-screen">
+      {embedded ? (
+        <div className="tracker-entries__header">
+          <h2>{t("entries.title")}</h2>
+          <button type="button" className="button--link" onClick={onNewEntry}>{t("entries.newEntry")}</button>
+        </div>
+      ) : <Header
         title={t("entries.title")}
         onBack={onBack}
         onNewEntry={onNewEntry}
         sync={sync}
-      />
+      />}
 
-      <div className="popup__body">
+      <div className={embedded ? undefined : "popup__body"}>
         <p
           ref={alertRef}
           className="notice screen__alert"
@@ -178,7 +185,7 @@ export function EntriesScreen({
             poll tick finds it, which can be mid-scroll here, and answering it
             can stop, split or discard the running entry — mutating the very
             list being read. So the answer is given next to the clock. */}
-        {state.pendingIdle !== null ? (
+        {!embedded && state.pendingIdle !== null ? (
           <button
             type="button"
             className="alert alert--idle"
@@ -195,7 +202,7 @@ export function EntriesScreen({
           {/* Pinned above the window rather than in it: the running entry is
               not part of the finished list, and this row is a signpost to the
               tracker rather than a second editor for it. */}
-          {state.running !== null ? (
+          {!embedded && state.running !== null ? (
             <RunningRow
               entry={state.running}
               elapsedSec={elapsedSec}

@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { BackgroundState } from "../lib/messaging";
 import { TrackerScreen, type TrackerScreenProps } from "./tracker-screen";
+import { EntriesScreen } from "./entries-screen";
 import { CatalogEditProvider } from "./catalog-edit";
 
 const state = {
@@ -80,6 +81,8 @@ const render = async (overrides: Partial<BackgroundState> = {}) => {
   const ok = vi.fn(async () => true);
   const onStart = vi.fn(async () => true);
   const onSignOut = vi.fn(async () => true);
+  const onUpdateTheme = vi.fn(async () => true);
+  const onOpenEntries = vi.fn();
   const props: TrackerScreenProps = {
     state: { ...state, ...overrides },
     error: null,
@@ -90,7 +93,8 @@ const render = async (overrides: Partial<BackgroundState> = {}) => {
     onUnpinFavorite: ok,
     onAnswerIdle: ok,
     onOpenSettings: vi.fn(),
-    onOpenEntries: vi.fn(),
+    onOpenEntries,
+    onUpdateTheme,
     onOpenSuggestions: vi.fn(),
     onSearchDescriptions: vi.fn(),
     onCreateClient: ok,
@@ -116,7 +120,7 @@ const render = async (overrides: Partial<BackgroundState> = {}) => {
       </CatalogEditProvider>,
     ),
   );
-  return { onStart, onSignOut, onUpdateRunning: ok };
+  return { onStart, onSignOut, onUpdateRunning: ok, onUpdateTheme, onOpenEntries };
 };
 
 describe("popup timer controls", () => {
@@ -206,6 +210,58 @@ describe("popup timer controls", () => {
     expect(host.querySelector('[data-testid="menu-settings"]')).not.toBeNull();
     await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
     expect(host.querySelector('[data-testid="menu-list"]')).toBeNull();
+  });
+
+  test("entries navigation lives in the avatar menu", async () => {
+    const { onOpenEntries } = await render();
+    expect(host.querySelector('[data-testid="header-entries"]')).toBeNull();
+    await click('[data-testid="menu-trigger"]');
+    await click('[data-testid="menu-entries"]');
+    expect(onOpenEntries).toHaveBeenCalledOnce();
+    expect(host.querySelector('[data-testid="menu-list"]')).toBeNull();
+  });
+
+  test("theme choice persists through account settings and updates the popup", async () => {
+    const { onUpdateTheme } = await render();
+    await click('[data-testid="theme-toggle"]');
+    await click('[data-testid="theme-option-dark"]');
+    expect(onUpdateTheme).toHaveBeenCalledWith("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    await click('[data-testid="theme-toggle"]');
+    await click('[data-testid="theme-option-light"]');
+    expect(document.documentElement.dataset.theme).toBe("light");
+  });
+
+  test("running timer has Stop first and tag input before selected tags", async () => {
+    await render({
+      tags: [{ id: "tag1", name: "Focus", color: "#ef4444" }] as BackgroundState["tags"],
+      running: { id: "e1", description: "Work", clientId: null, projectId: null,
+        taskId: null, tagIds: ["tag1"], billable: false,
+        start: new Date().toISOString(), end: null } as BackgroundState["running"],
+    });
+    expect(host.querySelector('.popup__body > :first-child')?.getAttribute("data-testid")).toBe("tracker-stop");
+    expect(host.querySelector('.timer-shortcuts')).toBeNull();
+    const input = host.querySelector('[data-testid="tracker-tags"]')!;
+    const cloud = host.querySelector('[data-testid="tracker-tags-selected"]')!;
+    expect(input.compareDocumentPosition(cloud) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test("embedded history keeps entry navigation and pagination without another header", async () => {
+    const onOpenEntry = vi.fn();
+    const onLoadMore = vi.fn(async () => true);
+    const entry = { id: "past", description: "Earlier work", start: new Date().toISOString(),
+      end: new Date().toISOString(), durationSec: 60, projectName: null, clientName: null,
+      taskName: null, projectColor: null, invoiceId: null };
+    const history = { ...state, entries: { entries: [entry], pendingIds: [], hasMore: true,
+      from: new Date().toISOString(), to: new Date().toISOString() } } as unknown as BackgroundState;
+    await act(async () => root.render(<EntriesScreen embedded state={history} error={null}
+      onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={onOpenEntry}
+      onNewEntry={vi.fn()} onLoadMore={onLoadMore} />));
+    expect(host.querySelector('.header')).toBeNull();
+    await click('[data-testid="entry-row"]');
+    expect(onOpenEntry).toHaveBeenCalledWith("past");
+    await click('[data-testid="entries-more"]');
+    expect(onLoadMore).toHaveBeenCalledOnce();
   });
 
   test("sign out remains available before the web URL is known", async () => {

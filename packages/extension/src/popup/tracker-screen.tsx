@@ -1,7 +1,7 @@
 import { History, Star, Play } from "lucide-react";
 import { QuickStartDrawer } from "./quick-start-drawer";
 import { ClientPicker } from "./client-picker";
-import { useState, type FormEvent, type JSX } from "react";
+import { useState, type FormEvent, type JSX, type ReactNode } from "react";
 import {
   createId,
   deviceTimeZone,
@@ -14,6 +14,7 @@ import {
   type Project,
   type QuickStart,
   type TimeEntry,
+  type ThemePreference,
 } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
 import { formatDurationFor } from "../i18n/format";
@@ -21,6 +22,7 @@ import { usePopupLocale, useT } from "../i18n/use-t";
 import { HeldQueue, WorkspacePicker } from "./workspace-bar";
 import { DescriptionField } from "./description-field";
 import { formatElapsed } from "./entry-format";
+import { ThemeToggle } from "./theme-toggle";
 import { Header } from "./header";
 import { TagPicker } from "./tag-picker";
 import { IdlePanel } from "./idle-panel";
@@ -68,6 +70,8 @@ export type TrackerScreenProps = {
   /** Opens account settings in the web app. */
   onOpenSettings: () => void;
   onOpenEntries: () => void;
+  onUpdateTheme?: (theme: ThemePreference) => Promise<boolean>;
+  entries?: ReactNode;
   /** The Suggestions screen. Its header button shows only while capture is on. */
   onOpenSuggestions: () => void;
   /** Asks the worker what this person has called work like this before. */
@@ -157,6 +161,8 @@ export function TrackerScreen({
   onOpenSettings,
   onSignOut,
   onOpenEntries,
+  onUpdateTheme,
+  entries,
   onOpenSuggestions,
   onSearchDescriptions,
   onCreateClient,
@@ -429,7 +435,6 @@ export function TrackerScreen({
       <Header
         title="Track Your Time"
         branded
-        onOpenEntries={onOpenEntries}
         accountMenu={
           <>
             <span
@@ -437,15 +442,17 @@ export function TrackerScreen({
               data-testid="tracker-sync-status"
               title={sync.title}
               role="status"
+              aria-label={sync.label}
             >
               <span className={`status__dot status__dot--${sync.tone}`} aria-hidden="true" />
-              {sync.label}
             </span>
+            <ThemeToggle theme={state.settings?.theme ?? "system"} onChange={onUpdateTheme} />
             <Menu
               webUrl={state.webUrl}
               email={state.email}
               name={state.profileName}
               image={state.profileImage}
+              onOpenEntries={onOpenEntries}
               onOpenSettings={onOpenSettings}
               onSignOut={onSignOut}
             />
@@ -458,27 +465,39 @@ export function TrackerScreen({
       />
 
       <div className="popup__body">
-        <nav className="timer-shortcuts" aria-label={t("quickStart.shortcuts")}>
+        {running !== null ? (
           <button
-            type="button"
-            disabled={busy}
-            onClick={() => setDrawer("recents")}
-            data-testid="open-recents"
+            className="button button--danger button--block"
+            type="submit"
+            form="tracker-form"
+            disabled={busy || panels.any}
+            data-testid="tracker-stop"
           >
-            <History size={15} aria-hidden="true" />
-            {t("quickStart.recents")}
+            {t("tracker.stop")}
           </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => setDrawer("favorites")}
-            data-testid="open-favorites"
-          >
-            <Star size={15} aria-hidden="true" />
-            {t("quickStart.favorites")}
-          </button>
-        </nav>
-        {drawer !== null && (
+        ) : (
+          <nav className="timer-shortcuts" aria-label={t("quickStart.shortcuts")}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setDrawer("recents")}
+              data-testid="open-recents"
+            >
+              <History size={15} aria-hidden="true" />
+              {t("quickStart.recents")}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setDrawer("favorites")}
+              data-testid="open-favorites"
+            >
+              <Star size={15} aria-hidden="true" />
+              {t("quickStart.favorites")}
+            </button>
+          </nav>
+        )}
+        {running === null && drawer !== null && (
           <QuickStartDrawer
             kind={drawer}
             items={
@@ -650,9 +669,6 @@ export function TrackerScreen({
           </span>
         </p>
 
-        {/* Hidden while a timer runs, where the row would only offer to stop
-            this one and start another. */}
-
         <HeldQueue rows={state.heldSync} onDiscard={onDiscardHeld} t={t} />
 
         <p
@@ -663,21 +679,10 @@ export function TrackerScreen({
         >
           {error ?? ""}
         </p>
+        {entries}
       </div>
 
-      {running !== null && (
-        <div className="footer">
-          <button
-            className="button button--danger button--block"
-            type="submit"
-            form="tracker-form"
-            disabled={busy || panels.any}
-            data-testid="tracker-stop"
-          >
-            {t("tracker.stop")}
-          </button>
-        </div>
-      )}
+
     </div>
   );
 }

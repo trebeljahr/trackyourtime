@@ -10,6 +10,7 @@ export type MenuProps = {
   name?: string | null;
   image?: string | null;
   onOpenSettings?: () => void;
+  onOpenEntries?: () => void;
   onSignOut?: () => Promise<boolean>;
 };
 
@@ -19,6 +20,7 @@ export function Menu({
   name,
   image,
   onOpenSettings,
+  onOpenEntries,
   onSignOut,
 }: MenuProps): JSX.Element {
   const t = useT("popup");
@@ -90,6 +92,12 @@ export function Menu({
                 {t("menu.reports")} {external}
               </button>
             </>
+          )}
+          {onOpenEntries && (
+            <button type="button" role="menuitem" className="menu__item"
+              data-testid="menu-entries" onClick={() => { setOpen(false); onOpenEntries(); }}>
+              {t("entries.title")}
+            </button>
           )}
           {onOpenSettings && (
             <button type="button" role="menuitem" className="menu__item"
