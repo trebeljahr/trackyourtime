@@ -405,6 +405,7 @@ export function TrackerScreen({
     <div className="screen" data-testid="tracker-screen">
       <Header
         title="Track Your Time"
+        branded
         onOpenEntries={onOpenEntries}
         onOpenSettings={onOpenSettings}
         // Off by default, so by default the tracker looks exactly as it did.

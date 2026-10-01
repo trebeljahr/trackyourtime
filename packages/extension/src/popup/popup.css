@@ -1123,6 +1123,13 @@ button.tag:hover .tag__x {
   border-bottom: 1px solid var(--border);
 }
 
+.header__logo {
+  flex: none;
+  display: block;
+  border-radius: 6px;
+  margin-right: 2px;
+}
+
 .header__title {
   font-size: 12px;
   font-weight: 600;

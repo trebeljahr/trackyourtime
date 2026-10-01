@@ -18,6 +18,8 @@ import type { SyncLabel } from "./sync-label";
 export type HeaderProps = {
   /** Product name or current screen title. */
   title?: string;
+  /** Show the product logo beside the title on the tracker. */
+  branded?: boolean;
   /** Omitted at depth 1, where there is nothing to go back to. */
   onBack?: () => void;
   /** Rendered only when supplied, so a screen opts into each action. */
@@ -35,6 +37,7 @@ export type HeaderProps = {
 
 export function Header({
   title,
+  branded = false,
   onBack,
   onOpenEntries,
   onOpenSettings,
@@ -55,6 +58,10 @@ export function Header({
         >
           <Icon name="back" />
         </button>
+      ) : null}
+
+      {branded ? (
+        <img className="header__logo" src="/icons/48.png" width={24} height={24} alt="" />
       ) : null}
 
       {title !== undefined ? (
