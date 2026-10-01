@@ -43,8 +43,15 @@ export async function savePopupSnapshot(state: BackgroundState): Promise<void> {
 export async function loadPopupSnapshot(): Promise<BackgroundState | null> {
   const area = sessionStorageArea();
   if (area === null) return null;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    const record: Record<string, unknown> = await area.get(POPUP_SNAPSHOT_KEY);
+    // The cache is optional; a stalled storage read must not block mounting.
+    const record: Record<string, unknown> = await Promise.race([
+      area.get(POPUP_SNAPSHOT_KEY),
+      new Promise<Record<string, unknown>>((resolve) => {
+        timeout = setTimeout(() => resolve({}), 250);
+      }),
+    ]);
     const stored = record[POPUP_SNAPSHOT_KEY];
     if (
       typeof stored !== "object" ||
@@ -57,5 +64,7 @@ export async function loadPopupSnapshot(): Promise<BackgroundState | null> {
     return typeof state === "object" && state !== null ? state : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }

@@ -70,9 +70,11 @@ const DRAFT_MEMORY_DEBOUNCE_MS = 500;
 export function App({ initialState = null }: { initialState?: BackgroundState | null }): JSX.Element {
   const t = useT("popup");
   const [state, setState] = useState<BackgroundState | null>(initialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [error, setError] = useState<string | null>(null);
 
-  // `send` must keep a stable identity (it is a mount-effect dependency), yet
+  // `send` must keep a stable identity for its consumers, yet
   // the failure it translates has to be said in the language on screen NOW —
   // a ref gives it both, the same trick `apiUrlRef` plays below.
   const tRef = useRef(t);
@@ -146,32 +148,31 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
     [],
   );
 
+  // Wait for each read before scheduling another, including cold startup.
   useEffect(() => {
-    // Refresh the cached first frame without blocking it on worker startup.
-    void send({ type: "state:get" });
-  }, [send]);
-
-  /**
-   * Re-poll while the popup is open.
-   *
-   * The contract is request/response only, so nothing lets the worker push. A
-   * popup left open would otherwise render its mount-time snapshot forever:
-   * "Connecting…" that never becomes "Synced" (the socket opens milliseconds
-   * after `buildState` reads its status), "Offline" after the network is back,
-   * or a timer someone started on another device staying invisible.
-   *
-   * Deliberately silent — it must not clear or set the error banner, or a
-   * blip would wipe the message from the action the user just took.
-   */
-  useEffect(() => {
-    const handle = setInterval(() => {
-      void sendToBackground({ type: "state:get" }).then((response) => {
-        if (!response.ok) return;
+    let active = true;
+    let handle: ReturnType<typeof setTimeout>;
+    const refresh = async (): Promise<void> => {
+      const response = await sendToBackground({ type: "state:get" });
+      if (!active) return;
+      if (response.ok) {
+        if (stateRef.current === null) setError(null);
         apiUrlRef.current = response.state.apiUrl;
         setState(response.state);
-      });
-    }, REFRESH_MS);
-    return () => clearInterval(handle);
+      } else if (stateRef.current === null) {
+        // Surface startup failures, but leave action errors alone once loaded.
+        setError((previous) => previous ?? describeError(
+          response.code, response.message, apiUrlRef.current, tRef.current,
+          response.details,
+        ));
+      }
+      handle = setTimeout(() => { void refresh(); }, REFRESH_MS);
+    };
+    void refresh();
+    return () => {
+      active = false;
+      clearTimeout(handle);
+    };
   }, []);
 
   /**
@@ -695,6 +696,10 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
         <div className="popup__body boot">
           {error === null ? (
             <div className="boot__status" data-testid="popup-loading" role="status">
+              <div className="boot__brand">
+                <img src="/icons/48.png" width="28" height="28" alt="" />
+                <span>Track Your <span className="boot__brand-accent">Time</span></span>
+              </div>
               <svg className="boot__timer" viewBox="0 0 80 88" width="72" height="80" aria-hidden="true">
                 <ellipse className="boot__shadow" cx="40" cy="81" rx="19" ry="3" />
                 <g className="boot__watch">

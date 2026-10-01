@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { BackgroundState } from "./messaging";
 import { sessionStorageArea } from "./chrome-storage";
 import {
@@ -26,5 +26,19 @@ describe("popup snapshot", () => {
     expect(await loadPopupSnapshot()).toBeNull();
     await sessionStorageArea()?.set({ [POPUP_SNAPSHOT_KEY]: "garbage" });
     expect(await loadPopupSnapshot()).toBeNull();
+  });
+});
+
+
+describe("stalled snapshot storage", () => {
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  test("lets startup proceed without a cache after 250ms", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(chrome.storage.session, "get").mockImplementation(() => new Promise(() => {}));
+    const pending = loadPopupSnapshot();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(await pending).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

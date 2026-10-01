@@ -547,6 +547,21 @@ button.tag:hover .tag__x {
   animation: boot-reveal 150ms ease-out 250ms forwards;
 }
 
+.boot__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 18px;
+  color: var(--fg);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -.5px;
+}
+
+.boot__brand-accent {
+  color: var(--accent);
+}
+
 @keyframes boot-reveal {
   to {
     opacity: 1;

@@ -654,8 +654,19 @@ const errorResponse = (code: string, message: string): BackgroundResponse => ({
 export async function sendToBackground(
   message: PopupToBackground,
 ): Promise<BackgroundResponse> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    const response: unknown = await chrome.runtime.sendMessage(message);
+    const pending = chrome.runtime.sendMessage(message);
+    // Only reads can safely time out and be retried. A mutation may still
+    // finish in the worker after the popup stops waiting.
+    const response: unknown = message.type === "state:get"
+      ? await Promise.race([
+          pending,
+          new Promise<undefined>((resolve) => {
+            timeout = setTimeout(() => resolve(undefined), 15_000);
+          }),
+        ])
+      : await pending;
 
     // A worker that died before responding yields undefined, not an error.
     if (typeof response !== "object" || response === null) {
@@ -670,5 +681,7 @@ export async function sendToBackground(
       "PORT_CLOSED",
       error instanceof Error ? error.message : "Could not reach the extension.",
     );
+  } finally {
+    clearTimeout(timeout);
   }
 }
