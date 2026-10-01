@@ -168,9 +168,10 @@ export function RenamePanel({
   const [name, setName] = useState(row.name);
   const [color, setColor] = useState(row.color);
   const [saving, setSaving] = useState(false);
+  const inFlight = useRef(false);
 
   const save = async (): Promise<void> => {
-    if (name.trim() === "") return;
+    if (inFlight.current || name.trim() === "") return;
     const patch = create
       ? { name: name.trim() }
       : changedFields({ name: row.name, color: row.color }, { name: name.trim(), color });
@@ -178,13 +179,23 @@ export function RenamePanel({
       onClose();
       return;
     }
+    inFlight.current = true;
     setSaving(true);
-    const ok = await onSave(patch);
-    setSaving(false);
+    let ok = false;
+    try {
+      ok = await onSave(patch);
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+    }
     // Left open on failure: the banner says why, and closing would throw away
     // what was typed.
     if (ok) onClose();
   };
+
+  if (create && saving) {
+    return <CreatedPreview name={name.trim()} color={color} testId={testId} />;
+  }
 
   return (
     <div className="panel" data-testid={testId}>
@@ -295,4 +306,22 @@ export function useOpenPanels(onAnyChange?: (any: boolean) => void): {
         return next;
       }),
   };
+}
+
+/** Show the submitted row immediately while retaining the mounted form's draft.
+ * Server IDs are deliberately not invented: dependent writes wait for the real row.
+ */
+export function CreatedPreview({ name, color, testId }: {
+  name: string;
+  color?: string;
+  testId: string;
+}): JSX.Element {
+  return (
+    <div className="field" data-testid={`${testId}-optimistic`}>
+      <span className="tag" style={{ borderColor: color }}>
+        {color && <span className="project__dot" style={{ backgroundColor: color }} />}
+        {name}
+      </span>
+    </div>
+  );
 }

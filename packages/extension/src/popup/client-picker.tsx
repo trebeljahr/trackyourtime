@@ -11,6 +11,7 @@ export function ClientPicker({
   onChange,
   onCreate,
   disabled,
+  onPendingChange,
   testId,
 }: {
   state: BackgroundState;
@@ -19,6 +20,7 @@ export function ClientPicker({
   onChange: (id: string | null) => void;
   onCreate: (name: string) => Promise<boolean>;
   disabled?: boolean;
+  onPendingChange?: (pending: boolean) => void;
   testId: string;
 }): JSX.Element {
   const t = useT("popup");
@@ -45,8 +47,9 @@ export function ClientPicker({
       disabled={disabled || !available}
       disabledHint={!available ? t("fields.clientNeedsUpdate") : undefined}
       onCreate={async (name) => {
-        await create(name, () => onCreate(name));
+        return create(name, () => onCreate(name));
       }}
+      onPendingChange={onPendingChange}
       createLabel={(name) => t("fields.createClient", { name })}
       testId={testId}
     />

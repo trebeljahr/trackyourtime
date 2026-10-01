@@ -148,8 +148,9 @@ export function TagPicker({
             selected.length === 0 ? t("tagPicker.search") : t("tagPicker.addAnother")
           }
           onCreate={async (name) => {
-            await createTag(name, () => onCreate(name));
+            return createTag(name, () => onCreate(name));
           }}
+          onPendingChange={onPendingChange}
           createLabel={(name) => t("tagPicker.create", { name })}
           onNew={() => open({ mode: "create" })}
           newLabel={t("catalogEdit.newTag")}

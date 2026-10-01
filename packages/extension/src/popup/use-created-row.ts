@@ -22,7 +22,7 @@ import { useEffect, useRef, useState } from "react";
 export function useSelectWhenCreated<T extends { name: string }>(
   rows: readonly T[],
   onSelect: (row: T) => void,
-): (name: string, create: () => Promise<boolean>) => Promise<void> {
+): (name: string, create: () => Promise<boolean>) => Promise<boolean> {
   const [wanted, setWanted] = useState<string | null>(null);
 
   // Every caller rebuilds this callback each render; a ref keeps the effect
@@ -48,5 +48,6 @@ export function useSelectWhenCreated<T extends { name: string }>(
     // earlier attempt is dropped with it, so a name typed twice cannot select
     // a row the second attempt did not make.
     setWanted(ok ? name.trim().toLowerCase() : null);
+    return ok;
   };
 }

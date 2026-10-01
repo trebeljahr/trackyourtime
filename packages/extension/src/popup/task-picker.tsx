@@ -103,8 +103,9 @@ export function TaskPicker({
       disabled={disabled}
       disabledHint={disabledHint}
       onCreate={async (name) => {
-        await createTask(name, () => onCreate(name));
+        return createTask(name, () => onCreate(name));
       }}
+      onPendingChange={onPendingChange}
       createLabel={(name) => t("fields.createTask", { name })}
       onNew={() => open({ mode: "create" })}
       newLabel={t("catalogEdit.newTask")}

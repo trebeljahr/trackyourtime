@@ -43,7 +43,8 @@ export type ComboboxProps = {
   disabled?: boolean;
   disabledHint?: string;
   /** When given, offers "Create <query>" for a query that matches nothing. */
-  onCreate?: (name: string) => Promise<void>;
+  onCreate?: (name: string) => Promise<boolean | void>;
+  onPendingChange?: (pending: boolean) => void;
   createLabel?: (name: string) => string;
   /**
    * When given, every option carries an edit button that calls this with its
@@ -77,6 +78,7 @@ export function Combobox({
   disabledHint,
   onCreate,
   createLabel,
+  onPendingChange,
   onEdit,
   editLabel,
   onNew,
@@ -87,7 +89,9 @@ export function Combobox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const [creating, setCreating] = useState(false);
+  const [pendingName, setPendingName] = useState<string | null>(null);
+  const creating = pendingName !== null;
+  const createInFlight = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const [flipped, setFlipped] = useState(false);
@@ -172,6 +176,7 @@ export function Combobox({
   };
 
   const choose = async (index: number): Promise<void> => {
+    if (createInFlight.current) return;
     const row = rows[index];
     if (!row) return;
 
@@ -191,14 +196,25 @@ export function Combobox({
       return;
     }
     if (row.kind === "create" && onCreate) {
-      setCreating(true);
+      const name = trimmed;
+      const previousQuery = query;
+      createInFlight.current = true;
+      onPendingChange?.(true);
+      setPendingName(name);
+      close();
+      let ok = false;
       try {
-        // The parent creates it and re-renders with the new option selected;
-        // guessing an id here would desync the moment the server disagrees.
-        await onCreate(trimmed);
-        close();
+        ok = (await onCreate(name)) !== false;
       } finally {
-        setCreating(false);
+        createInFlight.current = false;
+        onPendingChange?.(false);
+        setPendingName(null);
+        if (!ok) {
+          setQuery(previousQuery);
+          setOpen(true);
+          // Focus after React removes the disabled attribute.
+          requestAnimationFrame(() => rootRef.current?.querySelector("input")?.focus());
+        }
       }
     }
   };
@@ -281,7 +297,7 @@ export function Combobox({
           placeholder={
             selected?.label ?? placeholder ?? emptyLabel ?? t("combobox.search")
           }
-          value={open ? query : (selected?.label ?? "")}
+          value={pendingName ?? (open ? query : (selected?.label ?? ""))}
           onFocus={() => setOpen(true)}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -355,11 +371,9 @@ export function Combobox({
                     )}
                     {row.kind === "create" && (
                       <span className="combobox__create">
-                        {creating
-                          ? t("actions.creating")
-                          : createLabel !== undefined
-                            ? createLabel(trimmed)
-                            : t("combobox.create", { name: trimmed })}
+                        {createLabel !== undefined
+                          ? createLabel(trimmed)
+                          : t("combobox.create", { name: trimmed })}
                       </span>
                     )}
                     {row.kind === "new" && (

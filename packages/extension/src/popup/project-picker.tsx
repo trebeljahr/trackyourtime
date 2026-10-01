@@ -1,8 +1,9 @@
-import { useState, type JSX } from "react";
+import { useRef, useState, type JSX } from "react";
 import type { Client, Project } from "@starter/core";
 import { useT } from "../i18n/use-t";
 import {
   changedFields,
+  CreatedPreview,
   ColorSwatches,
   PanelActions,
   panelKeys,
@@ -237,6 +238,8 @@ function ProjectPanel({
   );
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [saving, setSaving] = useState(false);
+  const [creatingClient, setCreatingClient] = useState(false);
+  const inFlight = useRef(false);
 
   // Same for the client, into the panel's own field rather than the entry's.
   const createClient = useSelectWhenCreated(clients, (client) => {
@@ -254,20 +257,30 @@ function ProjectPanel({
       (parsedRate !== "invalid" && parsedRate !== project.hourlyRate));
 
   const save = async (): Promise<void> => {
-    if (!canSave) return;
+    if (!canSave || busy || creatingClient || inFlight.current) return;
+    inFlight.current = true;
     setSaving(true);
-    const ok = await onSave({
-      name: name.trim(),
-      clientId,
-      color,
-      billableDefault,
-      hourlyRate: parsedRate,
-    });
-    setSaving(false);
+    let ok = false;
+    try {
+      ok = await onSave({
+        name: name.trim(),
+        clientId,
+        color,
+        billableDefault,
+        hourlyRate: parsedRate,
+      });
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+    }
     // Left open on failure, holding everything typed: the banner above says
     // what went wrong, and closing would make the user retype it all.
     if (ok) onClose();
   };
+
+  if (project === null && saving) {
+    return <CreatedPreview name={name.trim()} color={color} testId={testId} />;
+  }
 
   return (
     <div className="panel" data-testid={testId}>
@@ -310,8 +323,9 @@ function ProjectPanel({
             emptyLabel={t("fields.noClient")}
             placeholder={t("fields.searchClients")}
             onCreate={async (clientName) => {
-              await createClient(clientName, () => onCreateClient(clientName));
+              return createClient(clientName, () => onCreateClient(clientName));
             }}
+            onPendingChange={setCreatingClient}
             createLabel={(clientName) =>
               t("fields.createClient", { name: clientName })
             }
@@ -383,7 +397,7 @@ function ProjectPanel({
 
       <PanelActions
         saving={saving || busy}
-        canSave={canSave && editingClient === null}
+        canSave={canSave && editingClient === null && !creatingClient}
         onCancel={onClose}
         onSave={() => void save()}
         create={project === null}

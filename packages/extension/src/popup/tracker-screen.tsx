@@ -597,6 +597,7 @@ export function TrackerScreen({
                 patchRunning({ clientId: next });
               }}
               onCreate={onCreateClient}
+              onPendingChange={panels.track("client")}
               testId="tracker-client"
             />
 

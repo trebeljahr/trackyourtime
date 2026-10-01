@@ -407,6 +407,7 @@ export function EntryForm({
         projectId={values.projectId}
         onChange={(clientId) => change({ clientId }, { clientId })}
         onCreate={onCreateClient}
+        onPendingChange={panels.track("client")}
         disabled={factsLocked}
         testId="entry-client"
       />
