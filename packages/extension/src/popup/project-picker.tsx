@@ -104,34 +104,66 @@ export function ProjectPicker({
     onPendingChange?.(false);
   };
 
+  const selectedProject = projects.find((project) => project.id === value);
+  const selectedClient = clients.find(
+    (client) => client.id === selectedProject?.clientId,
+  );
+
   if (panel === null) {
     return (
-      <Combobox
-        label={t("fields.project")}
-        options={projectOptions(projects, clients)}
-        value={value}
-        onChange={onChange}
-        emptyLabel={t("fields.noProject")}
-        placeholder={t("fields.searchProjects")}
-        disabled={disabled}
-        disabledHint={disabledHint}
-        onCreate={async (name) => {
-          open({ mode: "create", name });
-        }}
-        createLabel={(name) => t("fields.createProject", { name })}
-        onNew={() => open({ mode: "create", name: "" })}
-        newLabel={t("catalogEdit.newProject")}
-        onEdit={
-          edit === null
-            ? undefined
-            : (id) => {
-                const project = projects.find((candidate) => candidate.id === id);
-                if (project) open({ mode: "edit", project });
-              }
-        }
-        editLabel={(name) => t("catalogEdit.editProject", { name })}
-        testId={testId}
-      />
+      <>
+        <Combobox
+          label={t("fields.project")}
+          options={projectOptions(projects, clients)}
+          value={value}
+          onChange={onChange}
+          emptyLabel={t("fields.noProject")}
+          placeholder={t("fields.searchProjects")}
+          disabled={disabled}
+          disabledHint={disabledHint}
+          onCreate={async (name) => {
+            open({ mode: "create", name });
+          }}
+          createLabel={(name) => t("fields.createProject", { name })}
+          onNew={() => open({ mode: "create", name: "" })}
+          newLabel={t("catalogEdit.newProject")}
+          onEdit={
+            edit === null
+              ? undefined
+              : (id) => {
+                  const project = projects.find(
+                    (candidate) => candidate.id === id,
+                  );
+                  if (project) open({ mode: "edit", project });
+                }
+          }
+          editLabel={(name) => t("catalogEdit.editProject", { name })}
+          testId={testId}
+        />
+        <div className="field" data-testid={`${testId}-client`}>
+          <span className="field__label">{t("fields.client")}</span>
+          <div className="client-summary">
+            {selectedClient && (
+              <span
+                aria-hidden="true"
+                className="project__dot"
+                style={{ backgroundColor: selectedClient.color }}
+              />
+            )}
+            <span>{selectedClient?.name ?? t("fields.noClient")}</span>
+            {selectedProject && edit && !disabled && (
+              <button
+                type="button"
+                className="button--link"
+                onClick={() => open({ mode: "edit", project: selectedProject })}
+              >
+                {t("fields.editProjectClient")}
+              </button>
+            )}
+          </div>
+          <span className="popup__hint">{t("fields.clientFromProject")}</span>
+        </div>
+      </>
     );
   }
 
@@ -326,7 +358,9 @@ function ProjectPanel({
           />
         ) : (
           <RenamePanel
-            title={t("catalogEdit.editClientTitle", { name: editingClient.name })}
+            title={t("catalogEdit.editClientTitle", {
+              name: editingClient.name,
+            })}
             row={editingClient}
             onSave={(patch) =>
               edit === null

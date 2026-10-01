@@ -60,6 +60,8 @@ export const popup: Translation<typeof source> = {
   },
   fields: {
     startTime: "Startzeit",
+    editProjectClient: "Projekt bearbeiten",
+    clientFromProject: "Der Kunde wird im Projekt festgelegt.",
     description: "Beschreibung",
     project: "Projekt",
     noProject: "Kein Projekt",
@@ -287,7 +289,8 @@ export const popup: Translation<typeof source> = {
     saved: "Gespeichert",
   },
   quickStart: {
-    title: "Schnellstart",
+    hint: "Letzte oder angeheftete Arbeit übernimmt die Felder. Danach Timer starten wählen.",
+    title: "Letzte oder angeheftete Arbeit",
     rowTitle: "{label} – {hint}",
     pin: "{label} anheften",
     unpin: "{label} nicht mehr anheften",
@@ -344,7 +347,7 @@ export const popup: Translation<typeof source> = {
   },
   tracker: {
     descriptionPlaceholder: "Woran arbeitest du?",
-    start: "Starten",
+    start: "Timer starten",
     stop: "Stoppen",
     today: "Heute",
   },

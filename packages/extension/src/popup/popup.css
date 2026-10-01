@@ -86,7 +86,12 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font:
+    14px/1.5 system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -589,22 +594,32 @@ button.tag:hover .tag__x {
 
 .boot__shadow {
   fill: currentColor;
-  opacity: .12;
+  opacity: 0.12;
   transform-origin: 40px 81px;
   animation: boot-shadow 2.4s ease-in-out infinite;
 }
 
 @keyframes boot-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 @keyframes boot-tick {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes boot-shadow {
-  50% { transform: scaleX(.8); opacity: .07; }
+  50% {
+    transform: scaleX(0.8);
+    opacity: 0.07;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1006,7 +1021,9 @@ button.tag:hover .tag__x {
 }
 
 .swatch--selected {
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--fg);
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--fg);
 }
 
 .panel__actions {
@@ -1047,12 +1064,14 @@ button.tag:hover .tag__x {
 }
 
 .menu__trigger {
+  min-width: 40px;
+  min-height: 40px;
   padding: 2px 8px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 24px;
   line-height: 1.2;
   cursor: pointer;
 }
@@ -1092,22 +1111,15 @@ button.tag:hover .tag__x {
   background: var(--accent-soft);
 }
 
-/* The menu's separator, its danger item and its shared-session note are gone
-   with the items they belonged to: signing out, the API URL and the settings
-   link now live behind the cog, and the separator's generalisation is `.rule`
-   in the screens section below. */
-
 /* ── header ────────────────────────────────────────────────────────── */
 
-/* 32px, and it stays that small because the tracker gets no title — the
-   elapsed clock is the title. That is what pays for a header on the one
-   screen where every pixel is already spoken for. */
+/* Larger navigation targets remain visible above the scrolling form. */
 .header {
   display: flex;
   align-items: center;
   gap: 6px;
   flex: none;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 6px 0 10px;
   border-bottom: 1px solid var(--border);
 }
@@ -1137,8 +1149,8 @@ button.tag:hover .tag__x {
 .icon-button {
   display: inline-grid;
   place-items: center;
-  min-width: 32px;
-  height: 32px;
+  min-width: 40px;
+  height: 40px;
   padding: 0 7px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -1656,6 +1668,7 @@ button.tag:hover .tag__x {
 .choice input {
   margin: 0;
   accent-color: var(--accent);
+}
 
 /* ── activity suggestions ──────────────────────────────────────────── */
 
@@ -1752,4 +1765,65 @@ button.tag:hover .tag__x {
 
 .tracker-clock .range__field {
   flex: 0 0 100px;
+}
+
+/* Keep catalog colors visible after the picker closes. */
+.combobox--colored > .input {
+  padding-left: 32px;
+}
+.combobox__selected-dot {
+  position: absolute;
+  left: 12px;
+  top: 19px;
+  z-index: 1;
+  pointer-events: none;
+}
+.client-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.client-summary > span:nth-last-child(2) {
+  overflow-wrap: anywhere;
+}
+.client-summary .button--link {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.billable-glyph {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 20px;
+  font-size: 20px;
+  line-height: 1;
+}
+.billable-glyph__strike {
+  position: absolute;
+  width: 24px;
+  height: 1.5px;
+  top: 50%;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+.menu__item--danger {
+  color: var(--danger);
+}
+.menu__note {
+  padding: 8px;
+  max-width: 270px;
+}
+
+.quick__summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 0;
+}
+.quick__items {
+  max-height: 160px;
+  overflow-y: auto;
+}
+.footer > .button {
+  margin-bottom: 10px;
 }

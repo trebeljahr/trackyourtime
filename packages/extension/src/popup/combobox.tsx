@@ -120,7 +120,9 @@ export function Combobox({
     ...(canCreate ? [{ kind: "create" as const }] : []),
     // Only while nothing is typed: with a query, "Create X" is the same
     // action already, and two rows for it would read as two different things.
-    ...(onNew !== undefined && trimmed === "" ? [{ kind: "new" as const }] : []),
+    ...(onNew !== undefined && trimmed === ""
+      ? [{ kind: "new" as const }]
+      : []),
   ];
 
   useEffect(() => {
@@ -243,7 +245,10 @@ export function Combobox({
     return (
       <div className="field">
         <span className="field__label">{label}</span>
-        <p className="combobox__disabled" data-testid={testId && `${testId}-disabled`}>
+        <p
+          className="combobox__disabled"
+          data-testid={testId && `${testId}-disabled`}
+        >
           {disabledHint ?? t("combobox.notAvailable")}
         </p>
       </div>
@@ -256,7 +261,14 @@ export function Combobox({
         {label}
       </label>
 
-      <div className="combobox">
+      <div className={`combobox${selected?.color ? " combobox--colored" : ""}`}>
+        {selected?.color && (
+          <span
+            aria-hidden="true"
+            className="combobox__selected-dot project__dot"
+            style={{ backgroundColor: selected.color }}
+          />
+        )}
         <input
           id={`${listId}-input`}
           className="input"
@@ -266,7 +278,9 @@ export function Combobox({
           aria-controls={listId}
           aria-autocomplete="list"
           autoComplete="off"
-          placeholder={selected?.label ?? placeholder ?? emptyLabel ?? t("combobox.search")}
+          placeholder={
+            selected?.label ?? placeholder ?? emptyLabel ?? t("combobox.search")
+          }
           value={open ? query : (selected?.label ?? "")}
           onFocus={() => setOpen(true)}
           onChange={(event) => {
@@ -297,7 +311,9 @@ export function Combobox({
               return (
                 <li
                   key={key}
-                  className={onEdit !== undefined ? "combobox__item" : undefined}
+                  className={
+                    onEdit !== undefined ? "combobox__item" : undefined
+                  }
                 >
                   <button
                     type="button"
@@ -327,9 +343,13 @@ export function Combobox({
                             style={{ backgroundColor: row.option.color }}
                           />
                         )}
-                        <span className="combobox__label">{row.option.label}</span>
+                        <span className="combobox__label">
+                          {row.option.label}
+                        </span>
                         {row.option.hint !== undefined && (
-                          <span className="combobox__hint">{row.option.hint}</span>
+                          <span className="combobox__hint">
+                            {row.option.hint}
+                          </span>
                         )}
                       </>
                     )}
@@ -346,21 +366,23 @@ export function Combobox({
                       <span className="combobox__create">{newLabel}</span>
                     )}
                   </button>
-                  {row.kind === "option" && row.option && onEdit !== undefined && (
-                    <EditButton
-                      option={row.option}
-                      label={
-                        editLabel !== undefined
-                          ? editLabel(row.option.label)
-                          : t("combobox.edit", { name: row.option.label })
-                      }
-                      onEdit={(id) => {
-                        close();
-                        onEdit(id);
-                      }}
-                      testId={testId && `${testId}-pencil-${row.option.id}`}
-                    />
-                  )}
+                  {row.kind === "option" &&
+                    row.option &&
+                    onEdit !== undefined && (
+                      <EditButton
+                        option={row.option}
+                        label={
+                          editLabel !== undefined
+                            ? editLabel(row.option.label)
+                            : t("combobox.edit", { name: row.option.label })
+                        }
+                        onEdit={(id) => {
+                          close();
+                          onEdit(id);
+                        }}
+                        testId={testId && `${testId}-pencil-${row.option.id}`}
+                      />
+                    )}
                 </li>
               );
             })}

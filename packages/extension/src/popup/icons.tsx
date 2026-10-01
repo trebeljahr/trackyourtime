@@ -52,7 +52,7 @@ const PATHS: Record<IconName, JSX.Element> = {
   ),
 };
 
-export function Icon({ name, size = 18 }: { name: IconName; size?: number }): JSX.Element {
+export function Icon({ name, size = 22 }: { name: IconName; size?: number }): JSX.Element {
   return (
     <svg
       viewBox="0 0 24 24"

@@ -21,7 +21,8 @@
     "@starter/shared": "workspace:*",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "use-intl": "^4.14.7"
+    "use-intl": "^4.14.7",
+    "lucide-react": "^1.48.0"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^3.0.0",

@@ -1,3 +1,4 @@
+import { join, openTab } from "./open-tab";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { CatalogEditProvider, type CatalogEdit } from "./catalog-edit";
 import { dayKeyInZone, deviceTimeZone, type QuickStart } from "@starter/core";
@@ -760,7 +761,11 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
               onPinFavorite: pinFavorite,
               onUnpinFavorite: unpinFavorite,
               onAnswerIdle: (answer) => send({ type: "idle:answer", answer }),
-              onOpenSettings: () => openSection(null),
+              onOpenSettings: () => {
+                if (state.webUrl) openTab(join(state.webUrl, "/app/settings"));
+                else openSection("account");
+              },
+              onSignOut: signOut,
               onOpenEntries: () => go({ name: "entries" }),
               onOpenSuggestions: () => go({ name: "suggestions", day: null }),
               onSearchDescriptions: searchDescriptions,

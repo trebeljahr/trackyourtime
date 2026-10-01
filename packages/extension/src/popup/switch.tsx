@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { currencyIcon, currencySymbol } from "./currency";
 
 /**
  * An on/off control that commits the moment it is clicked.
@@ -21,6 +22,7 @@ export type SwitchProps = {
   disabled?: boolean;
   /** `struck` draws the off state with a line through the mark. */
   variant?: "plain" | "struck";
+  currency?: string;
   testId?: string;
 };
 
@@ -31,7 +33,9 @@ export function Switch({
   disabled = false,
   variant = "plain",
   testId,
+  currency = "USD",
 }: SwitchProps): JSX.Element {
+  const CurrencyIcon = currencyIcon(currency);
   const classes = ["switch"];
   if (checked) classes.push("switch--on");
   if (variant === "struck") classes.push("switch--struck");
@@ -47,7 +51,14 @@ export function Switch({
       data-testid={testId}
       data-checked={checked ? "true" : "false"}
     >
-      <span aria-hidden="true" className="switch__mark" />
+      {variant === "struck" ? (
+        <span aria-hidden="true" className="billable-glyph">
+          {CurrencyIcon ? <CurrencyIcon size={20} /> : currencySymbol(currency)}
+          {!checked && <span className="billable-glyph__strike" />}
+        </span>
+      ) : (
+        <span aria-hidden="true" className="switch__mark" />
+      )}
       {label}
     </button>
   );

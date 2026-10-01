@@ -69,6 +69,8 @@ export const popup = {
   },
   fields: {
     startTime: "Start time",
+    editProjectClient: "Edit project",
+    clientFromProject: "The client is set on the project.",
     description: "Description",
     project: "Project",
     noProject: "No project",
@@ -303,7 +305,8 @@ export const popup = {
     saved: "Saved",
   },
   quickStart: {
-    title: "Quick start",
+    hint: "Choose recent or pinned work to fill the form, then select Start a timer.",
+    title: "Use recent or pinned work",
     rowTitle: "{label} — {hint}",
     pin: "Pin {label}",
     unpin: "Unpin {label}",
@@ -361,7 +364,7 @@ export const popup = {
   tracker: {
     descriptionPlaceholder: "What are you working on?",
     /** The button. The start TIME of an entry is `fields.start`. */
-    start: "Start",
+    start: "Start a timer",
     stop: "Stop",
     today: "Today",
   },

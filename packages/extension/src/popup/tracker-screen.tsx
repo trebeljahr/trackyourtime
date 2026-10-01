@@ -60,14 +60,8 @@ export type TrackerScreenProps = {
   onUnpinFavorite: (id: string) => Promise<boolean>;
   /** Resolves the idle span the worker parked while the popup was closed. */
   onAnswerIdle: (answer: IdleAnswer) => Promise<boolean>;
-  /**
-   * Pushes the in-popup settings screen.
-   *
-   * The cog is the popup's top-right button, and everything that used to hang
-   * off the overflow menu — the API URL, signing out, the settings the web app
-   * owns — now lives behind it. The menu is left with the two things the popup
-   * genuinely cannot do: reports and the calendar, which need width.
-   */
+  onSignOut?: () => Promise<boolean>;
+  /** Opens account settings in the web app. */
   onOpenSettings: () => void;
   onOpenEntries: () => void;
   /** The Suggestions screen. Its header button shows only while capture is on. */
@@ -142,8 +136,8 @@ const billableDefaultFor = (
 ): boolean => {
   if (projectId === null) return false;
   return (
-    projects.find((candidate) => candidate.id === projectId)
-      ?.billableDefault ?? false
+    projects.find((candidate) => candidate.id === projectId)?.billableDefault ??
+    false
   );
 };
 
@@ -157,6 +151,7 @@ export function TrackerScreen({
   onUnpinFavorite,
   onAnswerIdle,
   onOpenSettings,
+  onSignOut,
   onOpenEntries,
   onOpenSuggestions,
   onSearchDescriptions,
@@ -183,9 +178,9 @@ export function TrackerScreen({
   // for. `null` (the outer one) means "no override" — the inner `running` is
   // itself nullable, which is exactly the stopped case, so the two cannot be
   // collapsed into one nullable field.
-  const [optimistic, setOptimistic] = useState<{ running: TimeEntry | null } | null>(
-    null,
-  );
+  const [optimistic, setOptimistic] = useState<{
+    running: TimeEntry | null;
+  } | null>(null);
 
   const running = optimistic === null ? state.running : optimistic.running;
   const elapsedSec = useElapsedSec(running);
@@ -313,37 +308,13 @@ export function TrackerScreen({
     });
   };
 
-  /**
-   * Start a favorite or a recent.
-   *
-   * Same call as the composer's own submit — `timer:start` with the fields
-   * already chosen — so the worker's billable defaulting, offline queueing and
-   * optimistic badge all apply unchanged. The only difference is that
-   * `billable` is explicit, because a pin already decided it.
-   */
-  const startQuick = async (quick: QuickStart): Promise<void> => {
-    if (busy) return;
-    setBusy(true);
-    setOptimistic({
-      running: provisionalEntry(
-        quick.description,
-        quick.projectId,
-        quick.taskId,
-        quick.billable,
-        // Quick starts open untagged on purpose: tags ride alongside a
-        // QuickStart rather than inside it, so one recurring combination does
-        // not fragment into a recent per set of labels.
-        [],
-      ),
-    });
-    await onStart(
-      quick.description,
-      quick.projectId,
-      quick.taskId,
-      quick.billable,
-    );
-    setOptimistic(null);
-    setBusy(false);
+  // Choosing a preset only fills the draft; Start is always explicit.
+  const selectQuick = (quick: QuickStart): void => {
+    setDescription(quick.description);
+    setProjectId(quick.projectId);
+    setTaskId(quick.taskId);
+    setBillable(quick.billable);
+    setTagIds([]);
   };
 
   const pin = async (quick: QuickStart): Promise<void> => {
@@ -427,7 +398,8 @@ export function TrackerScreen({
 
   // The same setting the entries list and the entry forms read, so a user who
   // asked for decimal is not shown two spellings of a duration at once.
-  const durationFormat: DurationFormat = state.settings?.durationFormat ?? "hms";
+  const durationFormat: DurationFormat =
+    state.settings?.durationFormat ?? "hms";
 
   return (
     <div className="screen" data-testid="tracker-screen">
@@ -438,7 +410,9 @@ export function TrackerScreen({
         onOpenEntries={onOpenEntries}
         onOpenSettings={onOpenSettings}
         // Off by default, so by default the tracker looks exactly as it did.
-        onOpenSuggestions={state.activity.settings.enabled ? onOpenSuggestions : undefined}
+        onOpenSuggestions={
+          state.activity.settings.enabled ? onOpenSuggestions : undefined
+        }
       />
 
       <div className="popup__body">
@@ -475,10 +449,8 @@ export function TrackerScreen({
         {running === null ? (
           <QuickStartList
             items={state.quickStarts}
-            disabled={busy}
-            onStart={(quick) => {
-              void startQuick(quick);
-            }}
+            disabled={busy || panels.any}
+            onSelect={selectQuick}
             onPin={(quick) => {
               void pin(quick);
             }}
@@ -492,9 +464,12 @@ export function TrackerScreen({
             draft's and a running entry's — so splitting them into two blocks
             would mean two places for every field to drift out of step. */}
         <form
+          id="tracker-form"
           className="form"
           onSubmit={submit}
-          data-testid={running === null ? "tracker-start-form" : "tracker-running"}
+          data-testid={
+            running === null ? "tracker-start-form" : "tracker-running"
+          }
         >
           {running !== null ? (
             <div className="tracker-clock">
@@ -566,21 +541,9 @@ export function TrackerScreen({
             onChange={toggleBillable}
             label={billable ? t("fields.billable") : t("fields.notBillable")}
             variant="struck"
+            currency={state.settings?.currency}
             testId="tracker-billable"
           />
-
-          <button
-            className={
-              running === null
-                ? "button button--primary button--block"
-                : "button button--danger button--block"
-            }
-            type="submit"
-            disabled={busy || panels.any}
-            data-testid={running === null ? "tracker-start" : "tracker-stop"}
-          >
-            {running === null ? t("tracker.start") : t("tracker.stop")}
-          </button>
         </form>
 
         <p className="today">
@@ -592,23 +555,47 @@ export function TrackerScreen({
 
         <HeldQueue rows={state.heldSync} onDiscard={onDiscardHeld} t={t} />
 
-        <p className="notice" role="alert" aria-live="assertive" data-testid="tracker-error">
+        <p
+          className="notice"
+          role="alert"
+          aria-live="assertive"
+          data-testid="tracker-error"
+        >
           {error ?? ""}
         </p>
       </div>
 
       <div className="footer">
+        <button
+          className={
+            running === null
+              ? "button button--primary button--block"
+              : "button button--danger button--block"
+          }
+          type="submit"
+          form="tracker-form"
+          disabled={busy || panels.any}
+          data-testid={running === null ? "tracker-start" : "tracker-stop"}
+        >
+          {running === null ? t("tracker.start") : t("tracker.stop")}
+        </button>
         <div className="footer__row">
           <span className="footer__email" title={state.email ?? ""}>
             {state.email ?? t("app.signedIn")}
           </span>
-          <span className="status" data-testid="tracker-sync-status" title={sync.title}>
+          <span
+            className="status"
+            data-testid="tracker-sync-status"
+            title={sync.title}
+          >
             <span className={`status__dot status__dot--${sync.tone}`} />
             {sync.label}
           </span>
-          {/* Nothing to overflow into when the web app's origin has not been
-              discovered — both remaining items are links to it. */}
-          {state.webUrl !== null ? <Menu webUrl={state.webUrl} /> : null}
+          <Menu
+            webUrl={state.webUrl}
+            onSignOut={onSignOut}
+            sharedSession={state.sessionSource === "web"}
+          />
         </div>
       </div>
     </div>

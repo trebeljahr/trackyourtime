@@ -2,24 +2,21 @@ import { useEffect, useRef, useState, type JSX } from "react";
 import { useT } from "../i18n/use-t";
 import { join, openTab } from "./open-tab";
 
-/**
- * The way out to the web app, and nothing else any more.
- *
- * Settings, the API URL and signing out used to live here because the popup
- * could not express them; they are now behind the cog, in the popup itself.
- * What is left is the surfaces that genuinely need width the popup does not
- * have — reports and the calendar — so every item here is a link out, and the
- * menu is not rendered at all when the web app's origin is unknown.
- */
-
 export type MenuProps = {
   /** Web app origin, discovered from the API. */
-  webUrl: string;
+  webUrl: string | null;
+  onSignOut?: () => Promise<boolean>;
+  sharedSession?: boolean;
 };
 
-export function Menu({ webUrl }: MenuProps): JSX.Element {
+export function Menu({
+  webUrl,
+  onSignOut,
+  sharedSession = false,
+}: MenuProps): JSX.Element {
   const t = useT("popup");
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,24 +51,50 @@ export function Menu({ webUrl }: MenuProps): JSX.Element {
 
       {open && (
         <div className="menu__list" role="menu" data-testid="menu-list">
-          <button
-            type="button"
-            role="menuitem"
-            className="menu__item"
-            onClick={() => openTab(join(webUrl, "/app/track"))}
-            data-testid="menu-open-app"
-          >
-            {t("actions.openApp")}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="menu__item"
-            onClick={() => openTab(join(webUrl, "/app/reports"))}
-            data-testid="menu-reports"
-          >
-            {t("menu.reports")}
-          </button>
+          {webUrl !== null && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="menu__item"
+                onClick={() => openTab(join(webUrl, "/app/track"))}
+                data-testid="menu-open-app"
+              >
+                {t("actions.openApp")}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="menu__item"
+                onClick={() => openTab(join(webUrl, "/app/reports"))}
+                data-testid="menu-reports"
+              >
+                {t("menu.reports")}
+              </button>
+            </>
+          )}
+          {onSignOut && (
+            <>
+              {sharedSession && (
+                <p className="popup__hint menu__note">
+                  {t("account.signOutSharedHint")}
+                </p>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                className="menu__item menu__item--danger"
+                disabled={busy}
+                data-testid="menu-sign-out"
+                onClick={() => {
+                  setBusy(true);
+                  void onSignOut().finally(() => setBusy(false));
+                }}
+              >
+                {t("actions.signOut")}
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

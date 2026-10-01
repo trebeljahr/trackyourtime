@@ -81,6 +81,7 @@ export function TagPicker({
                 }
                 data-testid={`${testId}-remove-${tag.id}`}
               >
+                <span aria-hidden="true" className="project__dot" style={{ backgroundColor: tag.color }} />
                 <span className="tag__label">{tag.name}</span>
                 <span aria-hidden="true" className="tag__x">
                   ×

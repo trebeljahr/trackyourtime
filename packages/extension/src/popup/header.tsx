@@ -6,7 +6,7 @@ import type { SyncLabel } from "./sync-label";
 /**
  * The popup's only chrome.
  *
- * 44px with 32px buttons: the icons are the popup's whole navigation, and at
+ * 48px with 40px buttons: the icons are the popup's whole navigation, and at
  * the old 14px glyphs they were hard to hit and harder to read. The tracker
  * still gets no title — the elapsed clock is the title.
  *

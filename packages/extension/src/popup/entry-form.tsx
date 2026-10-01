@@ -418,6 +418,7 @@ export function EntryForm({
         onChange={(next) => change({ billable: next }, { billable: next })}
         label={values.billable ? t("fields.billable") : t("fields.notBillable")}
         variant="struck"
+            currency={state.settings?.currency}
         disabled={factsLocked}
         testId="entry-billable"
       />
