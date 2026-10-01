@@ -67,7 +67,7 @@ export type AdminAuthContext = {
     }) => Promise<unknown>;
     deleteVerificationByIdentifier: (identifier: string) => Promise<unknown>;
     listSessions: (userId: string) => Promise<unknown[]>;
-    deleteSessions: (userId: string) => Promise<unknown>;
+    deleteUserSessions: (userId: string) => Promise<unknown>;
     updateUser: (userId: string, data: Record<string, unknown>) => Promise<unknown>;
   };
 };
@@ -150,7 +150,7 @@ export async function createUser(
     throw new CliError(`could not create the account: ${authErrorMessage(error)}`);
   }
 
-  await context.internalAdapter.deleteSessions(user.id);
+  await context.internalAdapter.deleteUserSessions(user.id);
 
   // The operator vouches for the address. With mail configured the server
   // requires a verified email before a password sign-in, and the account
@@ -239,7 +239,7 @@ export async function resetPassword(
   }
 
   const sessions = await context.internalAdapter.listSessions(user.id);
-  await context.internalAdapter.deleteSessions(user.id);
+  await context.internalAdapter.deleteUserSessions(user.id);
   return { userId: user.id, email: user.email, sessionsRevoked: sessions.length };
 }
 
