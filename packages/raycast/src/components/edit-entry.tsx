@@ -44,7 +44,9 @@ type FormValues = {
  */
 export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
   const { pop } = useNavigation();
-  const [clientId, setClientId] = useState<string | undefined>(entry.clientId === undefined ? undefined : orNone(entry.clientId));
+  const [clientId, setClientId] = useState<string | undefined>(
+    entry.clientId === undefined ? undefined : orNone(entry.clientId),
+  );
   const [description, setDescription] = useState(entry.description);
   const [projectId, setProjectId] = useState(orNone(entry.projectId));
   const [taskId, setTaskId] = useState(orNone(entry.taskId));
@@ -79,7 +81,7 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
       await api.update({
         id: entry.id,
         description: values.description.trim(),
-        ...(offersClient ? {clientId: orNull(values.clientId)} : {}),
+        ...(offersClient ? { clientId: orNull(values.clientId) } : {}),
         projectId: orNull(values.projectId),
         taskId: orNull(values.taskId),
         // Always sent, so clearing every tag in the picker actually clears
@@ -144,7 +146,12 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
         info="⌘⇧D searches what you have tracked before."
       />
       {projectField(catalog, projectId, setProjectId)}
-      {offersClient && clientField(catalog, clientId ?? orNone(catalog.projects.data?.find((project) => project.id === entry.projectId)?.clientId), setClientId)}
+      {offersClient &&
+        clientField(
+          catalog,
+          clientId ?? orNone(catalog.projects.data?.find((project) => project.id === entry.projectId)?.clientId),
+          setClientId,
+        )}
       {taskField(catalog, taskId, setTaskId)}
       {tagsField(catalog, tagIds, setTagIds)}
       <Form.Checkbox id="billable" label="Billable" value={billable} onChange={setBillable} />

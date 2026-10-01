@@ -109,7 +109,7 @@ export function LogTime({ onSaved }: Props): React.JSX.Element {
       const api = await getTrackYourTime();
       const entry = await api.create({
         description: values.description.trim(),
-        ...(offersClient ? {clientId: orNull(values.clientId)} : {}),
+        ...(offersClient ? { clientId: orNull(values.clientId) } : {}),
         projectId: orNull(values.projectId),
         taskId: orNull(values.taskId),
         tagIds: values.tagIds ?? [],

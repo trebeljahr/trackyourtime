@@ -271,9 +271,20 @@ export const catalogActions = (catalog: EntryCatalog, handlers: CatalogActionHan
   return actions;
 };
 
-export const clientField = (catalog: EntryCatalog, clientId: string, onChange: (value: string) => void): React.JSX.Element => (
+export const clientField = (
+  catalog: EntryCatalog,
+  clientId: string,
+  onChange: (value: string) => void,
+): React.JSX.Element => (
   <Form.Dropdown id="clientId" title="Client" value={clientId} onChange={onChange}>
     <Form.Dropdown.Item value={NONE} title="No client" icon={Icon.Circle} />
-    {(catalog.clients.data ?? []).map((client) => <Form.Dropdown.Item key={client.id} value={client.id} title={client.name} icon={{source: Icon.CircleFilled, tintColor: client.color}} />)}
+    {(catalog.clients.data ?? []).map((client) => (
+      <Form.Dropdown.Item
+        key={client.id}
+        value={client.id}
+        title={client.name}
+        icon={{ source: Icon.CircleFilled, tintColor: client.color }}
+      />
+    ))}
   </Form.Dropdown>
 );
