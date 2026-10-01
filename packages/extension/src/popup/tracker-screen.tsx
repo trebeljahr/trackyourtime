@@ -403,10 +403,8 @@ export function TrackerScreen({
 
   return (
     <div className="screen" data-testid="tracker-screen">
-      {/* No back and no title: the elapsed clock below is the title, and that
-          is exactly what pays for a header on the one screen where every pixel
-          is already spoken for. */}
       <Header
+        title="Track Your Time"
         onOpenEntries={onOpenEntries}
         onOpenSettings={onOpenSettings}
         // Off by default, so by default the tracker looks exactly as it did.
@@ -440,22 +438,6 @@ export function TrackerScreen({
             busy={busy}
             onAnswer={(answer) => {
               void answerIdle(answer);
-            }}
-          />
-        ) : null}
-
-        {/* Hidden while a timer runs, where the row would only offer to stop
-            this one and start another. */}
-        {running === null ? (
-          <QuickStartList
-            items={state.quickStarts}
-            disabled={busy || panels.any}
-            onSelect={selectQuick}
-            onPin={(quick) => {
-              void pin(quick);
-            }}
-            onUnpin={(id) => {
-              void unpin(id);
             }}
           />
         ) : null}
@@ -552,6 +534,22 @@ export function TrackerScreen({
             {formatDurationFor(todaySec, locale, durationFormat)}
           </span>
         </p>
+
+        {/* Hidden while a timer runs, where the row would only offer to stop
+            this one and start another. */}
+        {running === null ? (
+          <QuickStartList
+            items={state.quickStarts}
+            disabled={busy || panels.any}
+            onSelect={selectQuick}
+            onPin={(quick) => {
+              void pin(quick);
+            }}
+            onUnpin={(id) => {
+              void unpin(id);
+            }}
+          />
+        ) : null}
 
         <HeldQueue rows={state.heldSync} onDiscard={onDiscardHeld} t={t} />
 

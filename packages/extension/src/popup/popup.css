@@ -3,7 +3,7 @@
  *
  * The web client's styling is Tailwind v4 wired through Next's postcss
  * pipeline; pulling that into this package would mean new dependencies and a
- * second build config for one 380px surface. A stylesheet is cheaper and the
+ * second build config for one compact surface. A stylesheet is cheaper and the
  * popup's whole visual vocabulary fits in one file.
  */
 
@@ -136,21 +136,23 @@ body {
 }
 
 .popup {
-  /* Chrome sizes the popup to its content, so the width lives here rather
-     than in a viewport unit — and a max-height keeps a long project list
-     from growing the popup past the screen. */
-  width: 380px;
+  /* Stable dimensions keep navigation and timer actions from jumping when
+     switching screens. Leave room below the browser’s 600px popup ceiling. */
+  width: 360px;
+  height: 580px;
   max-height: 580px;
   display: flex;
   flex-direction: column;
 }
 
 .popup__body {
-  padding: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   /* A picker opened near the foot of a settings section has to be able to
      scroll itself clear of the bottom edge, not just up to it. */
   scroll-padding-block-end: 200px;
@@ -219,7 +221,7 @@ body {
 .form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 /* ── buttons ─────────────────────────────────────────────────────── */
@@ -460,7 +462,9 @@ button.tag:hover .tag__x {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding-top: 2px;
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 12px;
 }
@@ -475,8 +479,9 @@ button.tag:hover .tag__x {
 /* ── footer ──────────────────────────────────────────────────────── */
 
 .footer {
+  flex: none;
   border-top: 1px solid var(--border);
-  padding: 10px 14px 12px;
+  padding: 10px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -525,12 +530,6 @@ button.tag:hover .tag__x {
   padding: 28px 12px;
   text-align: center;
   color: var(--muted);
-}
-
-/* The first open after the browser starts, before any snapshot exists. Same
-   height as the tracker, so the window does not resize under the cursor. */
-.popup--boot {
-  height: 480px;
 }
 
 .boot {
@@ -1120,7 +1119,7 @@ button.tag:hover .tag__x {
   gap: 6px;
   flex: none;
   min-height: 48px;
-  padding: 0 6px 0 10px;
+  padding: 0 10px 0 16px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1760,7 +1759,9 @@ button.tag:hover .tag__x {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
+  padding: 4px 0 14px;
+  border-bottom: 1px solid var(--border);
 }
 
 .tracker-clock .range__field {
@@ -1824,6 +1825,22 @@ button.tag:hover .tag__x {
   max-height: 160px;
   overflow-y: auto;
 }
-.footer > .button {
-  margin-bottom: 10px;
+/* Read-only project context stays lighter than the editable fields. */
+.project-client {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 10px;
+  row-gap: 2px;
+}
+.project-client .client-summary {
+  min-height: 0;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.project-client .client-summary > span {
+  overflow-wrap: anywhere;
+}
+.project-client > .popup__hint {
+  grid-column: 1 / -1;
 }

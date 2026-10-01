@@ -17,7 +17,7 @@ export type QuickStartListProps = {
 };
 
 /**
- * The quick-start rail above the popup's start form.
+ * The quick-start list below the popup's start form.
  *
  * This is the surface the whole feature is for. At 380px, retyping a
  * description and re-picking a project is the most expensive thing the popup

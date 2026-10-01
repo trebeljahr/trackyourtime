@@ -140,7 +140,7 @@ export function ProjectPicker({
           editLabel={(name) => t("catalogEdit.editProject", { name })}
           testId={testId}
         />
-        <div className="field" data-testid={`${testId}-client`}>
+        <div className="field project-client" data-testid={`${testId}-client`}>
           <span className="field__label">{t("fields.client")}</span>
           <div className="client-summary">
             {selectedClient && (

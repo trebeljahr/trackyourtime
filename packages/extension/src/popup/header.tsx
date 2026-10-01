@@ -8,7 +8,7 @@ import type { SyncLabel } from "./sync-label";
  *
  * 48px with 40px buttons: the icons are the popup's whole navigation, and at
  * the old 14px glyphs they were hard to hit and harder to read. The tracker
- * still gets no title — the elapsed clock is the title.
+ * uses the product name; deeper screens show their destination.
  *
  * Nothing here opens a popover. The overflow menu's list opens *upward*
  * because it lives in the footer, and a header-anchored dropdown would need a
@@ -16,7 +16,7 @@ import type { SyncLabel } from "./sync-label";
  */
 
 export type HeaderProps = {
-  /** Omitted on the tracker, where the clock below is the title. */
+  /** Product name or current screen title. */
   title?: string;
   /** Omitted at depth 1, where there is nothing to go back to. */
   onBack?: () => void;
