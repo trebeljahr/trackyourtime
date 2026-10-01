@@ -1,7 +1,6 @@
 import { emailLinkForWeb } from "./email-link.js";
 import { logAuthLink as logAuthUrl } from "./link-policy.js";
 import { betterAuth } from "better-auth";
-import { APIError } from "better-auth/api";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { bearer } from "better-auth/plugins/bearer";
 import { deviceAuthorization } from "better-auth/plugins/device-authorization";
@@ -266,20 +265,26 @@ export async function initAuth(): Promise<void> {
         disableSignUp: true,
         storeToken: "hashed",
         async sendMagicLink({ email, url }, ctx) {
-          if (!isEmailDeliveryConfigured()) {
-            throw new APIError("SERVICE_UNAVAILABLE", { message: "Email delivery is not configured" });
-          }
           if (!ctx) return;
           const account = await ctx.context.internalAdapter.findUserByEmail(email);
           // The plugin would create a session without a two-factor challenge.
           // Keep the response generic for unknown and protected accounts.
           if (!account || (account.user as typeof account.user & { twoFactorEnabled?: boolean }).twoFactorEnabled) return;
           const safeUrl = emailLinkForWeb(url, env.FRONTEND_URL);
+          if (!isEmailDeliveryConfigured()) {
+            logAuthUrl("Sign-in", email, safeUrl);
+            return;
+          }
           const locale = await preferredLocale([account.user.id]);
-          await sendEmail({
-            to: email,
-            ...magicLinkEmail(locale, safeUrl, env.FRONTEND_URL),
-          });
+          try {
+            await sendEmail({
+              to: email,
+              ...magicLinkEmail(locale, safeUrl, env.FRONTEND_URL),
+            });
+          } catch (error) {
+            logAuthUrl("Sign-in", email, safeUrl);
+            throw error;
+          }
         },
       }),
       /**
