@@ -3208,8 +3208,10 @@ fallback in `build-and-deploy.yml`, `desktop-release.yml` and
   SDK's global handler sees the same failure untagged and drops it. In a
   shell every chunk error is kept, since its chunks ship inside the app.
 
-Not the browser extension and not Raycast: both are store-reviewed with a
-declared privacy scope.
+The browser extension and Raycast have separate opt-in reporters and store
+privacy scopes. The browser extension uses `EXTENSION_SENTRY_DSN` at build time
+and sends fixed fields only (`packages/extension/src/lib/error-reporting.ts`);
+Firefox also checks its optional diagnostic-data grant before sending.
 
 ### Static export caveats
 
