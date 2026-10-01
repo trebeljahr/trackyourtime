@@ -455,7 +455,7 @@ export function TrackerScreen({
             onClick={() => setDrawer("recents")}
             data-testid="open-recents"
           >
-            <History size={21} aria-hidden="true" />
+            <History size={15} aria-hidden="true" />
             {t("quickStart.recents")}
           </button>
           <button
@@ -464,7 +464,7 @@ export function TrackerScreen({
             onClick={() => setDrawer("favorites")}
             data-testid="open-favorites"
           >
-            <Star size={21} aria-hidden="true" />
+            <Star size={15} aria-hidden="true" />
             {t("quickStart.favorites")}
           </button>
         </nav>
@@ -618,9 +618,7 @@ export function TrackerScreen({
             />
           </form>
         ) : (
-          <section className="new-timer" aria-labelledby="new-timer-title">
-            <h2 id="new-timer-title">{t("tracker.newTimer")}</h2>
-            <p className="popup__hint">{t("tracker.newTimerHint")}</p>
+          <div className="new-timer">
             <button
               type="button"
               className="button button--primary button--block new-timer__start"
@@ -631,7 +629,7 @@ export function TrackerScreen({
               <Play size={20} aria-hidden="true" />
               {t("tracker.newTimer")}
             </button>
-          </section>
+          </div>
         )}
 
         <p className="today">

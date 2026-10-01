@@ -1889,22 +1889,23 @@ button.tag:hover .tag__x {
 .menu__avatar--fallback { display: grid; place-items: center; background: var(--accent-soft); color: var(--fg); font-size: 12px; font-weight: 600; }
 .menu__item svg { flex-shrink: 0; }
 .timer-shortcuts {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  display: flex;
+  gap: 6px;
 }
 .timer-shortcuts button {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  min-height: 48px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 10px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 6px;
   background: var(--surface);
   color: var(--fg);
   font: inherit;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
 }
 .timer-shortcuts button:hover {
@@ -1912,15 +1913,7 @@ button.tag:hover .tag__x {
   border-color: var(--accent);
 }
 .new-timer {
-  padding: 24px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.new-timer h2 {
-  margin: 0;
-  font-size: 20px;
-  letter-spacing: -0.02em;
+  padding: 16px 0;
 }
 .new-timer__start {
   display: flex;
@@ -1928,7 +1921,6 @@ button.tag:hover .tag__x {
   align-items: center;
   gap: 10px;
   min-height: 52px;
-  margin-top: 8px;
 }
 .timer-drawer {
   position: fixed;
