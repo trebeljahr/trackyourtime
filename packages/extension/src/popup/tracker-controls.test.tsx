@@ -185,10 +185,10 @@ describe("popup timer controls", () => {
     ).toContain("Acme");
     expect(host.querySelectorAll(".combobox__selected-dot")).toHaveLength(3);
     expect(host.querySelector(".billable-glyph .lucide-euro")).not.toBeNull();
-    await click('[data-testid="tracker-client"]');
+    await act(async () => host.querySelector<HTMLInputElement>('[data-testid="tracker-client"]')!.focus());
     const clear = [...host.querySelectorAll<HTMLElement>('[role="option"]')].find((option) => option.textContent?.includes("No client"));
     expect(clear).toBeDefined();
-    await act(async () => clear!.click());
+    await act(async () => clear!.dispatchEvent(new MouseEvent("mousedown", {bubbles: true})));
     expect(onUpdateRunning).toHaveBeenCalledExactlyOnceWith({clientId: null});
     expect(host.querySelector<HTMLInputElement>('[data-testid="tracker-project"]')?.value).toBe("Website");
   });
