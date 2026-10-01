@@ -304,18 +304,20 @@ if (existsSync(lockFile)) {
 // CORS. (Its bridge still accepts only https://trackyourtime.dev, so it does
 // not follow this dev web app's sign-in — by design.)
 const devExtensionId = extensionId(resolve(repoRoot, "packages/extension/dist")).id;
+const hmrExtensionId = extensionId(resolve(repoRoot, "packages/extension/dist-hmr")).id;
 const storeExtensionId = readStoreExtensionId(
   resolve(repoRoot, "packages/shared/src/store-clients.ts"),
 );
 const devExtensionOrigins = [
   `chrome-extension://${devExtensionId}`,
+  `chrome-extension://${hmrExtensionId}`,
   `chrome-extension://${storeExtensionId}`,
 ];
 // The ids the dev web app messages over the extension bridge
 // (`packages/client/src/lib/extension-bridge-transport.ts`). Without it the web
 // app only knows the store id, and the unpacked build of this checkout would
 // never hear that somebody signed in.
-const bridgeExtensionIds = [devExtensionId, storeExtensionId].join(",");
+const bridgeExtensionIds = [devExtensionId, hmrExtensionId, storeExtensionId].join(",");
 // The Capacitor shells' document origins. A native WKWebView/WebView serves the
 // bundled app from capacitor://localhost (iOS) or https://localhost (Android),
 // and better-auth force-validates Origin whenever a request carries Sec-Fetch-*

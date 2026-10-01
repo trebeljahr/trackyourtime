@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { crx, type ManifestV3Export } from "@crxjs/vite-plugin";
 import { defineConfig } from "vite";
-import { BUILD_TARGETS, RELEASE_VERSION, buildManifest } from "./manifest.config";
+import { BUILD_TARGETS, RELEASE_VERSION } from "./manifest.config";
+
+import { buildHmrManifest, HMR_OUT_DIR } from "./hmr-manifest";
 
 const fromHere = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
@@ -29,26 +31,19 @@ export default defineConfig(async ({ command, mode }) => {
   const targetMode = mode === "local-api" ? "development" : "production";
   const target = BUILD_TARGETS[targetMode];
   const port = await freePort();
-  const manifest = {
-    ...buildManifest(targetMode),
-    background: { service_worker: "src/background/index.ts", type: "module" },
-    // CRXJS loads the worker from localhost and proxies extension requests to it.
-    // These permissions belong only to this serve-only development manifest.
-    host_permissions: ["http://localhost/*", "http://127.0.0.1/*"],
-    content_security_policy: {
-      extension_pages: `script-src 'self' http://localhost:${port} http://127.0.0.1:${port}; object-src 'self';`,
-    },
-  } as ManifestV3Export;
+  const manifest = buildHmrManifest(port) as ManifestV3Export;
   return {
     plugins: [react(), crx({ manifest })],
     publicDir: "public",
-    // Keep using the already-installed unpacked path and extension identity.
-    build: { outDir: target.outDir, emptyOutDir: true },
+    // HMR never writes into either standalone build directory.
+    build: { outDir: HMR_OUT_DIR, emptyOutDir: true },
     server: {
       host: "127.0.0.1",
       port,
       strictPort: true,
       open: false,
+      // Standalone build output must not trigger popup reloads either.
+      watch: { ignored: ["**/dist/**", "**/dist-prod/**", "**/dist-firefox/**"] },
       cors: { origin: /^chrome-extension:\/\/[a-p]{32}$/ },
       hmr: { host: "127.0.0.1", port },
     },
@@ -64,7 +59,7 @@ export default defineConfig(async ({ command, mode }) => {
     define: {
       "import.meta.env.VITE_API_URL": JSON.stringify(process.env.VITE_API_URL ?? target.apiUrl),
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(RELEASE_VERSION),
-      "import.meta.env.VITE_BRIDGE_TARGET": JSON.stringify(target.bridgeTarget),
+      "import.meta.env.VITE_BRIDGE_TARGET": JSON.stringify("development"),
     },
   };
 });

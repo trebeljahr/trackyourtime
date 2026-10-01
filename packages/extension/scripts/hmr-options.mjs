@@ -14,7 +14,7 @@ export function hmrOptions(args, env = {}) {
     if (backend !== undefined) throw new Error("Choose one backend option.");
     backend = value;
   }
-  const selected = backend ?? env.VITE_API_URL ?? "live";
+  const selected = backend ?? env.VITE_API_URL ?? "local";
   if (selected === "live") return { mode: "hosted", apiUrl: undefined };
   if (selected === "local") return { mode: "local-api", apiUrl: undefined };
   let url;
@@ -23,8 +23,7 @@ export function hmrOptions(args, env = {}) {
       url.search || url.hash || url.pathname !== "/") {
     throw new Error("Use an HTTP(S) backend origin without credentials, paths, queries, or fragments.");
   }
-  // Loopback keeps the local extension identity and web-app sign-in bridge.
-  // Remote self-hosted servers use the store identity and password/device sign-in.
+  // Mode selects only the backend default; HMR always uses a development identity.
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
   return { mode: local ? "local-api" : "hosted", apiUrl: url.origin };
 }

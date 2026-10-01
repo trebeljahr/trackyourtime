@@ -6,14 +6,13 @@ try {
   if (options.help) {
     console.log(`Usage: pnpm hmr:extension [--backend live|local|URL] [--local]
 
-  pnpm hmr:extension                               Live API (default)
+  pnpm hmr:extension                               Local API (default)
   pnpm hmr:extension --backend local               Local API on port 5159
   pnpm hmr:extension --backend http://127.0.0.1:54321
   pnpm hmr:extension --backend https://api.example.com
 
-Explicit flags override VITE_API_URL. Local targets use packages/extension/dist;
-live and remote targets use packages/extension/dist-prod. Start the backend
-separately. A server saved in the popup still overrides the build default;
+Explicit flags override VITE_API_URL. Every backend uses the development
+extension in packages/extension/dist-hmr. Start the backend separately. A server saved in the popup still overrides the build default;
 use Change server in the popup to change an existing saved selection.`);
   } else {
     if (options.apiUrl) process.env.VITE_API_URL = options.apiUrl;
@@ -31,6 +30,8 @@ use Change server in the popup to change an existing saved selection.`);
     await server.listen();
     console.log(`HMR backend default: ${options.apiUrl ?? (options.mode === "local-api" ? "http://localhost:5159" : "https://api.trackyourtime.dev")}`);
     console.log("An existing popup server selection takes precedence; use Change server if needed.");
+    console.log("Load packages/extension/dist-hmr unpacked as Track Your Time (dev). Production stays in dist-prod.");
+    console.log("Remote backends must explicitly trust this development ID (pnpm extension:id hmr).");
     server.printUrls();
   }
 } catch (error) {

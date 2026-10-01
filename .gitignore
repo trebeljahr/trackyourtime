@@ -122,3 +122,6 @@ npm-debug.log*
 # Validator jars, the XRechnung configuration, samples and reports from
 # `pnpm einvoice:validate` (scripts/einvoice-validate.mjs).
 .cache/
+
+# Isolated extension HMR output
+packages/extension/dist-hmr/

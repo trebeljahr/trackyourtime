@@ -282,10 +282,10 @@ export function buildManifest(
       ? { externally_connectable: { matches: connectable } }
       : {}),
     icons: {
-      "16": "icons/16.png",
-      "32": "icons/32.png",
-      "48": "icons/48.png",
-      "128": "icons/128.png",
+      "16": mode === "development" ? "icons/dev/16.png" : "icons/16.png",
+      "32": mode === "development" ? "icons/dev/32.png" : "icons/32.png",
+      "48": mode === "development" ? "icons/dev/48.png" : "icons/48.png",
+      "128": mode === "development" ? "icons/dev/128.png" : "icons/128.png",
     },
   };
 }

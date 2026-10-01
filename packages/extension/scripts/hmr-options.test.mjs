@@ -2,13 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { hmrOptions } from "./hmr-options.mjs";
 
-test("live default, local alias, and pnpm argument forwarding", () => {
-  assert.deepEqual(hmrOptions([]), { mode: "hosted", apiUrl: undefined });
+test("local default, local alias, and pnpm argument forwarding", () => {
+  assert.deepEqual(hmrOptions([]), { mode: "local-api", apiUrl: undefined });
   for (const args of [["--local"], ["--backend", "local"], ["--", "--backend=local"]]) {
     assert.deepEqual(hmrOptions(args), { mode: "local-api", apiUrl: undefined });
   }
 });
-test("custom origins select the matching extension identity", () => {
+test("custom origins select the matching backend mode", () => {
   assert.deepEqual(hmrOptions(["--backend", "http://127.0.0.1:54321/"]), { mode: "local-api", apiUrl: "http://127.0.0.1:54321" });
   assert.deepEqual(hmrOptions(["--backend=https://api.example.com/"]), { mode: "hosted", apiUrl: "https://api.example.com" });
 });

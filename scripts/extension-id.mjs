@@ -15,7 +15,7 @@
  *  - Otherwise an unpacked extension's id is derived from the absolute path it
  *    was loaded from — stable for a directory, different for every checkout.
  *
- *   node scripts/extension-id.mjs [dev|prod|<path-to-unpacked-dir>]
+ *   node scripts/extension-id.mjs [dev|hmr|prod|<path-to-unpacked-dir>]
  */
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -24,6 +24,7 @@ import { extensionId } from "./lib/extension-id.mjs";
 const EXTENSION = new URL("../packages/extension/", import.meta.url).pathname;
 
 const TARGETS = {
+  hmr: join(EXTENSION, "dist-hmr"),
   dev: join(EXTENSION, "dist"),
   development: join(EXTENSION, "dist"),
   prod: join(EXTENSION, "dist-prod"),
