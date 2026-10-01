@@ -20,7 +20,6 @@ export type HeaderProps = {
   /** Omitted at depth 1, where there is nothing to go back to. */
   onBack?: () => void;
   /** Rendered only when supplied, so a screen opts into each action. */
-  onOpenEntries?: () => void;
   onOpenSettings?: () => void;
   accountMenu?: ReactNode;
   trailingAction?: ReactNode;
@@ -35,7 +34,6 @@ export function Header({
   title,
   branded = false,
   onBack,
-  onOpenEntries,
   onOpenSettings,
   onNewEntry,
   onOpenSuggestions,
@@ -104,18 +102,6 @@ export function Header({
           </button>
         ) : null}
 
-        {onOpenEntries !== undefined ? (
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={t("header.entries")}
-            title={t("header.entries")}
-            onClick={onOpenEntries}
-            data-testid="header-entries"
-          >
-            <Icon name="list" />
-          </button>
-        ) : null}
 
         {onOpenSettings !== undefined ? (
           <button

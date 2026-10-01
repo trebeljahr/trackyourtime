@@ -1,5 +1,5 @@
 import { LoadingSkeleton } from "./loading-skeleton";
-import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from "react";
+import { useState, type JSX } from "react";
 import {
   dayKeyInZone,
   deviceTimeZone,
@@ -10,15 +10,11 @@ import {
   type TimeFormat,
 } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
-import { formatDurationFor, formatIdleSpanFor } from "../i18n/format";
+import { formatDurationFor } from "../i18n/format";
 import { usePopupLocale, useT } from "../i18n/use-t";
 import { entryDayLabel, entryZone } from "./entry-format";
 import { EntryRow, RunningRow } from "./entry-row";
-import { Header } from "./header";
-import { Menu } from "./menu";
-import { ThemeToggle } from "./theme-toggle";
 import { join, openTab } from "./open-tab";
-import { describeSync } from "./sync-label";
 import { useElapsedSec } from "./use-elapsed";
 
 /**
@@ -26,7 +22,7 @@ import { useElapsedSec } from "./use-elapsed";
  *
  * A fixed trailing window rather than the web app's sentinel range: a 380px
  * list with no filter and no search should not be able to grow without limit,
- * and the window is the worker's own — this screen renders what the snapshot
+ * and the window is the worker's own — this list renders what the snapshot
  * carries and never asks for more than one more page of it.
  *
  * The rows are read-only. Tapping one pushes the detail screen, which is where
@@ -34,20 +30,12 @@ import { useElapsedSec } from "./use-elapsed";
  * place.
  */
 
-export type EntriesScreenProps = {
+export type EntriesListProps = {
   state: BackgroundState;
-  embedded?: boolean;
-  /** The last failure, already translated into human terms. */
-  error: string | null;
-  /** A one-line outcome carried in by the transition that landed here. */
-  note?: string | null;
-  onBack: () => void;
-  /** Where the idle strip and the running row send the user. */
+  /** Where the running row sends the user. */
   onGoTracker: () => void;
   onOpenEntry: (id: string) => void;
   onNewEntry: () => void;
-  onOpenSettings?: () => void;
-  onSignOut?: () => Promise<boolean>;
   onRestartEntry?: (entry: DetailedEntry) => Promise<boolean>;
   onLoadMore: () => Promise<boolean>;
 };
@@ -98,26 +86,19 @@ const windowDays = (from: string, to: string): number => {
   return Math.max(1, Math.round((last - first) / MS_PER_DAY) + 1);
 };
 
-export function EntriesScreen({
+export function EntriesList({
   state,
-  embedded = false,
-  error,
-  note = null,
-  onBack,
   onGoTracker,
   onOpenEntry,
   onNewEntry,
-  onOpenSettings,
-  onSignOut,
   onRestartEntry,
   onLoadMore,
-}: EntriesScreenProps): JSX.Element {
+}: EntriesListProps): JSX.Element {
   const t = useT("popup");
   const locale = usePopupLocale();
   const [busy, setBusy] = useState(false);
   const [restarting, setRestarting] = useState<DetailedEntry | null>(null);
   const running = restarting ?? state.running;
-  const alertRef = useRef<HTMLParagraphElement>(null);
   const elapsedSec = useElapsedSec(running);
 
   const restart = async (entry: DetailedEntry): Promise<void> => {
@@ -132,34 +113,12 @@ export function EntriesScreen({
     }
   };
 
-  useEffect(() => {
-    if (embedded || error === null) return;
-    alertRef.current?.scrollIntoView({ block: "nearest" });
-  }, [error, embedded]);
-
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key !== "Escape" || event.defaultPrevented) return;
-    const target = event.target as HTMLElement;
-    const tag = target.tagName.toLowerCase();
-    if (tag === "input" || tag === "textarea") return;
-    if (target.getAttribute("role") === "combobox") return;
-    event.preventDefault();
-    onBack();
-  };
-
   const loadMore = async (): Promise<void> => {
     if (busy) return;
     setBusy(true);
     await onLoadMore();
     setBusy(false);
   };
-
-  const sync = describeSync(
-    t,
-    state.syncStatus,
-    state.serverReachable,
-    state.pendingSync,
-  );
 
   const timeFormat: TimeFormat = state.settings?.timeFormat ?? "24h";
   const durationFormat: DurationFormat = state.settings?.durationFormat ?? "hms";
@@ -190,73 +149,16 @@ export function EntriesScreen({
   }
 
   return (
-    <div className={embedded ? "tracker-entries" : "screen"} onKeyDown={embedded ? undefined : onKeyDown} data-testid="entries-screen">
-      {embedded ? (
-        <div className="tracker-entries__header">
-          <h2>{t("entries.title")}</h2>
-        </div>
-      ) : <Header
-        title={t("entries.title")}
-        onBack={onBack}
-        onNewEntry={onNewEntry}
-        sync={sync}
-        accountMenu={
-          <>
-            <ThemeToggle />
-            <Menu
-              webUrl={state.webUrl}
-              email={state.email}
-              name={state.profileName}
-              image={state.profileImage}
-              onOpenSettings={onOpenSettings}
-              onSignOut={onSignOut}
-            />
-          </>
-        }
-      />}
-
-      <div className={embedded ? undefined : "popup__body"}>
-        <p
-          ref={alertRef}
-          className="notice screen__alert"
-          role="alert"
-          aria-live="assertive"
-          data-testid="entries-error"
-        >
-          {error ?? ""}
-        </p>
-
-        {note !== null ? (
-          <p className="notice notice--ok" role="status">
-            {note}
-          </p>
-        ) : null}
-
-        {/* A strip, not the panel: the worker parks the question on whichever
-            poll tick finds it, which can be mid-scroll here, and answering it
-            can stop, split or discard the running entry — mutating the very
-            list being read. So the answer is given next to the clock. */}
-        {!embedded && state.pendingIdle !== null ? (
-          <button
-            type="button"
-            className="alert alert--idle"
-            onClick={onGoTracker}
-            data-testid="idle-alert"
-          >
-            {t("idle.alert", {
-              span: formatIdleSpanFor(state.pendingIdle.idleSec, locale),
-            })}
-          </button>
-        ) : null}
-
+    <div className="tracker-entries" data-testid="entries-list">
+      <div className="tracker-entries__header">
+        <h2>{t("entries.title")}</h2>
+      </div>
         <div className="entries">
           {page === null ? (
             <LoadingSkeleton variant="entries" label={t("app.loading")} testId="entries-loading" />
           ) : groups.length === 0 ? (
             <>
-              {/* A list screen the user deliberately navigated to has to
-                  explain itself, unlike the quick-start row, which renders
-                  nothing when it has nothing to offer. */}
+              {/* Explain the empty history while keeping manual entry available. */}
               <p className="entries__empty" data-testid="entries-empty">
                 {t("entries.empty", { days: windowDays(page.from, page.to) })}
               </p>
@@ -343,7 +245,6 @@ export function EntriesScreen({
             </>
           )}
         </div>
-      </div>
     </div>
   );
 }

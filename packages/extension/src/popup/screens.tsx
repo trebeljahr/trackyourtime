@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import type { EntryDraft, Route } from "./route";
-import { EntriesScreen, type EntriesScreenProps } from "./entries-screen";
+import { EntriesList, type EntriesListProps } from "./entries-list";
 import {
   EntryCreateScreen,
   type EntryCreateScreenProps,
@@ -37,7 +37,7 @@ export type ScreensProps = {
   tracker: TrackerScreenProps;
   /** Settings' props, minus the section, which the route carries. */
   settings: Omit<SettingsScreenProps, "section">;
-  entries: EntriesScreenProps;
+  entries: EntriesListProps;
   /** The detail screen's props, minus the id, which the route carries. */
   entry: Omit<EntryDetailScreenProps, "id">;
   /** The create screen's props, minus the draft, which the route carries. */
@@ -68,12 +68,10 @@ export function Screens({
   switch (route.name) {
     case "tracker":
       return <TrackerScreen {...tracker} renderEntries={(running) =>
-        <EntriesScreen {...entries} state={{ ...entries.state, running }} embedded error={null} note={null} />
+        <EntriesList {...entries} state={{ ...entries.state, running }} />
       } />;
     case "settings":
       return <SettingsScreen {...settings} section={route.section} />;
-    case "entries":
-      return <EntriesScreen {...entries} />;
     case "entry":
       return <EntryDetailScreen {...entry} id={route.id} />;
     case "entry-new":

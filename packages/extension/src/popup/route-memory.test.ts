@@ -9,6 +9,17 @@ const store = async (value: unknown): Promise<void> => {
 };
 
 describe("activity routes", () => {
+  test("legacy entries route returns to the tracker list", async () => {
+    await store([{ name: "tracker" }, { name: "entries" }]);
+    expect(await loadRoute()).toEqual(ROOT_STACK);
+  });
+
+  test("entry detail returns to the tracker list", () => {
+    const stack = navigate(ROOT_STACK, { name: "entry", id: "entry-1" });
+    expect(stack.map((route) => route.name)).toEqual(["tracker", "entry"]);
+    expect(viewOf(stack[1] ?? ROOT_STACK[0])).toBe("entries");
+  });
+
   test("suggestions and its edit form round-trip through route memory", async () => {
     const draft = defaultDraft(Date.parse("2026-09-14T10:00:00Z"));
     const stack = navigate(ROOT_STACK, { name: "suggestion-edit", day: "2026-09-12", draft });

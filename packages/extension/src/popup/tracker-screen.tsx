@@ -67,7 +67,6 @@ export type TrackerScreenProps = {
   onSignOut?: () => Promise<boolean>;
   /** Opens account settings in the web app. */
   onOpenSettings: () => void;
-  onOpenEntries: () => void;
   entries?: ReactNode;
   renderEntries?: (running: TimeEntry | null) => ReactNode;
   /** The Suggestions screen. Its header button shows only while capture is on. */
@@ -152,7 +151,6 @@ export function TrackerScreen({
   onAnswerIdle,
   onOpenSettings,
   onSignOut,
-  onOpenEntries,
   entries,
   renderEntries,
   onOpenSuggestions,
@@ -440,7 +438,6 @@ export function TrackerScreen({
               email={state.email}
               name={state.profileName}
               image={state.profileImage}
-              onOpenEntries={onOpenEntries}
               onOpenSettings={onOpenSettings}
               onSignOut={onSignOut}
             />

@@ -57,7 +57,6 @@ export type EntryDraft = {
 export type Route =
   | { name: "tracker" }
   | { name: "settings"; section: SettingsSection | null }
-  | { name: "entries" }
   | { name: "entry"; id: string }
   | { name: "entry-new"; draft: EntryDraft }
   /**
@@ -85,10 +84,9 @@ export function viewOf(route: Route): PopupView {
       return "tracker";
     case "settings":
       return "settings";
-    case "entries":
     case "entry":
     case "entry-new":
-      // All three read the same window. The detail screen renders one row out
+      // Both read the same window. The detail screen renders one row out
       // of the page the list already fetched, so pushing it must not make the
       // worker drop what it is holding.
       return "entries";
@@ -117,7 +115,6 @@ export function navigate(stack: PopupStack, route: Route): PopupStack {
     case "tracker":
       return ROOT_STACK;
     case "settings":
-    case "entries":
     case "suggestions":
       return [ROOT_STACK[0], route];
     case "suggestion-edit":
@@ -125,11 +122,8 @@ export function navigate(stack: PopupStack, route: Route): PopupStack {
       return [ROOT_STACK[0], { name: "suggestions", day: route.day }, route];
     case "entry":
     case "entry-new":
-      // Always reached through the list, even when the route was restored from
-      // memory rather than tapped: back out of a detail screen has to land on
-      // the entries the row came from, or "back" would mean "the tracker" on
-      // one path and "the list" on another.
-      return [ROOT_STACK[0], { name: "entries" }, route];
+      // Entry rows now live on the tracker, so back returns to that list.
+      return [ROOT_STACK[0], route];
   }
 }
 

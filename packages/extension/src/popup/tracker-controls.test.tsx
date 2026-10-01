@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { BackgroundState } from "../lib/messaging";
 import { TrackerScreen, type TrackerScreenProps } from "./tracker-screen";
-import { EntriesScreen } from "./entries-screen";
+import { EntriesList } from "./entries-list";
 import { CatalogEditProvider } from "./catalog-edit";
 
 const state = {
@@ -81,7 +81,6 @@ const render = async (overrides: Partial<BackgroundState> = {}) => {
   const ok = vi.fn(async () => true);
   const onStart = vi.fn(async () => true);
   const onSignOut = vi.fn(async () => true);
-  const onOpenEntries = vi.fn();
   const props: TrackerScreenProps = {
     state: { ...state, ...overrides },
     error: null,
@@ -92,7 +91,6 @@ const render = async (overrides: Partial<BackgroundState> = {}) => {
     onUnpinFavorite: ok,
     onAnswerIdle: ok,
     onOpenSettings: vi.fn(),
-    onOpenEntries,
     onOpenSuggestions: vi.fn(),
     onSearchDescriptions: vi.fn(),
     onCreateClient: ok,
@@ -118,7 +116,7 @@ const render = async (overrides: Partial<BackgroundState> = {}) => {
       </CatalogEditProvider>,
     ),
   );
-  return { onStart, onSignOut, onUpdateRunning: ok, onOpenEntries };
+  return { onStart, onSignOut, onUpdateRunning: ok };
 };
 
 describe("popup timer controls", () => {
@@ -211,13 +209,10 @@ describe("popup timer controls", () => {
     expect(host.querySelector('[data-testid="menu-list"]')).toBeNull();
   });
 
-  test("entries navigation lives in the avatar menu", async () => {
-    const { onOpenEntries } = await render();
-    expect(host.querySelector('[data-testid="header-entries"]')).toBeNull();
+  test("account menu has no separate entries navigation", async () => {
+    await render();
     await click('[data-testid="menu-trigger"]');
-    await click('[data-testid="menu-entries"]');
-    expect(onOpenEntries).toHaveBeenCalledOnce();
-    expect(host.querySelector('[data-testid="menu-list"]')).toBeNull();
+    expect(host.querySelector('[data-testid="menu-entries"]')).toBeNull();
   });
 
   test("theme choice applies locally and persists", async () => {
@@ -251,7 +246,7 @@ describe("popup timer controls", () => {
     expect(input.compareDocumentPosition(cloud) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  test("embedded history keeps entry navigation and pagination without another header", async () => {
+  test("timer history keeps entry navigation and pagination without another header", async () => {
     const onOpenEntry = vi.fn();
     const onLoadMore = vi.fn(async () => true);
     const entry = { id: "past", description: "Earlier work", start: new Date().toISOString(),
@@ -259,8 +254,8 @@ describe("popup timer controls", () => {
       taskName: null, projectColor: null, invoiceId: null };
     const history = { ...state, entries: { entries: [entry], pendingIds: [], hasMore: true,
       from: new Date().toISOString(), to: new Date().toISOString() } } as unknown as BackgroundState;
-    await act(async () => root.render(<EntriesScreen embedded state={history} error={null}
-      onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={onOpenEntry}
+    await act(async () => root.render(<EntriesList state={history}
+      onGoTracker={vi.fn()} onOpenEntry={onOpenEntry}
       onNewEntry={vi.fn()} onLoadMore={onLoadMore} />));
     expect(host.querySelector('.header')).toBeNull();
     expect(host.querySelector('.tracker-entries__header button')).toBeNull();
@@ -268,21 +263,6 @@ describe("popup timer controls", () => {
     expect(onOpenEntry).toHaveBeenCalledWith("past");
     await click('[data-testid="entries-more"]');
     expect(onLoadMore).toHaveBeenCalledOnce();
-  });
-
-  test("standalone entries keep theme and account navigation", async () => {
-    const onOpenSettings = vi.fn();
-    const onSignOut = vi.fn(async () => true);
-    const history = { ...state, entries: { entries: [], pendingIds: [], hasMore: false,
-      from: new Date().toISOString(), to: new Date().toISOString() } } as BackgroundState;
-    await act(async () => root.render(<EntriesScreen state={history} error={null}
-      onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
-      onNewEntry={vi.fn()} onLoadMore={vi.fn(async () => true)}
-      onOpenSettings={onOpenSettings} onSignOut={onSignOut} />));
-    expect(host.querySelector('.theme-toggle')).not.toBeNull();
-    await click('[data-testid="menu-trigger"]');
-    await click('[data-testid="menu-settings"]');
-    expect(onOpenSettings).toHaveBeenCalledOnce();
   });
 
   test("restart shows a running copy before the worker replies and restores the row on failure", async () => {
@@ -293,8 +273,8 @@ describe("popup timer controls", () => {
       taskName: null, projectColor: null, invoiceId: null };
     const history = { ...state, entries: { entries: [entry], pendingIds: [], hasMore: false,
       from: entry.start, to: entry.end } } as unknown as BackgroundState;
-    await act(async () => root.render(<EntriesScreen embedded state={history} error={null}
-      onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
+    await act(async () => root.render(<EntriesList state={history}
+      onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
       onNewEntry={vi.fn()} onRestartEntry={onRestartEntry}
       onLoadMore={vi.fn(async () => true)} />));
     await click('[data-testid="entry-restart"]');
@@ -306,7 +286,7 @@ describe("popup timer controls", () => {
     expect(host.querySelector('[data-testid="entry-restart"]')).not.toBeNull();
   });
 
-  test.each([true, false])("live entry and tally tick together (embedded=%s)", async (embedded) => {
+  test("live entry and tally tick together", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 1, 12, 0, 0));
     try {
@@ -316,8 +296,8 @@ describe("popup timer controls", () => {
       const history = { ...state, running, entries: { entries: [past], pendingIds: [], hasMore: false,
         from: past.start, to: past.end } } as unknown as BackgroundState;
       const onGoTracker = vi.fn();
-      const show = async () => act(async () => root.render(<EntriesScreen embedded={embedded} state={history} error={null}
-        onBack={vi.fn()} onGoTracker={onGoTracker} onOpenEntry={vi.fn()}
+      const show = async () => act(async () => root.render(<EntriesList state={history}
+        onGoTracker={onGoTracker} onOpenEntry={vi.fn()}
         onNewEntry={vi.fn()} onLoadMore={vi.fn(async () => true)} />));
       await show();
       expect(host.querySelectorAll('[data-testid="entry-running"]')).toHaveLength(1);
@@ -345,8 +325,8 @@ describe("popup timer controls", () => {
         start: new Date(2026, 8, 30, 23).toISOString(), end: null },
         entries: { entries: [], pendingIds: [], hasMore: false, from: new Date().toISOString(), to: new Date().toISOString() }
       } as unknown as BackgroundState;
-      await act(async () => root.render(<EntriesScreen embedded state={history} error={null}
-        onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
+      await act(async () => root.render(<EntriesList state={history}
+        onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
         onNewEntry={vi.fn()} onLoadMore={vi.fn(async () => true)} />));
       expect(host.querySelector('.entry-day__label')?.textContent).toBe("Today");
       expect(host.querySelector('.entry-day__total')?.textContent).toBe("1:00:00");

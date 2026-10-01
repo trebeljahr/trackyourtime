@@ -697,8 +697,8 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
    * or scrolled out of the window by an edit that moved its start.
    *
    * Guarded on still being the entry route: the detail screen's effect can
-   * fire once more as it unmounts, and a second `back()` would drop the user
-   * out of the entries list they were just returned to.
+   * fire once more as it unmounts, and a second `back()` would repeat the
+   * navigation after the tracker list is already visible.
    */
   const entryMissing = useCallback((): void => {
     if (topOf(stackRef.current).name !== "entry") return;
@@ -788,7 +788,6 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
                 else openSection("account");
               },
               onSignOut: signOut,
-              onOpenEntries: () => go({ name: "entries" }),
               onOpenSuggestions: () => go({ name: "suggestions", day: null }),
               onSearchDescriptions: searchDescriptions,
               onCreateClient: createClient,
@@ -818,17 +817,9 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
             }}
             entries={{
               state,
-              error,
-              note,
-              onBack: goBack,
               onGoTracker: goTracker,
               onOpenEntry: openEntry,
               onNewEntry: newEntry,
-              onOpenSettings: () => {
-                if (state.webUrl) openTab(join(state.webUrl, "/app/settings"));
-                else openSection("account");
-              },
-              onSignOut: signOut,
               onRestartEntry: (entry) => send({
                 type: "timer:start",
                 description: entry.description,

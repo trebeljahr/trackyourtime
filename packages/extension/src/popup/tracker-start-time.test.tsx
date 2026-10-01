@@ -41,7 +41,7 @@ test("the start-time field is editable immediately after Start, before the worke
     onUpdateRunning: vi.fn(async () => true),
     onStop: vi.fn(async () => true), onPinFavorite: vi.fn(async () => true),
     onUnpinFavorite: vi.fn(async () => true), onAnswerIdle: vi.fn(async () => true),
-    onOpenSettings: vi.fn(), onOpenEntries: vi.fn(), onOpenSuggestions: vi.fn(),
+    onOpenSettings: vi.fn(), onOpenSuggestions: vi.fn(),
     onSearchDescriptions: vi.fn(), onCreateClient: vi.fn(async () => true),
     onCreateTag: vi.fn(async () => true), onCreateProject: vi.fn(async () => true),
     onCreateTask: vi.fn(async () => true), onSwitchWorkspace: vi.fn(async () => true),

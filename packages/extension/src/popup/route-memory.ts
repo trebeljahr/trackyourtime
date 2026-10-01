@@ -101,7 +101,8 @@ const parseRoute = (value: unknown): Route | null => {
 
   if (record.name === "tracker") return { name: "tracker" };
 
-  if (record.name === "entries") return { name: "entries" };
+  // Older builds remembered the separate list. It now lives on the tracker.
+  if (record.name === "entries") return { name: "tracker" };
 
   if (record.name === "entry") {
     // The id is checked against the entry window, not here: the window has not
