@@ -10,7 +10,8 @@
     "build:prod": "vite build --mode production",
     "build:firefox": "vite build --mode firefox",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev:prod": "vite build --watch --mode production"
   },
   "dependencies": {
     "@starter/core": "workspace:*",

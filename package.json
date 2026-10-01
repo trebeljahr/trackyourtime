@@ -85,7 +85,8 @@
     "prepare": "husky",
     "test:ios:simulator": "node scripts/ios-simulator-smoke.mjs",
     "test:ios:ui": "node scripts/ios-xcuitest.mjs",
-    "test:android:emulator": "node scripts/android-emulator-smoke.mjs"
+    "test:android:emulator": "node scripts/android-emulator-smoke.mjs",
+    "dev:extension:prod": "pnpm --filter @starter/extension run dev:prod"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

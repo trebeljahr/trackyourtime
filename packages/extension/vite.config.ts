@@ -1,3 +1,4 @@
+import { watchReload } from "./watch-reload";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
@@ -41,7 +42,7 @@ export default defineConfig(({ mode }) => {
   const target = BUILD_TARGETS[buildMode];
 
   return {
-    plugins: [react(), manifestPlugin(buildMode)],
+    plugins: [react(), manifestPlugin(buildMode), watchReload()],
     // The popup HTML is emitted at dist/src/popup/index.html but its JS and CSS
     // land at the dist root. Vite's default base ("/") would point them at
     // chrome-extension://<id>/popup.js, which only resolves because the
