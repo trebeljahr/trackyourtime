@@ -7,8 +7,9 @@ watch build to activate automatic reload.
 
 Successful builds trigger reload within about a second. Chrome may close the
 popup; reopen it to see changes. This is full extension reload, not React Fast
-Refresh: unsaved UI state can be lost. Account storage persists. Timer actions
-still affect your real account on the live API.
+Refresh: unsaved UI state and session-only sign-in can be cleared. Reopen the
+web app to reconnect if asked to sign in. Timer actions still affect your real
+account on the live API.
 
 `pnpm dev:extension` watches the local API target in `packages/extension/dist`.
 Run the local backend separately for that target.
