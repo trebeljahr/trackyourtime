@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-02
+
 The phone and desktop apps gained browser-based sign-in with an emailed link.
 The phone app got a new name and loading screen, and the extension gained a
 clearer tracker. This release also added independent clients to time entries
@@ -571,7 +573,8 @@ tag.
   and admins who may see both. An invoice id answers "not found" to anyone
   else.
 
-[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.2.0
 [0.1.2]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.2
 [0.1.1]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.1
 [0.1.0]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.1.0
