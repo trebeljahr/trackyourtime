@@ -1,4 +1,4 @@
-import { mergePopupSnapshot } from "../lib/popup-snapshot";
+import { loadPopupSnapshot, mergePopupSnapshot, POPUP_SNAPSHOT_KEY } from "../lib/popup-snapshot";
 import { join, openTab } from "./open-tab";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { CatalogEditProvider, type CatalogEdit } from "./catalog-edit";
@@ -73,10 +73,27 @@ const DRAFT_MEMORY_DEBOUNCE_MS = 500;
 export function App({ initialState = null }: { initialState?: BackgroundState | null;
 }): JSX.Element {
   const t = useT("popup");
-  const [state, setState] = useState<BackgroundState | null>(initialState);
+  // A cached sign-in screen cannot tell whether browser approval just finished.
+  const [state, setState] = useState<BackgroundState | null>(initialState?.signedIn ? initialState : null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area !== "session" || !changes[POPUP_SNAPSHOT_KEY]) return;
+      void loadPopupSnapshot().then((snapshot) => {
+        if (!active || !snapshot) return;
+        setState((previous) => mergePopupSnapshot(previous, snapshot));
+      });
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => {
+      active = false;
+      chrome.storage.onChanged.removeListener(onChanged);
+    };
+  }, []);
 
   // `send` must keep a stable identity for its consumers, yet
   // the failure it translates has to be said in the language on screen NOW —

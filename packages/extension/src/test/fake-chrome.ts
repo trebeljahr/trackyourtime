@@ -93,6 +93,7 @@ export function createFakeChrome() {
       sendMessage: async () => undefined,
     },
     storage: {
+      onChanged: fakeEvent<(changes: Record<string, chrome.storage.StorageChange>, area: string) => void>(),
       local: storageArea(),
       session: storageArea(),
     },

@@ -30,6 +30,7 @@ import {
   type DeviceAuthorization,
 } from "@starter/core";
 import { APP_VERSION } from "../lib/app-version";
+import { savePopupSnapshot } from "../lib/popup-snapshot";
 import { EXTENSION_CLIENT_ID } from "../lib/config";
 import {
   clearDeviceAuthFailure,
@@ -47,6 +48,7 @@ import {
 } from "../lib/device-auth-store";
 import { clearLinkBlock, clearSignOutMarker } from "../lib/sign-out-marker";
 import { BackgroundError } from "./errors";
+import { buildState } from "./state";
 import {
   adoptSession,
   ensureReady,
@@ -203,6 +205,10 @@ const exchangeOnce = async (record: PendingDeviceAuth): Promise<DeviceExchangeOu
     email: user?.email ?? null,
     source: sourceFor(record.purpose),
   });
+  // Approval can finish with no popup open. Prepare its first signed-in frame
+  // now, and notify an open popup through the snapshot storage change.
+  // The pending code is already cleared, so this read cannot exchange it again.
+  await buildState().then(savePopupSnapshot).catch(() => undefined);
   // `flushQueue` claims rows from before the owner stamp for this account and
   // sends what is this account's.
   await flushQueue().catch(() => undefined);

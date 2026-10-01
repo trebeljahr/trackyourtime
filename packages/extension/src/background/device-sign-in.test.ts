@@ -9,6 +9,7 @@ import {
   loadPendingDeviceAuth,
 } from "../lib/device-auth-store";
 import { loadSession } from "../lib/session";
+import { loadPopupSnapshot } from "../lib/popup-snapshot";
 import {
   API,
   createFakeAuthServer,
@@ -97,6 +98,7 @@ describe("startDeviceSignIn", () => {
       source: "device",
     });
     expect(fakeChrome.alarms.has(DEVICE_AUTH_ALARM)).toBe(false);
+    expect(await loadPopupSnapshot()).toMatchObject({ signedIn: true, email: "u@example.com" });
     expect(await attemptPendingDeviceSignIn()).toBeNull();
   });
 

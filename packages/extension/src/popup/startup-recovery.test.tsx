@@ -3,8 +3,38 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, test, vi } from "vitest";
 import { App } from "./App";
+import { POPUP_SNAPSHOT_KEY, savePopupSnapshot } from "../lib/popup-snapshot";
+import type { BackgroundState } from "../lib/messaging";
 
 vi.mock("./sign-in-screen", () => ({ SignInScreen: () => <div>Ready to sign in</div> }));
+vi.mock("./screens", () => ({ Screens: () => <div>Signed in with data</div> }));
+
+test("approval updates an open popup without waiting for its next poll", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.useFakeTimers();
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const state = {
+    signedIn: false, apiUrl: "https://api.example.test", view: "tracker",
+    compatibility: { refusal: null, release: null, apiLevel: null, minServerApiLevel: 1 },
+  } as BackgroundState;
+  const worker = vi.spyOn(chrome.runtime, "sendMessage").mockImplementation(() => Promise.resolve({ ok: true, state }));
+  const listen = vi.spyOn(chrome.storage.onChanged, "addListener");
+  try {
+    await act(async () => root.render(<App />));
+    expect(container.textContent).toContain("Ready to sign in");
+    await act(async () => {
+      await savePopupSnapshot({ ...state, signedIn: true });
+      listen.mock.calls[0]![0]({ [POPUP_SNAPSHOT_KEY]: { newValue: {} } }, "session");
+    });
+    expect(container.textContent).toContain("Signed in with data");
+    expect(worker).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => root.unmount());
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
+});
 
 test("a stalled startup offers Retry without overlapping polls and recovers", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });

@@ -19,6 +19,16 @@ vi.mock("./screens", () => ({
 }));
 
 describe("popup first render", () => {
+  test.each([null, { userCode: "ABCDEFGH", expiresAt: Date.now() + 60_000 }])(
+    "revalidates cached signed-out screens before displaying them (%j)",
+    (pendingDeviceAuth) => {
+      const html = renderToStaticMarkup(<App initialState={{
+        signedIn: false, pendingDeviceAuth,
+      } as BackgroundState} />);
+      expect(html).toContain('data-testid="popup-loading"');
+      expect(html).not.toContain("ABCDEFGH");
+    },
+  );
   test("settings opens the discovered web app's settings page", () => {
     const create = vi.spyOn(chrome.tabs, "create");
     renderToStaticMarkup(
