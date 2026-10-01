@@ -2017,3 +2017,24 @@ button.tag:hover .tag__x {
 }
 
 .sign-in__web-login { display: flex; flex-direction: column; gap: 8px; }
+
+.sign-in__server {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sign-in__server:hover, .sign-in__server[aria-expanded="true"] {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+.sign-in__server:disabled { opacity: 0.5; cursor: default; }

@@ -31,7 +31,9 @@ describe("extension sign-in choices", () => {
   test("hosted Chrome offers email, device code, and a web connection retry", () => {
     const html = renderToStaticMarkup(<SignInScreen {...props} />);
     expect(html).toContain('data-testid="open-web-app"');
-    expect(html).toContain("Use your own server");
+    expect(html).toContain("Using cloud");
+    expect(html).not.toContain("Use your own server");
+    expect(html).not.toContain("Signing in to");
     expect(html).toContain('data-testid="sign-in-web-app"');
     expect(html).toContain('data-testid="sign-in-form"');
     expect(html).toContain("Sign in with email");
@@ -118,4 +120,30 @@ test("accounts without a photo keep an initial and manual sign-in options", () =
   expect(html).toContain('aria-hidden="true">R</span>');
   expect(html).toContain('data-testid="sign-in-form"');
   expect(html).toContain('data-testid="sign-in-web-app"');
+});
+
+
+test("header server control reveals and hides the self-hosted URL picker", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<SignInScreen {...props} serverVersion="Track Your Time 0.1.2 (8c2ad03)" />));
+    const toggle = container.querySelector<HTMLButtonElement>(".header [data-testid='sign-in-change-server']")!;
+    expect(toggle.textContent).toBe("Using cloud");
+    expect(container.textContent).not.toContain("8c2ad03");
+    expect(container.querySelector('[data-testid="server-picker"]')).toBeNull();
+    await act(async () => toggle.click());
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("enter the URL of your self-hosted server");
+    expect(container.querySelector('[data-testid="api-url-input"]')).not.toBeNull();
+    await act(async () => toggle.click());
+    expect(container.querySelector('[data-testid="server-picker"]')).toBeNull();
+    await act(async () => root.render(<SignInScreen {...props} apiUrl="https://my.example.test" />));
+    expect(toggle.textContent).toBe("Using own server");
+    expect(toggle.title).toBe("https://my.example.test");
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
 });

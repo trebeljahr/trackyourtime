@@ -1,8 +1,8 @@
 import { useState, type FormEvent, type JSX } from "react";
+import { Pencil } from "lucide-react";
 import { sameServerOrigin } from "@starter/core";
-import { BRIDGE_TARGET, DEFAULT_API_URL } from "../lib/config";
+import { BRIDGE_TARGET } from "../lib/config";
 import type { DeviceSignInError, PendingDeviceSignIn } from "../lib/messaging";
-import { describeServer } from "../lib/server-label";
 import { describeDeviceSignInError } from "./errors";
 import { join, openTab } from "./open-tab";
 import { ServerPicker } from "./server-picker";
@@ -41,7 +41,6 @@ export function SignInScreen({
   apiUrl,
   webAccount = null,
   onConfirmWebAccount,
-  serverVersion,
   webUrl,
   pendingSync,
   pendingDeviceAuth,
@@ -87,32 +86,23 @@ export function SignInScreen({
 
   return (
     <div className="screen" data-testid="sign-in-screen">
-      <Header title="Track Your Time" branded />
+      <Header title="Track Your Time" branded trailingAction={
+        <button
+          type="button"
+          className="sign-in__server"
+          title={apiUrl}
+          aria-label={t("signIn.editServer")}
+          aria-expanded={changingServer}
+          aria-controls="sign-in-server-picker"
+          disabled={pendingDeviceAuth !== null || busy}
+          onClick={() => setChangingServer((open) => !open)}
+          data-testid="sign-in-change-server"
+        >
+          <span>{t(sameServerOrigin(apiUrl, "https://api.trackyourtime.dev") ? "signIn.usingCloud" : "signIn.usingOwnServer")}</span>
+          <Pencil size={12} aria-hidden="true" />
+        </button>
+      } />
       <div className="popup__body">
-        {/* Which server the password is about to be sent to, said before the
-            form rather than after it: with a self-hosted choice in play, that is
-            the thing to check before typing anything. */}
-        <div className="server" data-testid="sign-in-server">
-          <p className="server__text">
-            {t("signIn.signingInTo")}{" "}
-            <strong title={apiUrl}>{describeServer(apiUrl, DEFAULT_API_URL, t)}</strong>
-            {serverVersion !== null ? (
-              <span className="server__version"> · {serverVersion}</span>
-            ) : null}
-          </p>
-          {pendingDeviceAuth === null ? (
-            <button
-              type="button"
-              className="button--link"
-              aria-expanded={changingServer}
-              onClick={() => setChangingServer((open) => !open)}
-              data-testid="sign-in-change-server"
-            >
-              {changingServer ? t("signIn.keepServer") : automaticWebUrl ? t("signIn.ownServer") : t("signIn.changeServer")}
-            </button>
-          ) : null}
-        </div>
-
         {webAccount !== null && pendingDeviceAuth === null && !changingServer && onConfirmWebAccount ? (
           <button type="button" className="button button--primary button--block sign-in__web-login" disabled={busy}
             data-testid="confirm-web-account"
@@ -161,12 +151,15 @@ export function SignInScreen({
             {/* Two sibling forms, never nested: the server picker has its own
                 submit and must stay usable while the sign-in form is in flight. */}
             {changingServer ? (
-              <ServerPicker
-                apiUrl={apiUrl}
-                pendingSync={pendingSync}
-                onSetServer={onSetServer}
-                onSwitched={() => setChangingServer(false)}
-              />
+              <div className="panel" id="sign-in-server-picker">
+                <p className="panel__hint">{t("signIn.serverExplanation")}</p>
+                <ServerPicker
+                  apiUrl={apiUrl}
+                  pendingSync={pendingSync}
+                  onSetServer={onSetServer}
+                  onSwitched={() => setChangingServer(false)}
+                />
+              </div>
             ) : null}
 
             <form className="form" onSubmit={submit} data-testid="sign-in-form">

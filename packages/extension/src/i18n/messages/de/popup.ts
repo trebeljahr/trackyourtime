@@ -272,6 +272,10 @@ export const popup: Translation<typeof source> = {
     create: "Schlagwort „{name}“ erstellen",
   },
   signIn: {
+    usingCloud: "Cloud aktiv",
+    usingOwnServer: "Eigener Server",
+    editServer: "Server ändern",
+    serverExplanation: "Nutze die Track Your Time Cloud oder gib die URL deines selbst gehosteten Servers ein.",
     webAccountWaitingTitle: "Anmeldung läuft…",
     webAccountWaiting: "Lass die Web-App geöffnet, um die Anmeldung abzuschließen, oder fahre im Browser fort.",
 

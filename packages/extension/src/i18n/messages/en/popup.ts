@@ -288,6 +288,10 @@ export const popup = {
     create: "Create tag “{name}”",
   },
   signIn: {
+    usingCloud: "Using cloud",
+    usingOwnServer: "Using own server",
+    editServer: "Change server",
+    serverExplanation: "Use Track Your Time cloud, or enter the URL of your self-hosted server.",
     webAccountWaitingTitle: "Signing in…",
     webAccountWaiting: "Keep the web app open to finish signing in, or continue in the browser.",
 

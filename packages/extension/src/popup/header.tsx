@@ -23,6 +23,7 @@ export type HeaderProps = {
   onOpenEntries?: () => void;
   onOpenSettings?: () => void;
   accountMenu?: ReactNode;
+  trailingAction?: ReactNode;
   onNewEntry?: () => void;
   /** Only offered while activity capture is on — see the tracker. */
   onOpenSuggestions?: () => void;
@@ -43,6 +44,7 @@ export function Header({
   onOpenSuggestions,
   sync,
   accountMenu,
+  trailingAction,
 }: HeaderProps): JSX.Element {
   const t = useT("popup");
   return (
@@ -130,6 +132,7 @@ export function Header({
           </button>
         ) : null}
         {accountMenu}
+        {trailingAction}
       </div>
     </div>
   );
