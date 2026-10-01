@@ -269,7 +269,9 @@ describe("popup timer controls", () => {
     const onOpenSettings = vi.fn();
     const onSignOut = vi.fn(async () => true);
     const onUpdateTheme = vi.fn(async () => true);
-    await act(async () => root.render(<EntriesScreen state={state} error={null}
+    const history = { ...state, entries: { entries: [], pendingIds: [], hasMore: false,
+      from: new Date().toISOString(), to: new Date().toISOString() } } as BackgroundState;
+    await act(async () => root.render(<EntriesScreen state={history} error={null}
       onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
       onNewEntry={vi.fn()} onLoadMore={vi.fn(async () => true)}
       onOpenSettings={onOpenSettings} onSignOut={onSignOut}
