@@ -20,7 +20,8 @@ import {
   TwoFactorChallenge,
   type ChallengeOutcome,
 } from "@/components/two-factor-challenge";
-import { isElectron, isTokenShell } from "@/lib/shell";
+import { isTokenShell } from "@/lib/shell";
+import { useIsTokenShell } from "@/hooks/use-shell";
 import { useT } from "@/i18n/use-t";
 import { translate } from "@/i18n/translate";
 import { authErrorMessage } from "@/lib/auth-error-message";
@@ -38,6 +39,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
+  const tokenShell = useIsTokenShell();
   const [step, setStep] = useState<"password" | "two-factor">("password");
   // `?next=` (validated by lib/safe-next.ts) and `?email=`, both read in an
   // effect for the same prerender reason as the revoked notice below. The
@@ -52,6 +56,9 @@ export default function LoginPage() {
     setNext(safeNextFromSearch(search));
     const prefill = new URLSearchParams(search).get("email");
     if (prefill) setEmail((current) => (current === "" ? prefill : current));
+    if (new URLSearchParams(search).has("error")) {
+      setError(translate("shell")("auth.login.magicInvalid"));
+    }
   }, []);
 
   /*
@@ -112,13 +119,9 @@ export default function LoginPage() {
           // The challenge is a cookie a WKWebView — or the desktop app, which
           // never sends one — cannot send to the API, so the step could never
           // succeed there; saying so beats a code field that always answers
-          // "invalid". The desktop app has a way through: the browser.
+          // "invalid". Both native apps can finish through the browser.
           setError(
-            translate("shell")(
-              isElectron()
-                ? "auth.twoFactor.desktopUseBrowser"
-                : "auth.twoFactor.nativeUnsupported",
-            ),
+            translate("shell")("auth.twoFactor.desktopUseBrowser"),
           );
         } else {
           setStep("two-factor");
@@ -136,6 +139,33 @@ export default function LoginPage() {
       setError(translate("common")("errors.generic"));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleMagicLink() {
+    if (!email.trim()) {
+      setError(t("auth.login.magicEmailRequired"));
+      return;
+    }
+    setError("");
+    setMagicSent(false);
+    setMagicLoading(true);
+    try {
+      const result = await authClient.signIn.magicLink({
+        email: email.trim(),
+        callbackURL: webCallbackUrl(
+          safeNextFromSearch(window.location.search) ?? POST_AUTH_REDIRECT,
+        ),
+        errorCallbackURL: webCallbackUrl(
+          authPageHref("login", { next: safeNextFromSearch(window.location.search), email: email.trim() }),
+        ),
+      });
+      if (result.error) setError(authErrorMessage(result.error, "login"));
+      else setMagicSent(true);
+    } catch {
+      setError(translate("common")("errors.generic"));
+    } finally {
+      setMagicLoading(false);
     }
   }
 
@@ -259,7 +289,21 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Renders nothing outside the desktop app. */}
+        {!tokenShell && (
+          <div className="space-y-2">
+            <button
+              type="button"
+              disabled={magicLoading}
+              onClick={() => void handleMagicLink()}
+              className="inline-flex h-10 w-full items-center justify-center rounded-md border border-input text-sm font-medium hover:bg-muted disabled:opacity-50"
+              data-testid="login-magic-link"
+            >
+              {magicLoading ? t("auth.login.magicSending") : t("auth.login.magicSend")}
+            </button>
+            {magicSent && <p role="status" className="text-sm text-muted-foreground">{t("auth.login.magicSent")}</p>}
+          </div>
+        )}
+
         <BrowserSignIn onSignedIn={handleBrowserSignIn} />
 
         <GoogleSignInButton />

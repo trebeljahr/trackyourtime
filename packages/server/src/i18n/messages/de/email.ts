@@ -4,6 +4,12 @@ import type { email as source } from "../en/email.js";
 
 /** German `email`. Terms follow packages/client/src/i18n/GLOSSARY.de.md; voice is „du“. */
 export const email: Translation<typeof source> = {
+  magicLink: {
+    subject: "Bei Track Your Time anmelden",
+    intro: "Öffne diesen Link, um dich bei Track Your Time anzumelden. Er gilt fünf Minuten:",
+    action: "Anmelden",
+    ignore: "Wenn du diese Anmeldung nicht angefordert hast, ignoriere diese E-Mail.",
+  },
   passwordReset: {
     subject: "Passwort zurücksetzen",
     intro: "Öffne diesen Link, um dein Track-Your-Time-Passwort zurückzusetzen:",

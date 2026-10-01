@@ -12,29 +12,29 @@ import {
 
 import { untrustedMessage } from "@/components/server-picker";
 import { Button } from "@/components/ui/button";
-import { useIsElectron } from "@/hooks/use-shell";
+import { useIsCapacitor, useIsElectron } from "@/hooks/use-shell";
 import { useT } from "@/i18n/use-t";
 import { getAbsoluteApiOrigin, whenApiOriginReady } from "@/lib/api-origin";
 import { setNativeToken } from "@/lib/native-session";
 
 /**
- * "Sign in with your browser", on /login in the desktop app.
+ * "Sign in with your browser", on /login in the desktop and mobile apps.
  *
  * The password form in a shell cannot finish a two-factor challenge (the
  * challenge is a cookie the app never sends) and cannot do Google at all (the
  * OAuth redirect cannot come back to `app://-`). The browser the person
- * already uses has passed both. So the app runs the RFC 8628 device flow the
- * Raycast extension uses — `startDeviceAuthorization` / `pollForDeviceSession`
- * from `@starter/core`, client id `trackyourtime-desktop` — opens the approval
- * page in the OS browser and waits. No server change: the server already
- * allowlists the id and gives it the stored-token session lifetime.
+ * already uses can pass both. The app runs the RFC 8628 device flow used by
+ * Raycast, opens the approval page in the default browser, and waits. The
+ * server already allowlists both native client ids and issues stored-token
+ * sessions for them.
  *
  * Renders nothing on web and on the first client render anywhere
- * (`useIsElectron` hydrates as `false`), so the prerendered login page is
+ * (the shell hooks hydrate as `false`), so the prerendered login page is
  * unchanged.
  */
 
 export const DESKTOP_CLIENT_ID = "trackyourtime-desktop";
+export const MOBILE_CLIENT_ID = "trackyourtime-mobile";
 
 type Phase =
   | { kind: "idle" }
@@ -106,6 +106,7 @@ export function BrowserSignIn({
   onSignedIn: () => Promise<void>;
 }): React.JSX.Element | null {
   const desktop = useIsElectron();
+  const mobile = useIsCapacitor();
   const t = useT("shell");
   const [phase, setPhase] = React.useState<Phase>({ kind: "idle" });
   const [error, setError] = React.useState<string | null>(null);
@@ -115,11 +116,17 @@ export function BrowserSignIn({
   // that is gone.
   React.useEffect(() => () => abort.current?.abort(), []);
 
-  if (!desktop) return null;
+  if (!desktop && !mobile) return null;
 
-  const openApproval = (authorization: DeviceAuthorization): void => {
+  const openApproval = async (authorization: DeviceAuthorization): Promise<void> => {
     const url = authorization.verificationUriComplete || authorization.verificationUri;
-    if (url) void window.electronAPI?.openExternal(url);
+    if (!url) throw new Error("Missing verification URL");
+    if (desktop) {
+      if (!(await window.electronAPI?.openExternal(url))) throw new Error("Could not open browser");
+    } else {
+      const { AppLauncher } = await import("@capacitor/app-launcher");
+      await AppLauncher.openUrl({ url });
+    }
   };
 
   const start = async (): Promise<void> => {
@@ -133,13 +140,13 @@ export function BrowserSignIn({
       await whenApiOriginReady();
       const options = {
         baseUrl: getAbsoluteApiOrigin(),
-        clientId: DESKTOP_CLIENT_ID,
+        clientId: mobile ? MOBILE_CLIENT_ID : DESKTOP_CLIENT_ID,
         fetchImpl: deviceFetch,
       } as const;
       const authorization = await startDeviceAuthorization(options);
       if (controller.signal.aborted) return;
       setPhase({ kind: "waiting", authorization });
-      openApproval(authorization);
+      await openApproval(authorization);
 
       const session = await pollForDeviceSession(options, authorization.deviceCode, {
         intervalSeconds: authorization.intervalSeconds,
@@ -186,7 +193,7 @@ export function BrowserSignIn({
             type="button"
             variant="outline"
             className="flex-1"
-            onClick={() => openApproval(phase.authorization)}
+            onClick={() => void openApproval(phase.authorization).catch(() => setError(t(FAILURE_MESSAGES.failed)))}
             data-testid="browser-sign-in-reopen"
           >
             <ExternalLink className="size-4" />

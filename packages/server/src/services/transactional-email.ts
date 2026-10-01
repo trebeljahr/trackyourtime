@@ -27,7 +27,7 @@ export type RenderedEmail = {
 
 function accountEmail(
   locale: Locale,
-  kind: "verification" | "passwordReset",
+  kind: "verification" | "passwordReset" | "magicLink",
   url: string,
   frontendUrl?: string,
 ): RenderedEmail {
@@ -53,6 +53,14 @@ export function passwordResetEmail(
   frontendUrl?: string,
 ): RenderedEmail {
   return accountEmail(locale, "passwordReset", url, frontendUrl);
+}
+
+export function magicLinkEmail(
+  locale: Locale,
+  url: string,
+  frontendUrl?: string,
+): RenderedEmail {
+  return accountEmail(locale, "magicLink", url, frontendUrl);
 }
 
 export function verificationEmail(

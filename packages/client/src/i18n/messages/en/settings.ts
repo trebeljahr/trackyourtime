@@ -908,7 +908,7 @@ export const settings = {
     enable: {
       title: "Turn on two-factor authentication",
       description:
-        "Every sign-in on the web will ask for a code from an authenticator app. Until the mobile app and the browser extension support it, they cannot sign in to this account; devices that are already signed in stay signed in.",
+        "Every sign-in on the web will ask for a code from an authenticator app. The mobile and desktop apps can sign in through your browser. Devices already signed in stay signed in.",
     },
     scan: {
       title: "Scan the QR code",

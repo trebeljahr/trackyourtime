@@ -2,6 +2,7 @@ import { fetchAuthWithTimeout } from "./auth-request";
 import { createAuthClient } from "better-auth/react";
 import {
   deviceAuthorizationClient,
+  magicLinkClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
 import { clientId, isElectron, isTokenShell } from "@/lib/shell";
@@ -107,6 +108,7 @@ export const authClient = createAuthClient({
    * has nowhere sensible to type a password.
    */
   plugins: [
+    magicLinkClient(),
     deviceAuthorizationClient(),
     /**
      * Adds `authClient.twoFactor.*`. No `onTwoFactorRedirect` and no

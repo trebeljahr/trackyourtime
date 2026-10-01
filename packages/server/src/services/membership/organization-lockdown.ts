@@ -27,6 +27,7 @@
 // `recordDeletionPassword` uses to tell the two apart.
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { recordDeletionPassword } from "../../auth/account-deletion.js";
+import { magicLinkGuard } from "../../auth/magic-link-guard.js";
 import { INVITATION_TTL_SECONDS } from "./invitations.js";
 
 const ORGANIZATION_PREFIX = "/organization/";
@@ -63,6 +64,7 @@ export function refuseOrganizationHttp(ctx: HookContextLike): void {
 export const authBeforeHook = createAuthMiddleware(async (ctx) => {
   refuseOrganizationHttp(ctx);
   await recordDeletionPassword(ctx);
+  await magicLinkGuard(ctx);
 });
 
 /**

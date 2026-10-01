@@ -23,12 +23,16 @@ vi.mock("next/navigation", () => ({
 }));
 
 const signInEmail = vi.fn(async () => ({ error: null }));
+const signInMagicLink = vi.fn(async () => ({ error: null }));
 const signUpEmail = vi.fn(async () => ({ error: null }));
 vi.mock("@/lib/auth-client", () => ({
   signIn: { email: (...args: unknown[]) => signInEmail(...(args as [])) },
   signUp: { email: (...args: unknown[]) => signUpEmail(...(args as [])) },
   getSession: vi.fn(async () => ({ data: null })),
-  authClient: { sendVerificationEmail: vi.fn(async () => ({ data: null, error: null })) },
+  authClient: {
+    signIn: { magicLink: (...args: unknown[]) => signInMagicLink(...(args as [])) },
+    sendVerificationEmail: vi.fn(async () => ({ data: null, error: null })),
+  },
   isTwoFactorChallenge: () => false,
   webCallbackUrl: (path: string) => `http://localhost${path}`,
   POST_AUTH_REDIRECT: "/app/track",
@@ -73,6 +77,7 @@ const submitSignup = async (): Promise<void> => {
 
 beforeEach(() => {
   replace.mockClear();
+  signInMagicLink.mockClear();
 });
 
 afterEach(() => {
@@ -81,6 +86,18 @@ afterEach(() => {
 });
 
 describe("login ?next=", () => {
+  it("returns an emailed link to device approval in the browser", async () => {
+    visit(`?next=${encodeURIComponent("/app/device/?user_code=ABCD-EFGH")}`);
+    render(<LoginPage />);
+    fireEvent.change(screen.getByTestId("login-email"), { target: { value: "bob@example.com" } });
+    fireEvent.click(screen.getByTestId("login-magic-link"));
+    await waitFor(() => expect(signInMagicLink).toHaveBeenCalledWith({
+      email: "bob@example.com",
+      callbackURL: "http://localhost/app/device/?user_code=ABCD-EFGH",
+      errorCallbackURL: "http://localhost/login/?next=%2Fapp%2Fdevice%2F%3Fuser_code%3DABCD-EFGH&email=bob%40example.com",
+    }));
+    expect(screen.getByRole("status")).toHaveTextContent("Check your inbox");
+  });
   it("marks the login fields for password managers", () => {
     render(<LoginPage />);
     expect(screen.getByTestId("login-email")).toHaveAttribute("autocomplete", "username");

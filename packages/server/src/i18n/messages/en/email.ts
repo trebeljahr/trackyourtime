@@ -12,6 +12,12 @@
  * once, in code, rather than trusted inside a message.
  */
 export const email = {
+  magicLink: {
+    subject: "Sign in to Track Your Time",
+    intro: "Open this link to sign in to your Track Your Time account. It expires in five minutes:",
+    action: "Sign in",
+    ignore: "If you did not ask to sign in, ignore this email.",
+  },
   passwordReset: {
     subject: "Reset your password",
     intro: "Open this link to reset your Track Your Time password:",

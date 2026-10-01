@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * both halves together (e2e/desktop).
  */
 
-const shell = vi.hoisted(() => ({ value: "electron" as "web" | "electron" }));
+const shell = vi.hoisted(() => ({ value: "electron" as "web" | "electron" | "capacitor" }));
 vi.mock("@/lib/shell", async () =>
   (await import("@/lib/shell-mock")).mockShellModule(() => shell.value),
 );
@@ -35,6 +35,8 @@ type Answer = { status: number; body: Record<string, unknown> };
 const requests: { url: string; init: RequestInit | undefined }[] = [];
 let tokenAnswers: Answer[] = [];
 const openExternal = vi.fn(async () => true);
+const openMobileBrowser = vi.hoisted(() => vi.fn(async () => ({ completed: true })));
+vi.mock("@capacitor/app-launcher", () => ({ AppLauncher: { openUrl: openMobileBrowser } }));
 
 const json = ({ status, body }: Answer): Response =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -45,6 +47,7 @@ beforeEach(() => {
   tokenAnswers = [];
   setNativeToken.mockClear();
   openExternal.mockClear();
+  openMobileBrowser.mockClear();
   Object.assign(window, { electronAPI: { isDesktop: true, platform: "darwin", openExternal } });
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     requests.push({ url, init });
@@ -114,6 +117,22 @@ describe("BrowserSignIn", () => {
     expect(code?.url).toBe("https://api.example.test/api/auth/device/code");
     expect(JSON.parse(String(code?.init?.body))).toEqual({ client_id: "trackyourtime-desktop" });
     for (const request of requests) expect(request.init?.credentials).toBe("omit");
+  });
+
+  it("pairs a mobile app through the default browser", async () => {
+    shell.value = "capacitor";
+    tokenAnswers = [{ status: 200, body: { access_token: "mobile-token", user: { id: "u1" } } }];
+    const onSignedIn = vi.fn(async () => undefined);
+    render(<BrowserSignIn onSignedIn={onSignedIn} />);
+
+    fireEvent.click(await screen.findByTestId("browser-sign-in"));
+    await waitFor(() => expect(openMobileBrowser).toHaveBeenCalledWith({
+      url: "https://time.example.test/app/device?user_code=ABCD-EFGH",
+    }));
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledTimes(1));
+    expect(setNativeToken).toHaveBeenCalledWith("mobile-token");
+    expect(JSON.parse(String(requests[0]?.init?.body))).toEqual({ client_id: "trackyourtime-mobile" });
+    expect(openExternal).not.toHaveBeenCalled();
   });
 
   it("returns to the button with a message when the browser declines", async () => {

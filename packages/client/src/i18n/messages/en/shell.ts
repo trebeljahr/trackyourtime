@@ -127,6 +127,11 @@ export const shell = {
       signupFailed: "Could not create the account. Try again.",
     },
     login: {
+      magicSend: "Email me a sign-in link",
+      magicSending: "Sending link…",
+      magicSent: "Check your inbox. If this account can use a sign-in link, it will arrive shortly. The link expires in five minutes.",
+      magicEmailRequired: "Enter your email address first.",
+      magicInvalid: "This sign-in link is invalid or expired. Ask for a new one.",
       title: "Log in",
       subtitle: "Enter your credentials to access your account",
       submit: "Log in",
@@ -142,10 +147,10 @@ export const shell = {
       title: "Two-factor authentication",
       signingInAs: "Signing in as {email}",
       nativeUnsupported:
-        "This account uses two-factor authentication, which the app does not support yet. Sign in on the web app instead.",
+        "This account uses two-factor authentication. Use Sign in with your browser below.",
       /** The desktop app can: through the browser, below the form. */
       desktopUseBrowser:
-        "This account uses two-factor authentication. Use Sign in with your browser to sign in to the desktop app.",
+        "This account uses two-factor authentication. Use Sign in with your browser below.",
       totpLabel: "Authentication code",
       backupLabel: "Backup code",
       totpHint: "Enter the 6-digit code from your authenticator app.",
@@ -161,7 +166,7 @@ export const shell = {
     },
     google: {
       continue: "Continue with Google",
-      shellNote: "Google sign-in works on the web app only. Use your email and password here.",
+      shellNote: "To use Google, choose Sign in with your browser above.",
       desktopNote:
         "Google sign-in does not work inside the desktop app. Use Sign in with your browser, then choose Google there.",
       unconfiguredNote: "Google sign-in is not set up on this server.",
@@ -170,7 +175,7 @@ export const shell = {
     /** The desktop app's device-flow sign-in (the browser approves the app). */
     browserSignIn: {
       start: "Sign in with your browser",
-      hint: "For accounts with two-factor authentication or Google sign-in.",
+      hint: "Use your password, Google, or an emailed sign-in link in your browser.",
       starting: "Starting…",
       waitingTitle: "Approve this app in your browser",
       waiting:

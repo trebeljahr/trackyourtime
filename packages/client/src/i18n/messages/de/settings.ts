@@ -876,7 +876,7 @@ export const settings: Translation<typeof source> = {
     enable: {
       title: "Zwei-Faktor-Authentifizierung einschalten",
       description:
-        "Jede Anmeldung im Web fragt dann nach einem Code aus einer Authenticator-App. Bis die Mobil-App und die Browsererweiterung das unterstützen, können sie sich nicht mit diesem Konto anmelden; Geräte, die schon angemeldet sind, bleiben angemeldet.",
+        "Jede Anmeldung im Web fragt dann nach einem Code aus einer Authenticator-App. Die Mobil- und Desktop-App können sich über deinen Browser anmelden. Bereits angemeldete Geräte bleiben angemeldet.",
     },
     scan: {
       title: "QR-Code scannen",

@@ -121,6 +121,11 @@ export const shell: Translation<typeof source> = {
       signupFailed: "Das Konto konnte nicht erstellt werden. Versuch es noch einmal.",
     },
     login: {
+      magicSend: "Anmeldelink per E-Mail senden",
+      magicSending: "Link wird gesendet …",
+      magicSent: "Prüfe deinen Posteingang. Wenn dieses Konto einen Anmeldelink nutzen kann, kommt er gleich. Der Link gilt fünf Minuten.",
+      magicEmailRequired: "Gib zuerst deine E-Mail-Adresse ein.",
+      magicInvalid: "Dieser Anmeldelink ist ungültig oder abgelaufen. Fordere einen neuen an.",
       title: "Anmelden",
       subtitle: "Gib deine Zugangsdaten ein, um auf dein Konto zuzugreifen",
       submit: "Anmelden",
@@ -136,9 +141,9 @@ export const shell: Translation<typeof source> = {
       title: "Zwei-Faktor-Authentifizierung",
       signingInAs: "Anmeldung als {email}",
       nativeUnsupported:
-        "Dieses Konto nutzt Zwei-Faktor-Authentifizierung, die die App noch nicht unterstützt. Melde dich stattdessen in der Web-App an.",
+        "Dieses Konto nutzt Zwei-Faktor-Authentifizierung. Wähle unten „Mit deinem Browser anmelden“.",
       desktopUseBrowser:
-        "Dieses Konto nutzt Zwei-Faktor-Authentifizierung. Melde dich in der Desktop-App mit „Mit deinem Browser anmelden“ an.",
+        "Dieses Konto nutzt Zwei-Faktor-Authentifizierung. Wähle unten „Mit deinem Browser anmelden“.",
       totpLabel: "Bestätigungscode",
       backupLabel: "Backup-Code",
       totpHint: "Gib den 6-stelligen Code aus deiner Authenticator-App ein.",
@@ -156,7 +161,7 @@ export const shell: Translation<typeof source> = {
     google: {
       continue: "Weiter mit Google",
       shellNote:
-        "Die Anmeldung mit Google funktioniert nur in der Web-App. Melde dich hier mit E-Mail und Passwort an.",
+        "Für die Anmeldung mit Google wähle oben „Mit deinem Browser anmelden“.",
       desktopNote:
         "Die Anmeldung mit Google funktioniert nicht direkt in der Desktop-App. Wähle „Mit deinem Browser anmelden“ und dort Google.",
       unconfiguredNote: "Die Anmeldung mit Google ist auf diesem Server nicht eingerichtet.",
@@ -164,7 +169,7 @@ export const shell: Translation<typeof source> = {
     },
     browserSignIn: {
       start: "Mit deinem Browser anmelden",
-      hint: "Für Konten mit Zwei-Faktor-Authentifizierung oder Anmeldung mit Google.",
+      hint: "Nutze im Browser dein Passwort, Google oder einen Anmeldelink per E-Mail.",
       starting: "Wird gestartet …",
       waitingTitle: "Bestätige diese App in deinem Browser",
       waiting:

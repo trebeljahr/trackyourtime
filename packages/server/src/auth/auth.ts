@@ -1,9 +1,11 @@
 import { emailLinkForWeb } from "./email-link.js";
 import { logAuthLink as logAuthUrl } from "./link-policy.js";
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { bearer } from "better-auth/plugins/bearer";
 import { deviceAuthorization } from "better-auth/plugins/device-authorization";
+import { magicLink } from "better-auth/plugins/magic-link";
 import { organization } from "better-auth/plugins/organization";
 import { MongoClient } from "mongodb";
 import {
@@ -25,7 +27,7 @@ import {
   twoFactorPlugin,
   type AuthMail,
 } from "./account-security.js";
-import { passwordResetEmail } from "../services/transactional-email.js";
+import { magicLinkEmail, passwordResetEmail } from "../services/transactional-email.js";
 import { preferredLocale } from "../services/user-locale.js";
 import { DEVICE_FLOW_CLIENT_IDS } from "./client-label.js";
 import { versionFieldsForNewSession } from "./client-version.js";
@@ -260,6 +262,26 @@ export async function initAuth(): Promise<void> {
     },
 
     plugins: [
+      magicLink({
+        disableSignUp: true,
+        storeToken: "hashed",
+        async sendMagicLink({ email, url }, ctx) {
+          if (!isEmailDeliveryConfigured()) {
+            throw new APIError("SERVICE_UNAVAILABLE", { message: "Email delivery is not configured" });
+          }
+          if (!ctx) return;
+          const account = await ctx.context.internalAdapter.findUserByEmail(email);
+          // The plugin would create a session without a two-factor challenge.
+          // Keep the response generic for unknown and protected accounts.
+          if (!account || (account.user as typeof account.user & { twoFactorEnabled?: boolean }).twoFactorEnabled) return;
+          const safeUrl = emailLinkForWeb(url, env.FRONTEND_URL);
+          const locale = await preferredLocale([account.user.id]);
+          await sendEmail({
+            to: email,
+            ...magicLinkEmail(locale, safeUrl, env.FRONTEND_URL),
+          });
+        },
+      }),
       /**
        * TOTP + backup codes. MUST stay ahead of `bearer()`: after-hooks run in
        * registration order, and the bearer hook running first would hand out
