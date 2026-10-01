@@ -54,12 +54,7 @@ export const DEFAULT_API_URL: string = buildTimeApiUrl;
  */
 export const BRIDGE_TARGET: ExtensionBridgeTarget = ((): ExtensionBridgeTarget => {
   const configured: unknown = import.meta.env.VITE_BRIDGE_TARGET;
-  // "none" is the Firefox build, which has no bridge at all: Gecko implements
-  // `externally_connectable` for extensions only, never for web pages. It is
-  // still a value that must be recognised here — the module scope of the
-  // background page reads this, so an unrecognised target throws before a
-  // single listener is registered and the extension does nothing at all, with
-  // the error only visible in the browser console.
+  // "none" remains available for builds that deliberately disable bridging.
   if (
     configured === "development" ||
     configured === "production" ||

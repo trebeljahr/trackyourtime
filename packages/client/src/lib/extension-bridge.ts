@@ -17,7 +17,8 @@
  *    cookie (claim + approve, `lib/device-approve.ts`) and tells the extension
  *    how that went. The extension then fetches its OWN token from the server;
  *    no credential crosses the bridge. The code is never shown and never taken
- *    from anywhere but a reply of a pinned extension id.
+ *    from anywhere but a decoded bridge reply (pinned Chrome id or the
+ *    same-origin Firefox content relay).
  *  - `sign-out-web`: the extension was signed out on purpose after this
  *    session began. The page signs out through the app's normal `signOut()`,
  *    and the protected layout moves the person to /login as it would for any

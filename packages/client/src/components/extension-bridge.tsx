@@ -1,5 +1,6 @@
 "use client";
 
+import { FIREFOX_EXTENSION_ID } from "@starter/shared/extension-relay";
 import * as React from "react";
 
 import { getAbsoluteApiOrigin } from "@/lib/api-origin";
@@ -13,6 +14,7 @@ import {
 } from "@/lib/extension-bridge";
 import {
   chromeRuntime,
+  pageRelayAvailable,
   extensionIds,
   sendToExtension,
 } from "@/lib/extension-bridge-transport";
@@ -56,13 +58,13 @@ export const isTopLevelDocument = (win: Window): boolean => {
   }
 };
 
-/** The top-level web app over http(s), in a browser whose `chrome.runtime` can message an extension. */
+/** The top-level web app with a Chrome runtime or the hosted Firefox relay. */
 const bridgeAvailable = (): boolean =>
   typeof window !== "undefined" &&
   !isAppShell() &&
   isTopLevelDocument(window) &&
   /^https?:$/.test(window.location.protocol) &&
-  chromeRuntime() !== null;
+  (chromeRuntime() !== null || pageRelayAvailable());
 
 /**
  * Keeps the browser extension signed in and out with this web app — see
@@ -79,7 +81,7 @@ export function ExtensionBridge(): null {
 
   React.useEffect(() => {
     if (!bridgeAvailable()) return;
-    const ids = extensionIds();
+    const ids = chromeRuntime() === null && pageRelayAvailable() ? [FIREFOX_EXTENSION_ID] : extensionIds();
     if (ids.length === 0) return;
 
     const controller = createExtensionBridgeController({

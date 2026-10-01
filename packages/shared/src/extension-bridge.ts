@@ -1,13 +1,13 @@
 /**
  * The web app ↔ browser extension bridge.
  *
- * The store extension ships with no host permissions and no `cookies`
+ * The store extension ships with no host_permissions and no `cookies`
  * permission, so it can no longer borrow the web app's session cookie. It
  * lists the first-party web origins under `externally_connectable` instead,
  * and the web app — after mount, on the web only — messages the extension by
  * its pinned id (`chrome.runtime.sendMessage(id, request)`). The extension
- * never initiates: a page has no listener it could reach without a content
- * script, so every exchange is one request from the page and one reply.
+ * never initiates: every exchange is one request from the page and one reply.
+ * Firefox carries the same protocol through a hosted-only content-script relay.
  *
  * Both ends treat every value that crosses the bridge as untrusted input and
  * run it through the decoders here. A decoder never throws; anything it does
@@ -71,11 +71,8 @@ export const EXTENSION_BRIDGE_DEVELOPMENT_WEB_HOSTS: readonly string[] = [
 /**
  * Which web origins a build's bridge accepts.
  *
- * `none` is the Firefox build: Gecko implements neither
- * `externally_connectable` for web pages nor `runtime.connect` from one, so
- * there is no bridge to have. It is a target rather than an absent one so the
- * checks below can refuse every origin explicitly — a build with no listed
- * origins must not fall through to the development list.
+ * `none` explicitly disables the bridge. Both hosted browser builds use the
+ * production allowlist, through different transports.
  */
 export type ExtensionBridgeTarget = "development" | "production" | "none";
 

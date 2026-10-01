@@ -103,11 +103,12 @@ describe("firefox manifest", () => {
     expect(manifest).not.toHaveProperty("minimum_chrome_version");
   });
 
-  it("has no bridge: Firefox does not connect web pages to extensions", () => {
+  it("uses a hosted-only top-level content relay instead of externally_connectable", () => {
     // The key is omitted rather than written empty — AMO reads an unknown or
     // empty key as a mistake, and an empty match list is not a narrower
     // bridge, it is no bridge.
     expect(manifest).not.toHaveProperty("externally_connectable");
+    expect(manifest.content_scripts).toEqual([{ matches: ["https://trackyourtime.dev/*"], js: ["page-relay.js"], run_at: "document_start", all_frames: false }]);
   });
 
   it("points at the hosted API, like the production build", () => {
@@ -116,7 +117,7 @@ describe("firefox manifest", () => {
     // to AMO talking to nothing.
     expect(BUILD_TARGETS.firefox.apiUrl).toBe(BUILD_TARGETS.production.apiUrl);
     expect(BUILD_TARGETS.firefox.outDir).toBe("dist-firefox");
-    expect(BUILD_TARGETS.firefox.bridgeTarget).toBe("none");
+    expect(BUILD_TARGETS.firefox.bridgeTarget).toBe("production");
   });
 });
 

@@ -2832,12 +2832,16 @@ each rule below fails quietly if it is broken.
 - **`background.scripts`, not `service_worker`.** Gecko's MV3 background is an
   event page; a manifest with `service_worker` loads with no background at all
   — every listener unregistered, and a popup that does nothing.
-- **No `externally_connectable`, so there is no bridge.** Firefox implements it
-  for extensions only, never for web pages. `bridgeTarget: "none"` omits the
-  key AND makes `registerBridgeListener()` register nothing, so the "the page
-  drives" rule stays true on an engine where no page can. Signing in on the web
-  app therefore never signs the add-on in; the password form and the device
-  flow are the ways in.
+- **Hosted Firefox sign-in uses a content-script relay.** Firefox cannot use
+  web-page `externally_connectable`. Its production allowlist instead supplies
+  `content_scripts.matches`, scoped to `https://trackyourtime.dev/*` and the
+  top-level document. The content script decodes bridge requests only; the
+  background validates its add-on id, document URL, frame, private-browsing
+  status, configured server and account. Popup commands reject content-script
+  senders. No cookie or session token crosses page messages. The page silently
+  approves a device authorization using its own session. Self-hosters retain
+  password/device sign-in and the server picker. Site access can be revoked in
+  Firefox; automatic connection then requires restoring it and reloading the page.
 - **The socket needs https.** A `moz-extension://` document is a secure
   context and Firefox blocks insecure `ws://` from it — no loopback exception,
   unlike Chrome, and host permissions do not change it. Against an `http://`

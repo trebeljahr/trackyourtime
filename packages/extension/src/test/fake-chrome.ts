@@ -82,6 +82,7 @@ export function createFakeChrome() {
   const api = {
     runtime: {
       id: "fake-extension-id",
+      getURL: (path: string) => `chrome-extension://fake-extension-id/${path.replace(/^\//, "")}`,
       onMessage: fakeEvent<(message: unknown, sender: unknown, respond: (r: unknown) => void) => boolean>(),
       /** A page's `chrome.runtime.sendMessage(<id>, …)`; drive it with `control.sendExternal`. */
       onMessageExternal: fakeEvent<

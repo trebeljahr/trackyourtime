@@ -1,5 +1,5 @@
 /**
- * The one door from the web page to the browser extension.
+ * Browser transports for the web app ↔ extension bridge.
  *
  * A page reaches an extension through `chrome.runtime.sendMessage(id, …)`,
  * which Chrome exposes only on origins some installed extension lists under
@@ -9,9 +9,14 @@
  * failure here resolves `undefined` — the same value Chrome gives when no
  * listener replied — and the caller decodes that as "no extension".
  *
+ * Firefox uses a hosted-only window message relay when no page runtime exists.
+ * The content script and background independently screen those requests.
+ *
  * No `@types/chrome`: the page uses one function, and a narrow local type is
  * what keeps the rest of the extension API from looking available on the web.
  */
+import { decodeExtensionBridgeRequest, decodeExtensionBridgeReply, isAllowedExtensionBridgeOrigin } from "@starter/shared/extension-bridge";
+import { decodeExtensionRelayEnvelope, EXTENSION_RELAY_CHANNEL, FIREFOX_EXTENSION_ID } from "@starter/shared/extension-relay";
 import { STORE_EXTENSION_ID } from "@starter/shared";
 
 /** How long the page waits for an extension to answer. */
@@ -62,6 +67,7 @@ export const sendToExtension = (
   timeoutMs: number = EXTENSION_BRIDGE_TIMEOUT_MS,
   runtime: ChromeRuntimeLike | null = chromeRuntime(),
 ): Promise<unknown> =>
+  extensionId === FIREFOX_EXTENSION_ID ? sendThroughPageRelay(message, timeoutMs) :
   new Promise<unknown>((resolve) => {
     if (runtime === null || !EXTENSION_ID_PATTERN.test(extensionId)) {
       resolve(undefined);
@@ -106,3 +112,43 @@ export const extensionIds = (
       : configured.split(",").map((id) => id.trim());
   return [...new Set(raw.filter((id) => EXTENSION_ID_PATTERN.test(id)))];
 };
+
+/** Firefox exposes no runtime to web pages. Only the hosted origin has a relay. */
+export const pageRelayAvailable = (): boolean =>
+  typeof window !== "undefined" && window.top === window &&
+  isAllowedExtensionBridgeOrigin(window.location.origin, "production");
+
+/** The same-origin page is trusted, but every envelope and payload is still decoded.
+ * Correlation ids prevent stale replies satisfying newer requests; they are not credentials.
+ */
+export function sendThroughPageRelay(
+  message: unknown,
+  timeoutMs = EXTENSION_BRIDGE_TIMEOUT_MS,
+  win: Window | undefined = typeof window === "undefined" ? undefined : window,
+): Promise<unknown> {
+  const request = decodeExtensionBridgeRequest(message);
+  if (!request.ok || win === undefined || win.top !== win ||
+      !isAllowedExtensionBridgeOrigin(win.location.origin, "production")) {
+    return Promise.resolve(undefined);
+  }
+  return new Promise((resolve) => {
+    const id = win.crypto.randomUUID();
+    const finish = (value: unknown): void => {
+      clearTimeout(timer);
+      win.removeEventListener("message", onMessage);
+      resolve(value);
+    };
+    const onMessage = (event: MessageEvent): void => {
+      if (event.source !== win || event.origin !== win.location.origin) return;
+      const envelope = decodeExtensionRelayEnvelope(event.data);
+      if (envelope?.direction !== "reply" || envelope.id !== id) return;
+      const decoded = decodeExtensionBridgeReply(envelope.payload);
+      if (decoded.ok) finish(decoded.message);
+    };
+    const timer = setTimeout(() => finish(undefined), timeoutMs);
+    win.addEventListener("message", onMessage);
+    try {
+      win.postMessage({ channel: EXTENSION_RELAY_CHANNEL, direction: "request", id, payload: request.message }, win.location.origin);
+    } catch { finish(undefined); }
+  });
+}

@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { BUILD_TARGETS } from "../../manifest.config";
 import { SignInScreen, type SignInScreenProps } from "./sign-in-screen";
 
 const config = vi.hoisted(() => ({
@@ -47,11 +48,12 @@ describe("extension sign-in choices", () => {
     expect(html).not.toContain('data-testid="open-web-app"');
   });
 
-  test("Firefox retains manual sign-in on the hosted service", () => {
-    config.BRIDGE_TARGET = "none";
+  test("Firefox offers the hosted web connection alongside explicit sign-in", () => {
+    config.BRIDGE_TARGET = BUILD_TARGETS.firefox.bridgeTarget;
     const html = renderToStaticMarkup(<SignInScreen {...props} />);
     expect(html).toContain('data-testid="sign-in-web-app"');
-    expect(html).not.toContain('data-testid="open-web-app"');
+    expect(html).toContain('data-testid="sign-in-form"');
+    expect(html).toContain('data-testid="open-web-app"');
   });
 
   test("does not offer automatic connection for an unexpected web origin", () => {

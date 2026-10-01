@@ -3,6 +3,7 @@
  * and every row of the decision tables for a web sign-in, a web sign-out and
  * a web account switch.
  */
+import { EXTENSION_RELAY_CHANNEL } from "@starter/shared/extension-relay";
 import {
   EXTENSION_BRIDGE_CHANNEL,
   EXTENSION_BRIDGE_DEVICE_RETRY_MS,
@@ -37,6 +38,7 @@ import {
   isWebAppOrigin,
   registerBridgeListener,
   screenExternalMessage,
+  screenRelayMessage,
 } from "./bridge";
 import {
   enqueueOffline,
@@ -65,6 +67,8 @@ const signedOut: ExtensionBridgeWebSession = { userId: null, sessionCreatedAt: n
 /** Send a request the way a page does, through the sender checks. */
 const send = async (message: unknown, origin = WEB): Promise<ExtensionBridgeReply | undefined> => {
   const screened = screenExternalMessage(message, { origin, frameId: 0, tab: { id: 1 } }, "development");
+  // Both transports must enter the same account/server state machine.
+  expect(screenRelayMessage({ channel: EXTENSION_RELAY_CHANNEL, direction: "request", id: "relay-request-1234", payload: message }, { id: chrome.runtime.id, url: `${origin}/app`, frameId: 0, tab: { id: 1 } }, chrome.runtime.id, "development")).toEqual(screened);
   if (!screened.ok) return screened.reply;
   return handleBridgeRequest(screened.request, screened.origin, { retryDelayMs: 0 }, "development");
 };
@@ -503,5 +507,39 @@ describe("a refused token", () => {
     await forgetRejectedSession();
     expect(await loadSession()).toBeNull();
     expect(await getOfflineQueue().size()).toBe(0);
+  });
+});
+
+
+describe("Firefox relay trust boundary", () => {
+  const origin = "https://trackyourtime.dev";
+  const sender = { id: "our-addon", url: `${origin}/app`, frameId: 0, tab: { id: 1 } };
+  const envelope = { channel: EXTENSION_RELAY_CHANNEL, direction: "request", id: "relay-request-1234", payload: extensionBridgeSyncRequest("https://api.trackyourtime.dev", signedOut) };
+  test("accepts our top-level content script without Firefox's optional sender.origin", () => {
+    expect(screenRelayMessage(envelope, sender, "our-addon", "production")).toMatchObject({ ok: true, origin });
+  });
+  test.each([
+    { id: "other-addon" }, { url: "https://evil.example/app" }, { url: "https://trackyourtime.dev.evil.example/app" },
+    { url: "http://trackyourtime.dev/app" }, { url: "about:blank" }, { url: undefined },
+    { origin: "https://evil.example" }, { frameId: 1 }, { frameId: undefined },
+    { tab: undefined }, { tab: { incognito: true } },
+  ])("refuses untrusted sender %j", (change) => {
+    expect(screenRelayMessage(envelope, { ...sender, ...change }, "our-addon", "production")).toEqual({ ok: false, reply: undefined });
+  });
+  test("refuses raw bridge messages, popup commands, replies and malformed envelopes", () => {
+    for (const message of [envelope.payload, { ...envelope, payload: { type: "SIGN_OUT" } }, { ...envelope, direction: "reply" }, { ...envelope, id: "bad" }]) {
+      expect(screenRelayMessage(message, sender, "our-addon", "production")).toEqual({ ok: false, reply: undefined });
+    }
+  });
+  test("registers only the internal relay listener on Firefox", async () => {
+    const internal = vi.spyOn(chrome.runtime.onMessage, "addListener");
+    const external = vi.spyOn(chrome.runtime.onMessageExternal, "addListener");
+    registerBridgeListener("development", "relay");
+    expect(external).not.toHaveBeenCalled();
+    const listener = internal.mock.calls[0][0];
+    const response = new Promise<unknown>((resolve) => {
+      expect(listener({ ...envelope, payload: extensionBridgeSyncRequest(API, signedOut) }, { ...page, id: chrome.runtime.id, url: `${WEB}/app` }, resolve)).toBe(true);
+    });
+    expect(await response).toMatchObject({ kind: "sync-result", action: { reason: "signed-out" } });
   });
 });

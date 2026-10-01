@@ -150,3 +150,43 @@ MOZ_HEADLESS=1 npx web-ext@8 run --source-dir <ext> --firefox <firefox-binary> \
 
 `MOZ_HEADLESS=1` matters for more than speed: a visible Firefox steals focus
 from whoever is using the machine.
+
+## Hosted web-app sign-in transport
+
+Firefox's hosted build now uses the same device-approval bridge as Chromium,
+carried by a content script instead of `externally_connectable`. The manifest
+injects `page-relay.js` at document start only on `https://trackyourtime.dev/*`,
+with `all_frames: false`. This declares site access for the hosted web app;
+there is no `host_permissions` or `cookies` permission. Revoking that site
+access disables automatic connection until access is restored and the page
+is reloaded. Self-hosted servers keep password/device-code sign-in.
+
+The page and content script check the message source, exact origin, direction,
+correlation id and protocol payload. The background independently checks the
+browser-supplied add-on id, document URL, top-level frame and non-private tab,
+then the existing configured-server and account bindings. Popup commands are
+not accepted from web content scripts. The relay rebuilds decoded messages so
+unknown fields cannot forward credentials. Its replies contain only the
+existing protocol actions; tokens stay in the extension's background session
+storage. The page approves device authorization with its own web session.
+
+The content script is bundled as a standalone classic script; Firefox manifest
+content scripts cannot import the background's ESM chunks.
+
+A repeatable headless check loads the unmodified production Firefox artifact
+into a temporary profile. A loopback HTTPS proxy supplies fake hosted pages
+and API responses, with fake accounts. It checks actual Firefox injection,
+messaging and automatic linking without using a hosted account or user profile:
+
+```bash
+pnpm run build:extension:firefox
+FIREFOX_BINARY=/path/to/firefox GECKODRIVER=/path/to/geckodriver \
+  node scripts/extension/firefox-bridge-smoke.mjs
+```
+
+The fixture tests the browser transport and connection lifecycle; it does not
+exercise the hosted login/signup UI or production authentication service.
+
+References: [Mozilla content scripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts),
+[`content_scripts` manifest fields](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/content_scripts),
+[`externally_connectable` compatibility](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/externally_connectable).

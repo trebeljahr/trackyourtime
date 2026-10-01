@@ -1,3 +1,4 @@
+import { build as bundleScript } from "esbuild";
 import { watchReload } from "./watch-reload";
 import { bundleCheck } from "./bundle-check";
 import { fileURLToPath } from "node:url";
@@ -29,7 +30,19 @@ const resolveMode = (mode: string): BuildMode => {
  */
 const manifestPlugin = (mode: BuildMode): Plugin => ({
   name: "trackyourtime:manifest",
-  generateBundle() {
+  async generateBundle() {
+    if (mode === "firefox") {
+      // Manifest content scripts are classic scripts: no ESM imports or shared chunks.
+      const result = await bundleScript({
+        entryPoints: [fromHere("src/content/index.ts")],
+        bundle: true,
+        format: "iife",
+        platform: "browser",
+        target: "firefox140",
+        write: false,
+      });
+      this.emitFile({ type: "asset", fileName: "page-relay.js", source: result.outputFiles[0].text });
+    }
     this.emitFile({
       type: "asset",
       fileName: "manifest.json",
@@ -68,6 +81,7 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(RELEASE_VERSION),
       // Which web origins the bridge accepts messages from — the same target
       // the manifest's `externally_connectable` was generated from.
+      "import.meta.env.VITE_BRIDGE_TRANSPORT": JSON.stringify(target.engine === "gecko" ? "relay" : "external"),
       "import.meta.env.VITE_BRIDGE_TARGET": JSON.stringify(target.bridgeTarget),
     },
     build: {

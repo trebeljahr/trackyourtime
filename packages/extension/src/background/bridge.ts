@@ -3,7 +3,8 @@
  *
  * The store extension holds no host permission and no `cookies` permission,
  * so it can no longer read the web app's session cookie. Instead the build's
- * first-party web origins are listed under `externally_connectable`, and the
+ * first-party web origins use `externally_connectable` on Chromium and a
+ * content-script relay on Firefox. The
  * web app — after mount, on the web only — tells the extension who is signed
  * in there (`sync`). The extension answers with what the page should do:
  * nothing, approve a device code the extension just started, or sign out
@@ -30,6 +31,7 @@
  * of the user the page says is signed in, which is checked again when the
  * token arrives.
  */
+import { decodeExtensionRelayEnvelope } from "@starter/shared/extension-relay";
 import {
   decodeExtensionBridgeRequest,
   EXTENSION_BRIDGE_DEVICE_RETRY_MS,
@@ -78,6 +80,7 @@ import {
 /** The parts of `chrome.runtime.MessageSender` the checks read. */
 export type BridgeSender = {
   origin?: string;
+  url?: string;
   id?: string;
   /** 0 for a tab's top-level document. */
   frameId?: number;
@@ -320,41 +323,50 @@ export async function handleBridgeRequest(
   );
 }
 
-/**
- * Register the listener. Called at module scope from `index.ts`, like every
- * other listener: a page's message is an event that wakes a stopped worker.
- *
- * A build with no bridge target registers nothing. That is the Firefox build:
- * Gecko has `onMessageExternal` (extensions may message each other) but no
- * `externally_connectable` for web pages, so a listener there could only ever
- * be reached by another add-on — which is exactly the sender this protocol
- * refuses. Not registering it at all is the narrower statement, and it keeps
- * the bridge's "the page drives" rule true on an engine where no page can.
+/** A content-script sender must be our own add-on in the allowed top-level document.
+ * Firefox supplies the document URL; never accept origin claims from the payload.
  */
-export function registerBridgeListener(target: ExtensionBridgeTarget = BRIDGE_TARGET): void {
+export function screenRelayMessage(
+  message: unknown,
+  sender: BridgeSender,
+  ownId: string,
+  target: ExtensionBridgeTarget = BRIDGE_TARGET,
+): ReturnType<typeof screenExternalMessage> {
+  const silent = { ok: false, reply: undefined } as const;
+  const envelope = decodeExtensionRelayEnvelope(message);
+  if (sender.id !== ownId || envelope?.direction !== "request" || !sender.url) return silent;
+  let origin: string;
+  try { origin = new URL(sender.url).origin; } catch { return silent; }
+  if (sender.origin !== undefined && sender.origin !== origin) return silent;
+  return screenExternalMessage(envelope.payload, { ...sender, id: undefined, origin }, target);
+}
+
+/** Register synchronously so messages wake the background event page or worker. */
+export function registerBridgeListener(
+  target: ExtensionBridgeTarget = BRIDGE_TARGET,
+  transport: "relay" | "external" = import.meta.env.VITE_BRIDGE_TRANSPORT === "relay" ? "relay" : "external",
+): void {
   if (target === "none") return;
-  chrome.runtime.onMessageExternal.addListener(
+  const event = transport === "relay" ? chrome.runtime.onMessage : chrome.runtime.onMessageExternal;
+  event.addListener(
     (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (reply: unknown) => void) => {
-      const screened = screenExternalMessage(message, sender);
+      const screened = transport === "relay"
+        ? screenRelayMessage(message, sender, chrome.runtime.id, target)
+        : screenExternalMessage(message, sender, target);
       if (!screened.ok) {
         if (screened.reply === undefined) return false;
         sendResponse(screened.reply);
         return false;
       }
-      void handleBridgeRequest(screened.request, screened.origin)
+      void handleBridgeRequest(screened.request, screened.origin, {}, target)
         .catch((): ExtensionBridgeReply =>
           screened.request.kind === "sync"
             ? none("server-unavailable")
             : extensionBridgeDeviceReply("failed"),
         )
         .then((reply) => {
-          try {
-            sendResponse(reply);
-          } catch {
-            // The page went away before the answer; nobody is left to tell.
-          }
+          try { sendResponse(reply); } catch { /* Document closed. */ }
         });
-      // Keeps the response channel open for the asynchronous reply.
       return true;
     },
   );

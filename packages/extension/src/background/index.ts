@@ -620,7 +620,11 @@ const handle = async (message: unknown): Promise<BackgroundResponse> => {
 
 // ── listeners (synchronous registration only) ────────────────────────
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  // Content scripts have a tab; their only entry point is the screened bridge.
+  // Do not race that listener or expose popup commands to web documents.
+  if (sender.tab !== undefined &&
+      (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL("")))) return false;
   void handle(message).then((response) => {
     try {
       sendResponse(response);

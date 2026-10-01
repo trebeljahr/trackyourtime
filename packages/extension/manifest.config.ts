@@ -13,19 +13,22 @@
  * and the Chrome Web Store build is one bundle for everybody, so the popup lets
  * a person pick any server.
  *
- * No build asks for host access or cookies. Every request the extension makes
+ * No build asks for host_permissions or cookies. Firefox injects a content
+ * relay only on the hosted web app. Every request the extension makes
  * is an ordinary CORS request, which the server answers because the
  * extension's `chrome-extension://<id>` origin is in its trust list
  * (`TRUST_STORE_APPS` / `TRUSTED_ORIGINS`) — the same trust sign-in already
  * needed. What the cookie used to do, following the web app's sign-in, is the
  * web app ↔ extension bridge now: `externally_connectable` lets the build's
  * first-party web origins message the extension (`src/background/bridge.ts`).
- * That key is not a permission and shows no install warning.
+ * Chromium uses that key without a host-access prompt; Firefox declares its
+ * narrow site access through content_scripts.matches.
  */
 import {
   extensionBridgeMatchPatterns,
   type ExtensionBridgeTarget,
 } from "@starter/shared/extension-bridge";
+import { FIREFOX_EXTENSION_ID } from "@starter/shared/extension-relay";
 import { STORE_EXTENSION_KEY } from "@starter/shared/store-clients";
 import rootPackage from "../../package.json" with { type: "json" };
 
@@ -84,7 +87,7 @@ export type BuildTarget = {
  * person accepts leaves, and that is the time entry they wrote.
  */
 export const GECKO_SETTINGS = {
-  id: "trackyourtime@ricoslabs.com",
+  id: FIREFOX_EXTENSION_ID,
   strict_min_version: "140.0",
   data_collection_permissions: {
     required: ["authenticationInfo", "personallyIdentifyingInfo"],
@@ -144,10 +147,8 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
    *  - An add-on id in `browser_specific_settings`, because Firefox derives
    *    nothing from a key — and `key` itself is a Chromium field Firefox
    *    ignores, so it is left out rather than carried along.
-   *  - No `externally_connectable`: Firefox does not implement it for web
-   *    pages, so the web app ↔ extension bridge simply does not exist here.
-   *    The popup's password form and "Sign in with the web app" (the device
-   *    flow, and the way in for a two-factor or Google account) both work.
+   *  - A hosted-only content-script relay instead of externally_connectable.
+   *    Self-hosted servers retain password and device sign-in.
    *  - No `minimum_chrome_version`, which Gecko does not read.
    *
    * Its origin is `moz-extension://<random uuid>`, which no server can list,
@@ -159,9 +160,8 @@ export const BUILD_TARGETS: Record<BuildMode, BuildTarget> = {
     apiUrl: "https://api.trackyourtime.dev",
     name: "Track Your Time",
     nameMessage: "extName",
-    // No bridge on this engine at all, rather than the development list by
-    // omission.
-    bridgeTarget: "none",
+    // Same hosted origin allowlist; transport differs from Chromium.
+    bridgeTarget: "production",
     // `key` is Chromium's way of pinning an id. Firefox's is the gecko id
     // above, and a stray `key` in a manifest AMO reviews reads as a Chrome
     // build somebody forgot to clean up.
@@ -264,18 +264,25 @@ export function buildManifest(
       : { service_worker: "background.js", type: "module" },
     // `idle` is the only way to learn that the person has walked away — a
     // service worker sees no input events of its own. No `cookies` and no host
-    // permissions: see the header.
+    // permissions: see the header. Firefox site injection is declared below.
     permissions: ["storage", "alarms", "idle"],
     // Requested only when somebody turns on Settings → Activity, from that
     // click — never at install. `tabs` is what exposes a tab's URL and title
     // to activity capture, and Chrome words it as reading browsing history,
     // which nobody who has not asked for capture should be shown.
     optional_permissions: ["tabs"],
-    // The first-party web app may message the extension, so signing in there
-    // signs the toolbar in too. No `ids`: other extensions cannot connect.
-    // Omitted entirely where the engine has no such thing (Firefox), rather
-    // than written out empty, which AMO reads as an unknown key.
-    ...(connectable.length > 0
+    // Same allowlist, engine-specific transport. Firefox injects only into
+    // top-level hosted documents. Chromium exposes no external extension ids.
+    ...(gecko
+      ? {
+          content_scripts: [{
+            matches: connectable,
+            js: ["page-relay.js"],
+            run_at: "document_start",
+            all_frames: false,
+          }],
+        }
+      : connectable.length > 0
       ? { externally_connectable: { matches: connectable } }
       : {}),
     icons: {
