@@ -8,6 +8,7 @@ COPY packages/invoice-pdf/package.json packages/invoice-pdf/
 COPY packages/server/package.json packages/server/
 COPY packages/core/package.json packages/core/
 COPY packages/client/package.json packages/client/
+COPY packages/extension/package.json packages/extension/
 COPY docs-site/package.json docs-site/
 # Install all workspace deps (build stage is discarded)
 RUN pnpm install --frozen-lockfile
