@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+This patch restored the self-host client image build on both architectures.
+It did not change app behavior.
+
+### Fixed
+
+- The self-host client image installs the extension workspace needed to
+  resolve its translations during type checking.
+
 ## [0.2.1] - 2026-10-02
 
 This patch restored the hosted deployment and self-host client image builds
