@@ -1,3 +1,4 @@
+import { resolveClientId } from "../../services/entries/refs.js";
 // Pinned quick starts — the five things somebody tracks every day, kept where
 // a weekly task cannot fall off the end of the recents list.
 //
@@ -163,11 +164,21 @@ export const favoritesRouter = router({
       // Pinning something already pinned is a no-op that returns the pin, not
       // a duplicate and not an error: every surface offers a pin action, and
       // two of them racing must not leave two identical chips behind.
-      const key = quickStartKey({ description, projectId, taskId, billable });
+      const clientId = await resolveClientId(
+        ctx.workspaceId,
+        input.clientId,
+        project,
+      );
+      const key = quickStartKey({ description,
+        clientId, projectId, taskId, billable });
       const clash = existing.find(
         (candidate) =>
           quickStartKey({
             description: candidate.description.trim(),
+            clientId:
+              candidate.clientId === undefined
+                ? (project?.clientId ?? null)
+                : candidate.clientId,
             projectId: candidate.projectId ?? null,
             taskId: candidate.taskId ?? null,
             billable: candidate.billable,
@@ -189,6 +200,7 @@ export const favoritesRouter = router({
       const created = await Favorite.create({
         ...scope,
         description,
+        clientId,
         projectId,
         taskId,
         billable,
@@ -198,11 +210,7 @@ export const favoritesRouter = router({
       const wire = toClientFavorite(created);
       const catalog = await loadCatalogLookup(ctx.workspaceId, [wire]);
 
-      publishToUser(
-        ctx.user.id,
-        { kind: "favorites.changed" },
-        input.originId,
-      );
+      publishToUser(ctx.user.id, { kind: "favorites.changed" }, input.originId);
       return { ...wire, ...resolveQuickStartLabels(wire, catalog) };
     }),
 
@@ -230,10 +238,10 @@ export const favoritesRouter = router({
         );
 
         publishToUser(
-        ctx.user.id,
-        { kind: "favorites.changed" },
-        input.originId,
-      );
+          ctx.user.id,
+          { kind: "favorites.changed" },
+          input.originId,
+        );
         return { success: true, id: input.id };
       },
     ),
@@ -264,11 +272,7 @@ export const favoritesRouter = router({
 
       await writeOrder(scope, [...requested, ...rest]);
 
-      publishToUser(
-        ctx.user.id,
-        { kind: "favorites.changed" },
-        input.originId,
-      );
+      publishToUser(ctx.user.id, { kind: "favorites.changed" }, input.originId);
       return listFavorites(scope);
     }),
 });

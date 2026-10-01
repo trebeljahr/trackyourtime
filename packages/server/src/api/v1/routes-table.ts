@@ -112,6 +112,7 @@ const runawayMarkSchema = z.object({
 });
 
 const timeEntryShape = {
+  clientId: z.string().nullable().optional(),
   id: z.string(),
   workspaceId: z.string(),
   authorId: z.string(),
@@ -174,6 +175,8 @@ const clientBillingResponseSchema = z.object({
 });
 
 const clientShape = {
+  entryCount: z.number().optional(),
+  totalSec: z.number().optional(),
   id: z.string(),
   workspaceId: z.string(),
   createdBy: z.string(),

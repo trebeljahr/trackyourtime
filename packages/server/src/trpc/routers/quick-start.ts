@@ -32,6 +32,7 @@ export type CatalogLookup = {
 
 /** A quick start's references, as far as labelling is concerned. */
 export type QuickStartRefs = {
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
 };
@@ -69,8 +70,15 @@ export const resolveQuickStartLabels = (
       labels.clientName =
         project.clientId === null
           ? null
-          : catalog.clients.get(project.clientId) ?? null;
+          : (catalog.clients.get(project.clientId) ?? null);
     }
+  }
+
+  if (refs.clientId !== undefined) {
+    labels.clientName =
+      refs.clientId === null
+        ? null
+        : (catalog.clients.get(refs.clientId) ?? null);
   }
 
   if (refs.taskId !== null) {
@@ -86,6 +94,7 @@ export const resolveQuickStartLabels = (
 export type RecentSourceEntry = {
   id: string;
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable: boolean;
@@ -130,6 +139,7 @@ export const collapseRecents = (
 
     const quick = {
       description: entry.description.trim(),
+      ...(entry.clientId !== undefined ? { clientId: entry.clientId } : {}),
       projectId: entry.projectId,
       taskId: entry.taskId,
       billable: entry.billable,
@@ -202,6 +212,7 @@ export const collapseDescriptions = (
 
     const quick = {
       description,
+      ...(entry.clientId !== undefined ? { clientId: entry.clientId } : {}),
       projectId: entry.projectId,
       taskId: entry.taskId,
       billable: entry.billable,

@@ -89,6 +89,7 @@ export type ActivitySnapshot = {
 /** The fields an accepted suggestion is filed with. */
 export type AcceptedFields = {
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable?: boolean;
@@ -167,6 +168,7 @@ export type PopupToBackground =
   | {
       type: "timer:start";
       description: string;
+      clientId?: string | null;
       projectId: string | null;
       taskId: string | null;
       /**
@@ -201,6 +203,7 @@ export type PopupToBackground =
       type: "timer:update";
       start?: string;
       description?: string;
+      clientId?: string | null;
       projectId?: string | null;
       taskId?: string | null;
       billable?: boolean;
@@ -279,6 +282,7 @@ export type PopupToBackground =
   | {
       type: "entry:create";
       description: string;
+      clientId?: string | null;
       projectId: string | null;
       taskId: string | null;
       /** Omitted lets the picked project's `billableDefault` decide, as on start. */
@@ -308,6 +312,7 @@ export type PopupToBackground =
       type: "entry:update";
       id: string;
       description?: string;
+      clientId?: string | null;
       projectId?: string | null;
       taskId?: string | null;
       billable?: boolean;

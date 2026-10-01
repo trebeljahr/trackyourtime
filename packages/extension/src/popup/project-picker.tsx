@@ -104,11 +104,6 @@ export function ProjectPicker({
     onPendingChange?.(false);
   };
 
-  const selectedProject = projects.find((project) => project.id === value);
-  const selectedClient = clients.find(
-    (client) => client.id === selectedProject?.clientId,
-  );
-
   if (panel === null) {
     return (
       <>
@@ -140,29 +135,6 @@ export function ProjectPicker({
           editLabel={(name) => t("catalogEdit.editProject", { name })}
           testId={testId}
         />
-        <div className="field project-client" data-testid={`${testId}-client`}>
-          <span className="field__label">{t("fields.client")}</span>
-          <div className="client-summary">
-            {selectedClient && (
-              <span
-                aria-hidden="true"
-                className="project__dot"
-                style={{ backgroundColor: selectedClient.color }}
-              />
-            )}
-            <span>{selectedClient?.name ?? t("fields.noClient")}</span>
-            {selectedProject && edit && !disabled && (
-              <button
-                type="button"
-                className="button--link"
-                onClick={() => open({ mode: "edit", project: selectedProject })}
-              >
-                {t("fields.editProjectClient")}
-              </button>
-            )}
-          </div>
-          <span className="popup__hint">{t("fields.clientFromProject")}</span>
-        </div>
       </>
     );
   }

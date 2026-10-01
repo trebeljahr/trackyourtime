@@ -365,7 +365,11 @@ const setServer = async (
     if (token !== null) {
       try {
         await signOutSession(
-          { baseUrl: current.apiUrl, clientId: EXTENSION_CLIENT_ID, clientVersion: APP_VERSION },
+          {
+            baseUrl: current.apiUrl,
+            clientId: EXTENSION_CLIENT_ID,
+            clientVersion: APP_VERSION,
+          },
           token,
         );
       } catch {
@@ -420,6 +424,7 @@ const apply = async (message: PopupToBackground): Promise<void> => {
         // No explicit start instant — that argument is the idle resume's.
         undefined,
         message.tagIds,
+        message.clientId,
       );
       return;
     case "timer:stop":
@@ -432,6 +437,7 @@ const apply = async (message: PopupToBackground): Promise<void> => {
       return updateRunning({
         start: message.start,
         description: message.description,
+        clientId: message.clientId,
         projectId: message.projectId,
         taskId: message.taskId,
         billable: message.billable,
@@ -476,6 +482,7 @@ const apply = async (message: PopupToBackground): Promise<void> => {
       // which `JSON.stringify` leaves out of the object entirely.
       await createEntry({
         description: message.description,
+        clientId: message.clientId,
         projectId: message.projectId,
         taskId: message.taskId,
         billable: message.billable,
@@ -488,6 +495,7 @@ const apply = async (message: PopupToBackground): Promise<void> => {
       return updateEntry({
         id: message.id,
         description: message.description,
+        clientId: message.clientId,
         projectId: message.projectId,
         taskId: message.taskId,
         billable: message.billable,
@@ -521,6 +529,7 @@ const apply = async (message: PopupToBackground): Promise<void> => {
         end: message.end,
         edited: message.edited,
         description: message.description,
+        clientId: message.clientId,
         projectId: message.projectId,
         taskId: message.taskId,
         billable: message.billable,

@@ -401,6 +401,7 @@ export const updateTaskSchema = z.object({
 
 export const startTimerSchema = z.object({
   description: entryDescription.optional(),
+  clientId: idString.nullish(),
   projectId: idString.nullish(),
   taskId: idString.nullish(),
   billable: z.boolean().optional(),
@@ -433,6 +434,7 @@ export const continueEntrySchema = z.object({
 export const createEntrySchema = z
   .object({
     description: entryDescription.default(""),
+    clientId: idString.nullish(),
     projectId: idString.nullish(),
     taskId: idString.nullish(),
     billable: z.boolean().optional(),
@@ -449,6 +451,7 @@ export const updateEntrySchema = z
   .object({
     id: idString,
     description: entryDescription.optional(),
+    clientId: idString.nullish(),
     projectId: idString.nullish(),
     taskId: idString.nullish(),
     billable: z.boolean().optional(),
@@ -482,6 +485,7 @@ export const entryListSchema = z.object({
  * and by whatever a client pins from, so the two cannot drift apart.
  */
 const quickStartFields = {
+  clientId: idString.nullish(),
   description: entryDescription.default(""),
   projectId: idString.nullish(),
   taskId: idString.nullish(),
@@ -690,7 +694,8 @@ const manualKeysDistinct = (lines: ReadonlyArray<{ key?: string | undefined }> |
 };
 
 /** `from` and `to` name a range together, or a blank invoice together. */
-const rangeIsWhole = (input: { from?: string | undefined; to?: string | undefined }): boolean =>
+const rangeIsWhole = (input: { from?: string | undefined; to?: string | undefined;
+}): boolean =>
   (input.from === undefined) === (input.to === undefined);
 
 const RANGE_HALF = { message: "from and to go together", path: ["to"] };
@@ -913,7 +918,11 @@ export const createWebhookSchema = z.object({
 export const updateWebhookSchema = z.object({
   id: idString,
   url: z.url().max(2000).optional(),
-  events: z.array(webhookEventSchema).min(1).max(WEBHOOK_EVENTS.length).optional(),
+  events: z
+    .array(webhookEventSchema)
+    .min(1)
+    .max(WEBHOOK_EVENTS.length)
+    .optional(),
   enabled: z.boolean().optional(),
   originId,
 });

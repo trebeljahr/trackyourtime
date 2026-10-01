@@ -11,6 +11,7 @@ import {
   orNone,
   orNull,
   projectField,
+  clientField,
   tagsField,
   taskField,
   useEntryCatalog,
@@ -21,6 +22,7 @@ import { SignedOutView } from "./signed-out.js";
 type FormValues = {
   description: string;
   /** Undefined when the dropdown was not rendered — no projects to pick. */
+  clientId?: string;
   projectId?: string;
   taskId?: string;
   /** Undefined when the picker was not rendered — no tags exist yet. */
@@ -29,6 +31,7 @@ type FormValues = {
 };
 
 export function StartTimer(): React.JSX.Element {
+  const [clientId, setClientId] = useState<string>(NONE);
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState<string>(NONE);
   const [billable, setBillable] = useState(false);
@@ -40,6 +43,7 @@ export function StartTimer(): React.JSX.Element {
   // Gated on the server's declared API level, never its release: a store
   // build is often newer than a self-hosted server. docs/versioning.md →
   // "Gating a feature on the server".
+  const offersClient = useServerLevel().supports("entries.client");
   const offersDescriptions = useServerLevel().supports("entries.descriptions");
 
   // A project carries its own billable default; respect it until the user
@@ -57,6 +61,7 @@ export function StartTimer(): React.JSX.Element {
       const api = await getTrackYourTime();
       const entry = await api.start({
         description: values.description.trim(),
+        ...(offersClient ? {clientId: orNull(values.clientId)} : {}),
         projectId: orNull(values.projectId),
         taskId: orNull(values.taskId),
         tagIds: values.tagIds ?? [],
@@ -97,6 +102,7 @@ export function StartTimer(): React.JSX.Element {
                   onPick={setDescription}
                   onAdopt={(suggestion) => {
                     setDescription(suggestion.description);
+                    setClientId(orNone(suggestion.clientId));
                     setProjectId(orNone(suggestion.projectId));
                     setTaskId(orNone(suggestion.taskId));
                     setTagIds([...suggestion.tagIds]);
@@ -130,6 +136,7 @@ export function StartTimer(): React.JSX.Element {
         info="⌘⇧D searches what you have tracked before."
       />
       {projectField(catalog, projectId, setProjectId)}
+      {offersClient && clientField(catalog, clientId, setClientId)}
       {taskField(catalog, taskId, setTaskId)}
       {tagsField(catalog, tagIds, setTagIds)}
       <Form.Checkbox id="billable" label="Billable" value={billable} onChange={setBillable} />

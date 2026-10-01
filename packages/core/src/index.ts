@@ -28,3 +28,5 @@ export * from "./stored-catalog.js";
 export * from "./timer-toggle.js";
 export * from "./workspace-context.js";
 export * from "./activity/index.js";
+
+export { assertEntryClientSupported } from "./api-client.js";

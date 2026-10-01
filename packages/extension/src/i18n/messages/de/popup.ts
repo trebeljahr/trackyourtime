@@ -59,6 +59,7 @@ export const popup: Translation<typeof source> = {
     openAppExternal: "Track Your Time öffnen ↗",
   },
   fields: {
+    clientNeedsUpdate: "Server aktualisieren, um Kunden unabhängig zu wählen.",
     startTime: "Startzeit",
     editProjectClient: "Projekt bearbeiten",
     clientFromProject: "Der Kunde wird im Projekt festgelegt.",
@@ -293,6 +294,16 @@ export const popup: Translation<typeof source> = {
     saved: "Gespeichert",
   },
   quickStart: {
+    shortcuts: "Timer-Schnellzugriff",
+    recents: "Zuletzt",
+    favorites: "Favoriten",
+    close: "Schließen",
+    startHint: "Eintrag wählen, um den Timer sofort zu starten.",
+    emptyRecents: "Hier erscheint deine zuletzt erfasste Arbeit.",
+    emptyFavorites:
+      "Markiere einen letzten Eintrag mit einem Stern, um ihn hier zu speichern.",
+    startEntry: "{label} starten",
+
     hint: "Letzte oder angeheftete Arbeit übernimmt die Felder. Danach Timer starten wählen.",
     title: "Letzte oder angeheftete Arbeit",
     rowTitle: "{label} – {hint}",
@@ -350,6 +361,8 @@ export const popup: Translation<typeof source> = {
     zoneNote: "Erfasst in {zone} und in dieser Zeitzone bearbeitet.",
   },
   tracker: {
+    newTimer: "Neuen Timer starten",
+    newTimerHint: "Jetzt Zeit erfassen. Details während der Arbeit ergänzen.",
     descriptionPlaceholder: "Woran arbeitest du?",
     start: "Timer starten",
     stop: "Stoppen",

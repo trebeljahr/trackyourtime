@@ -624,7 +624,8 @@ const EMPTY_OPTIMISTIC: OptimisticEntries = { upserts: [], deletes: [] };
  */
 const readOptimisticEntries = (value: unknown): OptimisticEntries | null => {
   if (typeof value !== "object" || value === null) return null;
-  const { upserts, deletes } = value as { upserts?: unknown; deletes?: unknown };
+  const { upserts, deletes } = value as { upserts?: unknown; deletes?: unknown;
+  };
   return {
     upserts: readStoredList(upserts, readStoredTimeEntry),
     deletes: Array.isArray(deletes)
@@ -818,6 +819,7 @@ const buildRuntime = async (): Promise<Runtime> => {
     api: watchVersionRefusals(
       createApiClient({
         baseUrl: apiUrl,
+        serverApiLevel: () => serverApiLevelOf(apiUrl),
         token: session?.token,
         clientId: EXTENSION_CLIENT_ID,
         clientVersion: APP_VERSION,
@@ -1700,7 +1702,11 @@ export async function adoptSession(session: SessionInput): Promise<void> {
 const revokeOnServer = async (apiUrl: string, token: string): Promise<void> => {
   try {
     await signOutSession(
-      { baseUrl: apiUrl, clientId: EXTENSION_CLIENT_ID, clientVersion: APP_VERSION },
+      {
+        baseUrl: apiUrl,
+        clientId: EXTENSION_CLIENT_ID,
+        clientVersion: APP_VERSION,
+      },
       token,
     );
   } catch {
@@ -1913,7 +1919,9 @@ export async function flushQueue(): Promise<number> {
   // left unstamped rows behind.
   const me = getKnownUserId() ?? (await resolveSettings())?.userId ?? null;
   if (me === null) return pendingSyncCount();
-  await offline.adoptUnowned(me, (row) => isQueuedOn(row, current.apiUrl, DEFAULT_API_URL));
+  await offline.adoptUnowned(me, (row) =>
+    isQueuedOn(row, current.apiUrl, DEFAULT_API_URL),
+  );
 
   const result = await offline.flush(
     async (row) => {
@@ -1961,7 +1969,8 @@ export async function flushQueue(): Promise<number> {
           stillMember: async (workspaceId) => {
             // Asked directly rather than through `resolveWorkspaces`, whose
             // adoption step needs the queue this flush is holding.
-            const fresh = await current.api.query<WorkspaceSummary[]>("workspaces.list");
+            const fresh =
+              await current.api.query<WorkspaceSummary[]>("workspaces.list");
             await installWorkspaceList(fresh, current.apiUrl, false);
             return fresh.some((it) => it.id === workspaceId);
           },

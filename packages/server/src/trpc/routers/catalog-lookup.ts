@@ -37,13 +37,15 @@ export async function loadCatalogLookup(
   workspaceId: string,
   refs: readonly QuickStartRefs[],
 ): Promise<CatalogLookup> {
+  const clientIds = new Set<string>();
   const projectIds = new Set<string>();
   const taskIds = new Set<string>();
   for (const ref of refs) {
+    if (ref.clientId) clientIds.add(ref.clientId);
     if (ref.projectId !== null) projectIds.add(ref.projectId);
     if (ref.taskId !== null) taskIds.add(ref.taskId);
   }
-  if (projectIds.size === 0 && taskIds.size === 0) return emptyCatalog();
+  if (projectIds.size === 0 && taskIds.size === 0 && clientIds.size === 0) return emptyCatalog();
 
   const [projectDocs, taskDocs] = await Promise.all([
     projectIds.size === 0
@@ -77,8 +79,7 @@ export async function loadCatalogLookup(
     ]),
   );
 
-  // Second hop: only the clients the resolved projects actually belong to.
-  const clientIds = new Set<string>();
+  // Include legacy defaults alongside independent entry clients.
   for (const project of projects.values()) {
     if (project.clientId !== null) clientIds.add(project.clientId);
   }

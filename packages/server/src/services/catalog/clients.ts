@@ -2,9 +2,13 @@
 //
 // Every query is scoped by `workspaceId`, so a document owned by somebody else
 // is indistinguishable from a missing one (NOT_FOUND, never FORBIDDEN).
+import { TimeEntry } from "../../models/TimeEntry.js";
+import { authorScopeFilter } from "../../models/WorkspaceMember.js";
+import { entryClientExpression } from "../entries/refs.js";
 import { TRPCError } from "@trpc/server";
 import {
   EMPTY_CLIENT_BILLING,
+  rollupVisibility,
   electronicAddressProblems,
   mergeIdentityInput,
   normalizeClientBilling,
@@ -71,7 +75,48 @@ export async function listClients(
     .sort({ name: 1 })
     .lean();
 
-  return docs.map(toClientClient);
+  const totals = await TimeEntry.aggregate<{
+    _id: string | null;
+    entryCount: number;
+    totalSec: number;
+  }>([
+    {
+      $match: {
+        workspaceId: scope.workspaceId,
+        ...(authorScopeFilter(rollupVisibility(scope.visibility)) ?? {}),
+      },
+    },
+    {
+      $lookup: {
+        from: "projects",
+        let: { projectId: "$projectId" },
+        pipeline: [
+          {
+            $match: {
+              workspaceId: scope.workspaceId,
+              $expr: { $eq: [{ $toString: "$_id" }, "$$projectId"] },
+            },
+          },
+          { $project: { clientId: 1 } },
+        ],
+        as: "project",
+      },
+    },
+    { $unwind: { path: "$project", preserveNullAndEmptyArrays: true } },
+    {
+      $group: {
+        _id: entryClientExpression,
+        entryCount: { $sum: 1 },
+        totalSec: { $sum: "$durationSec" },
+      },
+    },
+  ]);
+  const byClient = new Map(totals.map((row) => [row._id, row]));
+  return docs.map((doc) => ({
+    ...toClientClient(doc),
+    entryCount: byClient.get(String(doc._id))?.entryCount ?? 0,
+    totalSec: byClient.get(String(doc._id))?.totalSec ?? 0,
+  }));
 }
 
 /** One client by id. Same `{ _id, workspaceId }` filter as everything else. */

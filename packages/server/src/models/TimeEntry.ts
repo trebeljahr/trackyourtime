@@ -9,6 +9,7 @@ export interface ITimeEntry extends Document {
   workspaceId: string;
   authorId: string;
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable: boolean;
@@ -62,6 +63,7 @@ export type TimeEntryDocLike = {
   workspaceId: string;
   authorId: string;
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable: boolean;
@@ -116,6 +118,8 @@ const timeEntrySchema = new Schema<ITimeEntry>(
     // required:true with default:"" made every such start fail with
     // "Path `description` is required".
     description: { type: String, default: "", maxlength: 500 },
+    // No default: absent marks legacy records which inherit the project client.
+    clientId: { type: String },
     projectId: { type: String, default: null },
     taskId: { type: String, default: null },
     billable: { type: Boolean, required: true, default: false },
@@ -225,6 +229,7 @@ export function toClientTimeEntry(doc: TimeEntryDocLike): TimeEntryWire {
     workspaceId: doc.workspaceId,
     authorId: doc.authorId,
     description: doc.description,
+    ...(doc.clientId !== undefined ? { clientId: doc.clientId } : {}),
     projectId: doc.projectId ?? null,
     taskId: doc.taskId ?? null,
     billable: doc.billable,

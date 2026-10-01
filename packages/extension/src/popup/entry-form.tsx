@@ -1,3 +1,4 @@
+import { ClientPicker } from "./client-picker";
 import { useState, type JSX } from "react";
 import {
   deviceTimeZone,
@@ -54,6 +55,7 @@ import type { EntryDraft } from "./route";
  */
 export type EntryFieldPatch = {
   description?: string;
+  clientId?: string | null;
   projectId?: string | null;
   taskId?: string | null;
   billable?: boolean;
@@ -206,7 +208,8 @@ export function EntryForm({
   const t = useT("popup");
   const locale = usePopupLocale();
   const timeFormat: TimeFormat = state.settings?.timeFormat ?? "24h";
-  const durationFormat: DurationFormat = state.settings?.durationFormat ?? "hms";
+  const durationFormat: DurationFormat =
+    state.settings?.durationFormat ?? "hms";
 
   // An invoiced entry still accepts a description and tags — that is exactly
   // what the server permits — so the two locks are not the same lock.
@@ -261,15 +264,17 @@ export function EntryForm({
     change(
       {
         description: suggestion.description,
+        clientId: suggestion.clientId,
         projectId: suggestion.projectId,
         taskId: suggestion.taskId,
         tagIds: suggestion.tagIds,
         billable: suggestion.billable,
       },
       mode === "create"
-        ? { }
+        ? {}
         : {
             description: suggestion.description,
+            clientId: suggestion.clientId,
             projectId: suggestion.projectId,
             taskId: suggestion.taskId,
             tagIds: suggestion.tagIds,
@@ -290,7 +295,8 @@ export function EntryForm({
       // been moved by hand it is an answer, not a default waiting to be
       // overwritten by the next project pick.
       const untouched =
-        values.billable === billableDefaultFor(state.projects, values.projectId);
+        values.billable ===
+        billableDefaultFor(state.projects, values.projectId);
       change(
         {
           projectId: next,
@@ -386,11 +392,23 @@ export function EntryForm({
         value={values.projectId}
         onChange={selectProject}
         disabled={factsLocked}
-        disabledHint={locked ? t("entryForm.onInvoice") : t("entryForm.notSent")}
+        disabledHint={
+          locked ? t("entryForm.onInvoice") : t("entryForm.notSent")
+        }
         onCreateClient={onCreateClient}
         onCreateProject={onCreateProject}
         onPendingChange={panels.track("project")}
         testId="entry-project"
+      />
+
+      <ClientPicker
+        state={state}
+        value={values.clientId}
+        projectId={values.projectId}
+        onChange={(clientId) => change({ clientId }, { clientId })}
+        onCreate={onCreateClient}
+        disabled={factsLocked}
+        testId="entry-client"
       />
 
       <TaskPicker
@@ -398,7 +416,9 @@ export function EntryForm({
         value={values.taskId}
         onChange={selectTask}
         disabled={factsLocked}
-        disabledHint={locked ? t("entryForm.onInvoice") : t("entryForm.notSent")}
+        disabledHint={
+          locked ? t("entryForm.onInvoice") : t("entryForm.notSent")
+        }
         onCreate={onCreateTask}
         onPendingChange={panels.track("task")}
         testId="entry-task"
@@ -418,7 +438,7 @@ export function EntryForm({
         onChange={(next) => change({ billable: next }, { billable: next })}
         label={values.billable ? t("fields.billable") : t("fields.notBillable")}
         variant="struck"
-            currency={state.settings?.currency}
+        currency={state.settings?.currency}
         disabled={factsLocked}
         testId="entry-billable"
       />

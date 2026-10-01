@@ -102,7 +102,7 @@ export type Visibility = {
  * both need to tell it apart from time this app watched tick by.
  */
 export type EntrySource =
-  | "web"
+  "web"
   | "desktop"
   | "mobile"
   | "extension"
@@ -208,8 +208,11 @@ export type TagRemoveResult = {
   message: string | null;
 };
 
-/** A billable customer that projects belong to. */
+/** A customer that time can be tracked for, with or without a project. */
 export type Client = {
+  /** Caller-visible tracked time, included by the catalog list. */
+  entryCount?: number;
+  totalSec?: number;
   id: string;
   workspaceId: string;
   /** Audit only — never used for scoping. */
@@ -409,6 +412,7 @@ export type TimeEntry = {
    */
   authorId: string;
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable: boolean;
@@ -630,7 +634,7 @@ export type ResolvedSettings = WorkspaceSettings & Omit<UserPreferences, "userId
  * treat it as a label, never as a permission.
  */
 export type ClientKind =
-  | "web"
+  "web"
   | "desktop"
   | "mobile"
   | "raycast"

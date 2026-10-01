@@ -176,6 +176,7 @@ const SHORT_ENTRY_SEC = 60;
 
 export type StartTimerArgs = {
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId?: string | null;
   billable: boolean;
@@ -193,6 +194,7 @@ export type ManualEntryArgs = StartTimerArgs & {
 export type UpdateEntryArgs = {
   id: string;
   description?: string;
+  clientId?: string | null;
   projectId?: string | null;
   taskId?: string | null;
   billable?: boolean;
@@ -388,6 +390,7 @@ export const useEntryMutations = (): EntryMutations => {
   const shapeContext = React.useCallback(
     (): EntryShapeContext => ({
       projects: utils.projects.list.getData({}) ?? [],
+      clients: utils.clients.list.getData({}) ?? [],
       settings: utils.settings.get.getData() ?? null,
     }),
     [utils]
@@ -499,6 +502,7 @@ export const useEntryMutations = (): EntryMutations => {
       const optimistic = buildEntry({
         id: context.tempId,
         description: input.description,
+        clientId: input.clientId,
         projectId: input.projectId,
         taskId: input.taskId,
         billable: input.billable,
@@ -720,7 +724,8 @@ export const useEntryMutations = (): EntryMutations => {
         buildEntry({
           id: context.tempId,
           description: input.description,
-          projectId: input.projectId,
+          clientId: input.clientId,
+        projectId: input.projectId,
           taskId: input.taskId,
           billable: input.billable,
           start: input.start,
@@ -783,6 +788,7 @@ export const useEntryMutations = (): EntryMutations => {
           return {
             ...entry,
             description: input.description ?? entry.description,
+            clientId: input.clientId === undefined ? entry.clientId : input.clientId,
             projectId,
             taskId:
               input.taskId === undefined ? entry.taskId : input.taskId ?? null,
@@ -797,7 +803,7 @@ export const useEntryMutations = (): EntryMutations => {
             updatedAt: nowIso(),
             projectName: project.projectName,
             projectColor: project.projectColor,
-            clientName: project.clientName,
+            clientName: (input.clientId === undefined ? entry.clientId : input.clientId) === undefined ? project.clientName : shapeContext().clients?.find((client) => client.id === (input.clientId === undefined ? entry.clientId : input.clientId))?.name ?? null,
             amount: entryAmount(durationSec, hourlyRate),
           };
         })
@@ -811,6 +817,7 @@ export const useEntryMutations = (): EntryMutations => {
           utils.entries.current.setData(undefined, {
             ...running,
             description: input.description ?? running.description,
+            clientId: input.clientId === undefined ? running.clientId : input.clientId,
             projectId:
               input.projectId === undefined
                 ? running.projectId
@@ -925,6 +932,7 @@ export const useEntryMutations = (): EntryMutations => {
       startWith(
         {
           description: args.description,
+          clientId: args.clientId,
           projectId: args.projectId,
           taskId: args.taskId ?? null,
           billable: args.billable,
@@ -1004,7 +1012,8 @@ export const useEntryMutations = (): EntryMutations => {
     (args: ManualEntryArgs): void => {
       const input: CreateInput = {
         description: args.description,
-        projectId: args.projectId,
+        clientId: args.clientId,
+          projectId: args.projectId,
         taskId: args.taskId ?? null,
         billable: args.billable,
         start: args.start,
@@ -1082,6 +1091,7 @@ export const useEntryMutations = (): EntryMutations => {
     (entry: DetailedEntry): void => {
       createManualEntry({
         description: entry.description,
+        clientId: entry.clientId,
         projectId: entry.projectId,
         taskId: entry.taskId,
         billable: entry.billable,

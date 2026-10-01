@@ -71,6 +71,7 @@ const optimisticEntry = (
   workspaceId: "",
   authorId,
   description: input.description,
+  ...(input.clientId !== undefined ? { clientId: input.clientId } : {}),
   projectId: input.projectId,
   taskId: input.taskId,
   billable: input.billable,
@@ -109,12 +110,14 @@ async function startTimerNow(
   startIso?: string,
   /** Tags to open the entry with; a quick start passes the ones it carries. */
   tagIds: string[] = [],
+  clientId?: string | null,
 ): Promise<TimeEntry | null> {
   const current = await ensureReady();
   if (!current.session) throw notSignedIn();
 
   const input: OfflineStartInput = {
     description,
+    ...(clientId !== undefined ? { clientId } : {}),
     projectId,
     taskId,
     tagIds,
@@ -238,6 +241,7 @@ const queueStop = async (
 export type RunningPatch = {
   start?: string;
   description?: string;
+  clientId?: string | null;
   projectId?: string | null;
   taskId?: string | null;
   billable?: boolean;
@@ -256,6 +260,7 @@ const patched = (entry: TimeEntry, patch: RunningPatch): TimeEntry => ({
   ...entry,
   start: patch.start ?? entry.start,
   description: patch.description ?? entry.description,
+  ...(patch.clientId !== undefined ? { clientId: patch.clientId } : {}),
   projectId: patch.projectId === undefined ? entry.projectId : patch.projectId,
   taskId: patch.taskId === undefined ? entry.taskId : patch.taskId,
   billable: patch.billable ?? entry.billable,

@@ -80,6 +80,7 @@ export const tracker = {
     description: "Log a block of work that was not timed.",
   },
   entryFields: {
+    clientNeedsUpdate: "Update the server to choose clients independently.",
     descriptionPlaceholder: "What did you work on?",
     clientTitle: "Client: {name}",
     clientHint: "{title}. Set by the project. Choose another project to change it.",

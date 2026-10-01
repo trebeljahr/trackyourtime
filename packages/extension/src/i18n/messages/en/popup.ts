@@ -68,6 +68,7 @@ export const popup = {
     openAppExternal: "Open Track Your Time ↗",
   },
   fields: {
+    clientNeedsUpdate: "Update the server to choose clients independently.",
     startTime: "Start time",
     editProjectClient: "Edit project",
     clientFromProject: "The client is set on the project.",
@@ -309,6 +310,15 @@ export const popup = {
     saved: "Saved",
   },
   quickStart: {
+    shortcuts: "Timer shortcuts",
+    recents: "Recents",
+    favorites: "Favorites",
+    close: "Close drawer",
+    startHint: "Choose an entry to start its timer immediately.",
+    emptyRecents: "Your recently tracked work will appear here.",
+    emptyFavorites: "Star an entry in Recents to save it here.",
+    startEntry: "Start {label}",
+
     hint: "Choose recent or pinned work to fill the form, then select Start a timer.",
     title: "Use recent or pinned work",
     rowTitle: "{label} — {hint}",
@@ -366,6 +376,8 @@ export const popup = {
     zoneNote: "Recorded in {zone}, and edited in that clock.",
   },
   tracker: {
+    newTimer: "Start a New Timer",
+    newTimerHint: "Start tracking now. Add the details while you work.",
     descriptionPlaceholder: "What are you working on?",
     /** The button. The start TIME of an entry is `fields.start`. */
     start: "Start a timer",

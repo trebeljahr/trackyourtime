@@ -74,6 +74,7 @@ export const tracker: Translation<typeof source> = {
     description: "Trag Arbeitszeit nach, die du nicht mit dem Timer erfasst hast.",
   },
   entryFields: {
+    clientNeedsUpdate: "Server aktualisieren, um Kunden unabhängig zu wählen.",
     descriptionPlaceholder: "Woran hast du gearbeitet?",
     clientTitle: "Kunde: {name}",
     clientHint: "{title}. Ergibt sich aus dem Projekt. Wähle ein anderes Projekt, um ihn zu ändern.",

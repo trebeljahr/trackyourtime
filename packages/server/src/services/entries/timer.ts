@@ -43,7 +43,7 @@ import {
   notFound,
   requireObjectId,
 } from "./errors.js";
-import { resolveRefs } from "./refs.js";
+import { resolveRefs, resolveClientId } from "./refs.js";
 import { filterKnownTagIds, resolveTagIds } from "./tags.js";
 
 /**
@@ -72,7 +72,7 @@ import { filterKnownTagIds, resolveTagIds } from "./tags.js";
  * workspaces by saying nothing at all. Forgetting it is a compile error.
  */
 export type TimerReach =
-  | { kind: "person" }
+  { kind: "person" }
   | { kind: "workspace"; workspaceId: string };
 
 /** A session principal: the person's timer, in whichever workspace it runs. */
@@ -201,6 +201,7 @@ export type StartArgs = {
   workspaceId: string;
   authorId: string;
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   /** `undefined` falls back to the project's `billableDefault`. */
@@ -236,6 +237,11 @@ export type StartedEntry = {
 
 export const startNewEntry = async (args: StartArgs): Promise<StartedEntry> => {
   const refs = await resolveRefs(args.workspaceId, args.projectId, args.taskId);
+  const clientId = await resolveClientId(
+    args.workspaceId,
+    args.clientId,
+    refs.project,
+  );
   const tagIds = (await resolveTagIds(args.workspaceId, args.tagIds)) ?? [];
   const settings = await getOrCreateWorkspaceSettings(args.workspaceId);
   // The project's default as every client sees it: a project billing at 0 is
@@ -256,6 +262,7 @@ export const startNewEntry = async (args: StartArgs): Promise<StartedEntry> => {
       workspaceId: args.workspaceId,
       authorId: args.authorId,
       description: args.description,
+      clientId,
       projectId: refs.projectId,
       taskId: refs.taskId,
       billable,
@@ -433,6 +440,7 @@ export async function startTimerDetailed(
     authorId: scope.userId,
     reach,
     description: input.description ?? "",
+    clientId: input.clientId,
     projectId: input.projectId ?? null,
     taskId: input.taskId ?? null,
     billable: input.billable,
@@ -710,6 +718,7 @@ export async function continueEntryDetailed(
     // token stopping timers in workspaces it cannot address.
     reach: personReach,
     description: source.description,
+    clientId: source.clientId,
     projectId: source.projectId,
     taskId: source.taskId,
     billable: source.billable,

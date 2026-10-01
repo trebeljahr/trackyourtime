@@ -14,6 +14,7 @@
  */
 import { Action, Form, Icon } from "@raycast/api";
 import { useEffect } from "react";
+import type { Client } from "../vendor/index.js";
 import type { ProjectWithStats, TagWithStats, TaskWithStats } from "../lib/api.js";
 import { formatDurationShort } from "../lib/format.js";
 import { useApi, type ApiHookResult } from "../lib/hooks.js";
@@ -31,6 +32,7 @@ export const orNull = (value: string | undefined): string | null => (value && va
 export const orNone = (value: string | null | undefined): string => value ?? NONE;
 
 export type EntryCatalog = {
+  clients: ApiHookResult<Client[]>;
   projects: ApiHookResult<ProjectWithStats[]>;
   tasks: ApiHookResult<TaskWithStats[]>;
   tags: ApiHookResult<TagWithStats[]>;
@@ -46,11 +48,13 @@ export type EntryCatalog = {
  * neither reloads when the project changes.
  */
 export function useEntryCatalog(): EntryCatalog {
+  const clients = useApi("clients", (api) => api.clients());
   const projects = useApi("projects", (api) => api.projects());
   const tags = useApi("tags", (api) => api.tags());
   const tasks = useApi("tasks", (api) => api.tasks());
 
   return {
+    clients,
     projects,
     tasks,
     tags,
@@ -266,3 +270,10 @@ export const catalogActions = (catalog: EntryCatalog, handlers: CatalogActionHan
 
   return actions;
 };
+
+export const clientField = (catalog: EntryCatalog, clientId: string, onChange: (value: string) => void): React.JSX.Element => (
+  <Form.Dropdown id="clientId" title="Client" value={clientId} onChange={onChange}>
+    <Form.Dropdown.Item value={NONE} title="No client" icon={Icon.Circle} />
+    {(catalog.clients.data ?? []).map((client) => <Form.Dropdown.Item key={client.id} value={client.id} title={client.name} icon={{source: Icon.CircleFilled, tintColor: client.color}} />)}
+  </Form.Dropdown>
+);

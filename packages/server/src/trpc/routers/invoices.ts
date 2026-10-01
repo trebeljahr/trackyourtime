@@ -1,3 +1,4 @@
+import { clientEntryFilter } from "../../services/entries/refs.js";
 // IMPLEMENTED BY: invoicing agent
 //
 // An invoice turns billable time for ONE client over ONE date range into a
@@ -233,7 +234,8 @@ const NO_TASK_SUFFIX = ":none";
 const groupBase = (
   entry: BillableEntry,
   groupBy: InvoiceGroupBy,
-): { key: string; label: string; projectId: string | null; taskId: string | null } => {
+): { key: string; label: string; projectId: string | null; taskId: string | null;
+} => {
   const projectLabel = entry.projectName ?? "No project";
   if (groupBy === "project") {
     return {
@@ -405,7 +407,8 @@ const parseRangeBound = (value: string, endOfDay: boolean): Date => {
     );
   }
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) throw badRequest(`Invalid date: ${value}`);
+  if (Number.isNaN(parsed.getTime()))
+    throw badRequest(`Invalid date: ${value}`);
   return parsed;
 };
 
@@ -416,7 +419,10 @@ type Range = { from: Date; to: Date };
  * out (the schema refuses one without the other). Blank means no tracked time
  * is gathered or claimed, and the stored range is null.
  */
-const parseRange = (input: { from?: string | undefined; to?: string | undefined }): Range | null => {
+const parseRange = (input: {
+  from?: string | undefined;
+  to?: string | undefined;
+}): Range | null => {
   if (input.from === undefined || input.to === undefined) return null;
   const from = parseRangeBound(input.from, false);
   const to = parseRangeBound(input.to, true);
@@ -545,14 +551,22 @@ const gather = async (
 
   // A blank invoice gathers nothing: no range, no entries, and its currency
   // is the workspace's.
-  const selection = range ? await gatherTime(workspaceId, input.clientId, range, input.groupBy) : NO_TIME;
+  const selection = range
+    ? await gatherTime(workspaceId, input.clientId, range, input.groupBy)
+    : NO_TIME;
   assertSingleCurrency(selection.currencies);
-  const timeLines = range ? invoiceLineItems(selection.billable, input.groupBy) : [];
+  const timeLines = range
+    ? invoiceLineItems(selection.billable, input.groupBy)
+    : [];
   const currency = selection.currencies[0] ?? settings.currency;
 
   let manual: ReturnType<typeof manualLineItems>;
   try {
-    manual = manualLineItems(input.lines ?? [], currency, new Set(timeLines.map((line) => line.key)));
+    manual = manualLineItems(
+      input.lines ?? [],
+      currency,
+      new Set(timeLines.map((line) => line.key)),
+    );
   } catch (error) {
     return badLines(error);
   }
@@ -579,34 +593,29 @@ const gatherTime = async (
   range: Range,
   groupBy: InvoiceGroupBy,
 ): Promise<BillableSelection> => {
-  const projects = await Project.find({ workspaceId, clientId })
-    .select("_id name")
+  const projects = await Project.find({ workspaceId })
+    .select("_id name clientId")
     .lean();
   const projectNames = new Map(
     projects.map((project) => [String(project._id), project.name]),
   );
 
-  // No projects means no billable time — and an empty `$in` would match
-  // everything the moment somebody edits this into a different shape, so
-  // short-circuit explicitly.
-  const rows =
-    projects.length === 0
-      ? []
-      : await TimeEntry.find({
-          workspaceId,
-          billable: true,
-          // A running entry is never invoiced: you cannot bill an hour that
-          // is still being worked.
-          end: { $ne: null },
-          projectId: { $in: [...projectNames.keys()] },
-          start: { $gte: range.from, $lt: range.to },
-        })
-          .select("_id projectId taskId durationSec hourlyRate currency invoiceId")
-          .sort({ start: 1, _id: 1 })
-          // One past the cap, so hitting it is detectable rather than a
-          // silent truncation — see the refusal below.
-          .limit(MAX_INVOICE_ENTRIES + 1)
-          .lean();
+  const rows = await TimeEntry.find({
+    workspaceId,
+    billable: true,
+    end: { $ne: null },
+    ...clientEntryFilter(
+      [clientId],
+      projects
+        .filter((project) => project.clientId === clientId)
+        .map((project) => String(project._id)),
+    ),
+    start: { $gte: range.from, $lt: range.to },
+  })
+    .select("_id projectId taskId durationSec hourlyRate currency invoiceId")
+    .sort({ start: 1, _id: 1 })
+    .limit(MAX_INVOICE_ENTRIES + 1)
+    .lean();
 
   // Truncating here would quietly bill less time than the range contains,
   // and the user would have no way to see it. Refuse and let them narrow the
@@ -630,18 +639,22 @@ const gatherTime = async (
   const taskNames =
     groupBy === "task" && taskIds.length > 0
       ? new Map(
-          (await Task.find({ workspaceId, _id: { $in: taskIds } })
-            .select("_id name")
-            .lean()).map((task) => [String(task._id), task.name]),
+          (
+            await Task.find({ workspaceId, _id: { $in: taskIds } })
+              .select("_id name")
+              .lean()
+          ).map((task) => [String(task._id), task.name]),
         )
       : new Map<string, string>();
 
   const candidates: BillableCandidate[] = rows.map((row) => ({
     id: String(row._id),
     projectId: row.projectId ?? null,
-    projectName: row.projectId ? projectNames.get(row.projectId) ?? null : null,
+    projectName: row.projectId
+      ? (projectNames.get(row.projectId) ?? null)
+      : null,
     taskId: row.taskId ?? null,
-    taskName: row.taskId ? taskNames.get(row.taskId) ?? null : null,
+    taskName: row.taskId ? (taskNames.get(row.taskId) ?? null) : null,
     seconds: row.durationSec,
     hourlyRate: row.hourlyRate ?? null,
     currency: row.currency,
@@ -711,7 +724,11 @@ const taxGathered = async (
   if (resolved.kind === "unknownKeys") {
     throw badRequest(`Unknown line keys: ${resolved.keys.join(", ")}`);
   }
-  const taxed = applyInvoiceTax(gathered.lineItems, resolved, input.taxRate ?? null);
+  const taxed = applyInvoiceTax(
+    gathered.lineItems,
+    resolved,
+    input.taxRate ?? null,
+  );
   if (resolved.kind !== "resolved") {
     return { taxed, resolvedTax: null, exemptionNotes: {}, profile };
   }
@@ -723,7 +740,11 @@ const taxGathered = async (
   return {
     taxed,
     resolvedTax: {
-      lines: resolved.lines.map((line) => ({ key: line.key, category: line.category, rate: line.rate })),
+      lines: resolved.lines.map((line) => ({
+        key: line.key,
+        category: line.category,
+        rate: line.rate,
+      })),
     },
     exemptionNotes,
     profile,
@@ -748,8 +769,10 @@ const recentNumbers = async (workspaceId: string): Promise<string[]> => {
 };
 
 /** The first number a create would try, from what is currently stored. */
-const suggestNumber = async (workspaceId: string, year: number): Promise<string> =>
-  nextInvoiceNumber(await recentNumbers(workspaceId), year);
+const suggestNumber = async (
+  workspaceId: string,
+  year: number,
+): Promise<string> => nextInvoiceNumber(await recentNumbers(workspaceId), year);
 
 /** The exemption reasons a stored breakdown carries, as the notes an edit would re-send. */
 const storedExemptionNotes = (
@@ -827,7 +850,11 @@ export const invoicesRouter = router({
       const gathered = await gather(workspaceId, input);
       // The preview input carries no language override; the notes it shows
       // are in the language the client or the issuer's preference names.
-      const locale = await invoiceLocaleFor(ctx.user.id, gathered.clientLocale, undefined);
+      const locale = await invoiceLocaleFor(
+        ctx.user.id,
+        gathered.clientLocale,
+        undefined,
+      );
       const { taxed, resolvedTax, exemptionNotes } = await taxGathered(
         workspaceId,
         gathered,
@@ -849,7 +876,10 @@ export const invoicesRouter = router({
         // A preview has no issue date yet, so the suggestion is sequenced by
         // the current year; `create` re-derives it from the issue date it is
         // actually given.
-        suggestedNumber: await suggestNumber(workspaceId, new Date().getFullYear()),
+        suggestedNumber: await suggestNumber(
+          workspaceId,
+          new Date().getFullYear(),
+        ),
         skippedMissingRate: gathered.selection.skippedMissingRate,
         skippedInvoiced: gathered.selection.skippedInvoiced,
         locale,
@@ -889,7 +919,10 @@ export const invoicesRouter = router({
       const range = gathered.range;
       const issueDate = new Date(input.issueDate);
       const dueDate = new Date(input.dueDate);
-      if (Number.isNaN(issueDate.getTime()) || Number.isNaN(dueDate.getTime())) {
+      if (
+        Number.isNaN(issueDate.getTime()) ||
+        Number.isNaN(dueDate.getTime())
+      ) {
         throw badRequest("Invalid issue or due date");
       }
       if (dueDate.getTime() < issueDate.getTime()) {
@@ -909,8 +942,17 @@ export const invoicesRouter = router({
             nextInvoiceNumber(await recentNumbers(workspaceId), issueYear),
           );
 
-      const locale = await invoiceLocaleFor(ctx.user.id, gathered.clientLocale, input.locale);
-      const { taxed, profile } = await taxGathered(workspaceId, gathered, input, locale);
+      const locale = await invoiceLocaleFor(
+        ctx.user.id,
+        gathered.clientLocale,
+        input.locale,
+      );
+      const { taxed, profile } = await taxGathered(
+        workspaceId,
+        gathered,
+        input,
+        locale,
+      );
       const identity = issuerSnapshot(profile);
       // The logo is frozen with the rest of the issuer, bytes and all, so the
       // PDF renders from the invoice alone and a logo changed later cannot
@@ -1011,7 +1053,10 @@ export const invoicesRouter = router({
         // half-built document. Order matters: freeing the entries first means
         // a crash mid-unwind leaves billable time and a visible draft, not
         // time stranded behind an invoice that no longer exists.
-        await TimeEntry.updateMany({ workspaceId, invoiceId }, { $set: { invoiceId: null } });
+        await TimeEntry.updateMany(
+          { workspaceId, invoiceId },
+          { $set: { invoiceId: null } },
+        );
         await Invoice.deleteOne({ _id: created._id, workspaceId });
         throw new TRPCError({
           code: "CONFLICT",
@@ -1031,7 +1076,10 @@ export const invoicesRouter = router({
       // precondition of one. Delivery is projected at SEND time, and an
       // invoice is money end to end, so a subscription owned by somebody
       // without `canViewOthersMoney` is skipped rather than stripped.
-      emitWebhookEvent(workspaceId, "invoice.created", { kind: "invoice", invoice });
+      emitWebhookEvent(workspaceId, "invoice.created", {
+        kind: "invoice",
+        invoice,
+      });
       return invoice;
     }),
 
@@ -1126,9 +1174,16 @@ export const invoicesRouter = router({
       }
       const stored = toClientInvoice(doc);
 
-      const issueDate = input.issueDate === undefined ? doc.issueDate : new Date(input.issueDate);
-      const dueDate = input.dueDate === undefined ? doc.dueDate : new Date(input.dueDate);
-      if (Number.isNaN(issueDate.getTime()) || Number.isNaN(dueDate.getTime())) {
+      const issueDate =
+        input.issueDate === undefined
+          ? doc.issueDate
+          : new Date(input.issueDate);
+      const dueDate =
+        input.dueDate === undefined ? doc.dueDate : new Date(input.dueDate);
+      if (
+        Number.isNaN(issueDate.getTime()) ||
+        Number.isNaN(dueDate.getTime())
+      ) {
         throw badRequest("Invalid issue or due date");
       }
       if (dueDate.getTime() < issueDate.getTime()) {
@@ -1136,7 +1191,8 @@ export const invoicesRouter = router({
       }
       // The language stays the snapshot's unless the edit names one; an
       // invoice from before localisation keeps having none (English).
-      const locale: Locale = input.locale ?? (isLocale(doc.locale) ? doc.locale : "en");
+      const locale: Locale =
+        input.locale ?? (isLocale(doc.locale) ? doc.locale : "en");
 
       let built: ReturnType<typeof mergeDraftLines>;
       try {
@@ -1167,7 +1223,13 @@ export const invoicesRouter = router({
         ? []
         : built.lines.flatMap((line) =>
             line.taxCategory
-              ? [{ key: line.key, category: line.taxCategory, rate: line.taxRate ?? 0 }]
+              ? [
+                  {
+                    key: line.key,
+                    category: line.taxCategory,
+                    rate: line.taxRate ?? 0,
+                  },
+                ]
               : [],
           );
       const keptNotes: ExemptionNotes | undefined = taxTouched
@@ -1199,12 +1261,18 @@ export const invoicesRouter = router({
       const datesChanged =
         issueDate.getTime() !== doc.issueDate.getTime() ||
         dueDate.getTime() !== doc.dueDate.getTime();
-      const localeChanged = input.locale !== undefined && input.locale !== doc.locale;
+      const localeChanged =
+        input.locale !== undefined && input.locale !== doc.locale;
       const paymentTerms =
         doc.paymentTerms !== undefined && (datesChanged || localeChanged)
-          ? paymentTermsSentence(locale, doc.issuer?.paymentTermsDays ?? null, dueDate.toISOString(), {
-              issueDateIso: issueDate.toISOString(),
-            })
+          ? paymentTermsSentence(
+              locale,
+              doc.issuer?.paymentTermsDays ?? null,
+              dueDate.toISOString(),
+              {
+                issueDateIso: issueDate.toISOString(),
+              },
+            )
           : undefined;
 
       const set: Record<string, unknown> = {
@@ -1221,7 +1289,9 @@ export const invoicesRouter = router({
         ...(taxed.taxBreakdown ? { taxBreakdown: taxed.taxBreakdown } : {}),
         ...(paymentTerms !== undefined ? { paymentTerms } : {}),
       };
-      const update = taxed.taxBreakdown ? { $set: set } : { $set: set, $unset: { taxBreakdown: "" } };
+      const update = taxed.taxBreakdown
+        ? { $set: set }
+        : { $set: set, $unset: { taxBreakdown: "" } };
 
       // Conditional on the state the edit was made against: still a draft,
       // untouched since the read, and still without an issued XML (storing
@@ -1229,7 +1299,12 @@ export const invoicesRouter = router({
       // collision, as on create.
       let updated: Awaited<ReturnType<typeof draftUpdate>>;
       try {
-        updated = await draftUpdate(input.id, workspaceId, new Date(input.updatedAt), update);
+        updated = await draftUpdate(
+          input.id,
+          workspaceId,
+          new Date(input.updatedAt),
+          update,
+        );
       } catch (error) {
         if (!isDuplicateKeyError(error)) throw error;
         throw new TRPCError({

@@ -43,6 +43,7 @@ export const buildQuickStartInput = (
   context: QuickStartContext,
 ): OfflineStartInput => ({
   description: quick.description,
+  ...(quick.clientId !== undefined ? { clientId: quick.clientId } : {}),
   projectId: quick.projectId,
   taskId: quick.taskId,
   billable: quick.billable,
@@ -75,6 +76,7 @@ export const repairQuickStart = (
   item: QuickStart & { projectMissing?: boolean; taskMissing?: boolean },
 ): QuickStart => ({
   description: item.description,
+  ...(item.clientId !== undefined ? { clientId: item.clientId } : {}),
   projectId: item.projectMissing === true ? null : item.projectId,
   taskId:
     item.taskMissing === true || item.projectMissing === true

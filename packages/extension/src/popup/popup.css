@@ -588,7 +588,7 @@ button.tag:hover .tag__x {
   color: var(--fg);
   font-size: 22px;
   font-weight: 600;
-  letter-spacing: -.5px;
+  letter-spacing: -0.5px;
 }
 
 .boot__brand-accent {
@@ -1888,3 +1888,97 @@ button.tag:hover .tag__x {
 .menu__avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
 .menu__avatar--fallback { display: grid; place-items: center; background: var(--accent-soft); color: var(--fg); font-size: 12px; font-weight: 600; }
 .menu__item svg { flex-shrink: 0; }
+.timer-shortcuts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.timer-shortcuts button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.timer-shortcuts button:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.new-timer {
+  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.new-timer h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+.new-timer__start {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  margin-top: 8px;
+}
+.timer-drawer {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 18px;
+  border: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+.timer-drawer[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.timer-drawer::backdrop {
+  background: rgb(0 0 0 / 0.25);
+}
+.timer-drawer__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.timer-drawer__header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.timer-drawer__header .icon-button {
+  margin-left: auto;
+}
+.timer-drawer__list {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.timer-drawer__empty {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.quick__play {
+  flex: none;
+  color: var(--accent);
+}
+.timer-drawer .quick__start {
+  min-height: 62px;
+}

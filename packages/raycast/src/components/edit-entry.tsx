@@ -11,6 +11,7 @@ import {
   orNone,
   orNull,
   projectField,
+  clientField,
   tagsField,
   taskField,
   useEntryCatalog,
@@ -26,6 +27,7 @@ type Props = {
 type FormValues = {
   description: string;
   /** Undefined when the dropdown was not rendered — nothing to pick. */
+  clientId?: string;
   projectId?: string;
   taskId?: string;
   /** Undefined when the picker was not rendered — no tags exist yet. */
@@ -42,6 +44,7 @@ type FormValues = {
  */
 export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
   const { pop } = useNavigation();
+  const [clientId, setClientId] = useState<string | undefined>(entry.clientId === undefined ? undefined : orNone(entry.clientId));
   const [description, setDescription] = useState(entry.description);
   const [projectId, setProjectId] = useState(orNone(entry.projectId));
   const [taskId, setTaskId] = useState(orNone(entry.taskId));
@@ -53,6 +56,7 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
   // Gated on the server's declared API level, never its release: a store
   // build is often newer than a self-hosted server. docs/versioning.md →
   // "Gating a feature on the server".
+  const offersClient = useServerLevel().supports("entries.client");
   const offersDescriptions = useServerLevel().supports("entries.descriptions");
 
   if (catalog.signedOut) return <SignedOutView />;
@@ -75,6 +79,7 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
       await api.update({
         id: entry.id,
         description: values.description.trim(),
+        ...(offersClient ? {clientId: orNull(values.clientId)} : {}),
         projectId: orNull(values.projectId),
         taskId: orNull(values.taskId),
         // Always sent, so clearing every tag in the picker actually clears
@@ -112,6 +117,7 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
                   onPick={setDescription}
                   onAdopt={(suggestion) => {
                     setDescription(suggestion.description);
+                    setClientId(orNone(suggestion.clientId));
                     setProjectId(orNone(suggestion.projectId));
                     setTaskId(orNone(suggestion.taskId));
                     setTagIds([...suggestion.tagIds]);
@@ -138,6 +144,7 @@ export function EditEntry({ entry, onSaved }: Props): React.JSX.Element {
         info="⌘⇧D searches what you have tracked before."
       />
       {projectField(catalog, projectId, setProjectId)}
+      {offersClient && clientField(catalog, clientId ?? orNone(catalog.projects.data?.find((project) => project.id === entry.projectId)?.clientId), setClientId)}
       {taskField(catalog, taskId, setTaskId)}
       {tagsField(catalog, tagIds, setTagIds)}
       <Form.Checkbox id="billable" label="Billable" value={billable} onChange={setBillable} />

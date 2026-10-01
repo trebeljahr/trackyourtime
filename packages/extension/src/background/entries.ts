@@ -121,7 +121,8 @@ export const decorateEntry = (entry: TimeEntry): DetailedEntry => {
     entry.projectId === null
       ? null
       : (getCachedProjects()?.find((it) => it.id === entry.projectId) ?? null);
-  const clientId = project?.clientId ?? null;
+  const clientId =
+    entry.clientId === undefined ? (project?.clientId ?? null) : entry.clientId;
   const client =
     clientId === null
       ? null
@@ -384,6 +385,7 @@ export async function loadMoreEntries(): Promise<void> {
 
 export type CreateEntryInput = {
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable?: boolean;
@@ -415,6 +417,7 @@ const optimisticEntry = (
   workspaceId: "",
   authorId,
   description: input.description,
+  ...(input.clientId !== undefined ? { clientId: input.clientId } : {}),
   projectId: input.projectId,
   taskId: input.taskId,
   billable: input.billable,
@@ -449,6 +452,7 @@ export async function createEntry(input: CreateEntryInput): Promise<void> {
 
   const payload: OfflineCreateInput = {
     description: input.description,
+    ...(input.clientId !== undefined ? { clientId: input.clientId } : {}),
     projectId: input.projectId,
     taskId: input.taskId,
     tagIds: input.tagIds,
@@ -501,6 +505,7 @@ const queueCreate = async (
 export type EntryPatch = {
   id: string;
   description?: string;
+  clientId?: string | null;
   projectId?: string | null;
   taskId?: string | null;
   billable?: boolean;
@@ -525,6 +530,7 @@ const patched = (entry: TimeEntry, patch: EntryPatch): TimeEntry => {
   return {
     ...entry,
     description: patch.description ?? entry.description,
+    ...(patch.clientId !== undefined ? { clientId: patch.clientId } : {}),
     projectId: patch.projectId === undefined ? entry.projectId : patch.projectId,
     taskId: patch.taskId === undefined ? entry.taskId : patch.taskId,
     billable: patch.billable ?? entry.billable,
@@ -578,6 +584,7 @@ export async function updateEntry(patch: EntryPatch): Promise<void> {
   const input: OfflineUpdateInput = {
     id: patch.id,
     description: patch.description,
+    clientId: patch.clientId,
     projectId: patch.projectId,
     taskId: patch.taskId,
     billable: patch.billable,
@@ -680,7 +687,8 @@ const TRACKED_TTL_MS = 15_000;
 const TRACKED_PAGE_LIMIT = 200;
 const TRACKED_MAX_PAGES = 5;
 
-let trackedCache: { key: string; at: number; intervals: ActivityInterval[] } | null = null;
+let trackedCache: { key: string; at: number; intervals: ActivityInterval[];
+} | null = null;
 
 /** The day the Suggestions screen shows; null means today. Lost on eviction, re-sent by the popup. */
 let activityDay: string | null = null;
@@ -735,12 +743,15 @@ export async function trackedIntervalsBetween(
   try {
     let cursor: string | null = null;
     for (let page = 0; page < TRACKED_MAX_PAGES; page += 1) {
-      const result: ListPage = await current.api.query<ListPage>("entries.list", {
-        from,
-        to,
-        limit: TRACKED_PAGE_LIMIT,
-        ...(cursor === null ? {} : { cursor }),
-      });
+      const result: ListPage = await current.api.query<ListPage>(
+        "entries.list",
+        {
+          from,
+          to,
+          limit: TRACKED_PAGE_LIMIT,
+          ...(cursor === null ? {} : { cursor }),
+        },
+      );
       rows.push(...result.entries);
       cursor = result.nextCursor ?? null;
       if (cursor === null) break;
@@ -763,9 +774,12 @@ export async function trackedIntervalsBetween(
   const mine = (entry: TimeEntry): boolean =>
     userId === null || entry.authorId === "" || entry.authorId === userId;
 
-  const intervals = overlaid.entries.filter(mine).map((entry) => toInterval(entry, now));
+  const intervals = overlaid.entries
+    .filter(mine)
+    .map((entry) => toInterval(entry, now));
   const running = peekRunning();
-  if (running !== null && mine(running)) intervals.push(toInterval(running, now));
+  if (running !== null && mine(running))
+    intervals.push(toInterval(running, now));
 
   const clipped = intervals.filter(
     (interval) => interval.end > range.from && interval.start < range.to,
@@ -785,11 +799,14 @@ const forgetTracked = (): void => {
  * stored-row count only for Settings; a snapshot for any other view carries the
  * two cheap local reads and nulls.
  */
-export async function resolveActivitySnapshot(view: PopupView): Promise<ActivitySnapshot> {
+export async function resolveActivitySnapshot(
+  view: PopupView,
+): Promise<ActivitySnapshot> {
   const now = Date.now();
   const zone = deviceTimeZone();
   const today = dayKeyInZone(now, zone);
-  const day = activityDay !== null && activityDay <= today ? activityDay : today;
+  const day =
+    activityDay !== null && activityDay <= today ? activityDay : today;
 
   const [settings, permitted, scope] = await Promise.all([
     loadActivitySettings(),
@@ -831,7 +848,9 @@ export async function resolveActivitySnapshot(view: PopupView): Promise<Activity
     return {
       ...snapshot,
       rules:
-        scope === null || storageProblem !== null ? [] : await activityRules(scope),
+        scope === null || storageProblem !== null
+          ? []
+          : await activityRules(scope),
       storedSegments:
         storageProblem !== null ? null : await countSegments().catch(() => 0),
     };
@@ -860,14 +879,19 @@ export type AcceptSuggestionInput = AcceptedFields & {
  * Then it is an ordinary `createEntry`: `source: "extension"`, the device
  * zone, and the offline queue when the server cannot be reached.
  */
-export async function acceptSuggestion(input: AcceptSuggestionInput): Promise<void> {
+export async function acceptSuggestion(
+  input: AcceptSuggestionInput,
+): Promise<void> {
   const current = await ensureReady();
   if (!current.session) throw notSignedIn();
   if (!(input.end > input.start)) throw badTimeRange();
 
   const scope = await loadActivityScope();
   if (scope === null) {
-    throw new BackgroundError("ACTIVITY_UNAVAILABLE", "Activity capture has no account to file under yet.");
+    throw new BackgroundError(
+      "ACTIVITY_UNAVAILABLE",
+      "Activity capture has no account to file under yet.",
+    );
   }
 
   const now = Date.now();
@@ -901,17 +925,22 @@ export async function acceptSuggestion(input: AcceptSuggestionInput): Promise<vo
   const projects = getCachedProjects();
   const tasks = getCachedTasks();
   const projectId =
-    input.projectId !== null && projects !== null && !projects.some((it) => it.id === input.projectId)
+    input.projectId !== null &&
+    projects !== null &&
+    !projects.some((it) => it.id === input.projectId)
       ? null
       : input.projectId;
   const taskId =
-    input.taskId !== null && tasks !== null && !tasks.some((it) => it.id === input.taskId)
+    input.taskId !== null &&
+    tasks !== null &&
+    !tasks.some((it) => it.id === input.taskId)
       ? null
       : input.taskId;
 
   forgetTracked();
   await createEntry({
     description: input.description,
+    clientId: input.clientId,
     projectId,
     taskId,
     billable: input.billable,

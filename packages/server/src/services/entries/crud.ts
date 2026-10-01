@@ -30,7 +30,7 @@ import {
   INVOICE_RELEVANT_FIELDS,
   invoicedEntryEditRefusal,
 } from "./invoice-guard.js";
-import { resolveRefs } from "./refs.js";
+import { resolveRefs, resolveClientId } from "./refs.js";
 import { resolveTagIds } from "./tags.js";
 
 /** Manual entry with an explicit start and end. */
@@ -53,6 +53,11 @@ export async function createEntry(
     input.projectId ?? null,
     input.taskId ?? null,
   );
+  const clientId = await resolveClientId(
+    workspaceId,
+    input.clientId,
+    refs.project,
+  );
   const tagIds = (await resolveTagIds(workspaceId, input.tagIds)) ?? [];
   const settings = await getOrCreateWorkspaceSettings(workspaceId);
   // The project's default as every client sees it: a project billing at 0 is
@@ -72,6 +77,7 @@ export async function createEntry(
     workspaceId,
     authorId: scope.userId,
     description: input.description,
+    clientId,
     projectId: refs.projectId,
     taskId: refs.taskId,
     billable,
@@ -127,8 +133,8 @@ export async function updateEntry(
     projectChanged || taskChanged
       ? await resolveRefs(
           workspaceId,
-          projectChanged ? input.projectId ?? null : existing.projectId,
-          taskChanged ? input.taskId ?? null : existing.taskId,
+          projectChanged ? (input.projectId ?? null) : existing.projectId,
+          taskChanged ? (input.taskId ?? null) : existing.taskId,
         )
       : {
           projectId: existing.projectId,
@@ -139,6 +145,23 @@ export async function updateEntry(
                 workspaceId,
               }).lean()
             : null,
+        };
+
+  const legacyProject =
+    existing.clientId === undefined && projectChanged && existing.projectId
+      ? await Project.findOne({ _id: existing.projectId, workspaceId }).lean()
+      : null;
+  const clientPatch =
+    input.clientId === undefined
+      ? existing.clientId === undefined && projectChanged
+        ? { clientId: legacyProject?.clientId ?? null }
+        : {}
+      : {
+          clientId: await resolveClientId(
+            workspaceId,
+            input.clientId,
+            refs.project,
+          ),
         };
 
   const start = input.start ? new Date(input.start) : existing.start;
@@ -189,6 +212,7 @@ export async function updateEntry(
       {
         $set: {
           description: input.description ?? existing.description,
+          ...clientPatch,
           projectId: refs.projectId,
           taskId: refs.taskId,
           billable,

@@ -69,7 +69,7 @@ import {
   type OfflineOverlay,
 } from "./overlay.js";
 import { apiUrl } from "./preferences.js";
-import { noteClientTooOld } from "./server-level.js";
+import { knownServerApiLevel, noteClientTooOld } from "./server-level.js";
 import { loadTimerEcho, noteTimerEcho } from "./storage.js";
 
 export { NotSignedInError, StillSyncingError };
@@ -89,6 +89,7 @@ export type TaskWithStats = Task & { totalSec: number };
 export type TagWithStats = Tag & { entryCount: number; totalSec: number };
 
 export type StartInput = {
+  clientId?: string | null;
   description?: string;
   projectId?: string | null;
   taskId?: string | null;
@@ -115,6 +116,7 @@ export type DescriptionsInput = {
 };
 
 export type UpdateInput = {
+  clientId?: string | null;
   id: string;
   description?: string;
   projectId?: string | null;
@@ -346,6 +348,7 @@ const cachedDescriptions = (
     }
     out.set(key, {
       description,
+      clientId: entry.clientId,
       projectId: entry.projectId,
       taskId: entry.taskId,
       billable: entry.billable,
@@ -529,6 +532,7 @@ const wrap = (
     const tempId = createTempId();
     const payload: OfflineStartInput = {
       description: input.description ?? "",
+      clientId: input.clientId,
       projectId: input.projectId ?? null,
       taskId: input.taskId ?? null,
       tagIds: input.tagIds,
@@ -543,6 +547,7 @@ const wrap = (
     const entry = buildOptimisticEntry(await loadShapeContext(), {
       id: tempId,
       description: payload.description,
+      clientId: payload.clientId,
       projectId: payload.projectId,
       taskId: payload.taskId,
       billable: payload.billable,
@@ -648,6 +653,7 @@ const wrap = (
     const tempId = createTempId();
     const payload: OfflineCreateInput = {
       description: input.description ?? "",
+      clientId: input.clientId,
       projectId: input.projectId ?? null,
       taskId: input.taskId ?? null,
       tagIds: input.tagIds,
@@ -663,6 +669,7 @@ const wrap = (
     const entry = buildOptimisticEntry(await loadShapeContext(), {
       id: tempId,
       description: payload.description,
+      clientId: payload.clientId,
       projectId: payload.projectId,
       taskId: payload.taskId,
       billable: payload.billable,
@@ -689,6 +696,7 @@ const wrap = (
     const merged: DetailedEntry = decorateEntry(context, {
       ...base,
       description: input.description ?? base.description,
+      clientId: input.clientId === undefined ? base.clientId : input.clientId,
       projectId: input.projectId === undefined ? base.projectId : input.projectId,
       taskId: input.taskId === undefined ? base.taskId : input.taskId,
       tagIds: input.tagIds ?? base.tagIds,
@@ -776,6 +784,7 @@ const wrap = (
           }
           return queueStart({
             description: quick.description,
+            clientId: quick.clientId,
             projectId: quick.projectId,
             taskId: quick.taskId,
             billable: quick.billable,
@@ -800,6 +809,7 @@ const wrap = (
         () =>
           queueStart({
             description: quick.description,
+            clientId: quick.clientId,
             projectId: quick.projectId,
             taskId: quick.taskId,
             billable: quick.billable,
@@ -1029,6 +1039,7 @@ export async function getTrackYourTime(): Promise<TrackYourTime> {
   let workspaceId = await activeWorkspaceId();
   const origin = apiUrl();
   const raw = createApiClient({
+    serverApiLevel: knownServerApiLevel,
     baseUrl: origin,
     token: session.token,
     clientId: CLIENT_ID,

@@ -28,6 +28,7 @@ export const ACCEPT_CONTEXT_MS = 12 * 60 * 60 * 1000;
 /** What the entry will be filed with. `billable` undefined: the project's default. */
 export type AcceptFields = {
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   tagIds: string[];
@@ -75,7 +76,7 @@ export type AcceptDeps = {
 export const withKnownCatalog = (
   fields: AcceptFields,
   catalog: KnownCatalog,
-): Required<AcceptFields> => {
+): AcceptFields & {billable: boolean} => {
   const projectId =
     fields.projectId !== null && catalog.projects !== null && !catalog.projects.has(fields.projectId)
       ? null
@@ -89,7 +90,7 @@ export const withKnownCatalog = (
   const billable =
     fields.billable ??
     (projectId === null ? false : (catalog.projects?.get(projectId)?.billableDefault ?? false));
-  return { description: fields.description, projectId, taskId, tagIds, billable };
+  return { description: fields.description, ...(fields.clientId !== undefined ? {clientId: fields.clientId} : {}), projectId, taskId, tagIds, billable };
 };
 
 export const acceptSuggestion = async (

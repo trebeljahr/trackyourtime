@@ -38,6 +38,7 @@ const timeEntryFields = {
   workspaceId: z.string(),
   authorId: z.string(),
   description: z.string(),
+  clientId: nullableId.optional(),
   projectId: nullableId,
   taskId: nullableId,
   billable: z.boolean(),
@@ -74,6 +75,7 @@ const detailedEntrySchema = z.looseObject({
  */
 const entryPatchSchema = z.looseObject({
   description: z.string().optional(),
+  clientId: nullableId.optional(),
   projectId: nullableId.optional(),
   taskId: nullableId.optional(),
   billable: z.boolean().optional(),

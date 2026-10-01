@@ -46,6 +46,7 @@ export type ShapeableTask = {
  */
 export type EntryShapeContext = {
   projects: readonly ShapeableProject[];
+  clients?: readonly { id: string; name: string }[];
   /** Optional: without it a fresh entry's `taskName` is null until it syncs. */
   tasks?: readonly ShapeableTask[];
   /** Null while `settings.get` is still in flight. */
@@ -108,7 +109,11 @@ export const decorateEntry = (
     ...entry,
     projectName: project.projectName,
     projectColor: project.projectColor,
-    clientName: project.clientName,
+    clientName:
+      entry.clientId === undefined
+        ? project.clientName
+        : (context.clients?.find((client) => client.id === entry.clientId)
+            ?.name ?? null),
     taskName: taskName(context, entry.taskId),
     amount: entryAmount(entry.durationSec, entry.hourlyRate),
   };
@@ -117,6 +122,7 @@ export const decorateEntry = (
 export type OptimisticEntryArgs = {
   id: string;
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable: boolean;
@@ -147,6 +153,7 @@ export const buildOptimisticEntry = (
     workspaceId: settings?.workspaceId ?? "",
     authorId: settings?.userId ?? "",
     description: args.description,
+    ...(args.clientId !== undefined ? { clientId: args.clientId } : {}),
     projectId: args.projectId,
     taskId: args.taskId,
     billable: args.billable,
@@ -169,7 +176,11 @@ export const buildOptimisticEntry = (
     updatedAt: stamp,
     projectName: project.projectName,
     projectColor: project.projectColor,
-    clientName: project.clientName,
+    clientName:
+      args.clientId === undefined
+        ? project.clientName
+        : (context.clients?.find((client) => client.id === args.clientId)
+            ?.name ?? null),
     taskName: taskName(context, args.taskId),
     amount: entryAmount(durationSec, hourlyRate),
   };
@@ -201,7 +212,11 @@ export const stoppedEntryShape = (
     updatedAt: safeEnd,
     projectName: project.projectName,
     projectColor: project.projectColor,
-    clientName: project.clientName,
+    clientName:
+      running.clientId === undefined
+        ? project.clientName
+        : (context.clients?.find((client) => client.id === running.clientId)
+            ?.name ?? null),
     taskName: taskName(context, running.taskId),
     amount: entryAmount(durationSec, hourlyRate),
   };

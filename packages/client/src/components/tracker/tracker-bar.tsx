@@ -64,6 +64,7 @@ export function TrackerBar(): React.JSX.Element {
 
   const [manualOpen, setManualOpen] = React.useState(false);
   const [description, setDescription] = React.useState("");
+  const [clientId, setClientId] = React.useState<string | null | undefined>(undefined);
   const [projectId, setProjectId] = React.useState<string | null>(null);
   const [taskId, setTaskId] = React.useState<string | null>(null);
   const [billable, setBillable] = React.useState(false);
@@ -96,6 +97,7 @@ export function TrackerBar(): React.JSX.Element {
   if (lastRunningId !== runningId) {
     setLastRunningId(runningId);
     setDescription(running?.description ?? "");
+    setClientId(running?.clientId);
     setProjectId(running?.projectId ?? null);
     setTaskId(running?.taskId ?? null);
     setBillable(running?.billable ?? false);
@@ -158,12 +160,13 @@ export function TrackerBar(): React.JSX.Element {
   // behaviour of their own here (Escape restores, the project default decides
   // the flag), so this assembles the view rather than owning it.
   const fields: EntryFields = React.useMemo(
-    () => ({ description, projectId, taskId, billable, tagIds }),
-    [billable, description, projectId, tagIds, taskId]
+    () => ({ description, clientId, projectId, taskId, billable, tagIds }),
+    [billable, description, clientId, projectId, tagIds, taskId]
   );
 
   const applyFields = React.useCallback(
     (next: EntryFields, patch: Partial<EntryFields>): void => {
+      setClientId(next.clientId);
       setProjectId(next.projectId);
       setTaskId(next.taskId);
 
@@ -223,6 +226,7 @@ export function TrackerBar(): React.JSX.Element {
   const fillFromSuggestion = React.useCallback(
     (suggestion: DescriptionSuggestion): void => {
       setDescription(suggestion.description);
+      setClientId(suggestion.clientId);
       setProjectId(suggestion.projectId);
       setTaskId(suggestion.taskId);
       setBillable(suggestion.billable);
@@ -231,6 +235,7 @@ export function TrackerBar(): React.JSX.Element {
         mutations.updateEntry({
           id: running.id,
           description: suggestion.description,
+          clientId: suggestion.clientId,
           projectId: suggestion.projectId,
           taskId: suggestion.taskId,
           billable: suggestion.billable,
@@ -242,8 +247,8 @@ export function TrackerBar(): React.JSX.Element {
   );
 
   const start = React.useCallback((): void => {
-    mutations.startTimer({ description, projectId, taskId, billable, tagIds });
-  }, [billable, description, mutations, projectId, tagIds, taskId]);
+    mutations.startTimer({ description, clientId, projectId, taskId, billable, tagIds });
+  }, [billable, description, clientId, mutations, projectId, tagIds, taskId]);
 
   const stop = React.useCallback((): void => {
     mutations.stopTimer();
@@ -323,10 +328,6 @@ export function TrackerBar(): React.JSX.Element {
           testId="tracker-description"
         />
 
-        {/* The client is a property of the project, not a field of its own —
-            it rides along inside this control, shown read-only, which is what
-            stops "Redesign" from being ambiguous when two clients both have
-            one without adding a picker to a bar that is already wide. */}
         {/* On a phone the two pickers share one line — `flex-1 min-w-0` lets
             them shrink out of their `min-w-48`/`min-w-40` defaults, which
             otherwise total more than 351pt and force each onto a line of its

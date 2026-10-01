@@ -53,6 +53,7 @@ export type OfflineTagIds = string[] | undefined;
 
 export type OfflineStartInput = {
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   tagIds?: OfflineTagIds;
@@ -74,6 +75,7 @@ export type OfflineStopInput = {
 
 export type OfflineCreateInput = {
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   tagIds?: OfflineTagIds;
@@ -88,6 +90,7 @@ export type OfflineCreateInput = {
 export type OfflineUpdateInput = {
   id: string;
   description?: string;
+  clientId?: string | null;
   projectId?: string | null;
   taskId?: string | null;
   /** Absent leaves the tags alone; `[]` clears them. */
@@ -175,7 +178,7 @@ const readStored = (payload: unknown): StoredOfflinePayload | null => {
  * it runs, or a person discards it.
  */
 export const decodeOfflineMutation = (
-  mutation: QueuedMutation
+  mutation: QueuedMutation,
 ): OfflineMutation | null => {
   if (!isOfflineOp(mutation.op)) return null;
   const stored = readStored(mutation.payload);
@@ -194,7 +197,7 @@ export const decodeOfflineMutation = (
 const decodeOp = (
   queueId: string,
   op: OfflineOp,
-  stored: StoredOfflinePayload
+  stored: StoredOfflinePayload,
 ): OfflineMutation => {
   const tempId = stored.tempId;
 
@@ -262,7 +265,9 @@ export const HELD_RETRY_MS = 60 * 60 * 1000;
  * - `server`: the server may change. Asked again after `HELD_RETRY_MS`, or
  *   sooner when the caller says so (a launch, a resume).
  */
-export const HOLD_RELEASE: Readonly<Record<HoldReason, "new-build" | "server">> = {
+export const HOLD_RELEASE: Readonly<
+  Record<HoldReason, "new-build" | "server">
+> = {
   "unknown-op": "new-build",
   "unknown-procedure": "server",
   "server-too-old": "server",
@@ -272,7 +277,9 @@ export const HOLD_RELEASE: Readonly<Record<HoldReason, "new-build" | "server">> 
  * The temp id a row's payload carries, read without decoding — so a row this
  * build cannot read still chains to the rows that depend on it.
  */
-export const tempIdOf = (row: Pick<QueuedMutation, "payload">): string | undefined => {
+export const tempIdOf = (
+  row: Pick<QueuedMutation, "payload">,
+): string | undefined => {
   if (typeof row.payload !== "object" || row.payload === null) return undefined;
   const { tempId } = row.payload as { tempId?: unknown };
   return typeof tempId === "string" && tempId.length > 0 ? tempId : undefined;
@@ -303,7 +310,7 @@ export const holdBlocksReplay = (
      * server reports enough, kept while it does not, whatever the clock says.
      */
     serverApiLevel?: number | null;
-  } = {}
+  } = {},
 ): boolean => {
   const reason = holdReasonOf(row);
   if (reason === null) return false;
@@ -330,14 +337,15 @@ export const holdBlocksReplay = (
  * its own business.
  */
 export const heldReasons = (
-  rows: readonly QueuedMutation[]
+  rows: readonly QueuedMutation[],
 ): Map<string, HoldReason> => {
   const held = new Map<string, HoldReason>();
   const chains = new Map<string, HoldReason>();
   for (const row of rows) {
     const link = tempIdOf(row);
     const reason =
-      holdReasonOf(row) ?? (link === undefined ? null : chains.get(link) ?? null);
+      holdReasonOf(row) ??
+      (link === undefined ? null : (chains.get(link) ?? null));
     if (reason === null) continue;
     held.set(row.id, reason);
     if (link !== undefined && !chains.has(link)) chains.set(link, reason);
@@ -379,7 +387,7 @@ const replayedEntryId = (result: unknown): string | null => {
 export const noteReplayedServerId = (
   watcher: Pick<IdleWatcher, "noteServerId">,
   mutation: OfflineMutation,
-  result: unknown
+  result: unknown,
 ): boolean => {
   // Only a start invents an id. Every other op names an entry that already
   // exists, so there is nothing to rename.
@@ -436,7 +444,7 @@ export type WorkspaceNameLookup = (workspaceId: string) => string | null;
 
 export const describeQueuedMutation = (
   row: QueuedMutation,
-  workspaceName?: WorkspaceNameLookup
+  workspaceName?: WorkspaceNameLookup,
 ): QueuedMutationSummary => {
   const workspaceId = row.workspaceId ?? null;
   const workspace = {
@@ -463,7 +471,8 @@ export const describeQueuedMutation = (
   return {
     queueId: row.id,
     op: decoded.op,
-    description: typeof input.description === "string" ? input.description : null,
+    description:
+      typeof input.description === "string" ? input.description : null,
     at: typeof input.start === "string" ? input.start : row.createdAt,
     server: row.server ?? null,
     ...workspace,

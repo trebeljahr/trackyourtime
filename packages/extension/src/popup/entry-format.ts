@@ -78,7 +78,10 @@ export function entryDayLabel(
 }
 
 /** An entry with no description is a real state, not a blank row. */
-export function entryTitle(entry: Pick<TimeEntry, "description">, t: PopupT): string {
+export function entryTitle(
+  entry: Pick<TimeEntry, "description">,
+  t: PopupT,
+): string {
   const trimmed = entry.description.trim();
   return trimmed === "" ? t("entry.noDescription") : trimmed;
 }
@@ -113,7 +116,10 @@ export function quickLabel(quick: Labelled, t: PopupT): string {
  */
 export function quickHint(quick: Labelled, t: PopupT): string | null {
   if (quick.projectMissing === true) return t("entry.projectDeleted");
-  if (!quick.projectName) return quick.taskName ?? null;
+  if (!quick.projectName)
+    return (
+      [quick.clientName, quick.taskName].filter(Boolean).join(" · ") || null
+    );
   if (quick.description.trim() === "") return quick.clientName ?? null;
 
   const project = quick.projectArchived

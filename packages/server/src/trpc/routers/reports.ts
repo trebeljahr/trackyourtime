@@ -1,3 +1,7 @@
+import {
+  clientEntryFilter,
+  entryClientExpression,
+} from "../../services/entries/refs.js";
 // IMPLEMENTED BY: reports agent
 //
 // Reporting is the headline feature, so the numbers have to be exactly right.
@@ -195,7 +199,6 @@ const dayKeysInRange = (
     dayKeyInZone(toMs - 1, timeZone),
   );
 
-
 // ── filter → aggregation stages ──────────────────────────────────────
 
 type JoinedEntry = TimeEntryDocLike & {
@@ -276,9 +279,7 @@ const buildMatchConditions = async (
       .select("_id")
       .lean();
     const viaClients = clientProjects.map((project) => String(project._id));
-    projectIds = projectIds
-      ? projectIds.filter((id) => viaClients.includes(id))
-      : viaClients;
+    conditions.push(clientEntryFilter(filters.clientIds, viaClients));
   }
   if (projectIds) {
     if (projectIds.length === 0) return null;
@@ -368,7 +369,7 @@ const lookupStages = (): PipelineStage[] => [
     $addFields: {
       clientOid: {
         $convert: {
-          input: "$project.clientId",
+          input: entryClientExpression,
           to: "objectId",
           onError: null,
           onNull: null,
@@ -491,7 +492,11 @@ const measureEntry = (
 
 // ── grouping ─────────────────────────────────────────────────────────
 
-export type GroupIdentity = { key: string; label: string; color: string | null };
+export type GroupIdentity = {
+  key: string;
+  label: string;
+  color: string | null;
+};
 
 const NO_PROJECT: GroupIdentity = {
   key: "none",
@@ -679,7 +684,11 @@ const groupIdentity = (
 
     case "project":
       return project
-        ? { key: String(project._id), label: project.name, color: project.color }
+        ? {
+            key: String(project._id),
+            label: project.name,
+            color: project.color,
+          }
         : NO_PROJECT;
 
     case "client":
@@ -844,7 +853,11 @@ export const projectDetailedReport = (
   }
   return {
     ...result,
-    entries: entries.map((entry) => ({ ...entry, hourlyRate: null, amount: null })),
+    entries: entries.map((entry) => ({
+      ...entry,
+      hourlyRate: null,
+      amount: null,
+    })),
     totalAmount: null,
     moneyVisible: false,
   };
@@ -874,7 +887,12 @@ export const buildSummary = async (
   const moneyVisible = reportMoneyVisible(scope.visibility);
   const conditions = await buildMatchConditions(scope, filters, range);
   if (conditions === null)
-    return emptySummary(settings.currency, range, calendar.timeZone, moneyVisible);
+    return emptySummary(
+      settings.currency,
+      range,
+      calendar.timeZone,
+      moneyVisible,
+    );
 
   const docs = await runJoinedQuery(workspaceId, conditions);
 
@@ -895,9 +913,7 @@ export const buildSummary = async (
   // dropping it would move that time into "No tag".
   const tagIndex = new Map<string, TagLabel>();
   if (groupBy === "tag") {
-    const tags = await Tag.find({ workspaceId })
-      .select("name color")
-      .lean();
+    const tags = await Tag.find({ workspaceId }).select("name color").lean();
     for (const tag of tags) {
       tagIndex.set(String(tag._id), { name: tag.name, color: tag.color });
     }
@@ -907,7 +923,11 @@ export const buildSummary = async (
   // Per day, seconds by group key — what lets a heatmap color each day by the
   // group that took most of it, without a second report per group.
   const sharesByDay = new Map<string, Map<string, number>>();
-  for (const date of dayKeysInRange(range.fromMs, range.toMs, calendar.timeZone)) {
+  for (const date of dayKeysInRange(
+    range.fromMs,
+    range.toMs,
+    calendar.timeZone,
+  )) {
     timeline.set(date, { date, seconds: 0, billableSec: 0, shares: [] });
     sharesByDay.set(date, new Map());
   }
@@ -1080,7 +1100,10 @@ export const buildDetailed = async (
     if (seconds <= 0) continue;
 
     totalSec += seconds;
-    const amount = entryAmount(seconds, entry.billable ? entry.hourlyRate : null);
+    const amount = entryAmount(
+      seconds,
+      entry.billable ? entry.hourlyRate : null,
+    );
     if (amount !== 0) amounts.push(amount);
   }
 
@@ -1234,7 +1257,11 @@ const decimalHours = (seconds: number): number =>
  * withheld the COLUMNS go, not merely the values — the header set itself says
  * "this export carries no money".
  */
-const MONEY_CSV_KEYS: ReadonlySet<string> = new Set(["rate", "amount", "currency"]);
+const MONEY_CSV_KEYS: ReadonlySet<string> = new Set([
+  "rate",
+  "amount",
+  "currency",
+]);
 
 const withoutMoneyColumns = (
   columns: readonly CsvColumn[],
@@ -1307,7 +1334,11 @@ export const detailedCsvRows = (
   return result.entries.map((entry) => {
     const seconds = entryDurationSec(entry, nowMs);
     const money: CsvRow = result.moneyVisible
-      ? { rate: entry.hourlyRate, amount: entry.amount, currency: entry.currency }
+      ? {
+          rate: entry.hourlyRate,
+          amount: entry.amount,
+          currency: entry.currency,
+        }
       : {};
     return {
       ...money,
@@ -1363,11 +1394,8 @@ const exportFilename = (
  * swaps the suffix rather than duplicating the sanitising rules — one place
  * decides what characters survive into a filename.
  */
-const pdfFilename = (
-  report: string,
-  range: Range,
-  timeZone: string,
-): string => `${exportFilename(report, range, timeZone).replace(/\.csv$/, "")}.pdf`;
+const pdfFilename = (report: string, range: Range, timeZone: string): string =>
+  `${exportFilename(report, range, timeZone).replace(/\.csv$/, "")}.pdf`;
 
 type CsvExport = CsvExportResult & { mimeType: "text/csv" };
 
@@ -1585,10 +1613,7 @@ export const reportsRouter = router({
         moneyVisible,
       });
 
-      const encode = (
-        report: string,
-        bytes: Buffer,
-      ): PdfExportResult => ({
+      const encode = (report: string, bytes: Buffer): PdfExportResult => ({
         filename: pdfFilename(report, range, exportZone),
         base64: bytes.toString("base64"),
         mimeType: "application/pdf",
@@ -1599,7 +1624,10 @@ export const reportsRouter = router({
         const result = await buildSummary(scope, input, groupBy);
         const bytes = await renderSummaryPdf(
           result,
-          meta(reportPdfTitle(locale, { kind: "summary", groupBy }), result.currency),
+          meta(
+            reportPdfTitle(locale, { kind: "summary", groupBy }),
+            result.currency,
+          ),
           groupBy,
         );
         return encode("summary", bytes);

@@ -1,3 +1,6 @@
+import { History, Star, Play } from "lucide-react";
+import { QuickStartDrawer } from "./quick-start-drawer";
+import { ClientPicker } from "./client-picker";
 import { useState, type FormEvent, type JSX } from "react";
 import {
   createId,
@@ -23,7 +26,6 @@ import { TagPicker } from "./tag-picker";
 import { IdlePanel } from "./idle-panel";
 import { Menu } from "./menu";
 import { ProjectPicker } from "./project-picker";
-import { QuickStartList } from "./quick-start-list";
 import { Switch } from "./switch";
 import { describeSync } from "./sync-label";
 import { useOpenPanels } from "./catalog-edit";
@@ -35,6 +37,7 @@ import { useElapsedSec } from "./use-elapsed";
 export type RunningPatch = {
   start?: string;
   description?: string;
+  clientId?: string | null;
   projectId?: string | null;
   taskId?: string | null;
   billable?: boolean;
@@ -52,6 +55,7 @@ export type TrackerScreenProps = {
     /** Explicit for a quick start; omitted lets the project default decide. */
     billable?: boolean,
     tagIds?: string[],
+    clientId?: string | null,
   ) => Promise<boolean>;
   onStop: () => Promise<boolean>;
   /** Edits the entry that is running. The worker resolves which one that is. */
@@ -165,11 +169,15 @@ export function TrackerScreen({
   const t = useT("popup");
   const locale = usePopupLocale();
   const [description, setDescription] = useState("");
+  const [clientId, setClientId] = useState<string | null | undefined>(
+    undefined,
+  );
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [billable, setBillable] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [drawer, setDrawer] = useState<"recents" | "favorites" | null>(null);
 
   /** Which pickers have a create or edit panel open; see the hook. */
   const panels = useOpenPanels();
@@ -200,6 +208,7 @@ export function TrackerScreen({
     setLastRunningId(runningId);
     if (running !== null) {
       setDescription(running.description);
+      setClientId(running.clientId);
       setProjectId(running.projectId);
       setTaskId(running.taskId);
       setBillable(running.billable);
@@ -233,6 +242,7 @@ export function TrackerScreen({
    */
   const fields: EntryFields = {
     description,
+    clientId,
     projectId,
     taskId,
     billable,
@@ -245,7 +255,16 @@ export function TrackerScreen({
     setProjectId(updated.projectId);
 
     if (running !== null) {
-      patchRunning({ projectId: updated.projectId });
+      const clientPatch =
+        clientId === undefined && (state.compatibility?.apiLevel ?? 0) >= 7
+          ? {
+              clientId:
+                state.projects.find((project) => project.id === projectId)
+                  ?.clientId ?? null,
+            }
+          : {};
+      if (clientPatch.clientId !== undefined) setClientId(clientPatch.clientId);
+      patchRunning({ projectId: updated.projectId, ...clientPatch });
       return;
     }
     // Only a draft follows the project's default. Changing the project under a
@@ -294,6 +313,7 @@ export function TrackerScreen({
    */
   const fillFromSuggestion = (suggestion: DescriptionSuggestion): void => {
     setDescription(suggestion.description);
+    setClientId(suggestion.clientId);
     setProjectId(suggestion.projectId);
     setTaskId(suggestion.taskId);
     setTagIds(suggestion.tagIds);
@@ -301,20 +321,12 @@ export function TrackerScreen({
     if (running === null) return;
     patchRunning({
       description: suggestion.description,
+      clientId: suggestion.clientId,
       projectId: suggestion.projectId,
       taskId: suggestion.taskId,
       tagIds: suggestion.tagIds,
       billable: suggestion.billable,
     });
-  };
-
-  // Choosing a preset only fills the draft; Start is always explicit.
-  const selectQuick = (quick: QuickStart): void => {
-    setDescription(quick.description);
-    setProjectId(quick.projectId);
-    setTaskId(quick.taskId);
-    setBillable(quick.billable);
-    setTagIds([]);
   };
 
   const pin = async (quick: QuickStart): Promise<void> => {
@@ -329,30 +341,41 @@ export function TrackerScreen({
     setBusy(false);
   };
 
-  const start = async (): Promise<void> => {
+  const start = async (quick?: QuickStart): Promise<void> => {
     if (busy) return;
+    const next = quick ?? {
+      description: "",
+      projectId: null,
+      taskId: null,
+      billable: false,
+    };
     setBusy(true);
+    setDrawer(null);
     setOptimistic({
-      running: provisionalEntry(
-        description.trim(),
-        projectId,
-        taskId,
-        billable,
-        tagIds,
-      ),
+      running: {
+        ...provisionalEntry(
+          next.description,
+          next.projectId,
+          next.taskId,
+          next.billable,
+          [],
+        ),
+        clientId: next.clientId,
+      },
     });
-
-    // Explicit rather than omitted: the composer has a billable toggle now, so
-    // the flag on screen is what the entry has to open with — letting the
-    // server re-derive it from the project would ignore the toggle.
-    await onStart(description.trim(), projectId, taskId, billable, tagIds);
-
-    // Either way the override goes: on success the worker's snapshot is the
-    // better truth, on failure dropping it reverts the UI to what is real. The
-    // fields are not cleared here — they now show the running entry, and the
-    // re-seed above keeps them in step with it.
-    setOptimistic(null);
-    setBusy(false);
+    try {
+      await onStart(
+        next.description,
+        next.projectId,
+        next.taskId,
+        next.billable,
+        [],
+        next.clientId,
+      );
+    } finally {
+      setOptimistic(null);
+      setBusy(false);
+    }
   };
 
   const answerIdle = async (answer: IdleAnswer): Promise<void> => {
@@ -425,6 +448,48 @@ export function TrackerScreen({
       />
 
       <div className="popup__body">
+        <nav className="timer-shortcuts" aria-label={t("quickStart.shortcuts")}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setDrawer("recents")}
+            data-testid="open-recents"
+          >
+            <History size={21} aria-hidden="true" />
+            {t("quickStart.recents")}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setDrawer("favorites")}
+            data-testid="open-favorites"
+          >
+            <Star size={21} aria-hidden="true" />
+            {t("quickStart.favorites")}
+          </button>
+        </nav>
+        {drawer !== null && (
+          <QuickStartDrawer
+            kind={drawer}
+            items={
+              drawer === "recents"
+                ? state.recents.map((item) => ({
+                    ...item,
+                    kind: "recent" as const,
+                  }))
+                : state.favorites.map((item) => ({
+                    ...item,
+                    kind: "favorite" as const,
+                  }))
+            }
+            busy={busy}
+            onClose={() => setDrawer(null)}
+            onStart={(quick) => void start(quick)}
+            onPin={(quick) => void pin(quick)}
+            onUnpin={(id) => void unpin(id)}
+          />
+        )}
+
         {/* First, because it decides where everything below is filed. A draft
             in the form is kept across a switch; its project may not exist in
             the next workspace, which the picker then shows as unset. */}
@@ -433,6 +498,7 @@ export function TrackerScreen({
           activeWorkspaceId={state.activeWorkspaceId}
           disabled={busy}
           onSwitch={(workspaceId) => {
+            setClientId(undefined);
             setProjectId(null);
             setTaskId(null);
             setTagIds([]);
@@ -456,88 +522,117 @@ export function TrackerScreen({
         {/* One form for both states. The fields are the same either way — a
             draft's and a running entry's — so splitting them into two blocks
             would mean two places for every field to drift out of step. */}
-        <form
-          id="tracker-form"
-          className="form"
-          onSubmit={submit}
-          data-testid={
-            running === null ? "tracker-start-form" : "tracker-running"
-          }
-        >
-          {running !== null ? (
-            <div className="tracker-clock">
-              <span className="elapsed" data-testid="tracker-elapsed">
-                {formatElapsed(elapsedSec, durationFormat, locale)}
-              </span>
-              <TimeField
-                label={t("fields.startTime")}
-                value={running.start}
-                zone={running.timeZone ?? deviceTimeZone()}
-                timeFormat={state.settings?.timeFormat ?? "24h"}
-                onCommit={(start) => patchRunning({ start })}
-                testId="tracker-start-time"
-              />
-            </div>
-          ) : null}
+        {running !== null ? (
+          <form
+            id="tracker-form"
+            className="form"
+            onSubmit={submit}
+            data-testid={
+              running === null ? "tracker-start-form" : "tracker-running"
+            }
+          >
+            {running !== null ? (
+              <div className="tracker-clock">
+                <span className="elapsed" data-testid="tracker-elapsed">
+                  {formatElapsed(elapsedSec, durationFormat, locale)}
+                </span>
+                <TimeField
+                  label={t("fields.startTime")}
+                  value={running.start}
+                  zone={running.timeZone ?? deviceTimeZone()}
+                  timeFormat={state.settings?.timeFormat ?? "24h"}
+                  onCommit={(start) => patchRunning({ start })}
+                  testId="tracker-start-time"
+                />
+              </div>
+            ) : null}
 
-          <DescriptionField
-            id="description"
-            label={t("fields.description")}
-            value={description}
-            // A draft has nothing settled behind it, so it compares against
-            // itself: leaving an untouched field then writes nothing, and
-            // Escape has nothing to restore it to.
-            committed={running?.description ?? description}
-            placeholder={t("tracker.descriptionPlaceholder")}
-            autoFocus
-            suggestions={state.descriptions ?? []}
-            suggestionsFor={state.descriptionsFor}
-            onSearch={onSearchDescriptions}
-            onType={setDescription}
-            onCommit={commitDescription}
-            onFill={fillFromSuggestion}
-            testId="tracker-description"
-          />
+            <DescriptionField
+              id="description"
+              label={t("fields.description")}
+              value={description}
+              // A draft has nothing settled behind it, so it compares against
+              // itself: leaving an untouched field then writes nothing, and
+              // Escape has nothing to restore it to.
+              committed={running?.description ?? description}
+              placeholder={t("tracker.descriptionPlaceholder")}
+              autoFocus
+              suggestions={state.descriptions ?? []}
+              suggestionsFor={state.descriptionsFor}
+              onSearch={onSearchDescriptions}
+              onType={setDescription}
+              onCommit={commitDescription}
+              onFill={fillFromSuggestion}
+              testId="tracker-description"
+            />
 
-          <ProjectPicker
-            projects={state.projects}
-            clients={state.clients}
-            value={projectId}
-            onChange={selectProject}
-            busy={busy}
-            onCreateClient={onCreateClient}
-            onCreateProject={onCreateProject}
-            onPendingChange={panels.track("project")}
-            testId="tracker-project"
-          />
+            <ProjectPicker
+              projects={state.projects}
+              clients={state.clients}
+              value={projectId}
+              onChange={selectProject}
+              busy={busy}
+              onCreateClient={onCreateClient}
+              onCreateProject={onCreateProject}
+              onPendingChange={panels.track("project")}
+              testId="tracker-project"
+            />
 
-          <TaskPicker
-            tasks={tasks}
-            value={taskId}
-            onChange={selectTask}
-            onCreate={onCreateTask}
-            onPendingChange={panels.track("task")}
-            testId="tracker-task"
-          />
+            <ClientPicker
+              state={state}
+              value={clientId}
+              projectId={projectId}
+              onChange={(next) => {
+                setClientId(next);
+                patchRunning({ clientId: next });
+              }}
+              onCreate={onCreateClient}
+              testId="tracker-client"
+            />
 
-          <TagPicker
-            tags={state.tags}
-            value={tagIds}
-            onChange={selectTags}
-            onCreate={onCreateTag}
-            onPendingChange={panels.track("tags")}
-            testId="tracker-tags"
-          />
+            <TaskPicker
+              tasks={tasks}
+              value={taskId}
+              onChange={selectTask}
+              onCreate={onCreateTask}
+              onPendingChange={panels.track("task")}
+              testId="tracker-task"
+            />
 
-          <Switch
-            checked={billable}
-            onChange={toggleBillable}
-            label={billable ? t("fields.billable") : t("fields.notBillable")}
-            variant="struck"
-            currency={state.settings?.currency}
-            testId="tracker-billable"
-          />
-        </form>
+            <TagPicker
+              tags={state.tags}
+              value={tagIds}
+              onChange={selectTags}
+              onCreate={onCreateTag}
+              onPendingChange={panels.track("tags")}
+              testId="tracker-tags"
+            />
+
+            <Switch
+              checked={billable}
+              onChange={toggleBillable}
+              label={billable ? t("fields.billable") : t("fields.notBillable")}
+              variant="struck"
+              currency={state.settings?.currency}
+              testId="tracker-billable"
+            />
+          </form>
+        ) : (
+          <section className="new-timer" aria-labelledby="new-timer-title">
+            <h2 id="new-timer-title">{t("tracker.newTimer")}</h2>
+            <p className="popup__hint">{t("tracker.newTimerHint")}</p>
+            <button
+              type="button"
+              className="button button--primary button--block new-timer__start"
+              disabled={busy}
+              onClick={() => void start()}
+              data-testid="tracker-start"
+            >
+              <Play size={20} aria-hidden="true" />
+              {t("tracker.newTimer")}
+            </button>
+          </section>
+        )}
 
         <p className="today">
           <span>{t("tracker.today")}</span>
@@ -548,19 +643,6 @@ export function TrackerScreen({
 
         {/* Hidden while a timer runs, where the row would only offer to stop
             this one and start another. */}
-        {running === null ? (
-          <QuickStartList
-            items={state.quickStarts}
-            disabled={busy || panels.any}
-            onSelect={selectQuick}
-            onPin={(quick) => {
-              void pin(quick);
-            }}
-            onUnpin={(id) => {
-              void unpin(id);
-            }}
-          />
-        ) : null}
 
         <HeldQueue rows={state.heldSync} onDiscard={onDiscardHeld} t={t} />
 
@@ -575,19 +657,17 @@ export function TrackerScreen({
       </div>
 
       <div className="footer">
-        <button
-          className={
-            running === null
-              ? "button button--primary button--block"
-              : "button button--danger button--block"
-          }
-          type="submit"
-          form="tracker-form"
-          disabled={busy || panels.any}
-          data-testid={running === null ? "tracker-start" : "tracker-stop"}
-        >
-          {running === null ? t("tracker.start") : t("tracker.stop")}
-        </button>
+        {running !== null && (
+          <button
+            className="button button--danger button--block"
+            type="submit"
+            form="tracker-form"
+            disabled={busy || panels.any}
+            data-testid="tracker-stop"
+          >
+            {t("tracker.stop")}
+          </button>
+        )}
         <div className="footer__row">
           <span
             className="status"

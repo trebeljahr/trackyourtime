@@ -14,7 +14,7 @@
 import type { PopupView } from "../lib/messaging";
 
 export type SettingsSection =
-  | "general"
+  "general"
   | "idle"
   | "limits"
   | "devices"
@@ -32,6 +32,7 @@ export type SettingsSection =
  */
 export type EntryDraft = {
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable: boolean;

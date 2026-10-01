@@ -1,3 +1,4 @@
+import { Client } from "../../models/Client.js";
 // Validating the project/task an entry points at.
 import { Project, type ProjectDocLike } from "../../models/Project.js";
 import { Task } from "../../models/Task.js";
@@ -47,3 +48,47 @@ export const resolveRefs = async (
 
   return { projectId, taskId, project };
 };
+
+/** Explicit null clears the client; omission keeps legacy project defaults. */
+export async function resolveClientId(
+  workspaceId: string,
+  clientId: string | null | undefined,
+  project: ProjectDocLike | null,
+): Promise<string | null> {
+  const resolved =
+    clientId === undefined ? (project?.clientId ?? null) : clientId;
+  if (
+    resolved !== null &&
+    !(await Client.exists({
+      _id: requireObjectId(resolved, "Client not found"),
+      workspaceId,
+    }))
+  ) {
+    throw notFound("Client not found");
+  }
+  return resolved;
+}
+
+/** Mongo expression preserves explicit 'no client' while reading old records. */
+export const entryClientExpression = {
+  $cond: [
+    { $eq: [{ $type: "$clientId" }, "missing"] },
+    "$project.clientId",
+    "$clientId",
+  ],
+};
+
+export function clientEntryFilter(
+  clientIds: readonly string[],
+  legacyProjectIds: readonly string[],
+): Record<string, unknown> {
+  return {
+    $or: [
+      { clientId: { $in: [...clientIds] } },
+      {
+        clientId: { $exists: false },
+        projectId: { $in: [...legacyProjectIds] },
+      },
+    ],
+  };
+}

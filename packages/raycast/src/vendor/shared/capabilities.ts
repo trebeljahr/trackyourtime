@@ -19,6 +19,7 @@
  * `capabilities.test.ts` in core fails when a level has no capability.
  */
 export const REQUIRES_API_LEVEL = {
+  "entries.client": 7,
   /** The version handshake itself: `apiLevel` on `/api/health`, `CLIENT_TOO_OLD`. */
   "version-handshake": 1,
   /** `entries.discard`, the undo of a start. */
@@ -84,4 +85,3 @@ export const serverSupports = (
  */
 export const highestCapabilityLevel = (): number =>
   Math.max(...Object.values(REQUIRES_API_LEVEL));
-

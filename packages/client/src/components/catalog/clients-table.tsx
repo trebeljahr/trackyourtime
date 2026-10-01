@@ -103,8 +103,14 @@ export function ClientsTable({
   );
 
   const stats = React.useMemo(
-    () => clientStatsByClientId(projects),
-    [projects],
+    () => {
+      const rows = clientStatsByClientId(projects);
+      for (const client of clients) {
+        if (client.totalSec !== undefined) rows.set(client.id, {projectCount: rows.get(client.id)?.projectCount ?? 0, totalSec: client.totalSec, entryCount: client.entryCount ?? 0});
+      }
+      return rows;
+    },
+    [projects, clients],
   );
 
   const pendingStats = pendingDelete

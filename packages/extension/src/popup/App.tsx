@@ -70,7 +70,8 @@ const REFRESH_MS = 3000;
  */
 const DRAFT_MEMORY_DEBOUNCE_MS = 500;
 
-export function App({ initialState = null }: { initialState?: BackgroundState | null }): JSX.Element {
+export function App({ initialState = null }: { initialState?: BackgroundState | null;
+}): JSX.Element {
   const t = useT("popup");
   const [state, setState] = useState<BackgroundState | null>(initialState);
   const stateRef = useRef(state);
@@ -527,6 +528,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
       const ok = await send({
         type: "entry:create",
         description: draft.description.trim(),
+        clientId: draft.clientId,
         projectId: draft.projectId,
         taskId: draft.taskId,
         billable: draft.billable,
@@ -597,6 +599,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
         end: Date.parse(draft.end),
         edited: true,
         description: draft.description.trim(),
+        clientId: draft.clientId,
         projectId: draft.projectId,
         taskId: draft.taskId,
         billable: draft.billable,
@@ -741,7 +744,9 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
   return (
     <div className="popup">
       <VersionBanner compatibility={state.compatibility} t={t} />
-      {state.originTrusted === false ? <OriginNotTrustedNotice apiUrl={state.apiUrl} /> : null}
+      {state.originTrusted === false ? (
+        <OriginNotTrustedNotice apiUrl={state.apiUrl} />
+      ) : null}
       {state.signedIn ? (
         <CatalogEditProvider value={catalogEdit}>
           <Screens
@@ -749,9 +754,12 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
             tracker={{
               state,
               error,
-              onStart: (description, projectId, taskId, billable, tagIds) =>
+              onStart: (description, projectId, taskId, billable, tagIds,
+                clientId,
+              ) =>
                 send({
                   type: "timer:start",
+                  clientId,
                   description,
                   projectId,
                   taskId,

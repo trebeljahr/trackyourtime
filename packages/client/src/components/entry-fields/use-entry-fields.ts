@@ -39,6 +39,7 @@ export const useEntryFields = (
 export type WriteThroughEntry = {
   id: string;
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable: boolean;

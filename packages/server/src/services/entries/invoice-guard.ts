@@ -9,6 +9,7 @@
  * time no longer has, with nothing on screen to say the two had diverged.
  */
 export const INVOICE_RELEVANT_FIELDS = [
+  "clientId",
   "projectId",
   "taskId",
   "billable",

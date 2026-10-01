@@ -199,7 +199,8 @@ async function loadCatalog(workspaceId: string): Promise<CatalogIndex> {
     projectNameById: new Map(),
   };
 
-  for (const client of clients) index.clients.set(lower(client.name), String(client._id));
+  for (const client of clients)
+    index.clients.set(lower(client.name), String(client._id));
   for (const project of projects) {
     const id = String(project._id);
     index.projects.set(lower(project.name), {
@@ -398,7 +399,9 @@ function hintsFromDoc(doc: WorkspaceExport | null): CatalogHints {
     if (client?.name && client.color) {
       hints.clientColor.set(lower(client.name), client.color);
     }
-    const billing = client?.name ? normalizeClientBilling(client.billing) : null;
+    const billing = client?.name
+      ? normalizeClientBilling(client.billing)
+      : null;
     if (client?.name && billing) {
       hints.clientBilling.set(lower(client.name), billing);
     }
@@ -417,7 +420,8 @@ function hintsFromDoc(doc: WorkspaceExport | null): CatalogHints {
     });
   }
   for (const task of doc.tasks) {
-    if (task?.name && task.color) hints.taskColor.set(lower(task.name), task.color);
+    if (task?.name && task.color)
+      hints.taskColor.set(lower(task.name), task.color);
   }
   for (const tag of doc.tags) {
     if (tag?.name && tag.color) hints.tagColor.set(lower(tag.name), tag.color);
@@ -432,7 +436,10 @@ function hintsFromDoc(doc: WorkspaceExport | null): CatalogHints {
  * half per call: a second independent parse is a second thing that can
  * disagree with the preview the user approved.
  */
-const workspaceDoc = (parsed: ParsedFile, text: string): WorkspaceExport | null =>
+const workspaceDoc = (
+  parsed: ParsedFile,
+  text: string,
+): WorkspaceExport | null =>
   parsed.format === "workspace-json" ? workspaceJsonCatalog(text) : null;
 
 /**
@@ -503,12 +510,15 @@ export function profileKeysToDrop(
   dropped: ReadonlySet<string>,
 ): readonly (keyof ImportedBusinessProfile)[] | null {
   if (path === "defaultTaxCategory" || path === "defaultTaxRate") {
-    if (!dropped.has("defaultTaxCategory")) return ["defaultTaxCategory", "defaultTaxRate"];
+    if (!dropped.has("defaultTaxCategory"))
+      return ["defaultTaxCategory", "defaultTaxRate"];
     if (!dropped.has("smallBusiness")) return ["smallBusiness"];
     return null;
   }
   if (path === "electronicAddress" || path === "electronicAddressScheme") {
-    return dropped.has("electronicAddress") ? null : ["electronicAddress", "electronicAddressScheme"];
+    return dropped.has("electronicAddress")
+      ? null
+      : ["electronicAddress", "electronicAddressScheme"];
   }
   return dropped.has(path) ? null : [path as keyof ImportedBusinessProfile];
 }
@@ -529,7 +539,8 @@ export async function restoreBusinessProfile(
   // after the identity, and independently of whether the identity could be
   // restored. A file that says nothing about it leaves the stored one alone.
   const { logo, ...identity } = profile;
-  if (Object.keys(identity).length > 0) await restoreBusinessIdentity(workspaceId, identity);
+  if (Object.keys(identity).length > 0)
+    await restoreBusinessIdentity(workspaceId, identity);
   if (logo === undefined) return;
   if (logo === null) {
     await clearBusinessLogo(workspaceId);
@@ -540,7 +551,9 @@ export async function restoreBusinessProfile(
   if (!inspected?.ok) {
     // The parser already left an unreadable logo out; this is the same
     // rule for a caller that hands the file's value over directly.
-    console.warn(`[import] business logo not restored for ${workspaceId}: not a PNG or JPEG the invoice can print`);
+    console.warn(
+      `[import] business logo not restored for ${workspaceId}: not a PNG or JPEG the invoice can print`,
+    );
     return;
   }
   await setBusinessLogo(workspaceId, inspected.logo);
@@ -554,7 +567,10 @@ async function restoreBusinessIdentity(
   const dropped = new Set<string>();
   for (;;) {
     try {
-      await saveBusinessProfile(workspaceId, remaining as ImportedBusinessProfile);
+      await saveBusinessProfile(
+        workspaceId,
+        remaining as ImportedBusinessProfile,
+      );
       break;
     } catch (error) {
       if (!(error instanceof BusinessProfileInvalidError)) throw error;
@@ -601,24 +617,33 @@ async function restoreFavorites(args: {
 
   const existing = await Favorite.find(
     { workspaceId, userId },
-    { description: 1, projectId: 1, taskId: 1, billable: 1 },
+    { description: 1, clientId: 1, projectId: 1, taskId: 1, billable: 1 },
   ).lean();
 
   const plan = planFavoriteRestore({
     favorites,
-    existing: existing.map(
-      (favorite): QuickStart => ({
-        description: favorite.description,
-        projectId: favorite.projectId ?? null,
-        taskId: favorite.taskId ?? null,
-        billable: favorite.billable,
-      }),
-    ),
+    existing: existing.map((favorite): QuickStart => ({
+      description: favorite.description,
+      clientId:
+        favorite.clientId === undefined
+          ? (catalog.projects.get(
+              lower(
+                catalog.projectNameById.get(favorite.projectId ?? "") ?? "",
+              ),
+            )?.clientId ?? null)
+          : favorite.clientId,
+      projectId: favorite.projectId ?? null,
+      taskId: favorite.taskId ?? null,
+      billable: favorite.billable,
+    })),
     resolve: (favorite) => {
       const project = favorite.projectName
         ? (catalog.projects.get(lower(favorite.projectName)) ?? null)
         : null;
       return {
+        clientId: favorite.clientName
+          ? (catalog.clients.get(lower(favorite.clientName)) ?? null)
+          : null,
         projectId: project?.id ?? null,
         taskId:
           project && favorite.taskName
@@ -736,7 +761,9 @@ async function createMissingCatalog(args: {
   for (const [key, name] of projectNames) {
     if (catalog.projects.has(key)) continue;
     const clientKey = projectClient.get(key) ?? null;
-    const clientId = clientKey ? (catalog.clients.get(clientKey) ?? null) : null;
+    const clientId = clientKey
+      ? (catalog.clients.get(clientKey) ?? null)
+      : null;
     const hourlyRate = hints.projectRate.get(key) ?? null;
     const billableDefault = hints.projectBillable.get(key) ?? true;
     const extras = hints.projectExtras.get(key);
@@ -802,7 +829,11 @@ async function createMissingCatalog(args: {
 
 const summarize = (
   rows: readonly ImportRow[],
-): { totalSec: number; firstStart: string | null; lastStart: string | null } => {
+): {
+  totalSec: number;
+  firstStart: string | null;
+  lastStart: string | null;
+} => {
   let totalSec = 0;
   let first: string | null = null;
   let last: string | null = null;
@@ -945,7 +976,9 @@ async function buildWorkspaceExport(args: {
             const values = normalizeBusinessProfile(doc);
             const logo = storedLogoOf(doc?.logo);
             if (isIdentityEmpty(values) && !logo) return undefined;
-            return logo ? { ...values, logo: logoToWire(logo).dataUrl } : values;
+            return logo
+              ? { ...values, logo: logoToWire(logo).dataUrl }
+              : values;
           })
       : Promise.resolve(undefined),
   ]);
@@ -981,9 +1014,11 @@ async function buildWorkspaceExport(args: {
     const project = entry.projectId ? projectById.get(entry.projectId) : null;
     return {
       description: entry.description ?? "",
-      clientName: project?.clientId
-        ? (clientNameById.get(project.clientId) ?? null)
-        : null,
+      clientName:
+        clientNameById.get(
+          (entry.clientId === undefined ? project?.clientId : entry.clientId) ??
+            "",
+        ) ?? null,
       projectName: project?.name ?? null,
       taskName: entry.taskId ? (taskNameById.get(entry.taskId) ?? null) : null,
       tagNames: (entry.tagIds ?? [])
@@ -1006,9 +1041,12 @@ async function buildWorkspaceExport(args: {
         : null;
       return {
         description: favorite.description,
-        clientName: project?.clientId
-          ? (clientNameById.get(project.clientId) ?? null)
-          : null,
+        clientName:
+          clientNameById.get(
+            (favorite.clientId === undefined
+              ? project?.clientId
+              : favorite.clientId) ?? "",
+          ) ?? null,
         projectName: project?.name ?? null,
         taskName: favorite.taskId
           ? (taskNameById.get(favorite.taskId) ?? null)
@@ -1046,9 +1084,13 @@ async function buildWorkspaceExport(args: {
         hourlyRate: line.hourlyRate,
         currency: line.currency,
         amount: line.amount,
-        ...(typeof line.quantity === "number" ? { quantity: line.quantity } : {}),
+        ...(typeof line.quantity === "number"
+          ? { quantity: line.quantity }
+          : {}),
         ...(line.unit ? { unit: line.unit } : {}),
-        ...(typeof line.unitPrice === "number" ? { unitPrice: line.unitPrice } : {}),
+        ...(typeof line.unitPrice === "number"
+          ? { unitPrice: line.unitPrice }
+          : {}),
         ...(line.taxCategory
           ? { taxCategory: line.taxCategory, taxRate: line.taxRate ?? 0 }
           : {}),
@@ -1301,6 +1343,9 @@ export const dataRouter = router({
           workspaceId,
           authorId: ctx.user.id,
           description: row.description,
+          clientId: row.clientName
+            ? (catalog.clients.get(lower(row.clientName)) ?? null)
+            : null,
           projectId: project?.id ?? null,
           taskId,
           billable,
@@ -1514,17 +1559,19 @@ export const dataRouter = router({
           result.projectsDeleted += 1;
         }
         for (const id of batch.clientIds) {
-          const used = await Project.exists({ workspaceId, clientId: id });
+          const used =
+            (await Project.exists({ workspaceId, clientId: id })) ||
+            (await TimeEntry.exists({ workspaceId, clientId: id })) ||
+            (await Favorite.exists({ workspaceId, clientId: id }));
           if (used) continue;
           await Client.deleteOne({ _id: id, workspaceId });
           result.clientsDeleted += 1;
         }
       }
 
-      await ImportBatch.updateOne(
-        batchFilter,
-        { $set: { undoneAt: new Date() } },
-      );
+      await ImportBatch.updateOne(batchFilter, {
+        $set: { undoneAt: new Date() },
+      });
 
       void publishSync(
         workspaceId,

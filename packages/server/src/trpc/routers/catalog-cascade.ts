@@ -94,6 +94,14 @@ export async function cascadeDeleteClient(
     { workspaceId, clientId },
     { $set: { clientId: null } },
   );
+  await TimeEntry.updateMany(
+    { workspaceId, clientId },
+    { $set: { clientId: null } },
+  );
+  await Favorite.updateMany(
+    { workspaceId, clientId },
+    { $set: { clientId: null } },
+  );
   await Client.deleteOne({ _id: clientId, workspaceId });
 
   return { ...EMPTY_RESULT, projectsDetached: detached.modifiedCount };

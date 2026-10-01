@@ -114,6 +114,7 @@ export type ApiClientOptions = {
    */
   clientVersion?: string;
   fetchImpl?: typeof fetch;
+  serverApiLevel?: () => number | null | Promise<number | null>;
   /**
    * The workspace this client is pointed at, read per request.
    *
@@ -160,7 +161,8 @@ export type ApiClient = {
 
 type TrpcEnvelope = {
   result?: { data?: unknown };
-  error?: { message?: string; data?: { code?: string; versionRefusal?: unknown } };
+  error?: { message?: string; data?: { code?: string; versionRefusal?: unknown };
+  };
 };
 
 const unwrap = (body: unknown, httpStatus: number): unknown => {
@@ -186,6 +188,7 @@ export const createApiClient = ({
   clientVersion,
   fetchImpl,
   workspaceId,
+  serverApiLevel,
 }: ApiClientOptions): ApiClient => {
   const doFetch =
     fetchImpl ?? (globalThis as { fetch?: typeof fetch }).fetch?.bind(globalThis);
@@ -207,8 +210,13 @@ export const createApiClient = ({
   const call = async <TResult>(
     path: string,
     raw: unknown,
-    method: "GET" | "POST"
+    method: "GET" | "POST",
   ): Promise<TResult> => {
+    assertEntryClientSupported(
+      path,
+      raw,
+      serverApiLevel ? await serverApiLevel() : null,
+    );
     const input = workspaceId ? withWorkspaceId(raw, workspaceId()) : raw;
     const url = new URL(`${baseUrl.replace(/\/$/, "")}/api/trpc/${path}`);
     if (method === "GET" && input !== undefined) {
@@ -230,7 +238,7 @@ export const createApiClient = ({
       throw new ApiError(
         `Request to ${path} failed (${response.status})`,
         "PARSE_ERROR",
-        response.status
+        response.status,
       );
     }
 
@@ -242,3 +250,30 @@ export const createApiClient = ({
     mutate: (path, input) => call(path, input, "POST"),
   };
 };
+
+/** Refuse an independent client rather than let an older server discard it. */
+export function assertEntryClientSupported(
+  path: string,
+  input: unknown,
+  level: number | null,
+): void {
+  if (
+    level !== null &&
+    level < 7 &&
+    [
+      "entries.start",
+      "entries.create",
+      "entries.update",
+      "favorites.create",
+    ].includes(path) &&
+    typeof input === "object" &&
+    input !== null &&
+    (input as { clientId?: unknown }).clientId !== undefined
+  ) {
+    throw new ApiError(
+      "Update the server to edit a timer's client independently of its project.",
+      "PRECONDITION_FAILED",
+      412,
+    );
+  }
+}

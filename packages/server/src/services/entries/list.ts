@@ -1,3 +1,4 @@
+import { clientEntryFilter, entryClientExpression } from "./refs.js";
 // Reading entries: the paginated list, the "recent things" collapse, and one
 // entry by id.
 import mongoose, { Types, type PipelineStage } from "mongoose";
@@ -154,9 +155,7 @@ export async function listEntries(
       .select("_id")
       .lean();
     const viaClients = clientProjects.map((project) => String(project._id));
-    projectIds = projectIds
-      ? projectIds.filter((id) => viaClients.includes(id))
-      : viaClients;
+    conditions.push(clientEntryFilter(input.clientIds, viaClients));
   }
   if (projectIds) conditions.push({ projectId: { $in: projectIds } });
 
@@ -242,7 +241,7 @@ export async function listEntries(
       $addFields: {
         clientOid: {
           $convert: {
-            input: "$project.clientId",
+            input: entryClientExpression,
             to: "objectId",
             onError: null,
             onNull: null,
@@ -322,6 +321,7 @@ export async function recentEntries(
     .limit(RECENT_SCAN_LIMIT)
     .select({
       description: 1,
+      clientId: 1,
       projectId: 1,
       taskId: 1,
       billable: 1,
@@ -333,6 +333,7 @@ export async function recentEntries(
   const entries: RecentSourceEntry[] = rows.map((row) => ({
     id: String(row._id),
     description: row.description,
+    ...(row.clientId !== undefined ? { clientId: row.clientId } : {}),
     projectId: row.projectId ?? null,
     taskId: row.taskId ?? null,
     billable: row.billable,
@@ -416,6 +417,7 @@ export async function entryDescriptions(
     .limit(RECENT_SCAN_LIMIT)
     .select({
       description: 1,
+      clientId: 1,
       projectId: 1,
       taskId: 1,
       billable: 1,
@@ -428,6 +430,7 @@ export async function entryDescriptions(
   const entries: DescriptionSourceEntry[] = rows.map((row) => ({
     id: String(row._id),
     description: row.description,
+    ...(row.clientId !== undefined ? { clientId: row.clientId } : {}),
     projectId: row.projectId ?? null,
     taskId: row.taskId ?? null,
     billable: row.billable,

@@ -99,6 +99,7 @@ export function planFavoriteRestore(args: {
   existing: readonly QuickStart[];
   /** Names → ids in the DESTINATION workspace; unresolved reads as null. */
   resolve: (favorite: WorkspaceExportFavorite) => {
+    clientId?: string | null;
     projectId: string | null;
     taskId: string | null;
   };
@@ -114,9 +115,10 @@ export function planFavoriteRestore(args: {
   const ordered = [...favorites].sort((a, b) => a.order - b.order);
 
   for (const favorite of ordered) {
-    const { projectId, taskId } = resolve(favorite);
+    const { clientId, projectId, taskId } = resolve(favorite);
     const quick: QuickStart = {
       description: favorite.description.trim().slice(0, 500),
+      ...(clientId !== undefined ? { clientId } : {}),
       projectId,
       // A task without its project addresses nothing: task names are unique
       // within a project, so a resolved task id is only meaningful with one.

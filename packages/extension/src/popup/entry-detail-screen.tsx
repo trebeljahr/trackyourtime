@@ -55,6 +55,7 @@ export type EntryDetailScreenProps = {
 
 const draftFrom = (entry: DetailedEntry): EntryDraft => ({
   description: entry.description,
+  clientId: entry.clientId,
   projectId: entry.projectId,
   taskId: entry.taskId,
   billable: entry.billable,

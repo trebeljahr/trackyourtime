@@ -28,6 +28,7 @@ import {
   orNone,
   orNull,
   projectField,
+  clientField,
   tagsField,
   taskField,
   useEntryCatalog,
@@ -42,6 +43,7 @@ type Props = {
 
 type FormValues = {
   description: string;
+  clientId?: string;
   projectId?: string;
   taskId?: string;
   tagIds?: string[];
@@ -56,6 +58,7 @@ export function LogTime({ onSaved }: Props): React.JSX.Element {
   // recomputing them mid-edit would move a range the user is already reading.
   const [range] = useState(defaultManualRange);
 
+  const [clientId, setClientId] = useState<string>(NONE);
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState<string>(NONE);
   const [taskId, setTaskId] = useState<string>(NONE);
@@ -67,6 +70,7 @@ export function LogTime({ onSaved }: Props): React.JSX.Element {
   // Gated on the server's declared API level, never its release: a store
   // build is often newer than a self-hosted server. docs/versioning.md →
   // "Gating a feature on the server".
+  const offersClient = useServerLevel().supports("entries.client");
   const offersDescriptions = useServerLevel().supports("entries.descriptions");
 
   // Same rule as starting a timer: a project's billable default applies until
@@ -105,6 +109,7 @@ export function LogTime({ onSaved }: Props): React.JSX.Element {
       const api = await getTrackYourTime();
       const entry = await api.create({
         description: values.description.trim(),
+        ...(offersClient ? {clientId: orNull(values.clientId)} : {}),
         projectId: orNull(values.projectId),
         taskId: orNull(values.taskId),
         tagIds: values.tagIds ?? [],
@@ -146,6 +151,7 @@ export function LogTime({ onSaved }: Props): React.JSX.Element {
                   onPick={setDescription}
                   onAdopt={(suggestion) => {
                     setDescription(suggestion.description);
+                    setClientId(orNone(suggestion.clientId));
                     setProjectId(orNone(suggestion.projectId));
                     setTaskId(orNone(suggestion.taskId));
                     setTagIds([...suggestion.tagIds]);
@@ -172,6 +178,7 @@ export function LogTime({ onSaved }: Props): React.JSX.Element {
         info="⌘⇧D searches what you have tracked before."
       />
       {projectField(catalog, projectId, setProjectId)}
+      {offersClient && clientField(catalog, clientId, setClientId)}
       {taskField(catalog, taskId, setTaskId)}
       {tagsField(catalog, tagIds, setTagIds)}
       <Form.Checkbox id="billable" label="Billable" value={billable} onChange={setBillable} />

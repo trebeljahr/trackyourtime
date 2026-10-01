@@ -187,6 +187,7 @@ export const loadShapeContext = async (): Promise<EntryShapeContext> => {
   const cache = await loadCache();
   const tasks: ShapeableTask[] = cache.tasks;
   return {
+    clients: cache.clients,
     projects: cache.projects,
     tasks,
     settings: cache.settings

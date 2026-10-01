@@ -1,6 +1,6 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { httpBatchLink, type TRPCLink } from "@trpc/client";
-import { CLIENT_TOO_OLD, versionHeaders, withWorkspaceId } from "@starter/core";
+import { assertEntryClientSupported, CLIENT_TOO_OLD, versionHeaders, withWorkspaceId } from "@starter/core";
 import type { AppRouter } from "@starter/server/trpc";
 import { clientId, isTokenShell } from "@/lib/shell";
 import { getNativeToken } from "@/lib/native-session";
@@ -11,7 +11,7 @@ import {
   whenActiveWorkspaceReady,
 } from "@/lib/active-workspace";
 import { APP_VERSION } from "@/lib/app-version";
-import { noteClientTooOld } from "@/lib/server-level";
+import { currentServerApiLevel, noteClientTooOld } from "@/lib/server-level";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -36,6 +36,7 @@ export const PENDING_WORKSPACE = "trackyourtime:pending-workspace";
  * reset the cache (`resetWorkspaceCaches`) rather than rely on new keys.
  */
 export const workspaceLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => {
+  assertEntryClientSupported(op.path, op.input, currentServerApiLevel());
   const input = isActiveWorkspaceReady()
     ? withWorkspaceId(op.input, getActiveWorkspaceId())
     : withWorkspaceId(op.input, PENDING_WORKSPACE);

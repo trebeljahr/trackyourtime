@@ -20,10 +20,13 @@ const state = {
   clients: [{ id: "c1", name: "Acme", color: "#22c55e" }],
   tasks: [{ id: "t1", name: "Design", color: "#3b82f6" }],
   tags: [],
-  quickStarts: [
+  compatibility: { apiLevel: 7 },
+  favorites: [],
+  recents: [
     {
       kind: "recent",
       key: "recent",
+      clientId: "c1",
       description: "Landing page",
       projectId: "p1",
       taskId: "t1",
@@ -54,6 +57,12 @@ let root: Root;
 let host: HTMLDivElement;
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -67,12 +76,12 @@ const click = async (selector: string) => {
   expect(element, selector).not.toBeNull();
   await act(async () => element!.click());
 };
-const render = async () => {
+const render = async (overrides: Partial<BackgroundState> = {}) => {
   const ok = vi.fn(async () => true);
   const onStart = vi.fn(async () => true);
   const onSignOut = vi.fn(async () => true);
   const props: TrackerScreenProps = {
-    state,
+    state: { ...state, ...overrides },
     error: null,
     onStart,
     onStop: ok,
@@ -107,46 +116,75 @@ const render = async () => {
       </CatalogEditProvider>,
     ),
   );
-  return { onStart, onSignOut };
+  return { onStart, onSignOut, onUpdateRunning: ok };
 };
 
 describe("popup timer controls", () => {
-  test("a preset fills the draft; only the separate Start button starts it", async () => {
+  test("starts a blank timer from the simple opening screen", async () => {
     const { onStart } = await render();
-    await click(".quick__summary");
-    await click(".quick__start");
-    expect(onStart).not.toHaveBeenCalled();
     expect(
-      host.querySelector<HTMLInputElement>(
-        '[data-testid="tracker-description"]',
-      )?.value,
-    ).toBe("Landing page");
-    expect(
-      host.querySelector('[data-testid="tracker-project-client"]')?.textContent,
-    ).toContain("Acme");
-    expect(host.querySelectorAll(".combobox__selected-dot")).toHaveLength(2);
-    expect(host.querySelector(".billable-glyph .lucide-euro")).not.toBeNull();
+      host.querySelector('[data-testid="tracker-description"]'),
+    ).toBeNull();
+    expect(host.querySelectorAll(".timer-shortcuts button")).toHaveLength(2);
     await click('[data-testid="tracker-start"]');
+    expect(onStart).toHaveBeenCalledExactlyOnceWith(
+      "",
+      null,
+      null,
+      false,
+      [],
+      undefined,
+    );
+  });
+
+  test("Recents drawer starts the selected entry with its independent client", async () => {
+    const { onStart } = await render();
+    await click('[data-testid="open-recents"]');
+    expect(host.querySelector("dialog")?.open).toBe(true);
+    expect(onStart).not.toHaveBeenCalled();
+    await click(".quick__start");
     expect(onStart).toHaveBeenCalledExactlyOnceWith(
       "Landing page",
       "p1",
       "t1",
       true,
       [],
+      "c1",
     );
+    expect(host.querySelector("dialog")).toBeNull();
   });
 
-  test("client editor opens the selected project's client field", async () => {
+  test("Favorites drawer has its own empty state and close button", async () => {
     await render();
-    await click(".quick__start");
-    await click('[data-testid="tracker-project-client"] button');
+    await click('[data-testid="open-favorites"]');
+    expect(host.querySelector(".timer-drawer__empty")).not.toBeNull();
+    expect(host.querySelector(".quick__start")).toBeNull();
+    await click(".timer-drawer__header button");
+    expect(host.querySelector("dialog")).toBeNull();
+  });
+
+  test("running timer opens its fields and client picker", async () => {
+    await render({
+      running: {
+        id: "e1",
+        description: "Work",
+        clientId: "c1",
+        projectId: "p1",
+        taskId: "t1",
+        tagIds: [],
+        billable: false,
+        start: new Date().toISOString(),
+        end: null,
+      } as unknown as BackgroundState["running"],
+    });
     expect(
-      host.querySelector('[data-testid="tracker-project-edit-client"]'),
+      host.querySelector('[data-testid="tracker-description"]'),
     ).not.toBeNull();
     expect(
-      host.querySelector<HTMLButtonElement>('[data-testid="tracker-start"]')
-        ?.disabled,
-    ).toBe(true);
+      host.querySelector<HTMLInputElement>('[data-testid="tracker-client"]')?.value,
+    ).toContain("Acme");
+    expect(host.querySelectorAll(".combobox__selected-dot")).toHaveLength(3);
+    expect(host.querySelector(".billable-glyph .lucide-euro")).not.toBeNull();
   });
 
   test("account avatar replaces footer identity and settings cog", async () => {

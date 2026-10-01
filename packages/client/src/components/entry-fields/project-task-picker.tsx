@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Building2 } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
+import { useServerSupports } from "@/lib/server-level";
 import { withProject, withTask, type EntryFields } from "@starter/core";
 
 import { ProjectPicker } from "@/components/project-picker";
@@ -14,10 +15,11 @@ import { cn } from "@/lib/utils";
 /**
  * The client of a project, or null when there is no project or no client.
  *
- * Read off the picked project rather than stored anywhere: a client is never
- * chosen for an entry, so there is no second copy of it that could drift.
+ * Used only as a default for legacy entries without their own client.
  */
-export const useProjectClientName = (projectId: string | null): string | null => {
+export const useProjectClientName = (
+  projectId: string | null,
+): string | null => {
   const projects = trpc.projects.list.useQuery({});
   if (projectId === null) return null;
   return (
@@ -55,16 +57,7 @@ export type ProjectTaskPickerProps = {
   className?: string;
 };
 
-/**
- * Project and task, laid out together because they are read together — not
- * because either owns the other.
- *
- * The two references are independent: a task names WHAT the work was, a
- * project names what it was FOR, and every combination of the two is a legal
- * entry. So changing one never touches the other, and the client between them
- * is read off the project rather than picked. The project only narrows which
- * tasks the task picker suggests.
- */
+/** Independent project, client and task fields, shared by every entry editor. */
 export function ProjectTaskPicker({
   value,
   onChange,
@@ -78,16 +71,30 @@ export function ProjectTaskPicker({
   className,
 }: ProjectTaskPickerProps): React.JSX.Element {
   const t = useT("tracker");
+  const clients = trpc.clients.list.useQuery({});
+  const projects = trpc.projects.list.useQuery({});
+  const supportsClient = useServerSupports("entries.client");
   const tc = useT("common");
-  const clientName = useProjectClientName(value.projectId);
+  const selectedClient =
+    value.clientId === undefined
+      ? (projects.data?.find((project) => project.id === value.projectId)
+          ?.clientId ?? null)
+      : value.clientId;
 
   const handleProject = React.useCallback(
     (projectId: string | null): void => {
       const next = withProject(value, projectId);
       if (next === value) return;
-      onChange(next, { projectId: next.projectId });
+      const clientPatch =
+        supportsClient && value.clientId === undefined
+          ? { clientId: selectedClient }
+          : {};
+      onChange(
+        { ...next, ...clientPatch },
+        { projectId: next.projectId, ...clientPatch },
+      );
     },
-    [onChange, value]
+    [onChange, value, supportsClient, selectedClient],
   );
 
   const handleTask = React.useCallback(
@@ -96,75 +103,33 @@ export function ProjectTaskPicker({
       if (next === value) return;
       onChange(next, { taskId: next.taskId });
     },
-    [onChange, value]
+    [onChange, value],
   );
 
   const contents = layout === "contents";
   const control = bare ? "border-0 shadow-none" : "w-full";
   const [projectOpen, setProjectOpen] = React.useState(false);
 
-  /**
-   * The client, read-only — but a way into the project picker.
-   *
-   * Never a picker of its own: a client owns projects and an entry points at a
-   * project — so choosing one here would be a second source of truth that can
-   * disagree with the project's own client. Shown rather than chosen is what
-   * keeps "Redesign" unambiguous when two clients both have one.
-   *
-   * It still reads as a field, sitting between two pickers, and a label that
-   * ignores a click looks broken rather than derived. So clicking it opens
-   * the project picker, whose list is grouped by client: the way to move an
-   * entry to another client IS to file it under one of that client's
-   * projects, and the title says so.
-   *
-   * How much room it earns depends on where it is. In the caller's grid it
-   * owns a track that collapses to 0px on narrower viewports, so it must stay
-   * a rendered item whatever it says — `display: none` would drop it and slide
-   * every later column one track left. In the labelled form it sits under the
-   * project and says "No client" when there is none, which is information. On
-   * a bar competing for width it is neither, so it goes away entirely.
-   */
-  const clientLabel = (
-    <>
-      <Building2 className="size-3 shrink-0" aria-hidden />
-      <span className="truncate">{clientName ?? tc("empty.noClient")}</span>
-    </>
+  const client = (
+    <Combobox
+      options={(clients.data ?? []).map((client) => ({
+        value: client.id,
+        label: client.name,
+        color: client.color,
+      }))}
+      value={selectedClient}
+      onChange={(clientId) => onChange({ ...value, clientId }, { clientId })}
+      placeholder={tc("empty.noClient")}
+      allowClear
+      clearLabel={tc("empty.noClient")}
+      aria-label={tc("fields.client")}
+      disabled={disabled || !supportsClient}
+      title={!supportsClient ? t("entryFields.clientNeedsUpdate") : undefined}
+      size={size}
+      className={cn(control, "min-w-0", controlClassName)}
+      data-testid={`${testIdPrefix}-client`}
+    />
   );
-  const clientClassName = cn(
-    "min-w-0 items-center gap-1 truncate text-xs text-muted-foreground",
-    contents
-      ? "hidden min-[1140px]:flex"
-      : labelled
-        ? "flex"
-        : "hidden max-w-32 shrink lg:inline-flex"
-  );
-  const clientTitle =
-    clientName === null
-      ? tc("empty.noClient")
-      : t("entryFields.clientTitle", { name: clientName });
-  const client =
-    !contents && !labelled && clientName === null ? null : disabled ? (
-      <span
-        className={clientClassName}
-        title={clientTitle}
-        data-testid={`${testIdPrefix}-client`}
-      >
-        {clientLabel}
-      </span>
-    ) : (
-      <button
-        type="button"
-        className={cn(
-          clientClassName,
-          "cursor-pointer rounded px-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        )}
-        title={t("entryFields.clientHint", { title: clientTitle })}
-        onClick={() => setProjectOpen(true)}
-        data-testid={`${testIdPrefix}-client`}
-      >
-        {clientLabel}
-      </button>
-    );
 
   const project = (
     <ProjectPicker
@@ -204,15 +169,15 @@ export function ProjectTaskPicker({
     );
   }
 
-  // The labelled form keeps the client under the project it belongs to, which
-  // is the only placement that reads as "this project's client" rather than as
-  // a third thing to pick.
   if (labelled) {
     return (
       <div className={cn("flex flex-wrap gap-3", className)}>
         <div className="min-w-48 flex-1 space-y-2">
           <Label>{tc("fields.project")}</Label>
           {project}
+        </div>
+        <div className="min-w-48 flex-1 space-y-2">
+          <Label>{tc("fields.client")}</Label>
           {client}
         </div>
         <div className="min-w-48 flex-1 space-y-2">
@@ -224,9 +189,7 @@ export function ProjectTaskPicker({
   }
 
   return (
-    <div
-      className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}
-    >
+    <div className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}>
       {project}
       {client}
       {task}

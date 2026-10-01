@@ -3,27 +3,24 @@
 /**
  * What every client lets you say about a block of time.
  *
- * Five things decide what an entry *is* — its description, its project, its
- * task, its tags and whether it is billable — and all five are settable from
+ * Six things decide what an entry *is* — its description, its client, its project, its
+ * task, its tags and whether it is billable — and all six are settable from
  * every surface that creates or edits one: the tracker bar, the manual dialog,
  * an entry row, the calendar, the browser extension popup, the Raycast forms.
  * They live here rather than in any one of those because the RULES that hold
  * between them are not per-surface, and every place that reimplemented them
  * got at least one wrong.
  *
- * Client is deliberately absent, and is not a sixth field. An entry has no
- * client column: a client owns projects, a project owns tasks, and an entry
- * points at a project. Clients are therefore SHOWN everywhere (grouping the
- * project list, labelling the chosen project) and CHOSEN nowhere — picking one
- * directly would either be a filter wearing a field's clothes, or a second
- * source of truth that can disagree with the project's own client.
+ * Client is independent of project and task. An omitted client is a legacy
+ * record; explicit null means no client.
  *
  * Framework-free, like the rest of core — no React, no DOM, no tRPC.
  */
 
-/** The five fields that decide what an entry tracks. */
+/** The fields that decide what an entry tracks. */
 export type EntryFields = {
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable: boolean;
@@ -39,15 +36,17 @@ export const emptyEntryFields = (): EntryFields => ({
   tagIds: [],
 });
 
-/** The five fields as they stand on an existing entry. */
+/** The fields as they stand on an existing entry. */
 export const entryFieldsFrom = (entry: {
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable: boolean;
   tagIds: string[];
 }): EntryFields => ({
   description: entry.description,
+  ...(entry.clientId !== undefined ? { clientId: entry.clientId } : {}),
   projectId: entry.projectId,
   taskId: entry.taskId,
   billable: entry.billable,
@@ -72,8 +71,7 @@ export const withProject = (
 export const withTask = (
   fields: EntryFields,
   taskId: string | null,
-): EntryFields =>
-  taskId === fields.taskId ? fields : { ...fields, taskId };
+): EntryFields => (taskId === fields.taskId ? fields : { ...fields, taskId });
 
 /** Replace the whole tag set, preserving the order they were picked in. */
 export const withTags = (
@@ -90,6 +88,7 @@ export const sameTagIds = (
 /** Whether two field sets describe the same tracked thing. */
 export const sameEntryFields = (a: EntryFields, b: EntryFields): boolean =>
   a.description === b.description &&
+  a.clientId === b.clientId &&
   a.projectId === b.projectId &&
   a.taskId === b.taskId &&
   a.billable === b.billable &&

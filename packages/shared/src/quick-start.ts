@@ -19,6 +19,7 @@ import type { TimeEntry } from "./types.js";
 /** The four fields that decide what a timer is tracking. */
 export type QuickStart = {
   description: string;
+  clientId?: string | null;
   projectId: string | null;
   taskId: string | null;
   billable: boolean;
@@ -141,6 +142,7 @@ export const quickStartKey = (quick: QuickStart): string =>
     quick.projectId ?? "",
     quick.taskId ?? "",
     quick.billable ? "1" : "0",
+    ...(quick.clientId !== undefined ? [quick.clientId ?? "no-client"] : []),
   ].join(UNIT);
 
 /** True when two quick starts would open an identical entry. */
@@ -149,9 +151,11 @@ export const sameQuickStart = (a: QuickStart, b: QuickStart): boolean =>
 
 /** Narrow anything entry-shaped down to the four fields that matter. */
 export const toQuickStart = (
-  entry: Pick<TimeEntry, "description" | "projectId" | "taskId" | "billable">,
+  entry: Pick<TimeEntry,
+    "clientId" | "description" | "projectId" | "taskId" | "billable">,
 ): QuickStart => ({
   description: entry.description,
+  ...(entry.clientId !== undefined ? { clientId: entry.clientId } : {}),
   projectId: entry.projectId,
   taskId: entry.taskId,
   billable: entry.billable,
