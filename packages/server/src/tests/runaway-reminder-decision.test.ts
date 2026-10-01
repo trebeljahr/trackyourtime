@@ -118,7 +118,7 @@ test("the email reads sensibly with no description, no limit and no link", () =>
   assert.match(email.text, /"Untitled"/);
   assert.match(email.text, /If you forgot to stop it/);
   assert.doesNotMatch(email.text, /Open the tracker/);
-  assert.doesNotMatch(email.html, /href=/);
+  assert.doesNotMatch(email.html, /Open the tracker|app\/settings\?tab=account/);
 });
 
 test("the email is written in the recipient's language, with the name still escaped", () => {

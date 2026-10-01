@@ -25,7 +25,6 @@ export type RenderedEmail = {
   html: string;
 };
 
-/** Self-contained branding: no remote images, tracking pixels or hosted-service links. */
 function accountEmail(
   locale: Locale,
   kind: "verification" | "passwordReset",
@@ -44,7 +43,7 @@ function accountEmail(
     text: `Track Your Time · ${instance}\n\n${intro}\n${url}\n\n${ignore}`,
     html: emailLayout(locale, subject,
       `<p>${esc(intro)}</p>${emailAction(action, url, locale)}`,
-      esc(ignore), instance),
+      esc(ignore), frontendUrl ?? url),
   };
 }
 
@@ -86,7 +85,7 @@ export function newsletterConfirmationEmail(
 
   const html = emailLayout(locale, heading,
     `<p>${esc(lead)}</p><p>${esc(body)}</p>${emailAction(action, args.confirmUrl, locale)}`,
-    esc(ignore));
+    esc(ignore), args.confirmUrl);
 
   return {
     subject: t("newsletterConfirmation.subject", { siteName }),

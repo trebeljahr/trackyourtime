@@ -229,7 +229,7 @@ export function buildWorkspaceInvitationEmail(
     text: `${intro}\n\n${action}: ${params.url}\n\n${expiry}`,
     html: emailLayout(params.locale ?? "en", headerSafe(t("invitation.subject", values), 200),
       `<p>${escapeHtml(intro)}</p>${emailAction(action, params.url, params.locale ?? "en")}`,
-      escapeHtml(expiry)),
+      escapeHtml(expiry), params.url),
   };
 }
 
@@ -334,7 +334,7 @@ export function buildRunawayReminderEmail(
   const link = input.trackUrl ? emailAction(open, input.trackUrl, input.locale ?? "en") : "";
   const footerHtml = `${escapeHtml(footer)}${settingsUrl ? ` <a href="${escapeHtml(settingsUrl)}" style="color:#4338ca">${escapeHtml(t("runawayReminder.settingsLink"))}</a>` : ""}`;
   const html = emailLayout(input.locale ?? "en", subject,
-    `<p>${startedHtml}</p><p>${escapeHtml(why)}</p>${link}`, footerHtml);
+    `<p>${startedHtml}</p><p>${escapeHtml(why)}</p>${link}`, footerHtml, input.trackUrl ?? undefined);
 
   return { to: input.to, subject, text, html };
 }

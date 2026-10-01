@@ -80,7 +80,7 @@ describe("newsletter confirmation", () => {
 });
 
 for (const render of [verificationEmail, passwordResetEmail]) {
-  it("brands self-hosted account mail without hosted assets or tracking", () => {
+  it("links the brand and serves its real icon from the instance", () => {
     const mail = render(
       "en",
       "https://time.example.test/api/auth/verify-email?token=a&x=2",
@@ -90,7 +90,9 @@ for (const render of [verificationEmail, passwordResetEmail]) {
     assert.match(mail.html, /time.example.test/);
     assert.match(mail.html, /#4f46e5/);
     assert.ok(!mail.html.includes("trackyourtime.dev"));
-    assert.ok(!mail.html.includes("<img"));
+    assert.ok(mail.html.includes('href="https://time.example.test"'));
+    assert.ok(mail.html.includes('src="https://time.example.test/apple-icon.png"'));
+    assert.ok(!mail.html.includes("◷"));
     assert.ok(mail.html.includes("token=a&amp;x=2"));
     assert.ok(mail.text.includes("token=a&x=2"));
   });
