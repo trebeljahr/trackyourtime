@@ -456,17 +456,7 @@ export function TrackerScreen({
       />
 
       <div className="popup__body">
-        {running !== null ? (
-          <button
-            className="button button--danger button--block"
-            type="submit"
-            form="tracker-form"
-            disabled={busy || panels.any}
-            data-testid="tracker-stop"
-          >
-            {t("tracker.stop")}
-          </button>
-        ) : (
+        {running === null && (
           <nav className="timer-shortcuts" aria-label={t("quickStart.shortcuts")}>
             <button
               type="button"
@@ -552,18 +542,28 @@ export function TrackerScreen({
             }
           >
             {running !== null ? (
-              <div className="tracker-clock">
-                <span className="elapsed" data-testid="tracker-elapsed">
-                  {formatElapsed(elapsedSec, durationFormat, locale)}
-                </span>
-                <TimeField
-                  label={t("fields.startTime")}
-                  value={running.start}
-                  zone={running.timeZone ?? deviceTimeZone()}
-                  timeFormat={state.settings?.timeFormat ?? "24h"}
-                  onCommit={(start) => patchRunning({ start })}
-                  testId="tracker-start-time"
-                />
+              <div className="tracker-running-controls">
+                <div className="tracker-clock">
+                  <TimeField
+                    label={t("fields.startTime")}
+                    value={running.start}
+                    zone={running.timeZone ?? deviceTimeZone()}
+                    timeFormat={state.settings?.timeFormat ?? "24h"}
+                    onCommit={(start) => patchRunning({ start })}
+                    testId="tracker-start-time"
+                  />
+                  <span className="elapsed" data-testid="tracker-elapsed">
+                    {formatElapsed(elapsedSec, durationFormat, locale)}
+                  </span>
+                </div>
+                <button
+                  className="button button--danger button--block"
+                  type="submit"
+                  disabled={busy || panels.any}
+                  data-testid="tracker-stop"
+                >
+                  {t("tracker.stop")}
+                </button>
               </div>
             ) : null}
 

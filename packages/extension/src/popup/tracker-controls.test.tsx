@@ -233,14 +233,19 @@ describe("popup timer controls", () => {
     expect(document.documentElement.dataset.theme).toBe("light");
   });
 
-  test("running timer has Stop first and tag input before selected tags", async () => {
+  test("running timer shows start time, total, then Stop before its fields", async () => {
     await render({
       tags: [{ id: "tag1", name: "Focus", color: "#ef4444" }] as BackgroundState["tags"],
       running: { id: "e1", description: "Work", clientId: null, projectId: null,
         taskId: null, tagIds: ["tag1"], billable: false,
         start: new Date().toISOString(), end: null } as BackgroundState["running"],
     });
-    expect(host.querySelector('.popup__body > :first-child')?.getAttribute("data-testid")).toBe("tracker-stop");
+    const controls = host.querySelector('.tracker-running-controls')!;
+    const startTime = controls.querySelector('[data-testid="tracker-start-time"]')!;
+    const elapsed = controls.querySelector('[data-testid="tracker-elapsed"]')!;
+    const stop = controls.querySelector('[data-testid="tracker-stop"]')!;
+    expect(startTime.compareDocumentPosition(elapsed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(elapsed.compareDocumentPosition(stop) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(host.querySelector('.timer-shortcuts')).toBeNull();
     const input = host.querySelector('[data-testid="tracker-tags"]')!;
     const cloud = host.querySelector('[data-testid="tracker-tags-selected"]')!;

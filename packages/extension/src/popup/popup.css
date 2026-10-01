@@ -316,6 +316,7 @@ body {
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   letter-spacing: -0.01em;
+  text-align: right;
 }
 
 /* A toggle that commits the moment it is clicked, with no form to submit —
@@ -1800,14 +1801,21 @@ button.tag:hover .tag__x {
   min-width: 0;
 }
 
-/* Keep the editable start beside the live duration in the narrow popup. */
+/* Put the live time above Stop, with the total on the right. */
+.tracker-running-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
 .tracker-clock {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 4px 0 14px;
-  border-bottom: 1px solid var(--border);
+  padding-top: 4px;
 }
 
 .tracker-clock .range__field {
