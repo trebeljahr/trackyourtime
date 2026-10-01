@@ -114,23 +114,19 @@ export function SignInScreen({
         </div>
 
         {webAccount !== null && pendingDeviceAuth === null && !changingServer && onConfirmWebAccount ? (
-          <section className="panel web-account" data-testid="web-account-offer" aria-labelledby="web-account-title">
-            <h2 className="panel__title" id="web-account-title">{t("signIn.webAccountTitle")}</h2>
-            <div className="web-account__identity">
+          <button type="button" className="button button--primary button--block sign-in__web-login" disabled={busy}
+            data-testid="confirm-web-account"
+            onClick={() => void runDevice(() => onConfirmWebAccount(webAccount.userId, webAccount.sessionCreatedAt))}>
+            <span>{busy ? t("signIn.submitting") : t("signIn.autoLoginAs")}</span>
+            <span className="web-account__identity">
               <span className="web-account__avatar" aria-hidden="true">
                 {webAccount.email.charAt(0).toUpperCase()}
                 {webAccount.image ? <img key={webAccount.image} src={webAccount.image} alt="" referrerPolicy="no-referrer"
                   onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
               </span>
               <strong className="web-account__email">{webAccount.email}</strong>
-            </div>
-            <p className="panel__hint">{t("signIn.webAccountHint")}</p>
-            <button type="button" className="button button--primary button--block" disabled={busy}
-              data-testid="confirm-web-account"
-              onClick={() => void runDevice(() => onConfirmWebAccount(webAccount.userId, webAccount.sessionCreatedAt))}>
-              {busy ? t("signIn.submitting") : t("signIn.useWebAccount")}
-            </button>
-          </section>
+            </span>
+          </button>
         ) : null}
 
         {pendingDeviceAuth !== null ? (
@@ -227,18 +223,16 @@ export function SignInScreen({
             >
               {t("signIn.withWebApp")}
             </button>
-            <p className="popup__hint">{t("signIn.withWebAppHint")}</p>
-            {automaticWebUrl ? (
+            {automaticWebUrl && !webAccount ? (
               <>
                 <button
                   type="button"
-                  className="button--link"
+                  className="button button--block"
                   onClick={() => openTab(join(automaticWebUrl, "/app/track"))}
                   data-testid="open-web-app"
                 >
                   {t("signIn.openWebApp")}
                 </button>
-                <p className="popup__hint">{t("signIn.openWebAppHint")}</p>
               </>
             ) : null}
           </>

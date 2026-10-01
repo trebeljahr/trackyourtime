@@ -36,7 +36,16 @@ describe("extension sign-in choices", () => {
     expect(html).toContain('data-testid="sign-in-form"');
     expect(html).toContain("Sign in with email");
     expect(html).toContain("Sign in with a device code");
-    expect(html).not.toContain("connects automatically");
+    expect(html).toContain("Log In From Web App");
+    expect(html).not.toContain("Get a code, then");
+    expect(html).not.toContain("Already signed in on the web?");
+  });
+
+  test("shows the web account inside the login button", () => {
+    const html = renderToStaticMarkup(<SignInScreen {...props} webAccount={{ userId: "reader", sessionCreatedAt: 123, email: "reader@example.test", image: "https://example.test/avatar.png" }} onConfirmWebAccount={vi.fn()} />);
+    expect(html).toContain("Auto Log In From Web As");
+    expect(html).toContain("reader@example.test");
+    expect(html).toContain('src="https://example.test/avatar.png"');
   });
 
   test("hosted connection is available before server metadata arrives", () => {
@@ -87,12 +96,13 @@ test("shows the offered photo and email, and signs in only after confirmation", 
   const account = { userId: "u1", email: "rico@example.com", image: "https://example.com/avatar.png", sessionCreatedAt: 123 };
   try {
     await act(async () => root.render(<SignInScreen {...props} webAccount={account} onConfirmWebAccount={confirm} />));
-    const offer = container.querySelector('[data-testid="web-account-offer"]')!;
-    expect(offer.textContent).toContain("Sign in with this account?");
+    const offer = container.querySelector<HTMLButtonElement>('[data-testid="confirm-web-account"]')!;
+    expect(offer.textContent).toContain("Auto Log In From Web As");
+    expect(container.querySelector('[data-testid="open-web-app"]')).toBeNull();
     expect(offer.textContent).toContain(account.email);
     expect(offer.querySelector("img")?.getAttribute("src")).toBe(account.image);
     expect(confirm).not.toHaveBeenCalled();
-    await act(async () => (offer.querySelector("button") as HTMLButtonElement).click());
+    await act(async () => offer.click());
     expect(confirm).toHaveBeenCalledExactlyOnceWith("u1", 123);
   } finally {
     await act(async () => root.unmount());

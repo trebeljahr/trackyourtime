@@ -1976,7 +1976,7 @@ button.tag:hover .tag__x {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 12px 0;
+  margin: 0;
 }
 
 .web-account__avatar {
@@ -2004,3 +2004,5 @@ button.tag:hover .tag__x {
   overflow-wrap: anywhere;
   min-width: 0;
 }
+
+.sign-in__web-login { display: flex; flex-direction: column; gap: 8px; }
