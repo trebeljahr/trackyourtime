@@ -245,6 +245,8 @@ export const marketing = {
         "With activity capture on, the extension stores the site name of the active tab in the browser’s IndexedDB on your computer. It stores the page title only if you also switch on page titles. It deletes activity after 14 days, or after the period you set. It never records incognito tabs or the sites you exclude.",
       activityLocal:
         "The extension sends your activity nowhere. Only an entry you accept reaches the server, and that entry carries no site data.",
+      errorReports:
+        "A store build may send an error report to Track Your Time's error tracker when the popup or background fails. It contains only the error type, popup or background source, browser platform, app version and build ID. It contains no message, stack, page address, account data or activity. Firefox sends it only with the browser's diagnostic-data permission.",
       limitedUse:
         "The use of information received from Chrome APIs adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements.",
     },

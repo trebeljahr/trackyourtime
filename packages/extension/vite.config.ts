@@ -5,7 +5,7 @@ import { bundleCheck } from "./bundle-check";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { BUILD_TARGETS, RELEASE_VERSION, buildManifest, type BuildMode } from "./manifest.config";
+import { BUILD_TARGETS, RELEASE_VERSION, buildManifest, reportingConfig, type BuildMode } from "./manifest.config";
 
 const fromHere = (relative: string): string =>
   fileURLToPath(new URL(relative, import.meta.url));
@@ -65,6 +65,7 @@ const manifestPlugin = (mode: BuildMode): Plugin => ({
 export default defineConfig(({ mode }) => {
   const buildMode = resolveMode(mode);
   const target = BUILD_TARGETS[buildMode];
+  const reporting = reportingConfig(process.env.EXTENSION_SENTRY_DSN, target.engine);
 
   return {
     plugins: [react(), manifestPlugin(buildMode), bundleCheck(), watchReload()],
@@ -91,6 +92,8 @@ export default defineConfig(({ mode }) => {
       // manifest and the bundle cannot name two different versions.
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(RELEASE_VERSION),
       "import.meta.env.VITE_BUILD_ID": JSON.stringify(buildId()),
+      "import.meta.env.VITE_ERROR_REPORTING_CONFIG": JSON.stringify(reporting),
+      "import.meta.env.VITE_ERROR_REPORTING_ENABLED": JSON.stringify(Boolean(reporting)),
       // Which web origins the bridge accepts messages from — the same target
       // the manifest's `externally_connectable` was generated from.
       "import.meta.env.VITE_BRIDGE_TRANSPORT": JSON.stringify(target.engine === "gecko" ? "relay" : "external"),

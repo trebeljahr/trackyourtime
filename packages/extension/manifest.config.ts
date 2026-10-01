@@ -198,6 +198,23 @@ export const manifestVersionFields = (
 /** The environment a build reads, narrowed so no Node typings are needed. */
 export type BuildEnv = Readonly<Record<string, string | undefined>>;
 
+/** Validate the public DSN before adding its origin to the extension permissions. */
+export function reportingConfig(dsn: string | undefined, engine: "chromium" | "gecko") {
+  if (!dsn?.trim()) return null;
+  const url = new URL(dsn);
+  if (url.protocol !== "https:" || !url.username || url.password || url.search || url.hash || !/^\d+$/.test(url.pathname.split("/").filter(Boolean).at(-1) ?? "")) {
+    throw new Error("EXTENSION_SENTRY_DSN must be an HTTPS Sentry DSN with a public key and numeric project ID");
+  }
+  const project = url.pathname.split("/").filter(Boolean).at(-1);
+  const prefix = url.pathname.slice(0, url.pathname.lastIndexOf(`/${project}`));
+  return {
+    endpoint: `${url.origin}${prefix}/api/${project}/envelope/`,
+    publicKey: url.username,
+    platform: engine === "gecko" ? "firefox" as const : "chrome" as const,
+    origin: url.origin,
+  };
+}
+
 const processEnv = (): BuildEnv =>
   (globalThis as { process?: { env?: BuildEnv } }).process?.env ?? {};
 
@@ -231,6 +248,7 @@ export function buildManifest(
   const gecko = target.engine === "gecko";
   const key = gecko ? undefined : pinnedKey(target, env);
   const connectable = extensionBridgeMatchPatterns(target.bridgeTarget);
+  const reporting = reportingConfig(env.EXTENSION_SENTRY_DSN, target.engine);
 
   return {
     manifest_version: 3,
@@ -243,7 +261,7 @@ export function buildManifest(
     // WebSocket traffic only keeps an MV3 service worker alive from 116 on,
     // and the sync socket depends on that. Gecko reads neither field.
     ...(gecko
-      ? { browser_specific_settings: { gecko: GECKO_SETTINGS } }
+      ? { browser_specific_settings: { gecko: reporting ? { ...GECKO_SETTINGS, data_collection_permissions: { ...GECKO_SETTINGS.data_collection_permissions, optional: ["technicalAndInteraction"] } } : GECKO_SETTINGS } }
       : { minimum_chrome_version: "116" }),
     ...(key ? { key } : {}),
     action: {
@@ -259,9 +277,9 @@ export function buildManifest(
     // `idle` is the only way to learn that the person has walked away — a
     // service worker sees no input events of its own.
     permissions: ["storage", "alarms", "idle", "cookies"],
-    host_permissions: target.bridgeTarget === "development"
+    host_permissions: [...(target.bridgeTarget === "development"
       ? ["http://localhost/*", "http://127.0.0.1/*", "https://api.trackyourtime.dev/*"]
-      : ["https://api.trackyourtime.dev/*"],
+      : ["https://api.trackyourtime.dev/*"]), ...(reporting ? [`${reporting.origin}/*`] : [])],
     // Requested only when somebody turns on Settings → Activity, from that
     // click — never at install. `tabs` is what exposes a tab's URL and title
     // to activity capture, and Chrome words it as reading browsing history,

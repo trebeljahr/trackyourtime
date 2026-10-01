@@ -109,6 +109,7 @@ export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement 
           <li>{t.rich("privacy.extension.tabs", { strong })}</li>
           <li>{t("privacy.extension.activity")}</li>
           <li>{t("privacy.extension.activityLocal")}</li>
+          <li>{t("privacy.extension.errorReports")}</li>
           <li>{t("privacy.extension.limitedUse")}</li>
         </ul>
       </Block>

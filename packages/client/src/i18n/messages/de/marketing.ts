@@ -242,6 +242,8 @@ export const marketing: Translation<typeof source> = {
         "Ist die Aktivitätserfassung an, speichert die Erweiterung den Namen der Website im aktiven Tab in der IndexedDB des Browsers auf deinem Computer. Den Seitentitel speichert sie nur, wenn du auch Seitentitel einschaltest. Sie löscht die Aktivität nach 14 Tagen oder nach dem Zeitraum, den du einstellst. Inkognito-Tabs und Websites, die du ausschließt, erfasst sie nie.",
       activityLocal:
         "Deine Aktivität sendet die Erweiterung nirgendwohin. Nur ein Eintrag, den du übernimmst, erreicht den Server, und dieser Eintrag enthält keine Daten über Websites.",
+      errorReports:
+        "Eine Store-Version kann bei einem Fehler im Popup oder Hintergrund einen Bericht an die Fehlerverfolgung von Track Your Time senden. Er enthält nur Fehlertyp, Quelle, Browser-Plattform, App-Version und Build-ID. Er enthält keine Fehlermeldung, keinen Stack, keine Seitenadresse, Kontodaten oder Aktivität. Firefox sendet ihn nur mit der Berechtigung für Diagnosedaten des Browsers.",
       limitedUse:
         "Die Nutzung von Informationen, die über Chrome-APIs empfangen werden, entspricht der Chrome Web Store User Data Policy, einschließlich der Anforderungen zur eingeschränkten Nutzung (Limited Use).",
     },

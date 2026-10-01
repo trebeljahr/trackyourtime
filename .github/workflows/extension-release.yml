@@ -183,6 +183,8 @@ jobs:
       # EXTENSION_KEY must NOT be set here: the package step refuses a build
       # whose key does not pin the store item.
       - name: Build (production target)
+        env:
+          EXTENSION_SENTRY_DSN: ${{ vars.EXTENSION_SENTRY_DSN || '' }}
         run: pnpm run build:extension:prod
 
       # Checks the manifest version against the tag (the root package.json is
@@ -338,6 +340,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build (firefox target)
+        env:
+          EXTENSION_SENTRY_DSN: ${{ vars.EXTENSION_SENTRY_DSN || '' }}
         run: pnpm run build:extension:firefox
 
       # The same check the Chrome job makes, for the same reason: the manifest

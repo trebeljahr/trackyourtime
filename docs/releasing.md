@@ -302,6 +302,14 @@ Re-publishing an older release does not move `latest` or `X.Y` backwards.
 
 ## Chrome Web Store
 
+### Extension error reporting
+
+Set the repository variable `EXTENSION_SENTRY_DSN` to an HTTPS GlitchTip or Sentry DSN before building a store release. The Chrome and Firefox jobs bake it into their bundles and add only that endpoint's origin to `host_permissions`. Leave it empty to ship no error sender or reporting host permission. A local build uses the same variable with `pnpm run build:extension:prod` or `pnpm run build:extension:firefox`.
+
+The popup reports uncaught errors, unhandled rejections, and React errors. The background reports uncaught errors, unhandled rejections, and unexpected message failures. Each event contains only a fixed error class, source (`popup` or `background`), browser platform, app version, and build commit. It sends no error message, stack, URL, user ID, token, activity, breadcrumb, session, or performance data. The DSN is a public routing key embedded in the distributed package. Use a separate project from the web app if you need separate retention or alert rules.
+
+Store privacy forms must describe this diagnostic transmission and the configured provider before upload. A Firefox build with a DSN declares optional `technicalAndInteraction` collection and checks the grant before sending; without a grant, it sends nothing. If reporting is disabled for the store build, the declaration stays unchanged.
+
 `.github/workflows/extension-release.yml` publishes new versions of the
 browser extension to the existing store item `opibnndhibnigcfgfbgbipakadhnbjfi`
 (`STORE_EXTENSION_ID` in `packages/shared/src/store-clients.ts`) through the

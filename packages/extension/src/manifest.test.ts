@@ -6,6 +6,7 @@ import {
   RELEASE_VERSION,
   buildManifest,
   manifestVersionFields,
+  reportingConfig,
 } from "../manifest.config";
 
 /** What the store listing may ask for, and nothing more, in every build. */
@@ -17,6 +18,13 @@ const expectScopedAccountAccess = (manifest: Record<string, unknown>): void => {
 };
 
 describe("production manifest", () => {
+  it("adds only the configured reporting origin", () => {
+    const env = { EXTENSION_SENTRY_DSN: "https://public@errors.example.com/42" };
+    expect(buildManifest("production", env).host_permissions).toContain("https://errors.example.com/*");
+    expect(buildManifest("firefox", env).browser_specific_settings).toMatchObject({ gecko: { data_collection_permissions: { optional: ["technicalAndInteraction"] } } });
+    expect(reportingConfig(env.EXTENSION_SENTRY_DSN, "gecko")).toMatchObject({ endpoint: "https://errors.example.com/api/42/envelope/", platform: "firefox" });
+    expect(() => reportingConfig("http://public@errors.example.com/42", "chromium")).toThrow();
+  });
   it("scopes web-account cookie access to its own API", () => {
     expectScopedAccountAccess(buildManifest("production", {}));
     expect(buildManifest("production", {}).host_permissions).toEqual(["https://api.trackyourtime.dev/*"]);

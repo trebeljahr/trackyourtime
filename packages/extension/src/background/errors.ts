@@ -74,6 +74,10 @@ export const toErrorResponse = (error: unknown): BackgroundResponse => {
     return { ok: false, code: "UNREACHABLE", message: UNREACHABLE };
   }
 
+  if (import.meta.env.VITE_ERROR_REPORTING_ENABLED) {
+    void import("../lib/error-reporting").then(({ reportExtensionError }) => reportExtensionError(error, "background"));
+  }
+
   return {
     ok: false,
     code: "UNKNOWN",

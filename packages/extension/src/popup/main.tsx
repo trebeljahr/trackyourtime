@@ -5,6 +5,15 @@ import { loadPopupSnapshot } from "../lib/popup-snapshot";
 import { applyTheme, cachedTheme } from "./theme";
 import { resolveExtensionLocale } from "../i18n";
 import "./popup.css";
+if (import.meta.env.VITE_ERROR_REPORTING_ENABLED) {
+  void import("../lib/error-reporting").then(({ startErrorReporting }) => startErrorReporting("popup"));
+}
+
+const reportPopupError = (error: unknown): void => {
+  if (import.meta.env.VITE_ERROR_REPORTING_ENABLED) {
+    void import("../lib/error-reporting").then(({ reportExtensionError }) => reportExtensionError(error, "popup"));
+  }
+};
 
 // Before the first render, and synchronously: the popup is rebuilt from
 // scratch every time it is opened, so a theme applied after the worker answers
@@ -23,7 +32,7 @@ if (!container) {
 // Read the memory-only cache before mounting: an effect always paints the
 // loading screen first, even when the previous timer is already available.
 void loadPopupSnapshot().then((initialState) => {
-  createRoot(container).render(
+  createRoot(container, { onUncaughtError: reportPopupError, onCaughtError: reportPopupError }).render(
     <StrictMode>
       <App initialState={initialState} />
     </StrictMode>,

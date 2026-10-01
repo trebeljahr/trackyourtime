@@ -114,6 +114,9 @@ import { buildState } from "./state";
 import { startTimer, stopTimer, updateRunning } from "./timer";
 
 const BADGE_ALARM = "trackyourtime.badge";
+if (import.meta.env.VITE_ERROR_REPORTING_ENABLED) {
+  void import("../lib/error-reporting").then(({ startErrorReporting }) => startErrorReporting("background"));
+}
 
 /** The floor Chrome enforces on periodic alarms. */
 const BADGE_PERIOD_MINUTES = 0.5;
