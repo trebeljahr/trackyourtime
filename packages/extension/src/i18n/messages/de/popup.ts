@@ -381,7 +381,7 @@ export const popup: Translation<typeof source> = {
       "{days, plural, one {Heute noch nichts erfasst.} other {In den letzten # Tagen nichts erfasst.}}",
     newEntry: "Neuer Eintrag",
     loadOlder: "Ältere laden",
-    end: "{days, plural, one {Das ist alles von heute.} other {Das sind die letzten # Tage.}} Ältere Einträge findest du in der Web-App.",
+    end: "Ältere Einträge findest du in der Web-App ↗",
   },
   entryNew: {
     title: "Neuer Eintrag",

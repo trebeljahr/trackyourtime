@@ -293,15 +293,14 @@ export function EntriesScreen({
                 /* Said out loud so the end of the list reads as a decision
                    rather than a bug. */
                 <p className="entries__more" data-testid="entries-end">
-                  {t("entries.end", { days: windowDays(page.from, page.to) })}{" "}
-                  {webUrl === null ? null : (
+                  {webUrl === null ? t("entries.end") : (
                     <button
                       type="button"
                       className="button--link"
                       onClick={() => openTab(join(webUrl, "/app/track"))}
                       data-testid="entries-open-app"
                     >
-                      {t("actions.openAppExternal")}
+                      {t("entries.end")}
                     </button>
                   )}
                 </p>

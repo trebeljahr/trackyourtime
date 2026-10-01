@@ -397,7 +397,7 @@ export const popup = {
       "{days, plural, one {Nothing tracked today.} other {Nothing tracked in the last # days.}}",
     newEntry: "New entry",
     loadOlder: "Load older",
-    end: "{days, plural, one {That is all of today.} other {That is the last # days.}} Older entries are in the web app.",
+    end: "Older Entries are in the web app ↗",
   },
   entryNew: {
     title: "New entry",
