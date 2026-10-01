@@ -61,6 +61,8 @@ export type ApiHookResult<T> = {
   /** True when the failure was "no session", so the caller shows sign-in. */
   signedOut: boolean;
   revalidate: () => void;
+  /** Apply a visible change now, then refresh or restore on refusal. */
+  optimistic: <R>(request: Promise<R>, update: (value: T) => T) => Promise<R>;
 };
 
 /**
@@ -82,7 +84,7 @@ export function useApi<T>(
 ): ApiHookResult<T> {
   const workspace = useActiveWorkspaceId();
   const scopedKey = `${cacheKey}@${workspace.workspaceId ?? "none"}`;
-  const { data, isLoading, error, revalidate } = useCachedPromise(
+  const { data, isLoading, error, revalidate, mutate } = useCachedPromise(
     // The key is passed as an argument, not closed over, because that is what
     // `useCachedPromise` hashes into its cache slot.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -112,6 +114,14 @@ export function useApi<T>(
     error,
     signedOut: isAuthFailure(error),
     revalidate,
+    optimistic: <R,>(request: Promise<R>, update: (value: T) => T): Promise<R> =>
+      mutate(request, {
+        optimisticUpdate: (current) =>
+          current === undefined || current.workspaceId !== workspace.workspaceId
+            ? current as Tagged<T>
+            : { ...current, value: update(current.value) },
+        rollbackOnError: true,
+      }),
   };
 }
 

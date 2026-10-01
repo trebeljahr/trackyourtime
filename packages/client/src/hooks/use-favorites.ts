@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  createId,
   mergeQuickStarts,
   quickStartKey,
   type DetailedFavorite,
@@ -68,11 +69,55 @@ export const useQuickStarts = (): QuickStarts => {
   );
 
   const createMutation = trpc.favorites.create.useMutation({
-    onSuccess: () => {
+    onMutate: async (input) => {
+      await utils.favorites.list.cancel();
+      const previous = utils.favorites.list.getData();
+      const quick: QuickStart = {
+        description: input.description ?? "",
+        clientId: input.clientId,
+        projectId: input.projectId ?? null,
+        taskId: input.taskId ?? null,
+        billable: input.billable ?? false,
+      };
+      const tempId = `optimistic-${createId()}`;
+      const now = new Date().toISOString();
+      const recent = utils.entries.recent.getData(RECENT_INPUT)?.find(
+        (entry) => quickStartKey(entry) === quickStartKey(quick),
+      );
+      const optimistic: DetailedFavorite = {
+        ...quick,
+        id: tempId,
+        workspaceId: utils.settings.get.getData()?.workspaceId ?? "",
+        userId: utils.settings.get.getData()?.userId ?? "",
+        order: previous?.length ?? 0,
+        createdAt: now,
+        updatedAt: now,
+        projectName: recent?.projectName ?? null,
+        projectColor: recent?.projectColor ?? null,
+        clientName: recent?.clientName ?? null,
+        taskName: recent?.taskName ?? null,
+        projectMissing: recent?.projectMissing ?? false,
+        projectArchived: recent?.projectArchived ?? false,
+        taskMissing: recent?.taskMissing ?? false,
+      };
+      utils.favorites.list.setData(undefined, (current) =>
+        current?.some((favorite) => quickStartKey(favorite) === quickStartKey(quick))
+          ? current
+          : [...(current ?? []), optimistic],
+      );
+      return { previous, tempId };
+    },
+    onSuccess: (favorite, _input, context) => {
+      utils.favorites.list.setData(undefined, (current) =>
+        current?.map((row) => row.id === context?.tempId ? favorite : row),
+      );
       toast.success(translate("tracker")("favorites.pinned"));
       invalidate();
     },
-    onError: (error) => onError(error, translate("tracker")("favorites.pinFailed")),
+    onError: (error, _input, context) => {
+      utils.favorites.list.setData(undefined, context?.previous);
+      onError(error, translate("tracker")("favorites.pinFailed"));
+    },
   });
 
   const removeMutation = trpc.favorites.remove.useMutation({

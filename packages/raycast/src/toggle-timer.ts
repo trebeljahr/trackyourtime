@@ -39,6 +39,9 @@ export default async function ToggleTimer(): Promise<void> {
     const running = await api.current();
 
     if (running) {
+      await noteTimerEcho(null);
+      void refreshMenuBar();
+      void showHUD("⏹ Stopping timer…");
       try {
         const stopped = await api.stop(running.id);
         await refreshMenuBar();
@@ -48,7 +51,11 @@ export default async function ToggleTimer(): Promise<void> {
           }${await queuedSuffix()}`,
         );
       } catch (error) {
-        if (!isAlreadyStopped(error)) throw error;
+        if (!isAlreadyStopped(error)) {
+          await noteTimerEcho(running.id);
+          await refreshMenuBar();
+          throw error;
+        }
         // Stopped elsewhere between the read above and the write. The user got
         // the state they pressed for, so say so rather than reporting a
         // failure. `api.stop` threw before it could record the echo, so this
@@ -88,6 +95,7 @@ export default async function ToggleTimer(): Promise<void> {
     }
     const last = decision.candidate;
 
+    void showHUD(`▶ Starting — ${entryLabel(last)}…`);
     const started = await api.continue(last.id, toQuickStart(last));
     await refreshMenuBar();
     // Labelled from the entry that was continued, not from the one that came

@@ -2,7 +2,7 @@ import { loadPopupSnapshot, mergePopupSnapshot, POPUP_SNAPSHOT_KEY } from "../li
 import { join, openTab } from "./open-tab";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { CatalogEditProvider, type CatalogEdit } from "./catalog-edit";
-import { dayKeyInZone, deviceTimeZone, type QuickStart } from "@starter/core";
+import { createId, dayKeyInZone, deviceTimeZone, type QuickStart } from "@starter/core";
 import {
   sendToBackground,
   type AcceptedFields,
@@ -38,6 +38,7 @@ import { applyLocalePreference, useT } from "../i18n/use-t";
 import { SignInScreen } from "./sign-in-screen";
 import type { SetServerOutcome } from "./switch-server";
 import type { RunningPatch } from "./tracker-screen";
+import { hasOptimisticState, optimisticState } from "./optimistic-state";
 
 /**
  * The whole popup.
@@ -78,6 +79,15 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
   const stateRef = useRef(state);
   stateRef.current = state;
   const [error, setError] = useState<string | null>(null);
+  const [pendingOptimistic, setPendingOptimistic] = useState<
+    { id: string; at: string; message: PopupToBackground }[]
+  >([]);
+  const visibleState = useMemo(
+    () => state === null ? null : pendingOptimistic.reduce(
+      (current, pending) => optimisticState(current, pending.message, pending.id, pending.at), state,
+    ),
+    [state, pendingOptimistic],
+  );
 
   useEffect(() => {
     let active = true;
@@ -144,31 +154,41 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
    */
   const send = useCallback(
     async (message: PopupToBackground): Promise<boolean> => {
-      if (message.type === "timer:start" || message.type === "timer:stop") {
-        // A second refusal with identical text is still a new toast.
-        setError(null);
+      const optimisticId = hasOptimisticState(message) ? `optimistic-${createId()}` : null;
+      if (optimisticId !== null) {
+        setPendingOptimistic((current) => [...current, { id: optimisticId, at: new Date().toISOString(), message }]);
       }
-      const response: BackgroundResponse = await sendToBackground(message);
-      if (response.ok) {
-        apiUrlRef.current = response.state.apiUrl;
-        setState((previous) => mergePopupSnapshot(previous, response.state));
-        setError(null);
-        return true;
+      try {
+        if (message.type === "timer:start" || message.type === "timer:stop") {
+          // A second refusal with identical text is still a new toast.
+          setError(null);
+        }
+        const response: BackgroundResponse = await sendToBackground(message);
+        if (response.ok) {
+          apiUrlRef.current = response.state.apiUrl;
+          setState((previous) => mergePopupSnapshot(previous, response.state));
+          setError(null);
+          return true;
+        }
+        setError(
+          describeError(
+            response.code,
+            response.message,
+            apiUrlRef.current,
+            tRef.current,
+            response.details,
+          ),
+        );
+        // A failure retires whatever the last transition said: "Entry added."
+        // sitting above "The end has to be after the start." reads as though
+        // both were true of the same action.
+        setNote(null);
+        return false;
+      } finally {
+        if (optimisticId !== null) {
+          setPendingOptimistic((current) => current.filter((item) => item.id !== optimisticId));
+        }
       }
-      setError(
-        describeError(
-          response.code,
-          response.message,
-          apiUrlRef.current,
-          tRef.current,
-          response.details,
-        ),
-      );
-      // A failure retires whatever the last transition said: "Entry added."
-      // sitting above "The end has to be after the start." reads as though
-      // both were true of the same action.
-      setNote(null);
-      return false;
     },
     [],
   );
@@ -768,7 +788,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
           <Screens
             route={topOf(stack)}
             tracker={{
-              state,
+              state: visibleState!,
               error,
               onStart: (description, projectId, taskId, billable, tagIds,
                 clientId,
@@ -808,7 +828,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
               onDiscardHeld: (id) => send({ type: "queue:discard-held", id }),
             }}
             settings={{
-              state,
+              state: visibleState!,
               error,
               note,
               onOpenSection: openSection,
@@ -825,7 +845,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
               onWipeActivity: wipeActivity,
             }}
             entries={{
-              state,
+              state: visibleState!,
               onGoTracker: goTracker,
               onOpenEntry: openEntry,
               onNewEntry: newEntry,
@@ -841,7 +861,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
               onLoadMore: loadMoreEntries,
             }}
             entry={{
-              state,
+              state: visibleState!,
               error,
               note,
               onBack: goBack,
@@ -856,7 +876,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
               onMissing: entryMissing,
             }}
             entryNew={{
-              state,
+              state: visibleState!,
               error,
               note,
               onBack: goBack,
@@ -870,7 +890,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
               onCreateTask: createTask,
             }}
             suggestions={{
-              state,
+              state: visibleState!,
               error,
               note,
               onBack: goBack,
@@ -893,7 +913,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
               onCreateProject: createProject,
             }}
             suggestionEdit={{
-              state,
+              state: visibleState!,
               error,
               note,
               onBack: goBack,

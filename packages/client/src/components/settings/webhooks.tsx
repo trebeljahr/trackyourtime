@@ -349,12 +349,24 @@ export function WebhooksPanel(): React.JSX.Element {
   const subscriptions = webhooksQuery.data ?? [];
 
   const update = trpc.webhooks.update.useMutation({
-    onError: (error) => {
+    onMutate: async ({ id, enabled }) => {
+      await utils.webhooks.list.cancel();
+      const previous = utils.webhooks.list.getData();
+      utils.webhooks.list.setData(undefined, (old) =>
+        old?.map((item) => item.id === id ? { ...item, enabled: enabled ?? item.enabled } : item),
+      );
+      return { previous };
+    },
+    onError: (error, _input, context) => {
+      utils.webhooks.list.setData(undefined, context?.previous);
       toast.error(
         userErrorMessage(error, translate("settings")("webhooks.toasts.updateFailed")),
       );
     },
     onSuccess: (subscription) => {
+      utils.webhooks.list.setData(undefined, (old) =>
+        old?.map((item) => item.id === subscription.id ? subscription : item),
+      );
       toast.success(
         translate("settings")(
           subscription.enabled ? "webhooks.toasts.enabled" : "webhooks.toasts.paused",

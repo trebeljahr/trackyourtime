@@ -24,7 +24,7 @@ import { formatClock, formatDurationShort, formatMenuBarClock, formatMenuBarTota
 import { useApi, useNow, usePoll, useReconciledRunning, useWatchRunning } from "./lib/hooks.js";
 import { heldCopy } from "./lib/offline.js";
 import { webLink } from "./lib/preferences.js";
-import { entryHint, entryLabel, favoriteFor, loadTimerSnapshot } from "./lib/timer-data.js";
+import { entryHint, entryLabel, favoriteFor, loadTimerSnapshot, previewStarted, previewStopped, type TimerSnapshot } from "./lib/timer-data.js";
 import { useServerLevel } from "./lib/server-level.js";
 import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
@@ -60,7 +60,7 @@ const openTimer = (): void => {
 
 export default function MenuBar(): React.JSX.Element | null {
   const { titleMode, idleTitle, hideWhenIdle, tickSeconds } = getPreferenceValues<Preferences.MenuBar>();
-  const { data, isLoading, error, signedOut, revalidate } = useApi("menu-bar", (api) =>
+  const { data, isLoading, error, signedOut, revalidate, optimistic } = useApi("menu-bar", (api) =>
     loadTimerSnapshot(api, { recentLimit: RECENT_LIMIT }),
   );
 
@@ -144,10 +144,14 @@ export default function MenuBar(): React.JSX.Element | null {
     return `${label} · ${clock}`;
   })();
 
-  const act = async (run: () => Promise<void>, failureTitle: string): Promise<void> => {
+  const act = async (
+    run: () => Promise<void>,
+    failureTitle: string,
+    preview?: (snapshot: TimerSnapshot) => TimerSnapshot,
+  ): Promise<void> => {
     try {
-      await run();
-      revalidate();
+      await (preview ? optimistic(run(), preview) : run());
+      if (!preview) revalidate();
     } catch (error) {
       // Somebody stopped it elsewhere between this item's last read and the
       // click. The user got what they wanted; record it and move on rather
@@ -232,7 +236,14 @@ export default function MenuBar(): React.JSX.Element | null {
                   title: "Timer stopped",
                   message: formatDurationShort(stopped.durationSec),
                 });
-              }, "Could not stop the timer");
+              }, "Could not stop the timer", (snapshot) => ({
+                ...snapshot,
+                fetchedAt: Date.now(),
+                running: null,
+                recent: running?.workspaceId === snapshot.activeWorkspaceId
+                  ? [previewStopped(running), ...snapshot.recent.filter((row) => row.id !== running.id)]
+                  : snapshot.recent,
+              }));
             }}
           />
           {/* A menu bar item cannot host a form, so editing hands off to the
@@ -325,7 +336,11 @@ export default function MenuBar(): React.JSX.Element | null {
                     title: "Timer started",
                     message: [quickStartLabel(favorite), replacedNotice(started)].filter(Boolean).join(" · "),
                   });
-                }, "Could not start the timer");
+                }, "Could not start the timer", (snapshot) => ({
+                  ...snapshot,
+                  fetchedAt: Date.now(),
+                  running: previewStarted(repairQuickStart(favorite), favorite, snapshot.activeWorkspaceId),
+                }));
               }}
             />
           ))}
@@ -349,7 +364,11 @@ export default function MenuBar(): React.JSX.Element | null {
                     title: "Timer started",
                     message: [entryLabel(entry), replacedNotice(started)].filter(Boolean).join(" · "),
                   });
-                }, "Could not start the timer");
+                }, "Could not start the timer", (snapshot) => ({
+                  ...snapshot,
+                  fetchedAt: Date.now(),
+                  running: previewStarted(toQuickStart(entry), entry, snapshot.activeWorkspaceId),
+                }));
               }}
             />
           ))}

@@ -6,6 +6,7 @@ import { formatClock, formatDayHeading, formatDurationShort, isoDaysAgo, project
 import { useApi } from "./lib/hooks.js";
 import { useServerLevel } from "./lib/server-level.js";
 import { ownOnly, resolveUserId } from "./lib/timer-data.js";
+import { previewStarted, previewStopped } from "./lib/timer-data.js";
 import { webLink } from "./lib/preferences.js";
 import { refreshMenuBar, showFailureToast } from "./lib/ui.js";
 import { CompatibilityListSection } from "./components/compatibility-banner.js";
@@ -105,7 +106,7 @@ const accessoriesFor = (
 
 export default function Entries(): React.JSX.Element {
   const now = Date.now();
-  const { data, isLoading, signedOut, revalidate } = useApi("entries", async (api) => {
+  const { data, isLoading, signedOut, revalidate, optimistic } = useApi("entries", async (api) => {
     const { entries } = await api.list({
       from: isoDaysAgo(HISTORY_DAYS),
       to: new Date(Date.now() + 60_000).toISOString(),
@@ -126,11 +127,15 @@ export default function Entries(): React.JSX.Element {
 
   const entries = data ?? [];
 
-  const run = async (action: () => Promise<string>, failureTitle: string): Promise<void> => {
+  const run = async (
+    action: () => Promise<string>,
+    failureTitle: string,
+    preview?: (entries: DetailedEntry[]) => DetailedEntry[],
+  ): Promise<void> => {
     try {
-      const message = await action();
+      const message = await (preview ? optimistic(action(), preview) : action());
       await refreshMenuBar();
-      revalidate();
+      if (!preview) revalidate();
       await showToast({ style: Toast.Style.Success, title: message });
     } catch (error) {
       await showFailureToast(error, failureTitle);
@@ -210,7 +215,8 @@ export default function Entries(): React.JSX.Element {
                               const api = await getTrackYourTime();
                               await api.stop(entry.id);
                               return "Timer stopped";
-                            }, "Could not stop the timer")
+                            }, "Could not stop the timer", (rows) =>
+                              rows.map((row) => row.id === entry.id ? previewStopped(row) : row))
                           }
                         />
                       ) : (
@@ -222,7 +228,10 @@ export default function Entries(): React.JSX.Element {
                               const api = await getTrackYourTime();
                               await api.continue(entry.id, toQuickStart(entry));
                               return "Timer started";
-                            }, "Could not start the timer")
+                            }, "Could not start the timer", (rows) => [
+                              previewStarted(toQuickStart(entry), entry, entry.workspaceId),
+                              ...rows.map((row) => row.end === null ? previewStopped(row) : row),
+                            ])
                           }
                         />
                       )}

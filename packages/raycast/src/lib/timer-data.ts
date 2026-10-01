@@ -9,6 +9,7 @@
 import {
   RECENT_TIMER_DAYS,
   entryDurationSec,
+  deviceTimeZone,
   isOwnEntry,
   isTempId,
   quickStartKey,
@@ -16,6 +17,7 @@ import {
   toQuickStart,
   type DetailedEntry,
   type DetailedFavorite,
+  type QuickStart,
   type HoldReason,
   type TimeEntry,
   type WorkspaceSummary,
@@ -74,6 +76,53 @@ export type TimerSnapshot = {
    * runs — and says where, because this workspace's projects are not its own.
    */
   runningWorkspaceName: string | null;
+};
+
+/** A visible timer while a Raycast command waits for the server. */
+export const previewStarted = (
+  quick: QuickStart,
+  source: DetailedEntry | DetailedFavorite,
+  workspaceId: string | null,
+): DetailedEntry => {
+  const start = new Date().toISOString();
+  return {
+    id: `preview-${start}`,
+    workspaceId: workspaceId ?? "",
+    authorId: "",
+    description: quick.description,
+    clientId: quick.clientId,
+    projectId: quick.projectId,
+    taskId: quick.taskId,
+    billable: quick.billable,
+    tagIds: "start" in source ? source.tagIds : [],
+    start,
+    end: null,
+    durationSec: 0,
+    hourlyRate: null,
+    currency: "",
+    source: "api",
+    timeZone: "start" in source ? source.timeZone : deviceTimeZone(),
+    runaway: null,
+    invoiceId: null,
+    importId: null,
+    createdAt: start,
+    updatedAt: start,
+    projectName: source.projectName,
+    projectColor: source.projectColor,
+    clientName: source.clientName,
+    taskName: source.taskName,
+    amount: 0,
+  };
+};
+
+export const previewStopped = (entry: DetailedEntry): DetailedEntry => {
+  const end = new Date().toISOString();
+  return {
+    ...entry,
+    end,
+    durationSec: Math.max(0, Math.round((Date.parse(end) - Date.parse(entry.start)) / 1000)),
+    updatedAt: end,
+  };
 };
 
 /**

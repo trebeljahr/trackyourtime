@@ -6,6 +6,17 @@ import { App } from "./App";
 import { POPUP_SNAPSHOT_KEY, savePopupSnapshot } from "../lib/popup-snapshot";
 import type { BackgroundState } from "../lib/messaging";
 
+window.matchMedia ??= () => ({
+  matches: false,
+  media: "(prefers-color-scheme: dark)",
+  onchange: null,
+  addListener: () => undefined,
+  removeListener: () => undefined,
+  addEventListener: () => undefined,
+  removeEventListener: () => undefined,
+  dispatchEvent: () => false,
+});
+
 vi.mock("./sign-in-screen", () => ({ SignInScreen: () => <div>Ready to sign in</div> }));
 vi.mock("./screens", () => ({ Screens: () => <div>Signed in with data</div> }));
 

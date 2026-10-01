@@ -88,6 +88,7 @@ function QuickStartMenuItem({
   const t = useT("tracker");
   const tc = useT("common");
   const pinned = item.kind === "favorite";
+  const awaitingPin = pinned && item.id.startsWith("optimistic-");
   const label = quickStartLabelFor(item, t);
   const hint = quickStartHintFor(item, t);
   const broken = isBrokenQuickStart(item);
@@ -151,7 +152,7 @@ function QuickStartMenuItem({
           <>
             <button
               type="button"
-              disabled={index === 0}
+              disabled={awaitingPin || index === 0}
               className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-0 group-hover:opacity-100 group-data-[highlighted]:opacity-100 focus-visible:opacity-100"
               aria-label={t("quickStart.moveUp", { label })}
               onClick={(event) => {
@@ -164,7 +165,7 @@ function QuickStartMenuItem({
             </button>
             <button
               type="button"
-              disabled={index >= favoriteCount - 1}
+              disabled={awaitingPin || index >= favoriteCount - 1}
               className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-0 group-hover:opacity-100 group-data-[highlighted]:opacity-100 focus-visible:opacity-100"
               aria-label={t("quickStart.moveDown", { label })}
               onClick={(event) => {
@@ -177,6 +178,7 @@ function QuickStartMenuItem({
             </button>
             <button
               type="button"
+              disabled={awaitingPin}
               className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
               aria-label={t("quickStart.unpinLabel", { label })}
               title={t("quickStart.unpin")}
