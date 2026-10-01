@@ -19,10 +19,7 @@
  *    no credential crosses the bridge. The code is never shown and never taken
  *    from anywhere but a decoded bridge reply (pinned Chrome id or the
  *    same-origin Firefox content relay).
- *  - `sign-out-web`: the extension was signed out on purpose after this
- *    session began. The page signs out through the app's normal `signOut()`,
- *    and the protected layout moves the person to /login as it would for any
- *    other sign-out.
+ *  - `sign-out-web`: refused. Each app owns its session independently.
  *  - `none`: nothing.
  *
  * Everything unrecognised is ignored — an extension that is missing, older,
@@ -38,12 +35,12 @@ import {
 } from "@starter/shared";
 
 /** The page's signed-in session, as the bridge describes it. */
-export type BridgeWebSession = { userId: string; createdAt: number } | null;
+export type BridgeWebSession = { userId: string; createdAt: number; profile?: { email: string; image: string | null } } | null;
 
 /**
  * The session lookup as the page sees it. Only `resolved` is ever sent: a
  * pending or failed lookup (offline, a server blip) is not a statement that
- * nobody is signed in, and the extension signs itself out on that statement.
+ * nobody is signed in, so an unavailable lookup must not clear an account offer.
  */
 export type BridgeSessionState =
   | { status: "pending" }
@@ -64,9 +61,7 @@ export type ExtensionSyncOutcome =
   | "approve-failed"
   /** The code was unusable or already expired; nothing was sent back. */
   | "approve-dropped"
-  /** The page signed out, as the extension asked. */
-  | "signed-out-web"
-  /** The extension asked for a sign-out this session does not qualify for. */
+  /** The extension asked to sign out the web app; always refused. */
   | "sign-out-refused";
 
 export type ExtensionSyncDeps = {
@@ -85,8 +80,6 @@ export type ExtensionSyncDeps = {
   send: (id: string, message: unknown) => Promise<unknown>;
   /** Approve a normalised user code with this page's session. */
   approve: (userCode: string) => Promise<boolean>;
-  /** The app's `signOut()`. */
-  signOutWeb: () => Promise<void>;
   now: () => number;
 };
 
@@ -102,19 +95,8 @@ const handleAction = async (
   if (action.type === "none") return "nothing-to-do";
 
   if (action.type === "sign-out-web") {
-    const current = deps.currentSession();
-    // Only the session that was described, and only if it began before the
-    // extension signed out: a sign-in made after that is a newer decision.
-    if (
-      current === null ||
-      deps.session === null ||
-      current.userId !== deps.session.userId ||
-      !(current.createdAt < action.at)
-    ) {
-      return "sign-out-refused";
-    }
-    await deps.signOutWeb();
-    return "signed-out-web";
+    // Never let an extension sign out the web app, including legacy replies.
+    return "sign-out-refused";
   }
 
   // approve-device
@@ -144,8 +126,7 @@ const handleAction = async (
  * One exchange: describe the session to every extension id and act on each
  * reply. Ids are handled in turn, never in parallel, so a dev machine with
  * both the unpacked and the store build installed approves one code at a
- * time. Stops after a sign-out: the session it described is gone, and the
- * sign-out produces a fresh exchange of its own.
+ * time. No bridge reply can sign the web app out.
  */
 export const syncWithExtensions = async (
   deps: ExtensionSyncDeps,
@@ -153,6 +134,7 @@ export const syncWithExtensions = async (
   const request = extensionBridgeSyncRequest(deps.apiOrigin, {
     userId: deps.session?.userId ?? null,
     sessionCreatedAt: deps.session?.createdAt ?? null,
+    ...(deps.session?.profile ? { profile: deps.session.profile } : {}),
   });
   const outcomes: ExtensionSyncOutcome[] = [];
   for (const id of deps.ids) {
@@ -176,7 +158,6 @@ export const syncWithExtensions = async (
     }
     const outcome = await handleAction(id, reply.action, deps);
     outcomes.push(outcome);
-    if (outcome === "signed-out-web") break;
   }
   return outcomes;
 };
@@ -194,7 +175,6 @@ export type ExtensionBridgeHost = {
   apiOrigin: () => string;
   send: (id: string, message: unknown) => Promise<unknown>;
   approve: (userCode: string) => Promise<boolean>;
-  signOutWeb: () => Promise<void>;
   now: () => number;
   /** Called with each finished exchange's outcomes. */
   onOutcomes?: (outcomes: ExtensionSyncOutcome[]) => void;
@@ -248,7 +228,6 @@ export const createExtensionBridgeController = (
       currentSession: () => resolvedSession() ?? null,
       send: host.send,
       approve: host.approve,
-      signOutWeb: host.signOutWeb,
       now: host.now,
     })
       .then((outcomes) => {

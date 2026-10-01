@@ -33,8 +33,6 @@ import { DEVICE_AUTH_ALARM } from "../lib/device-auth-store";
 import {
   clearLinkBlock,
   clearSignOutMarker,
-  saveLinkBlock,
-  saveSignOutMarker,
 } from "../lib/sign-out-marker";
 import type {
   BackgroundResponse,
@@ -57,7 +55,7 @@ import {
   removeActivityRuleFor,
 } from "./activity/suggestions";
 import { renderBadge } from "./badge";
-import { registerBridgeListener } from "./bridge";
+import { confirmWebAccount, registerBridgeListener } from "./bridge";
 import {
   createClient,
   createTag,
@@ -73,6 +71,7 @@ import {
   attemptPendingDeviceSignIn,
   cancelDeviceSignIn,
   startDeviceSignIn,
+  serially,
 } from "./device-sign-in";
 import { listDevices, revokeDevice, revokeOtherDevices } from "./devices";
 import {
@@ -229,19 +228,10 @@ const signIn = async (email: string, password: string): Promise<void> => {
   await flushQueue();
 };
 
-/**
- * Sign the extension out on purpose.
- *
- * Revokes the extension's own session on the server, whichever way it was
- * signed in, then leaves a marker so the web app — of this person, on this
- * server — signs out too the next time a tab of it talks to the extension
- * (`lib/sign-out-marker.ts`). That is the cookie's old "sign out in one place,
- * sign out in both", narrowed to the same person.
- */
+/** Revoke only the extension's own session; the web app stays signed in. */
 const signOut = async (): Promise<void> => {
   const current = await ensureReady();
   const token = current.session?.token ?? null;
-  const userId = current.session?.userId ?? getKnownUserId();
 
   if (token !== null) {
     try {
@@ -256,13 +246,8 @@ const signOut = async (): Promise<void> => {
     }
   }
 
-  const at = Date.now();
-  if (userId !== null) {
-    await saveSignOutMarker({ userId, apiOrigin: current.apiUrl, at });
-  }
-  // Whoever it was, and even when nobody could say: no web session from
-  // before this moment signs the extension straight back in.
-  await saveLinkBlock({ apiOrigin: current.apiUrl, at });
+  await clearSignOutMarker();
+  await clearLinkBlock();
   await forgetSession();
 };
 
@@ -408,7 +393,9 @@ const apply = async (message: PopupToBackground): Promise<void> => {
     case "auth:sign-in":
       return signIn(message.email, message.password);
     case "auth:sign-out":
-      return signOut();
+      return serially(signOut);
+    case "auth:web-confirm":
+      return confirmWebAccount(message.userId, message.sessionCreatedAt);
     case "auth:device-start":
       return startDeviceSignIn();
     case "auth:device-cancel":

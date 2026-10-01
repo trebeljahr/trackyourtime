@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { BUILD_TARGETS } from "../../manifest.config";
@@ -72,4 +75,37 @@ describe("extension sign-in choices", () => {
     expect(html).toContain('data-testid="device-cancel"');
     expect(html).not.toContain('data-testid="sign-in-form"');
   });
+});
+
+
+test("shows the offered photo and email, and signs in only after confirmation", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const confirm = vi.fn(async () => true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const account = { userId: "u1", email: "rico@example.com", image: "https://example.com/avatar.png", sessionCreatedAt: 123 };
+  try {
+    await act(async () => root.render(<SignInScreen {...props} webAccount={account} onConfirmWebAccount={confirm} />));
+    const offer = container.querySelector('[data-testid="web-account-offer"]')!;
+    expect(offer.textContent).toContain("Sign in with this account?");
+    expect(offer.textContent).toContain(account.email);
+    expect(offer.querySelector("img")?.getAttribute("src")).toBe(account.image);
+    expect(confirm).not.toHaveBeenCalled();
+    await act(async () => (offer.querySelector("button") as HTMLButtonElement).click());
+    expect(confirm).toHaveBeenCalledExactlyOnceWith("u1", 123);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+test("accounts without a photo keep an initial and manual sign-in options", () => {
+  const html = renderToStaticMarkup(<SignInScreen {...props}
+    webAccount={{ userId: "u1", email: "rico@example.com", image: null, sessionCreatedAt: 123 }}
+    onConfirmWebAccount={vi.fn()} />);
+  expect(html).toContain('aria-hidden="true">R</span>');
+  expect(html).toContain('data-testid="sign-in-form"');
+  expect(html).toContain('data-testid="sign-in-web-app"');
 });

@@ -1,3 +1,4 @@
+import { loadWebAccount } from "../lib/web-account";
 /**
  * Building the {@link BackgroundState} snapshot the popup renders.
  *
@@ -167,19 +168,19 @@ const signedOutFacts = async (
 
 /**
  * The popup's own device sign-in, as the sign-in screen shows it: the user
- * code while it waits, and why the last one ended. A device authorization the
- * web app started is not the popup's to show.
+ * code while it waits, the offered web account, and why the last attempt ended.
  */
-type DeviceSignInFacts = Pick<BackgroundState, "pendingDeviceAuth" | "deviceSignInError">;
+type DeviceSignInFacts = Pick<BackgroundState, "pendingDeviceAuth" | "deviceSignInError" | "webAccount">;
 
 const resolveDeviceSignIn = async (apiUrl: string): Promise<DeviceSignInFacts> => {
   const pending = await loadPendingDeviceAuth();
   return {
+    webAccount: await loadWebAccount(apiUrl),
     pendingDeviceAuth:
       pending !== null &&
-      pending.purpose === "manual" &&
       isLivePendingDeviceAuth(pending, apiUrl, Date.now())
         ? {
+            ...(pending.purpose === "web-confirmed" ? { webAccount: true } : {}),
             userCode: pending.userCode,
             expiresAt: pending.expiresAt,
             ...(pending.verificationUrl && isAllowedVerificationUrl(pending.verificationUrl)

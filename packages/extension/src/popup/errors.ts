@@ -107,6 +107,8 @@ const fixedMessage = (code: string, t: PopupT, server: string): string | null =>
       return t("errors.suggestionTracked");
     case "ORIGIN_NOT_TRUSTED":
       return t(`errors.${originNotTrustedKey()}`, { server, origin: extensionOrigin() });
+    case "WEB_ACCOUNT_CHANGED":
+      return t("errors.webAccountChanged");
     case "DEVICE_URL_INVALID":
       return t("errors.deviceUrlInvalid");
     case "SERVER_UNREACHABLE":

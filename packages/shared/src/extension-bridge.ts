@@ -16,8 +16,8 @@
  * What the bridge carries, and nothing more:
  *  - `sync`: the page's session state (who is signed in, since when, against
  *    which API origin). The extension answers with what the page should do:
- *    nothing, approve a device authorization it started, or sign out because
- *    the extension was signed out on purpose.
+ *    nothing, or approve a device authorization the person explicitly
+ *    requested in the extension. Web and extension sessions are independent.
  *  - `device-approved`: the page approved (or failed to approve) that device
  *    authorization, which wakes the worker to fetch its own token.
  *
@@ -31,27 +31,17 @@
 export const EXTENSION_BRIDGE_CHANNEL = "trackyourtime.extension-bridge";
 
 /** The protocol version this build writes. Bump on any incompatible change. */
-export const EXTENSION_BRIDGE_VERSION = 1;
+export const EXTENSION_BRIDGE_VERSION = 2;
 
 /** Every version this build can read. */
-export const EXTENSION_BRIDGE_SUPPORTED_VERSIONS: readonly number[] = [1];
+export const EXTENSION_BRIDGE_SUPPORTED_VERSIONS: readonly number[] = [2];
 
 /**
  * The shortest gap between two `sync` requests the page sends on focus or
- * visibility. A session TRANSITION (sign-in, sign-out, account switch) is sent
+ * visibility, or while the page stays mounted. A session TRANSITION (sign-in, sign-out, account switch) is sent
  * at once regardless.
  */
-export const EXTENSION_BRIDGE_SYNC_MIN_INTERVAL_MS = 30_000;
-
-/**
- * How long an explicit extension sign-out keeps asking the web app to sign out
- * too. Seven days is the browser session lifetime: no web session that
- * predates the sign-out can still be alive after it.
- */
-export const EXTENSION_SIGN_OUT_MARKER_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** How long the extension waits before starting another device authorization after one failed. */
-export const EXTENSION_BRIDGE_DEVICE_RETRY_MS = 60_000;
+export const EXTENSION_BRIDGE_SYNC_MIN_INTERVAL_MS = 5_000;
 
 /** The web app origins a production extension build accepts messages from. */
 export const EXTENSION_BRIDGE_PRODUCTION_WEB_ORIGINS: readonly string[] = [
@@ -116,6 +106,8 @@ export type ExtensionBridgeWebSession = {
   userId: string | null;
   /** When that session was created (epoch ms); `null` exactly when `userId` is. */
   sessionCreatedAt: number | null;
+  /** Display-only identity; never a credential or authorization. */
+  profile?: { email: string; image: string | null };
 };
 
 type BridgeEnvelope = {
@@ -154,11 +146,13 @@ export type ExtensionBridgeRequest =
 export const EXTENSION_BRIDGE_IGNORE_REASONS = [
   /** Already signed in, through the web app, as that user. */
   "linked",
+  /** A web account is available, but the popup must confirm it first. */
+  "confirmation-required",
   /** Signed out, and so is the page. */
   "signed-out",
   /** The extension points at a different server than the page. */
   "other-server",
-  /** The extension holds a session somebody signed in to on purpose (password or device flow). */
+  /** The extension already holds its own independent session. */
   "explicit-session",
   /** A device authorization failed recently; the extension waits before starting another. */
   "backing-off",
@@ -186,7 +180,7 @@ export type ExtensionBridgeSyncAction =
       expiresAt: number;
     }
   | {
-      /** The extension was signed out on purpose after this page's session began. */
+      /** Legacy action, decoded only so the web app can explicitly refuse it. */
       type: "sign-out-web";
       /** When the extension signed out (epoch ms). */
       at: number;
@@ -355,7 +349,15 @@ const readWebSession = (value: unknown): ExtensionBridgeWebSession | null => {
     return value.sessionCreatedAt === null ? { userId: null, sessionCreatedAt: null } : null;
   }
   if (!isUserId(value.userId) || !isEpochMs(value.sessionCreatedAt)) return null;
-  return { userId: value.userId, sessionCreatedAt: value.sessionCreatedAt };
+  let profile: ExtensionBridgeWebSession["profile"];
+  if (value.profile !== undefined) {
+    if (!isRecord(value.profile)) return null;
+    const { email, image } = value.profile;
+    if (typeof email !== "string" || email.length === 0 || email.length > 320 || CONTROL_CHARACTER.test(email)) return null;
+    if (image !== null && (typeof image !== "string" || image.length > 2048 || parseOrigin(image) === null)) return null;
+    profile = { email, image: image as string | null };
+  }
+  return { userId: value.userId, sessionCreatedAt: value.sessionCreatedAt, ...(profile ? { profile } : {}) };
 };
 
 /**

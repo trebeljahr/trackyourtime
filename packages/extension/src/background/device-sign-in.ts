@@ -2,9 +2,8 @@
  * Signing the extension in through the RFC 8628 device flow.
  *
  * Two ways in share everything here:
- *  - the web app linking the extension (`bridge.ts`, purpose `web-link`): a
- *    person signed in to the web app, the page approves a code the extension
- *    started, and the extension fetches a session of its own;
+ *  - a confirmed web account (`bridge.ts`, purpose `web-confirmed`): after
+ *    the person chooses the account in the popup, the page approves its code, and the extension fetches a session of its own;
  *  - the popup's "Sign in with the web app" (purpose `manual`): the approval
  *    page opens in a tab, for any server, and for an account with two-factor
  *    authentication, which the password path cannot complete.
@@ -40,7 +39,6 @@ import {
   DEVICE_AUTH_ALARM,
   isLivePendingDeviceAuth,
   loadPendingDeviceAuth,
-  noteDeviceAuthFailure,
   saveDeviceSignInError,
   savePendingDeviceAuth,
   type DeviceAuthPurpose,
@@ -151,18 +149,12 @@ const endWithout = async (
   if (stored !== null && stored.requestId !== record.requestId) return outcome;
   await clearPendingDeviceAuth();
   await clearDeviceAlarm();
-  if (record.purpose === "web-link") {
-    // The bridge waits before starting another, so a page that cannot approve
-    // is not answered with a fresh `/device/code` on every focus.
-    await noteDeviceAuthFailure(Date.now());
-  } else {
-    await saveDeviceSignInError(reason);
-  }
+  await saveDeviceSignInError(reason);
   return outcome;
 };
 
 const sourceFor = (purpose: DeviceAuthPurpose): "web" | "device" =>
-  purpose === "web-link" ? "web" : "device";
+  purpose === "web-confirmed" ? "web" : "device";
 
 /**
  * One `/device/token` exchange for `record`, and everything that follows an
@@ -187,7 +179,7 @@ const exchangeOnce = async (record: PendingDeviceAuth): Promise<DeviceExchangeOu
   }
 
   const user = await lookUpSessionUser(current.apiUrl, issued.token);
-  if (record.purpose === "web-link" && user?.userId !== record.forUserId) {
+  if (record.purpose === "web-confirmed" && user?.userId !== record.forUserId) {
     // Approved by somebody other than the person the page said was signed in
     // — or nobody would say who. Never kept.
     try {
@@ -202,8 +194,7 @@ const exchangeOnce = async (record: PendingDeviceAuth): Promise<DeviceExchangeOu
   await clearDeviceAlarm();
   await clearDeviceAuthFailure();
   await clearDeviceSignInError();
-  // Signed in again: an old extension sign-out has nothing more to ask of the
-  // web app, and nothing stands in the way of linking again later.
+  // Remove obsolete logout instructions left by an earlier build.
   await clearSignOutMarker();
   await clearLinkBlock();
   await adoptSession({
@@ -267,7 +258,7 @@ export const beginDeviceAuthorization = async (
     userCode: authorization.userCode,
     apiOrigin: apiUrl,
     purpose,
-    forUserId: purpose === "web-link" ? forUserId : null,
+    forUserId: purpose === "web-confirmed" ? forUserId : null,
     expiresAt: Date.now() + authorization.expiresInSeconds * 1000,
     intervalSeconds: Math.max(1, authorization.intervalSeconds),
   };
@@ -330,7 +321,7 @@ export async function startDeviceSignIn(): Promise<void> {
 export async function cancelDeviceSignIn(): Promise<void> {
   await serially(async () => {
     const record = await loadPendingDeviceAuth();
-    if (record?.purpose === "manual") await clearPendingDeviceAuth();
+    if (record !== null) await clearPendingDeviceAuth();
     await clearDeviceSignInError();
   });
   await clearDeviceAlarm();

@@ -85,7 +85,7 @@ describe("extension bridge: requests", () => {
       problem: "not-bridge",
     });
     assert.deepEqual(
-      decodeExtensionBridgeRequest({ ...extensionBridgeSyncRequest(API, SIGNED_IN), v: 2 }),
+      decodeExtensionBridgeRequest({ ...extensionBridgeSyncRequest(API, SIGNED_IN), v: EXTENSION_BRIDGE_VERSION + 1 }),
       { ok: false, problem: "unsupported-version" },
     );
     assert.deepEqual(
@@ -205,5 +205,24 @@ describe("extension bridge: replies", () => {
     assert.equal(normalizeExtensionBridgeUserCode("ABCD 2345"), null);
     assert.equal(normalizeExtensionBridgeUserCode("A".repeat(33)), null);
     assert.equal(normalizeExtensionBridgeUserCode(12345678), null);
+  });
+});
+
+
+describe("explicit account offers", () => {
+  it("round-trips an email and photo, and drops unrelated profile fields", () => {
+    const profile = { email: "rico@example.com", image: "https://api.trackyourtime.dev/api/avatars/u/key" };
+    const request = extensionBridgeSyncRequest(API, { ...SIGNED_IN, profile });
+    assert.deepEqual(decodeExtensionBridgeRequest({ ...request, web: { ...request.web, profile: { ...profile, token: "secret" } } }), { ok: true, message: request });
+  });
+  it("rejects invalid profiles and legacy automatic-login messages", () => {
+    for (const profile of [
+      { email: "", image: null }, { email: "x".repeat(321), image: null },
+      { email: "rico@example.com", image: "javascript:alert(1)" },
+      { email: "rico@example.com", image: "data:image/svg+xml,unsafe" },
+    ]) {
+      assert.equal(decodeExtensionBridgeRequest(extensionBridgeSyncRequest(API, { ...SIGNED_IN, profile })).ok, false);
+    }
+    assert.deepEqual(decodeExtensionBridgeRequest({ ...extensionBridgeSyncRequest(API, SIGNED_IN), v: 1 }), { ok: false, problem: "unsupported-version" });
   });
 });

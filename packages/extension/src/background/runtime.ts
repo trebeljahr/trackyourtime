@@ -76,7 +76,6 @@ import {
   type ResolvedSettings,
   type VersionedSpec,
   readHealthVersion,
-  signOutSession,
 } from "@starter/core";
 import { APP_VERSION } from "../lib/app-version";
 import { chromeStorage, localStorageArea } from "../lib/chrome-storage";
@@ -1698,72 +1697,6 @@ export async function adoptSession(session: SessionInput): Promise<void> {
   await reload();
 }
 
-/** Revoke `session` on `apiUrl`, best effort. */
-const revokeOnServer = async (apiUrl: string, token: string): Promise<void> => {
-  try {
-    await signOutSession(
-      {
-        baseUrl: apiUrl,
-        clientId: EXTENSION_CLIENT_ID,
-        clientVersion: APP_VERSION,
-      },
-      token,
-    );
-  } catch {
-    // Best effort: dropping the local copy is what signs this browser out.
-  }
-};
-
-/**
- * Leave a session that was linked to the web app, KEEPING the offline queue.
- *
- * Shared by a web-app sign-out and a web-app account switch. Both are the web
- * app changing its mind about who is signed in, which says nothing about the
- * work queued here: those rows are owner-stamped and stay held for their
- * account. What goes is everything that describes the session being left —
- * the token (revoked on the server, since it is a session row of the
- * extension's own), the optimistic timer and rows, the idle watcher's claim
- * and the workspace choice. Activity capture needs nothing: its scope is
- * per account, and the next account's scope clears the rows of every other.
- */
-const leaveLinkedSession = async (current: Runtime): Promise<void> => {
-  // While the token still works, so what this account queued reaches its
-  // own account rather than waiting to be held.
-  await flushQueue().catch(() => undefined);
-  if (current.session !== null) {
-    await revokeOnServer(current.apiUrl, current.session.token);
-  }
-  await forgetOptimisticRunning();
-  await clearOptimisticEntries();
-  await resetIdleWatcher();
-  await clearWorkspaceChoice();
-  workspaceChoice = emptyWorkspaceChoice();
-  await clearSession();
-  await reload();
-};
-
-/**
- * The web app signed out, and the extension's session was linked to it: sign
- * the extension out too, as the shared cookie used to. A session signed in to
- * on purpose (`password`, `device`) is left alone, as it always was.
- */
-export async function signOutLinkedWebSession(): Promise<boolean> {
-  const current = await ensureReady();
-  if (current.session === null || current.sessionSource !== "web") return false;
-  await leaveLinkedSession(current);
-  await renderBadge(null);
-  return true;
-}
-
-/**
- * The web app switched accounts while the extension was linked to the old
- * one. The old session is left like a web sign-out; linking the new account
- * is the bridge's next step.
- */
-export async function switchLinkedAccount(): Promise<boolean> {
-  return signOutLinkedWebSession();
-}
-
 /** Repaint the badge from whatever the rebuilt runtime now knows. */
 export const refreshBadgeFromCache = async (): Promise<void> => {
   try {
@@ -1818,15 +1751,8 @@ export async function forgetSession(): Promise<void> {
 }
 
 /**
- * The server refused the stored token (a 401).
- *
- * A session linked to the web app is dropped the way a web sign-out drops it —
- * KEEPING the offline queue — because a linked session is now a row of its
- * own that the web app's "Sign out other devices" or a password change
- * revokes, and the bridge links the extension straight back in. Clearing the
- * queue there would lose tracked time over something that was never a
- * sign-out of this browser. The rows are owner-stamped, so no other account
- * replays them. Every other session is forgotten whole, as before.
+ * A rejected web-authorized session keeps owner-stamped offline rows for the
+ * next confirmed sign-in. Revocation never triggers automatic reauthorization.
  */
 export async function forgetRejectedSession(): Promise<void> {
   const current = await ensureReady();

@@ -55,12 +55,10 @@ measured rather than assumed is in
   `TRUST_STORE_APPS=true` implies. Without it every request is refused by CORS
   and the popup says which setting the server's admin needs. `pnpm run dev`
   sets it for local work.
-- **There is no web-app bridge.** Firefox implements `externally_connectable`
-  for extensions only, never for web pages, so signing in at trackyourtime.dev
-  does not sign the add-on in and `background/bridge.ts` registers no listener
-  (`bridgeTarget: "none"`). Sign in with the popup's password form, or with
-  "Sign in with the web app" — the device flow, and the way in for an account
-  with two-factor authentication.
+- **The hosted web account uses a scoped content-script relay.** Firefox does
+  not expose `externally_connectable` to web pages. Its relay runs only on
+  `https://trackyourtime.dev/*` and offers the account for confirmation in the
+  popup. Password and device-code sign-in remain available on other servers.
 - **The sync socket needs an https server.** A `moz-extension://` page is a
   secure context and Firefox blocks an insecure `ws://` from it, with no
   loopback exception and whatever host permissions are held. Against a local
@@ -151,8 +149,8 @@ scripts, and does not read or change any web page.
   anywhere, and only an entry the person accepts reaches the server.
 
 `externally_connectable` lists `https://trackyourtime.dev/*`. It is not a
-permission: it lets trackyourtime.dev tell the extension that you signed in or
-out there, so the extension can sign itself in or out to match.
+permission: it lets trackyourtime.dev offer a signed-in account to the
+extension. The extension asks for confirmation before using that account.
 
 ### Production ids and TRUSTED_ORIGINS
 
@@ -308,46 +306,46 @@ Three ways in, on the sign-in screen:
   popup closes: the pending authorization is kept in `chrome.storage.session`,
   and an alarm, the popup opening or any other wake-up makes one token
   exchange. It never long-polls — MV3 stops the worker mid-wait.
-- **Follow the web app** (below), on the hosted service. Production builds also
-  offer **Open Track Your Time** on the sign-in screen, because opening the web
-  app is what links the extension.
+- **Use a web account** (below). The extension shows the signed-in web account's
+  profile photo and email, then asks for confirmation. **Open Track Your Time**
+  lets the web app refresh that offer. Manual sign-in remains available.
 
 Every session token is kept in `chrome.storage.session` — memory-only, so it
-never touches disk and is gone after a browser restart. For a session linked to
-the web app, the next Track Your Time tab signs the extension back in; otherwise
-signing in again is the intended cost. Do not move the token to
-`chrome.storage.local`. The stored session records how it was signed in
-(`web`, `password` or `device`).
+never touches disk and is gone after a browser restart. A fresh confirmation or
+manual sign-in is required after restart. Do not move the token to
+`chrome.storage.local`. The stored session records its source
+(`web`, `password` or `device`), but all three are independent of web logout.
 
 Every session appears in Settings → Devices as `trackyourtime-extension` and can
 be revoked from there, which kills both the HTTP and the WebSocket path.
 
-### Following the web app's sign-in
+### Confirming a web account
 
-The web app messages the extension through `externally_connectable` — after
-mount, on the web only, by the pinned extension id — and
-`src/background/bridge.ts` answers. The protocol is
-`@starter/shared/extension-bridge`; the extension never initiates.
+The web app messages Chromium through `externally_connectable`, from a browser
+tab to the pinned extension id. Firefox uses its hosted-only content relay.
+`src/background/bridge.ts` handles the messages. The protocol is `@starter/shared/extension-bridge`, version 2.
+Version 1 is rejected in both directions because it allowed automatic login
+and linked logout. Both the web app and extension need this update for account
+offers; password and manual device sign-in still work independently.
 
-- **Web sign-in, extension signed out:** the extension starts a device
-  authorization and replies with the user code; the page approves it with its
-  own session and says so; the extension fetches its own token, checks with
-  `get-session` that it belongs to the user the page named, and keeps it
-  (source `web`). No token crosses the bridge.
-- **Web sign-out:** an extension linked to the web app signs out too, revokes
-  its own session and keeps its offline queue.
-- **Web account switch:** the old linked session is left the same way, and the
-  new account is linked. The old account's queued rows stay, held for that
-  account (every row is stamped with its owner), and are listed with a discard.
-- **Extension sign-out:** revokes the session and leaves a marker in
-  `chrome.storage.local`. The next `sync` from a web tab of the same person, on
-  the same server, whose session began before the sign-out, is answered with
-  `sign-out-web`, and the page signs out. Markers expire after seven days.
-  It also blocks linking: no web session that began before the sign-out links
-  the extension again, whoever it belongs to and however old, until somebody
-  signs in.
-- A `password` or `device` session is never displaced by the web app, in
-  either direction.
+- **Web sign-in:** the page offers its user ID, email, profile photo and session
+  start. The extension holds this in memory for up to 90 seconds after its last
+  refresh. No device authorization starts until the person confirms that
+  account in the popup.
+- **Confirmation:** the extension starts a device authorization bound to the
+  selected user. On its next sync, the web page approves the code with its own
+  session. The extension fetches its own token and checks its user ID before
+  keeping it. No token crosses the bridge. The page checks every five seconds
+  while mounted, so confirmation does not require another focus event.
+- **Web logout or account switch:** updates the account offer and cancels an
+  unfinished confirmation for the previous user. An existing extension session
+  stays signed in, including sessions created by older builds.
+- **Extension logout:** revokes only the extension session. It never asks the
+  web app to sign out, and a new sign-in requires another confirmation.
+- **Upgrade:** old logout markers are discarded. Pending authorizations from
+  automatic login are rejected; they cannot bypass confirmation.
+- Explicit session revocation in Settings → Devices still applies. Revoking
+  other devices can sign out the web app, but does not sign out this extension.
 - A message is accepted only from a tab's top-level page (not a frame, not an
   incognito tab, not another extension) whose origin
   is in the build's allowlist and is the web app of the server the extension

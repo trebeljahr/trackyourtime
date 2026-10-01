@@ -1982,3 +1982,37 @@ button.tag:hover .tag__x {
 .timer-drawer .quick__start {
   min-height: 62px;
 }
+
+/* Confirm an existing web account without sharing either app's session. */
+.web-account__identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.web-account__avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.web-account__avatar img {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.web-account__email {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

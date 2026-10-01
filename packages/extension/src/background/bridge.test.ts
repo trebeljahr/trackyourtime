@@ -6,8 +6,6 @@
 import { EXTENSION_RELAY_CHANNEL } from "@starter/shared/extension-relay";
 import {
   EXTENSION_BRIDGE_CHANNEL,
-  EXTENSION_BRIDGE_DEVICE_RETRY_MS,
-  EXTENSION_SIGN_OUT_MARKER_TTL_MS,
   extensionBridgeDeviceApprovedRequest,
   extensionBridgeSyncRequest,
   type ExtensionBridgeReply,
@@ -20,13 +18,11 @@ import {
   savePendingDeviceAuth,
   type PendingDeviceAuth,
 } from "../lib/device-auth-store";
+import { loadWebAccount, WEB_ACCOUNT_TTL_MS } from "../lib/web-account";
+import { cancelDeviceSignIn } from "./device-sign-in";
+import { buildState } from "./state";
 import { loadSession, saveSession } from "../lib/session";
-import {
-  loadLinkBlock,
-  loadSignOutMarker,
-  saveLinkBlock,
-  saveSignOutMarker,
-} from "../lib/sign-out-marker";
+import { LINK_BLOCK_STORAGE_KEY, SIGN_OUT_MARKER_STORAGE_KEY } from "../lib/sign-out-marker";
 import {
   API,
   createFakeAuthServer,
@@ -35,6 +31,7 @@ import {
 } from "../test/fake-auth-server";
 import {
   handleBridgeRequest,
+  confirmWebAccount,
   isWebAppOrigin,
   registerBridgeListener,
   screenExternalMessage,
@@ -44,8 +41,6 @@ import {
   enqueueOffline,
   forgetRejectedSession,
   getOfflineQueue,
-  listHeldRows,
-  pendingSyncCount,
   reload,
 } from "./runtime";
 
@@ -60,6 +55,7 @@ const page = { origin: WEB, frameId: 0, tab: { id: 1 } } as chrome.runtime.Messa
 const signedIn = (userId: string, createdAt = Date.now() - 60_000): ExtensionBridgeWebSession => ({
   userId,
   sessionCreatedAt: createdAt,
+  profile: { email: `${userId}@example.com`, image: "https://api.trackyourtime.dev/api/avatars/test" },
 });
 
 const signedOut: ExtensionBridgeWebSession = { userId: null, sessionCreatedAt: null };
@@ -92,7 +88,10 @@ const statusOf = (reply: ExtensionBridgeReply | undefined) => {
 /** Link the extension to `userId` through the whole bridge exchange. */
 const link = async (userId: string, email = `${userId}@example.com`): Promise<void> => {
   server.approvedUser = { id: userId, email };
-  const action = actionOf(await sync(signedIn(userId)));
+  const web = signedIn(userId);
+  await sync(web);
+  await confirmWebAccount(userId, web.sessionCreatedAt!);
+  const action = actionOf(await sync(web));
   if (action.type !== "approve-device") throw new Error(`expected approve-device, got ${action.type}`);
   server.token = "approved";
   expect(statusOf(await approved(action.requestId))).toBe("signed-in");
@@ -163,7 +162,7 @@ describe("the sender", () => {
       { origin: WEB, frameId: 0, tab: {} },
       "development",
     );
-    expect(result).toMatchObject({ ok: false, reply: { kind: "unsupported", supported: [1] } });
+    expect(result).toMatchObject({ ok: false, reply: { kind: "unsupported", supported: [2] } });
   });
 
   test("a malformed or foreign message gets no reply", () => {
@@ -213,279 +212,146 @@ describe("the sender", () => {
   });
 });
 
-// ── (a) the web app signs in ─────────────────────────────────────────
+const confirm = async (userId = U) => {
+  const web = signedIn(userId);
+  await sync(web);
+  await confirmWebAccount(userId, web.sessionCreatedAt!);
+  const action = actionOf(await sync(web));
+  if (action.type !== "approve-device") throw new Error("expected confirmed device authorization");
+  return action;
+};
 
-describe("web sign-in", () => {
-  test("a signed-out extension starts a device authorization and hands the page its code", async () => {
-    const action = actionOf(await sync(signedIn(U)));
-    expect(action).toMatchObject({ type: "approve-device", userCode: "ABCDEFGH" });
-    const record = await loadPendingDeviceAuth();
-    expect(record).toMatchObject({ purpose: "web-link", forUserId: U, apiOrigin: API });
-    // The device code never leaves the extension.
-    expect(JSON.stringify(action)).not.toContain(record?.deviceCode);
-  });
-
-  test("the approval signs the extension in with a session of its own, as the page's user", async () => {
-    await link(U);
-    expect(await loadSession()).toMatchObject({
-      token: "token-1",
-      userId: U,
-      email: `${U}@example.com`,
-      source: "web",
-    });
+describe("explicit web account confirmation", () => {
+  test("detects the account without starting an authorization or signing in", async () => {
+    const web = signedIn(U);
+    expect(actionOf(await sync(web))).toEqual({ type: "none", reason: "confirmation-required" });
+    expect(await loadWebAccount(API)).toEqual({ userId: U, sessionCreatedAt: web.sessionCreatedAt, ...web.profile });
+    expect((await buildState()).webAccount?.email).toBe(`${U}@example.com`);
+    expect(server.calls).not.toContain("/api/auth/device/code");
     expect(await loadPendingDeviceAuth()).toBeNull();
-    expect(actionOf(await sync(signedIn(U)))).toEqual({ type: "none", reason: "linked" });
+    expect(await loadSession()).toBeNull();
   });
 
-  test("a second tab reuses the code instead of starting another authorization", async () => {
-    const first = actionOf(await sync(signedIn(U)));
-    const second = actionOf(await sync(signedIn(U)));
-    expect(second).toEqual(first);
+  test("offers no account without an email", async () => {
+    await sync({ userId: U, sessionCreatedAt: Date.now() });
+    expect(await loadWebAccount(API)).toBeNull();
+    await expect(confirmWebAccount(U, Date.now())).rejects.toMatchObject({ code: "WEB_ACCOUNT_CHANGED" });
+  });
+
+  test("rejects an expired offer, another user, or another web session", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const web = signedIn(U);
+    await sync(web);
+    await expect(confirmWebAccount(V, web.sessionCreatedAt!)).rejects.toMatchObject({ code: "WEB_ACCOUNT_CHANGED" });
+    await expect(confirmWebAccount(U, web.sessionCreatedAt! + 1)).rejects.toMatchObject({ code: "WEB_ACCOUNT_CHANGED" });
+    vi.setSystemTime(Date.now() + WEB_ACCOUNT_TTL_MS + 1);
+    await expect(confirmWebAccount(U, web.sessionCreatedAt!)).rejects.toMatchObject({ code: "WEB_ACCOUNT_CHANGED" });
+    expect(server.calls).not.toContain("/api/auth/device/code");
+  });
+
+  test("confirmation starts one code and repeated web syncs reuse it", async () => {
+    const action = await confirm();
+    const record = await loadPendingDeviceAuth();
+    expect(record).toMatchObject({ purpose: "web-confirmed", forUserId: U });
+    expect(actionOf(await sync(signedIn(U)))).toEqual(action);
     expect(server.calls.filter((path) => path === "/api/auth/device/code")).toHaveLength(1);
+    expect(JSON.stringify(action)).not.toContain(record?.deviceCode);
+    expect((await buildState()).pendingDeviceAuth).toMatchObject({ webAccount: true });
   });
 
-  test("an approval the page's reply was lost for still links on the next sync", async () => {
-    const first = actionOf(await sync(signedIn(U)));
-    server.approvedUser = { id: U, email: `${U}@example.com` };
-    server.token = "approved";
-    // The same code again, and no poll of its own: a poll here would put the
-    // page's `device-approved` exchange inside the server's polling interval.
-    server.calls = [];
-    const again = actionOf(await sync(signedIn(U)));
-    expect(again).toEqual(first);
-    expect(server.calls).not.toContain("/api/auth/device/token");
-    if (again.type !== "approve-device") throw new Error("expected a code");
-    expect(statusOf(await approved(again.requestId))).toBe("signed-in");
-    expect((await loadSession())?.source).toBe("web");
+  test("approval creates an independent session for the confirmed user", async () => {
+    await link(U);
+    expect(await loadSession()).toMatchObject({ token: "token-1", userId: U, source: "web" });
+    expect(await loadPendingDeviceAuth()).toBeNull();
+    expect(actionOf(await sync(signedIn(U)))).toEqual({ type: "none", reason: "explicit-session" });
   });
 
-  test("a token that belongs to somebody else is revoked and never kept", async () => {
-    const action = actionOf(await sync(signedIn(U)));
-    if (action.type !== "approve-device") throw new Error("expected a code");
+  test("a token for a different user is revoked and never adopted", async () => {
+    const action = await confirm();
     server.approvedUser = { id: V, email: "v@example.com" };
     server.token = "approved";
     expect(statusOf(await approved(action.requestId))).toBe("failed");
     expect(server.revoked).toEqual(["token-1"]);
     expect(await loadSession()).toBeNull();
-    expect(await loadPendingDeviceAuth()).toBeNull();
   });
 
-  test("not yet approved answers pending and keeps the authorization", async () => {
-    const action = actionOf(await sync(signedIn(U)));
-    if (action.type !== "approve-device") throw new Error("expected a code");
-    expect(statusOf(await approved(action.requestId))).toBe("pending");
-    expect(await loadPendingDeviceAuth()).not.toBeNull();
-  });
-
-  test("an unknown request id is refused", async () => {
-    actionOf(await sync(signedIn(U)));
+  test("pending, unknown, failed and expired approvals cannot sign in", async () => {
+    const action = await confirm();
     expect(statusOf(await approved("zzzzzzzzzzzzzzzzzzzzzzzz"))).toBe("failed");
-    expect(await loadPendingDeviceAuth()).not.toBeNull();
-  });
-
-  test("a page that could not approve ends it, and the extension backs off", async () => {
-    const action = actionOf(await sync(signedIn(U)));
-    if (action.type !== "approve-device") throw new Error("expected a code");
+    expect(statusOf(await approved(action.requestId))).toBe("pending");
     expect(statusOf(await approved(action.requestId, "failed"))).toBe("failed");
     expect(await loadPendingDeviceAuth()).toBeNull();
-    expect(actionOf(await sync(signedIn(U)))).toEqual({ type: "none", reason: "backing-off" });
+    expect(actionOf(await sync(signedIn(U))).type).toBe("none");
+    const again = await confirm();
+    server.token = "expired";
+    expect(statusOf(await approved(again.requestId))).toBe("expired");
+    expect(await loadSession()).toBeNull();
   });
 
-  test("a denied or expired code ends it", async () => {
-    const action = actionOf(await sync(signedIn(U)));
-    if (action.type !== "approve-device") throw new Error("expected a code");
-    server.token = "expired";
-    expect(statusOf(await approved(action.requestId))).toBe("expired");
+  test("cancel requires another explicit confirmation", async () => {
+    const action = await confirm();
+    await cancelDeviceSignIn();
+    expect(statusOf(await approved(action.requestId))).toBe("failed");
+    expect(actionOf(await sync(signedIn(U)))).toEqual({ type: "none", reason: "confirmation-required" });
     expect(await loadPendingDeviceAuth()).toBeNull();
   });
 
-  test("a server that will not start an authorization is backed off from", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    server.deviceCodeFails = true;
-    expect(actionOf(await sync(signedIn(U)))).toEqual({ type: "none", reason: "server-unavailable" });
-    expect(actionOf(await sync(signedIn(U)))).toEqual({ type: "none", reason: "backing-off" });
-    server.deviceCodeFails = false;
-    vi.setSystemTime(Date.now() + EXTENSION_BRIDGE_DEVICE_RETRY_MS + 1);
-    expect(actionOf(await sync(signedIn(U)))).toMatchObject({ type: "approve-device" });
+  test("a web logout or account switch clears pending consent without starting a replacement", async () => {
+    for (const next of [signedOut, signedIn(V)]) {
+      const action = await confirm();
+      await sync(next);
+      expect(await loadPendingDeviceAuth()).toBeNull();
+      expect(statusOf(await approved(action.requestId))).toBe("failed");
+    }
+    expect(await loadSession()).toBeNull();
   });
 
-  test("a code started for another user is dropped, and a new one is started", async () => {
-    actionOf(await sync(signedIn(U)));
-    const action = actionOf(await sync(signedIn(V)));
-    expect(action).toMatchObject({ type: "approve-device" });
-    expect((await loadPendingDeviceAuth())?.forUserId).toBe(V);
-  });
-
-  test("a device sign-in the popup started is not raced by a second one", async () => {
+  test("a manual device authorization is not replaced", async () => {
     const manual: PendingDeviceAuth = {
-      requestId: "manualmanualmanualmanual",
-      deviceCode: "device-manual",
-      userCode: "WXYZWXYZ",
-      apiOrigin: API,
-      purpose: "manual",
-      forUserId: null,
-      expiresAt: Date.now() + 600_000,
-      intervalSeconds: 5,
+      requestId: "manualmanualmanualmanual", deviceCode: "device-manual", userCode: "WXYZWXYZ",
+      apiOrigin: API, purpose: "manual", forUserId: null, expiresAt: Date.now() + 600_000, intervalSeconds: 5,
     };
     await savePendingDeviceAuth(manual);
-    expect(actionOf(await sync(signedIn(U)))).toEqual({ type: "none", reason: "backing-off" });
+    const web = signedIn(U);
+    await sync(web);
+    await confirmWebAccount(U, web.sessionCreatedAt!);
+    expect(await loadPendingDeviceAuth()).toEqual(manual);
     expect(server.calls).not.toContain("/api/auth/device/code");
   });
 
-  for (const source of ["password", "device"] as const) {
-    test(`a ${source} session is never displaced by the web app`, async () => {
-      await saveSession({ token: "mine", userId: V, email: null, source });
-      await reload();
-      expect(actionOf(await sync(signedIn(U)))).toEqual({ type: "none", reason: "explicit-session" });
-      expect(actionOf(await sync(signedOut))).toEqual({ type: "none", reason: "explicit-session" });
-      expect((await loadSession())?.token).toBe("mine");
-      expect(server.revoked).toEqual([]);
-    });
-  }
-});
-
-// ── (b) the web app signs out ────────────────────────────────────────
-
-describe("web sign-out", () => {
-  test("signs a linked extension out, revokes its own session and keeps the queue", async () => {
-    await link(U);
-    // Nothing can be sent: the network is gone for tRPC.
-    server.mutationsFail = true;
-    await enqueueOffline("entries.start", startInput("kept"), "tmp_1");
-    expect((await getOfflineQueue().list())[0]?.owner).toBe(U);
-
-    expect(actionOf(await sync(signedOut))).toEqual({ type: "none", reason: "signed-out" });
-    expect(await loadSession()).toBeNull();
-    expect(server.revoked).toContain("token-1");
-    expect(await getOfflineQueue().size()).toBe(1);
-  });
-
-  test("sends what it can before leaving", async () => {
-    await link(U);
-    server.mutationsFail = true;
-    await enqueueOffline("entries.start", startInput("sent on the way out"), "tmp_1");
-    server.mutationsFail = false;
-    expect(actionOf(await sync(signedOut))).toEqual({ type: "none", reason: "signed-out" });
-    expect(await getOfflineQueue().size()).toBe(0);
-    expect(server.calls).toContain("/api/trpc/entries.start");
-  });
-
-  test("a signed-out extension has nothing to do, and a web-link code is dropped", async () => {
-    actionOf(await sync(signedIn(U)));
-    expect(actionOf(await sync(signedOut))).toEqual({ type: "none", reason: "signed-out" });
+  test("legacy bridge requests are rejected before they can start automatic sign-in", async () => {
+    const request = { ...extensionBridgeSyncRequest(API, signedIn(U)), v: 1 };
+    expect(await send(request)).toMatchObject({ kind: "unsupported", supported: [2] });
     expect(await loadPendingDeviceAuth()).toBeNull();
   });
 });
 
-// ── (d) the web app switches accounts ────────────────────────────────
-
-describe("web account switch", () => {
-  test("leaves the old account, holds its queued rows, and links the new one", async () => {
-    await link(U);
-    server.mutationsFail = true;
-    await enqueueOffline("entries.start", startInput("U's work"), "tmp_1");
-
-    const action = actionOf(await sync(signedIn(V)));
-    expect(action).toMatchObject({ type: "approve-device" });
-    expect(server.revoked).toContain("token-1");
-    expect(await loadSession()).toBeNull();
-
-    if (action.type !== "approve-device") throw new Error("expected a code");
-    // The network is back: only the owner check keeps U's row from V's account.
-    server.mutationsFail = false;
-    server.calls = [];
-    server.approvedUser = { id: V, email: "v@example.com" };
-    server.token = "approved";
-    expect(statusOf(await approved(action.requestId))).toBe("signed-in");
-    expect((await loadSession())?.userId).toBe(V);
-    expect(server.calls).not.toContain("/api/trpc/entries.start");
-
-    // U's row is still there, held for U, and not ahead of V's work.
-    expect(await getOfflineQueue().size()).toBe(1);
-    expect(await pendingSyncCount()).toBe(0);
-    expect((await listHeldRows()).map((row) => row.hold)).toEqual(["other-account"]);
-  });
-});
-
-// ── (c) the extension signed out on purpose ──────────────────────────
-
-describe("the sign-out marker", () => {
-  test("asks the same person's older web session to sign out", async () => {
-    const at = Date.now() - 1_000;
-    await saveSignOutMarker({ userId: U, apiOrigin: API, at });
-    expect(actionOf(await sync(signedIn(U, at - 60_000)))).toEqual({ type: "sign-out-web", at });
-    // Kept until the web app has actually signed out.
-    expect(await loadSignOutMarker()).not.toBeNull();
-    expect(actionOf(await sync(signedOut))).toEqual({ type: "none", reason: "signed-out" });
-    expect(await loadSignOutMarker()).toBeNull();
-  });
-
-  test("a web session newer than the sign-out deletes it and links as usual", async () => {
-    const at = Date.now() - 60_000;
-    await saveSignOutMarker({ userId: U, apiOrigin: API, at });
-    expect(actionOf(await sync(signedIn(U, at + 1_000)))).toMatchObject({ type: "approve-device" });
-    expect(await loadSignOutMarker()).toBeNull();
-  });
-
-  test("never signs out another account", async () => {
-    await saveSignOutMarker({ userId: V, apiOrigin: API, at: Date.now() });
-    expect(actionOf(await sync(signedIn(U, Date.now() - 60_000)))).toMatchObject({
-      type: "approve-device",
+describe("independent sessions", () => {
+  for (const source of ["web", "password", "device"] as const) {
+    test(`${source} sessions survive web logout and web account switches`, async () => {
+      await saveSession({ token: "mine", userId: U, email: `${U}@example.com`, source });
+      await reload();
+      server.mutationsFail = true;
+      await enqueueOffline("entries.start", startInput("kept"), "tmp_1");
+      await sync(signedOut);
+      expect(await loadWebAccount(API)).toBeNull();
+      await sync(signedIn(V));
+      expect((await loadSession())?.token).toBe("mine");
+      expect(await getOfflineQueue().size()).toBe(1);
+      expect(server.revoked).toEqual([]);
+      expect(await loadPendingDeviceAuth()).toBeNull();
     });
-    expect(await loadSignOutMarker()).toBeNull();
-  });
+  }
 
-  test("expires", async () => {
-    const at = Date.now() - EXTENSION_SIGN_OUT_MARKER_TTL_MS - 1;
-    await saveSignOutMarker({ userId: U, apiOrigin: API, at });
-    expect(actionOf(await sync(signedIn(U, at - 1)))).toMatchObject({ type: "approve-device" });
-    expect(await loadSignOutMarker()).toBeNull();
-  });
-
-  test("a successful link deletes it", async () => {
-    await link(U);
-    expect(await loadSignOutMarker()).toBeNull();
-  });
-});
-
-describe("the link block", () => {
-  test("no web session from before an explicit sign-out links the extension, whoever it belongs to", async () => {
-    const at = Date.now() - 1_000;
-    // The marker named U; the web app is signed in as V, from before.
-    await saveSignOutMarker({ userId: U, apiOrigin: API, at });
-    await saveLinkBlock({ apiOrigin: API, at });
-    expect(actionOf(await sync(signedIn(V, at - 60_000)))).toEqual({
-      type: "none",
-      reason: "explicit-sign-out",
+  test("legacy logout markers are discarded without logging the web app out or signing the extension in", async () => {
+    await chrome.storage.local.set({
+      [SIGN_OUT_MARKER_STORAGE_KEY]: JSON.stringify({ userId: U, apiOrigin: API, at: Date.now() }),
+      [LINK_BLOCK_STORAGE_KEY]: JSON.stringify({ apiOrigin: API, at: Date.now() }),
     });
-    expect(server.calls).not.toContain("/api/auth/device/code");
-  });
-
-  test("does not expire with the marker", async () => {
-    const at = Date.now() - EXTENSION_SIGN_OUT_MARKER_TTL_MS - 60_000;
-    await saveLinkBlock({ apiOrigin: API, at });
-    expect(actionOf(await sync(signedIn(U, at - 1)))).toEqual({
-      type: "none",
-      reason: "explicit-sign-out",
-    });
-  });
-
-  test("a web sign-in after it links as usual, and the link clears it", async () => {
-    const at = Date.now() - 60_000;
-    await saveLinkBlock({ apiOrigin: API, at });
-    server.approvedUser = { id: U, email: `${U}@example.com` };
-    const action = actionOf(await sync(signedIn(U, at + 1_000)));
-    if (action.type !== "approve-device") throw new Error("expected a code");
-    server.token = "approved";
-    expect(statusOf(await approved(action.requestId))).toBe("signed-in");
-    expect(await loadLinkBlock()).toBeNull();
-  });
-
-  test("says nothing about another server", async () => {
-    await saveLinkBlock({ apiOrigin: "https://track.example.com", at: Date.now() });
-    expect(actionOf(await sync(signedIn(U, Date.now() - 60_000)))).toMatchObject({
-      type: "approve-device",
-    });
+    expect(actionOf(await sync(signedIn(U)))).toEqual({ type: "none", reason: "confirmation-required" });
+    expect(await chrome.storage.local.get(SIGN_OUT_MARKER_STORAGE_KEY)).toEqual({});
+    expect(await chrome.storage.local.get(LINK_BLOCK_STORAGE_KEY)).toEqual({});
+    expect(await loadPendingDeviceAuth()).toBeNull();
   });
 });
 
@@ -542,4 +408,22 @@ describe("Firefox relay trust boundary", () => {
     });
     expect(await response).toMatchObject({ kind: "sync-result", action: { reason: "signed-out" } });
   });
+});
+
+test("extension logout revokes only its own token and requires confirmation to sign in again", async () => {
+  await link(U);
+  server.sessions.set("web-token", { id: U, email: `${U}@example.com` });
+  await import("./index");
+  const response = await new Promise<unknown>((resolve) => {
+    const event = chrome.runtime.onMessage as unknown as {
+      emit: (message: unknown, sender: unknown, respond: (reply: unknown) => void) => void;
+    };
+    event.emit({ type: "auth:sign-out" }, {}, resolve);
+  });
+  expect(response).toMatchObject({ ok: true, state: { signedIn: false } });
+  expect(server.revoked).toEqual(["token-1"]);
+  expect(server.sessions.has("web-token")).toBe(true);
+  expect(await chrome.storage.local.get(SIGN_OUT_MARKER_STORAGE_KEY)).toEqual({});
+  expect(actionOf(await sync(signedIn(U)))).toEqual({ type: "none", reason: "confirmation-required" });
+  expect(await loadPendingDeviceAuth()).toBeNull();
 });

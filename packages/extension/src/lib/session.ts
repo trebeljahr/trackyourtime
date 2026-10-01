@@ -3,9 +3,8 @@
  *
  * It lives in `chrome.storage.session` on purpose: that area is memory-only,
  * so the token never lands on disk and dies with the browser process. The
- * price is signing in again after a browser restart — for a session linked to
- * the web app, that happens by itself the next time a Track Your Time tab
- * loads (`background/bridge.ts`). Do not move this to `chrome.storage.local`.
+ * price is signing in again after a browser restart — the popup offers a recent web account for explicit confirmation
+ * (`background/bridge.ts`). Do not move this to `chrome.storage.local`.
  *
  * Only the service worker should touch these; the popup asks it for state.
  */
@@ -17,15 +16,12 @@ export const SESSION_STORAGE_KEY = "trackyourtime.session";
  * How the extension's session came to be. Every one of them is a session row
  * of the extension's own — none is shared with the web app any more.
  *
- * - `web`: the web app handed the extension a device code to approve, because
- *   somebody signed in there (`background/bridge.ts`). A web sign-out or an
- *   account switch in the web app ends it.
+ * - `web`: somebody confirmed the account offered by the web app.
  * - `password`: somebody typed a password into the popup.
- * - `device`: somebody pressed "Sign in with the web app" and approved the
- *   code in a browser tab.
+ * - `device`: somebody approved a device code in a browser tab.
  *
- * `password` and `device` are signed in to on purpose, and nothing the web app
- * does displaces them.
+ * All three are independent sessions. Web logout and account switches never
+ * displace them, including sessions created by older extension builds.
  */
 export type SessionSource = "web" | "password" | "device";
 

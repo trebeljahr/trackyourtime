@@ -2,10 +2,11 @@
 
 import { FIREFOX_EXTENSION_ID } from "@starter/shared/extension-relay";
 import * as React from "react";
+import { EXTENSION_BRIDGE_SYNC_MIN_INTERVAL_MS } from "@starter/shared";
 
 import { getAbsoluteApiOrigin } from "@/lib/api-origin";
 import { isAppShell } from "@/lib/shell";
-import { signOut, useSession } from "@/lib/auth-client";
+import { useSession } from "@/lib/auth-client";
 import { approveDeviceCode } from "@/lib/device-approve";
 import {
   createExtensionBridgeController,
@@ -20,7 +21,7 @@ import {
 } from "@/lib/extension-bridge-transport";
 
 type SessionLike = {
-  data: { user?: { id?: unknown } | null; session?: { createdAt?: unknown } | null } | null;
+  data: { user?: { id?: unknown; email?: unknown; image?: unknown } | null; session?: { createdAt?: unknown } | null } | null;
   isPending: boolean;
   error: unknown;
 };
@@ -38,16 +39,21 @@ export const bridgeSessionState = (result: SessionLike): BridgeSessionState => {
     raw instanceof Date || typeof raw === "string" || typeof raw === "number"
       ? new Date(raw).getTime()
       : Number.NaN;
-  // A session with no readable start cannot be compared against an extension
-  // sign-out, so it is not described at all rather than described wrongly.
+  // Confirmation must refer to a known web session.
   if (!Number.isFinite(createdAt)) return { status: "error" };
-  return { status: "resolved", session: { userId, createdAt } };
+  const email = result.data?.user?.email;
+  const image = result.data?.user?.image;
+  return { status: "resolved", session: {
+    userId, createdAt,
+    ...(typeof email === "string" && email !== "" ? {
+      profile: { email, image: typeof image === "string" && /^https?:\/\//.test(image) ? image : null },
+    } : {}),
+  } };
 };
 
 /**
  * Whether this document is the tab's top-level one. A frame — which any site
- * can make of the web app — gets no session cookie cross-site, so it would
- * describe a signed-out web app and sign a linked extension out.
+ * can make of the web app — must not publish account offers.
  */
 export const isTopLevelDocument = (win: Window): boolean => {
   try {
@@ -67,7 +73,7 @@ const bridgeAvailable = (): boolean =>
   (chromeRuntime() !== null || pageRelayAvailable());
 
 /**
- * Keeps the browser extension signed in and out with this web app — see
+ * Offers this web account to the extension for explicit confirmation — see
  * `lib/extension-bridge.ts`.
  *
  * Renders nothing and decides everything in effects: the prerendered HTML is
@@ -91,9 +97,6 @@ export function ExtensionBridge(): null {
       send: (id, message) => sendToExtension(id, message),
       approve: async (userCode) =>
         (await approveDeviceCode(userCode, { alreadyApprovedIsOk: true })).ok,
-      signOutWeb: async () => {
-        await signOut();
-      },
       now: () => Date.now(),
       onOutcomes:
         process.env.NODE_ENV === "development"
@@ -108,10 +111,14 @@ export function ExtensionBridge(): null {
     const onFocus = (): void => controller.wake();
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onFocus);
+    // The popup cannot message a web page. Poll while mounted so a confirmed
+    // account can approve its device code without another focus transition.
+    const timer = window.setInterval(() => controller.wake(), EXTENSION_BRIDGE_SYNC_MIN_INTERVAL_MS);
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onFocus);
+      window.clearInterval(timer);
       controller.dispose();
       controllerRef.current = null;
     };
@@ -120,7 +127,7 @@ export function ExtensionBridge(): null {
   const state = bridgeSessionState(session);
   const stateKey =
     state.status === "resolved"
-      ? `resolved:${state.session?.userId ?? ""}:${state.session?.createdAt ?? ""}`
+      ? `resolved:${state.session?.userId ?? ""}:${state.session?.createdAt ?? ""}:${state.session?.profile?.email ?? ""}:${state.session?.profile?.image ?? ""}`
       : state.status;
 
   React.useEffect(() => {

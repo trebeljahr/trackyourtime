@@ -31,10 +31,9 @@ type Sent = { id: string; message: Record<string, unknown> };
 const harness = (
   reply: (id: string, message: Record<string, unknown>) => unknown,
   overrides: Partial<ExtensionSyncDeps> = {},
-): { deps: ExtensionSyncDeps; sent: Sent[]; approve: ReturnType<typeof vi.fn>; signOutWeb: ReturnType<typeof vi.fn> } => {
+): { deps: ExtensionSyncDeps; sent: Sent[]; approve: ReturnType<typeof vi.fn> } => {
   const sent: Sent[] = [];
   const approve = vi.fn(async (_code: string) => true);
-  const signOutWeb = vi.fn(async () => undefined);
   const deps: ExtensionSyncDeps = {
     ids: [EXT_A],
     apiOrigin: API,
@@ -46,11 +45,10 @@ const harness = (
       return reply(id, record);
     },
     approve,
-    signOutWeb,
     now: () => NOW,
     ...overrides,
   };
-  return { deps, sent, approve, signOutWeb };
+  return { deps, sent, approve };
 };
 
 const syncReply = (action: ExtensionBridgeSyncAction): unknown => extensionBridgeSyncReply(action);
@@ -72,7 +70,7 @@ describe("syncWithExtensions", () => {
         id: EXT_A,
         message: {
           channel: EXTENSION_BRIDGE_CHANNEL,
-          v: 1,
+          v: 2,
           kind: "sync",
           apiOrigin: API,
           web: { userId: "user-u", sessionCreatedAt: U!.createdAt },
@@ -91,12 +89,12 @@ describe("syncWithExtensions", () => {
   });
 
   it("treats no reply, a foreign reply and a malformed reply as no extension", async () => {
-    for (const answer of [undefined, { hello: "world" }, { channel: EXTENSION_BRIDGE_CHANNEL, v: 1, kind: "sync-result", action: { type: "launch" } }]) {
-      const { deps, sent, approve, signOutWeb } = harness(() => answer);
+    for (const answer of [undefined, { hello: "world" }, { channel: EXTENSION_BRIDGE_CHANNEL, v: 2, kind: "sync-result", action: { type: "launch" } }]) {
+      const { deps, sent, approve } = harness(() => answer);
       await expect(syncWithExtensions(deps)).resolves.toEqual(["no-reply"]);
       expect(sent).toHaveLength(1);
       expect(approve).not.toHaveBeenCalled();
-      expect(signOutWeb).not.toHaveBeenCalled();
+
     }
   });
 
@@ -118,7 +116,7 @@ describe("syncWithExtensions", () => {
         id: EXT_A,
         message: {
           channel: EXTENSION_BRIDGE_CHANNEL,
-          v: 1,
+          v: 2,
           kind: "device-approved",
           apiOrigin: API,
           requestId: REQUEST_ID,
@@ -178,36 +176,36 @@ describe("syncWithExtensions", () => {
   });
 
   describe("sign-out-web", () => {
-    it("signs out a session that began before the extension signed out", async () => {
-      const { deps, signOutWeb } = harness(() => syncReply({ type: "sign-out-web", at: NOW - 1 }));
-      await expect(syncWithExtensions(deps)).resolves.toEqual(["signed-out-web"]);
-      expect(signOutWeb).toHaveBeenCalledTimes(1);
+    it("refuses to sign out a session even when it predates the extension sign-out", async () => {
+      const { deps } = harness(() => syncReply({ type: "sign-out-web", at: NOW - 1 }));
+      await expect(syncWithExtensions(deps)).resolves.toEqual(["sign-out-refused"]);
+
     });
 
     it("keeps a session that began after, or at, the extension's sign-out", async () => {
       for (const at of [U!.createdAt, U!.createdAt - 1]) {
-        const { deps, signOutWeb } = harness(() => syncReply({ type: "sign-out-web", at }));
+        const { deps } = harness(() => syncReply({ type: "sign-out-web", at }));
         await expect(syncWithExtensions(deps)).resolves.toEqual(["sign-out-refused"]);
-        expect(signOutWeb).not.toHaveBeenCalled();
+
       }
     });
 
     it("keeps the session when the user changed or nobody is signed in", async () => {
-      let { deps, signOutWeb } = harness(() => syncReply({ type: "sign-out-web", at: NOW }), {
+      let { deps } = harness(() => syncReply({ type: "sign-out-web", at: NOW }), {
         currentSession: () => V,
       });
       // The first id check passes on the described user; the action re-reads.
       let calls = 0;
       deps.currentSession = () => (calls++ === 0 ? U : V);
       await expect(syncWithExtensions(deps)).resolves.toEqual(["sign-out-refused"]);
-      expect(signOutWeb).not.toHaveBeenCalled();
 
-      ({ deps, signOutWeb } = harness(() => syncReply({ type: "sign-out-web", at: NOW }), {
+
+      ({ deps } = harness(() => syncReply({ type: "sign-out-web", at: NOW }), {
         session: null,
         currentSession: () => null,
       }));
       await expect(syncWithExtensions(deps)).resolves.toEqual(["sign-out-refused"]);
-      expect(signOutWeb).not.toHaveBeenCalled();
+
     });
   });
 
@@ -221,12 +219,12 @@ describe("syncWithExtensions", () => {
       expect(sent.map((s) => s.id)).toEqual([EXT_A, EXT_B]);
     });
 
-    it("stops after signing out", async () => {
+    it("refuses logout requests from every extension", async () => {
       const { deps, sent } = harness(() => syncReply({ type: "sign-out-web", at: NOW }), {
         ids: [EXT_A, EXT_B],
       });
-      await expect(syncWithExtensions(deps)).resolves.toEqual(["signed-out-web"]);
-      expect(sent).toHaveLength(1);
+      await expect(syncWithExtensions(deps)).resolves.toEqual(["sign-out-refused", "sign-out-refused"]);
+      expect(sent).toHaveLength(2);
     });
 
     it("stops when the user changed between ids", async () => {
@@ -266,7 +264,6 @@ describe("createExtensionBridgeController", () => {
         return Promise.resolve(syncReply({ type: "none", reason: "linked" }));
       },
       approve: async () => true,
-      signOutWeb: async () => undefined,
       now: () => now,
     };
   });
@@ -409,4 +406,20 @@ describe("createExtensionBridgeController", () => {
     await bridge.idle();
     expect(sent).toHaveLength(0);
   });
+});
+
+
+it("never approves automatic-login replies from the old bridge version", async () => {
+  const { deps, approve } = harness(() => ({ ...extensionBridgeSyncReply(approveAction()), v: 1 }));
+  await expect(syncWithExtensions(deps)).resolves.toEqual(["no-reply"]);
+  expect(approve).not.toHaveBeenCalled();
+});
+
+it("forwards profile details without forwarding a token", async () => {
+  const session = { ...U!, profile: { email: "rico@example.com", image: null } };
+  const { deps, sent } = harness(() => syncReply({ type: "none", reason: "confirmation-required" }), {
+    session, currentSession: () => session,
+  });
+  await syncWithExtensions(deps);
+  expect(sent[0]!.message.web).toEqual({ userId: session.userId, sessionCreatedAt: session.createdAt, profile: session.profile });
 });

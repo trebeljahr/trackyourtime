@@ -130,6 +130,7 @@ export const popup: Translation<typeof source> = {
       "{server} nimmt keine Anfragen von dieser Erweiterung an. Bitte den Admin, TRUST_STORE_APPS=true zu setzen oder {origin} zu TRUSTED_ORIGINS hinzuzufügen.",
     originNotTrustedRandom:
       "{server} nimmt keine Anfragen von dieser Erweiterung an. Firefox gibt jeder Installation eine eigene Adresse ({origin}), deshalb bitte den Admin, TRUST_EXTENSION_ORIGINS=true (oder TRUST_STORE_APPS=true) zu setzen.",
+    webAccountChanged: "Öffne die Web-App, prüfe das Konto und versuche es erneut.",
     deviceUrlInvalid:
       "Der Server hat eine Bestätigungsseite geschickt, die die Erweiterung nicht öffnet. Die Webadresse des Servers muss https:// verwenden.",
     deviceDenied: "Die Anmeldung wurde in der Web-App abgelehnt.",
@@ -271,9 +272,15 @@ export const popup: Translation<typeof source> = {
     create: "Schlagwort „{name}“ erstellen",
   },
   signIn: {
+    webAccountTitle: "Mit diesem Konto anmelden?",
+    webAccountHint: "Dieses Konto ist in der Web-App angemeldet. Die Erweiterung bleibt unabhängig davon angemeldet.",
+    useWebAccount: "Dieses Konto verwenden",
+    webAccountWaitingTitle: "Anmeldung läuft…",
+    webAccountWaiting: "Lass die Web-App geöffnet, um die Anmeldung abzuschließen, oder fahre im Browser fort.",
+
     ownServer: "Eigenen Server verwenden",
     openWebApp: "Track Your Time öffnen",
-    openWebAppHint: "Bereits im Web angemeldet? Öffne die Web-App, um die Verbindung erneut zu versuchen. Nutze sonst eine der Anmeldemethoden oben.",
+    openWebAppHint: "Schon in der Web-App angemeldet? Öffne sie und kehre hierher zurück, um dieses Konto auszuwählen.",
     title: "Bei Track Your Time anmelden",
     email: "E-Mail",
     password: "Passwort",
@@ -520,28 +527,24 @@ export const popup: Translation<typeof source> = {
     },
     signOutBrowserTitle: "Diesen Browser abmelden?",
     signOutDeviceTitle: "Dieses Gerät abmelden?",
-    sharedSessionHint:
-      "Über die Web-App angemeldet. Wenn du dich hier abmeldest, wirst du auch bei Track Your Time in diesem Browser abgemeldet, sobald du es das nächste Mal öffnest.",
+    sharedSessionHint: "Wenn du dich aus der Erweiterung abmeldest, bleibt die Web-App angemeldet.",
     signOutBrowserHint: "Die Erweiterung vergisst ihre Sitzung, und du meldest dich neu an.",
     signOutDeviceHint:
       "{name} synchronisiert sofort nicht mehr und muss sich neu anmelden. Nichts, was dort schon erfasst wurde, geht verloren.",
     signOutOthers: "Andere Geräte abmelden",
     signOutOthersTitle: "Alle anderen Geräte abmelden?",
     signOutOthersHint: "Dieser Browser bleibt angemeldet. Alle anderen Geräte müssen sich neu anmelden.",
-    signOutOthersSharedHint:
-      "Alle anderen Geräte müssen sich neu anmelden, auch Track Your Time in diesem Browser. Die Erweiterung ist darüber angemeldet und wird deshalb ebenfalls abgemeldet.",
+    signOutOthersSharedHint: "Alle anderen Geräte, einschließlich der Web-App, müssen sich neu anmelden. Die Erweiterung bleibt angemeldet.",
     signOutOthersConfirm: "Abmelden",
   },
   account: {
     signedInAs: "Angemeldet als",
     appVersion: "Erweiterung, Version {version}",
-    sharedSession:
-      "Über die Web-App in diesem Browser angemeldet. Wenn du dich in der Web-App abmeldest, wird auch die Erweiterung abgemeldet.",
+    sharedSession: "Mit deinem Web-Konto angemeldet. Web-App und Erweiterung bleiben unabhängig voneinander angemeldet.",
     changeServer: "Server wechseln …",
     keepServer: "Diesen Server behalten",
     signOutTitle: "Abmelden?",
-    signOutSharedHint:
-      "Wenn du dich hier abmeldest, wirst du auch bei Track Your Time in diesem Browser abgemeldet, sobald du es das nächste Mal öffnest.",
+    signOutSharedHint: "Wenn du dich aus der Erweiterung abmeldest, bleibt die Web-App angemeldet.",
     signOutHint: "Alles bereits Erfasste bleibt erhalten. Melde dich wieder an, um weiter zu erfassen.",
   },
 };

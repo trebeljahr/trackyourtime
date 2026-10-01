@@ -9,8 +9,8 @@
  * is a credential until it is spent, and it dies with the browser.
  *
  * Beside it, two small facts that must survive the same restarts: when the
- * last authorization failed (the bridge backs off after that), and why the
- * last one the popup started did not finish.
+ * last authorization failed in older builds, and why the current one
+ * did not finish.
  *
  * Only the service worker touches these. The popup sees the user code and the
  * expiry on the snapshot — never the device code.
@@ -28,13 +28,13 @@ export const DEVICE_AUTH_ERROR_KEY = "trackyourtime.device-auth-error";
 /**
  * Who started the authorization.
  *
- * - `web-link`: the bridge, for a person signed in to the web app. The page
- *   approves it; `forUserId` is who the page said was signed in, and the
+ * - `web-confirmed`: the popup explicitly confirmed the offered web account.
+ *   The page approves it; `forUserId` is who the page said was signed in, and the
  *   issued session must belong to exactly that user.
  * - `manual`: the popup's "Sign in with the web app". The person approves it
  *   in a tab, as whoever they are signed in as there.
  */
-export type DeviceAuthPurpose = "web-link" | "manual";
+export type DeviceAuthPurpose = "web-confirmed" | "manual";
 
 export type PendingDeviceAuth = {
   /** Handed to the page with the code, and echoed back in `device-approved`. */
@@ -46,7 +46,7 @@ export type PendingDeviceAuth = {
   /** The API origin the authorization was started against. */
   apiOrigin: string;
   purpose: DeviceAuthPurpose;
-  /** For `web-link` only: the user the page said was signed in. */
+  /** For `web-confirmed` only: the user the page said was signed in. */
   forUserId: string | null;
   /** Epoch ms. */
   expiresAt: number;
@@ -90,13 +90,13 @@ export const decodePendingDeviceAuth = (raw: string | null): PendingDeviceAuth |
       apiOrigin === null ||
       expiresAt === null ||
       intervalSeconds === null ||
-      (purpose !== "web-link" && purpose !== "manual")
+      (purpose !== "web-confirmed" && purpose !== "manual")
     ) {
       return null;
     }
     const forUserId = text(record.forUserId);
-    // A web-link record is only ever adopted for the user it names.
-    if (purpose === "web-link" && forUserId === null) return null;
+    // A web-confirmed record is only ever adopted for the user it names.
+    if (purpose === "web-confirmed" && forUserId === null) return null;
     return {
       requestId,
       deviceCode,
@@ -104,7 +104,7 @@ export const decodePendingDeviceAuth = (raw: string | null): PendingDeviceAuth |
       ...(text(record.verificationUrl) ? { verificationUrl: text(record.verificationUrl)! } : {}),
       apiOrigin,
       purpose,
-      forUserId: purpose === "web-link" ? forUserId : null,
+      forUserId: purpose === "web-confirmed" ? forUserId : null,
       expiresAt,
       intervalSeconds: Math.max(1, intervalSeconds),
     };
@@ -131,17 +131,6 @@ export const isLivePendingDeviceAuth = (
   apiUrl: string,
   now: number,
 ): boolean => record.expiresAt > now && sameServerOrigin(record.apiOrigin, apiUrl);
-
-export async function noteDeviceAuthFailure(at: number): Promise<void> {
-  await storage().setItem(DEVICE_AUTH_FAILED_AT_KEY, String(at));
-}
-
-export async function loadDeviceAuthFailedAt(): Promise<number | null> {
-  const raw = await storage().getItem(DEVICE_AUTH_FAILED_AT_KEY);
-  if (raw === null) return null;
-  const at = Number(raw);
-  return Number.isFinite(at) ? at : null;
-}
 
 export async function clearDeviceAuthFailure(): Promise<void> {
   await storage().removeItem(DEVICE_AUTH_FAILED_AT_KEY);

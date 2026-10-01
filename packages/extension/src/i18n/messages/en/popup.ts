@@ -146,6 +146,7 @@ export const popup = {
      */
     originNotTrustedRandom:
       "{server} does not accept requests from this extension. Firefox gives every install its own address ({origin}), so ask its admin to set TRUST_EXTENSION_ORIGINS=true (or TRUST_STORE_APPS=true).",
+    webAccountChanged: "Open the web app to check the account, then try again.",
     deviceUrlInvalid:
       "The server sent an approval page the extension will not open. The server’s web address has to use https://.",
     deviceDenied: "The sign-in was declined in the web app.",
@@ -287,9 +288,15 @@ export const popup = {
     create: "Create tag “{name}”",
   },
   signIn: {
+    webAccountTitle: "Sign in with this account?",
+    webAccountHint: "This account is signed in on the web. The extension stays signed in independently.",
+    useWebAccount: "Use this account",
+    webAccountWaitingTitle: "Signing in…",
+    webAccountWaiting: "Keep the web app open to finish signing in, or continue in the browser.",
+
     ownServer: "Use your own server",
     openWebApp: "Open Track Your Time",
-    openWebAppHint: "Already signed in on the web? Open the web app to retry connecting. If the extension stays signed out, use either method above.",
+    openWebAppHint: "Already signed in on the web? Open the web app, then return here to choose that account.",
     title: "Sign in to Track Your Time",
     email: "Email",
     password: "Password",
@@ -536,30 +543,26 @@ export const popup = {
     },
     signOutBrowserTitle: "Sign this browser out?",
     signOutDeviceTitle: "Sign this device out?",
-    sharedSessionHint:
-      "Signed in through the web app. Signing out here also signs you out of Track Your Time in this browser the next time you open it.",
+    sharedSessionHint: "Signing out of the extension leaves the web app signed in.",
     signOutBrowserHint: "The extension forgets its session and you sign in again.",
     signOutDeviceHint:
       "{name} stops syncing immediately and has to sign in again. Nothing it already tracked is lost.",
     signOutOthers: "Sign out other devices",
     signOutOthersTitle: "Sign every other device out?",
     signOutOthersHint: "This browser stays signed in. Everything else has to sign in again.",
-    /** The extension is linked to the web app, whose own session in this browser is one of the others. */
-    signOutOthersSharedHint:
-      "Every other device has to sign in again, and so does Track Your Time in this browser. The extension is signed in through it, so the extension signs out too.",
+    /** The web app has its own session, so it counts as another device. */
+    signOutOthersSharedHint: "Every other device, including the web app, has to sign in again. The extension stays signed in.",
     signOutOthersConfirm: "Sign them out",
   },
   account: {
     signedInAs: "Signed in as",
     /** This extension's own release, from the root package.json. */
     appVersion: "Track Your Time extension {version}",
-    sharedSession:
-      "Signed in through the web app in this browser. Signing out of the web app signs the extension out too.",
+    sharedSession: "Signed in using your web account. The web app and extension stay signed in independently.",
     changeServer: "Change server…",
     keepServer: "Keep this server",
     signOutTitle: "Sign out?",
-    signOutSharedHint:
-      "Signing out here also signs you out of Track Your Time in this browser the next time you open it.",
+    signOutSharedHint: "Signing out of the extension leaves the web app signed in.",
     signOutHint: "Anything already tracked is kept. You sign in again to keep tracking.",
   },
 } as const;

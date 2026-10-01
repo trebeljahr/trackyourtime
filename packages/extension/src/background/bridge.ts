@@ -1,40 +1,11 @@
 /**
- * The web app ↔ extension bridge, the extension's half.
- *
- * The store extension holds no host permission and no `cookies` permission,
- * so it can no longer read the web app's session cookie. Instead the build's
- * first-party web origins use `externally_connectable` on Chromium and a
- * content-script relay on Firefox. The
- * web app — after mount, on the web only — tells the extension who is signed
- * in there (`sync`). The extension answers with what the page should do:
- * nothing, approve a device code the extension just started, or sign out
- * because the extension was signed out on purpose. The protocol, its decoders
- * and its constants are `@starter/shared/extension-bridge`.
- *
- * What it preserves from the cookie:
- *  - signing in on the web app signs a signed-out extension in (a device
- *    authorization the page approves with its own session — never a token over
- *    the bridge);
- *  - signing out of the web app signs out an extension that was linked to it,
- *    and keeps its queued changes;
- *  - a session somebody signed in to on purpose (password, device flow) is
- *    never displaced by the web app, in either direction;
- *  - signing out of the extension signs that person out of the web app — on
- *    the page's next `sync` rather than at once, and only the same person
- *    (`lib/sign-out-marker.ts`).
- *
- * Every message is untrusted input. It is accepted only from a page (never
- * another extension) whose origin is in this BUILD's allowlist AND is the web
- * app of the server the extension points at, and only about that server. A
- * message never changes the server, the workspace, the queue or a setting.
- * Nothing in a reply is a credential: the user code only works for a session
- * of the user the page says is signed in, which is checked again when the
- * token arrives.
+ * Trusted web pages offer an account; only a popup confirmation starts a
+ * device authorization. Each app keeps its own session after that sign-in.
+ * Sender, server and account checks apply to every bridge exchange.
  */
 import { decodeExtensionRelayEnvelope } from "@starter/shared/extension-relay";
 import {
   decodeExtensionBridgeRequest,
-  EXTENSION_BRIDGE_DEVICE_RETRY_MS,
   extensionBridgeDeviceReply,
   extensionBridgeSyncReply,
   extensionBridgeUnsupportedReply,
@@ -46,26 +17,27 @@ import {
   type ExtensionBridgeSyncRequest,
   type ExtensionBridgeTarget,
 } from "@starter/shared/extension-bridge";
+import { loadWebAccount, saveWebAccount } from "../lib/web-account";
+import { BackgroundError } from "./errors";
 import { sameServerOrigin } from "@starter/core";
 import { BRIDGE_TARGET, loadServerInfo } from "../lib/config";
 import {
   clearPendingDeviceAuth,
+  clearDeviceSignInError,
+  saveDeviceSignInError,
+  DEVICE_AUTH_ALARM,
   isLivePendingDeviceAuth,
-  loadDeviceAuthFailedAt,
   loadPendingDeviceAuth,
-  noteDeviceAuthFailure,
   savePendingDeviceAuth,
   type PendingDeviceAuth,
 } from "../lib/device-auth-store";
 import {
   clearSignOutMarker,
-  isLinkBlocked,
-  loadLinkBlock,
-  loadSignOutMarker,
-  signOutMarkerVerdict,
+  clearLinkBlock,
 } from "../lib/sign-out-marker";
 import {
   beginDeviceAuthorization,
+  isAllowedVerificationUrl,
   exchangePendingDeviceAuth,
   serially,
 } from "./device-sign-in";
@@ -73,8 +45,6 @@ import {
   ensureReady,
   getCachedServerInfo,
   resolveWebUrl,
-  signOutLinkedWebSession,
-  switchLinkedAccount,
 } from "./runtime";
 
 /** The parts of `chrome.runtime.MessageSender` the checks read. */
@@ -90,7 +60,7 @@ export type BridgeSender = {
 export type BridgeOptions = {
   /** Gap between the up-to-three exchanges after `device-approved`. */
   retryDelayMs?: number;
-  /** Injectable clock, for the back-off and the marker. */
+  /** Injectable clock for account freshness and authorization expiry. */
   now?: () => number;
 };
 
@@ -115,9 +85,8 @@ export const screenExternalMessage = (
     return { ok: false, reply: undefined };
   }
   // The tab's top-level document only. Any site can frame the web app, and a
-  // cross-site frame gets no session cookie (SameSite=Lax), so a framed app
-  // honestly believes nobody is signed in — which the extension would read as
-  // a web sign-out. An incognito tab's session is not this browser's either.
+  // cross-site frame must not publish account offers. An incognito tab's
+  // session is not this browser's either.
   if (sender.frameId !== 0 || sender.tab.incognito === true) {
     return { ok: false, reply: undefined };
   }
@@ -184,101 +153,65 @@ const approve = (record: PendingDeviceAuth): ExtensionBridgeReply =>
     expiresAt: record.expiresAt,
   });
 
-/** Nobody is signed in to the extension, and the page is signed in as `userId`. */
-const linkSignedOutExtension = async (
-  apiUrl: string,
-  userId: string,
-  sessionCreatedAt: number | null,
-  now: number,
-): Promise<ExtensionBridgeReply> => {
-  // Signed out here on purpose: a web session from before that stays unlinked,
-  // whoever it belongs to. Only a newer web sign-in, or any sign-in here,
-  // links again.
-  if (isLinkBlocked(await loadLinkBlock(), apiUrl, sessionCreatedAt)) {
-    return none("explicit-sign-out");
-  }
-
-  const pending = await loadPendingDeviceAuth();
-  if (pending !== null && isLivePendingDeviceAuth(pending, apiUrl, now)) {
-    // The popup's own sign-in is under way: do not start a second one.
-    if (pending.purpose === "manual") return none("backing-off");
-    if (pending.forUserId === userId) {
-      // Another tab (or this one, before a lost reply) already has the code.
-      // Hand it over again without polling here: the page approves it (an
-      // already approved code counts) and its `device-approved` makes the
-      // exchange. A poll now would put that exchange inside the server's
-      // polling interval, which answers `slow_down` to every retry.
-      return approve(pending);
+/** The only entry point that can start a web-account sign-in: an internal popup action. */
+export const confirmWebAccount = (userId: string, sessionCreatedAt: number): Promise<void> =>
+  serially(async () => {
+    const current = await ensureReady();
+    if (current.session !== null) return;
+    const account = await loadWebAccount(current.apiUrl);
+    if (account === null || account.userId !== userId || account.sessionCreatedAt !== sessionCreatedAt) {
+      throw new BackgroundError("WEB_ACCOUNT_CHANGED", "Open the web app to check the account, then try again.");
     }
-    await clearPendingDeviceAuth();
-  } else if (pending !== null) {
-    await clearPendingDeviceAuth();
-  }
-
-  const failedAt = await loadDeviceAuthFailedAt();
-  if (failedAt !== null && now - failedAt < EXTENSION_BRIDGE_DEVICE_RETRY_MS) {
-    return none("backing-off");
-  }
-
-  try {
-    const { record } = await beginDeviceAuthorization(apiUrl, "web-link", userId);
+    const pending = await loadPendingDeviceAuth();
+    if (pending !== null && isLivePendingDeviceAuth(pending, current.apiUrl, Date.now())) return;
+    const { record, authorization } = await beginDeviceAuthorization(current.apiUrl, "web-confirmed", userId);
+    if (isAllowedVerificationUrl(authorization.verificationUriComplete)) {
+      record.verificationUrl = authorization.verificationUriComplete;
+    }
     await savePendingDeviceAuth(record);
-    return approve(record);
-  } catch {
-    await noteDeviceAuthFailure(now);
-    return none("server-unavailable");
-  }
-};
+    await clearDeviceSignInError();
+    await chrome.alarms.create(DEVICE_AUTH_ALARM, { periodInMinutes: 0.5 });
+  });
 
 const handleSync = async (
   request: ExtensionBridgeSyncRequest,
   now: number,
 ): Promise<ExtensionBridgeReply> => {
   const { web } = request;
-  let current = await ensureReady();
+  const current = await ensureReady();
+  if (!sameServerOrigin(request.apiOrigin, current.apiUrl)) return none("other-server");
+  // Discard legacy cross-app logout instructions; they no longer have authority.
+  await clearSignOutMarker();
+  await clearLinkBlock();
+  await saveWebAccount(current.apiUrl, web.userId !== null && web.sessionCreatedAt !== null && web.profile ? {
+    userId: web.userId,
+    sessionCreatedAt: web.sessionCreatedAt,
+    ...web.profile,
+  } : null, now);
 
-  const marker = await loadSignOutMarker();
-  if (marker !== null) {
-    if (signOutMarkerVerdict(marker, current.apiUrl, web, now) === "sign-out-web") {
-      return extensionBridgeSyncReply({ type: "sign-out-web", at: marker.at });
+  // Neither a web logout nor a switch to another web account changes this session.
+  if (current.session !== null) return none("explicit-session");
+
+  const pending = await loadPendingDeviceAuth();
+  if (pending !== null && pending.purpose === "web-confirmed") {
+    if (!isLivePendingDeviceAuth(pending, current.apiUrl, now) || pending.forUserId !== web.userId) {
+      await clearPendingDeviceAuth();
+    } else {
+      return approve(pending);
     }
-    await clearSignOutMarker();
   }
-
-  if (web.userId === null) {
-    // (b) The web app is signed out.
-    const pending = await loadPendingDeviceAuth();
-    if (pending?.purpose === "web-link") await clearPendingDeviceAuth();
-    if (current.session === null) return none("signed-out");
-    if (current.sessionSource !== "web") return none("explicit-session");
-    await signOutLinkedWebSession();
-    return none("signed-out");
-  }
-
-  if (current.session !== null) {
-    // A session somebody chose is never displaced by the web app.
-    if (current.sessionSource !== "web") return none("explicit-session");
-    if (current.session.userId === web.userId) return none("linked");
-    // (d) The web app switched accounts: leave the old one, link the new.
-    await switchLinkedAccount();
-    current = await ensureReady();
-    if (current.session !== null) return none("explicit-session");
-  }
-
-  // (a) Signed in on the web, signed out here.
-  return linkSignedOutExtension(current.apiUrl, web.userId, web.sessionCreatedAt, now);
+  return none(web.userId === null ? "signed-out" : "confirmation-required");
 };
 
 const handleDeviceApproved = async (
   request: ExtensionBridgeDeviceApprovedRequest,
   retryDelayMs: number,
-  now: number,
 ): Promise<ExtensionBridgeReply> => {
   const current = await ensureReady();
   const record = await loadPendingDeviceAuth();
   if (
     record === null ||
-    record.purpose !== "web-link" ||
+    record.purpose !== "web-confirmed" ||
     record.requestId !== request.requestId ||
     !sameServerOrigin(record.apiOrigin, current.apiUrl)
   ) {
@@ -286,7 +219,7 @@ const handleDeviceApproved = async (
   }
   if (request.outcome === "failed") {
     await clearPendingDeviceAuth();
-    await noteDeviceAuthFailure(now);
+    await saveDeviceSignInError("failed");
     return extensionBridgeDeviceReply("failed");
   }
   const outcome = await exchangePendingDeviceAuth(record, 3, retryDelayMs);
@@ -319,7 +252,7 @@ export async function handleBridgeRequest(
   return serially(() =>
     request.kind === "sync"
       ? handleSync(request, now())
-      : handleDeviceApproved(request, options.retryDelayMs ?? 1000, now()),
+      : handleDeviceApproved(request, options.retryDelayMs ?? 1000),
   );
 }
 

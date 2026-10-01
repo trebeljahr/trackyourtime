@@ -19,7 +19,7 @@ const record: PendingDeviceAuth = {
   deviceCode: "device-code",
   userCode: "ABCDEFGH",
   apiOrigin: API,
-  purpose: "web-link",
+  purpose: "web-confirmed",
   forUserId: "u1",
   expiresAt: 2_000,
   intervalSeconds: 5,
@@ -38,13 +38,14 @@ describe("the pending device authorization", () => {
   });
 
   test("a malformed record is none", () => {
+    expect(decodePendingDeviceAuth(JSON.stringify({ ...record, purpose: "web-link" }))).toBeNull();
     expect(decodePendingDeviceAuth("{")).toBeNull();
     expect(decodePendingDeviceAuth(JSON.stringify({ ...record, deviceCode: "" }))).toBeNull();
     expect(decodePendingDeviceAuth(JSON.stringify({ ...record, purpose: "other" }))).toBeNull();
     expect(decodePendingDeviceAuth(JSON.stringify({ ...record, expiresAt: "soon" }))).toBeNull();
   });
 
-  test("a web-link record without its user is none; a manual one never carries one", () => {
+  test("a web-confirmed record without its user is none; a manual one never carries one", () => {
     expect(decodePendingDeviceAuth(JSON.stringify({ ...record, forUserId: null }))).toBeNull();
     expect(
       decodePendingDeviceAuth(JSON.stringify({ ...record, purpose: "manual", forUserId: "u1" }))

@@ -891,6 +891,8 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
           pendingDeviceAuth={state.pendingDeviceAuth}
           deviceSignInError={state.deviceSignInError}
           error={error}
+          webAccount={state.webAccount}
+          onConfirmWebAccount={(userId, sessionCreatedAt) => send({ type: "auth:web-confirm", userId, sessionCreatedAt })}
           onSignIn={signIn}
           onStartDeviceSignIn={startDeviceSignIn}
           onCancelDeviceSignIn={cancelDeviceSignIn}

@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
-import { EXTENSION_BRIDGE_CHANNEL, STORE_EXTENSION_ID } from "@starter/shared";
+import { EXTENSION_BRIDGE_CHANNEL, EXTENSION_BRIDGE_SYNC_MIN_INTERVAL_MS, STORE_EXTENSION_ID } from "@starter/shared";
 
 type SessionResult = {
   data: { user: { id: string }; session: { createdAt: Date | string } } | null;
@@ -49,6 +49,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   delete (globalThis as { chrome?: unknown }).chrome;
 });
 
@@ -83,7 +84,7 @@ describe("ExtensionBridge", () => {
     expect(id).toBe(STORE_EXTENSION_ID);
     expect(message).toEqual({
       channel: EXTENSION_BRIDGE_CHANNEL,
-      v: 1,
+      v: 2,
       kind: "sync",
       apiOrigin: "https://api.trackyourtime.dev",
       web: { userId: "user-u", sessionCreatedAt: Date.parse("2026-09-17T10:00:00.000Z") },
@@ -175,4 +176,27 @@ describe("bridgeSessionState", () => {
       }),
     ).toEqual({ status: "error" });
   });
+});
+
+
+it("sends the email and photo as display-only account details", () => {
+  expect(bridgeSessionState({
+    data: { user: { id: "u", email: "rico@example.com", image: "https://example.com/photo.png" }, session: { createdAt: 1000 } },
+    isPending: false, error: null,
+  })).toEqual({ status: "resolved", session: {
+    userId: "u", createdAt: 1000, profile: { email: "rico@example.com", image: "https://example.com/photo.png" },
+  } });
+});
+
+it("checks for a confirmed account while the page is open and stops on unmount", async () => {
+  vi.useFakeTimers();
+  session = signedIn();
+  const view = render(<ExtensionBridge />);
+  await act(async () => undefined);
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+  await act(async () => vi.advanceTimersByTimeAsync(EXTENSION_BRIDGE_SYNC_MIN_INTERVAL_MS));
+  expect(sendMessage).toHaveBeenCalledTimes(2);
+  view.unmount();
+  await act(async () => vi.advanceTimersByTimeAsync(EXTENSION_BRIDGE_SYNC_MIN_INTERVAL_MS));
+  expect(sendMessage).toHaveBeenCalledTimes(2);
 });

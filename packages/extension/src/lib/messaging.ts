@@ -1,3 +1,4 @@
+import type { WebAccount } from "./web-account";
 /**
  * The one channel between the popup and the service worker.
  *
@@ -163,6 +164,7 @@ export type PopupToBackground =
    * account with two-factor authentication, which a password cannot complete.
    */
   | { type: "auth:device-start" }
+  | { type: "auth:web-confirm"; userId: string; sessionCreatedAt: number }
   /** Stop waiting for the device authorization the popup started. */
   | { type: "auth:device-cancel" }
   | {
@@ -449,6 +451,8 @@ export type HeldSyncRow = Omit<QueuedMutationSummary, "hold"> & {
 
 /** The device authorization the popup is waiting on, as much as it may see. */
 export type PendingDeviceSignIn = {
+  /** The person confirmed the offered web account in the popup. */
+  webAccount?: boolean;
   /** Public approval URL, containing the user code, never the device credential. */
   verificationUrl?: string;
   /** The code the person checks on the approval page. */
@@ -496,6 +500,8 @@ export type BackgroundState = {
   webUrl: string | null;
   signedIn: boolean;
   sessionSource: SessionSource | null;
+  /** A recent web account offer; never signs in until confirmed. */
+  webAccount?: WebAccount | null;
   /**
    * The device authorization the popup's "Sign in with the web app" started,
    * while it waits. Null otherwise, and never the device code itself.

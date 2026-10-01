@@ -7,11 +7,14 @@ import { describeDeviceSignInError } from "./errors";
 import { join, openTab } from "./open-tab";
 import { ServerPicker } from "./server-picker";
 import { Header } from "./header";
+import type { WebAccount } from "../lib/web-account";
 import type { SetServerOutcome } from "./switch-server";
 import { useT } from "../i18n/use-t";
 
 export type SignInScreenProps = {
   apiUrl: string;
+  webAccount?: WebAccount | null;
+  onConfirmWebAccount?: (userId: string, sessionCreatedAt: number) => Promise<boolean>;
   /** "Track Your Time 0.1.0 (1a2b3c4)", when the server has said. */
   serverVersion: string | null;
   /** The server's web app, when it has said. */
@@ -36,6 +39,8 @@ export type SignInScreenProps = {
 /** Every server offers explicit sign-in, even when web-session linking is available. */
 export function SignInScreen({
   apiUrl,
+  webAccount = null,
+  onConfirmWebAccount,
   serverVersion,
   webUrl,
   pendingSync,
@@ -108,10 +113,30 @@ export function SignInScreen({
           ) : null}
         </div>
 
+        {webAccount !== null && pendingDeviceAuth === null && !changingServer && onConfirmWebAccount ? (
+          <section className="panel web-account" data-testid="web-account-offer" aria-labelledby="web-account-title">
+            <h2 className="panel__title" id="web-account-title">{t("signIn.webAccountTitle")}</h2>
+            <div className="web-account__identity">
+              <span className="web-account__avatar" aria-hidden="true">
+                {webAccount.email.charAt(0).toUpperCase()}
+                {webAccount.image ? <img key={webAccount.image} src={webAccount.image} alt="" referrerPolicy="no-referrer"
+                  onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
+              </span>
+              <strong className="web-account__email">{webAccount.email}</strong>
+            </div>
+            <p className="panel__hint">{t("signIn.webAccountHint")}</p>
+            <button type="button" className="button button--primary button--block" disabled={busy}
+              data-testid="confirm-web-account"
+              onClick={() => void runDevice(() => onConfirmWebAccount(webAccount.userId, webAccount.sessionCreatedAt))}>
+              {busy ? t("signIn.submitting") : t("signIn.useWebAccount")}
+            </button>
+          </section>
+        ) : null}
+
         {pendingDeviceAuth !== null ? (
           <div className="panel" data-testid="device-sign-in-waiting">
-            <p className="panel__title">{t("signIn.deviceTitle")}</p>
-            <p className="panel__hint">{t("signIn.deviceWaiting")}</p>
+            <p className="panel__title">{t(pendingDeviceAuth.webAccount ? "signIn.webAccountWaitingTitle" : "signIn.deviceTitle")}</p>
+            <p className="panel__hint">{t(pendingDeviceAuth.webAccount ? "signIn.webAccountWaiting" : "signIn.deviceWaiting")}</p>
             <p className="device-code" data-testid="device-user-code">
               {pendingDeviceAuth.userCode}
             </p>
