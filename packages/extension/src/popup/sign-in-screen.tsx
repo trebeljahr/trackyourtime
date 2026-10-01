@@ -32,7 +32,7 @@ export type SignInScreenProps = {
   ) => Promise<SetServerOutcome>;
 };
 
-/** Hosted Chrome sign-in uses the web bridge; other servers keep manual sign-in. */
+/** Every server offers explicit sign-in, even when web-session linking is available. */
 export function SignInScreen({
   apiUrl,
   serverVersion,
@@ -147,11 +147,66 @@ export function SignInScreen({
             />
           ) : null}
 
+          <form className="form" onSubmit={submit} data-testid="sign-in-form">
+            <div className="field">
+              <label className="field__label" htmlFor="email">
+                {t("signIn.email")}
+              </label>
+              <input
+                id="email"
+                className="input"
+                type="email"
+                autoComplete="username"
+                autoFocus
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                data-testid="sign-in-email"
+              />
+            </div>
+
+            <div className="field">
+              <label className="field__label" htmlFor="password">
+                {t("signIn.password")}
+              </label>
+              <input
+                id="password"
+                className="input"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                data-testid="sign-in-password"
+              />
+            </div>
+
+            <button
+              className="button button--primary button--block"
+              type="submit"
+              disabled={busy}
+              data-testid="sign-in-submit"
+            >
+              {busy ? t("signIn.submitting") : t("signIn.submit")}
+            </button>
+          </form>
+
+          <p className="sign-in__or">{t("signIn.or")}</p>
+          <button
+            type="button"
+            className="button button--block"
+            disabled={busy}
+            onClick={() => void runDevice(onStartDeviceSignIn)}
+            data-testid="sign-in-web-app"
+          >
+            {t("signIn.withWebApp")}
+          </button>
+          <p className="popup__hint">{t("signIn.withWebAppHint")}</p>
           {automaticWebUrl ? (
             <>
               <button
                 type="button"
-                className="button button--primary button--block"
+                className="button--link"
                 onClick={() => openTab(join(automaticWebUrl, "/app/track"))}
                 data-testid="open-web-app"
               >
@@ -159,65 +214,7 @@ export function SignInScreen({
               </button>
               <p className="popup__hint">{t("signIn.openWebAppHint")}</p>
             </>
-          ) : (
-            <>
-              <form className="form" onSubmit={submit} data-testid="sign-in-form">
-                <div className="field">
-                  <label className="field__label" htmlFor="email">
-                    {t("signIn.email")}
-                  </label>
-                  <input
-                    id="email"
-                    className="input"
-                    type="email"
-                    autoComplete="username"
-                    autoFocus
-                    required
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    data-testid="sign-in-email"
-                  />
-                </div>
-
-                <div className="field">
-                  <label className="field__label" htmlFor="password">
-                    {t("signIn.password")}
-                  </label>
-                  <input
-                    id="password"
-                    className="input"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    data-testid="sign-in-password"
-                  />
-                </div>
-
-                <button
-                  className="button button--primary button--block"
-                  type="submit"
-                  disabled={busy}
-                  data-testid="sign-in-submit"
-                >
-                  {busy ? t("signIn.submitting") : t("signIn.submit")}
-                </button>
-              </form>
-
-              <p className="sign-in__or">{t("signIn.or")}</p>
-              <button
-                type="button"
-                className="button button--block"
-                disabled={busy}
-                onClick={() => void runDevice(onStartDeviceSignIn)}
-                data-testid="sign-in-web-app"
-              >
-                {t("signIn.withWebApp")}
-              </button>
-              <p className="popup__hint">{t("signIn.withWebAppHint")}</p>
-            </>
-          )}
+          ) : null}
         </>
       )}
 

@@ -24,12 +24,15 @@ const props: SignInScreenProps = {
 };
 
 describe("extension sign-in choices", () => {
-  test("hosted Chrome offers automatic connection without password or device-code choices", () => {
+  test("hosted Chrome offers email, device code, and a web connection retry", () => {
     const html = renderToStaticMarkup(<SignInScreen {...props} />);
     expect(html).toContain('data-testid="open-web-app"');
     expect(html).toContain("Use your own server");
-    expect(html).not.toContain('data-testid="sign-in-web-app"');
-    expect(html).not.toContain('data-testid="sign-in-form"');
+    expect(html).toContain('data-testid="sign-in-web-app"');
+    expect(html).toContain('data-testid="sign-in-form"');
+    expect(html).toContain("Sign in with email");
+    expect(html).toContain("Sign in with a device code");
+    expect(html).not.toContain("connects automatically");
   });
 
   test("hosted connection is available before server metadata arrives", () => {
