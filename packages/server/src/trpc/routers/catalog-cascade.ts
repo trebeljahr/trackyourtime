@@ -5,6 +5,7 @@
 // and `TimeEntry.taskId` are both nullable precisely so a "project-less"
 // entry is a normal, representable state. The same holds one level up: a
 // project whose client is deleted keeps its time and becomes client-less.
+import { snapshotProjectClients } from "../../services/entries/refs.js";
 import type { CatalogRemoveResult } from "@starter/shared";
 import { Client } from "../../models/Client.js";
 import { Favorite } from "../../models/Favorite.js";
@@ -34,6 +35,7 @@ export async function cascadeDeleteProject(
   workspaceId: string,
   projectId: string,
 ): Promise<CatalogRemoveResult> {
+  await snapshotProjectClients(workspaceId, projectId);
   const detached = await TimeEntry.updateMany(
     { workspaceId, projectId },
     { $set: { projectId: null } },

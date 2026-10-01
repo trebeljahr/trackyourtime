@@ -3,6 +3,7 @@
 //
 // `list` resolves the owning client (even an archived one) and aggregates
 // entry counts / tracked seconds in a single pipeline — never N+1.
+import { snapshotProjectClients } from "../entries/refs.js";
 import { TRPCError } from "@trpc/server";
 import mongoose from "mongoose";
 import {
@@ -299,6 +300,8 @@ export async function updateProject(
       budgetSet = budgetWrite(input, "");
     }
   }
+
+  if (input.clientId !== undefined) await snapshotProjectClients(scope.workspaceId, input.id);
 
   const updated = await Project.findOneAndUpdate(
     { _id: input.id, workspaceId: scope.workspaceId },

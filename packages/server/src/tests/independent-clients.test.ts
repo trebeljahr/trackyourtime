@@ -7,6 +7,8 @@ import { TimeEntry } from "../models/TimeEntry.js";
 import { createEntry, updateEntry } from "../services/entries/crud.js";
 import { listEntries } from "../services/entries/list.js";
 import { startTimerDetailed, personReach } from "../services/entries/timer.js";
+import { updateProject } from "../services/catalog/projects.js";
+import { cascadeDeleteProject } from "../trpc/routers/catalog-cascade.js";
 import { listClients } from "../services/catalog/clients.js";
 import { buildDetailed } from "../trpc/routers/reports.js";
 import { invoicesRouter } from "../trpc/routers/invoices.js";
@@ -149,6 +151,16 @@ describe("independent timer clients", { skip: skipWithoutDatabase }, () => {
       projectId: null,
     });
     assert.equal(movedLegacy.clientId, seeded.clientId);
+  });
+
+  it("keeps historical clients when a project's default changes or the project is deleted", async () => {
+    const seeded = await seedWorkspace();
+    await updateProject(scope, {id: seeded.projectId, clientId: null});
+    assert.equal((await listEntries(scope, {...range, clientIds: [seeded.clientId]})).entries.length, 2);
+    await cascadeDeleteProject(WORKSPACE, seeded.projectId);
+    const entries = await listEntries(scope, {...range, clientIds: [seeded.clientId]});
+    assert.equal(entries.entries.length, 2);
+    assert.ok(entries.entries.every((entry) => entry.projectId === null));
   });
 
   it("rejects another workspace's client before stopping the running timer", async () => {

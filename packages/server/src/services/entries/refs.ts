@@ -1,3 +1,5 @@
+import { Favorite } from "../../models/Favorite.js";
+import { TimeEntry } from "../../models/TimeEntry.js";
 import { Client } from "../../models/Client.js";
 // Validating the project/task an entry points at.
 import { Project, type ProjectDocLike } from "../../models/Project.js";
@@ -91,4 +93,14 @@ export function clientEntryFilter(
       },
     ],
   };
+}
+
+/** Freeze legacy attribution before a project default changes or is removed. */
+export async function snapshotProjectClients(workspaceId: string, projectId: string): Promise<void> {
+  const project = await Project.findOne({_id: projectId, workspaceId}).select("clientId").lean();
+  if (!project) return;
+  const filter = {workspaceId, projectId, clientId: {$exists: false}};
+  const update = {$set: {clientId: project.clientId ?? null}};
+  await TimeEntry.updateMany(filter, update);
+  await Favorite.updateMany(filter, update);
 }
