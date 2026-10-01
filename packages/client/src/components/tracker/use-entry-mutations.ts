@@ -287,7 +287,14 @@ export const useEntryMutations = (): EntryMutations => {
   const insertEntry = React.useCallback(
     (entry: DetailedEntry): void => {
       utils.entries.list.setInfiniteData(TRACKER_LIST_INPUT, (data) => {
-        if (data === undefined) return data;
+        // A cold launch may have a timer mirror but no loaded Entries page.
+        // Seed that page so the new row is visible before the first fetch.
+        if (data === undefined || data.pages.length === 0) {
+          return {
+            pages: [{ entries: [entry], nextCursor: undefined }],
+            pageParams: [null],
+          };
+        }
         const [first, ...rest] = data.pages;
         if (first === undefined) return data;
         return {
@@ -304,11 +311,32 @@ export const useEntryMutations = (): EntryMutations => {
 
   const replaceEntry = React.useCallback(
     (id: string, next: DetailedEntry): void => {
-      patchList((entries) =>
-        entries.map((entry) => (entry.id === id ? next : entry))
-      );
+      utils.entries.list.setInfiniteData(TRACKER_LIST_INPUT, (data) => {
+        if (data === undefined || data.pages.length === 0) {
+          return {
+            pages: [{ entries: [next], nextCursor: undefined }],
+            pageParams: [null],
+          };
+        }
+        let found = false;
+        const pages = data.pages.map((page) => ({
+          ...page,
+          entries: page.entries.map((entry) => {
+            if (entry.id !== id) return entry;
+            found = true;
+            return next;
+          }),
+        }));
+        if (!found && pages[0]) {
+          pages[0] = {
+            ...pages[0],
+            entries: [next, ...pages[0].entries].sort(byStartDesc),
+          };
+        }
+        return { ...data, pages };
+      });
     },
-    [patchList]
+    [utils]
   );
 
   const dropEntry = React.useCallback(
@@ -344,6 +372,12 @@ export const useEntryMutations = (): EntryMutations => {
           TRACKER_LIST_INPUT,
           context.previousList
         );
+      } else {
+        // Undo a page seeded only for an optimistic cold-cache write.
+        utils.entries.list.setInfiniteData(TRACKER_LIST_INPUT, {
+          pages: [{ entries: [], nextCursor: undefined }],
+          pageParams: [null],
+        });
       }
     },
     [utils]

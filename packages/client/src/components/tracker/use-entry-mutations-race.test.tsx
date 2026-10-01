@@ -225,6 +225,23 @@ const settleAll = async (): Promise<void> => {
 };
 
 describe("entry mutations racing each other", () => {
+  it("shows a stopped row before Entries has loaded on a cold launch", async () => {
+    timerStore.getState().setRunning(running);
+    const stop = deferred<unknown>();
+    held.set("entries.stop", stop);
+    mount();
+
+    act(() => mutations?.stopTimer());
+    await waitFor(() => expect(screen.getByTestId("stopped").textContent).toBe("Before"));
+    expect(screen.getByTestId("current").textContent).toBe("");
+    expect(heldCalls.get("entries.stop")).toBe(1);
+
+    const stopped = stoppedAt(running, new Date().toISOString());
+    serverEntries = [entry(stopped)];
+    await act(async () => stop.resolve(stopped));
+    await settleAll();
+  });
+
   it("does not revive an offline timer stopped while its start-time edit is being stored", async () => {
     const offline = entry({ id: "temp-offline", description: "Offline", start: "2026-09-30T09:00:00.000Z" });
     serverEntries = [offline];
