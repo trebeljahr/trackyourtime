@@ -4,7 +4,7 @@ import { Hero, Section } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { DATE_STYLES } from "@/i18n/format";
 import { marketingMetadata, marketingT, type Locale } from "@/i18n/marketing";
-import { CONTACT_EMAIL, REPO_URL } from "@/lib/site-links";
+import { PRIVACY_EMAIL, REPO_URL } from "@/lib/site-links";
 
 /** Metadata for one locale of this page. `path` stays the English path. */
 export const privacyMetadata = (locale: Locale): Metadata => {
@@ -51,7 +51,7 @@ export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement 
   const t = marketingT(locale);
   const strong = (chunks: React.ReactNode): React.ReactElement => <strong>{chunks}</strong>;
   const mail = (chunks: React.ReactNode): React.ReactElement => (
-    <a href={`mailto:${CONTACT_EMAIL}`} className={link}>
+    <a href={`mailto:${PRIVACY_EMAIL}`} className={link}>
       {chunks}
     </a>
   );
@@ -64,7 +64,7 @@ export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement 
         title={t("privacy.hero.title")}
       >
         <p>{t("privacy.hero.scope")}</p>
-        <p>{t.rich("privacy.hero.contact", { email: CONTACT_EMAIL, mail })}</p>
+        <p>{t.rich("privacy.hero.contact", { email: PRIVACY_EMAIL, mail })}</p>
       </Hero>
 
       <Block title={t("privacy.summary.title")}>
@@ -171,7 +171,7 @@ export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement 
         <p>{t.rich("privacy.rights.copy", { strong })}</p>
         <p>{t.rich("privacy.rights.correct", { strong })}</p>
         <p>{t.rich("privacy.rights.delete", { strong })}</p>
-        <p>{t.rich("privacy.rights.noSignIn", { email: CONTACT_EMAIL, mail })}</p>
+        <p>{t.rich("privacy.rights.noSignIn", { email: PRIVACY_EMAIL, mail })}</p>
         <p>{t("privacy.rights.eu")}</p>
       </Block>
 

@@ -173,7 +173,15 @@ Reviewer demo account: `demo@trackyourtime.dev` on production (password in
 - **Support URL** https://trackyourtime.dev/support/
 - **Marketing URL** https://trackyourtime.dev/mobile/
 - **Privacy policy** https://trackyourtime.dev/privacy/
-- **Contact** ricotrebeljahr@gmail.com · **Copyright** 2026 Rico Trebeljahr
+- **Current store contact** ricotrebeljahr@gmail.com · **Copyright** 2026 Rico Trebeljahr
+
+Planned role contacts: `support@trackyourtime.dev` for support and stores,
+`privacy@trackyourtime.dev` for data requests, and
+`imprint@trackyourtime.dev` for the legal notice.
+
+Update the App Store, Google Play, Chrome Web Store, and any other listing to
+use the support address only after all three inbound forwarding rules and a
+transactional reply have passed the checks in `docs/deploy.md`.
 - **Price** Free. No in-app purchases. No ads.
 
 ### App Store

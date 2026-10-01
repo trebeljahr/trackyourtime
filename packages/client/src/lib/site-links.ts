@@ -27,7 +27,11 @@ export const EINVOICE_DOCS_URL = `${DOCS_URL}e-invoices/`;
 /** How to build, install and update the desktop app (docs-site/docs/desktop.md). */
 export const DESKTOP_DOCS_URL = `${DOCS_URL}desktop/`;
 export const ISSUES_URL = `${REPO_URL}/issues`;
-export const CONTACT_EMAIL = "ricotrebeljahr@gmail.com";
+/** Public role addresses. Publish only after inbound forwarding is verified. */
+export const SUPPORT_EMAIL = "support@trackyourtime.dev";
+export const PRIVACY_EMAIL = "privacy@trackyourtime.dev";
+export const IMPRINT_EMAIL = "imprint@trackyourtime.dev";
+export const CONTACT_EMAIL = SUPPORT_EMAIL;
 
 /**
  * The project's donate page on ricos.site. ProjectDonateLink adds the current

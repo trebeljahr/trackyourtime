@@ -412,7 +412,7 @@ LISTMONK_API_USER=<Listmonk API user>
 LISTMONK_API_TOKEN=<its token>
 LISTMONK_FROM=Track Your Time <noreply@mail.trackyourtime.dev>
 LISTMONK_FROM_EMAIL=noreply@mail.trackyourtime.dev
-LISTMONK_REPLY_TO=support@mail.trackyourtime.dev
+LISTMONK_REPLY_TO=support@trackyourtime.dev
 LISTMONK_TX_TEMPLATE_ID=7         # tracktime-tx
 LISTMONK_CAMPAIGN_TEMPLATE_ID=8   # tracktime-campaign
 LISTMONK_LIVE_LIST_ID=9           # tracktime
@@ -432,9 +432,15 @@ footer, action button and copyable URL):
 
 The Listmonk sender and Reply-To fields must also match these values in the
 deployed server environment; compose defaults do not override existing Coolify
-values. Route inbound `support@mail.trackyourtime.dev` to the support inbox
-with the mail provider's forwarding rule, then verify a test reply arrives.
-SES sending and DKIM records alone do not create an inbound mailbox.
+values. Before publishing the role addresses, enable inbound Email Routing on
+`trackyourtime.dev` and create explicit forwarding rules for
+`support@trackyourtime.dev`, `privacy@trackyourtime.dev`, and
+`imprint@trackyourtime.dev` to the verified owner inbox. Test each route from
+an independent mailbox, plus a reply to a transactional message. Do not rely
+on a catch-all: it may be disabled later. SES sending and DKIM records alone
+do not create an inbound mailbox. Keep the old
+`support@mail.trackyourtime.dev` route until outstanding messages have been
+answered; the Listmonk Reply-To change needs the deployed server environment.
 
 Before upgrading an existing deployment, set `EMAIL_TRANSPORT=listmonk` in the
 server environment. Provider credentials no longer select delivery implicitly;
