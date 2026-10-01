@@ -11,7 +11,7 @@ import { registerTools } from "./tools.js";
 
 export const SERVER_NAME = "trackyourtime";
 /** Hand-kept; `scripts/lib/version-sync.test.mjs` fails when it drifts from the root package.json. */
-export const SERVER_VERSION = "0.2.0";
+export const SERVER_VERSION = "0.2.1";
 
 const INSTRUCTIONS = [
   "Track Your Time is a time tracker for people who bill clients by the hour.",
