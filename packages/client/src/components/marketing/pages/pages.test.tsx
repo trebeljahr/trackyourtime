@@ -6,6 +6,7 @@ import { DownloadPage, downloadMetadata } from "@/components/marketing/pages/dow
 import { ExtensionPage, extensionMetadata } from "@/components/marketing/pages/extension-page";
 import { invoiceGeneratorMetadata } from "@/components/marketing/pages/invoice-generator-meta";
 import { InvoiceGeneratorPage } from "@/components/marketing/pages/invoice-generator-page";
+import { ImprintPage, imprintMetadata } from "@/components/marketing/pages/imprint-page";
 import { LandingPage, landingMetadata } from "@/components/marketing/pages/landing-page";
 import { MobilePage, mobileMetadata } from "@/components/marketing/pages/mobile-page";
 import { PressPage, pressMetadata } from "@/components/marketing/pages/press-page";
@@ -21,6 +22,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: () => undefined
 const PAGES = [
   { name: "landing", Page: LandingPage, meta: landingMetadata, title: "Open-source time tracking on every device you use" },
   { name: "privacy", Page: PrivacyPage, meta: privacyMetadata, title: "Privacy policy" },
+  { name: "imprint", Page: ImprintPage, meta: imprintMetadata, title: "Imprint" },
   { name: "support", Page: SupportPage, meta: supportMetadata, title: "Get help with Track Your Time" },
   { name: "extension", Page: ExtensionPage, meta: extensionMetadata, title: "Your timer, one click away" },
   { name: "raycast", Page: RaycastPage, meta: raycastMetadata, title: "Track time without leaving the keyboard" },
@@ -63,7 +65,7 @@ describe("public pages in English", () => {
 
   it("keeps rich-text links and arguments", () => {
     const html = renderToStaticMarkup(<PrivacyPage locale="en" />);
-    expect(html).toContain("Last updated 22 September 2026");
+    expect(html).toContain("Last updated 2 October 2026");
     expect(html).toMatch(/<a href="mailto:[^"]+"[^>]*>[^<]+@[^<]+<\/a>/);
     expect(html).toContain("<strong>Your account.</strong>");
   });

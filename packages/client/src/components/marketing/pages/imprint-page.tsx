@@ -16,7 +16,9 @@ export function ImprintPage({ locale }: { locale: Locale }): React.ReactElement 
   const german = locale === "de";
   return (
     <MarketingShell locale={locale} path="/imprint/">
-      <Hero eyebrow="Track Your Time" title={german ? "Impressum" : "Imprint"} />
+      <Hero eyebrow="Track Your Time" title={german ? "Impressum" : "Imprint"}>
+        <p>{german ? "Anbieter und Kontakt" : "Provider and contact"}</p>
+      </Hero>
       <Section title={german ? "Anbieter (§ 5 DDG)" : "Provider (§ 5 DDG)"}>
         <address className="not-italic leading-relaxed text-muted-foreground">
           Rico Trebeljahr<br />

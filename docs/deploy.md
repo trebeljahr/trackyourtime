@@ -442,6 +442,14 @@ do not create an inbound mailbox. Keep the old
 `support@mail.trackyourtime.dev` route until outstanding messages have been
 answered; the Listmonk Reply-To change needs the deployed server environment.
 
+On 2 October 2026, Cloudflare showed all three root-domain rules active with
+`ricotrebeljahr@gmail.com` as their verified destination. Its activity log
+showed independent test messages to each address as Forwarded. The same three
+messages arrived in the verified Gmail inbox. The older
+`support@mail.trackyourtime.dev` and `newsletter@mail.trackyourtime.dev`
+rules remained active. A reply to the new transactional Reply-To still needs
+checking after the deployed Listmonk setting changes.
+
 Before upgrading an existing deployment, set `EMAIL_TRANSPORT=listmonk` in the
 server environment. Provider credentials no longer select delivery implicitly;
 missing the selector with existing mail settings stops startup. Use `smtp` for
