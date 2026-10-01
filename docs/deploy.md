@@ -412,11 +412,29 @@ LISTMONK_API_USER=<Listmonk API user>
 LISTMONK_API_TOKEN=<its token>
 LISTMONK_FROM=Track Your Time <noreply@mail.trackyourtime.dev>
 LISTMONK_FROM_EMAIL=noreply@mail.trackyourtime.dev
+LISTMONK_REPLY_TO=support@mail.trackyourtime.dev
 LISTMONK_TX_TEMPLATE_ID=7         # tracktime-tx
 LISTMONK_CAMPAIGN_TEMPLATE_ID=8   # tracktime-campaign
 LISTMONK_LIVE_LIST_ID=9           # tracktime
 LISTMONK_TEST_LIST_ID=10          # tracktime-test
 ```
+
+Transactional email inventory (all use the shared `email-layout.ts` header,
+footer, action button and copyable URL):
+
+| Email | Trigger | Action |
+| --- | --- | --- |
+| Email verification | New account or address change | Verify address |
+| Password reset | Reset request | Reset password |
+| Workspace invitation | Member invite | Accept invitation |
+| Newsletter confirmation | Signup form | Confirm subscription |
+| Runaway timer reminder | Timer passes its limit | Open tracker; settings link in footer |
+
+The Listmonk sender and Reply-To fields must also match these values in the
+deployed server environment; compose defaults do not override existing Coolify
+values. Route inbound `support@mail.trackyourtime.dev` to the support inbox
+with the mail provider's forwarding rule, then verify a test reply arrives.
+SES sending and DKIM records alone do not create an inbound mailbox.
 
 Before upgrading an existing deployment, set `EMAIL_TRANSPORT=listmonk` in the
 server environment. Provider credentials no longer select delivery implicitly;

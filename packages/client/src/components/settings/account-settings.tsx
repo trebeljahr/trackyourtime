@@ -22,6 +22,7 @@ import {
 import { DeleteAccountCard } from "@/components/settings/delete-account";
 import { ProfilePicture } from "@/components/profile/profile-picture";
 import { SettingRow } from "@/components/settings/setting-row";
+import { DEEP_LINK_HIGHLIGHT_CLASS } from "@/components/einvoice/use-deep-link-focus";
 import { TwoFactorRow } from "@/components/settings/two-factor";
 import { useAuth } from "@/hooks/use-auth";
 import { useT } from "@/i18n/use-t";
@@ -159,6 +160,8 @@ export function AccountSettings({
             title={t("account.notifications.title")}
             description={t("account.notifications.description")}
             testId="setting-notifications"
+            settingKey="notifications"
+            className={DEEP_LINK_HIGHLIGHT_CLASS}
           >
             <Switch
               checked={profileQuery.data?.preferences.notifications ?? true}

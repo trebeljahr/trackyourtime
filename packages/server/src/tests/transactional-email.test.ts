@@ -61,6 +61,8 @@ describe("newsletter confirmation", () => {
     assert.equal(en.subject, "Confirm your subscription · this newsletter");
     assert.ok(en.html.includes("The link is good for 21 days."));
     assert.ok(en.html.startsWith('<!doctype html>\n<html lang="en">'));
+    assert.match(en.html, /Track Your <span[^>]*>Time<\/span>/);
+    assert.match(en.html, /copy this link:/);
 
     const one = newsletterConfirmationEmail("en", {
       confirmUrl: URL,

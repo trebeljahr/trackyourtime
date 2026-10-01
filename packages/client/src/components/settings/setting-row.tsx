@@ -66,6 +66,7 @@ export type SettingRowProps = {
   children: React.ReactNode;
   className?: string;
   testId?: string;
+  settingKey?: string;
 };
 
 /** Label + explanation on the left, control on the right. */
@@ -76,6 +77,7 @@ export function SettingRow({
   children,
   className,
   testId,
+  settingKey,
 }: SettingRowProps): React.JSX.Element {
   return (
     <div
@@ -84,6 +86,7 @@ export function SettingRow({
         className
       )}
       data-testid={testId}
+      data-setting={settingKey}
     >
       <div className="min-w-0 space-y-1">
         {htmlFor ? (

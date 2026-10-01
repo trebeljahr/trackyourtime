@@ -9,7 +9,7 @@ import { parseDeepLink } from "./billing-fields";
  * shows while `useDeepLinkFocus` holds `data-highlight="true"` on it.
  */
 export const DEEP_LINK_HIGHLIGHT_CLASS =
-  "rounded-md transition-shadow data-[highlight=true]:ring-2 data-[highlight=true]:ring-primary/60 data-[highlight=true]:ring-offset-2 data-[highlight=true]:ring-offset-background";
+  "rounded-md transition-shadow data-[highlight=true]:ring-2 data-[highlight=true]:ring-primary/60 data-[highlight=true]:ring-offset-2 data-[highlight=true]:ring-offset-background data-[highlight=true]:animate-[deep-link-pulse_900ms_ease-in-out_2] motion-reduce:data-[highlight=true]:animate-none";
 
 /** How long the arrived-at row stays highlighted. */
 const HIGHLIGHT_MS = 2000;
@@ -43,11 +43,22 @@ export function useDeepLinkFocus(
   ready: boolean,
   field: string | null,
 ): void {
+  useHighlightTarget(root, ready, field, "field");
+}
+
+/** Reusable arrival focus for a whitelisted data attribute inside a screen. */
+export function useHighlightTarget(
+  root: React.RefObject<HTMLElement | null>,
+  ready: boolean,
+  targetKey: string | null,
+  attribute: "field" | "setting" = "field",
+): void {
   const done = React.useRef(false);
 
   React.useEffect(() => {
-    if (done.current || !ready || field === null || root.current === null) return;
-    const target = root.current.querySelector<HTMLElement>(`[data-field="${field}"]`);
+    if (done.current || !ready || targetKey === null || root.current === null) return;
+    if (!/^[A-Za-z0-9_-]+$/.test(targetKey)) return;
+    const target = root.current.querySelector<HTMLElement>(`[data-${attribute}="${targetKey}"]`);
     if (!target) return;
     done.current = true;
 
@@ -72,5 +83,5 @@ export function useDeepLinkFocus(
       // cleanup just removed would never come back and the row never lights.
       if (!finished) done.current = false;
     };
-  }, [root, ready, field]);
+  }, [root, ready, targetKey, attribute]);
 }

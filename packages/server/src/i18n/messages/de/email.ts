@@ -45,5 +45,6 @@ export const email: Translation<typeof source> = {
     open: "Timer öffnen",
     footer:
       "Du bekommst diese E-Mail einmal pro Timer. Wenn du diese E-Mails nicht mehr möchtest, schalte unter Einstellungen → Konto die E-Mail-Benachrichtigungen aus.",
+    settingsLink: "E-Mail-Benachrichtigungen öffnen",
   },
 };

@@ -4,7 +4,7 @@ import * as React from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useDeepLinkFocus } from "./use-deep-link-focus";
+import { useDeepLinkFocus, useHighlightTarget } from "./use-deep-link-focus";
 
 function Harness({ field }: { field: string | null }): React.JSX.Element {
   const root = React.useRef<HTMLDivElement>(null);
@@ -18,6 +18,12 @@ function Harness({ field }: { field: string | null }): React.JSX.Element {
   );
 }
 
+function SettingsHarness(): React.JSX.Element {
+  const root = React.useRef<HTMLDivElement>(null);
+  useHighlightTarget(root, true, "notifications", "setting");
+  return <div ref={root}><div data-setting="notifications" data-testid="setting-row"><button type="button">Email notifications</button></div></div>;
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
 });
@@ -28,6 +34,11 @@ afterEach(() => {
 });
 
 describe("useDeepLinkFocus", () => {
+  it("focuses and highlights a settings row", () => {
+    render(<SettingsHarness />);
+    expect(screen.getByTestId("setting-row")).toHaveAttribute("data-highlight", "true");
+    expect(screen.getByRole("button")).toHaveFocus();
+  });
   it("highlights and focuses the row under StrictMode, then clears the highlight", () => {
     render(
       <React.StrictMode>

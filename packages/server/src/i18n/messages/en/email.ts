@@ -55,5 +55,6 @@ export const email = {
     pastLimit: "That is past your {limit} limit. Stop it, keep it running, or correct its end time.",
     open: "Open the tracker",
     footer: "You get this email once per timer. To stop these emails, turn off Email notifications in Settings, Account.",
+    settingsLink: "Open Email notifications",
   },
 } as const;

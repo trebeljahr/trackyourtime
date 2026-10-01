@@ -102,6 +102,7 @@ test("the email names the entry, the duration, the limit and links to /app/track
   assert.match(email.html, /Design &lt;review&gt;/);
   assert.doesNotMatch(email.html, /<review>/);
   assert.match(email.html, /href="https:\/\/app\.example\.com\/app\/track"/);
+  assert.match(email.html, /app\/settings\?tab=account&amp;highlight=notifications/);
 });
 
 test("the email reads sensibly with no description, no limit and no link", () => {

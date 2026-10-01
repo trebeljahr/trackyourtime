@@ -2,12 +2,14 @@ import nodemailer, { type Transporter } from "nodemailer";
 import type { Locale } from "@starter/shared";
 import { env } from "../config/env.js";
 import { serverT } from "../i18n/index.js";
+import { emailAction, emailLayout } from "./email-layout.js";
 
 export interface EmailParams {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  replyTo?: string;
 }
 
 import { selectEmailTransport, resolveFromAddress, type EmailTransportEnv } from "../config/email-transport.js";
@@ -67,6 +69,7 @@ function getTransporter(): Transporter {
  * says nothing — so both real transports surface the provider's own error.
  */
 export async function sendEmail(params: EmailParams): Promise<void> {
+  if (/[\r\n]/.test(params.replyTo ?? "")) throw new Error("Invalid replyTo");
   switch (selectEmailTransport(env)) {
     case "smtp":
       return sendViaSmtp(params);
@@ -91,6 +94,7 @@ async function sendViaSmtp(params: EmailParams): Promise<void> {
     await getTransporter().sendMail({
       from,
       to: params.to,
+      ...((params.replyTo || env.EMAIL_REPLY_TO) ? { replyTo: params.replyTo || env.EMAIL_REPLY_TO } : {}),
       subject: params.subject,
       text: params.text,
       ...(params.html ? { html: params.html } : {}),
@@ -124,8 +128,9 @@ export function listmonkTxBody(
   source: Pick<EmailTransportEnv, "LISTMONK_FROM" | "LISTMONK_FROM_EMAIL" | "LISTMONK_TX_TEMPLATE_ID"> & { LISTMONK_REPLY_TO?: string },
 ): Record<string, unknown> {
   if (/[\r\n]/.test(source.LISTMONK_REPLY_TO ?? "")) throw new Error("Invalid LISTMONK_REPLY_TO");
+  if (/[\r\n]/.test(params.replyTo ?? "")) throw new Error("Invalid replyTo");
   return {
-    ...(source.LISTMONK_REPLY_TO?.trim() ? { headers: [{ "Reply-To": source.LISTMONK_REPLY_TO.trim() }] } : {}),
+    ...((params.replyTo || source.LISTMONK_REPLY_TO)?.trim() ? { headers: [{ "Reply-To": (params.replyTo || source.LISTMONK_REPLY_TO)!.trim() }] } : {}),
     subscriber_email: params.to,
     subscriber_mode: "external",
     template_id: Number(source.LISTMONK_TX_TEMPLATE_ID),
@@ -222,10 +227,9 @@ export function buildWorkspaceInvitationEmail(
     to: params.to,
     subject: headerSafe(t("invitation.subject", values), 200),
     text: `${intro}\n\n${action}: ${params.url}\n\n${expiry}`,
-    html:
-      `<p>${escapeHtml(intro)}</p>` +
-      `<p><a href="${escapeHtml(params.url)}">${escapeHtml(action)}</a></p>` +
-      `<p>${escapeHtml(expiry)}</p>`,
+    html: emailLayout(params.locale ?? "en", headerSafe(t("invitation.subject", values), 200),
+      `<p>${escapeHtml(intro)}</p>${emailAction(action, params.url, params.locale ?? "en")}`,
+      escapeHtml(expiry)),
   };
 }
 
@@ -308,6 +312,9 @@ export function buildRunawayReminderEmail(
           limit: formatReminderDuration(input.limitSec, input.locale),
         });
   const footer = t("runawayReminder.footer");
+  const settingsUrl = input.trackUrl
+    ? new URL("/app/settings?tab=account&highlight=notifications", input.trackUrl).toString()
+    : null;
   const open = t("runawayReminder.open");
 
   const subject = headerSafe(t("runawayReminder.subject", { elapsed }), 200);
@@ -316,7 +323,7 @@ export function buildRunawayReminderEmail(
     why,
     ...(input.trackUrl ? [`${open}: ${input.trackUrl}`] : []),
     "",
-    footer,
+    `${footer}${settingsUrl ? ` ${settingsUrl}` : ""}`,
   ].join("\n");
 
   // Escaped after translation, like the invitation: the name is user input,
@@ -324,13 +331,10 @@ export function buildRunawayReminderEmail(
   const startedHtml = escapeHtml(
     t("runawayReminder.startedHtml", { name: NAME_SLOT, started, elapsed }),
   ).replace(NAME_SLOT, `<strong>${escapeHtml(name)}</strong>`);
-  const link = input.trackUrl
-    ? `<p><a href="${escapeHtml(input.trackUrl)}">${escapeHtml(open)}</a></p>`
-    : "";
-  const html =
-    `<p>${startedHtml}</p>` +
-    `<p>${escapeHtml(why)}</p>${link}` +
-    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
+  const link = input.trackUrl ? emailAction(open, input.trackUrl, input.locale ?? "en") : "";
+  const footerHtml = `${escapeHtml(footer)}${settingsUrl ? ` <a href="${escapeHtml(settingsUrl)}" style="color:#4338ca">${escapeHtml(t("runawayReminder.settingsLink"))}</a>` : ""}`;
+  const html = emailLayout(input.locale ?? "en", subject,
+    `<p>${startedHtml}</p><p>${escapeHtml(why)}</p>${link}`, footerHtml);
 
   return { to: input.to, subject, text, html };
 }

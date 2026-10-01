@@ -280,6 +280,7 @@ export const env = {
   // reject a message with no sender, and most only accept a domain they have
   // been configured to send for — there is no default worth guessing.
   EMAIL_FROM: getOptional("EMAIL_FROM"),
+  EMAIL_REPLY_TO: getOptional("EMAIL_REPLY_TO"),
 
   // Email — Listmonk + SES. Listmonk owns the API surface (tx + campaigns
   // + subscriber management); SES is the SMTP relay it sends through.

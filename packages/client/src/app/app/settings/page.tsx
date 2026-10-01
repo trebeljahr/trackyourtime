@@ -26,6 +26,7 @@ import { isElectron } from "@/lib/shell";
 import { WorkspaceTab } from "@/components/settings/workspace-tab";
 import { useLocale } from "@/i18n/locale-store";
 import { useT } from "@/i18n/use-t";
+import { useHighlightTarget } from "@/components/einvoice/use-deep-link-focus";
 
 const TABS = [
   "general",
@@ -52,6 +53,9 @@ export default function SettingsPage() {
   const t = useT("settings");
   const controller = useWorkspaceSettings();
   const [tab, setTab] = React.useState("general");
+  const [highlight, setHighlight] = React.useState<string | null>(null);
+  const pageRef = React.useRef<HTMLDivElement>(null);
+  useHighlightTarget(pageRef, tab === "account", highlight, "setting");
   const electron = useIsElectron();
   const tabs: readonly string[] = electron ? [...TABS, DESKTOP_TAB] : TABS;
 
@@ -66,6 +70,8 @@ export default function SettingsPage() {
     // has no query string to read (see the note above).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (requested && isTab(requested)) setTab(requested);
+    const requestedHighlight = new URLSearchParams(window.location.search).get("highlight");
+    if (requested === "account" && requestedHighlight === "notifications") setHighlight(requestedHighlight);
     // The desktop tray's Settings item, while this page is already open.
     const onRequest = (event: Event): void => {
       const detail = (event as CustomEvent<unknown>).detail;
@@ -95,7 +101,7 @@ export default function SettingsPage() {
   }, [tab, locale]);
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6" data-testid="settings-page">
+    <div ref={pageRef} className="mx-auto w-full max-w-3xl space-y-6" data-testid="settings-page">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">{t("page.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("page.description")}</p>
