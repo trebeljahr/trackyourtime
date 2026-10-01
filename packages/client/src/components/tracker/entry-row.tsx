@@ -209,7 +209,7 @@ function EntryRowImpl({
               value={draft}
               autoFocus
               aria-label={tc("fields.description")}
-              className="h-8 min-w-0 flex-1"
+              className="h-8 min-w-0 flex-1 shadow-none focus-visible:ring-inset"
               onChange={(event) => setDraft(event.target.value)}
               onBlur={commitDescription}
               onKeyDown={(event) => {
