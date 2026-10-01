@@ -41,6 +41,8 @@ export type PendingDeviceAuth = {
   requestId: string;
   deviceCode: string;
   userCode: string;
+  /** Public approval URL; absent for authorizations created by older builds. */
+  verificationUrl?: string;
   /** The API origin the authorization was started against. */
   apiOrigin: string;
   purpose: DeviceAuthPurpose;
@@ -99,6 +101,7 @@ export const decodePendingDeviceAuth = (raw: string | null): PendingDeviceAuth |
       requestId,
       deviceCode,
       userCode,
+      ...(text(record.verificationUrl) ? { verificationUrl: text(record.verificationUrl)! } : {}),
       apiOrigin,
       purpose,
       forUserId: purpose === "web-link" ? forUserId : null,

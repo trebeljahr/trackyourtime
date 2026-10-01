@@ -444,6 +444,8 @@ export type HeldSyncRow = Omit<QueuedMutationSummary, "hold"> & {
 
 /** The device authorization the popup is waiting on, as much as it may see. */
 export type PendingDeviceSignIn = {
+  /** Public approval URL, containing the user code, never the device credential. */
+  verificationUrl?: string;
   /** The code the person checks on the approval page. */
   userCode: string;
   /** Epoch ms. */

@@ -298,7 +298,7 @@ const pollWhileAwake = async (requestId: string): Promise<void> => {
 /**
  * "Sign in with the web app", from the popup.
  *
- * Starts an authorization, opens its approval page in a tab (no permission
+ * Starts an authorization, leaves navigation to the popup (no permission
  * needed), and keeps an alarm so the exchange finishes even after the popup
  * closes and the worker is stopped.
  */
@@ -306,7 +306,7 @@ export async function startDeviceSignIn(): Promise<void> {
   const current = await ensureReady();
   if (current.session !== null) return;
 
-  const { record, authorization } = await serially(async () => {
+  const { record } = await serially(async () => {
     const started = await beginDeviceAuthorization(current.apiUrl, "manual", null);
     if (!isAllowedVerificationUrl(started.authorization.verificationUriComplete)) {
       throw new BackgroundError(
@@ -314,6 +314,7 @@ export async function startDeviceSignIn(): Promise<void> {
         "The server sent an approval page address the extension will not open.",
       );
     }
+    started.record.verificationUrl = started.authorization.verificationUriComplete;
     await savePendingDeviceAuth(started.record);
     await clearDeviceSignInError();
     return started;
@@ -322,7 +323,6 @@ export async function startDeviceSignIn(): Promise<void> {
   await chrome.alarms.create(DEVICE_AUTH_ALARM, {
     periodInMinutes: DEVICE_ALARM_PERIOD_MINUTES,
   });
-  await chrome.tabs.create({ url: authorization.verificationUriComplete });
   void pollWhileAwake(record.requestId).catch(() => undefined);
 }
 

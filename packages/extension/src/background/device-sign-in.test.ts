@@ -58,10 +58,10 @@ describe("isAllowedVerificationUrl", () => {
 });
 
 describe("startDeviceSignIn", () => {
-  test("opens the approval page, keeps an alarm, and shows the code on the snapshot", async () => {
+  test("keeps the popup open and exposes the approval URL with the code", async () => {
     await startDeviceSignIn();
 
-    expect(fakeChrome.created).toEqual([server.verificationUrl]);
+    expect(fakeChrome.created).toEqual([]);
     expect(fakeChrome.alarms.has(DEVICE_AUTH_ALARM)).toBe(true);
     expect(await loadPendingDeviceAuth()).toMatchObject({ purpose: "manual", forUserId: null });
 
@@ -69,6 +69,7 @@ describe("startDeviceSignIn", () => {
     expect(state.signedIn).toBe(false);
     expect(state.pendingDeviceAuth).toEqual({
       userCode: "ABCDEFGH",
+      verificationUrl: server.verificationUrl,
       expiresAt: expect.any(Number),
     });
     // Never the device code.

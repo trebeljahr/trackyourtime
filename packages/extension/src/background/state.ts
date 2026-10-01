@@ -33,7 +33,7 @@ import {
   loadDeviceSignInError,
   loadPendingDeviceAuth,
 } from "../lib/device-auth-store";
-import { attemptPendingDeviceSignIn } from "./device-sign-in";
+import { attemptPendingDeviceSignIn, isAllowedVerificationUrl } from "./device-sign-in";
 import { fetchClients, fetchProjects, fetchTags, fetchTasks } from "./catalog";
 import {
   cachedEntryPage,
@@ -179,7 +179,12 @@ const resolveDeviceSignIn = async (apiUrl: string): Promise<DeviceSignInFacts> =
       pending !== null &&
       pending.purpose === "manual" &&
       isLivePendingDeviceAuth(pending, apiUrl, Date.now())
-        ? { userCode: pending.userCode, expiresAt: pending.expiresAt }
+        ? {
+            userCode: pending.userCode,
+            expiresAt: pending.expiresAt,
+            ...(pending.verificationUrl && isAllowedVerificationUrl(pending.verificationUrl)
+              ? { verificationUrl: pending.verificationUrl } : {}),
+          }
         : null,
     deviceSignInError: await loadDeviceSignInError(),
   };

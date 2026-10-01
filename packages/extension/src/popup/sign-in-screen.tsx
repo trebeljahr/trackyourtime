@@ -1,10 +1,9 @@
 import { useState, type FormEvent, type JSX } from "react";
-import { sameServerOrigin } from "@starter/core";
-import { BRIDGE_TARGET, DEFAULT_API_URL } from "../lib/config";
+import { DEFAULT_API_URL } from "../lib/config";
 import type { DeviceSignInError, PendingDeviceSignIn } from "../lib/messaging";
 import { describeServer } from "../lib/server-label";
 import { describeDeviceSignInError } from "./errors";
-import { join, openTab } from "./open-tab";
+import { openTab } from "./open-tab";
 import { ServerPicker } from "./server-picker";
 import type { SetServerOutcome } from "./switch-server";
 import { useT } from "../i18n/use-t";
@@ -32,24 +31,10 @@ export type SignInScreenProps = {
   ) => Promise<SetServerOutcome>;
 };
 
-/**
- * Three ways in, for any server.
- *
- * - Email and password, straight in the popup; the session token stays in
- *   the worker.
- * - "Sign in with the web app": the RFC 8628 device flow. The approval page
- *   opens in a tab, the popup shows the code it will show, and the worker
- *   finishes on its own even if the popup closes. It is also the way in for
- *   an account with two-factor authentication, which a password cannot
- *   complete here.
- * - On the hosted service, "Open Track Your Time": a person already signed in
- *   there is signed in here the moment the page loads (`background/bridge.ts`)
- *   — which is also how the extension comes back after a browser restart.
- */
+/** Email/password or one web-app sign-in path, with the code shown before navigation. */
 export function SignInScreen({
   apiUrl,
   serverVersion,
-  webUrl,
   pendingSync,
   pendingDeviceAuth,
   deviceSignInError,
@@ -79,13 +64,6 @@ export function SignInScreen({
     await action();
     setBusy(false);
   };
-
-  // Only where the bridge can link it: the hosted web app, for a production
-  // build pointed at the hosted server.
-  const offerWebApp =
-    BRIDGE_TARGET === "production" &&
-    webUrl !== null &&
-    sameServerOrigin(apiUrl, DEFAULT_API_URL);
 
   const notice =
     error ?? (deviceSignInError !== null ? describeDeviceSignInError(deviceSignInError, t) : null);
@@ -125,6 +103,16 @@ export function SignInScreen({
           <p className="device-code" data-testid="device-user-code">
             {pendingDeviceAuth.userCode}
           </p>
+          {pendingDeviceAuth.verificationUrl ? (
+            <button
+              type="button"
+              className="button button--primary button--block"
+              onClick={() => openTab(pendingDeviceAuth.verificationUrl!)}
+              data-testid="device-continue"
+            >
+              {t("signIn.deviceContinue")}
+            </button>
+          ) : null}
           <button
             type="button"
             className="button button--block"
@@ -146,21 +134,6 @@ export function SignInScreen({
               onSetServer={onSetServer}
               onSwitched={() => setChangingServer(false)}
             />
-          ) : null}
-
-          {offerWebApp && webUrl !== null ? (
-            <>
-              <button
-                type="button"
-                className="button button--primary button--block"
-                onClick={() => openTab(join(webUrl, "/app/track"))}
-                data-testid="open-web-app"
-              >
-                {t("signIn.openWebApp")}
-              </button>
-              <p className="popup__hint">{t("signIn.openWebAppHint")}</p>
-              <p className="sign-in__or">{t("signIn.or")}</p>
-            </>
           ) : null}
 
           <form className="form" onSubmit={submit} data-testid="sign-in-form">
