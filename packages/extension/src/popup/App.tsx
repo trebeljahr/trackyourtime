@@ -144,6 +144,10 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
    */
   const send = useCallback(
     async (message: PopupToBackground): Promise<boolean> => {
+      if (message.type === "timer:start" || message.type === "timer:stop") {
+        // A second refusal with identical text is still a new toast.
+        setError(null);
+      }
       const response: BackgroundResponse = await sendToBackground(message);
       if (response.ok) {
         apiUrlRef.current = response.state.apiUrl;
