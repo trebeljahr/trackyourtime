@@ -412,7 +412,7 @@ LISTMONK_API_USER=<Listmonk API user>
 LISTMONK_API_TOKEN=<its token>
 LISTMONK_FROM=Track Your Time <noreply@mail.trackyourtime.dev>
 LISTMONK_FROM_EMAIL=noreply@mail.trackyourtime.dev
-LISTMONK_REPLY_TO=support@trackyourtime.dev
+LISTMONK_REPLY_TO=support@mail.trackyourtime.dev
 LISTMONK_TX_TEMPLATE_ID=7         # tracktime-tx
 LISTMONK_CAMPAIGN_TEMPLATE_ID=8   # tracktime-campaign
 LISTMONK_LIVE_LIST_ID=9           # tracktime
@@ -438,17 +438,17 @@ values. Before publishing the role addresses, enable inbound Email Routing on
 `imprint@trackyourtime.dev` to the verified owner inbox. Test each route from
 an independent mailbox, plus a reply to a transactional message. Do not rely
 on a catch-all: it may be disabled later. SES sending and DKIM records alone
-do not create an inbound mailbox. Keep the old
-`support@mail.trackyourtime.dev` route until outstanding messages have been
-answered; the Listmonk Reply-To change needs the deployed server environment.
+do not create an inbound mailbox. Keep the
+`support@mail.trackyourtime.dev` route for transactional replies.
 
 On 2 October 2026, Cloudflare showed all three root-domain rules active with
 `ricotrebeljahr@gmail.com` as their verified destination. Its activity log
 showed independent test messages to each address as Forwarded. The same three
 messages arrived in the verified Gmail inbox. The older
 `support@mail.trackyourtime.dev` and `newsletter@mail.trackyourtime.dev`
-rules remained active. A reply to the new transactional Reply-To still needs
-checking after the deployed Listmonk setting changes.
+rules remained active. On 2 October, the deployed server settings were changed
+to the sender and Reply-To above. A message sent from the second test inbox to
+`support@mail.trackyourtime.dev` arrived in the verified owner inbox.
 
 Before upgrading an existing deployment, set `EMAIL_TRANSPORT=listmonk` in the
 server environment. Provider credentials no longer select delivery implicitly;
