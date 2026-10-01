@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { TimesheetScreen } from "@/components/timesheet/timesheet-screen";
+import { TimesheetSkeleton } from "@/components/ui/content-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -16,7 +17,7 @@ export default function TimesheetPage(): React.JSX.Element {
       fallback={
         <div className="space-y-4">
           <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-96 w-full" />
+          <TimesheetSkeleton />
         </div>
       }
     >

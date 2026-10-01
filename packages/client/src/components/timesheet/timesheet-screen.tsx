@@ -24,7 +24,7 @@ import { ProjectPicker } from "@/components/project-picker";
 import { TaskPicker } from "@/components/task-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TimesheetSkeleton } from "@/components/ui/content-skeletons";
 import { formatDayRangeLabel } from "@/components/calendar/day-range-label";
 import { useNow } from "@/components/calendar/use-now";
 import { useFormat } from "@/i18n/use-format";
@@ -285,9 +285,7 @@ export function TimesheetScreen(): React.JSX.Element {
 
           {isLoading ? (
             <div className="grid gap-2" data-testid="timesheet-skeleton">
-              {Array.from({ length: 5 }, (_unused, index) => (
-                <Skeleton key={index} className="h-10 w-full" />
-              ))}
+              <TimesheetSkeleton />
             </div>
           ) : grid.rows.length === 0 ? (
             <EmptyState

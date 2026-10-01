@@ -30,7 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ListSkeleton } from "@/components/ui/content-skeletons";
 import {
   Table,
   TableBody,
@@ -271,8 +271,7 @@ export function DevicesPanel(): React.JSX.Element {
         <DesktopTokenStorageNote />
         {devicesQuery.isLoading ? (
           <div className="space-y-2" data-testid="devices-loading">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+            <ListSkeleton avatar />
           </div>
         ) : devices.length === 0 ? (
           <EmptyState

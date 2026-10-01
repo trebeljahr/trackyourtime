@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ListSkeleton } from "@/components/ui/content-skeletons";
 import {
   Table,
   TableBody,
@@ -98,9 +98,7 @@ export function ProjectsTable({
   if (isLoading) {
     return (
       <div className="space-y-2" data-testid="projects-loading">
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-9 w-full" />
+        <ListSkeleton />
       </div>
     );
   }

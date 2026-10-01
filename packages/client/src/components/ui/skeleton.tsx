@@ -8,7 +8,8 @@ function Skeleton({
 }: React.HTMLAttributes<HTMLDivElement>): React.JSX.Element {
   return (
     <div
-      className={cn("animate-pulse rounded-md bg-muted", className)}
+      aria-hidden="true"
+      className={cn("motion-safe:animate-pulse rounded-md bg-muted", className)}
       {...props}
     />
   );

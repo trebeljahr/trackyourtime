@@ -11,7 +11,7 @@ import type {
 import { ConfirmDialog } from "@/components/catalog/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ListSkeleton } from "@/components/ui/content-skeletons";
 import { toast } from "@/components/ui/sonner";
 import { InviteForm } from "@/components/members/invite-form";
 import { LeaveWorkspace } from "@/components/members/leave-workspace";
@@ -172,9 +172,7 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
   if (workspaceLoading || (workspace !== null && membersQuery.isPending)) {
     return (
       <div className="space-y-3" data-testid="members-loading">
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
+        <ListSkeleton avatar />
       </div>
     );
   }

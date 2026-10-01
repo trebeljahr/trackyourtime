@@ -6,7 +6,7 @@ import { FileText, Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ListSkeleton } from "@/components/ui/content-skeletons";
 import {
   Table,
   TableBody,
@@ -54,9 +54,7 @@ export function InvoiceList({
   if (isLoading) {
     return (
       <div className="space-y-2" data-testid="invoices-loading">
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-9 w-full" />
+        <ListSkeleton />
       </div>
     );
   }

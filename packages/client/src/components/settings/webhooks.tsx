@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ListSkeleton } from "@/components/ui/content-skeletons";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -182,8 +182,7 @@ function DeliveriesDialog({
 
         {deliveriesQuery.isLoading ? (
           <div className="space-y-2" data-testid="webhook-deliveries-loading">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+            <ListSkeleton />
           </div>
         ) : deliveries.length === 0 ? (
           <EmptyState
@@ -388,8 +387,7 @@ export function WebhooksPanel(): React.JSX.Element {
       <CardContent className="space-y-6">
         {webhooksQuery.isLoading ? (
           <div className="space-y-2" data-testid="webhooks-loading">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+            <ListSkeleton />
           </div>
         ) : subscriptions.length === 0 ? (
           <EmptyState

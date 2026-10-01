@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ListSkeleton } from "@/components/ui/content-skeletons";
 import {
   Table,
   TableBody,
@@ -201,8 +201,7 @@ export function ApiTokensPanel(): React.JSX.Element {
       <CardContent className="space-y-6">
         {tokensQuery.isLoading ? (
           <div className="space-y-2" data-testid="api-tokens-loading">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+            <ListSkeleton />
           </div>
         ) : tokens.length === 0 ? (
           <EmptyState

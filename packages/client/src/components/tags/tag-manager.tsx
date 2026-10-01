@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ListSkeleton } from "@/components/ui/content-skeletons";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -134,9 +134,7 @@ export function TagManager(): React.JSX.Element {
 
       {isLoading ? (
         <div className="space-y-2" data-testid="tags-loading">
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
+          <ListSkeleton />
         </div>
       ) : rows.length === 0 ? (
         <EmptyState

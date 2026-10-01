@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { CalendarSkeleton } from "@/components/ui/content-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarScreen } from "@/components/calendar/calendar-screen";
 
@@ -16,7 +17,7 @@ export default function CalendarPage(): React.JSX.Element {
       fallback={
         <div className="space-y-4" data-testid="calendar-loading">
           <Skeleton className="h-9 w-64" />
-          <Skeleton className="h-[26rem] w-full" />
+          <CalendarSkeleton />
         </div>
       }
     >

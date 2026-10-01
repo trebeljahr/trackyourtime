@@ -1,5 +1,6 @@
 "use client";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/hooks/use-auth";
@@ -50,7 +51,15 @@ export default function ProfilePage() {
 
         {/* Bio */}
         {profileQuery.isLoading ? (
-          <p className="text-muted-foreground">{t("profile.loading")}</p>
+          <div role="status" className="space-y-3">
+            <span className="sr-only">{t("profile.loading")}</span>
+            <div aria-hidden="true" className="space-y-3">
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-3/4" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          </div>
         ) : isEditing ? (
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-2">
