@@ -431,14 +431,25 @@ export function TrackerScreen({
         branded
         onOpenEntries={onOpenEntries}
         accountMenu={
-          <Menu
-            webUrl={state.webUrl}
-            email={state.email}
-            name={state.profileName}
-            image={state.profileImage}
-            onOpenSettings={onOpenSettings}
-            onSignOut={onSignOut}
-          />
+          <>
+            <span
+              className="status header__status"
+              data-testid="tracker-sync-status"
+              title={sync.title}
+              role="status"
+            >
+              <span className={`status__dot status__dot--${sync.tone}`} aria-hidden="true" />
+              {sync.label}
+            </span>
+            <Menu
+              webUrl={state.webUrl}
+              email={state.email}
+              name={state.profileName}
+              image={state.profileImage}
+              onOpenSettings={onOpenSettings}
+              onSignOut={onSignOut}
+            />
+          </>
         }
         // Off by default, so by default the tracker looks exactly as it did.
         onOpenSuggestions={
@@ -653,8 +664,8 @@ export function TrackerScreen({
         </p>
       </div>
 
-      <div className="footer">
-        {running !== null && (
+      {running !== null && (
+        <div className="footer">
           <button
             className="button button--danger button--block"
             type="submit"
@@ -664,18 +675,8 @@ export function TrackerScreen({
           >
             {t("tracker.stop")}
           </button>
-        )}
-        <div className="footer__row">
-          <span
-            className="status"
-            data-testid="tracker-sync-status"
-            title={sync.title}
-          >
-            <span className={`status__dot status__dot--${sync.tone}`} />
-            {sync.label}
-          </span>
         </div>
-      </div>
+      )}
     </div>
   );
 }

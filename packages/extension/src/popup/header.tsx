@@ -27,10 +27,7 @@ export type HeaderProps = {
   onNewEntry?: () => void;
   /** Only offered while activity capture is on — see the tracker. */
   onOpenSuggestions?: () => void;
-  /**
-   * A bare dot, never a label. The labelled status stays in the tracker's
-   * footer, where there is room for the sentence that makes it useful.
-   */
+  /** Compact sync indicator for secondary screens. */
   sync?: SyncLabel;
 };
 
