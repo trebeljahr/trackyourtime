@@ -147,3 +147,15 @@ test("header server control reveals and hides the self-hosted URL picker", async
     vi.unstubAllGlobals();
   }
 });
+
+
+test("confirmed web sign-in stays in the popup with no code or browser navigation", () => {
+  const html = renderToStaticMarkup(<SignInScreen {...props} pendingDeviceAuth={{
+    webAccount: true, userCode: "ABCDEFGH", expiresAt: Date.now() + 60000,
+    verificationUrl: "https://trackyourtime.dev/app/device?user_code=ABCDEFGH",
+  }} />);
+  expect(html).toContain("Connecting your account in the background");
+  expect(html).not.toContain('data-testid="device-continue"');
+  expect(html).not.toContain('data-testid="device-user-code"');
+  expect(html).toContain('data-testid="device-cancel"');
+});

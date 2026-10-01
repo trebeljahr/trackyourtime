@@ -1,3 +1,4 @@
+import { readBrowserAccount, approveBrowserDevice } from "./browser-account";
 /**
  * Trusted web pages offer an account; only a popup confirmation starts a
  * device authorization. Each app keeps its own session after that sign-in.
@@ -37,7 +38,6 @@ import {
 } from "../lib/sign-out-marker";
 import {
   beginDeviceAuthorization,
-  isAllowedVerificationUrl,
   exchangePendingDeviceAuth,
   serially,
 } from "./device-sign-in";
@@ -158,19 +158,27 @@ export const confirmWebAccount = (userId: string, sessionCreatedAt: number): Pro
   serially(async () => {
     const current = await ensureReady();
     if (current.session !== null) return;
-    const account = await loadWebAccount(current.apiUrl);
+    const browser = await readBrowserAccount(current.apiUrl);
+    const account = browser === undefined ? await loadWebAccount(current.apiUrl) : browser?.account ?? null;
     if (account === null || account.userId !== userId || account.sessionCreatedAt !== sessionCreatedAt) {
-      throw new BackgroundError("WEB_ACCOUNT_CHANGED", "Open the web app to check the account, then try again.");
+      throw new BackgroundError("WEB_ACCOUNT_CHANGED", "The web account changed. Refresh the account offer and try again.");
     }
     const pending = await loadPendingDeviceAuth();
     if (pending !== null && isLivePendingDeviceAuth(pending, current.apiUrl, Date.now())) return;
-    const { record, authorization } = await beginDeviceAuthorization(current.apiUrl, "web-confirmed", userId);
-    if (isAllowedVerificationUrl(authorization.verificationUriComplete)) {
-      record.verificationUrl = authorization.verificationUriComplete;
-    }
+    const { record } = await beginDeviceAuthorization(current.apiUrl, "web-confirmed", userId);
     await savePendingDeviceAuth(record);
     await clearDeviceSignInError();
     await chrome.alarms.create(DEVICE_AUTH_ALARM, { periodInMinutes: 0.5 });
+    if (browser) {
+      try {
+        await approveBrowserDevice(current.apiUrl, browser.token, record.userCode);
+        await exchangePendingDeviceAuth(record, 1);
+      } catch {
+        await clearPendingDeviceAuth();
+        await chrome.alarms.clear(DEVICE_AUTH_ALARM);
+        throw new BackgroundError("WEB_ACCOUNT_CHANGED", "Could not sign in with the web account. Try again.");
+      }
+    }
   });
 
 const handleSync = async (

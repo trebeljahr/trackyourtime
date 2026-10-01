@@ -317,8 +317,8 @@ the API cannot publish.
 ### Server trust and permissions
 
 The hosted server must trust the store extension before any release reaches
-users. The extension has no host permissions, so every request it sends is a
-CORS request. The server answers CORS only for trusted origins. In the server
+users. The extension has host access to the hosted API. Other servers answer
+CORS only for trusted origins. In the server
 app's env fields in Coolify, set `TRUST_STORE_APPS=true`, or add
 `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` to `TRUSTED_ORIGINS`.
 Then check the answer:
@@ -342,8 +342,9 @@ list changes:
 | `idle` | Detects when you leave the computer with a timer running, so the extension can ask what to do with that time. |
 | `tabs` (optional) | Activity capture only. Requested from the click that turns it on. Records which website is in front, on the device. |
 
-The manifest has no `host_permissions`, no `optional_host_permissions` and no
-`cookies`. `externally_connectable` lists `https://trackyourtime.dev/*`. It is
+The manifest requests `cookies` and host access to `https://api.trackyourtime.dev/*`
+to discover the web account and approve a separate extension session after confirmation.
+It has no `optional_host_permissions`. `externally_connectable` lists `https://trackyourtime.dev/*`. It is
 not a permission and Chrome shows no install warning for it. It lets the
 Track Your Time web app tell the extension that you signed in or out there.
 
@@ -523,6 +524,6 @@ person. Nothing else in the release waits for it.
 
 ### Permissions, as AMO asks about them
 
-The same list as the Chrome item — `storage`, `alarms`, `idle`, and the
-optional `tabs` — with no host permissions and no content scripts. The
+The same list as the Chrome item — `storage`, `alarms`, `idle`, `cookies`, and
+optional `tabs` — with host access to the API and a hosted-web content relay. The
 justifications in [Chrome Web Store](#chrome-web-store) apply word for word.

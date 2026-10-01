@@ -9,17 +9,17 @@ import {
 } from "../manifest.config";
 
 /** What the store listing may ask for, and nothing more, in every build. */
-const expectNoHostAccess = (manifest: Record<string, unknown>): void => {
-  expect(manifest).not.toHaveProperty("host_permissions");
+const expectScopedAccountAccess = (manifest: Record<string, unknown>): void => {
+  expect(manifest.host_permissions).not.toContain("<all_urls>");
   expect(manifest).not.toHaveProperty("optional_host_permissions");
-  expect(manifest.permissions).toEqual(["storage", "alarms", "idle"]);
-  expect(manifest.permissions).not.toContain("cookies");
+  expect(manifest.permissions).toEqual(["storage", "alarms", "idle", "cookies"]);
   expect(manifest.optional_permissions).toEqual(["tabs"]);
 };
 
 describe("production manifest", () => {
-  it("asks for no host access and no cookies", () => {
-    expectNoHostAccess(buildManifest("production", {}));
+  it("scopes web-account cookie access to its own API", () => {
+    expectScopedAccountAccess(buildManifest("production", {}));
+    expect(buildManifest("production", {}).host_permissions).toEqual(["https://api.trackyourtime.dev/*"]);
   });
 
   it("lets only the hosted web app message the extension", () => {
@@ -50,8 +50,9 @@ describe("development manifest", () => {
     expect(buildManifest("development", { EXTENSION_KEY: "k" }).key).toBe("k");
   });
 
-  it("asks for no host access and no cookies", () => {
-    expectNoHostAccess(buildManifest("development", {}));
+  it("scopes web-account cookie access to its own API", () => {
+    expectScopedAccountAccess(buildManifest("development", {}));
+    expect(buildManifest("development", {}).host_permissions).toEqual(["http://localhost/*", "http://127.0.0.1/*"]);
   });
 
   it("lets a local web app on any port message the extension, and no other extension", () => {
@@ -66,8 +67,9 @@ describe("development manifest", () => {
 describe("firefox manifest", () => {
   const manifest = buildManifest("firefox", {});
 
-  it("asks for no host access and no cookies, like every other build", () => {
-    expectNoHostAccess(manifest);
+  it("limits web-account cookie access to the hosted API", () => {
+    expectScopedAccountAccess(manifest);
+    expect(manifest.host_permissions).toEqual(["https://api.trackyourtime.dev/*"]);
   });
 
   it("runs an event page, not a service worker", () => {

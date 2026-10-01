@@ -277,7 +277,7 @@ export const popup: Translation<typeof source> = {
     editServer: "Server ändern",
     serverExplanation: "Nutze die Track Your Time Cloud oder gib die URL deines selbst gehosteten Servers ein.",
     webAccountWaitingTitle: "Anmeldung läuft…",
-    webAccountWaiting: "Lass die Web-App geöffnet, um die Anmeldung abzuschließen, oder fahre im Browser fort.",
+    webAccountWaiting: "Dein Konto wird im Hintergrund verbunden…",
 
     ownServer: "Eigenen Server verwenden",
     openWebApp: "Über Web-App anmelden",

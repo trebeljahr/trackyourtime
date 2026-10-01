@@ -293,7 +293,7 @@ export const popup = {
     editServer: "Change server",
     serverExplanation: "Use Track Your Time cloud, or enter the URL of your self-hosted server.",
     webAccountWaitingTitle: "Signing in…",
-    webAccountWaiting: "Keep the web app open to finish signing in, or continue in the browser.",
+    webAccountWaiting: "Connecting your account in the background…",
 
     ownServer: "Use your own server",
     openWebApp: "Log In From Web App",

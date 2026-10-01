@@ -1,3 +1,4 @@
+import { discoverBrowserAccount, browserAccountImage } from "./browser-account";
 import { loadWebAccount } from "../lib/web-account";
 /**
  * Building the {@link BackgroundState} snapshot the popup renders.
@@ -174,8 +175,11 @@ type DeviceSignInFacts = Pick<BackgroundState, "pendingDeviceAuth" | "deviceSign
 
 const resolveDeviceSignIn = async (apiUrl: string): Promise<DeviceSignInFacts> => {
   const pending = await loadPendingDeviceAuth();
+  const browser = await discoverBrowserAccount(apiUrl).catch(() => undefined);
+  const offered = browser === undefined ? await loadWebAccount(apiUrl) : browser;
+  const webAccount = offered ? { ...offered, image: await browserAccountImage(apiUrl, offered.image) } : null;
   return {
-    webAccount: await loadWebAccount(apiUrl),
+    webAccount,
     pendingDeviceAuth:
       pending !== null &&
       isLivePendingDeviceAuth(pending, apiUrl, Date.now())

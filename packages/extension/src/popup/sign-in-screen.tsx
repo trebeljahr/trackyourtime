@@ -123,10 +123,10 @@ export function SignInScreen({
           <div className="panel" data-testid="device-sign-in-waiting">
             <p className="panel__title">{t(pendingDeviceAuth.webAccount ? "signIn.webAccountWaitingTitle" : "signIn.deviceTitle")}</p>
             <p className="panel__hint">{t(pendingDeviceAuth.webAccount ? "signIn.webAccountWaiting" : "signIn.deviceWaiting")}</p>
-            <p className="device-code" data-testid="device-user-code">
-              {pendingDeviceAuth.userCode}
-            </p>
-            {pendingDeviceAuth.verificationUrl ? (
+            {!pendingDeviceAuth.webAccount ? (
+              <p className="device-code" data-testid="device-user-code">{pendingDeviceAuth.userCode}</p>
+            ) : null}
+            {!pendingDeviceAuth.webAccount && pendingDeviceAuth.verificationUrl ? (
               <button
                 type="button"
                 className="button button--primary button--block"

@@ -24,15 +24,15 @@ filenames are commonly gitignored, which would make a fresh clone build an
 extension with no URL in it and no error to say so.
 
 Each target gets its own name (`Track Your Time` vs `Track Your Time (dev)`), so
-the two can be installed side by side. Neither asks for host access or cookies:
+the two can be installed side by side. Cookie access is scoped to the API host:
 
 | | development (`dist/`) | production (`dist-prod/`) | firefox (`dist-firefox/`) |
 |---|---|---|---|
-| `permissions` | `storage`, `alarms`, `idle` | `storage`, `alarms`, `idle` | `storage`, `alarms`, `idle` |
+| `permissions` | `storage`, `alarms`, `idle`, `cookies` | `storage`, `alarms`, `idle`, `cookies` | `storage`, `alarms`, `idle`, `cookies` |
 | `optional_permissions` (asked for from Settings → Activity) | `tabs` | `tabs` | `tabs` |
 | `background` | service worker | service worker | event page (`scripts`) |
 | `externally_connectable.matches` | `http://localhost/*`, `http://127.0.0.1/*` | `https://trackyourtime.dev/*` | absent — Gecko has no such thing |
-| `host_permissions`, `optional_host_permissions`, `cookies` | none | none | none |
+| `host_permissions` | `http://localhost/*`, `http://127.0.0.1/*` | `https://api.trackyourtime.dev/*` | `https://api.trackyourtime.dev/*` |
 | `key` | none — id follows the load path | the Web Store key (`STORE_EXTENSION_KEY`) | none — `browser_specific_settings.gecko.id` |
 
 `externally_connectable` is generated from `extensionBridgeMatchPatterns` in
@@ -104,8 +104,8 @@ Choosing a server runs in two steps:
    `ORIGIN_NOT_TRUSTED`; one too old to say is let through. Nothing changes
    unless every check passes.
 
-There is no Chrome prompt: the extension holds no host access, so there is
-nothing to request and nothing to give back.
+Changing servers requests no additional host access. Direct cookie discovery
+is limited to the build’s API host; other servers use manual sign-in.
 
 Moving to a **different** server signs out of the old one, and the session is
 revoked there whichever way it was signed in — every session is the
@@ -132,14 +132,16 @@ nothing is dropped. The first request that gets through clears the notice.
 
 ### Chrome Web Store permission justification
 
-The extension requests `storage`, `alarms` and `idle`, plus the optional `tabs`.
-It requests no host permissions and no `cookies` permission, has no content
-scripts, and does not read or change any web page.
+The extension requests `storage`, `alarms`, `idle` and `cookies`, plus optional
+`tabs`. Host access is limited to the API host. Firefox also uses a hosted-web
+content relay for account offers.
 
 - `storage` keeps the server address, the offline queue and the session token
   (the token in memory-only session storage).
 - `alarms` keeps the toolbar badge and queued changes going while Chrome has
   stopped the background worker.
+- `cookies` discovers the web account on the API host and approves a separate
+  extension session after confirmation. The web token is never stored.
 - `idle` notices when the person has walked away from a running timer.
 - `tabs` (optional) is for activity capture. It is not granted at install and
   is requested only when the person turns on Settings → Activity, from that
@@ -321,22 +323,18 @@ be revoked from there, which kills both the HTTP and the WebSocket path.
 
 ### Confirming a web account
 
-The web app messages Chromium through `externally_connectable`, from a browser
-tab to the pinned extension id. Firefox uses its hosted-only content relay.
-`src/background/bridge.ts` handles the messages. The protocol is `@starter/shared/extension-bridge`, version 2.
-Version 1 is rejected in both directions because it allowed automatic login
-and linked logout. Both the web app and extension need this update for account
-offers; password and manual device sign-in still work independently.
+The worker reads the API host’s session cookie and validates it with the server.
+The popup shows the account email and photo, then waits for explicit confirmation.
+First-party avatars are loaded in the background and embedded in the popup.
 
-- **Web sign-in:** the page offers its user ID, email, profile photo and session
-  start. The extension holds this in memory for up to 90 seconds after its last
-  refresh. No device authorization starts until the person confirms that
-  account in the popup.
-- **Confirmation:** the extension starts a device authorization bound to the
-  selected user. On its next sync, the web page approves the code with its own
-  session. The extension fetches its own token and checks its user ID before
-  keeping it. No token crosses the bridge. The page checks every five seconds
-  while mounted, so confirmation does not require another focus event.
+- **Confirmation:** the worker rechecks the selected account, creates a device
+  authorization, and approves it using the web session. It exchanges that code
+  for a separate extension token and verifies the user ID. No web tab is needed
+  or opened. The web cookie is neither persisted nor adopted as the extension token.
+- **Fallback:** when cookie access is unavailable, the version 2 web bridge can
+  offer and approve an account from an existing page. Chromium uses
+  `externally_connectable`; Firefox uses its hosted-only content relay.
+  Password and manual device sign-in remain available for other servers.
 - **Web logout or account switch:** updates the account offer and cancels an
   unfinished confirmation for the previous user. An existing extension session
   stays signed in, including sessions created by older builds.

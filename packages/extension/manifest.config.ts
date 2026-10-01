@@ -13,16 +13,10 @@
  * and the Chrome Web Store build is one bundle for everybody, so the popup lets
  * a person pick any server.
  *
- * No build asks for host_permissions or cookies. Firefox injects a content
- * relay only on the hosted web app. Every request the extension makes
- * is an ordinary CORS request, which the server answers because the
- * extension's `chrome-extension://<id>` origin is in its trust list
- * (`TRUST_STORE_APPS` / `TRUSTED_ORIGINS`) — the same trust sign-in already
- * needed. What the cookie used to do, following the web app's sign-in, is the
- * web app ↔ extension bridge now: `externally_connectable` lets the build's
- * first-party web origins message the extension (`src/background/bridge.ts`).
- * Chromium uses that key without a host-access prompt; Firefox declares its
- * narrow site access through content_scripts.matches.
+ * Cookie access is limited to the hosted API, or loopback in development.
+ * It offers the existing web account and, after confirmation, approves a
+ * separate extension session without opening a web page. The web token is
+ * never persisted or adopted as the extension's token.
  */
 import {
   extensionBridgeMatchPatterns,
@@ -263,9 +257,11 @@ export function buildManifest(
       ? { scripts: ["background.js"], type: "module" }
       : { service_worker: "background.js", type: "module" },
     // `idle` is the only way to learn that the person has walked away — a
-    // service worker sees no input events of its own. No `cookies` and no host
-    // permissions: see the header. Firefox site injection is declared below.
-    permissions: ["storage", "alarms", "idle"],
+    // service worker sees no input events of its own.
+    permissions: ["storage", "alarms", "idle", "cookies"],
+    host_permissions: target.bridgeTarget === "development"
+      ? ["http://localhost/*", "http://127.0.0.1/*"]
+      : ["https://api.trackyourtime.dev/*"],
     // Requested only when somebody turns on Settings → Activity, from that
     // click — never at install. `tabs` is what exposes a tab's URL and title
     // to activity capture, and Chrome words it as reading browsing history,
