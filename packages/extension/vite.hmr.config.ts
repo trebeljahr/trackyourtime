@@ -28,11 +28,17 @@ export default defineConfig(async ({ command, mode }) => {
   if (mode !== "hosted" && mode !== "local-api") throw new Error("Use --mode hosted or --mode local-api for extension HMR.");
   const targetMode = mode === "local-api" ? "development" : "production";
   const target = BUILD_TARGETS[targetMode];
+  const port = await freePort();
   const manifest = {
     ...buildManifest(targetMode),
     background: { service_worker: "src/background/index.ts", type: "module" },
+    // CRXJS loads the worker from localhost and proxies extension requests to it.
+    // These permissions belong only to this serve-only development manifest.
+    host_permissions: ["http://localhost/*", "http://127.0.0.1/*"],
+    content_security_policy: {
+      extension_pages: `script-src 'self' http://localhost:${port} http://127.0.0.1:${port}; object-src 'self';`,
+    },
   } as ManifestV3Export;
-  const port = await freePort();
   return {
     plugins: [react(), crx({ manifest })],
     publicDir: "public",
