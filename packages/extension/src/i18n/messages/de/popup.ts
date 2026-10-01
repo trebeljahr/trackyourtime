@@ -260,6 +260,7 @@ export const popup: Translation<typeof source> = {
     yesterday: "Gestern",
     noDescription: "Keine Beschreibung",
     running: "Läuft",
+    restart: "Diese Aufgabe erneut starten",
     pendingTitle: "Noch nicht gesendet – bearbeitbar, sobald er synchronisiert ist",
     projectDeleted: "Projekt gelöscht",
     projectArchived: "{project} (archiviert)",

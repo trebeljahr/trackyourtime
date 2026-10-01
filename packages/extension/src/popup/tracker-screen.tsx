@@ -71,6 +71,7 @@ export type TrackerScreenProps = {
   onOpenEntries: () => void;
   onUpdateTheme?: (theme: ThemePreference) => Promise<boolean>;
   entries?: ReactNode;
+  renderEntries?: (running: TimeEntry | null) => ReactNode;
   /** The Suggestions screen. Its header button shows only while capture is on. */
   onOpenSuggestions: () => void;
   /** Asks the worker what this person has called work like this before. */
@@ -156,6 +157,7 @@ export function TrackerScreen({
   onOpenEntries,
   onUpdateTheme,
   entries,
+  renderEntries,
   onOpenSuggestions,
   onSearchDescriptions,
   onCreateClient,
@@ -390,9 +392,12 @@ export function TrackerScreen({
     if (busy) return;
     setBusy(true);
     setOptimistic({ running: null });
-    await onStop();
-    setOptimistic(null);
-    setBusy(false);
+    try {
+      await onStop();
+    } finally {
+      setOptimistic(null);
+      setBusy(false);
+    }
   };
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
@@ -658,7 +663,7 @@ export function TrackerScreen({
         >
           {error ?? ""}
         </p>
-        {entries}
+        {renderEntries ? renderEntries(running) : entries}
       </div>
 
 

@@ -835,6 +835,15 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
               onGoTracker: goTracker,
               onOpenEntry: openEntry,
               onNewEntry: newEntry,
+              onRestartEntry: (entry) => send({
+                type: "timer:start",
+                description: entry.description,
+                clientId: entry.clientId,
+                projectId: entry.projectId,
+                taskId: entry.taskId,
+                billable: entry.billable,
+                tagIds: entry.tagIds,
+              }),
               onLoadMore: loadMoreEntries,
             }}
             entry={{

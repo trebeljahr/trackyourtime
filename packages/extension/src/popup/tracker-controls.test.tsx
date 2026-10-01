@@ -265,6 +265,27 @@ describe("popup timer controls", () => {
     expect(onLoadMore).toHaveBeenCalledOnce();
   });
 
+  test("restart shows a running copy before the worker replies and restores the row on failure", async () => {
+    let finish!: (value: boolean) => void;
+    const onRestartEntry = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+    const entry = { id: "past", description: "Earlier work", start: new Date().toISOString(),
+      end: new Date().toISOString(), durationSec: 60, projectName: null, clientName: null,
+      taskName: null, projectColor: null, invoiceId: null };
+    const history = { ...state, entries: { entries: [entry], pendingIds: [], hasMore: false,
+      from: entry.start, to: entry.end } } as unknown as BackgroundState;
+    await act(async () => root.render(<EntriesScreen embedded state={history} error={null}
+      onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
+      onNewEntry={vi.fn()} onRestartEntry={onRestartEntry}
+      onLoadMore={vi.fn(async () => true)} />));
+    await click('[data-testid="entry-restart"]');
+    expect(onRestartEntry).toHaveBeenCalledWith(history.entries!.entries[0]);
+    expect(host.querySelector('[data-testid="entry-running"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="entry-restart"]')).toBeNull();
+    await act(async () => finish(false));
+    expect(host.querySelector('[data-testid="entry-running"]')).toBeNull();
+    expect(host.querySelector('[data-testid="entry-restart"]')).not.toBeNull();
+  });
+
   test.each([true, false])("live entry and tally tick together (embedded=%s)", async (embedded) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 9, 1, 12, 0, 0));

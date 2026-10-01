@@ -276,6 +276,7 @@ export const popup = {
     yesterday: "Yesterday",
     noDescription: "No description",
     running: "Running",
+    restart: "Start this task again",
     pendingTitle: "Not sent yet — editable once it syncs",
     projectDeleted: "Project deleted",
     projectArchived: "{project} (archived)",

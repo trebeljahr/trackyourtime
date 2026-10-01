@@ -44,6 +44,7 @@ export type EntriesScreenProps = {
   onGoTracker: () => void;
   onOpenEntry: (id: string) => void;
   onNewEntry: () => void;
+  onRestartEntry?: (entry: DetailedEntry) => Promise<boolean>;
   onLoadMore: () => Promise<boolean>;
 };
 
@@ -102,13 +103,28 @@ export function EntriesScreen({
   onGoTracker,
   onOpenEntry,
   onNewEntry,
+  onRestartEntry,
   onLoadMore,
 }: EntriesScreenProps): JSX.Element {
   const t = useT("popup");
   const locale = usePopupLocale();
   const [busy, setBusy] = useState(false);
+  const [restarting, setRestarting] = useState<DetailedEntry | null>(null);
+  const running = restarting ?? state.running;
   const alertRef = useRef<HTMLParagraphElement>(null);
-  const elapsedSec = useElapsedSec(state.running);
+  const elapsedSec = useElapsedSec(running);
+
+  const restart = async (entry: DetailedEntry): Promise<void> => {
+    if (running !== null || onRestartEntry === undefined) return;
+    const now = new Date().toISOString();
+    setRestarting({ ...entry, id: `restarting-${entry.id}`, start: now,
+      end: null, durationSec: 0, createdAt: now, updatedAt: now });
+    try {
+      await onRestartEntry(entry);
+    } finally {
+      setRestarting(null);
+    }
+  };
 
   useEffect(() => {
     if (embedded || error === null) return;
@@ -150,9 +166,9 @@ export function EntriesScreen({
   const todayKey = dayKeyInZone(Date.now(), deviceTimeZone());
   const pending = new Set(page?.pendingIds ?? []);
   const groups = groupByDay((page?.entries ?? []).filter(
-    (entry) => entry.end !== null && entry.id !== state.running?.id,
+    (entry) => entry.end !== null && entry.id !== running?.id,
   ));
-  if (state.running !== null) {
+  if (running !== null) {
     let today = groups.find((group) => group.key === todayKey);
     if (today === undefined) {
       today = { key: todayKey, entries: [], totalSec: 0 };
@@ -250,9 +266,9 @@ export function EntriesScreen({
                   </div>
 
                   <div className="entries">
-                    {group.key === todayKey && state.running !== null ? (
+                    {group.key === todayKey && running !== null ? (
                       <RunningRow
-                        entry={state.running}
+                        entry={running}
                         elapsedSec={elapsedSec}
                         timeFormat={timeFormat}
                         durationFormat={durationFormat}
@@ -271,6 +287,7 @@ export function EntriesScreen({
                         // row itself has never reached the server.
                         pending={pending.has(entry.id) || isTempId(entry.id)}
                         onOpen={() => onOpenEntry(entry.id)}
+                        onRestart={running === null && onRestartEntry ? () => { void restart(entry); } : undefined}
                       />
                     ))}
                   </div>

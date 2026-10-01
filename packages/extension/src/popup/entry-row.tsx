@@ -1,4 +1,5 @@
 import type { CSSProperties, JSX } from "react";
+import { Play } from "lucide-react";
 import {
   type DetailedEntry,
   type DurationFormat,
@@ -43,6 +44,7 @@ export type EntryRowProps = {
    */
   pending: boolean;
   onOpen: () => void;
+  onRestart?: () => void;
 };
 
 export function EntryRow({
@@ -51,12 +53,14 @@ export function EntryRow({
   durationFormat,
   pending,
   onOpen,
+  onRestart,
 }: EntryRowProps): JSX.Element {
   const t = useT("popup");
   const locale = usePopupLocale();
   const described = entry.description.trim() !== "";
 
   return (
+    <div className="entry-wrap">
     <button
       type="button"
       className="entry"
@@ -91,6 +95,14 @@ export function EntryRow({
         </span>
       </span>
     </button>
+    {onRestart ? (
+      <button type="button" className="entry__restart" onClick={onRestart}
+        aria-label={t("entry.restart")} title={t("entry.restart")}
+        data-testid="entry-restart" data-entry-id={entry.id}>
+        <Play size={15} fill="currentColor" aria-hidden="true" />
+      </button>
+    ) : null}
+    </div>
   );
 }
 
