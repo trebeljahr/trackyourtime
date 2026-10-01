@@ -267,6 +267,14 @@ export const popup = {
     discard: "Discard {span}",
     discardAndResume: "Discard and resume",
   },
+  runaway: {
+    title: "Has this timer run too long?",
+    running: "Check the time before you stop this timer.",
+    stopped: "This timer has stopped. Check its start and end time.",
+    keep: "I worked that long",
+    stopAndEdit: "Stop and edit time",
+    editTime: "Edit time",
+  },
   dayStepper: {
     previous: "Previous day",
     next: "Next day",

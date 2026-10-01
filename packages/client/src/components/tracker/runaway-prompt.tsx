@@ -22,6 +22,7 @@ const ACTION_SUMMARY_KEYS = {
 
 export type RunawayAnswer = {
   resolution: RunawayResolution;
+  start?: string;
   /** ISO datetime, only for the `end-at` resolution. */
   end?: string;
 };
@@ -30,6 +31,7 @@ export type RunawayPromptProps = {
   entry: TimeEntry;
   mark: RunawayMark;
   onAnswer: (answer: RunawayAnswer) => void;
+  onStop?: () => void;
 };
 
 /** `YYYY-MM-DDTHH:mm` in the viewer's own zone, for `<input type=datetime-local>`. */
@@ -58,17 +60,15 @@ export function RunawayPrompt({
   entry,
   mark,
   onAnswer,
+  onStop,
 }: RunawayPromptProps): React.JSX.Element {
   const t = useT("tracker");
   const tc = useT("common");
   const format = useFormat();
   const [editing, setEditing] = React.useState(false);
+  const [draftStart, setDraftStart] = React.useState(() => toLocalInputValue(entry.start));
   const [draft, setDraft] = React.useState(() =>
-    toLocalInputValue(
-      new Date(
-        Date.parse(entry.start) + mark.limitSec * 1000,
-      ).toISOString(),
-    ),
+    toLocalInputValue(entry.end ?? new Date().toISOString()),
   );
 
   const ran = format.durationShort(mark.elapsedSec);
@@ -77,9 +77,10 @@ export function RunawayPrompt({
   const stillRunning = entry.end === null;
 
   const submitEndAt = (): void => {
+    const parsedStart = Date.parse(draftStart);
     const parsed = Date.parse(draft);
-    if (Number.isNaN(parsed)) return;
-    onAnswer({ resolution: "end-at", end: new Date(parsed).toISOString() });
+    if (Number.isNaN(parsedStart) || Number.isNaN(parsed) || parsed <= parsedStart) return;
+    onAnswer({ resolution: "end-at", start: new Date(parsedStart).toISOString(), end: new Date(parsed).toISOString() });
   };
 
   return (
@@ -97,7 +98,7 @@ export function RunawayPrompt({
           </p>
           <p className="text-sm text-muted-foreground">
             {t("runaway.body", {
-              action: t(ACTION_SUMMARY_KEYS[mark.action]),
+              action: t(mark.action === "flagged" && !stillRunning ? "runaway.actionStopped" : ACTION_SUMMARY_KEYS[mark.action]),
               limit,
             })}
           </p>
@@ -106,6 +107,14 @@ export function RunawayPrompt({
 
       {editing ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <Input
+            type="datetime-local"
+            value={draftStart}
+            onChange={(event) => setDraftStart(event.target.value)}
+            aria-label={t("runaway.realStart")}
+            className="h-8 w-auto flex-1 basis-52"
+            data-testid="runaway-start-at"
+          />
           <Input
             type="datetime-local"
             value={draft}
@@ -154,27 +163,18 @@ export function RunawayPrompt({
             >
               {t("runaway.restore", { ran })}
             </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onAnswer({ resolution: "cap" })}
-              data-testid="runaway-cap"
-            >
-              {stillRunning
-                ? t("runaway.cap", { limit })
-                : t("runaway.cutBack", { limit })}
-            </Button>
-          )}
+          ) : null}
 
           <Button
             type="button"
             size="sm"
-            onClick={() => setEditing(true)}
+            onClick={() => {
+              if (stillRunning) onStop?.();
+              setEditing(true);
+            }}
             data-testid="runaway-end-at-open"
           >
-            {t("runaway.setEnd")}
+            {stillRunning ? t("runaway.stopAndEdit") : t("runaway.editTime")}
           </Button>
         </div>
       )}

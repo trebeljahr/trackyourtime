@@ -189,6 +189,7 @@ export type PopupToBackground =
       tagIds?: string[];
     }
   | { type: "timer:stop" }
+  | { type: "runaway:keep"; id: string }
   /**
    * Edit the entry that is currently running.
    *

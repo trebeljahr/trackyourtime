@@ -58,6 +58,8 @@ export type TrackerScreenProps = {
     clientId?: string | null,
   ) => Promise<boolean>;
   onStop: () => Promise<boolean>;
+  onKeepRunaway: (id: string) => Promise<boolean>;
+  onEditRunaway: (id: string, running: boolean) => Promise<void>;
   /** Edits the entry that is running. The worker resolves which one that is. */
   onUpdateRunning: (patch: RunningPatch) => Promise<boolean>;
   onPinFavorite: (quick: QuickStart) => Promise<boolean>;
@@ -145,6 +147,8 @@ export function TrackerScreen({
   error,
   onStart,
   onStop,
+  onKeepRunaway,
+  onEditRunaway,
   onUpdateRunning,
   onPinFavorite,
   onUnpinFavorite,
@@ -195,6 +199,10 @@ export function TrackerScreen({
   } | null>(null);
 
   const running = optimistic === null ? state.running : optimistic.running;
+  const runawayEntry =
+    running?.runaway?.resolvedAt === null
+      ? running
+      : state.entries?.entries.find((entry) => entry.runaway?.resolvedAt === null) ?? null;
   const elapsedSec = useElapsedSec(running);
 
   /**
@@ -537,6 +545,23 @@ export function TrackerScreen({
               void answerIdle(answer);
             }}
           />
+        ) : null}
+
+        {runawayEntry?.runaway ? (
+          <div className="alert runaway-alert" data-testid="extension-runaway-alert">
+            <strong>{t("runaway.title")}</strong>
+            <p>{runawayEntry.end === null ? t("runaway.running") : t("runaway.stopped")}</p>
+            <div className="runaway-alert__actions">
+              <button type="button" className="button" disabled={busy}
+                onClick={() => void onKeepRunaway(runawayEntry.id)}>
+                {t("runaway.keep")}
+              </button>
+              <button type="button" className="button button--primary" disabled={busy}
+                onClick={() => void onEditRunaway(runawayEntry.id, runawayEntry.end === null)}>
+                {runawayEntry.end === null ? t("runaway.stopAndEdit") : t("runaway.editTime")}
+              </button>
+            </div>
+          </div>
         ) : null}
 
         {/* One form for both states. The fields are the same either way — a

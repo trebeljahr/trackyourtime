@@ -216,6 +216,7 @@ export type SplitAtIdleArgs = {
 export type ResolveRunawayArgs = {
   id: string;
   resolution: RunawayResolution;
+  start?: string;
   /** ISO datetime, only for the `end-at` resolution. */
   end?: string;
 };

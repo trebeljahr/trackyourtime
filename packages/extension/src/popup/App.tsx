@@ -783,6 +783,11 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
                   tagIds,
                 }),
               onStop: () => send({ type: "timer:stop" }),
+              onKeepRunaway: (id) => send({ type: "runaway:keep", id }),
+              onEditRunaway: async (id, running) => {
+                if (running && !(await send({ type: "timer:stop" }))) return;
+                openEntry(id);
+              },
               onUpdateRunning: updateRunning,
               onPinFavorite: pinFavorite,
               onUnpinFavorite: unpinFavorite,

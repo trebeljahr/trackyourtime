@@ -49,14 +49,16 @@ const renderPrompt = (
   markOverrides: Partial<RunawayMark> = {},
 ) => {
   const onAnswer = vi.fn<(answer: RunawayAnswer) => void>();
+  const onStop = vi.fn();
   render(
     <RunawayPrompt
       entry={entry(entryOverrides)}
       mark={mark(markOverrides)}
       onAnswer={onAnswer}
+      onStop={onStop}
     />,
   );
-  return { onAnswer };
+  return { onAnswer, onStop };
 };
 
 afterEach(cleanup);
@@ -67,23 +69,19 @@ describe("RunawayPrompt", () => {
     expect(screen.getByTestId("runaway-prompt").textContent).toContain("63h");
   });
 
-  it("offers keep, cap and an explicit end for a still-running entry", () => {
-    renderPrompt();
+  it("offers keep and an explicit time edit for a still-running entry", () => {
+    const { onStop } = renderPrompt();
     expect(screen.getByTestId("runaway-keep")).toBeTruthy();
-    expect(screen.getByTestId("runaway-cap").textContent).toContain("8h");
+    expect(screen.queryByTestId("runaway-cap")).toBeNull();
     expect(screen.getByTestId("runaway-end-at-open")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("runaway-end-at-open"));
+    expect(onStop).toHaveBeenCalledOnce();
   });
 
   it("answers keep without changing anything", () => {
     const { onAnswer } = renderPrompt();
     fireEvent.click(screen.getByTestId("runaway-keep"));
     expect(onAnswer).toHaveBeenCalledWith({ resolution: "keep" });
-  });
-
-  it("answers cap with no instant — the server recomputes it", () => {
-    const { onAnswer } = renderPrompt();
-    fireEvent.click(screen.getByTestId("runaway-cap"));
-    expect(onAnswer).toHaveBeenCalledWith({ resolution: "cap" });
   });
 
   it("offers to put the discarded hours back once a cap has happened", () => {
@@ -118,22 +116,23 @@ describe("RunawayPrompt", () => {
     fireEvent.click(screen.getByTestId("runaway-end-at-open"));
     const field = screen.getByTestId("runaway-end-at") as HTMLInputElement;
     // datetime-local carries no offset, so this is the viewer's local clock.
-    fireEvent.change(field, { target: { value: "2026-08-28T22:30" } });
+    const chosen = new Date(Date.parse(START) + 4.5 * HOUR * 1000);
+    fireEvent.change(field, { target: { value: chosen.toLocaleString("sv-SE").slice(0, 16).replace(" ", "T") } });
     fireEvent.click(screen.getByTestId("runaway-end-at-save"));
 
     expect(onAnswer).toHaveBeenCalledTimes(1);
     const answer = onAnswer.mock.calls[0]?.[0] as RunawayAnswer;
     expect(answer.resolution).toBe("end-at");
-    expect(answer.end).toBe(new Date("2026-08-28T22:30").toISOString());
+    expect(answer.start).toBe(START);
+    expect(answer.end).toBe(chosen.toISOString());
   });
 
-  it("prefills the end field with the cap, the likeliest correction", () => {
-    renderPrompt();
+  it("prefills the end field with the saved end for a stopped timer", () => {
+    renderPrompt({ end: MONDAY, durationSec: 63 * HOUR });
     fireEvent.click(screen.getByTestId("runaway-end-at-open"));
     const field = screen.getByTestId("runaway-end-at") as HTMLInputElement;
     expect(field.value).toBe(
-      // start + 8h, read on the viewer's own clock
-      new Date(Date.parse(START) + 8 * HOUR * 1000)
+      new Date(MONDAY)
         .toLocaleString("sv-SE")
         .slice(0, 16)
         .replace(" ", "T"),

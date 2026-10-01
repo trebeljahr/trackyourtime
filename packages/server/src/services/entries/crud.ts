@@ -180,6 +180,12 @@ export async function updateEntry(
 
   const billable = input.billable ?? existing.billable;
   const durationSec = end ? durationBetween(start, end) : 0;
+  const correctedRunaway =
+    existing.runaway &&
+    existing.runaway.resolvedAt === null &&
+    (input.start !== undefined || input.end !== undefined) &&
+    end !== null &&
+    durationSec <= existing.runaway.limitSec;
 
   // `tagIds` REPLACES the whole set when present. Omitting the key leaves
   // the entry's tags exactly as they were, so a partial edit (rename the
@@ -219,6 +225,7 @@ export async function updateEntry(
           start,
           end,
           durationSec,
+          ...(correctedRunaway ? { "runaway.resolvedAt": new Date() } : {}),
           hourlyRate,
           currency,
           ...(tagIds !== undefined ? { tagIds } : {}),

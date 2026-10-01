@@ -59,15 +59,17 @@ export const useRunawayGuard = (mutations: EntryMutations): void => {
       );
   }, [query.data, viewerId]);
 
-  const { resolveRunaway } = mutations;
+  const { resolveRunaway, stopTimer } = mutations;
 
   // A ref, not state: the answer handler must reach the newest `resolve`
   // without re-rendering — and therefore re-raising — a toast that is already
   // on screen waiting to be answered.
   const resolveRef = React.useRef(resolveRunaway);
+  const stopRef = React.useRef(stopTimer);
   React.useEffect(() => {
     resolveRef.current = resolveRunaway;
-  }, [resolveRunaway]);
+    stopRef.current = stopTimer;
+  }, [resolveRunaway, stopTimer]);
 
   // Everything already shown, so a list refetch does not re-raise a prompt the
   // person is in the middle of reading.
@@ -93,6 +95,7 @@ export const useRunawayGuard = (mutations: EntryMutations): void => {
           <RunawayPrompt
             entry={entry}
             mark={mark}
+            onStop={() => stopRef.current()}
             onAnswer={(answer: RunawayAnswer) => {
               toast.dismiss(toastId(entry.id));
               resolveRef.current({ id: entry.id, ...answer });

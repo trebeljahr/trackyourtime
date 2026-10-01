@@ -4,7 +4,6 @@ import {
   deviceTimeZone,
   isSameZone,
   parseDurationInput,
-  rollEndAfterStart,
   withDayInZone,
   zoneLabel,
   type DayKey,
@@ -315,14 +314,16 @@ export function EntryForm({
     change({ taskId: next }, { taskId: next });
   };
 
-  const setDay = (dayKey: DayKey): void => {
+  const setStartDay = (dayKey: DayKey): void => {
     const start = withDayInZone(values.start, dayKey, zone);
-    const delta = Date.parse(start) - Date.parse(values.start);
-    if (delta === 0) return;
-    // The end moves by the same delta, so a day step preserves the length
-    // instead of stretching the entry across the days it stepped over.
-    const end = new Date(Date.parse(values.end) + delta).toISOString();
-    change({ start, end }, { start, end });
+    if (start === values.start) return;
+    setStart(start);
+  };
+
+  const setEndDay = (dayKey: DayKey): void => {
+    const end = withDayInZone(values.end, dayKey, zone);
+    if (Date.parse(end) <= Date.parse(values.start) || end === values.end) return;
+    change({ end }, { end });
   };
 
   const setStart = (iso: string): void => {
@@ -344,9 +345,9 @@ export function EntryForm({
   };
 
   const setEnd = (iso: string): void => {
-    // Rolled, never clamped: a timer running at 23:30 and ended at 00:30 is an
-    // hour of work, and clamping to start + a minute would destroy it.
-    const end = rollEndAfterStart(values.start, iso, 1);
+    // The end day is now independent. A clock edit must keep that day instead
+    // of silently rolling it forward across a long entry's start.
+    const end = Date.parse(iso) > Date.parse(values.start) ? iso : values.end;
     if (end === values.end) return;
     change({ end }, { end });
   };
@@ -447,9 +448,19 @@ export function EntryForm({
       <DayStepper
         value={values.start}
         zone={zone}
-        onChange={setDay}
+        label={t("fields.start")}
+        onChange={setStartDay}
         disabled={factsLocked}
-        testId="entry-start-day"
+        testId="entry-start-date"
+      />
+
+      <DayStepper
+        value={values.end}
+        zone={zone}
+        label={t("fields.end")}
+        onChange={setEndDay}
+        disabled={factsLocked}
+        testId="entry-end-date"
       />
 
       <div className="range">

@@ -251,6 +251,14 @@ export const popup: Translation<typeof source> = {
     discard: "{span} verwerfen",
     discardAndResume: "Verwerfen und fortsetzen",
   },
+  runaway: {
+    title: "Lief dieser Timer zu lange?",
+    running: "Prüfe die Zeit, bevor du diesen Timer stoppst.",
+    stopped: "Dieser Timer ist gestoppt. Prüfe Beginn und Ende.",
+    keep: "Ich habe so lange gearbeitet",
+    stopAndEdit: "Stoppen und Zeit bearbeiten",
+    editTime: "Zeit bearbeiten",
+  },
   dayStepper: {
     previous: "Vorheriger Tag",
     next: "Nächster Tag",

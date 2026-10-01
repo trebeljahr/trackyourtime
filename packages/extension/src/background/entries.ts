@@ -95,6 +95,16 @@ const stillSyncing = (): BackgroundError =>
 const badTimeRange = (): BackgroundError =>
   new BackgroundError("BAD_TIME_RANGE", "The end has to be after the start.");
 
+export async function keepRunawayEntry(id: string): Promise<void> {
+  const current = await ensureReady();
+  const write = addressedWrite();
+  await current.api.mutate<TimeEntry>(
+    "entries.resolveRunaway",
+    write.address({ id, resolution: "keep", originId: ORIGIN_ID }),
+  );
+  markEntriesStale();
+}
+
 /** The window's bounds, recomputed per read so "today" moves with the clock. */
 const windowBounds = (nowMs: number = Date.now()): { from: string; to: string } => {
   const zone = deviceTimeZone();

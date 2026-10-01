@@ -78,6 +78,7 @@ import {
   acceptSuggestion,
   createEntry,
   loadMoreEntries,
+  keepRunawayEntry,
   setActivityDay,
   removeEntry,
   updateEntry,
@@ -419,6 +420,8 @@ const apply = async (message: PopupToBackground): Promise<void> => {
       return;
     case "timer:stop":
       return stopTimer();
+    case "runaway:keep":
+      return keepRunawayEntry(message.id);
     case "timer:update":
       // Listed field by field to drop the discriminant. The omitted ones
       // arrive as explicit `undefined`, which is the same thing to the server

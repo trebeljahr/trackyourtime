@@ -1629,6 +1629,13 @@ button.tag:hover .tag__x {
   font-variant-numeric: tabular-nums;
 }
 
+.daystep__date {
+  flex: 1;
+  min-width: 0;
+  max-width: 145px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── the idle strip ────────────────────────────────────────────────── */
 
 /* The full IdlePanel renders only on the tracker. Elsewhere the prompt is one
@@ -1647,6 +1654,17 @@ button.tag:hover .tag__x {
   font-size: 12px;
   text-align: left;
   cursor: pointer;
+}
+
+.runaway-alert p {
+  margin: 5px 0 8px;
+  line-height: 1.4;
+}
+
+.runaway-alert__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .alert--idle:hover {

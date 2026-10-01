@@ -565,6 +565,10 @@ export async function resolveRunawayEntry(
   }
 
   const startMs = existing.start.getTime();
+  const editedStartMs = input.resolution === "end-at" && input.start
+    ? Date.parse(input.start)
+    : startMs;
+  if (Number.isNaN(editedStartMs)) throw badRequest("Invalid start");
   const endMs = resolvedEndMs(input.resolution, startMs, mark, suppliedEndMs);
   const resolvedAt = new Date();
 
@@ -592,7 +596,7 @@ export async function resolveRunawayEntry(
     return entry;
   }
 
-  if (endMs <= startMs) throw badRequest("End must be after start");
+  if (endMs <= editedStartMs) throw badRequest("End must be after start");
 
   // A running entry goes through the same stop path as any other stop, so
   // the rate snapshot is taken exactly once and in exactly one place — and
@@ -605,7 +609,11 @@ export async function resolveRunawayEntry(
 
     const resolved = await TimeEntry.findOneAndUpdate(
       { _id: String(existing._id), authorId },
-      { $set: { "runaway.resolvedAt": resolvedAt } },
+      { $set: {
+        start: new Date(editedStartMs),
+        durationSec: durationBetween(new Date(editedStartMs), new Date(endMs)),
+        "runaway.resolvedAt": resolvedAt,
+      } },
       { returnDocument: "after" },
     ).lean();
     const entry = resolved ? toClientTimeEntry(resolved) : stopped;
@@ -626,8 +634,9 @@ export async function resolveRunawayEntry(
     { _id: String(existing._id), authorId },
     {
       $set: {
+        start: new Date(editedStartMs),
         end: new Date(endMs),
-        durationSec: durationBetween(existing.start, new Date(endMs)),
+        durationSec: durationBetween(new Date(editedStartMs), new Date(endMs)),
         "runaway.resolvedAt": resolvedAt,
       },
     },

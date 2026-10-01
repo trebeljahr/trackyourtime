@@ -4,14 +4,8 @@ import { usePopupLocale, useT } from "../i18n/use-t";
 import { entryDayLabel } from "./entry-format";
 
 /**
- * Which calendar day an entry belongs to, as two arrows and a label.
- *
- * Never `<input type="date">`, for the reason {@link ./time-field} gives about
- * `type="time"`: Chrome's date picker is an overlay anchored to the input, and
- * inside a 380×580 popup it clips against the window instead of escaping it.
- * Two arrows also fit what this is actually used for — a manual entry is
- * almost always today or yesterday, and a calendar to reach yesterday is three
- * interactions where this is one.
+ * Move an entry's calendar day. The arrows handle nearby days; an editor
+ * can also expose a date input to reach an earlier day directly.
  *
  * The days are counted in the entry's own zone, so stepping a Berlin entry back
  * from Tokyo moves it one Berlin day rather than landing mid-afternoon.
@@ -20,6 +14,7 @@ import { entryDayLabel } from "./entry-format";
 export type DayStepperProps = {
   /** The instant whose calendar day is being moved, ISO. */
   value: string;
+  label?: string;
   zone: string;
   onChange: (dayKey: DayKey) => void;
   disabled?: boolean;
@@ -28,6 +23,7 @@ export type DayStepperProps = {
 
 export function DayStepper({
   value,
+  label,
   zone,
   onChange,
   disabled = false,
@@ -45,7 +41,7 @@ export function DayStepper({
 
   return (
     <div className="field">
-      <span className="field__label">{t("fields.day")}</span>
+      <span className="field__label">{label ? `${label} ${t("fields.day").toLowerCase()}` : t("fields.day")}</span>
       <div className="daystep" data-testid={testId}>
         <button
           type="button"
@@ -61,6 +57,21 @@ export function DayStepper({
         <span className="daystep__label" data-testid={`${testId}-label`}>
           {entryDayLabel(dayKey, todayKey, t, locale)}
         </span>
+
+        {label ? (
+          <input
+            className="input daystep__date"
+            type="date"
+            aria-label={`${label} ${t("fields.day").toLowerCase()}`}
+            value={dayKey}
+            max={todayKey}
+            disabled={disabled}
+            onChange={(event) => {
+              if (event.target.value) onChange(event.target.value as DayKey);
+            }}
+            data-testid={`${testId}-input`}
+          />
+        ) : null}
 
         <button
           type="button"

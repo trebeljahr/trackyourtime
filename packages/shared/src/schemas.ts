@@ -503,6 +503,7 @@ const quickStartFields = {
 export const resolveRunawaySchema = z.object({
   id: idString,
   resolution: runawayResolutionSchema,
+  start: isoDateTimeSchema.optional(),
   end: isoDateTimeSchema.optional(),
   originId,
 });

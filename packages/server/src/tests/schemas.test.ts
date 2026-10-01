@@ -269,6 +269,7 @@ test("resolveRunawaySchema names every answer and demands an id", () => {
     accepts(resolveRunawaySchema, {
       id: "e1",
       resolution: "end-at",
+      start: "2026-08-28T18:00:00.000Z",
       end: "2026-08-28T22:30:00.000Z",
     })
   );
