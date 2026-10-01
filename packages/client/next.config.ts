@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
@@ -94,6 +95,16 @@ function readRootVersion(): string {
 // an export whose HTML contains "./_next".
 const isDev = process.env.NODE_ENV === "development";
 
+function buildCommit(): string {
+  const supplied = process.env.NEXT_PUBLIC_BUILD_COMMIT || process.env.COMMIT_SHA || process.env.GITHUB_SHA;
+  if (supplied) return supplied.trim();
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspaceRoot, encoding: "utf8" }).trim();
+  } catch {
+    return "";
+  }
+}
+
 // Next 16 blocks cross-origin requests to /_next dev resources by default.
 // scripts/dev.mjs prints 127.0.0.1 URLs while Next treats localhost as its own
 // origin, so without this the dev chunks are blocked, React never hydrates, and
@@ -106,6 +117,7 @@ const baseConfig: NextConfig = {
   // shells. Read by `lib/app-version.ts`.
   env: {
     NEXT_PUBLIC_APP_VERSION: readRootVersion(),
+    NEXT_PUBLIC_BUILD_ID: buildCommit().slice(0, 12),
     // Defined even when unset. The bundler inlines only the NEXT_PUBLIC_*
     // variables that exist at build time; an unset one stays a runtime
     // `process.env` lookup, and `lib/error-reporting/reporter.ts` keeps the

@@ -1,4 +1,4 @@
-import { APP_VERSION } from "@/lib/app-version";
+import { APP_VERSION, BUILD_ID } from "@/lib/app-version";
 import { BUILD_COMMIT } from "@/lib/deploy-version";
 import { isAppShell, isCapacitor, isElectron } from "@/lib/shell";
 import { CHUNK_RELOAD_REFUSED, scrubBreadcrumb, scrubEvent, shouldDropEvent } from "./scrub";
@@ -174,7 +174,7 @@ const loadSentry = (): Promise<Sentry> =>
 const reporter = createErrorReporter({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN ?? "",
   load: loadSentry,
-  release: releaseName(APP_VERSION, BUILD_COMMIT),
+  release: releaseName(APP_VERSION, BUILD_COMMIT || BUILD_ID),
   environment: process.env.NODE_ENV ?? "development",
   platform: reportingPlatform,
   appShell: isAppShell,

@@ -334,8 +334,13 @@ The root `package.json` `version` is the single source of truth.
 - The Next export (web, Capacitor, Electron) reads it in
   `next.config.ts` and inlines it as `NEXT_PUBLIC_APP_VERSION`
   (`lib/app-version.ts`).
+- Settings also shows the source commit (12 hex digits). Phone apps show the
+  native store build number from Capacitor alongside that commit. A release
+  version alone may cover more than one build.
 - The browser extension reads it in `manifest.config.ts` for the manifest, and
-  `vite.config.ts` bakes it in as `VITE_APP_VERSION`.
+  `vite.config.ts` bakes it in as `VITE_APP_VERSION`. Settings → Account also
+  shows the source commit. Raycast shows version and commit in its Timer view;
+  the standalone Store export stamps the commit into that copy.
 - Hand-kept copies: every `packages/*/package.json` that has a version,
   `packages/raycast/src/lib/version.ts` (a Raycast Store submission has no root
   package.json), `packages/mcp/src/server.ts`, iOS `MARKETING_VERSION` and

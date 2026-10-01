@@ -405,6 +405,10 @@ export function exportStore(opts) {
     }
     fs.cpSync(from, path.join(outDir, name), { recursive: true, filter: (src) => path.basename(src) !== ".DS_Store" });
   }
+  const commit = (process.env.BUILD_COMMIT || process.env.GITHUB_SHA || spawnSync("git", ["rev-parse", "--short=12", "HEAD"], { cwd: REPO_DIR, encoding: "utf8" }).stdout).trim();
+  if (!/^[0-9a-f]{7,40}$/i.test(commit)) throw new Error("Cannot stamp Raycast export: Git commit is unavailable.");
+  const versionFile = path.join(outDir, "src/lib/version.ts");
+  fs.writeFileSync(versionFile, fs.readFileSync(versionFile, "utf8").replace('BUILD_ID = "development"', `BUILD_ID = "${commit.slice(0, 12)}"`));
   fs.writeFileSync(path.join(outDir, ".gitignore"), STORE_GITIGNORE);
   fs.writeFileSync(path.join(outDir, ".prettierignore"), STORE_PRETTIERIGNORE);
   const localDefaults = path.join(outDir, "src/lib/local-defaults.ts");

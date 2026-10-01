@@ -26,6 +26,7 @@ import { RECENT_DAYS, entryHint, entryLabel, favoriteFor, loadTimerSnapshot } fr
 import { useServerLevel } from "./lib/server-level.js";
 import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
+import { APP_VERSION, BUILD_ID } from "./lib/version.js";
 import { isAlreadyStopped, refreshMenuBar, replacedNotice, showFailureToast } from "./lib/ui.js";
 import { chooseWorkspace } from "./lib/workspace.js";
 
@@ -350,6 +351,10 @@ export default function Timer(): React.JSX.Element {
       {/* Above everything: while one side is too old, nothing below works
           the way it should, and the way out is an update, not a retry. */}
       <CompatibilityListSection banner={banner}>{commonActions}</CompatibilityListSection>
+
+      <List.Section title="About">
+        <List.Item icon={Icon.Info} title="Track Your Time for Raycast" subtitle={`Version ${APP_VERSION} (${BUILD_ID})`} />
+      </List.Section>
 
       {/* Stated rather than hidden: what is queued is time the user tracked,
           and a client holding it quietly looks like one that lost it. */}

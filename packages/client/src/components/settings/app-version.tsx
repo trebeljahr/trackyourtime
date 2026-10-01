@@ -5,7 +5,8 @@ import { API_LEVEL } from "@starter/shared";
 
 import { useActiveWorkspace } from "@/components/members/use-active-workspace";
 import { useT } from "@/i18n/use-t";
-import { APP_VERSION } from "@/lib/app-version";
+import { APP_VERSION, BUILD_ID } from "@/lib/app-version";
+import { isCapacitor } from "@/lib/shell";
 import { useServerSupports } from "@/lib/server-level";
 import { SELF_HOSTING_URL } from "@/lib/site-links";
 import { trpc } from "@/lib/trpc";
@@ -24,6 +25,20 @@ import { trpc } from "@/lib/trpc";
  */
 export function AppVersionInfo(): React.JSX.Element {
   const t = useT("settings");
+  const [nativeBuild, setNativeBuild] = React.useState("");
+  React.useEffect(() => {
+    if (!isCapacitor()) return;
+    let active = true;
+    void import("@capacitor/app")
+      .then(({ App }) => App.getInfo())
+      .then((info) => {
+        if (active) setNativeBuild(info.build);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
   const health = trpc.health.check.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
     retry: false,
@@ -44,6 +59,7 @@ export function AppVersionInfo(): React.JSX.Element {
         .filter((part) => part !== "")
         .join(" ")
     : "";
+  const clientVersion = `${APP_VERSION}${nativeBuild ? ` · build ${nativeBuild}` : ""}${BUILD_ID ? ` (${BUILD_ID})` : ""}`;
 
   return (
     <div
@@ -53,7 +69,7 @@ export function AppVersionInfo(): React.JSX.Element {
       <p>
         <span data-testid="app-version">
           {APP_VERSION
-            ? t("about.appVersion", { version: APP_VERSION })
+            ? t("about.appVersion", { version: clientVersion })
             : t("about.appVersionUnknown")}
         </span>
         {" · "}

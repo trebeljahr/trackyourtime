@@ -1,5 +1,5 @@
 import { useState, type JSX } from "react";
-import { APP_VERSION } from "../../lib/app-version";
+import { APP_VERSION, BUILD_ID } from "../../lib/app-version";
 import { DEFAULT_API_URL } from "../../lib/config";
 import type { SessionSource } from "../../lib/messaging";
 import { describeServer } from "../../lib/server-label";
@@ -101,7 +101,7 @@ export function AccountSection({
 
       {APP_VERSION !== "" ? (
         <p className="setting__note" data-testid="account-app-version">
-          {t("account.appVersion", { version: APP_VERSION })}
+          {t("account.appVersion", { version: `${APP_VERSION}${BUILD_ID ? ` (${BUILD_ID})` : ""}` })}
         </p>
       ) : null}
 

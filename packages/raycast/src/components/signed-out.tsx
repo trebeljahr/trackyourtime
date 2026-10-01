@@ -1,6 +1,7 @@
 import { Action, ActionPanel, Icon, List, openExtensionPreferences } from "@raycast/api";
 import { webLink } from "../lib/preferences.js";
 import { SignIn } from "./sign-in.js";
+import { APP_VERSION, BUILD_ID } from "../lib/version.js";
 
 /**
  * Empty state shown by every view command when there is no session yet.
@@ -18,7 +19,7 @@ export function SignedOutView(): React.JSX.Element {
       <List.EmptyView
         icon={Icon.Key}
         title="Not signed in"
-        description="Pair this Mac with your Track Your Time account to start tracking from Raycast."
+        description={`Pair this Mac with your Track Your Time account to start tracking from Raycast. Version ${APP_VERSION} (${BUILD_ID}).`}
         actions={
           <ActionPanel>
             <Action.Push title="Sign in to Track Your Time" icon={Icon.Key} target={<SignIn />} />

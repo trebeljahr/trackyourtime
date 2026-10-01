@@ -6,3 +6,5 @@
  */
 export const APP_VERSION: string =
   typeof import.meta.env.VITE_APP_VERSION === "string" ? import.meta.env.VITE_APP_VERSION : "";
+export const BUILD_ID: string =
+  typeof import.meta.env.VITE_BUILD_ID === "string" ? import.meta.env.VITE_BUILD_ID : "";

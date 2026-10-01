@@ -8,3 +8,5 @@
  * (unit tests), and an empty version is simply not sent.
  */
 export const APP_VERSION: string = process.env.NEXT_PUBLIC_APP_VERSION ?? "";
+/** Source commit baked into this client bundle. */
+export const BUILD_ID: string = process.env.NEXT_PUBLIC_BUILD_ID ?? "";

@@ -669,6 +669,12 @@ it is empty, so a build that reports nothing says so in its log. `release.yml`
 (the self-host image) never passes it: a self-hosted web app reports nowhere
 unless the operator builds the image with the variable.
 
+To check the hosted configuration without printing the DSN, run
+`gh variable list --json name --repo trebeljahr/trackyourtime` and look for
+`NEXT_PUBLIC_SENTRY_DSN`. This checks client builds only; check `SENTRY_DSN`
+in Coolify separately for the server. A configured DSN still needs a test
+event in GlitchTip to confirm delivery.
+
 Empty means off, not "on with nowhere to send". The SDK (`@sentry/browser`,
 pinned like the server's `@sentry/node`) is imported behind a condition on the
 inlined variable (`packages/client/src/lib/error-reporting/reporter.ts`), so a
@@ -680,8 +686,7 @@ What a report carries is decided in
 the same in plain words: the error and its stack frames, the page and request
 URLs with query strings removed (invite ids, device codes and `?next=` live
 there), the method and status of the last requests, the browser identifier,
-`release` (`trackyourtime@<version>+<commit>`; desktop and phone builds are
-tagged and carry the version alone) and `platform` (`web`, `electron`, `ios`,
+`release` (`trackyourtime@<version>+<commit>`) and `platform` (`web`, `electron`, `ios`,
 `android`). No user, no cookies, no headers but the browser identifier, no
 request bodies, no console or DOM breadcrumbs, no session replay, no tracing.
 
