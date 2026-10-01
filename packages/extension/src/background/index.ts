@@ -124,8 +124,8 @@ const BADGE_PERIOD_MINUTES = 0.5;
 /**
  * `setInterval` does not survive worker eviction — the timer dies with the
  * worker and the badge freezes at whatever it last said. An alarm is the only
- * scheduler Chrome will wake a dead worker for, which makes it the only
- * correct mechanism here.
+ * scheduler Chrome will wake a dead worker for, so it remains the recovery
+ * mechanism for the local one-second ticker.
  */
 const ensureBadgeAlarm = async (): Promise<void> => {
   const existing = await chrome.alarms.get(BADGE_ALARM);
@@ -150,6 +150,9 @@ const refreshBadge = async (): Promise<void> => {
       return;
     }
   }
+
+  // Paint cached elapsed time before any potentially slow network work.
+  await renderBadge(peekRunning());
 
   // The socket is the only thing that pushes another device's work here, and
   // its own reconnect is a `setTimeout` that an evicted worker loses. This

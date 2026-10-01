@@ -76,7 +76,7 @@ export function createFakeChrome() {
   const windows: FakeWindow[] = [{ id: 1, focused: true, incognito: false }];
   const granted = new Set<string>();
   const alarms = new Map<string, chrome.alarms.Alarm>();
-  const badge = { text: "" };
+  const badge = { text: "", title: "" };
   const created: string[] = [];
 
   const api = {
@@ -159,7 +159,8 @@ export function createFakeChrome() {
         badge.text = details.text;
       },
       setBadgeBackgroundColor: async () => undefined,
-      setTitle: async () => undefined,
+      setBadgeTextColor: async () => undefined,
+      setTitle: async (details: { title: string }) => { badge.title = details.title; },
     },
   };
 

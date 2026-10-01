@@ -23,26 +23,23 @@ const MINUTES_PER_HOUR = 60;
 const BADGE_BACKGROUND = "#4f46e5";
 const BADGE_TEXT_COLOR = "#ffffff";
 
-/**
- * A badge is roughly four characters wide, so the unit steps down as the
- * number grows: "7m", "59m", "1h". Precision below the minute would only
- * flicker — the alarm cannot fire more often than every 30 seconds anyway.
- * The unit letters come from the `background` catalog, so a translation can
- * pick its own shortest recognisable unit.
- */
+/** Keep one unambiguous hours:minutes scale, including the first hour. */
 export const badgeTextFor = (
   entry: TimeEntry | null,
   t: ExtensionTranslator<"background">,
   nowMs: number = Date.now(),
 ): string => {
   if (entry === null) return "";
-
-  const minutes = Math.floor(
-    entryDurationSec(entry, nowMs) / SECONDS_PER_MINUTE,
-  );
-  if (minutes < MINUTES_PER_HOUR) return t("badge.minutes", { minutes });
-  return t("badge.hours", { hours: Math.floor(minutes / MINUTES_PER_HOUR) });
+  const minutes = Math.floor(entryDurationSec(entry, nowMs) / SECONDS_PER_MINUTE);
+  const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+  // Very long timers cannot fit a clock in the toolbar. Hover retains precision.
+  if (hours >= 100) return t("badge.hours", { hours });
+  return `${hours}:${String(minutes % MINUTES_PER_HOUR).padStart(2, "0")}`;
 };
+
+let running: TimeEntry | null = null;
+let ticker: ReturnType<typeof setInterval> | undefined;
+let revision = 0;
 
 /**
  * Paint the badge for `entry`, or clear it when nothing is running.
@@ -52,13 +49,31 @@ export const badgeTextFor = (
  * for it.
  */
 export async function renderBadge(entry: TimeEntry | null): Promise<void> {
+  running = entry;
+  const currentRevision = ++revision;
+  if (entry && ticker === undefined) {
+    // Local paint only: no network polling or accumulated seconds. The alarm
+    // restores this ticker after worker eviction; stopping releases it.
+    ticker = setInterval(() => { void renderBadge(running); }, 1000);
+  } else if (!entry && ticker !== undefined) {
+    clearInterval(ticker);
+    ticker = undefined;
+  }
   const action = (globalThis as { chrome?: typeof chrome }).chrome?.action;
   if (!action) return;
 
   try {
-    await action.setBadgeText({ text: badgeTextFor(entry, await backgroundT()) });
-    await action.setBadgeBackgroundColor({ color: BADGE_BACKGROUND });
-    await action.setBadgeTextColor({ color: BADGE_TEXT_COLOR });
+    const t = await backgroundT();
+    if (currentRevision !== revision) return;
+    const now = Date.now();
+    const seconds = entry ? Math.floor(entryDurationSec(entry, now)) : 0;
+    const clock = `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+    await Promise.all([
+      action.setBadgeText({ text: badgeTextFor(entry, t, now) }),
+      action.setTitle({ title: entry ? t("badge.elapsed", { time: clock }) : "Track Your Time" }),
+      action.setBadgeBackgroundColor({ color: BADGE_BACKGROUND }),
+      action.setBadgeTextColor({ color: BADGE_TEXT_COLOR }),
+    ]);
   } catch {
     /* the worker is going away — the next alarm repaints it */
   }

@@ -13,6 +13,7 @@
  */
 export const background = {
   badge: {
+    elapsed: "Elapsed time: {time} (h:mm:ss)",
     /**
      * The toolbar badge fits about four characters, so the unit is a single
      * letter with no space. Translate to the shortest unit a reader recognises.
