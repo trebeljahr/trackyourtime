@@ -6,6 +6,7 @@ import { describeServer } from "../lib/server-label";
 import { describeDeviceSignInError } from "./errors";
 import { join, openTab } from "./open-tab";
 import { ServerPicker } from "./server-picker";
+import { Header } from "./header";
 import type { SetServerOutcome } from "./switch-server";
 import { useT } from "../i18n/use-t";
 
@@ -80,147 +81,148 @@ export function SignInScreen({
     error ?? (deviceSignInError !== null ? describeDeviceSignInError(deviceSignInError, t) : null);
 
   return (
-    <div className="popup__body" data-testid="sign-in-screen">
-      <h1 className="popup__title">{t("signIn.title")}</h1>
-
-      {/* Which server the password is about to be sent to, said before the
-          form rather than after it: with a self-hosted choice in play, that is
-          the thing to check before typing anything. */}
-      <div className="server" data-testid="sign-in-server">
-        <p className="server__text">
-          {t("signIn.signingInTo")}{" "}
-          <strong title={apiUrl}>{describeServer(apiUrl, DEFAULT_API_URL, t)}</strong>
-          {serverVersion !== null ? (
-            <span className="server__version"> · {serverVersion}</span>
-          ) : null}
-        </p>
-        {pendingDeviceAuth === null ? (
-          <button
-            type="button"
-            className="button--link"
-            aria-expanded={changingServer}
-            onClick={() => setChangingServer((open) => !open)}
-            data-testid="sign-in-change-server"
-          >
-            {changingServer ? t("signIn.keepServer") : automaticWebUrl ? t("signIn.ownServer") : t("signIn.changeServer")}
-          </button>
-        ) : null}
-      </div>
-
-      {pendingDeviceAuth !== null ? (
-        <div className="panel" data-testid="device-sign-in-waiting">
-          <p className="panel__title">{t("signIn.deviceTitle")}</p>
-          <p className="panel__hint">{t("signIn.deviceWaiting")}</p>
-          <p className="device-code" data-testid="device-user-code">
-            {pendingDeviceAuth.userCode}
+    <div className="screen" data-testid="sign-in-screen">
+      <Header title="Track Your Time" branded />
+      <div className="popup__body">
+        {/* Which server the password is about to be sent to, said before the
+            form rather than after it: with a self-hosted choice in play, that is
+            the thing to check before typing anything. */}
+        <div className="server" data-testid="sign-in-server">
+          <p className="server__text">
+            {t("signIn.signingInTo")}{" "}
+            <strong title={apiUrl}>{describeServer(apiUrl, DEFAULT_API_URL, t)}</strong>
+            {serverVersion !== null ? (
+              <span className="server__version"> · {serverVersion}</span>
+            ) : null}
           </p>
-          {pendingDeviceAuth.verificationUrl ? (
+          {pendingDeviceAuth === null ? (
             <button
               type="button"
-              className="button button--primary button--block"
-              onClick={() => openTab(pendingDeviceAuth.verificationUrl!)}
-              data-testid="device-continue"
+              className="button--link"
+              aria-expanded={changingServer}
+              onClick={() => setChangingServer((open) => !open)}
+              data-testid="sign-in-change-server"
             >
-              {t("signIn.deviceContinue")}
+              {changingServer ? t("signIn.keepServer") : automaticWebUrl ? t("signIn.ownServer") : t("signIn.changeServer")}
             </button>
           ) : null}
-          <button
-            type="button"
-            className="button button--block"
-            disabled={busy}
-            onClick={() => void runDevice(onCancelDeviceSignIn)}
-            data-testid="device-cancel"
-          >
-            {t("signIn.deviceCancel")}
-          </button>
         </div>
-      ) : (
-        <>
-          {/* Two sibling forms, never nested: the server picker has its own
-              submit and must stay usable while the sign-in form is in flight. */}
-          {changingServer ? (
-            <ServerPicker
-              apiUrl={apiUrl}
-              pendingSync={pendingSync}
-              onSetServer={onSetServer}
-              onSwitched={() => setChangingServer(false)}
-            />
-          ) : null}
 
-          <form className="form" onSubmit={submit} data-testid="sign-in-form">
-            <div className="field">
-              <label className="field__label" htmlFor="email">
-                {t("signIn.email")}
-              </label>
-              <input
-                id="email"
-                className="input"
-                type="email"
-                autoComplete="username"
-                autoFocus
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                data-testid="sign-in-email"
-              />
-            </div>
-
-            <div className="field">
-              <label className="field__label" htmlFor="password">
-                {t("signIn.password")}
-              </label>
-              <input
-                id="password"
-                className="input"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                data-testid="sign-in-password"
-              />
-            </div>
-
-            <button
-              className="button button--primary button--block"
-              type="submit"
-              disabled={busy}
-              data-testid="sign-in-submit"
-            >
-              {busy ? t("signIn.submitting") : t("signIn.submit")}
-            </button>
-          </form>
-
-          <p className="sign-in__or">{t("signIn.or")}</p>
-          <button
-            type="button"
-            className="button button--block"
-            disabled={busy}
-            onClick={() => void runDevice(onStartDeviceSignIn)}
-            data-testid="sign-in-web-app"
-          >
-            {t("signIn.withWebApp")}
-          </button>
-          <p className="popup__hint">{t("signIn.withWebAppHint")}</p>
-          {automaticWebUrl ? (
-            <>
+        {pendingDeviceAuth !== null ? (
+          <div className="panel" data-testid="device-sign-in-waiting">
+            <p className="panel__title">{t("signIn.deviceTitle")}</p>
+            <p className="panel__hint">{t("signIn.deviceWaiting")}</p>
+            <p className="device-code" data-testid="device-user-code">
+              {pendingDeviceAuth.userCode}
+            </p>
+            {pendingDeviceAuth.verificationUrl ? (
               <button
                 type="button"
-                className="button--link"
-                onClick={() => openTab(join(automaticWebUrl, "/app/track"))}
-                data-testid="open-web-app"
+                className="button button--primary button--block"
+                onClick={() => openTab(pendingDeviceAuth.verificationUrl!)}
+                data-testid="device-continue"
               >
-                {t("signIn.openWebApp")}
+                {t("signIn.deviceContinue")}
               </button>
-              <p className="popup__hint">{t("signIn.openWebAppHint")}</p>
-            </>
-          ) : null}
-        </>
-      )}
+            ) : null}
+            <button
+              type="button"
+              className="button button--block"
+              disabled={busy}
+              onClick={() => void runDevice(onCancelDeviceSignIn)}
+              data-testid="device-cancel"
+            >
+              {t("signIn.deviceCancel")}
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Two sibling forms, never nested: the server picker has its own
+                submit and must stay usable while the sign-in form is in flight. */}
+            {changingServer ? (
+              <ServerPicker
+                apiUrl={apiUrl}
+                pendingSync={pendingSync}
+                onSetServer={onSetServer}
+                onSwitched={() => setChangingServer(false)}
+              />
+            ) : null}
 
-      <p className="notice" role="alert" aria-live="assertive" data-testid="sign-in-error">
-        {notice ?? ""}
-      </p>
+            <form className="form" onSubmit={submit} data-testid="sign-in-form">
+              <div className="field">
+                <label className="field__label" htmlFor="email">
+                  {t("signIn.email")}
+                </label>
+                <input
+                  id="email"
+                  className="input"
+                  type="email"
+                  autoComplete="username"
+                  autoFocus
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  data-testid="sign-in-email"
+                />
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="password">
+                  {t("signIn.password")}
+                </label>
+                <input
+                  id="password"
+                  className="input"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  data-testid="sign-in-password"
+                />
+              </div>
+
+              <button
+                className="button button--primary button--block"
+                type="submit"
+                disabled={busy}
+                data-testid="sign-in-submit"
+              >
+                {busy ? t("signIn.submitting") : t("signIn.submit")}
+              </button>
+            </form>
+
+            <p className="sign-in__or">{t("signIn.or")}</p>
+            <button
+              type="button"
+              className="button button--block"
+              disabled={busy}
+              onClick={() => void runDevice(onStartDeviceSignIn)}
+              data-testid="sign-in-web-app"
+            >
+              {t("signIn.withWebApp")}
+            </button>
+            <p className="popup__hint">{t("signIn.withWebAppHint")}</p>
+            {automaticWebUrl ? (
+              <>
+                <button
+                  type="button"
+                  className="button--link"
+                  onClick={() => openTab(join(automaticWebUrl, "/app/track"))}
+                  data-testid="open-web-app"
+                >
+                  {t("signIn.openWebApp")}
+                </button>
+                <p className="popup__hint">{t("signIn.openWebAppHint")}</p>
+              </>
+            ) : null}
+          </>
+        )}
+
+        <p className="notice" role="alert" aria-live="assertive" data-testid="sign-in-error">
+          {notice ?? ""}
+        </p>
+      </div>
     </div>
   );
 }

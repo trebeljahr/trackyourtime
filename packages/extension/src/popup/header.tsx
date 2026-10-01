@@ -18,7 +18,7 @@ import type { SyncLabel } from "./sync-label";
 export type HeaderProps = {
   /** Product name or current screen title. */
   title?: string;
-  /** Show the product logo beside the title on the tracker. */
+  /** Show the product logo beside the title. */
   branded?: boolean;
   /** Omitted at depth 1, where there is nothing to go back to. */
   onBack?: () => void;
