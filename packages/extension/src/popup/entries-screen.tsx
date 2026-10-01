@@ -197,7 +197,6 @@ export function EntriesScreen({
       {embedded ? (
         <div className="tracker-entries__header">
           <h2>{t("entries.title")}</h2>
-          <button type="button" className="button--link" onClick={onNewEntry}>{t("entries.newEntry")}</button>
         </div>
       ) : <Header
         title={t("entries.title")}

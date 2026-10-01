@@ -265,6 +265,7 @@ describe("popup timer controls", () => {
       onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={onOpenEntry}
       onNewEntry={vi.fn()} onLoadMore={onLoadMore} />));
     expect(host.querySelector('.header')).toBeNull();
+    expect(host.querySelector('.tracker-entries__header button')).toBeNull();
     await click('[data-testid="entry-row"]');
     expect(onOpenEntry).toHaveBeenCalledWith("past");
     await click('[data-testid="entries-more"]');

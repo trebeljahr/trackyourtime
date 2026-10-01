@@ -2101,9 +2101,8 @@ button.tag:hover .tag__x {
 .theme-toggle .menu__item svg:last-child { margin-left: auto; }
 .form > .field > .tags { margin-top: 6px; margin-bottom: 0; }
 .tracker-entries { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px; }
-.tracker-entries__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.tracker-entries__header { margin-bottom: 12px; }
 .tracker-entries__header h2 { margin: 0; font-size: 13px; font-weight: 600; }
-.tracker-entries__header button { font-size: 11px; }
 .theme-toggle > summary { transition: background-color 120ms ease; }
 .theme-toggle[open] > summary { background: var(--accent-soft); }
 @media (prefers-reduced-motion: reduce) {
