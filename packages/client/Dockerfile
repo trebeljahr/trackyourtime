@@ -20,6 +20,8 @@ COPY packages/invoice-pdf packages/invoice-pdf
 COPY packages/server packages/server
 COPY packages/core packages/core
 COPY packages/client packages/client
+# Client catalog tests import the extension messages during type checking.
+COPY packages/extension/src/i18n/messages packages/extension/src/i18n/messages
 # The docs site is built into out/docs/ below. Its config and llms plugin import
 # from scripts/llms, and scripts/docs holds the copy-and-check step.
 COPY docs-site docs-site
