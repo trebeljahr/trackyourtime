@@ -15,9 +15,11 @@ vi.mock("./runtime", () => ({
   getKnownUserId: () => "user",
   getOfflineQueue: () => queue,
   invalidateRecents: vi.fn(),
+  markEntriesStale: vi.fn(),
   isTransportFailure: (error: unknown) => error instanceof TypeError,
   ORIGIN_ID: "test",
   rememberOptimisticRunning: (entry: TimeEntry) => remember(entry),
+  upsertOptimisticEntry: vi.fn(async () => undefined),
   resolveRunning: async () => running,
   setCachedRunning: (entry: TimeEntry | null) => { running = entry; },
   enqueueOffline: (op: string, input: unknown, tempId?: string) =>

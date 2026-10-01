@@ -24,7 +24,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 7;
+export const API_LEVEL = 8;
 
 export type ApiLevelChange = {
   level: number;
@@ -98,6 +98,13 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     release: "0.1.2",
     added: [
       "Independent clientId on time entries and favorites, including filtering, reporting and invoicing.",
+    ],
+  },
+  {
+    level: 8,
+    release: "0.1.2",
+    added: [
+      "Optional start time on entries.resolveRunaway when setting the real end time.",
     ],
   },
 ];

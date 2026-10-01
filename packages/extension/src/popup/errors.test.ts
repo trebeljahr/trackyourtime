@@ -26,7 +26,7 @@ describe("describeError", () => {
   test("an untrusted origin names the settings and this extension's origin", () => {
     const text = describeError("ORIGIN_NOT_TRUSTED", "", "https://track.example.com", extensionT("en", "popup"));
     expect(text).toContain("track.example.com");
-    expect(text).toContain("TRUST_STORE_APPS=true");
+    expect(text).toContain("TRUSTED_ORIGINS");
     expect(text).toContain(`chrome-extension://${chrome.runtime.id}`);
   });
 

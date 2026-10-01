@@ -17,6 +17,8 @@
  * `capabilities.test.ts` in core fails when a level has no capability.
  */
 export const REQUIRES_API_LEVEL = {
+  /** Editing a runaway timer's start together with its real end time. */
+  "entries.resolveRunaway.start": 8,
   "entries.client": 7,
   /** The version handshake itself: `apiLevel` on `/api/health`, `CLIENT_TOO_OLD`. */
   "version-handshake": 1,
