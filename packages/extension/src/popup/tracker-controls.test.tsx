@@ -130,6 +130,7 @@ describe("popup timer controls", () => {
       host.querySelector('[data-testid="tracker-description"]'),
     ).toBeNull();
     expect(host.querySelectorAll(".timer-shortcuts button")).toHaveLength(2);
+    expect(host.querySelector('[data-testid="tracker-today"]')).toBeNull();
     await click('[data-testid="tracker-start"]');
     expect(onStart).toHaveBeenCalledExactlyOnceWith(
       "",
@@ -262,6 +263,57 @@ describe("popup timer controls", () => {
     expect(onOpenEntry).toHaveBeenCalledWith("past");
     await click('[data-testid="entries-more"]');
     expect(onLoadMore).toHaveBeenCalledOnce();
+  });
+
+  test.each([true, false])("live entry and tally tick together (embedded=%s)", async (embedded) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 1, 12, 0, 0));
+    try {
+      const running = { id: "live", description: "Current work", start: new Date(2026, 9, 1, 11).toISOString(), end: null };
+      const past = { ...running, id: "past", description: "Earlier work", end: new Date().toISOString(),
+        durationSec: 60, projectName: null, clientName: null, taskName: null, projectColor: null, invoiceId: null };
+      const history = { ...state, running, entries: { entries: [past], pendingIds: [], hasMore: false,
+        from: past.start, to: past.end } } as unknown as BackgroundState;
+      const onGoTracker = vi.fn();
+      const show = async () => act(async () => root.render(<EntriesScreen embedded={embedded} state={history} error={null}
+        onBack={vi.fn()} onGoTracker={onGoTracker} onOpenEntry={vi.fn()}
+        onNewEntry={vi.fn()} onLoadMore={vi.fn(async () => true)} />));
+      await show();
+      expect(host.querySelectorAll('[data-testid="entry-running"]')).toHaveLength(1);
+      expect(host.querySelector('.entry-day__total')?.textContent).toBe("1:01:00");
+      await act(async () => vi.advanceTimersByTime(1000));
+      expect(host.querySelector('.entry--running .entry__duration')?.textContent).toBe("1:00:01");
+      expect(host.querySelector('.entry-day__total')?.textContent).toBe("1:01:01");
+      await click('[data-testid="entry-running"]');
+      expect(onGoTracker).toHaveBeenCalledOnce();
+      history.running = null;
+      history.entries!.entries.unshift({ ...history.entries!.entries[0]!, id: "live", durationSec: 3601 });
+      await show();
+      expect(host.querySelector('[data-testid="entry-running"]')).toBeNull();
+      expect(host.querySelector('.entry-day__total')?.textContent).toBe("1:01:01");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("overnight running entry creates today's group without finished entries", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 1, 1, 0, 0));
+    try {
+      const history = { ...state, running: { id: "live", description: "Overnight",
+        start: new Date(2026, 8, 30, 23).toISOString(), end: null },
+        entries: { entries: [], pendingIds: [], hasMore: false, from: new Date().toISOString(), to: new Date().toISOString() }
+      } as unknown as BackgroundState;
+      await act(async () => root.render(<EntriesScreen embedded state={history} error={null}
+        onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
+        onNewEntry={vi.fn()} onLoadMore={vi.fn(async () => true)} />));
+      expect(host.querySelector('.entry-day__label')?.textContent).toBe("Today");
+      expect(host.querySelector('.entry-day__total')?.textContent).toBe("1:00:00");
+      expect(host.querySelector('.entry--running .entry__duration')?.textContent).toBe("2:00:00");
+      expect(host.querySelector('[data-testid="entries-empty"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("sign out remains available before the web URL is known", async () => {

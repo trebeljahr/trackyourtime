@@ -62,10 +62,10 @@ const groupByDay = (entries: DetailedEntry[]): DayGroup[] => {
   const groups: DayGroup[] = [];
   for (const entry of entries) {
     const key = dayKeyInZone(Date.parse(entry.start), entryZone(entry));
-    const last = groups[groups.length - 1];
-    if (last !== undefined && last.key === key) {
-      last.entries.push(entry);
-      last.totalSec += entry.durationSec;
+    const existing = groups.find((group) => group.key === key);
+    if (existing !== undefined) {
+      existing.entries.push(entry);
+      existing.totalSec += entry.durationSec;
       continue;
     }
     groups.push({ key, entries: [entry], totalSec: entry.durationSec });
@@ -149,6 +149,23 @@ export function EntriesScreen({
   // Berlin date rather than being relabelled by where it is being read.
   const todayKey = dayKeyInZone(Date.now(), deviceTimeZone());
   const pending = new Set(page?.pendingIds ?? []);
+  const groups = groupByDay((page?.entries ?? []).filter(
+    (entry) => entry.end !== null && entry.id !== state.running?.id,
+  ));
+  if (state.running !== null) {
+    let today = groups.find((group) => group.key === todayKey);
+    if (today === undefined) {
+      today = { key: todayKey, entries: [], totalSec: 0 };
+      groups.unshift(today);
+    }
+    // Only the part after local midnight belongs in today's tally. Using
+    // timestamps also handles days where the clocks move forward or back.
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    today.totalSec += Math.min(elapsedSec, Math.max(0,
+      Math.floor((Date.now() - midnight.getTime()) / 1000),
+    ));
+  }
 
   return (
     <div className={embedded ? "tracker-entries" : "screen"} onKeyDown={embedded ? undefined : onKeyDown} data-testid="entries-screen">
@@ -199,22 +216,9 @@ export function EntriesScreen({
         ) : null}
 
         <div className="entries">
-          {/* Pinned above the window rather than in it: the running entry is
-              not part of the finished list, and this row is a signpost to the
-              tracker rather than a second editor for it. */}
-          {!embedded && state.running !== null ? (
-            <RunningRow
-              entry={state.running}
-              elapsedSec={elapsedSec}
-              timeFormat={timeFormat}
-              durationFormat={durationFormat}
-              onOpen={onGoTracker}
-            />
-          ) : null}
-
           {page === null ? (
             <LoadingSkeleton variant="entries" label={t("app.loading")} testId="entries-loading" />
-          ) : page.entries.length === 0 ? (
+          ) : groups.length === 0 ? (
             <>
               {/* A list screen the user deliberately navigated to has to
                   explain itself, unlike the quick-start row, which renders
@@ -231,9 +235,10 @@ export function EntriesScreen({
                 {t("entries.newEntry")}
               </button>
             </>
-          ) : (
+          ) : null}
+          {groups.length > 0 && (
             <>
-              {groupByDay(page.entries).map((group) => (
+              {groups.map((group) => (
                 <div key={group.key}>
                   <div className="entry-day">
                     <span className="entry-day__label">
@@ -245,6 +250,16 @@ export function EntriesScreen({
                   </div>
 
                   <div className="entries">
+                    {group.key === todayKey && state.running !== null ? (
+                      <RunningRow
+                        entry={state.running}
+                        elapsedSec={elapsedSec}
+                        timeFormat={timeFormat}
+                        durationFormat={durationFormat}
+                        onOpen={onGoTracker}
+                      />
+                    ) : null}
+
                     {group.entries.map((entry) => (
                       <EntryRow
                         key={entry.id}
@@ -262,7 +277,7 @@ export function EntriesScreen({
                 </div>
               ))}
 
-              {page.hasMore ? (
+              {page?.hasMore ? (
                 <button
                   type="button"
                   className="button button--block"
@@ -274,7 +289,7 @@ export function EntriesScreen({
                 >
                   {busy ? t("app.loading") : t("entries.loadOlder")}
                 </button>
-              ) : (
+              ) : page !== null ? (
                 /* Said out loud so the end of the list reads as a decision
                    rather than a bug. */
                 <p className="entries__more" data-testid="entries-end">
@@ -290,7 +305,7 @@ export function EntriesScreen({
                     </button>
                   )}
                 </p>
-              )}
+              ) : null}
             </>
           )}
         </div>

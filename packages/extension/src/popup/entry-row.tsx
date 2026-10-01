@@ -104,15 +104,7 @@ export type RunningRowProps = {
   onOpen: () => void;
 };
 
-/**
- * The running entry, pinned above the list.
- *
- * It is not in the list itself — the worker filters an open end out of the
- * window — because `entries.list` matches on overlap and the same row would
- * otherwise be editable in two places, with two different id semantics while a
- * start is still queued. Tapping it goes to the tracker, which is where a
- * running entry is edited.
- */
+/** The live row in today's group opens the tracker to edit the timer. */
 export function RunningRow({
   entry,
   elapsedSec,

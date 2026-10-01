@@ -58,8 +58,7 @@ export function entryRangeLabel(
 ): string {
   const zone = entryZone(entry);
   const start = formatClockInZone(entry.start, zone, timeFormat);
-  // An open end is a running entry, which the list never shows — but a row
-  // rendered from the offline overlay can reach here mid-write.
+  // Running entries have no end yet.
   const end =
     entry.end === null ? "…" : formatClockInZone(entry.end, zone, timeFormat);
   return `${start}–${end}`;

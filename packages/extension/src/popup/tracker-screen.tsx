@@ -17,7 +17,6 @@ import {
   type ThemePreference,
 } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
-import { formatDurationFor } from "../i18n/format";
 import { usePopupLocale, useT } from "../i18n/use-t";
 import { HeldQueue, WorkspacePicker } from "./workspace-bar";
 import { DescriptionField } from "./description-field";
@@ -85,12 +84,6 @@ export type TrackerScreenProps = {
   onSwitchWorkspace: (workspaceId: string) => Promise<boolean>;
   /** Discards one change held for a workspace the person has left. */
   onDiscardHeld: (id: string) => Promise<boolean>;
-};
-
-/** Local-clock seconds elapsed today, the ceiling on a running entry's share. */
-const secondsSinceMidnight = (nowMs: number = Date.now()): number => {
-  const now = new Date(nowMs);
-  return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
 };
 
 /**
@@ -408,13 +401,6 @@ export function TrackerScreen({
     else void stop();
   };
 
-  // `state.todaySec` counts finished entries only, so the running one is added
-  // here — clamped to the part of it that falls inside today, or an overnight
-  // timer would credit the whole night to this morning.
-  const runningToday =
-    running === null ? 0 : Math.min(elapsedSec, secondsSinceMidnight());
-  const todaySec = state.todaySec + runningToday;
-
   // Tasks are workspace-wide, so the snapshot always carries the whole list.
   const tasks = state.tasks;
 
@@ -661,13 +647,6 @@ export function TrackerScreen({
             </button>
           </div>
         )}
-
-        <p className="today">
-          <span>{t("tracker.today")}</span>
-          <span className="today__value" data-testid="tracker-today">
-            {formatDurationFor(todaySec, locale, durationFormat)}
-          </span>
-        </p>
 
         <HeldQueue rows={state.heldSync} onDiscard={onDiscardHeld} t={t} />
 
