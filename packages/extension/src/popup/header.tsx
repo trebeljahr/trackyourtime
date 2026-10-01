@@ -59,10 +59,11 @@ export function Header({
       ) : null}
 
       {branded ? (
-        <img className="header__logo" src="/icons/48.png" width={24} height={24} alt="" />
-      ) : null}
-
-      {title !== undefined ? (
+        <a className="header__brand" href="https://trackyourtime.dev/" target="_blank" rel="noopener noreferrer" aria-label={title ?? "Track Your Time"}>
+          <img className="header__logo" src="/icons/48.png" width={24} height={24} alt="" />
+          {title !== undefined ? <span className="header__title">{title}</span> : null}
+        </a>
+      ) : title !== undefined ? (
         <span className="header__title">{title}</span>
       ) : null}
 

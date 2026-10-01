@@ -1145,6 +1145,19 @@ button.tag:hover .tag__x {
   margin-right: 2px;
 }
 
+.header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.header__brand:hover .header__title {
+  text-decoration: underline;
+}
+
 .header__title {
   font-size: 12px;
   font-weight: 600;
