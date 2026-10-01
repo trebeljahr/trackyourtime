@@ -27,21 +27,21 @@ test("a signed web cookie approves a separate extension session without a page",
   const sessionCookie = signup.headers.getSetCookie().find((cookie) => cookie.split("=")[0].endsWith("session_token"));
   assert.ok(sessionCookie);
   const webToken = sessionCookie.split(";")[0].slice(sessionCookie.indexOf("=") + 1);
-  const session = await (await call("/get-session?disableCookieCache=true", undefined, webToken)).json();
+  const session = await (await call("/get-session?disableCookieCache=true", undefined, webToken)).json() as { user: { id: string; email: string } };
   assert.equal(session.user.email, "test@example.com");
   const codeResponse = await call("/device/code", { client_id: "trackyourtime-extension" });
   assert.equal(codeResponse.status, 200);
-  const code = await codeResponse.json();
+  const code = await codeResponse.json() as { user_code: string; device_code: string };
   assert.equal((await call(`/device?user_code=${code.user_code}`, undefined, webToken)).status, 200);
   assert.equal((await call("/device/approve", { userCode: code.user_code }, webToken)).status, 200);
   const tokenResponse = await call("/device/token", {
     grant_type: "urn:ietf:params:oauth:grant-type:device_code", client_id: "trackyourtime-extension", device_code: code.device_code,
   });
   assert.equal(tokenResponse.status, 200);
-  const extension = await tokenResponse.json();
+  const extension = await tokenResponse.json() as { access_token: string };
   assert.ok(extension.access_token);
   assert.notEqual(extension.access_token, webToken);
-  assert.equal((await (await call("/get-session", undefined, extension.access_token)).json()).user.id, session.user.id);
+  assert.equal(((await (await call("/get-session", undefined, extension.access_token)).json()) as typeof session).user.id, session.user.id);
   assert.equal((await call("/sign-out", {}, extension.access_token)).status, 200);
-  assert.equal((await (await call("/get-session?disableCookieCache=true", undefined, webToken)).json()).user.id, session.user.id);
+  assert.equal(((await (await call("/get-session?disableCookieCache=true", undefined, webToken)).json()) as typeof session).user.id, session.user.id);
 });

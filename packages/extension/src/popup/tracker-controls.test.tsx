@@ -58,6 +58,16 @@ let root: Root;
 let host: HTMLDivElement;
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const saved = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => saved.get(key) ?? null,
+      setItem: (key: string, value: string) => { saved.set(key, value); },
+      removeItem: (key: string) => { saved.delete(key); },
+      clear: () => { saved.clear(); },
+    },
+  });
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true;
   };
@@ -90,6 +100,8 @@ const render = async (overrides: Partial<BackgroundState> = {}) => {
     onPinFavorite: ok,
     onUnpinFavorite: ok,
     onAnswerIdle: ok,
+    onKeepRunaway: ok,
+    onEditRunaway: vi.fn(async () => {}),
     onOpenSettings: vi.fn(),
     onOpenSuggestions: vi.fn(),
     onSearchDescriptions: vi.fn(),
@@ -165,6 +177,7 @@ describe("popup timer controls", () => {
     }}><TrackerScreen state={{ ...state, recents: [selected] } as BackgroundState}
       error={null} onStart={onStart} onStop={ok} onUpdateRunning={ok}
       onPinFavorite={ok} onUnpinFavorite={ok} onAnswerIdle={ok}
+      onKeepRunaway={ok} onEditRunaway={vi.fn(async () => {})}
       onOpenSettings={vi.fn()} onOpenSuggestions={vi.fn()} onSearchDescriptions={vi.fn()}
       onCreateClient={ok} onCreateTag={ok} onCreateProject={ok} onCreateTask={ok}
       onSwitchWorkspace={ok} onDiscardHeld={ok}
@@ -189,6 +202,7 @@ describe("popup timer controls", () => {
       createProject: ok, updateProject: ok, updateClient: ok, updateTag: ok, updateTask: ok,
     }}><TrackerScreen state={history} error={null} onStart={ok} onStop={onStop}
       onUpdateRunning={ok} onPinFavorite={ok} onUnpinFavorite={ok} onAnswerIdle={ok}
+      onKeepRunaway={ok} onEditRunaway={vi.fn(async () => {})}
       onOpenSettings={vi.fn()} onOpenSuggestions={vi.fn()} onSearchDescriptions={vi.fn()}
       onCreateClient={ok} onCreateTag={ok} onCreateProject={ok} onCreateTask={ok}
       onSwitchWorkspace={ok} onDiscardHeld={ok}
