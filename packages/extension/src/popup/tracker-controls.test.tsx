@@ -265,6 +265,21 @@ describe("popup timer controls", () => {
     expect(onLoadMore).toHaveBeenCalledOnce();
   });
 
+  test("standalone entries keep theme and account navigation", async () => {
+    const onOpenSettings = vi.fn();
+    const onSignOut = vi.fn(async () => true);
+    const onUpdateTheme = vi.fn(async () => true);
+    await act(async () => root.render(<EntriesScreen state={state} error={null}
+      onBack={vi.fn()} onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
+      onNewEntry={vi.fn()} onLoadMore={vi.fn(async () => true)}
+      onOpenSettings={onOpenSettings} onSignOut={onSignOut}
+      onUpdateTheme={onUpdateTheme} />));
+    expect(host.querySelector('.theme-toggle')).not.toBeNull();
+    await click('[data-testid="menu-trigger"]');
+    await click('[data-testid="menu-settings"]');
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+  });
+
   test("restart shows a running copy before the worker replies and restores the row on failure", async () => {
     let finish!: (value: boolean) => void;
     const onRestartEntry = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));

@@ -8,6 +8,7 @@ import {
   type DetailedEntry,
   type DurationFormat,
   type TimeFormat,
+  type ThemePreference,
 } from "@starter/core";
 import type { BackgroundState } from "../lib/messaging";
 import { formatDurationFor, formatIdleSpanFor } from "../i18n/format";
@@ -15,6 +16,8 @@ import { usePopupLocale, useT } from "../i18n/use-t";
 import { entryDayLabel, entryZone } from "./entry-format";
 import { EntryRow, RunningRow } from "./entry-row";
 import { Header } from "./header";
+import { Menu } from "./menu";
+import { ThemeToggle } from "./theme-toggle";
 import { join, openTab } from "./open-tab";
 import { describeSync } from "./sync-label";
 import { useElapsedSec } from "./use-elapsed";
@@ -44,6 +47,9 @@ export type EntriesScreenProps = {
   onGoTracker: () => void;
   onOpenEntry: (id: string) => void;
   onNewEntry: () => void;
+  onOpenSettings?: () => void;
+  onSignOut?: () => Promise<boolean>;
+  onUpdateTheme?: (theme: ThemePreference) => Promise<boolean>;
   onRestartEntry?: (entry: DetailedEntry) => Promise<boolean>;
   onLoadMore: () => Promise<boolean>;
 };
@@ -103,6 +109,9 @@ export function EntriesScreen({
   onGoTracker,
   onOpenEntry,
   onNewEntry,
+  onOpenSettings,
+  onSignOut,
+  onUpdateTheme,
   onRestartEntry,
   onLoadMore,
 }: EntriesScreenProps): JSX.Element {
@@ -195,6 +204,19 @@ export function EntriesScreen({
         onBack={onBack}
         onNewEntry={onNewEntry}
         sync={sync}
+        accountMenu={
+          <>
+            {onUpdateTheme && <ThemeToggle theme={state.settings?.theme ?? "system"} onChange={onUpdateTheme} />}
+            <Menu
+              webUrl={state.webUrl}
+              email={state.email}
+              name={state.profileName}
+              image={state.profileImage}
+              onOpenSettings={onOpenSettings}
+              onSignOut={onSignOut}
+            />
+          </>
+        }
       />}
 
       <div className={embedded ? undefined : "popup__body"}>

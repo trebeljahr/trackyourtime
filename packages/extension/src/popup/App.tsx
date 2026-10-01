@@ -835,6 +835,12 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
               onGoTracker: goTracker,
               onOpenEntry: openEntry,
               onNewEntry: newEntry,
+              onOpenSettings: () => {
+                if (state.webUrl) openTab(join(state.webUrl, "/app/settings"));
+                else openSection("account");
+              },
+              onSignOut: signOut,
+              onUpdateTheme: (theme) => updateSettings({ theme }),
               onRestartEntry: (entry) => send({
                 type: "timer:start",
                 description: entry.description,
