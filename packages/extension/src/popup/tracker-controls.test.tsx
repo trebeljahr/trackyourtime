@@ -163,8 +163,8 @@ describe("popup timer controls", () => {
     expect(host.querySelector("dialog")).toBeNull();
   });
 
-  test("running timer opens its fields and client picker", async () => {
-    await render({
+  test("running timer opens its fields and changes client without changing project", async () => {
+    const { onUpdateRunning } = await render({
       running: {
         id: "e1",
         description: "Work",
@@ -185,6 +185,12 @@ describe("popup timer controls", () => {
     ).toContain("Acme");
     expect(host.querySelectorAll(".combobox__selected-dot")).toHaveLength(3);
     expect(host.querySelector(".billable-glyph .lucide-euro")).not.toBeNull();
+    await click('[data-testid="tracker-client"]');
+    const clear = [...host.querySelectorAll<HTMLElement>('[role="option"]')].find((option) => option.textContent?.includes("No client"));
+    expect(clear).toBeDefined();
+    await act(async () => clear!.click());
+    expect(onUpdateRunning).toHaveBeenCalledExactlyOnceWith({clientId: null});
+    expect(host.querySelector<HTMLInputElement>('[data-testid="tracker-project"]')?.value).toBe("Website");
   });
 
   test("account avatar replaces footer identity and settings cog", async () => {

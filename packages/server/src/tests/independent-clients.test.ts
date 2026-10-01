@@ -10,6 +10,7 @@ import { startTimerDetailed, personReach } from "../services/entries/timer.js";
 import { listClients } from "../services/catalog/clients.js";
 import { buildDetailed } from "../trpc/routers/reports.js";
 import { invoicesRouter } from "../trpc/routers/invoices.js";
+import { dataRouter } from "../trpc/routers/data.js";
 import { favoritesRouter } from "../trpc/routers/favorites.js";
 import {
   INTEGRATION_MODELS,
@@ -73,6 +74,8 @@ describe("independent timer clients", { skip: skipWithoutDatabase }, () => {
       clientId: null,
     });
     assert.equal(shared.clientId, clientId);
+    const backup = await dataRouter.createCaller(contextFor(OWNER)).exportJson({});
+    assert.equal(backup.entries.filter((entry) => entry.clientName === "Second client").length, 2);
     assert.equal(
       (await Project.findById(seeded.projectId).lean())?.clientId,
       seeded.clientId,

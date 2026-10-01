@@ -178,6 +178,7 @@ const timeEntrySchema = new Schema<ITimeEntry>(
 /** Range queries: "everything in this workspace between two instants". */
 timeEntrySchema.index({ workspaceId: 1, start: -1 });
 timeEntrySchema.index({ workspaceId: 1, projectId: 1, start: -1 });
+timeEntrySchema.index({ workspaceId: 1, clientId: 1, start: -1 });
 /** Per-member reads: the `memberIds` report filter, and the visibility clause
  * that restricts a member without `canViewOthersTime` to their own rows. */
 timeEntrySchema.index({ workspaceId: 1, authorId: 1, start: -1 });
