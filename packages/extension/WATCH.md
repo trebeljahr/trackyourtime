@@ -1,23 +1,40 @@
-# Chrome watch builds
+# Chrome live development
 
-Run `pnpm dev:extension:prod` from the repository root to watch extension source
-changes while using the live API. Load `packages/extension/dist-prod` unpacked
-in Chrome. If already installed, click Reload once after starting the first
-watch build to activate automatic reload.
+## Popup HMR (recommended)
 
-Successful builds trigger reload within about a second. Chrome may close the
-popup; reopen it to see changes. This is full extension reload, not React Fast
-Refresh: unsaved UI state and session-only sign-in can be cleared. Reopen the
-web app to reconnect if asked to sign in. Timer actions still affect your real
-account on the live API.
+From the repository root, run `pnpm hmr:extension`. This starts Vite and CRXJS on
+a checked, random high port bound to loopback, with the live API as the backend.
+Load `packages/extension/dist-prod` unpacked in Chrome. If it is already loaded,
+click Reload once after starting HMR to switch from the static/watch build.
 
-`pnpm dev:extension` watches the local API target in `packages/extension/dist`.
-Run the local backend separately for that target.
+Keep the popup open while editing React components or CSS. React Fast Refresh
+updates compatible components in place, preserving inputs and navigation.
+CSS changes apply without a page reload. Changing hook order, replacing a
+component, or editing a module without a valid refresh boundary can reset state.
+Background-worker and manifest changes require a full extension reload; Chrome
+may close the popup and clear session-only sign-in. Reopen the web app to reconnect.
+Timer actions still affect your real account on the live API.
 
-The watcher follows this checkout. Worktree changes appear after integration.
-Shared packages imported from compiled output need rebuilding separately.
+For a local backend, use `pnpm hmr:extension:local` and load
+`packages/extension/dist`. Run the backend separately. The HMR config follows
+core/shared source edits directly for their root exports. Shared subpath exports
+still use compiled output and need rebuilding when changed.
 
-Only watch builds contain reload code. It polls a local revision file and keeps
-the development worker awake without new permissions or a listening server.
-To restore normal worker sleep, stop the watcher, run
-`pnpm build:extension:prod`, and reload once in Chrome.
+Do not run HMR and build-watch commands for the same output folder together.
+The server must remain running while using the HMR extension. Restarting it can
+choose a new port: reload the extension once after a restart. HMR follows this
+checkout; separate worktree changes appear after integration into this checkout.
+
+HMR uses a separate config and CRXJS's development-only loader. Production and
+Firefox release commands retain their original build pipeline. To return to a
+standalone extension, stop HMR, run `pnpm build:extension:prod`, and reload Chrome's
+extension once. Never package or upload an HMR output directory.
+
+## Full rebuild and reload
+
+`pnpm dev:extension:prod` watches the live API target; `pnpm dev:extension` watches
+the local API target. Both rebuild files and reload the entire extension after a
+successful build, rather than preserving popup state. Activate with one manual
+Chrome reload after starting the first watch build. These builds poll a local
+revision file and keep the worker awake. Restore a normal production build and
+reload once to remove that development behavior.

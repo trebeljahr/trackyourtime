@@ -11,7 +11,9 @@
     "build:firefox": "vite build --mode firefox",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
-    "dev:prod": "vite build --watch --mode production"
+    "dev:prod": "vite build --watch --mode production",
+    "hmr": "vite --config vite.hmr.config.ts --mode hosted",
+    "hmr:local": "vite --config vite.hmr.config.ts --mode local"
   },
   "dependencies": {
     "@starter/core": "workspace:*",
@@ -21,6 +23,7 @@
     "use-intl": "^4.14.7"
   },
   "devDependencies": {
+    "@crxjs/vite-plugin": "^3.0.0",
     "@types/chrome": "^0.2.7",
     "@types/node": "^25.8.0",
     "@types/react": "^19.2.14",

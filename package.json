@@ -86,7 +86,9 @@
     "test:ios:simulator": "node scripts/ios-simulator-smoke.mjs",
     "test:ios:ui": "node scripts/ios-xcuitest.mjs",
     "test:android:emulator": "node scripts/android-emulator-smoke.mjs",
-    "dev:extension:prod": "pnpm --filter @starter/extension run dev:prod"
+    "dev:extension:prod": "pnpm --filter @starter/extension run dev:prod",
+    "hmr:extension": "pnpm --filter @starter/extension run hmr",
+    "hmr:extension:local": "pnpm --filter @starter/extension run hmr:local"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
