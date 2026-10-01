@@ -544,7 +544,6 @@ export const popup: Translation<typeof source> = {
     changeServer: "Server wechseln …",
     keepServer: "Diesen Server behalten",
     signOutTitle: "Abmelden?",
-    signOutSharedHint: "Wenn du dich aus der Erweiterung abmeldest, bleibt die Web-App angemeldet.",
     signOutHint: "Alles bereits Erfasste bleibt erhalten. Melde dich wieder an, um weiter zu erfassen.",
   },
 };

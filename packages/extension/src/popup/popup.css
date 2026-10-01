@@ -1850,10 +1850,6 @@ button.tag:hover .tag__x {
 .menu__item--danger {
   color: var(--danger);
 }
-.menu__note {
-  padding: 8px;
-  max-width: 270px;
-}
 
 .quick__summary {
   cursor: pointer;

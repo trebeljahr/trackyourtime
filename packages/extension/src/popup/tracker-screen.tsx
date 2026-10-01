@@ -438,7 +438,6 @@ export function TrackerScreen({
             image={state.profileImage}
             onOpenSettings={onOpenSettings}
             onSignOut={onSignOut}
-            sharedSession={state.sessionSource === "web"}
           />
         }
         // Off by default, so by default the tracker looks exactly as it did.

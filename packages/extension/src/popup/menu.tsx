@@ -11,7 +11,6 @@ export type MenuProps = {
   image?: string | null;
   onOpenSettings?: () => void;
   onSignOut?: () => Promise<boolean>;
-  sharedSession?: boolean;
 };
 
 export function Menu({
@@ -21,7 +20,6 @@ export function Menu({
   image,
   onOpenSettings,
   onSignOut,
-  sharedSession = false,
 }: MenuProps): JSX.Element {
   const t = useT("popup");
   const [failedImage, setFailedImage] = useState<string | null>(null);
@@ -103,11 +101,6 @@ export function Menu({
           )}
           {onSignOut && (
             <>
-              {sharedSession && (
-                <p className="popup__hint menu__note">
-                  {t("account.signOutSharedHint")}
-                </p>
-              )}
               <button
                 type="button"
                 role="menuitem"

@@ -562,7 +562,6 @@ export const popup = {
     changeServer: "Change server…",
     keepServer: "Keep this server",
     signOutTitle: "Sign out?",
-    signOutSharedHint: "Signing out of the extension leaves the web app signed in.",
     signOutHint: "Anything already tracked is kept. You sign in again to keep tracking.",
   },
 } as const;

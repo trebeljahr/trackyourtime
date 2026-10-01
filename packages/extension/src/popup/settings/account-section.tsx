@@ -127,7 +127,7 @@ export function AccountSection({
       {confirming ? (
         <ConfirmPanel
           title={t("account.signOutTitle")}
-          hint={shared ? t("account.signOutSharedHint") : t("account.signOutHint")}
+          hint={t("account.signOutHint")}
           confirmLabel={t("actions.signOut")}
           danger
           busy={busy}
