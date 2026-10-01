@@ -7,7 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The phone and desktop apps gained browser-based sign-in with an emailed link.
+The phone app got a new name and loading screen, and the extension gained a
+clearer tracker. This release also added independent clients to time entries
+and favorites, and tightened session checks on the server.
+
+### Added
+
+- The web app can email a single-use sign-in link to an existing account.
+  The phone and desktop apps can complete the same flow in the default browser
+  and approve the app with a short code. Accounts with two-factor authentication
+  still use their password and authenticator code in the browser.
+- Time entries and favorites can have their own client, independent of the
+  project default. Client filters and reports use that choice.
+- The extension shows recent entries, a running timer total and faster timer
+  feedback in its redesigned popup.
+
+### Changed
+
+- The installed phone app now appears as “Track Your Time”. Its login screen
+  offers password manager hints, and its startup screen uses the branded
+  stopwatch animation.
+- Account emails use the product logo and link to the relevant settings page.
+
 ### Fixed
+
+- Server requests revalidate sessions instead of trusting a stale cookie
+  cache after a session is revoked.
+- The server checks current invoice permissions before processing webhooks.
+- Timer edits can change the start time and resolve a stale long-timer alert.
 
 - Linux AppImages use a static runtime so ARM64 installs no longer need the
   development-only `libz.so` symlink. Release CI checks AppImage, deb and rpm

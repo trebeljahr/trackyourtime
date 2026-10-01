@@ -93,14 +93,14 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
   },
   {
     level: 7,
-    release: "0.1.2",
+    release: "0.2.0",
     added: [
       "Independent clientId on time entries and favorites, including filtering, reporting and invoicing.",
     ],
   },
   {
     level: 8,
-    release: "0.1.2",
+    release: "0.2.0",
     added: [
       "Optional start time on entries.resolveRunaway when setting the real end time.",
     ],
