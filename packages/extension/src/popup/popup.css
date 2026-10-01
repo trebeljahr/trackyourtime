@@ -1963,12 +1963,23 @@ button.tag:hover .tag__x {
   color: var(--muted);
   line-height: 1.6;
 }
-.quick__play {
-  flex: none;
-  color: var(--accent);
+.timer-drawer .quick__row {
+  align-items: center;
 }
-.timer-drawer .quick__start {
-  min-height: 62px;
+.timer-drawer .tag.quick__start {
+  flex: 0 1 auto;
+  max-width: calc(100% - 30px);
+  min-height: 28px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: transparent;
+  gap: 5px;
+}
+.timer-drawer .tag.quick__start:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+.timer-drawer .quick__pin {
+  min-height: 28px;
 }
 
 /* Confirm an existing web account without sharing either app's session. */

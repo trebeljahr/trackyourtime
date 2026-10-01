@@ -1,5 +1,5 @@
 import { useEffect, useRef, type JSX } from "react";
-import { History, Star, Play, X } from "lucide-react";
+import { History, Star, X } from "lucide-react";
 import {
   repairQuickStart,
   type QuickStart,
@@ -79,20 +79,27 @@ export function QuickStartDrawer({
             >
               <button
                 type="button"
-                className="quick__start"
+                className="tag quick__start"
+                style={{ borderColor: item.projectColor ?? undefined }}
+                title={hint ? t("quickStart.rowTitle", { label, hint }) : label}
                 disabled={busy}
                 onClick={() => onStart(repairQuickStart(item))}
                 aria-label={t("quickStart.startEntry", { label })}
               >
-                <Play size={18} className="quick__play" aria-hidden="true" />
-                <span className="quick__text">
-                  <span className="quick__label">{label}</span>
-                  {hint && <span className="quick__hint">{hint}</span>}
+                <span
+                  className="project__dot"
+                  style={{ backgroundColor: item.projectColor ?? "var(--muted)" }}
+                  aria-hidden="true"
+                />
+                <span className="tag__label">
+                  {label}
+                  {hint && <span className="quick__hint"> · {hint}</span>}
                 </span>
               </button>
               <button
                 type="button"
                 className="quick__pin"
+                aria-pressed={item.kind === "favorite"}
                 disabled={busy}
                 aria-label={t(
                   item.kind === "favorite"
@@ -107,7 +114,7 @@ export function QuickStartDrawer({
                 }
               >
                 <Star
-                  size={19}
+                  size={15}
                   fill={item.kind === "favorite" ? "currentColor" : "none"}
                 />
               </button>
