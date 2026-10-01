@@ -1,3 +1,4 @@
+import { mergePopupSnapshot } from "../lib/popup-snapshot";
 import { join, openTab } from "./open-tab";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { CatalogEditProvider, type CatalogEdit } from "./catalog-edit";
@@ -42,7 +43,8 @@ import type { RunningPatch } from "./tracker-screen";
  * The whole popup.
  *
  * It owns no domain state of its own: every message returns a full
- * {@link BackgroundState}, which is stored verbatim and rendered. The only
+ * {@link BackgroundState}, with the last entry page retained when a view
+ * omits it while refreshing. The only
  * local state is "have we heard from the worker yet", "what went wrong last
  * time", "what just happened" and "which screen are we on" — everything else
  * lives in the service worker, which survives the popup being destroyed on
@@ -127,7 +129,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
       const response: BackgroundResponse = await sendToBackground(message);
       if (response.ok) {
         apiUrlRef.current = response.state.apiUrl;
-        setState(response.state);
+        setState((previous) => mergePopupSnapshot(previous, response.state));
         setError(null);
         return true;
       }
@@ -159,7 +161,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
       if (response.ok) {
         if (stateRef.current === null) setError(null);
         apiUrlRef.current = response.state.apiUrl;
-        setState(response.state);
+        setState((previous) => mergePopupSnapshot(previous, response.state));
       } else if (stateRef.current === null) {
         // Surface startup failures, but leave action errors alone once loaded.
         setError((previous) => previous ?? describeError(
@@ -370,7 +372,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
       });
       if (response.ok) {
         apiUrlRef.current = response.state.apiUrl;
-        setState(response.state);
+        setState((previous) => mergePopupSnapshot(previous, response.state));
         setError(null);
         return { ok: true };
       }
@@ -476,7 +478,7 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
       (response) => {
         if (!response.ok) return;
         apiUrlRef.current = response.state.apiUrl;
-        setState(response.state);
+        setState((previous) => mergePopupSnapshot(previous, response.state));
       },
     );
   }, []);

@@ -3,6 +3,7 @@ import type { BackgroundState } from "./messaging";
 import { sessionStorageArea } from "./chrome-storage";
 import {
   loadPopupSnapshot,
+  mergePopupSnapshot,
   POPUP_SNAPSHOT_KEY,
   savePopupSnapshot,
 } from "./popup-snapshot";
@@ -40,5 +41,49 @@ describe("stalled snapshot storage", () => {
     await vi.advanceTimersByTimeAsync(250);
     expect(await pending).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("cached entry pages", () => {
+  const page = { entries: [], from: "2026-10-01", to: "2026-10-02", hasMore: false, pendingIds: [] };
+  const scoped = {
+    ...state,
+    settings: { userId: "u1" },
+    activeWorkspaceId: "w1",
+    entries: page,
+    entriesStale: false,
+  } as unknown as BackgroundState;
+
+  test("retains entries through tracker snapshots and popup reopen", async () => {
+    await savePopupSnapshot(scoped);
+    await savePopupSnapshot({ ...scoped, entries: null });
+    expect(await loadPopupSnapshot()).toMatchObject({ entries: page, entriesStale: true });
+  });
+
+  test("keeps the visible page until refresh replaces it, including an empty result", () => {
+    const cached = { ...scoped, entries: { ...page, hasMore: true } };
+    expect(mergePopupSnapshot(cached, { ...scoped, entries: null }).entries).toBe(cached.entries);
+    expect(mergePopupSnapshot(cached, scoped)).toBe(scoped);
+  });
+
+  test.each([
+    { signedIn: false },
+    { apiUrl: "https://other.example.test" },
+    { settings: { userId: "u2" } },
+    { settings: null },
+    { activeWorkspaceId: "w2" },
+    { activeWorkspaceId: null },
+  ])("drops cached rows when scope changes: %j", (change) => {
+    const next = { ...scoped, entries: null, ...change } as BackgroundState;
+    expect(mergePopupSnapshot(scoped, next).entries).toBeNull();
+  });
+
+  test("ordered writes cannot restore entries after sign-out", async () => {
+    await Promise.all([
+      savePopupSnapshot(scoped),
+      savePopupSnapshot({ ...scoped, entries: null }),
+      savePopupSnapshot({ ...scoped, signedIn: false, entries: null }),
+    ]);
+    expect(await loadPopupSnapshot()).toMatchObject({ signedIn: false, entries: null });
   });
 });

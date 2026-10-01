@@ -29,15 +29,45 @@ const SNAPSHOT_VERSION = 1;
 
 type Stored = { v: number; state: BackgroundState };
 
-export async function savePopupSnapshot(state: BackgroundState): Promise<void> {
-  const area = sessionStorageArea();
-  if (area === null) return;
-  const stored: Stored = { v: SNAPSHOT_VERSION, state };
-  try {
-    await area.set({ [POPUP_SNAPSHOT_KEY]: stored });
-  } catch {
-    // Quota or a torn-down area: the popup simply loads the slow way.
-  }
+/** A null page means this view did not load entries, not an empty result. */
+export function mergePopupSnapshot(
+  previous: BackgroundState | null,
+  next: BackgroundState,
+): BackgroundState {
+  if (
+    next.entries !== null ||
+    previous?.entries == null ||
+    !previous.signedIn || !next.signedIn ||
+    previous.apiUrl !== next.apiUrl ||
+    !next.settings?.userId ||
+    previous.settings?.userId !== next.settings.userId ||
+    !next.activeWorkspaceId ||
+    previous.activeWorkspaceId !== next.activeWorkspaceId
+  ) return next;
+
+  return { ...next, entries: previous.entries, entriesStale: true };
+}
+
+// Serialize read/merge/write so a slow storage write cannot undo a sign-out
+// or overwrite a newer page with an earlier response.
+let savePending: Promise<void> = Promise.resolve();
+
+export function savePopupSnapshot(state: BackgroundState): Promise<void> {
+  savePending = savePending.then(async () => {
+    const area = sessionStorageArea();
+    if (area === null) return;
+    try {
+      const previous = await loadPopupSnapshot();
+      const stored: Stored = {
+        v: SNAPSHOT_VERSION,
+        state: mergePopupSnapshot(previous, state),
+      };
+      await area.set({ [POPUP_SNAPSHOT_KEY]: stored });
+    } catch {
+      // Quota or a torn-down area: the popup simply loads the slow way.
+    }
+  });
+  return savePending;
 }
 
 export async function loadPopupSnapshot(): Promise<BackgroundState | null> {

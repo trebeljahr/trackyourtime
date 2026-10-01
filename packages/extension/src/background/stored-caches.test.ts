@@ -225,3 +225,17 @@ describe("the server info", () => {
     expect(await loadServerInfo()).toBeNull();
   });
 });
+
+describe("entry navigation cache", () => {
+  test("reuses fresh entries on return, but honors invalidation", async () => {
+    const cache = await runtime();
+    cache.setCachedEntries([], null, false);
+    cache.clearEntriesStale();
+    cache.setActiveView("entries");
+    cache.setActiveView("tracker");
+    cache.setActiveView("entries");
+    expect(cache.entriesCacheIsFresh()).toBe(true);
+    cache.markEntriesStale();
+    expect(cache.entriesCacheIsFresh()).toBe(false);
+  });
+});

@@ -1399,14 +1399,12 @@ export const getActiveView = (): PopupView => activeView;
  * Record which surface the popup is on, so `buildState` fetches only what is
  * being looked at.
  *
- * Arriving at the entries list is exactly the moment its window should be true
- * rather than up to {@link ENTRIES_CACHE_TTL_MS} old, so the move marks it
- * stale — a refetch on arrival, not on every poll while it sits there.
+ * Navigation reuses a fresh window. Mutations, sync events and the cache TTL
+ * decide when it needs refreshing.
  */
 export const setActiveView = (view: PopupView): void => {
   if (activeView === view) return;
   activeView = view;
-  if (view === "entries") entriesStale = true;
 };
 
 export const getCachedEntries = (): {
