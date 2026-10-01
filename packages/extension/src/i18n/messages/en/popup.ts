@@ -297,7 +297,8 @@ export const popup = {
     webAccountWaiting: "Connecting your account in the background…",
 
     ownServer: "Use your own server",
-    openWebApp: "Log In From Web App",
+    openWebApp: "Sign in from web as",
+    noAccount: "No account yet? Sign up",
     title: "Sign in to Track Your Time",
     email: "Email",
     password: "Password",

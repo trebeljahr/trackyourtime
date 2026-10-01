@@ -281,7 +281,8 @@ export const popup: Translation<typeof source> = {
     webAccountWaiting: "Dein Konto wird im Hintergrund verbunden…",
 
     ownServer: "Eigenen Server verwenden",
-    openWebApp: "Über Web-App anmelden",
+    openWebApp: "Über Web-App anmelden als",
+    noAccount: "Noch kein Konto? Registrieren",
     title: "Bei Track Your Time anmelden",
     email: "E-Mail",
     password: "Passwort",

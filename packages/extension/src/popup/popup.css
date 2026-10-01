@@ -1989,18 +1989,20 @@ button.tag:hover .tag__x {
   min-height: 28px;
 }
 
-/* Confirm an existing web account without sharing either app's session. */
-.web-account__offer {
+/* One account offer is one action: avatar, label and email share the button. */
+.web-account__button {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  text-align: left;
 }
 
 .web-account__identity {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
 }
 
 .web-account__avatar {
@@ -2028,6 +2030,23 @@ button.tag:hover .tag__x {
 .web-account__email {
   overflow-wrap: anywhere;
   min-width: 0;
+}
+
+.sign-in__signup {
+  align-self: flex-end;
+  margin-top: auto;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sign-in__signup:hover,
+.sign-in__signup:focus-visible {
+  text-decoration: underline;
 }
 
 .sign-in__server {

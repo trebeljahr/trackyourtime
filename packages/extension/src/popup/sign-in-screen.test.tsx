@@ -25,7 +25,7 @@ const props: SignInScreenProps = {
 };
 
 describe("extension sign-in choices", () => {
-  test("without a web account, offers email and device code only", () => {
+  test("without a web account, offers email, device code and sign-up", () => {
     const html = renderToStaticMarkup(<SignInScreen {...props} />);
     expect(html).not.toContain('data-testid="open-web-app"');
     expect(html).toContain("Using cloud");
@@ -35,19 +35,22 @@ describe("extension sign-in choices", () => {
     expect(html).toContain('data-testid="sign-in-form"');
     expect(html).toContain("Sign in with email");
     expect(html).toContain("Sign in with a device code");
-    expect(html).not.toContain("Log In From Web App");
+    expect(html).toContain("No account yet? Sign up");
+    expect(html).not.toContain("Sign in from web as");
     expect(html).not.toContain("Get a code, then");
     expect(html).not.toContain("Already signed in on the web?");
   });
 
-  test("shows the web account directly above its login button, after other choices", () => {
+  test("shows a single web account button after an or divider", () => {
     const html = renderToStaticMarkup(<SignInScreen {...props} webAccount={{ userId: "reader", sessionCreatedAt: 123, email: "reader@example.test", image: "https://example.test/avatar.png" }} onConfirmWebAccount={vi.fn()} />);
     expect(html).toContain('data-testid="open-web-app"');
     expect(html).toContain('data-testid="web-account-identity"');
     expect(html).toContain("reader@example.test");
     expect(html).toContain('src="https://example.test/avatar.png"');
-    expect(html.indexOf('data-testid="sign-in-web-app"')).toBeLessThan(html.indexOf('data-testid="web-account-identity"'));
-    expect(html.indexOf('data-testid="web-account-identity"')).toBeLessThan(html.indexOf('data-testid="open-web-app"'));
+    expect(html).toContain("Sign in from web as");
+    expect(html).not.toContain("No account yet? Sign up");
+    expect(html.indexOf('data-testid="sign-in-web-app"')).toBeLessThan(html.lastIndexOf('class="sign-in__or"'));
+    expect(html.lastIndexOf('class="sign-in__or"')).toBeLessThan(html.indexOf('data-testid="open-web-app"'));
   });
 
   test("no account offer stays hidden before server metadata arrives", () => {
@@ -101,15 +104,34 @@ test("shows the offered photo and email, and signs in only after confirmation", 
     await act(async () => root.render(<SignInScreen {...props} webAccount={account} onConfirmWebAccount={confirm} />));
     const offer = container.querySelector<HTMLButtonElement>('[data-testid="open-web-app"]')!;
     const identity = container.querySelector('[data-testid="web-account-identity"]')!;
-    expect(offer.textContent).toContain("Log In From Web App");
+    expect(offer.textContent).toContain("Sign in from web as");
+    expect(offer.contains(identity)).toBe(true);
     expect(identity.textContent).toContain(account.email);
-    expect(identity.querySelector("img")?.getAttribute("src")).toBe(account.image);
+    expect(offer.querySelector("img")?.getAttribute("src")).toBe(account.image);
     expect(confirm).not.toHaveBeenCalled();
     await act(async () => offer.click());
     expect(confirm).toHaveBeenCalledExactlyOnceWith("u1", 123);
   } finally {
     await act(async () => root.unmount());
     container.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+test("sign-up opens the current web app when no account is offered", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const create = vi.fn();
+  vi.stubGlobal("chrome", { tabs: { create } });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<SignInScreen {...props} webUrl="https://self.example.test" />));
+    const signup = container.querySelector<HTMLButtonElement>('[data-testid="sign-in-signup"]')!;
+    expect(signup).not.toBeNull();
+    await act(async () => signup.click());
+    expect(create).toHaveBeenCalledExactlyOnceWith({ url: "https://self.example.test/signup/" });
+  } finally {
+    await act(async () => root.unmount());
     vi.unstubAllGlobals();
   }
 });
