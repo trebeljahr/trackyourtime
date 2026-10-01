@@ -25,8 +25,8 @@ async function freePort(): Promise<number> {
 // accidentally enter Chrome Store or Firefox packages.
 export default defineConfig(async ({ command, mode }) => {
   if (command !== "serve") throw new Error("HMR config is for development only. Use vite.config.ts to build releases.");
-  if (mode !== "hosted" && mode !== "local") throw new Error("Use --mode hosted or --mode local for extension HMR.");
-  const targetMode = mode === "local" ? "development" : "production";
+  if (mode !== "hosted" && mode !== "local-api") throw new Error("Use --mode hosted or --mode local-api for extension HMR.");
+  const targetMode = mode === "local-api" ? "development" : "production";
   const target = BUILD_TARGETS[targetMode];
   const manifest = {
     ...buildManifest(targetMode),

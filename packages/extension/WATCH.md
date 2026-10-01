@@ -15,10 +15,33 @@ Background-worker and manifest changes require a full extension reload; Chrome
 may close the popup and clear session-only sign-in. Reopen the web app to reconnect.
 Timer actions still affect your real account on the live API.
 
-For a local backend, use `pnpm hmr:extension:local` and load
-`packages/extension/dist`. Run the backend separately. The HMR config follows
-core/shared source edits directly for their root exports. Shared subpath exports
-still use compiled output and need rebuilding when changed.
+Choose the backend with the same command:
+
+```sh
+pnpm hmr:extension                                      # live API
+pnpm hmr:extension --backend local                      # localhost:5159
+pnpm hmr:extension --backend http://127.0.0.1:54321       # custom local port
+pnpm hmr:extension --backend https://api.example.com     # another backend
+```
+
+`--local` and the existing `pnpm hmr:extension:local` are local-target shortcuts.
+Explicit flags override `VITE_API_URL`; without flags that environment variable
+can still supply a custom origin. Use `pnpm hmr:extension --help` for usage.
+Only HTTP(S) origins are accepted, without credentials, paths, queries, or fragments.
+
+Loopback backends use `packages/extension/dist` and the development identity;
+remote backends use `packages/extension/dist-prod` and the store identity.
+Start local backends separately. A custom backend must trust the extension origin;
+`pnpm extension:id dev` or `pnpm extension:id prod` prints it. Self-hosted remote
+servers use password or device sign-in; the web bridge remains limited to the
+existing trusted web origins.
+
+These options set the **build default**. A server previously chosen in the popup
+still takes precedence: use **Change server** there to switch an existing install.
+This preserves the normal account-switch and unsent-change checks.
+
+The HMR config follows core/shared source edits directly for their root exports.
+Shared subpath exports still use compiled output and need rebuilding when changed.
 
 Do not run HMR and build-watch commands for the same output folder together.
 The server must remain running while using the HMR extension. Restarting it can

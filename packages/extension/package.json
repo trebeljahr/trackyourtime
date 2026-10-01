@@ -12,8 +12,9 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
     "dev:prod": "vite build --watch --mode production",
-    "hmr": "vite --config vite.hmr.config.ts --mode hosted",
-    "hmr:local": "vite --config vite.hmr.config.ts --mode local"
+    "hmr": "node scripts/hmr.mjs",
+    "hmr:local": "node scripts/hmr.mjs --local",
+    "test:hmr": "node --test scripts/hmr-options.test.mjs"
   },
   "dependencies": {
     "@starter/core": "workspace:*",
