@@ -1,4 +1,4 @@
-import { useState, type JSX } from "react";
+import { useRef, useState, type JSX } from "react";
 import {
   formatClockInZone,
   parseTimeOfDayInZone,
@@ -48,6 +48,8 @@ export function TimeField({
   const shown = formatClockInZone(value, zone, timeFormat);
   const [draft, setDraft] = useState(shown);
   const [rejected, setRejected] = useState(false);
+  const editing = useRef(false);
+  const skipBlurCommit = useRef(false);
 
   // Re-seeded during render rather than in an effect, the same rule the
   // tracker's fields follow: the field has to be right on the first paint
@@ -55,8 +57,10 @@ export function TimeField({
   const [lastShown, setLastShown] = useState(shown);
   if (lastShown !== shown) {
     setLastShown(shown);
-    setDraft(shown);
-    setRejected(false);
+    if (!editing.current) {
+      setDraft(shown);
+      setRejected(false);
+    }
   }
 
   const revert = (): void => {
@@ -71,6 +75,7 @@ export function TimeField({
    * actually did last.
    */
   const commit = (): void => {
+    if (draft === shown) return;
     const parsed = parseTimeOfDayInZone(draft, value, zone);
     if (parsed === null) {
       setDraft(shown);
@@ -98,16 +103,32 @@ export function TimeField({
         value={draft}
         disabled={disabled}
         onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
+        onFocus={(event) => {
+          editing.current = true;
+          event.target.select();
+        }}
+        onBlur={() => {
+          editing.current = false;
+          if (skipBlurCommit.current) {
+            skipBlurCommit.current = false;
+            return;
+          }
+          commit();
+        }}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
+            event.stopPropagation();
+            skipBlurCommit.current = true;
             commit();
+            event.currentTarget.blur();
           }
           if (event.key === "Escape") {
             // Handled here so the screen's own Escape does not read a field
             // revert as "go back".
             event.preventDefault();
+            event.stopPropagation();
+            skipBlurCommit.current = true;
             revert();
             event.currentTarget.blur();
           }

@@ -1726,3 +1726,15 @@ button.tag:hover .tag__x {
   flex: 1;
   min-width: 0;
 }
+
+/* Keep the editable start beside the live duration in the narrow popup. */
+.tracker-clock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tracker-clock .range__field {
+  flex: 0 0 100px;
+}

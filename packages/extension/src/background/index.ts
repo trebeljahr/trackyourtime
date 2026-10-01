@@ -430,6 +430,7 @@ const apply = async (message: PopupToBackground): Promise<void> => {
       // and to the queue: both go through `JSON.stringify`, which leaves an
       // `undefined` value out of the object entirely.
       return updateRunning({
+        start: message.start,
         description: message.description,
         projectId: message.projectId,
         taskId: message.taskId,

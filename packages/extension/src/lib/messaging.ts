@@ -199,6 +199,7 @@ export type PopupToBackground =
    */
   | {
       type: "timer:update";
+      start?: string;
       description?: string;
       projectId?: string | null;
       taskId?: string | null;

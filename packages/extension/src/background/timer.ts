@@ -9,6 +9,9 @@
  */
 import {
   createTempId,
+  decodeOfflineMutation,
+  isForeignTo,
+  isQueuedOn,
   deviceTimeZone,
   isTempId,
   type OfflineStartInput,
@@ -25,6 +28,8 @@ import {
   enqueueOffline,
   flushQueue,
   getCachedProjects,
+  getKnownUserId,
+  getOfflineQueue,
   invalidateRecents,
   isTransportFailure,
   ORIGIN_ID,
@@ -87,7 +92,7 @@ const optimisticEntry = (
   updatedAt: input.start,
 });
 
-export async function startTimer(
+async function startTimerNow(
   description: string,
   projectId: string | null,
   taskId: string | null = null,
@@ -174,9 +179,10 @@ const queueStart = async (
   return entry;
 };
 
-export async function stopTimer(
+async function stopTimerNow(
   /** ISO instant to end at. Idle detection passes where input stopped. */
   endIso?: string,
+  requestedAt?: string,
 ): Promise<void> {
   const current = await ensureReady();
   if (!current.session) throw notSignedIn();
@@ -185,7 +191,7 @@ export async function stopTimer(
   // already-replayed start opened, which is the only entry that can still be
   // running by then. Pinning an id would name an entry that may not exist.
   const input: OfflineStopInput = {
-    end: endIso ?? new Date().toISOString(),
+    end: endIso ?? requestedAt ?? new Date().toISOString(),
     originId: ORIGIN_ID,
   };
 
@@ -230,6 +236,7 @@ const queueStop = async (
  * replay as the edit that was made rather than as a whole-entry overwrite.
  */
 export type RunningPatch = {
+  start?: string;
   description?: string;
   projectId?: string | null;
   taskId?: string | null;
@@ -247,6 +254,7 @@ export type RunningPatch = {
  */
 const patched = (entry: TimeEntry, patch: RunningPatch): TimeEntry => ({
   ...entry,
+  start: patch.start ?? entry.start,
   description: patch.description ?? entry.description,
   projectId: patch.projectId === undefined ? entry.projectId : patch.projectId,
   taskId: patch.taskId === undefined ? entry.taskId : patch.taskId,
@@ -262,7 +270,7 @@ const patched = (entry: TimeEntry, patch: RunningPatch): TimeEntry => ({
  * snapshot can be a few seconds old, and an id from before another device
  * stopped the timer would edit a row that is no longer running.
  */
-export async function updateRunning(patch: RunningPatch): Promise<void> {
+async function updateRunningNow(patch: RunningPatch): Promise<void> {
   const current = await ensureReady();
   if (!current.session) throw notSignedIn();
 
@@ -274,11 +282,31 @@ export async function updateRunning(patch: RunningPatch): Promise<void> {
     );
   }
 
-  // A timer started offline exists only as a queued `entries.start`, so an
-  // update naming its temp id would be refused on replay and the edit lost.
-  // The queued start still carries the fields it was opened with, so nothing
-  // is stuck — the edit just has to wait for the entry to become real.
+  // Edit the queued start itself: the server has never seen its temporary id.
   if (isTempId(running.id)) {
+    const write = addressedWrite();
+    if (
+      patch.start !== undefined &&
+      Object.entries(patch).every(([key, value]) => key === "start" || value === undefined)
+    ) {
+      const changed = await getOfflineQueue().amendPayloads((row) => {
+        if (
+          isForeignTo(row, getKnownUserId()) ||
+          !isQueuedOn(row, current.apiUrl, current.apiUrl) ||
+          row.workspaceId !== (write.workspaceId ?? undefined)
+        ) return undefined;
+        const decoded = decodeOfflineMutation(row);
+        if (decoded?.op !== "entries.start" || decoded.tempId !== running.id) return undefined;
+        return { input: { ...decoded.input, start: patch.start }, tempId: running.id };
+      });
+      if (changed > 0) {
+        const edited = patched(running, patch);
+        setCachedRunning(edited);
+        await rememberOptimisticRunning(edited);
+        await renderBadge(edited);
+        return;
+      }
+    }
     throw new BackgroundError(
       "STILL_SYNCING",
       "That timer has not reached the server yet. Try again in a moment.",
@@ -328,3 +356,38 @@ const queueUpdate = async (
   // show the pre-edit fields until the queue drains.
   await rememberOptimisticRunning(optimistic);
 };
+
+// Popup messages arrive concurrently. Keep Start, edits and Stop in gesture
+// order so an immediate edit cannot target the timer from before Start.
+let timerWrites: Promise<unknown> = Promise.resolve();
+let pendingStart: Promise<TimeEntry | null> | null = null;
+const serializeTimerWrite = <T>(write: () => Promise<T>): Promise<T> => {
+  const next = timerWrites.then(write, write);
+  timerWrites = next.then(() => undefined, () => undefined);
+  return next;
+};
+
+export function startTimer(...args: Parameters<typeof startTimerNow>): Promise<TimeEntry | null> {
+  args[4] ??= new Date().toISOString();
+  const started = serializeTimerWrite(() => startTimerNow(...args));
+  pendingStart = started;
+  const settled = (): void => {
+    if (pendingStart === started) pendingStart = null;
+  };
+  void started.then(settled, settled);
+  return started;
+}
+
+export function stopTimer(endIso?: string): Promise<void> {
+  const requestedAt = new Date().toISOString();
+  return serializeTimerWrite(() => stopTimerNow(endIso, requestedAt));
+}
+
+export function updateRunning(patch: RunningPatch): Promise<void> {
+  const start = pendingStart;
+  return serializeTimerWrite(async () => {
+    // A refused Start must also refuse its edit, not change an older timer.
+    if (start) await start;
+    await updateRunningNow(patch);
+  });
+}

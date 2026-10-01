@@ -59,6 +59,7 @@ export const popup: Translation<typeof source> = {
     openAppExternal: "Track Your Time öffnen ↗",
   },
   fields: {
+    startTime: "Startzeit",
     description: "Beschreibung",
     project: "Projekt",
     noProject: "Kein Projekt",

@@ -27,11 +27,13 @@ import { QuickStartList } from "./quick-start-list";
 import { Switch } from "./switch";
 import { describeSync } from "./sync-label";
 import { useOpenPanels } from "./catalog-edit";
+import { TimeField } from "./time-field";
 import { TaskPicker } from "./task-picker";
 import { useElapsedSec } from "./use-elapsed";
 
 /** An edit to the running entry. Absent fields are left alone. */
 export type RunningPatch = {
+  start?: string;
   description?: string;
   projectId?: string | null;
   taskId?: string | null;
@@ -495,9 +497,19 @@ export function TrackerScreen({
           data-testid={running === null ? "tracker-start-form" : "tracker-running"}
         >
           {running !== null ? (
-            <span className="elapsed" data-testid="tracker-elapsed">
-              {formatElapsed(elapsedSec, durationFormat, locale)}
-            </span>
+            <div className="tracker-clock">
+              <span className="elapsed" data-testid="tracker-elapsed">
+                {formatElapsed(elapsedSec, durationFormat, locale)}
+              </span>
+              <TimeField
+                label={t("fields.startTime")}
+                value={running.start}
+                zone={running.timeZone ?? deviceTimeZone()}
+                timeFormat={state.settings?.timeFormat ?? "24h"}
+                onCommit={(start) => patchRunning({ start })}
+                testId="tracker-start-time"
+              />
+            </div>
           ) : null}
 
           <DescriptionField

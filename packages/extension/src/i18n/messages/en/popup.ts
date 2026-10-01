@@ -68,6 +68,7 @@ export const popup = {
     openAppExternal: "Open Track Your Time ↗",
   },
   fields: {
+    startTime: "Start time",
     description: "Description",
     project: "Project",
     noProject: "No project",
