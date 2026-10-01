@@ -56,5 +56,19 @@
   "containerPorts": {
     "client": 6477,
     "server": 5159
+  },
+  "integrations": {
+    "email": {
+      "domain": "trackyourtime.dev",
+      "configuredAt": "2026-10-01T22:16:57.399Z",
+      "destinationEmail": "ricotrebeljahr@gmail.com",
+      "addresses": [
+        "hi",
+        "support",
+        "privacy",
+        "imprint"
+      ],
+      "catchAll": false
+    }
   }
 }
