@@ -406,6 +406,6 @@ repo's build — it is a manual, separately maintained step.
 ### Side-by-side HMR development
 
 `pnpm hmr:extension` uses the local API and writes only `dist-hmr/`. Load that
-directory as **Track Your Time (dev)** (orange icon). It can run beside the
+directory as **Track Your Time (dev)** (yellow hard hat). It can run beside the
 production store install or unpacked `dist-prod/` (purple icon), with separate
 sign-in and storage. See [WATCH.md](WATCH.md) for migration and backend options.

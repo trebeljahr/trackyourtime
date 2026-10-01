@@ -1,7 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="28" fill="#c2410c"/>
-  <circle cx="57" cy="58" r="34" fill="none" stroke="#fff7ed" stroke-width="10"/>
-  <path d="M57 35v24l15 10" fill="none" stroke="#fff7ed" stroke-width="9" stroke-linecap="round"/>
-  <rect x="72" y="78" width="48" height="42" rx="10" fill="#431407"/>
-  <path d="M86 88h8c17 0 17 22 0 22h-8z" fill="none" stroke="#fff7ed" stroke-width="6"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Track Your Time development — wearing a hard hat">
+  <rect x="4" y="24" width="120" height="104" rx="26" fill="#4F46E5"/>
+  <circle cx="64" cy="78" r="32" fill="none" stroke="#FFFFFF" stroke-opacity="0.32" stroke-width="12"/>
+  <path d="M64 46A32 32 0 1 1 36.3 94" fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="64" cy="78" r="8" fill="#FFFFFF"/>
+  <path d="M22 38C22 15 39 5 64 5s42 10 42 33" fill="#FBBF24" stroke="#92400E" stroke-width="4"/>
+  <path d="M55 9v25M73 9v25" fill="none" stroke="#FDE68A" stroke-width="7" stroke-linecap="round"/>
+  <rect x="10" y="32" width="108" height="15" rx="7.5" fill="#FBBF24" stroke="#92400E" stroke-width="4"/>
 </svg>

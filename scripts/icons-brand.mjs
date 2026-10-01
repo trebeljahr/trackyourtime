@@ -83,6 +83,12 @@ async function emit(relPath, buffer) {
  * generators (icon-gen, capacitor-assets) produce the smaller
  * variants from these, so there is no point committing those by hand.
  */
+// Development keeps the same timer mark, with a hard hat to distinguish it.
+const devIcon = await readFile(path.join(root, "packages/extension/public/icons/dev/source.svg"));
+for (const size of [16, 32, 48, 128]) {
+  await emit(`packages/extension/public/icons/dev/${size}.png`, await render(devIcon, size));
+}
+
 const TARGETS = [
   // Chrome: toolbar (16/32), management page (48), Web Store (128).
   ["packages/extension/public/icons/16.png", 16],

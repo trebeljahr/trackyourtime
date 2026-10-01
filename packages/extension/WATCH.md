@@ -5,7 +5,7 @@
 From the repository root, run `pnpm hmr:extension`. This starts Vite and CRXJS on
 a checked, random high port bound to loopback, with the local API as the backend.
 Load `packages/extension/dist-hmr` unpacked in Chrome. It appears as **Track Your
-Time (dev)** with an orange clock and D badge. Its ID, sign-in, and storage are
+Time (dev)** with an purple clock wearing a yellow hard hat. Its ID, sign-in, and storage are
 separate from production. Keep the store install or unpacked `dist-prod` alongside
 it. Store and unpacked production share one identity; choose one for that slot.
 
