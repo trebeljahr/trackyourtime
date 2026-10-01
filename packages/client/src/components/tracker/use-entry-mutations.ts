@@ -31,6 +31,7 @@ import { idleWatcher } from "@/lib/idle-watcher";
 import { OFFLINE_QUEUED_MUTATION } from "@/lib/query-client";
 import { trpc } from "@/lib/trpc";
 import {
+  amendQueuedStart,
   cancelQueuedForTemp,
   createTempId,
   enqueueOffline,
@@ -68,6 +69,8 @@ type MutationContext = {
   tempId?: string;
   /** Flipped in `onError` when the mutation was parked in the offline queue. */
   queued?: boolean;
+  /** A start-time edit made before the server named the running entry. */
+  pendingStart?: string;
   /**
    * The entry a stop is ending, resolved from the query cache *or* the timer
    * store. Distinct from `previousCurrent`, which is only ever the cache and
@@ -511,8 +514,31 @@ export const useEntryMutations = (): EntryMutations => {
       idleWatcher.noteLocalStart(context.tempId, Date.parse(input.start));
       return context;
     },
-    onSuccess: (entry, _raw, context) => {
+    onSuccess: async (entry, _raw, context) => {
       announceReplacedTimer(entry);
+      // Keep the timer scope occupied until edits made during Start have been
+      // saved. A Stop pressed meanwhile must follow both writes.
+      while (context?.pendingStart && context.pendingStart !== entry.start) {
+        const start = context.pendingStart;
+        const input = {
+          id: entry.id,
+          start,
+          originId: ORIGIN_ID,
+          ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
+        };
+        try {
+          entry = { ...entry, ...(await utils.client.entries.update.mutate(input)) };
+        } catch (error) {
+          if (isNetworkError(error)) {
+            await enqueueOffline("entries.update", input, undefined, context.workspaceId);
+            context.queued = true;
+            entry = { ...entry, start };
+          } else {
+            toast.error(userErrorMessage(error, translate("tracker")("mutations.saveFailed")));
+            break;
+          }
+        }
+      }
       if (!stillInWorkspace(context)) return;
       const tempId = context?.tempId;
       if (timerWriteQueuedBehind()) {
@@ -559,7 +585,10 @@ export const useEntryMutations = (): EntryMutations => {
         (tempId, workspaceId) =>
           enqueueOffline(
             "entries.start",
-            raw as OfflineStartInput,
+            {
+              ...(raw as OfflineStartInput),
+              start: context?.pendingStart ?? (raw as OfflineStartInput).start,
+            },
             tempId,
             workspaceId
           ),
@@ -993,16 +1022,60 @@ export const useEntryMutations = (): EntryMutations => {
   const updateEntry = React.useCallback(
     (args: UpdateEntryArgs): void => {
       if (isTempId(args.id)) {
-        // The server has never seen this entry, so an edit would be lost the
-        // moment the queued create replays. Rows disable their editors while
-        // this is true; this guard is the backstop.
+        const cached = utils.entries.current.getData();
+        const running = cached === undefined ? timerStore.getState().running : cached;
+        if (
+          args.start !== undefined &&
+          running?.id === args.id &&
+          Object.keys(args).every((key) => key === "id" || key === "start")
+        ) {
+          const start = args.start;
+          const workspaceId = getActiveWorkspaceId();
+          const apply = (): void => {
+            if (workspaceId !== getActiveWorkspaceId()) return;
+            const cachedCurrent = utils.entries.current.getData();
+            const current = cachedCurrent === undefined ? timerStore.getState().running : cachedCurrent;
+            if (current?.id === args.id) {
+              utils.entries.current.setData(undefined, { ...current, start });
+            }
+            patchList((entries) => entries.map((entry) => {
+              if (entry.id !== args.id) return entry;
+              const durationSec = entry.end === null ? 0 : durationBetween(start, entry.end);
+              return { ...entry, start, durationSec, amount: entryAmount(durationSec, entry.hourlyRate) };
+            }));
+          };
+          const pendingStart = queryClient.getMutationCache().findAll({
+            status: "pending",
+            predicate: (mutation) => mutation.options.scope?.id === TIMER_SCOPE.id,
+          })
+            .find((mutation) => {
+              const context = mutation.state.context as MutationContext | undefined;
+              return context?.tempId === args.id && context.runningAtStop === undefined && !context.queued;
+            });
+          if (pendingStart) {
+            (pendingStart.state.context as MutationContext).pendingStart = start;
+            apply();
+          } else {
+            void amendQueuedStart(args.id, start, workspaceId).then((saved) => {
+              if (saved) apply();
+              else {
+                toast.info(translate("tracker")("mutations.stillSyncing"));
+                refetchWhenQuiet();
+              }
+            }).catch((error: unknown) => {
+              toast.error(userErrorMessage(error, translate("tracker")("mutations.saveFailed")));
+            });
+          }
+          return;
+        }
+        // Other edits of temporary entries still wait for their server id.
         toast.info(translate("tracker")("mutations.stillSyncing"));
         return;
       }
       const input: UpdateInput = { ...args, originId: ORIGIN_ID };
       updateMutation.mutate(input);
     },
-    [updateMutation]
+    [updateMutation, utils, queryClient, patchList, refetchWhenQuiet]
   );
 
   const duplicateEntry = React.useCallback(

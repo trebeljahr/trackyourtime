@@ -11,6 +11,7 @@
 import { TRPCClientError } from "@trpc/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  amendQueuedStart,
   cancelQueuedForTemp,
   clearOfflineQueue,
   enqueueOffline,
@@ -48,6 +49,21 @@ describe("the client queue", () => {
     // A flush replays only the signed-in account's rows, so these need an
     // account. Ownership itself is covered by offline-owner.test.ts.
     await setOfflineQueueOwner("user-1");
+  });
+
+  it("persists an adjusted offline start without changing queue order or other accounts", async () => {
+    await enqueueOffline("entries.start", startInput, "temp-1", "workspace-1");
+    await enqueueOffline("entries.stop", { end: "2026-08-21T12:00:00.000Z", originId: "tab-1" }, "temp-1", "workspace-1");
+    const earlier = "2026-08-21T08:00:00.000Z";
+    expect(await amendQueuedStart("temp-1", earlier, "workspace-2")).toBe(false);
+    await setOfflineQueueOwner("someone-else");
+    expect(await amendQueuedStart("temp-1", earlier, "workspace-1")).toBe(false);
+    await setOfflineQueueOwner("user-1");
+    expect(await amendQueuedStart("temp-1", earlier, "workspace-1")).toBe(true);
+    const rows = await getOfflineQueue().list();
+    expect(rows.map((row) => row.op)).toEqual(["entries.start", "entries.stop"]);
+    expect(rows[0].payload).toMatchObject({ input: { start: earlier }, tempId: "temp-1" });
+    expect(await amendQueuedStart("missing", earlier, "workspace-1")).toBe(false);
   });
 
   it("tracks the pending count as mutations are queued and flushed", async () => {

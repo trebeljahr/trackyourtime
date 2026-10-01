@@ -61,6 +61,7 @@ export function TimeField({
   const [editing, setEditing] = React.useState(false);
   const [invalid, setInvalid] = React.useState(false);
   const [lastDisplay, setLastDisplay] = React.useState(display);
+  const skipBlurCommit = React.useRef(false);
 
   // Adopt sync-driven changes unless the user is mid-edit.
   if (lastDisplay !== display) {
@@ -69,6 +70,8 @@ export function TimeField({
   }
 
   const commit = React.useCallback((): void => {
+    // Merely focusing the field must not round away the entry's seconds.
+    if (draft === display) return;
     const parsed = timeZone
       ? parseTimeOfDayInZone(draft, value, timeZone)
       : parseTimeOfDay(draft, value);
@@ -78,7 +81,9 @@ export function TimeField({
       return;
     }
     setInvalid(false);
-    setDraft(format.time(parsed, timeFormat));
+    setDraft(timeZone
+      ? formatClockInZone(parsed, timeZone, timeFormat)
+      : format.time(parsed, timeFormat));
     if (parsed !== value) onCommit(parsed);
   }, [draft, display, format, onCommit, timeFormat, timeZone, value]);
 
@@ -104,11 +109,17 @@ export function TimeField({
       }}
       onBlur={() => {
         setEditing(false);
+        if (skipBlurCommit.current) {
+          skipBlurCommit.current = false;
+          return;
+        }
         commit();
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
+          event.stopPropagation();
+          skipBlurCommit.current = true;
           commit();
           event.currentTarget.blur();
         }
@@ -117,6 +128,7 @@ export function TimeField({
           event.stopPropagation();
           setInvalid(false);
           setDraft(display);
+          skipBlurCommit.current = true;
           event.currentTarget.blur();
         }
       }}

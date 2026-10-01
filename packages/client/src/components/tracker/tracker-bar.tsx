@@ -39,7 +39,6 @@ import { useRunningEntry } from "@/hooks/use-sync";
 import { formatDurationFor } from "@/i18n/format";
 import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
-import { isTempId } from "@/lib/offline";
 import { isCapacitor } from "@/lib/shell";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -372,12 +371,11 @@ export function TrackerBar(): React.JSX.Element {
             recorded in, like every other time field. */}
         {editsRunning && running ? (
           <label className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-            {t("bar.startedAt")}
+            {t("fields.startTime")}
             <TimeField
               value={running.start}
               timeFormat={format.timeFormat}
               timeZone={running.timeZone ?? deviceTimeZone()}
-              disabled={isTempId(running.id)}
               aria-label={t("fields.startTime")}
               testId="tracker-start"
               onCommit={(iso) => mutations.updateEntry({ id: running.id, start: iso })}

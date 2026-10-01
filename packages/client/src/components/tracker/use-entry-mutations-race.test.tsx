@@ -32,9 +32,11 @@ vi.mock("@/components/ui/sonner", () => ({
 }));
 
 const enqueueOffline = vi.fn(async (): Promise<void> => undefined);
+const amendQueuedStart = vi.fn(async (): Promise<boolean> => false);
 vi.mock("@/lib/offline", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/offline")>()),
   enqueueOffline,
+  amendQueuedStart,
 }));
 
 vi.mock("@/lib/running-mirror", () => ({
@@ -50,6 +52,7 @@ vi.mock("@/lib/trpc", async () => {
 
 const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
 const { trpc } = await import("@/lib/trpc");
+const { timerStore } = await import("@/hooks/use-sync");
 const { TRACKER_LIST_INPUT, useEntryMutations } = await import(
   "@/components/tracker/use-entry-mutations"
 );
@@ -100,6 +103,7 @@ const held = new Map<string, Deferred<unknown>>();
 const heldCalls = new Map<string, number>();
 /** Held procedures in the order their requests left the client. */
 let callOrder: string[] = [];
+const callInputs = new Map<string, unknown>();
 
 const answer = (path: string): Promise<unknown> => {
   switch (path) {
@@ -128,7 +132,7 @@ const fakeLink: TRPCLink<never> = () => ({ op }) =>
     }) => {
       let live = true;
       void Promise.resolve()
-        .then(() => answer(op.path))
+        .then(() => { callInputs.set(op.path, op.input); return answer(op.path); })
         .then(
           (data) => {
             if (!live) return;
@@ -206,7 +210,10 @@ beforeEach(() => {
   held.clear();
   heldCalls.clear();
   callOrder = [];
+  callInputs.clear();
   enqueueOffline.mockClear();
+  amendQueuedStart.mockReset();
+  timerStore.getState().clear();
   mutations = null;
 });
 
@@ -218,6 +225,80 @@ const settleAll = async (): Promise<void> => {
 };
 
 describe("entry mutations racing each other", () => {
+  it("does not revive an offline timer stopped while its start-time edit is being stored", async () => {
+    const offline = entry({ id: "temp-offline", description: "Offline", start: "2026-09-30T09:00:00.000Z" });
+    serverEntries = [offline];
+    mount();
+    await screen.findByText("Offline");
+    timerStore.getState().setRunning(offline);
+    const amend = deferred<boolean>();
+    amendQueuedStart.mockReturnValueOnce(amend.promise);
+    const stop = deferred<unknown>();
+    held.set("entries.stop", stop);
+    act(() => mutations?.updateEntry({ id: offline.id, start: "2026-09-30T08:00:00.000Z" }));
+    act(() => mutations?.stopTimer());
+    await waitFor(() => expect(heldCalls.get("entries.stop")).toBe(1));
+    expect(screen.getByTestId("current").textContent).toBe("");
+    await act(async () => amend.resolve(true));
+    expect(screen.getByTestId("current").textContent).toBe("");
+    const stopped = entry({ ...offline, id: "real-id", end: "2026-09-30T10:00:00.000Z" });
+    serverEntries = [stopped];
+    await act(async () => stop.resolve(stopped));
+    await settleAll();
+  });
+
+  it("saves a start-time edit made before Start answers, before a queued Stop", async () => {
+    serverEntries = [];
+    mount();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    const start = deferred<unknown>();
+    const update = deferred<unknown>();
+    const stop = deferred<unknown>();
+    held.set("entries.start", start);
+    held.set("entries.update", update);
+    held.set("entries.stop", stop);
+    act(() => mutations?.startTimer({ description: "New", projectId: null, billable: false }));
+    await waitFor(() => expect(heldCalls.get("entries.start")).toBe(1));
+    const tempId = screen.getByTestId("current").textContent!;
+    const earlier = "2026-09-30T08:00:00.000Z";
+    act(() => mutations?.updateEntry({ id: tempId, start: earlier }));
+    const current = queryClient.getQueryCache().findAll().find((q) =>
+      JSON.stringify(q.queryKey).includes('"current"'))?.state.data as TimeEntry;
+    expect(current.start).toBe(earlier);
+    act(() => mutations?.stopTimer());
+    await waitFor(() => expect(screen.getByTestId("current").textContent).toBe(""));
+    const created = entry({ id: "real-id", description: "New", start: "2026-09-30T09:00:00.000Z" });
+    await act(async () => start.resolve(created));
+    await waitFor(() => expect(heldCalls.get("entries.update")).toBe(1));
+    expect(callInputs.get("entries.update")).toMatchObject({ id: "real-id", start: earlier });
+    expect(heldCalls.get("entries.stop")).toBeUndefined();
+    expect(screen.getByTestId("current").textContent).toBe("");
+    await act(async () => update.resolve({ ...created, start: earlier }));
+    await waitFor(() => expect(heldCalls.get("entries.stop")).toBe(1));
+    expect(screen.getByTestId("current").textContent).toBe("");
+    const stopped = entry({ ...created, start: earlier, end: "2026-09-30T10:00:00.000Z" });
+    serverEntries = [stopped];
+    await act(async () => stop.resolve(stopped));
+    await settleAll();
+    expect(callOrder).toEqual(["entries.start", "entries.update", "entries.stop"]);
+  });
+
+  it("queues the adjusted start when the initial Start loses its connection", async () => {
+    serverEntries = [];
+    mount();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    const start = deferred<unknown>();
+    held.set("entries.start", start);
+    act(() => mutations?.startTimer({ description: "Offline", projectId: null, billable: false }));
+    await waitFor(() => expect(heldCalls.get("entries.start")).toBe(1));
+    const tempId = screen.getByTestId("current").textContent!;
+    const earlier = "2026-09-30T08:00:00.000Z";
+    act(() => mutations?.updateEntry({ id: tempId, start: earlier }));
+    await act(async () => start.reject(new TypeError("Failed to fetch")));
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    expect(enqueueOffline).toHaveBeenCalledWith("entries.start", expect.objectContaining({ start: earlier }), tempId, null);
+  });
+
   it("keeps a just-started timer on the list when an earlier stop settles", async () => {
     mount();
     await screen.findByText("Before");

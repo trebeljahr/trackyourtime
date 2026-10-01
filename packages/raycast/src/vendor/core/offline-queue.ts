@@ -147,6 +147,10 @@ export type OfflineQueue = {
     workspaceId?: string
   ): Promise<QueuedMutation>;
   list(): Promise<QueuedMutation[]>;
+  /** Amend payloads atomically with respect to enqueue and replay. */
+  amendPayloads(
+    amend: (row: QueuedMutation) => unknown | undefined
+  ): Promise<number>;
   size(): Promise<number>;
   remove(id: string): Promise<void>;
   clear(): Promise<void>;
@@ -556,6 +560,20 @@ export const createOfflineQueue = ({
       }),
 
     list: () => serial(read),
+
+    amendPayloads: (amend) =>
+      serial(async () => {
+        const mutations = await read();
+        let changed = 0;
+        const next = mutations.map((row) => {
+          const payload = amend(row);
+          if (payload === undefined) return row;
+          changed += 1;
+          return { ...row, payload };
+        });
+        if (changed > 0) await write(next);
+        return changed;
+      }),
 
     size: () => serial(async () => (await read()).length),
 

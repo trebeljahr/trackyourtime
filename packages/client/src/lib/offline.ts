@@ -531,9 +531,24 @@ export const enqueueOffline = async <K extends OfflineOp>(
 };
 
 /**
- * Drop everything queued for a temp entry. Used when the user deletes an
- * entry they created while offline — replaying its create would resurrect it.
+ * Adjust an offline start before replay, preserving its position and ownership.
  */
+export const amendQueuedStart = async (
+  tempId: string,
+  start: string,
+  workspaceId: string | null
+): Promise<boolean> => {
+  const changed = await getOfflineQueue().amendPayloads((row) => {
+    if (isElsewhere(row, owner ?? lastOwner)) return undefined;
+    if (row.workspaceId !== (workspaceId ?? undefined)) return undefined;
+    const decoded = decodeOfflineMutation(row);
+    if (decoded?.op !== "entries.start" || decoded.tempId !== tempId) return undefined;
+    return { input: { ...decoded.input, start }, tempId };
+  });
+  return changed > 0;
+};
+
+/** Drop the queued create and dependent operations for a deleted temp entry. */
 export const cancelQueuedForTemp = async (tempId: string): Promise<boolean> => {
   const offlineQueue = getOfflineQueue();
   const rows = await offlineQueue.list();
