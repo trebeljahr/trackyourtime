@@ -1,7 +1,7 @@
 import { History, Star, Play } from "lucide-react";
 import { QuickStartDrawer } from "./quick-start-drawer";
 import { ClientPicker } from "./client-picker";
-import { useState, type FormEvent, type JSX, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type JSX, type ReactNode } from "react";
 import {
   createId,
   deviceTimeZone,
@@ -68,7 +68,7 @@ export type TrackerScreenProps = {
   /** Opens account settings in the web app. */
   onOpenSettings: () => void;
   entries?: ReactNode;
-  renderEntries?: (running: TimeEntry | null) => ReactNode;
+  renderEntries?: (running: TimeEntry | null, stopped: TimeEntry | null) => ReactNode;
   /** The Suggestions screen. Its header button shows only while capture is on. */
   onOpenSuggestions: () => void;
   /** Asks the worker what this person has called work like this before. */
@@ -174,6 +174,13 @@ export function TrackerScreen({
   const [billable, setBillable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [drawer, setDrawer] = useState<"recents" | "favorites" | null>(null);
+  const [toastError, setToastError] = useState<string | null>(null);
+  useEffect(() => {
+    setToastError(error);
+    if (error === null) return;
+    const timeout = setTimeout(() => setToastError(null), 6000);
+    return () => clearTimeout(timeout);
+  }, [error]);
 
   /** Which pickers have a create or edit panel open; see the hook. */
   const panels = useOpenPanels();
@@ -184,6 +191,7 @@ export function TrackerScreen({
   // collapsed into one nullable field.
   const [optimistic, setOptimistic] = useState<{
     running: TimeEntry | null;
+    stopped?: TimeEntry;
   } | null>(null);
 
   const running = optimistic === null ? state.running : optimistic.running;
@@ -340,11 +348,14 @@ export function TrackerScreen({
   const start = async (quick?: QuickStart): Promise<void> => {
     if (busy) return;
     const next = quick ?? {
-      description: "",
-      projectId: null,
-      taskId: null,
-      billable: false,
+      description,
+      clientId,
+      projectId,
+      taskId,
+      billable,
+      tagIds,
     };
+    const nextTags = quick === undefined ? tagIds : [];
     setBusy(true);
     setDrawer(null);
     setOptimistic({
@@ -354,7 +365,7 @@ export function TrackerScreen({
           next.projectId,
           next.taskId,
           next.billable,
-          [],
+          nextTags,
         ),
         clientId: next.clientId,
       },
@@ -365,7 +376,7 @@ export function TrackerScreen({
         next.projectId,
         next.taskId,
         next.billable,
-        [],
+        nextTags,
         next.clientId,
       );
     } finally {
@@ -385,8 +396,13 @@ export function TrackerScreen({
 
   const stop = async (): Promise<void> => {
     if (busy) return;
+    const stopped = running === null ? null : (() => {
+      const end = new Date().toISOString();
+      return { ...running, end, durationSec: Math.max(0,
+        Math.round((Date.parse(end) - Date.parse(running.start)) / 1000)), updatedAt: end };
+    })();
     setBusy(true);
-    setOptimistic({ running: null });
+    setOptimistic({ running: null, ...(stopped ? { stopped } : {}) });
     try {
       await onStop();
     } finally {
@@ -653,14 +669,14 @@ export function TrackerScreen({
         <HeldQueue rows={state.heldSync} onDiscard={onDiscardHeld} t={t} />
 
         <p
-          className="notice"
+          className="notice tracker-toast"
           role="alert"
           aria-live="assertive"
           data-testid="tracker-error"
         >
-          {error ?? ""}
+          {toastError ?? ""}
         </p>
-        {renderEntries ? renderEntries(running) : entries}
+        {renderEntries ? renderEntries(running, optimistic?.stopped ?? null) : entries}
       </div>
 
 

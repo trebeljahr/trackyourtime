@@ -31,11 +31,13 @@ import {
   getKnownUserId,
   getOfflineQueue,
   invalidateRecents,
+  markEntriesStale,
   isTransportFailure,
   ORIGIN_ID,
   rememberOptimisticRunning,
   resolveRunning,
   setCachedRunning,
+  upsertOptimisticEntry,
 } from "./runtime";
 
 const notSignedIn = (): BackgroundError =>
@@ -149,6 +151,7 @@ async function startTimerNow(
     // Starting stops whatever was running, so the entry log — and with it the
     // derived recents list — has moved on.
     invalidateRecents();
+    markEntriesStale();
     // This device opened the entry, so it is the one allowed to act on its own
     // idle signal for it.
     await noteLocalStart(entry.id, Date.parse(input.start));
@@ -189,6 +192,7 @@ async function stopTimerNow(
 ): Promise<void> {
   const current = await ensureReady();
   if (!current.session) throw notSignedIn();
+  const running = await resolveRunning();
 
   // No `id`, deliberately: on replay the server stops whatever the
   // already-replayed start opened, which is the only entry that can still be
@@ -206,7 +210,7 @@ async function stopTimerNow(
   const stuck = await flushQueue();
   const write = addressedWrite();
   if (stuck > 0) {
-    await queueStop(input, write.workspaceId);
+    await queueStop(input, write.workspaceId, running);
     return;
   }
 
@@ -214,19 +218,30 @@ async function stopTimerNow(
     await current.api.mutate<TimeEntry>("entries.stop", write.address(input));
     setCachedRunning(null);
     invalidateRecents();
+    markEntriesStale();
     await renderBadge(null);
   } catch (error) {
     if (!isTransportFailure(error)) throw error;
-    await queueStop(input, write.workspaceId);
+    await queueStop(input, write.workspaceId, running);
   }
 }
 
 const queueStop = async (
   input: OfflineStopInput,
   workspaceId: string | null,
+  running: TimeEntry | null,
 ): Promise<void> => {
   await enqueueOffline("entries.stop", input, undefined, workspaceId);
+  if (running !== null) {
+    await upsertOptimisticEntry({
+      ...running,
+      end: input.end,
+      durationSec: Math.max(0, Math.round((Date.parse(input.end) - Date.parse(running.start)) / 1000)),
+      updatedAt: input.end,
+    });
+  }
   setCachedRunning(null);
+  markEntriesStale();
   // "A stop is queued" is itself a state worth surviving eviction — without it
   // a revived worker refetches and resurrects the entry this stop closed.
   await rememberOptimisticRunning(null);

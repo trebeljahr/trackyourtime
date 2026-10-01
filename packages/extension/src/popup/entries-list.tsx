@@ -6,6 +6,7 @@ import {
   isTempId,
   type DayKey,
   type DetailedEntry,
+  type TimeEntry,
   type DurationFormat,
   type TimeFormat,
 } from "@starter/core";
@@ -32,6 +33,7 @@ import { useElapsedSec } from "./use-elapsed";
 
 export type EntriesListProps = {
   state: BackgroundState;
+  optimisticStopped?: TimeEntry | null;
   /** Where the running row sends the user. */
   onGoTracker: () => void;
   onOpenEntry: (id: string) => void;
@@ -88,6 +90,7 @@ const windowDays = (from: string, to: string): number => {
 
 export function EntriesList({
   state,
+  optimisticStopped = null,
   onGoTracker,
   onOpenEntry,
   onNewEntry,
@@ -130,7 +133,19 @@ export function EntriesList({
   // Berlin date rather than being relabelled by where it is being read.
   const todayKey = dayKeyInZone(Date.now(), deviceTimeZone());
   const pending = new Set(page?.pendingIds ?? []);
-  const groups = groupByDay((page?.entries ?? []).filter(
+  const optimisticRow: DetailedEntry | null = optimisticStopped === null ? null : {
+    ...optimisticStopped,
+    projectName: state.projects.find((item) => item.id === optimisticStopped.projectId)?.name ?? null,
+    projectColor: state.projects.find((item) => item.id === optimisticStopped.projectId)?.color ?? null,
+    clientName: state.clients.find((item) => item.id === optimisticStopped.clientId)?.name ?? null,
+    taskName: state.tasks.find((item) => item.id === optimisticStopped.taskId)?.name ?? null,
+    amount: 0,
+  };
+  const rows = optimisticRow === null ? (page?.entries ?? []) :
+    [optimisticRow, ...(page?.entries ?? []).filter((entry) => entry.id !== optimisticRow.id)]
+      .sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
+  if (optimisticRow !== null) pending.add(optimisticRow.id);
+  const groups = groupByDay(rows.filter(
     (entry) => entry.end !== null && entry.id !== running?.id,
   ));
   if (running !== null) {

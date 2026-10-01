@@ -155,6 +155,54 @@ describe("popup timer controls", () => {
     expect(host.querySelector("dialog")).toBeNull();
   });
 
+  test("quick start paints its selected fields before the worker replies", async () => {
+    let finish!: (value: boolean) => void;
+    const onStart = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+    const ok = vi.fn(async () => true);
+    const selected = state.recents[0]!;
+    await act(async () => root.render(<CatalogEditProvider value={{
+      createProject: ok, updateProject: ok, updateClient: ok, updateTag: ok, updateTask: ok,
+    }}><TrackerScreen state={{ ...state, recents: [selected] } as BackgroundState}
+      error={null} onStart={onStart} onStop={ok} onUpdateRunning={ok}
+      onPinFavorite={ok} onUnpinFavorite={ok} onAnswerIdle={ok}
+      onOpenSettings={vi.fn()} onOpenSuggestions={vi.fn()} onSearchDescriptions={vi.fn()}
+      onCreateClient={ok} onCreateTag={ok} onCreateProject={ok} onCreateTask={ok}
+      onSwitchWorkspace={ok} onDiscardHeld={ok}
+      renderEntries={(running) => <div data-testid="optimistic-description">{running?.description}</div>}
+    /></CatalogEditProvider>));
+    await click('[data-testid="open-recents"]');
+    await click(".quick__start");
+    expect(onStart).toHaveBeenCalledWith("Landing page", "p1", "t1", true, [], "c1");
+    expect(host.querySelector('[data-testid="optimistic-description"]')?.textContent).toBe("Landing page");
+    await act(async () => finish(true));
+  });
+
+  test("stop paints a finished entry before the worker replies and rolls back on refusal", async () => {
+    let finish!: (value: boolean) => void;
+    const onStop = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+    const ok = vi.fn(async () => true);
+    const running = { id: "running-1", description: "Work", start: new Date(Date.now() - 60_000).toISOString(),
+      end: null, durationSec: 0, projectId: null, taskId: null, billable: false, tagIds: [] };
+    const history = { ...state, running, entries: { entries: [], pendingIds: [], hasMore: false,
+      from: running.start, to: new Date().toISOString() } } as unknown as BackgroundState;
+    await act(async () => root.render(<CatalogEditProvider value={{
+      createProject: ok, updateProject: ok, updateClient: ok, updateTag: ok, updateTask: ok,
+    }}><TrackerScreen state={history} error={null} onStart={ok} onStop={onStop}
+      onUpdateRunning={ok} onPinFavorite={ok} onUnpinFavorite={ok} onAnswerIdle={ok}
+      onOpenSettings={vi.fn()} onOpenSuggestions={vi.fn()} onSearchDescriptions={vi.fn()}
+      onCreateClient={ok} onCreateTag={ok} onCreateProject={ok} onCreateTask={ok}
+      onSwitchWorkspace={ok} onDiscardHeld={ok}
+      renderEntries={(shown, stopped) => <EntriesList state={{ ...history, running: shown }}
+        optimisticStopped={stopped} onGoTracker={vi.fn()} onOpenEntry={vi.fn()}
+        onNewEntry={vi.fn()} onLoadMore={ok} />}
+    /></CatalogEditProvider>));
+    await click('[data-testid="tracker-stop"]');
+    expect(host.querySelector('[data-entry-id="running-1"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="entry-running"]')).toBeNull();
+    await act(async () => finish(false));
+    expect(host.querySelector('[data-testid="entry-running"]')).not.toBeNull();
+  });
+
   test("Favorites drawer has its own empty state and close button", async () => {
     await render();
     await click('[data-testid="open-favorites"]');

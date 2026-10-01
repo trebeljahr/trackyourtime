@@ -67,8 +67,8 @@ export function Screens({
   const t = useT("popup");
   switch (route.name) {
     case "tracker":
-      return <TrackerScreen {...tracker} renderEntries={(running) =>
-        <EntriesList {...entries} state={{ ...entries.state, running }} />
+      return <TrackerScreen {...tracker} renderEntries={(running, stopped) =>
+        <EntriesList {...entries} state={{ ...entries.state, running }} optimisticStopped={stopped} />
       } />;
     case "settings":
       return <SettingsScreen {...settings} section={route.section} />;
