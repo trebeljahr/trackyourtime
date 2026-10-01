@@ -114,11 +114,11 @@ export function useApi<T>(
     error,
     signedOut: isAuthFailure(error),
     revalidate,
-    optimistic: <R,>(request: Promise<R>, update: (value: T) => T): Promise<R> =>
+    optimistic: <R>(request: Promise<R>, update: (value: T) => T): Promise<R> =>
       mutate(request, {
         optimisticUpdate: (current) =>
           current === undefined || current.workspaceId !== workspace.workspaceId
-            ? current as Tagged<T>
+            ? (current as Tagged<T>)
             : { ...current, value: update(current.value) },
         rollbackOnError: true,
       }),

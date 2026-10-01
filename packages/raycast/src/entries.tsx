@@ -211,12 +211,15 @@ export default function Entries(): React.JSX.Element {
                           title="Stop Timer"
                           icon={Icon.Stop}
                           onAction={() =>
-                            run(async () => {
-                              const api = await getTrackYourTime();
-                              await api.stop(entry.id);
-                              return "Timer stopped";
-                            }, "Could not stop the timer", (rows) =>
-                              rows.map((row) => row.id === entry.id ? previewStopped(row) : row))
+                            run(
+                              async () => {
+                                const api = await getTrackYourTime();
+                                await api.stop(entry.id);
+                                return "Timer stopped";
+                              },
+                              "Could not stop the timer",
+                              (rows) => rows.map((row) => (row.id === entry.id ? previewStopped(row) : row)),
+                            )
                           }
                         />
                       ) : (
@@ -224,14 +227,18 @@ export default function Entries(): React.JSX.Element {
                           title="Continue Entry"
                           icon={Icon.Play}
                           onAction={() =>
-                            run(async () => {
-                              const api = await getTrackYourTime();
-                              await api.continue(entry.id, toQuickStart(entry));
-                              return "Timer started";
-                            }, "Could not start the timer", (rows) => [
-                              previewStarted(toQuickStart(entry), entry, entry.workspaceId),
-                              ...rows.map((row) => row.end === null ? previewStopped(row) : row),
-                            ])
+                            run(
+                              async () => {
+                                const api = await getTrackYourTime();
+                                await api.continue(entry.id, toQuickStart(entry));
+                                return "Timer started";
+                              },
+                              "Could not start the timer",
+                              (rows) => [
+                                previewStarted(toQuickStart(entry), entry, entry.workspaceId),
+                                ...rows.map((row) => (row.end === null ? previewStopped(row) : row)),
+                              ],
+                            )
                           }
                         />
                       )}

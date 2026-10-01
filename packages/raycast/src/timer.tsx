@@ -22,7 +22,16 @@ import { isLocalEntry } from "./lib/overlay.js";
 import { formatClock, formatDayHeading, formatDurationShort, projectIcon } from "./lib/format.js";
 import { useApi, useNow, useReconciledRunning } from "./lib/hooks.js";
 import { apiUrl, hostLabel, webLink } from "./lib/preferences.js";
-import { RECENT_DAYS, entryHint, entryLabel, favoriteFor, loadTimerSnapshot, previewStarted, previewStopped, type TimerSnapshot } from "./lib/timer-data.js";
+import {
+  RECENT_DAYS,
+  entryHint,
+  entryLabel,
+  favoriteFor,
+  loadTimerSnapshot,
+  previewStarted,
+  previewStopped,
+  type TimerSnapshot,
+} from "./lib/timer-data.js";
 import { useServerLevel } from "./lib/server-level.js";
 import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
@@ -93,18 +102,23 @@ export default function Timer(): React.JSX.Element {
   };
 
   const stop = (entry: DetailedEntry): Promise<void> =>
-    run(async () => {
-      const api = await getTrackYourTime();
-      const stopped = await api.stop(entry.id);
-      return `Stopped — ${formatDurationShort(stopped.durationSec)}`;
-    }, "Could not stop the timer", (snapshot) => ({
-      ...snapshot,
-      fetchedAt: Date.now(),
-      running: null,
-      recent: entry.workspaceId === snapshot.activeWorkspaceId
-        ? [previewStopped(entry), ...snapshot.recent.filter((row) => row.id !== entry.id)]
-        : snapshot.recent,
-    }));
+    run(
+      async () => {
+        const api = await getTrackYourTime();
+        const stopped = await api.stop(entry.id);
+        return `Stopped — ${formatDurationShort(stopped.durationSec)}`;
+      },
+      "Could not stop the timer",
+      (snapshot) => ({
+        ...snapshot,
+        fetchedAt: Date.now(),
+        running: null,
+        recent:
+          entry.workspaceId === snapshot.activeWorkspaceId
+            ? [previewStopped(entry), ...snapshot.recent.filter((row) => row.id !== entry.id)]
+            : snapshot.recent,
+      }),
+    );
 
   const discard = async (entry: DetailedEntry): Promise<void> => {
     const confirmed = await confirmAlert({
@@ -159,40 +173,48 @@ export default function Timer(): React.JSX.Element {
     }, "Could not switch workspace");
 
   const togglePin = (entry: DetailedEntry, pinned: DetailedFavorite | undefined): Promise<void> =>
-    run(async () => {
-      const api = await getTrackYourTime();
-      if (pinned) {
-        await api.removeFavorite(pinned.id);
-        return "Favorite removed";
-      }
-      await api.addFavorite(toQuickStart(entry));
-      return "Pinned as a favorite";
-    }, "Could not update favorites", (snapshot) => {
-      if (pinned) return {
-        ...snapshot,
-        favorites: snapshot.favorites.filter((favorite) => favorite.id !== pinned.id),
-      };
-      const now = new Date().toISOString();
-      return {
-        ...snapshot,
-        favorites: [...snapshot.favorites, {
-          ...toQuickStart(entry),
-          id: `preview-favorite-${now}`,
-          workspaceId: entry.workspaceId,
-          userId: entry.authorId,
-          order: snapshot.favorites.length,
-          createdAt: now,
-          updatedAt: now,
-          projectName: entry.projectName,
-          projectColor: entry.projectColor,
-          clientName: entry.clientName,
-          taskName: entry.taskName,
-          projectMissing: false,
-          projectArchived: false,
-          taskMissing: false,
-        }],
-      };
-    });
+    run(
+      async () => {
+        const api = await getTrackYourTime();
+        if (pinned) {
+          await api.removeFavorite(pinned.id);
+          return "Favorite removed";
+        }
+        await api.addFavorite(toQuickStart(entry));
+        return "Pinned as a favorite";
+      },
+      "Could not update favorites",
+      (snapshot) => {
+        if (pinned)
+          return {
+            ...snapshot,
+            favorites: snapshot.favorites.filter((favorite) => favorite.id !== pinned.id),
+          };
+        const now = new Date().toISOString();
+        return {
+          ...snapshot,
+          favorites: [
+            ...snapshot.favorites,
+            {
+              ...toQuickStart(entry),
+              id: `preview-favorite-${now}`,
+              workspaceId: entry.workspaceId,
+              userId: entry.authorId,
+              order: snapshot.favorites.length,
+              createdAt: now,
+              updatedAt: now,
+              projectName: entry.projectName,
+              projectColor: entry.projectColor,
+              clientName: entry.clientName,
+              taskName: entry.taskName,
+              projectMissing: false,
+              projectArchived: false,
+              taskMissing: false,
+            },
+          ],
+        };
+      },
+    );
 
   if (signedOut) return <SignedOutView />;
 
@@ -389,7 +411,11 @@ export default function Timer(): React.JSX.Element {
       <CompatibilityListSection banner={banner}>{commonActions}</CompatibilityListSection>
 
       <List.Section title="About">
-        <List.Item icon={Icon.Info} title="Track Your Time for Raycast" subtitle={`Version ${APP_VERSION} (${BUILD_ID})`} />
+        <List.Item
+          icon={Icon.Info}
+          title="Track Your Time for Raycast"
+          subtitle={`Version ${APP_VERSION} (${BUILD_ID})`}
+        />
       </List.Section>
 
       {/* Stated rather than hidden: what is queued is time the user tracked,
@@ -564,18 +590,23 @@ export default function Timer(): React.JSX.Element {
                       title="Start Timer"
                       icon={Icon.Play}
                       onAction={() =>
-                        run(async () => {
-                          const api = await getTrackYourTime();
-                          const entry = await api.startQuick(repairQuickStart(favorite));
-                          return started(quickStartLabel(favorite), entry);
-                        }, "Could not start the timer", (snapshot) => ({
-                          ...snapshot,
-                          fetchedAt: Date.now(),
-                          running: previewStarted(repairQuickStart(favorite), favorite, snapshot.activeWorkspaceId),
-                          recent: snapshot.running?.workspaceId === snapshot.activeWorkspaceId
-                            ? [previewStopped(snapshot.running), ...snapshot.recent]
-                            : snapshot.recent,
-                        }))
+                        run(
+                          async () => {
+                            const api = await getTrackYourTime();
+                            const entry = await api.startQuick(repairQuickStart(favorite));
+                            return started(quickStartLabel(favorite), entry);
+                          },
+                          "Could not start the timer",
+                          (snapshot) => ({
+                            ...snapshot,
+                            fetchedAt: Date.now(),
+                            running: previewStarted(repairQuickStart(favorite), favorite, snapshot.activeWorkspaceId),
+                            recent:
+                              snapshot.running?.workspaceId === snapshot.activeWorkspaceId
+                                ? [previewStopped(snapshot.running), ...snapshot.recent]
+                                : snapshot.recent,
+                          }),
+                        )
                       }
                     />
                     <Action
@@ -623,15 +654,19 @@ export default function Timer(): React.JSX.Element {
                       title="Continue Entry"
                       icon={Icon.Play}
                       onAction={() =>
-                        run(async () => {
-                          const api = await getTrackYourTime();
-                          const next = await api.continue(entry.id, toQuickStart(entry));
-                          return started(entryLabel(entry), next);
-                        }, "Could not start the timer", (snapshot) => ({
-                          ...snapshot,
-                          fetchedAt: Date.now(),
-                          running: previewStarted(toQuickStart(entry), entry, snapshot.activeWorkspaceId),
-                        }))
+                        run(
+                          async () => {
+                            const api = await getTrackYourTime();
+                            const next = await api.continue(entry.id, toQuickStart(entry));
+                            return started(entryLabel(entry), next);
+                          },
+                          "Could not start the timer",
+                          (snapshot) => ({
+                            ...snapshot,
+                            fetchedAt: Date.now(),
+                            running: previewStarted(toQuickStart(entry), entry, snapshot.activeWorkspaceId),
+                          }),
+                        )
                       }
                     />
                     <Action.Push

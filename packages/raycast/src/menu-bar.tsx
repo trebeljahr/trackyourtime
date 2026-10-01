@@ -24,7 +24,15 @@ import { formatClock, formatDurationShort, formatMenuBarClock, formatMenuBarTota
 import { useApi, useNow, usePoll, useReconciledRunning, useWatchRunning } from "./lib/hooks.js";
 import { heldCopy } from "./lib/offline.js";
 import { webLink } from "./lib/preferences.js";
-import { entryHint, entryLabel, favoriteFor, loadTimerSnapshot, previewStarted, previewStopped, type TimerSnapshot } from "./lib/timer-data.js";
+import {
+  entryHint,
+  entryLabel,
+  favoriteFor,
+  loadTimerSnapshot,
+  previewStarted,
+  previewStopped,
+  type TimerSnapshot,
+} from "./lib/timer-data.js";
 import { useServerLevel } from "./lib/server-level.js";
 import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
@@ -228,22 +236,27 @@ export default function MenuBar(): React.JSX.Element | null {
             icon={Icon.Stop}
             shortcut={Keyboard.Shortcut.Common.Save}
             onAction={() => {
-              void act(async () => {
-                const api = await getTrackYourTime();
-                const stopped = await api.stop();
-                await showToast({
-                  style: Toast.Style.Success,
-                  title: "Timer stopped",
-                  message: formatDurationShort(stopped.durationSec),
-                });
-              }, "Could not stop the timer", (snapshot) => ({
-                ...snapshot,
-                fetchedAt: Date.now(),
-                running: null,
-                recent: running?.workspaceId === snapshot.activeWorkspaceId
-                  ? [previewStopped(running), ...snapshot.recent.filter((row) => row.id !== running.id)]
-                  : snapshot.recent,
-              }));
+              void act(
+                async () => {
+                  const api = await getTrackYourTime();
+                  const stopped = await api.stop();
+                  await showToast({
+                    style: Toast.Style.Success,
+                    title: "Timer stopped",
+                    message: formatDurationShort(stopped.durationSec),
+                  });
+                },
+                "Could not stop the timer",
+                (snapshot) => ({
+                  ...snapshot,
+                  fetchedAt: Date.now(),
+                  running: null,
+                  recent:
+                    running?.workspaceId === snapshot.activeWorkspaceId
+                      ? [previewStopped(running), ...snapshot.recent.filter((row) => row.id !== running.id)]
+                      : snapshot.recent,
+                }),
+              );
             }}
           />
           {/* A menu bar item cannot host a form, so editing hands off to the
@@ -328,19 +341,23 @@ export default function MenuBar(): React.JSX.Element | null {
               subtitle={quickStartHint(favorite) ?? undefined}
               icon={Icon.Star}
               onAction={() => {
-                void act(async () => {
-                  const api = await getTrackYourTime();
-                  const started = await api.startQuick(repairQuickStart(favorite));
-                  await showToast({
-                    style: Toast.Style.Success,
-                    title: "Timer started",
-                    message: [quickStartLabel(favorite), replacedNotice(started)].filter(Boolean).join(" · "),
-                  });
-                }, "Could not start the timer", (snapshot) => ({
-                  ...snapshot,
-                  fetchedAt: Date.now(),
-                  running: previewStarted(repairQuickStart(favorite), favorite, snapshot.activeWorkspaceId),
-                }));
+                void act(
+                  async () => {
+                    const api = await getTrackYourTime();
+                    const started = await api.startQuick(repairQuickStart(favorite));
+                    await showToast({
+                      style: Toast.Style.Success,
+                      title: "Timer started",
+                      message: [quickStartLabel(favorite), replacedNotice(started)].filter(Boolean).join(" · "),
+                    });
+                  },
+                  "Could not start the timer",
+                  (snapshot) => ({
+                    ...snapshot,
+                    fetchedAt: Date.now(),
+                    running: previewStarted(repairQuickStart(favorite), favorite, snapshot.activeWorkspaceId),
+                  }),
+                );
               }}
             />
           ))}
@@ -356,19 +373,23 @@ export default function MenuBar(): React.JSX.Element | null {
               subtitle={entry.projectName ?? undefined}
               icon={Icon.ArrowClockwise}
               onAction={() => {
-                void act(async () => {
-                  const api = await getTrackYourTime();
-                  const started = await api.continue(entry.id, toQuickStart(entry));
-                  await showToast({
-                    style: Toast.Style.Success,
-                    title: "Timer started",
-                    message: [entryLabel(entry), replacedNotice(started)].filter(Boolean).join(" · "),
-                  });
-                }, "Could not start the timer", (snapshot) => ({
-                  ...snapshot,
-                  fetchedAt: Date.now(),
-                  running: previewStarted(toQuickStart(entry), entry, snapshot.activeWorkspaceId),
-                }));
+                void act(
+                  async () => {
+                    const api = await getTrackYourTime();
+                    const started = await api.continue(entry.id, toQuickStart(entry));
+                    await showToast({
+                      style: Toast.Style.Success,
+                      title: "Timer started",
+                      message: [entryLabel(entry), replacedNotice(started)].filter(Boolean).join(" · "),
+                    });
+                  },
+                  "Could not start the timer",
+                  (snapshot) => ({
+                    ...snapshot,
+                    fetchedAt: Date.now(),
+                    running: previewStarted(toQuickStart(entry), entry, snapshot.activeWorkspaceId),
+                  }),
+                );
               }}
             />
           ))}
