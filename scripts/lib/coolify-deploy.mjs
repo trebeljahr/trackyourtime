@@ -448,9 +448,8 @@ export const signWebhook = (secret, body) => createHmac("sha256", secret).update
  *
  * The endpoint answers 200 with one entry per app whose repository and branch
  * matched — the other app of this pair included, marked "Invalid signature.".
- * Only an entry for this uuid with status `success`, or a `skipped` one (the
- * same commit is already queued; only an app whose signature matched gets
- * that far), counts. Anything else — "Deployments disabled.", a watch path
+ * Only an entry for this uuid with status `success` or `skipped` counts.
+ * Anything else — "Deployments disabled.", a watch path
  * mismatch, every entry invalid, a plain-text "Nothing to do." — is a
  * failure, and the detail says which without naming any other app.
  */
@@ -466,7 +465,7 @@ export const webhookQueued = (text, uuid) => {
   if (entries.some((entry) => entry.application_uuid === uuid && entry.status === "success")) {
     return { ok: true, detail: "deployment queued" };
   }
-  if (entries.some((entry) => entry.status === "skipped")) return { ok: true, detail: "this commit is already queued" };
+  if (entries.some((entry) => entry.application_uuid === uuid && entry.status === "skipped")) return { ok: true, detail: "this commit is already queued" };
   const own = entries.filter((entry) => entry.message !== "Invalid signature.");
   if (own.length === 0) {
     return {

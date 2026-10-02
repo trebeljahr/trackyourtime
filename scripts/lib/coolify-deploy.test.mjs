@@ -316,6 +316,7 @@ describe("the signed webhook", () => {
     const other = { application_uuid: "cli-uuid", status: "failed", message: "Invalid signature." };
     assert.equal(webhookQueued(JSON.stringify([{ application_uuid: "srv-uuid", status: "success" }, other]), "srv-uuid").ok, true);
     assert.equal(webhookQueued(JSON.stringify([{ application_uuid: "srv-uuid", status: "skipped" }]), "srv-uuid").ok, true);
+    assert.equal(webhookQueued(JSON.stringify([{ application_uuid: "cli-uuid", status: "skipped" }]), "srv-uuid").ok, false);
     assert.equal(webhookQueued(JSON.stringify([{ application_uuid: "cli-uuid", status: "success" }]), "srv-uuid").ok, false);
     assert.match(webhookQueued(JSON.stringify([other]), "srv-uuid").detail, /signature matched no app/);
     assert.match(webhookQueued(JSON.stringify([]), "srv-uuid").detail, /no app matched/);

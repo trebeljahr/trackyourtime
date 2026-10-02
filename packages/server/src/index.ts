@@ -2,7 +2,7 @@
 import "./instrument.js";
 
 import { createServer } from "http";
-import { createApp } from "./app.js";
+import { createApp, setDraining } from "./app.js";
 import { connectToDB, disconnectFromDB } from "./db/connection.js";
 import { BootRefusedError, prepareDatabase } from "./db/prepare.js";
 import { SchemaTooNewError } from "./services/migrations/index.js";
@@ -76,8 +76,15 @@ async function start(): Promise<void> {
 
 // ── Graceful shutdown ──────────────────────────────────────────────────
 
+let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log(`\n[server] ${signal} received, shutting down gracefully...`);
+
+  setDraining();
+  // Give Coolify's health probe time to remove this replica from Caddy.
+  await new Promise((resolve) => setTimeout(resolve, 20_000));
 
   // Close all WebSocket connections
   for (const client of wss.clients) {
@@ -85,10 +92,11 @@ async function shutdown(signal: string): Promise<void> {
   }
 
   // Stop accepting new connections
-  server.close();
+  const closed = new Promise<void>((resolve) => server.close(() => resolve()));
 
   // Let a job run in flight finish before its database goes away
   await stopScheduler();
+  await closed;
 
   // Disconnect from databases and auth
   await disconnectAuth();
@@ -102,8 +110,8 @@ async function shutdown(signal: string): Promise<void> {
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
-// Force exit after 10 seconds
-const FORCE_EXIT_MS = 10_000;
+// Coolify/Docker stop timeout must exceed this bound (see docs/deploy.md).
+const FORCE_EXIT_MS = 35_000;
 process.on("SIGTERM", () => {
   setTimeout(() => {
     console.error("[server] Forced exit after timeout");

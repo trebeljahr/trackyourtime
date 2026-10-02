@@ -68,7 +68,7 @@ COPY --from=build /prod/node_modules ./node_modules
 USER node
 EXPOSE 5159
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=5 \
+HEALTHCHECK --interval=2s --timeout=5s --start-period=15s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||'5159')+'/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["node", "dist/index.js"]

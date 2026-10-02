@@ -194,6 +194,20 @@ before this change still connects wherever `/ws` is still routed.
    tells Coolify to deploy. The runtime images install curl because Coolify
    runs its health check with `curl … || wget …` inside the container.
 
+   For a measured rolling release, set both live Coolify checks to enabled,
+   interval 2 s, timeout 5 s, retries 5, start period 15 s. Probe `/` on
+   port 6477 for the client and `/api/health` on port 5159 for the server.
+   Confirm neither app has a fixed host port or container name. The runtime
+   returns 503 on the probe for 20 seconds after SIGTERM, then closes active
+   sockets and HTTP traffic. Set the container stop grace period to at least
+   40 seconds; a 10-second Docker default would kill the process before the
+   drain finishes. Verify the live Coolify stop behavior before relying on it.
+   Existing WebSocket sessions reconnect. While replicas overlap, web clients
+   refresh cached state every 30 seconds and again on reconnect because sync
+   fanout is process-local. This bounds stale web views but does not promise
+   instant cross-replica events for other clients; test each active client in
+   the rollout and add shared fanout if that latency is unacceptable.
+
    The compose apps they replaced are kept, stopped, as
    `tracktime-{server,client}-legacy-compose` for
    `hatchkit migrate-runtime --rollback`. Those read `SERVER_IMAGE` /

@@ -21,6 +21,9 @@ import { notFoundHandler, errorHandler } from "./middleware/error-handler.js";
 import { env, getTrustedOrigins, trustsExtensionOrigins } from "./config/env.js";
 import { extensionOriginTrusted } from "./auth/extension-origins.js";
 
+let draining = false;
+export const setDraining = (): void => { draining = true; };
+
 /**
  * Body ceiling for an import request. {@link MAX_IMPORT_BYTES} of file, plus
  * headroom for JSON escaping of it (a file full of quotes and newlines grows
@@ -185,6 +188,10 @@ export function createApp() {
 
   // ── 6. Health endpoint ─────────────────────────────────────────────
   app.get("/api/health", (req, res) => {
+    if (draining) {
+      res.status(503).json({ status: "draining" });
+      return;
+    }
     // Readable from ANY origin. A client choosing a server calls this before
     // it is trusted anywhere — the phone app checking a self-hosted address,
     // the web app checking the server it is about to move to — and a CORS

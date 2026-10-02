@@ -28,6 +28,7 @@ const PORT = Number(process.env.PORT ?? process.env.E2E_CLIENT_PORT ?? 6477);
 // Containers must accept traffic from Traefik on another address; the E2E
 // suite binds loopback so a run cannot be reached from off the machine.
 const HOST = process.env.HOST ?? "0.0.0.0";
+let draining = false;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -160,6 +161,11 @@ const NO_FRAMING = {
 };
 
 const server = createServer((req, res) => {
+  if (draining && (req.url ?? "/").split("?")[0] === "/") {
+    res.writeHead(503, { "cache-control": "no-store" });
+    res.end("Draining");
+    return;
+  }
   const method = req.method ?? "GET";
   if (method !== "GET" && method !== "HEAD") {
     res.writeHead(405, { allow: "GET, HEAD" });
@@ -227,6 +233,9 @@ server.listen(PORT, HOST, () => {
 // ignores it and waits out the 10s kill timeout on every deploy.
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.on(signal, () => {
-    server.close(() => process.exit(0));
+    if (draining) return;
+    draining = true;
+    setTimeout(() => server.close(() => process.exit(0)), 20_000);
+    setTimeout(() => process.exit(1), 35_000).unref();
   });
 }

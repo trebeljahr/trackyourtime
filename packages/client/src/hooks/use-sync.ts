@@ -247,7 +247,12 @@ export const useSync = (): SyncStatus => {
       // token this closure was created with.
       token: () => getNativeToken() ?? undefined,
       clientVersion: APP_VERSION,
-      onStatus: setStatus,
+      onStatus: (status) => {
+        setStatus(status);
+        // A reconnect may have crossed instances and missed process-local
+        // events. The database is authoritative; refetch every mounted query.
+        if (status === "open") void utilsRef.current.invalidate();
+      },
       /*
        * The server closed us with 4401: this device's session no longer
        * exists. The socket has already stopped reconnecting — without this
@@ -292,7 +297,14 @@ export const useSync = (): SyncStatus => {
 
     client.connect();
     activeClient = client;
+    // During a rolling deploy, two healthy instances can hold sockets at once.
+    // Fanout is process-local, so an open socket can miss writes made through
+    // the other instance. Bound that stale window without needing a disconnect.
+    const resync = window.setInterval(() => {
+      if (client.status() === "open") void utilsRef.current.invalidate();
+    }, 30_000);
     return () => {
+      window.clearInterval(resync);
       if (activeClient === client) activeClient = null;
       client.close();
     };
