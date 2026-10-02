@@ -19,6 +19,7 @@ import {
   organizationPluginOptions,
 } from "../services/membership/organization-lockdown.js";
 import { accountDeletionOptions } from "./account-deletion.js";
+import { authRateLimitEnabled } from "./auth-rate-limit.js";
 import { trustedOriginsForRequest } from "./extension-origins.js";
 import {
   emailVerificationOptions,
@@ -68,6 +69,15 @@ export async function initAuth(): Promise<void> {
     database: mongodbAdapter(db),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
+    // The desktop E2E suite runs a throwaway API on loopback. Its many fresh
+    // accounts share one IP and exhaust Better Auth's 3-per-10-second sign-in
+    // bucket. Only that explicitly marked local API skips auth rate limiting.
+    rateLimit: {
+      enabled: authRateLimitEnabled(
+        env.BETTER_AUTH_URL,
+        process.env.DESKTOP_E2E_DISABLE_AUTH_RATE_LIMIT,
+      ),
+    },
     /**
      * A function rather than the list, because one class of origin can only
      * be judged per request: a Firefox or Safari extension's
