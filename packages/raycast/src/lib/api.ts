@@ -14,6 +14,9 @@ import {
   createTempId,
   decorateEntry,
   deviceTimeZone,
+  durableEntryEnvelope,
+  durableQueuedWrite,
+  type QueuedMutation,
   isTempId,
   stoppedEntryShape,
   type ApiClient,
@@ -36,7 +39,7 @@ import {
   type TimeEntry,
   type ResolvedSettings,
 } from "../vendor/index.js";
-import { CLIENT_ID, getOriginId, getStoredSession } from "./auth.js";
+import { CLIENT_ID, getOriginId, getStoredSession, getStoredUserId } from "./auth.js";
 import { APP_VERSION } from "./version.js";
 import { NotSignedInError, StillSyncingError } from "./errors.js";
 import {
@@ -391,16 +394,50 @@ const wrap = (
    * Queue a write in the workspace this client addresses its requests to, so
    * the row and the attempt it replaces cannot disagree about where it goes.
    */
-  const enqueue = <K extends OfflineOp>(op: K, input: OfflinePayloadMap[K], tempId?: string): Promise<void> =>
-    enqueueOffline(op, input, tempId, getWorkspaceId());
+  const enqueue = async <K extends OfflineOp>(
+    op: K,
+    input: OfflinePayloadMap[K],
+    tempId?: string,
+    retainedId?: string,
+  ): Promise<OfflinePayloadMap[K]> => {
+    if (!retainedId) {
+      const row = await enqueueOffline(op, input, tempId, getWorkspaceId());
+      return (row.payload as { input: OfflinePayloadMap[K] }).input;
+    }
+    let retained: QueuedMutation | undefined;
+    await getOfflineQueue().amendRows((rows) =>
+      rows.map((row) => {
+        if (row.id !== retainedId) return row;
+        if (row.op !== op) throw new Error("Saved write does not match this operation");
+        retained = row;
+        return tempId ? { ...row, payload: { ...(row.payload as object), tempId } } : row;
+      }),
+    );
+    if (!retained) throw new StillSyncingError();
+    // Metadata may gain a temp id; the persisted request never changes.
+    const saved = retained.submittedInput ?? (retained.payload as { input: object }).input;
+    return { ...input, ...saved } as OfflinePayloadMap[K];
+  };
+
+  const durableMutation = async <T>(op: OfflineOp, input: object): Promise<T> => {
+    if ("id" in input && typeof input.id === "string" && isTempId(input.id)) throw new StillSyncingError();
+    const owner = await getStoredUserId();
+    if (!owner) throw new NotSignedInError();
+    const workspaceId = getWorkspaceId();
+    if (!workspaceId) throw new Error("Resolve a workspace before sending pending writes");
+    return getOfflineQueue().submit(op, { input }, { owner, server: apiUrl(), workspaceId }, (row) =>
+      client.mutate<T>("entries.applyOperation", durableEntryEnvelope(op, row.submittedInput)),
+    );
+  };
 
   const mutators: OfflineReplayMutators = {
-    "entries.start": (input) => client.mutate("entries.start", input),
-    "entries.stop": (input) => client.mutate("entries.stop", input),
-    "entries.create": (input) => client.mutate("entries.create", input),
-    "entries.update": (input) => client.mutate("entries.update", input),
-    "entries.remove": (input) => client.mutate("entries.remove", input),
-    "entries.discard": (input) => client.mutate("entries.discard", input),
+    "entries.start": (input) => client.mutate("entries.applyOperation", durableEntryEnvelope("entries.start", input)),
+    "entries.stop": (input) => client.mutate("entries.applyOperation", durableEntryEnvelope("entries.stop", input)),
+    "entries.create": (input) => client.mutate("entries.applyOperation", durableEntryEnvelope("entries.create", input)),
+    "entries.update": (input) => client.mutate("entries.applyOperation", durableEntryEnvelope("entries.update", input)),
+    "entries.remove": (input) => client.mutate("entries.applyOperation", durableEntryEnvelope("entries.remove", input)),
+    "entries.discard": (input) =>
+      client.mutate("entries.applyOperation", durableEntryEnvelope("entries.discard", input)),
   };
 
   /**
@@ -488,12 +525,19 @@ const wrap = (
    * before the start it ends. So a non-empty queue routes even a perfectly
    * online mutation into the queue, where the order is kept.
    */
-  const writing = async <T>(live: () => Promise<T>, queued: () => Promise<T>): Promise<T> => {
+  const writing = async <T>(live: () => Promise<T>, queued: (retainedId?: string) => Promise<T>): Promise<T> => {
     // A Mac that has never resolved a workspace does so before its first
     // write: a write naming none lands in the SESSION's active workspace,
     // which another client moves. Offline this fails and the row is stamped
     // with nothing, to be adopted by the first workspace a list resolves.
-    if (getWorkspaceId() === null) await liveWorkspaces().catch(() => undefined);
+    if (getWorkspaceId() === null) {
+      try {
+        await liveWorkspaces();
+      } catch (error) {
+        if (!isTransportFailure(error)) throw error;
+        return queued();
+      }
+    }
     // A drain that throws is a storage failure, not a refused mutation — the
     // queue itself swallows every server and transport error into its result.
     // Whatever went wrong, we no longer know the queue is empty, so the safe
@@ -504,8 +548,20 @@ const wrap = (
     try {
       return await live();
     } catch (error) {
-      if (!isTransportFailure(error)) throw error;
-      return queued();
+      const saved = durableQueuedWrite(error);
+      if (saved) {
+        // The row already exists, even for a lost reply, old replica or 412.
+        // Attach local display metadata; never enqueue a second operation.
+        if (
+          saved.cause instanceof NotSignedInError ||
+          (saved.cause instanceof ApiError && [400, 401, 403, 409, 422].includes(saved.cause.httpStatus))
+        )
+          throw saved.cause;
+        return queued(saved.rowId);
+      }
+      // Entry HTTP failures always carry the saved row. A plain error is
+      // local storage/ownership failure: it must not create a fresh operation.
+      throw error;
     }
   };
 
@@ -528,9 +584,9 @@ const wrap = (
   };
 
   /** Start an entry with no network: a temp id now, a real one on replay. */
-  const queueStart = async (input: StartInput): Promise<DetailedEntry> => {
+  const queueStart = async (input: StartInput, retainedId?: string): Promise<DetailedEntry> => {
     const tempId = createTempId();
-    const payload: OfflineStartInput = {
+    let payload: OfflineStartInput = {
       description: input.description ?? "",
       clientId: input.clientId,
       projectId: input.projectId ?? null,
@@ -542,7 +598,7 @@ const wrap = (
       timeZone: deviceTimeZone(),
       originId,
     };
-    await enqueue("entries.start", payload, tempId);
+    payload = await enqueue("entries.start", payload, tempId, retainedId);
 
     const entry = buildOptimisticEntry(await loadShapeContext(), {
       id: tempId,
@@ -563,10 +619,10 @@ const wrap = (
     return entry;
   };
 
-  const queueStop = async (id: string | undefined): Promise<DetailedEntry> => {
+  const queueStop = async (id: string | undefined, retainedId?: string): Promise<DetailedEntry> => {
     const overlay = await loadOverlay();
     const local = overlayRunning(overlay);
-    const end = new Date().toISOString();
+    let end = new Date().toISOString();
     const context = await loadShapeContext();
 
     // Stopping a timer this Mac started offline. The queued stop carries NO
@@ -574,7 +630,7 @@ const wrap = (
     // `tempId` as its start, which is what lets the replay target the entry
     // that start produces.
     if (local && (id === undefined || id === local.id)) {
-      await enqueue("entries.stop", { end, originId }, local.id);
+      end = (await enqueue("entries.stop", { end, originId }, local.id, retainedId)).end;
       const stopped = stoppedEntryShape(context, local, end);
       await noteOptimisticEntry(stopped);
       await noteTimerEcho(null);
@@ -588,7 +644,7 @@ const wrap = (
       throw new ApiError("No running timer", "NOT_FOUND", 404);
     }
 
-    await enqueue("entries.stop", { id: target, end, originId });
+    end = (await enqueue("entries.stop", { id: target, end, originId }, undefined, retainedId)).end;
     const base = await knownEntry(target, overlay);
     const stopped = base
       ? stoppedEntryShape(context, base, end)
@@ -649,9 +705,9 @@ const wrap = (
     amount: 0,
   });
 
-  const queueCreate = async (input: CreateInput): Promise<DetailedEntry> => {
+  const queueCreate = async (input: CreateInput, retainedId?: string): Promise<DetailedEntry> => {
     const tempId = createTempId();
-    const payload: OfflineCreateInput = {
+    let payload: OfflineCreateInput = {
       description: input.description ?? "",
       clientId: input.clientId,
       projectId: input.projectId ?? null,
@@ -664,7 +720,7 @@ const wrap = (
       timeZone: deviceTimeZone(),
       originId,
     };
-    await enqueue("entries.create", payload, tempId);
+    payload = await enqueue("entries.create", payload, tempId, retainedId);
 
     const entry = buildOptimisticEntry(await loadShapeContext(), {
       id: tempId,
@@ -681,9 +737,9 @@ const wrap = (
     return entry;
   };
 
-  const queueUpdate = async (input: UpdateInput): Promise<DetailedEntry> => {
+  const queueUpdate = async (input: UpdateInput, retainedId?: string): Promise<DetailedEntry> => {
     const payload: OfflineUpdateInput = { ...input, originId };
-    await enqueue("entries.update", payload);
+    await enqueue("entries.update", payload, undefined, retainedId);
 
     const overlay = await loadOverlay();
     const base = await knownEntry(input.id, overlay);
@@ -726,33 +782,33 @@ const wrap = (
       writing(
         () =>
           echoing(
-            client.mutate<TimeEntry>("entries.start", {
+            durableMutation<TimeEntry>("entries.start", {
               ...input,
               source: SOURCE,
               originId,
             }),
             (entry) => entry.id,
           ),
-        () => queueStart(input),
+        (retainedId) => queueStart(input, retainedId),
       ),
 
     stop: (id) =>
       writing(
-        () => echoing(client.mutate<TimeEntry>("entries.stop", { id, originId }), () => null),
-        () => queueStop(id),
+        () => echoing(durableMutation<TimeEntry>("entries.stop", { id, originId }), () => null),
+        (retainedId) => queueStop(id, retainedId),
       ),
 
     discard: (id) =>
       writing(
         () =>
           echoing(
-            client.mutate<{ success: true; id: string }>("entries.discard", {
+            durableMutation<{ success: true; id: string }>("entries.discard", {
               id,
               originId,
             }),
             () => null,
           ),
-        async () => {
+        async (retainedId) => {
           const overlay = await loadOverlay();
           const local = overlayRunning(overlay);
           const target = id ?? local?.id ?? (await runningFromCache())?.id;
@@ -764,7 +820,7 @@ const wrap = (
           // an id the server has never seen, and leaving the start queued
           // would resurrect the timer the moment the network returned.
           if (isTempId(target)) await cancelQueuedForTemp(target);
-          else await enqueue("entries.discard", { id: target, originId });
+          else await enqueue("entries.discard", { id: target, originId }, undefined, retainedId);
           await noteOptimisticRemoval(target);
           await noteTimerEcho(null);
           return { success: true as const, id: target };
@@ -775,28 +831,45 @@ const wrap = (
     // continue from the entry it names, and offline there is nobody to ask.
     // Every caller has the row on screen already, so it hands over the fields
     // rather than making this guess at them.
-    continue: (id, quick) =>
-      writing(
-        () => echoing(client.mutate<TimeEntry>("entries.continue", { id, originId }), (entry) => entry.id),
-        () => {
-          if (!quick) {
-            throw new ApiError("Cannot continue this entry while offline", "PRECONDITION_FAILED", 412);
-          }
-          return queueStart({
-            description: quick.description,
-            clientId: quick.clientId,
-            projectId: quick.projectId,
-            taskId: quick.taskId,
-            billable: quick.billable,
-          });
-        },
-      ),
+    continue: async (id, quick) => {
+      // Resolve the source before the first write. Retrying an unreceipted
+      // `continue` after a lost reply could create a second timer.
+      let source: DetailedEntry | QuickStart;
+      try {
+        if (getWorkspaceId() === null) await liveWorkspaces();
+        source = await client.query<DetailedEntry>("entries.get", { id });
+      } catch (error) {
+        if (!quick || !isTransportFailure(error)) throw error;
+        source = quick;
+      }
+      const input: StartInput = {
+        description: source.description,
+        clientId: source.clientId,
+        projectId: source.projectId,
+        taskId: source.taskId,
+        billable: source.billable,
+        ...("tagIds" in source && Array.isArray(source.tagIds) ? { tagIds: source.tagIds } : {}),
+      };
+      return writing(
+        () =>
+          echoing(
+            durableMutation<TimeEntry>("entries.start", {
+              ...input,
+              source: SOURCE,
+              timeZone: deviceTimeZone(),
+              originId,
+            }),
+            (entry) => entry.id,
+          ),
+        (retainedId) => queueStart(input, retainedId),
+      );
+    },
 
     startQuick: (quick) =>
       writing(
         () =>
           echoing(
-            client.mutate<TimeEntry>(
+            durableMutation<TimeEntry>(
               "entries.start",
               buildQuickStartInput(quick, {
                 source: SOURCE,
@@ -806,14 +879,17 @@ const wrap = (
             ),
             (entry) => entry.id,
           ),
-        () =>
-          queueStart({
-            description: quick.description,
-            clientId: quick.clientId,
-            projectId: quick.projectId,
-            taskId: quick.taskId,
-            billable: quick.billable,
-          }),
+        (retainedId) =>
+          queueStart(
+            {
+              description: quick.description,
+              clientId: quick.clientId,
+              projectId: quick.projectId,
+              taskId: quick.taskId,
+              billable: quick.billable,
+            },
+            retainedId,
+          ),
       ),
 
     // No echo: a manual entry is already finished, so it says nothing about
@@ -822,7 +898,7 @@ const wrap = (
     create: (input) =>
       writing(
         async () => {
-          const created = await client.mutate<TimeEntry>("entries.create", {
+          const created = await durableMutation<TimeEntry>("entries.create", {
             ...input,
             source: SOURCE,
             timeZone: deviceTimeZone(),
@@ -830,7 +906,7 @@ const wrap = (
           });
           return created;
         },
-        () => queueCreate(input),
+        (retainedId) => queueCreate(input, retainedId),
       ),
 
     favorites: () =>
@@ -892,18 +968,18 @@ const wrap = (
       writing(
         () =>
           echoing(
-            client.mutate<TimeEntry>("entries.update", { ...input, originId }),
+            durableMutation<TimeEntry>("entries.update", { ...input, originId }),
             (entry) => (entry.end === null ? entry.id : null),
             input.id,
           ),
-        async () => {
+        async (retainedId) => {
           // An entry that exists only as a queued start or create would be
           // refused on replay under a temp id the server has never seen, and
           // the queue drops a permanent refusal — so the edit would vanish
           // with no error anywhere. The queued row still carries every field
           // it was written with; the edit just has to wait for it to land.
           if (isTempId(input.id)) throw new StillSyncingError();
-          return queueUpdate(input);
+          return queueUpdate(input, retainedId);
         },
       ),
 
@@ -911,18 +987,18 @@ const wrap = (
       writing(
         () =>
           echoing(
-            client.mutate<{ success: true; id: string }>("entries.remove", {
+            durableMutation<{ success: true; id: string }>("entries.remove", {
               id,
               originId,
             }),
             () => null,
             id,
           ),
-        async () => {
+        async (retainedId) => {
           // Deleting a row that only exists as a queued create is done by
           // dropping that create — see `discard` for the same argument.
           if (isTempId(id)) await cancelQueuedForTemp(id);
-          else await enqueue("entries.remove", { id, originId });
+          else await enqueue("entries.remove", { id, originId }, undefined, retainedId);
           await noteOptimisticRemoval(id);
           await forgetEntry(id);
           const echo = await loadTimerEcho();

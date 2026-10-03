@@ -54,7 +54,10 @@ import {
   type StoredOfflinePayload,
   type WorkspaceSummary,
 } from "../vendor/index.js";
-import { NotSignedInError } from "./errors.js";
+import { environment } from "@raycast/api";
+import { join } from "node:path";
+import { withQueueFileLock } from "./queue-lock.js";
+import { NotSignedInError, StillSyncingError } from "./errors.js";
 import { getStoredSession, getStoredUserId } from "./auth.js";
 import { raycastStorage } from "./storage.js";
 import { apiUrl } from "./preferences.js";
@@ -63,17 +66,13 @@ import { activeWorkspaceId, knownWorkspaces, workspaceNameLookup } from "./works
 
 let queue: OfflineQueue | null = null;
 
-/**
- * Memoised per process, which on Raycast means per command launch. There is
- * no shared runtime for two commands to disagree through — the store is the
- * only channel between them, and `createOfflineQueue` serialises its own
- * read-modify-write, so two commands racing lose nothing worse than one
- * enqueue landing before the other.
- */
+/** Each command has its own process; the kernel lock protects their shared store. */
 export const getOfflineQueue = (): OfflineQueue => {
   queue ??= createOfflineQueue({
     storage: raycastStorage,
     key: OFFLINE_QUEUE_STORAGE_KEY,
+    durableEntries: true,
+    exclusive: (task) => withQueueFileLock(join(environment.supportPath, "pending-writes.lock"), task),
   });
   return queue;
 };
@@ -212,10 +211,10 @@ export async function enqueueOffline<K extends OfflineOp>(
    * there would replay somewhere the attempt never went.
    */
   workspaceId?: string | null,
-): Promise<void> {
+): Promise<QueuedMutation> {
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
   await ready();
-  await getOfflineQueue().enqueue(
+  return getOfflineQueue().enqueue(
     op,
     payload,
     (await getStoredUserId()) ?? undefined,
@@ -445,17 +444,27 @@ export async function discardForeign(kind: KeptKind = "foreign"): Promise<number
 export async function cancelQueuedForTemp(tempId: string): Promise<boolean> {
   const offline = getOfflineQueue();
   const owner = await getStoredUserId();
-  const rows = await offline.list();
   let removed = false;
-
-  for (const row of rows) {
-    // Never reach into another account's rows, even to cancel. An unowned row
-    // is fair game: it is one this install queued before it knew the account.
-    if (!isOnThisServer(row) || isForeignTo(row, owner)) continue;
-    if (decodeOfflineMutation(row)?.tempId !== tempId) continue;
-    await offline.remove(row.id);
-    removed = true;
-  }
+  await offline.amendRows((rows) => {
+    const belongs = (row: QueuedMutation) =>
+      isOnThisServer(row) && !isForeignTo(row, owner) && decodeOfflineMutation(row)?.tempId === tempId;
+    // An interrupted request may already have committed. Resolve its receipt
+    // before deleting the real entry; deleting the queue would lose that fact.
+    if (
+      rows.some(
+        (row) =>
+          belongs(row) &&
+          (row.submittedInput !== undefined ||
+            typeof (row.payload as { input?: { operationId?: unknown } })?.input?.operationId !== "string"),
+      )
+    )
+      throw new StillSyncingError();
+    return rows.filter((row) => {
+      if (!belongs(row)) return true;
+      removed = true;
+      return false;
+    });
+  });
 
   return removed;
 }

@@ -3,6 +3,7 @@
 // declare them. Run `pnpm vendor:raycast` after changing packages/core or packages/shared.
 export { ApiError, createApiClient, isTransportFailure } from "./core/api-client.js";
 export type { ApiClient } from "./core/api-client.js";
+export { durableEntryEnvelope, durableQueuedWrite } from "./core/durable-entry.js";
 export { defaultManualRange } from "./core/entry-fields.js";
 export { buildOptimisticEntry, decorateEntry, stoppedEntryShape } from "./core/entry-shape.js";
 export type { EntryShapeContext, ShapeableTask } from "./core/entry-shape.js";

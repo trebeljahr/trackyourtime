@@ -94,6 +94,9 @@ export const retryRecoveryRow = async (
       const decoded = decodeOfflineMutation(row);
       if (decoded === null || holdReasonOf(row) === "unknown-op")
         throw new Error("RECOVERY_UPDATE_REQUIRED");
+      if (row.submittedInput !== undefined && row.id === id && input !== undefined &&
+          JSON.stringify(input) !== JSON.stringify(row.submittedInput))
+        throw new Error("RECOVERY_ALREADY_SUBMITTED");
       const replacement =
         row.id === id && input !== undefined ? input : decoded.input;
       if (
@@ -103,9 +106,13 @@ export const retryRecoveryRow = async (
       )
         throw new Error("RECOVERY_INVALID_INPUT");
       const fields = replacement as Record<string, unknown>;
+      if (fields.workspaceId !== undefined && fields.workspaceId !== row.workspaceId)
+        throw new Error("RECOVERY_INVALID_INPUT");
+      if (row.hold?.code === "LEGACY_WRITE_OUTCOME_UNKNOWN")
+        throw new Error("RECOVERY_LEGACY_OUTCOME_UNKNOWN");
       // No request-body workspace override or identity changes from an editor.
       if (
-        ["workspaceId", "owner", "server", "userId"].some(
+        ["owner", "server", "userId"].some(
           (key) => key in fields,
         )
       )
