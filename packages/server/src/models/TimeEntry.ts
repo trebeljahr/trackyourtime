@@ -175,13 +175,14 @@ const timeEntrySchema = new Schema<ITimeEntry>(
   { timestamps: true },
 );
 
-/** Range queries: "everything in this workspace between two instants". */
-timeEntrySchema.index({ workspaceId: 1, start: -1 });
+/** Ordered range pages, including the cursor tie-breaker for equal starts.
+ * Built additively at boot; older indexes remain safe for rolled-back readers. */
+timeEntrySchema.index({ workspaceId: 1, start: -1, _id: -1 });
 timeEntrySchema.index({ workspaceId: 1, projectId: 1, start: -1 });
 timeEntrySchema.index({ workspaceId: 1, clientId: 1, start: -1 });
 /** Per-member reads: the `memberIds` report filter, and the visibility clause
  * that restricts a member without `canViewOthersTime` to their own rows. */
-timeEntrySchema.index({ workspaceId: 1, authorId: 1, start: -1 });
+timeEntrySchema.index({ workspaceId: 1, authorId: 1, start: -1, _id: -1 });
 
 /** "Entries carrying any of these tags" — a multikey index over the array. */
 timeEntrySchema.index({ workspaceId: 1, tagIds: 1 });
