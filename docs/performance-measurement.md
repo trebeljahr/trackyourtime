@@ -21,7 +21,10 @@ no account, workspace, token, request input, or entry data is attached.
   waits on the request's shared membership lookup. `data`: summed downstream
   workspace-procedure execution, including input validation and result shaping.
   Batched work overlaps, so sums may exceed request wall time; never subtract them
-  from the request duration. REST v1 and non-workspace procedure data are unmeasured.
+  from the request duration. Streaming batches send headers before all operations
+  finish: the header is a snapshot of completed phases only; later phase timings
+  are omitted. Use individual unbatched requests when comparing full server phases.
+  REST v1 and non-workspace procedure data are unmeasured.
 
 Trusted cross-origin auth/tRPC responses get exact `Timing-Allow-Origin`, based on
 existing CORS approval, and expose `Server-Timing` for Fetch. Rejected origins get
