@@ -2,26 +2,37 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Timer, Layers, MoveRight } from "lucide-react";
+import { Timer, Layers, MoveRight, List } from "lucide-react";
 import {
   parseTimesheetCell,
   timesheetCellState,
   TIMESHEET_MAX_CELL_SECONDS,
   type DurationFormat,
   type TimesheetCell,
+  type DetailedEntry,
 } from "@starter/shared";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  PopoverClose,
 } from "@/components/ui/popover";
 import { useFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 import { isNavKey, type TimesheetNavKey } from "./timesheet-nav";
 import { refusalMessageKey } from "./refusal-message";
+
+export type TimesheetBlockActions = {
+  entry: (id: string) => DetailedEntry | undefined;
+  protection: (id: string) => string | null;
+  onEdit: (id: string, testId: string) => void;
+  onAdd: (testId: string) => void;
+  disabled?: boolean;
+};
 
 export type TimesheetCellFieldProps = {
   cell: TimesheetCell;
@@ -33,6 +44,9 @@ export type TimesheetCellFieldProps = {
   /** Where the breakdown links to for a cell the grid refuses to edit. */
   detailHref: string;
   disabled?: boolean;
+  /** Localized approval/locked-period reason, supplied by the caller. */
+  readOnlyReason?: string;
+  blocks?: TimesheetBlockActions;
   isToday?: boolean;
   onCommit: (seconds: number) => void;
   onNavigate: (key: TimesheetNavKey) => void;
@@ -62,13 +76,15 @@ export function TimesheetCellField({
   clock,
   detailHref,
   disabled = false,
+  readOnlyReason,
+  blocks,
   isToday = false,
   onCommit,
   onNavigate,
   testId,
 }: TimesheetCellFieldProps): React.JSX.Element {
   const state = timesheetCellState(cell);
-  const editable = state === "empty" || state === "single";
+  const editable = (state === "empty" || state === "single") && readOnlyReason === undefined;
 
   if (!editable) {
     return (
@@ -78,6 +94,9 @@ export function TimesheetCellField({
         duration={duration}
         clock={clock}
         detailHref={detailHref}
+        disabled={disabled}
+        readOnlyReason={readOnlyReason}
+        blocks={blocks}
         isToday={isToday}
         onNavigate={onNavigate}
         testId={testId}
@@ -86,16 +105,23 @@ export function TimesheetCellField({
   }
 
   return (
-    <EditableCell
-      cell={cell}
-      label={label}
-      durationFormat={durationFormat}
-      disabled={disabled}
-      isToday={isToday}
-      onCommit={onCommit}
-      onNavigate={onNavigate}
-      testId={testId}
-    />
+    <div className="flex items-center justify-center gap-1">
+      <EditableCell
+        cell={cell}
+        label={label}
+        durationFormat={durationFormat}
+        disabled={disabled}
+        isToday={isToday}
+        onCommit={onCommit}
+        onNavigate={onNavigate}
+        testId={testId}
+      />
+      {blocks !== undefined ? (
+        <ReadOnlyCell cell={cell} label={label} duration={duration} clock={clock}
+          detailHref={detailHref} disabled={disabled} blocks={blocks}
+          onNavigate={onNavigate} testId={testId} secondary />
+      ) : null}
+    </div>
   );
 }
 
@@ -249,101 +275,109 @@ function EditableCell({
   );
 }
 
-// ── read-only, with the breakdown that explains why ──────────────────
-
-type ReadOnlyCellProps = Pick<
-  TimesheetCellFieldProps,
-  | "cell"
-  | "label"
-  | "duration"
-  | "clock"
-  | "detailHref"
-  | "isToday"
-  | "onNavigate"
-  | "testId"
->;
+// The sum stays read-only; the breakdown addresses actual entry records.
+type ReadOnlyCellProps = Pick<TimesheetCellFieldProps,
+  "cell" | "label" | "duration" | "clock" | "detailHref" | "disabled" |
+  "readOnlyReason" | "blocks" | "isToday" | "onNavigate" | "testId"
+> & { secondary?: boolean };
 
 function ReadOnlyCell({
-  cell,
-  label,
-  duration,
-  clock,
-  detailHref,
-  isToday = false,
-  onNavigate,
-  testId,
+  cell, label, duration, clock, detailHref, disabled = false, readOnlyReason,
+  blocks, isToday = false, onNavigate, testId, secondary = false,
 }: ReadOnlyCellProps): React.JSX.Element {
   const t = useT("calendar");
+  const tc = useT("common");
+  const f = useFormat();
+  const headingId = React.useId();
+  const [open, setOpen] = React.useState(false);
+  const openingEditor = React.useRef(false);
   const state = timesheetCellState(cell);
-  const reason =
-    state === "running"
-      ? "running"
-      : state === "multiple"
-        ? "multiple"
-        : "spans-days";
-  const explanation = t(`timesheet.refusal.${refusalMessageKey(reason)}`);
-  const Icon = state === "running" ? Timer : state === "multiple" ? Layers : MoveRight;
+  const reason = state === "running" ? "running" : state === "multiple" ? "multiple" : "spans-days";
+  const explanation = readOnlyReason ?? (secondary ? t("timesheet.blocks.hint") : t(`timesheet.refusal.${refusalMessageKey(reason)}`));
+  const Icon = secondary ? List : state === "running" ? Timer : state === "multiple" ? Layers : MoveRight;
+  const actionsDisabled = disabled || blocks?.disabled === true;
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`${label}: ${duration(cell.seconds)}. ${explanation}`}
-          title={explanation}
-          className={cn(
-            cellClasses(isToday, false),
-            "inline-flex items-center justify-center gap-1 border border-dashed border-border bg-muted/40",
-            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          )}
+          aria-label={secondary ? t("timesheet.blocks.show", { label }) : `${label}: ${duration(cell.seconds)}. ${explanation}`}
+          title={secondary ? t("timesheet.blocks.show", { label }) : explanation}
+          className={cn(secondary ? "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" :
+            cn(cellClasses(isToday, cell.seconds === 0), "inline-flex items-center justify-center gap-1 border border-dashed border-border bg-muted/40"),
+            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring")}
           onKeyDown={(event) => {
-            if (!isNavKey(event.key)) return;
+            // Enter and Space open the popover through the native button.
+            if (secondary || event.key === "Enter" || !isNavKey(event.key)) return;
             event.preventDefault();
             onNavigate(event.key);
           }}
-          data-testid={testId}
+          data-testid={secondary ? `${testId}-blocks` : testId}
           data-cell-state={state}
         >
-          <Icon
-            className={cn(
-              "size-3 shrink-0 text-muted-foreground",
-              state === "running" && "animate-pulse text-destructive"
-            )}
-            aria-hidden="true"
-          />
-          {duration(cell.seconds)}
+          <Icon className={cn("size-3 shrink-0 text-muted-foreground", state === "running" && !secondary && "animate-pulse text-destructive")} aria-hidden="true" />
+          {secondary ? null : duration(cell.seconds)}
         </button>
       </PopoverTrigger>
 
-      <PopoverContent align="center" className="w-72 text-sm">
-        <p className="font-medium">{label}</p>
+      <PopoverContent align="center" className="max-h-[70dvh] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto text-sm" aria-labelledby={headingId}
+        onCloseAutoFocus={(event) => {
+          if (openingEditor.current) {
+            event.preventDefault();
+            openingEditor.current = false;
+          }
+        }}>
+        <p id={headingId} className="font-medium">{label}</p>
         <p className="mt-1 text-xs text-muted-foreground">{explanation}</p>
+        {blocks?.disabled ? <p className="mt-1 text-xs" role="status">{tc("status.saving")}</p> : null}
 
-        <ul className="mt-2 grid gap-1" data-testid={`${testId}-breakdown`}>
-          {cell.entries.map((entry) => (
-            <li
-              key={entry.id}
-              className="flex items-center justify-between gap-2 text-xs"
-            >
-              <span className="text-muted-foreground">
-                {clock(entry.start)}
-                {" – "}
-                {entry.end === null ? t("timesheet.running") : clock(entry.end)}
-              </span>
-              <span className="font-mono tabular-nums">
-                {duration(entry.secondsInCell)}
-              </span>
-            </li>
-          ))}
-        </ul>
+        {cell.entries.length === 0 ? <p className="mt-3 text-xs text-muted-foreground">{t("timesheet.blocks.empty")}</p> : (
+          <ul className="mt-3 grid gap-3" data-testid={`${testId}-breakdown`}>
+            {cell.entries.map((slice) => {
+              const entry = blocks?.entry(slice.id);
+              const protection = blocks?.protection(slice.id);
+              const name = entry?.description || t("timesheet.blocks.untitled");
+              return (
+                <li key={slice.id} className="space-y-1 border-b border-border pb-2 text-xs" data-testid={`${testId}-block-${slice.id}`}>
+                  {blocks !== undefined ? <p className="break-words font-medium">{name}</p> : null}
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-muted-foreground">
+                      {!slice.containedInDay ? `${f.date(slice.start, "dayLabel")} ` : ""}{clock(slice.start)}
+                      {" – "}
+                      {slice.end === null ? t("timesheet.running") : <>{!slice.containedInDay ? `${f.date(slice.end, "dayLabel")} ` : ""}{clock(slice.end)}</>}
+                    </span>
+                    <span className="shrink-0 font-mono tabular-nums">{duration(slice.secondsInCell)}</span>
+                  </div>
+                  {!slice.containedInDay ? <p className="text-muted-foreground">{t("timesheet.blocks.dayContribution")}</p> : null}
+                  {blocks !== undefined ? <>
+                    {protection ? <p id={`${testId}-${slice.id}-reason`} className="text-muted-foreground">{protection}</p> : null}
+                    <Button type="button" variant="outline" size="sm" className="h-7"
+                      disabled={actionsDisabled || protection !== null}
+                      aria-label={t("timesheet.blocks.edit", { label: `${name}, ${clock(slice.start)}` })}
+                      aria-describedby={protection ? `${testId}-${slice.id}-reason` : undefined}
+                      data-testid={`${testId}-edit-${slice.id}`}
+                      onClick={() => { openingEditor.current = true; setOpen(false); blocks.onEdit(slice.id, testId); }}>
+                      {tc("actions.edit")}
+                    </Button>
+                  </> : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
-        <Link
-          href={detailHref}
-          className="mt-3 inline-block text-xs font-medium underline underline-offset-4"
-          data-testid={`${testId}-open`}
-        >
-          {t("timesheet.openEntries")}
-        </Link>
+        {blocks !== undefined ? <Button type="button" variant="outline" size="sm" className="mt-3 w-full"
+          disabled={actionsDisabled} data-testid={`${testId}-add-block`}
+          onClick={() => { openingEditor.current = true; setOpen(false); blocks.onAdd(testId); }}>
+          {t("timesheet.blocks.add")}
+        </Button> : null}
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <Link href={detailHref} className="text-xs font-medium underline underline-offset-4" data-testid={`${testId}-open`}>
+            {t("timesheet.openEntries")}
+          </Link>
+          <PopoverClose asChild><Button type="button" variant="ghost" size="sm">{tc("a11y.close")}</Button></PopoverClose>
+        </div>
       </PopoverContent>
     </Popover>
   );

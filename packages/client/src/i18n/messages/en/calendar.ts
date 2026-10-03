@@ -94,6 +94,25 @@ export const calendar = {
     removeRow: "Remove row {label}",
     running: "running",
     openEntries: "Open these entries",
+    blocks: {
+      show: "Show blocks for {label}",
+      hint: "Edit one block or add another. The cell total is the sum of its blocks.",
+      add: "Add block",
+      edit: "Edit block {label}",
+      empty: "No blocks on this day. Add a block to log time.",
+      untitled: "No description",
+      dayContribution: "The duration shown is this block’s contribution to this day. Editing opens the whole block.",
+      refreshBeforeRetry: "The save succeeded, but the saved block is unavailable here. Refresh the timesheet before trying again.",
+      scopeChanged: "Your account or workspace changed. Close this draft and open it again.",
+      unavailable: "Editing is unavailable while this timesheet is loading or incomplete. Try again after it refreshes.",
+      protection: {
+        missing: "This entry is no longer available. Refresh the timesheet.",
+        foreign: "Only your own entries in this workspace can be edited.",
+        running: "Stop this timer before editing its block.",
+        invoiced: "This block is invoiced and cannot be edited here.",
+        syncing: "This block is still syncing. Edit it after it syncs.",
+      },
+    },
     stillSyncing: "Still syncing — try again in a moment.",
     entryRemoved: "Entry removed",
     failed: {
@@ -105,9 +124,9 @@ export const calendar = {
     refusal: {
       running: "This cell holds the running timer — stop it before editing.",
       multiple:
-        "This day has several entries for this row. Edit them in the tracker so nothing is rewritten by guesswork.",
+        "This day has several blocks. Edit each block below; the total cannot be edited directly.",
       spansDays:
-        "This entry crosses midnight, so it belongs to two days. Edit it in the tracker.",
+        "This block crosses midnight. Edit the whole block below; this day’s total cannot be edited directly.",
       tooLong: "A day cannot hold more than 24 hours.",
     },
   },

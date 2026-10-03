@@ -87,6 +87,25 @@ export const calendar: Translation<typeof source> = {
     removeRow: "Zeile {label} entfernen",
     running: "läuft",
     openEntries: "Diese Einträge öffnen",
+    blocks: {
+      show: "Zeitblöcke für {label} anzeigen",
+      hint: "Bearbeite einen Zeitblock oder füge einen hinzu. Die Zelle zeigt die Summe ihrer Zeitblöcke.",
+      add: "Zeitblock hinzufügen",
+      edit: "Zeitblock {label} bearbeiten",
+      empty: "An diesem Tag gibt es keine Zeitblöcke. Füge einen hinzu, um Zeit zu erfassen.",
+      untitled: "Keine Beschreibung",
+      dayContribution: "Die Dauer zeigt den Anteil dieses Zeitblocks an diesem Tag. Beim Bearbeiten öffnet sich der ganze Zeitblock.",
+      refreshBeforeRetry: "Der Zeitblock wurde gespeichert, ist hier aber noch nicht verfügbar. Aktualisiere den Stundenzettel, bevor du es erneut versuchst.",
+      scopeChanged: "Dein Konto oder Arbeitsbereich hat sich geändert. Schließe den Entwurf und öffne ihn erneut.",
+      unavailable: "Bearbeiten ist während des Ladens oder bei einem unvollständigen Stundenzettel nicht möglich. Versuche es nach dem Aktualisieren erneut.",
+      protection: {
+        missing: "Dieser Eintrag ist nicht mehr verfügbar. Aktualisiere den Stundenzettel.",
+        foreign: "Du kannst nur deine eigenen Einträge in diesem Arbeitsbereich bearbeiten.",
+        running: "Stoppe diesen Timer, bevor du seinen Zeitblock bearbeitest.",
+        invoiced: "Dieser Zeitblock wurde abgerechnet und kann hier nicht bearbeitet werden.",
+        syncing: "Dieser Zeitblock wird noch synchronisiert. Bearbeite ihn danach.",
+      },
+    },
     stillSyncing: "Wird noch synchronisiert – versuch es gleich noch einmal.",
     entryRemoved: "Eintrag entfernt",
     failed: {
@@ -97,9 +116,9 @@ export const calendar: Translation<typeof source> = {
     refusal: {
       running: "In dieser Zelle läuft der Timer – stopp ihn, bevor du sie bearbeitest.",
       multiple:
-        "Diese Zeile hat an diesem Tag mehrere Einträge. Bearbeite sie unter „Erfassen“, damit nichts auf Verdacht umgeschrieben wird.",
+        "An diesem Tag gibt es mehrere Zeitblöcke. Bearbeite die einzelnen Zeitblöcke unten; die Summe lässt sich nicht direkt ändern.",
       spansDays:
-        "Dieser Eintrag geht über Mitternacht und gehört damit zu zwei Tagen. Bearbeite ihn unter „Erfassen“.",
+        "Dieser Zeitblock geht über Mitternacht. Bearbeite den ganzen Zeitblock unten; die Summe dieses Tages lässt sich nicht direkt ändern.",
       tooLong: "Ein Tag kann nicht mehr als 24 Stunden haben.",
     },
   },

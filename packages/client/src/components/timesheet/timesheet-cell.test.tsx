@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   formatDuration,
   type TimesheetCell,
+  type DetailedEntry,
 } from "@starter/shared";
 
-import { TimesheetCellField } from "./timesheet-cell";
+import { TimesheetCellField, type TimesheetCellFieldProps } from "./timesheet-cell";
 
 const HOUR = 3600;
 
@@ -32,7 +33,8 @@ const cell = (entries: TimesheetCell["entries"] = []): TimesheetCell => ({
 const renderCell = (
   target: TimesheetCell,
   onCommit = vi.fn(),
-  onNavigate = vi.fn()
+  onNavigate = vi.fn(),
+  extra: Partial<TimesheetCellFieldProps> = {},
 ) => {
   render(
     <TimesheetCellField
@@ -45,6 +47,7 @@ const renderCell = (
       onCommit={onCommit}
       onNavigate={onNavigate}
       testId="cell"
+      {...extra}
     />
   );
   return { onCommit, onNavigate, field: screen.getByTestId("cell") };
@@ -165,7 +168,7 @@ describe("TimesheetCellField", () => {
     expect(onNavigate).toHaveBeenCalledWith("ArrowLeft");
   });
 
-  it("shows a cell with several entries as read-only", () => {
+  it("keeps a multi-block aggregate read-only", () => {
     const { field } = renderCell(
       cell([cellEntry({ id: "a" }), cellEntry({ id: "b" })])
     );
@@ -198,4 +201,90 @@ describe("TimesheetCellField", () => {
     fireEvent.keyDown(field, { key: "ArrowRight" });
     expect(onNavigate).toHaveBeenCalledWith("ArrowRight");
   });
+  it("opens the multi-block popover by keyboard without navigating down", async () => {
+    const { field, onNavigate } = renderCell(cell([cellEntry({ id: "a" }), cellEntry({ id: "b" })]));
+    field.focus();
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(onNavigate).not.toHaveBeenCalled();
+    // jsdom does not synthesize the native button click after Enter.
+    fireEvent.click(field);
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("Acme, Tue 3 Feb");
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(field).toHaveFocus();
+  });
+
+  it("lists the actual descriptions and edits only the chosen entry", () => {
+    const onEdit = vi.fn();
+    const onAdd = vi.fn();
+    const details = new Map(["a", "b"].map((id) => [id, { id, description: `Work ${id}` } as DetailedEntry]));
+    const { field, onCommit } = renderCell(cell([cellEntry({ id: "a" }), cellEntry({ id: "b" })]), vi.fn(), vi.fn(), {
+      blocks: { entry: (id) => details.get(id), protection: () => null, onEdit, onAdd },
+    });
+    fireEvent.click(field);
+    expect(screen.getByText("Work a")).toBeInTheDocument();
+    expect(screen.getByText("Work b")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("cell-edit-b"));
+    expect(onEdit).toHaveBeenCalledExactlyOnceWith("b", "cell");
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("protects an invoiced block while allowing edits to its sibling and adding time", () => {
+    const onEdit = vi.fn();
+    const onAdd = vi.fn();
+    const { field } = renderCell(cell([cellEntry({ id: "a" }), cellEntry({ id: "b" })]), vi.fn(), vi.fn(), {
+      blocks: { entry: () => undefined, protection: (id) => id === "a" ? "Invoiced" : null, onEdit, onAdd },
+    });
+    fireEvent.click(field);
+    expect(screen.getByTestId("cell-edit-a")).toBeDisabled();
+    expect(screen.getByTestId("cell-edit-a")).toHaveAccessibleDescription("Invoiced");
+    expect(screen.getByTestId("cell-edit-b")).toBeEnabled();
+    fireEvent.click(screen.getByTestId("cell-add-block"));
+    expect(onAdd).toHaveBeenCalledExactlyOnceWith("cell");
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it("shows the full midnight span and explains the clipped day contribution", () => {
+    const { field } = renderCell(cell([cellEntry({ containedInDay: false, start: "2026-02-02T23:00:00.000Z" })]), vi.fn(), vi.fn(), {
+      blocks: { entry: () => undefined, protection: () => null, onEdit: vi.fn(), onAdd: vi.fn() },
+    });
+    fireEvent.click(field);
+    expect(screen.getByText(/contribution to this day/)).toBeInTheDocument();
+    expect(screen.getByTestId("cell-edit-e1")).toBeEnabled();
+  });
+
+  it("offers an empty-state add action without writing an aggregate", () => {
+    const onAdd = vi.fn();
+    const { onCommit } = renderCell(cell(), vi.fn(), vi.fn(), {
+      blocks: { entry: () => undefined, protection: () => null, onEdit: vi.fn(), onAdd },
+    });
+    fireEvent.click(screen.getByTestId("cell-blocks"));
+    expect(screen.getByText("No blocks on this day. Add a block to log time.")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("cell-add-block"));
+    expect(onAdd).toHaveBeenCalledOnce();
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("allows inspecting a locked cell while disabling all writes", () => {
+    const { field } = renderCell(cell([cellEntry()]), vi.fn(), vi.fn(), {
+      readOnlyReason: "Approved period", disabled: true,
+      blocks: { entry: () => undefined, protection: () => null, onEdit: vi.fn(), onAdd: vi.fn() },
+    });
+    fireEvent.click(field);
+    expect(screen.getByText("Approved period")).toBeInTheDocument();
+    expect(screen.getByTestId("cell-edit-e1")).toBeDisabled();
+    expect(screen.getByTestId("cell-add-block")).toBeDisabled();
+  });
+
+  it("announces pending writes and disables the popover actions", () => {
+    const { field } = renderCell(cell([cellEntry({ id: "a" }), cellEntry({ id: "b" })]), vi.fn(), vi.fn(), {
+      blocks: { entry: () => undefined, protection: () => null, onEdit: vi.fn(), onAdd: vi.fn(), disabled: true },
+    });
+    fireEvent.click(field);
+    expect(screen.getByRole("status")).toHaveTextContent("Saving");
+    expect(screen.getByTestId("cell-edit-a")).toBeDisabled();
+    expect(screen.getByTestId("cell-add-block")).toBeDisabled();
+  });
+
 });

@@ -19,6 +19,12 @@ import {
 } from "@starter/shared";
 
 import { EmptyState } from "@/components/empty-state";
+import { EntryEditDialog } from "@/components/tracker/entry-edit-dialog";
+import { ManualEntryDialog } from "@/components/tracker/manual-entry-dialog";
+import { useEntryMutations } from "@/components/tracker/use-entry-mutations";
+import { getActiveWorkspaceId, subscribeActiveWorkspace } from "@/lib/active-workspace";
+import { blockProtection } from "./block-protection";
+import { useTimesheetBlockEditor } from "./use-timesheet-block-editor";
 import { useAuth } from "@/hooks/use-auth";
 import { ProjectPicker } from "@/components/project-picker";
 import { TaskPicker } from "@/components/task-picker";
@@ -70,7 +76,12 @@ const rangeLabel = (from: string, to: string, intlTag: string): string => {
   return formatDayRangeLabel(start, end, intlTag);
 };
 
-export function TimesheetScreen(): React.JSX.Element {
+export type TimesheetScreenProps = {
+  /** Approval periods can supply a localized reason without changing cell arithmetic. */
+  cellDisabledReason?: (row: TimesheetRow, day: string) => string | undefined;
+};
+
+export function TimesheetScreen({ cellDisabledReason }: TimesheetScreenProps = {}): React.JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -79,6 +90,7 @@ export function TimesheetScreen(): React.JSX.Element {
   const t = useT("calendar");
   const tc = useT("common");
   const { user } = useAuth();
+  const workspaceId = React.useSyncExternalStore(subscribeActiveWorkspace, getActiveWorkspaceId, () => null);
   const nowMs = useNow(RUNNING_TICK_MS);
 
   const todayKey = dayKeyInZone(nowMs, TIME_ZONE);
@@ -128,6 +140,7 @@ export function TimesheetScreen(): React.JSX.Element {
 
   const projectsQuery = trpc.projects.list.useQuery({});
   const tasksQuery = trpc.tasks.list.useQuery({});
+  const membersQuery = trpc.members.list.useQuery(undefined, { staleTime: 60_000 });
 
   const { rows: pinnedRows, pin, unpin } = useTimesheetRows();
   const { applyPlan, isBusy } = useTimesheetMutations(listInput);
@@ -163,9 +176,9 @@ export function TimesheetScreen(): React.JSX.Element {
   const myEntries = React.useMemo(
     () =>
       (entriesQuery.data?.entries ?? []).filter(
-        (entry) => entry.authorId === user?.id
+        (entry) => user !== null && entry.authorId === user.id && entry.workspaceId === workspaceId
       ),
-    [entriesQuery.data, user?.id]
+    [entriesQuery.data, user, workspaceId]
   );
 
   const grid = React.useMemo(
@@ -186,11 +199,28 @@ export function TimesheetScreen(): React.JSX.Element {
    * the wrong thing. The grid goes read-only rather than quietly guessing.
    */
   const truncated = entriesQuery.data?.nextCursor !== undefined;
+  const unavailable = truncated || entriesQuery.isError || entriesQuery.isPlaceholderData ||
+    projectsQuery.isPending || projectsQuery.isError || !fmt.isLoaded || membersQuery.isPending;
+  // Older servers do not expose a member rate. Never read another member’s rate.
+  const member = membersQuery.data?.find((candidate) => candidate.userId === user?.id);
+  const memberRate = member !== undefined && "hourlyRate" in member && typeof member.hourlyRate === "number"
+    ? member.hourlyRate : null;
+  const blockMutations = useEntryMutations();
+  const blockEditor = useTimesheetBlockEditor({
+    entries: myEntries, userId: user?.id ?? null, listInput, timeZone: TIME_ZONE,
+    mutations: blockMutations, disabled: unavailable || isBusy, memberRate, cellDisabledReason,
+  });
+  const entryMap = React.useMemo(() => new Map(myEntries.map((entry) => [entry.id, entry])), [myEntries]);
+  const protection = React.useCallback((entry: (typeof myEntries)[number] | undefined): string | null => {
+    const reason = blockProtection(entry, user?.id ?? null, workspaceId);
+    return reason === null ? null : t(`timesheet.blocks.protection.${reason}`);
+  }, [t, user?.id, workspaceId]);
 
   const handleCommitCell = React.useCallback(
     (row: TimesheetRow, dayIndex: number, seconds: number): void => {
       const cell = row.cells[dayIndex];
-      if (cell === undefined) return;
+      if (cell === undefined || unavailable || blockMutations.isBusy || cellDisabledReason?.(row, cell.day) !== undefined) return;
+      if (cell.entries.some((slice) => protection(entryMap.get(slice.id)) !== null)) return;
 
       const plan = planCellEdit({
         cell,
@@ -199,7 +229,7 @@ export function TimesheetScreen(): React.JSX.Element {
       });
       applyPlan(plan, { projectId: row.projectId, taskId: row.taskId });
     },
-    [applyPlan]
+    [applyPlan, unavailable, blockMutations.isBusy, cellDisabledReason, protection, entryMap]
   );
 
   const detailHref = React.useCallback(
@@ -228,7 +258,7 @@ export function TimesheetScreen(): React.JSX.Element {
   const isLoading = entriesQuery.isPending || user === null;
 
   return (
-    <div className="space-y-4" data-testid="timesheet-page">
+    <div className="space-y-4" data-testid="timesheet-page" tabIndex={-1}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">{t("timesheet.title")}</h1>
@@ -305,7 +335,10 @@ export function TimesheetScreen(): React.JSX.Element {
               onUnpinRow={(row) =>
                 unpin({ projectId: row.projectId, taskId: row.taskId })
               }
-              disabled={truncated}
+              disabled={unavailable || blockMutations.isBusy}
+              cellDisabledReason={cellDisabledReason}
+              blocks={{ entries: entryMap, protection, edit: blockEditor.edit, add: blockEditor.add,
+                disabled: isBusy || blockMutations.isBusy }}
               todayKey={todayKey}
             />
           )}
@@ -360,8 +393,13 @@ export function TimesheetScreen(): React.JSX.Element {
         </p>
       ) : null}
 
+      <EntryEditDialog entry={blockEditor.entry} onClose={blockEditor.close} mutations={blockEditor.mutations} />
+      <ManualEntryDialog open={blockEditor.manual !== null} onOpenChange={(open) => { if (!open) blockEditor.close(); }}
+        seed={blockEditor.manual?.seed ?? { description: "", projectId: null, taskId: null, billable: false, tagIds: [] }}
+        range={blockEditor.manual?.range} mutations={blockEditor.mutations} />
+
       <p className="sr-only" aria-live="polite">
-        {isBusy ? tc("status.saving") : tc("status.saved")}
+        {isBusy || blockMutations.isBusy ? tc("status.saving") : tc("status.saved")}
       </p>
     </div>
   );

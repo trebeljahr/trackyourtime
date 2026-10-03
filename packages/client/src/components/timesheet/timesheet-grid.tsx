@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import {
   timesheetRowKey,
   type DurationFormat,
+  type DetailedEntry,
   type TimesheetGrid as TimesheetGridData,
   type TimesheetRow,
 } from "@starter/shared";
@@ -44,6 +45,15 @@ export type TimesheetGridProps = {
   /** Unpin a row the user added. Absent for rows implied by their entries. */
   onUnpinRow: (row: TimesheetRow) => void;
   disabled?: boolean;
+  /** Localized approval/locked-period reason. Keeps inspection available. */
+  cellDisabledReason?: (row: TimesheetRow, day: string) => string | undefined;
+  blocks?: {
+    entries: ReadonlyMap<string, DetailedEntry>;
+    protection: (entry: DetailedEntry | undefined) => string | null;
+    edit: (entry: DetailedEntry, target: { row: TimesheetRow; day: string; testId: string }) => void;
+    add: (target: { row: TimesheetRow; day: string; testId: string }) => void;
+    disabled?: boolean;
+  };
   /** "YYYY-MM-DD" of today in the grid's zone, so the column can be marked. */
   todayKey?: string;
 };
@@ -74,6 +84,8 @@ export function TimesheetGrid({
   onCommitCell,
   onUnpinRow,
   disabled = false,
+  cellDisabledReason,
+  blocks,
   todayKey,
 }: TimesheetGridProps): React.JSX.Element {
   // Cells are found by their testid inside this container rather than through
@@ -210,6 +222,10 @@ export function TimesheetGrid({
                 {grid.days.map((day, dayIndex) => {
                   const cell = row.cells[dayIndex];
                   if (cell === undefined) return <TableCell key={day} />;
+                  const lockedReason = cellDisabledReason?.(row, day);
+                  const single = cell.entries.length === 1 ? cell.entries[0] : undefined;
+                  const protectedReason = single !== undefined && blocks !== undefined
+                    ? blocks.protection(blocks.entries.get(single.id)) ?? undefined : undefined;
                   return (
                     <TableCell
                       key={day}
@@ -223,7 +239,18 @@ export function TimesheetGrid({
                         duration={duration}
                         clock={clock}
                         detailHref={detailHref(row, day)}
-                        disabled={disabled}
+                        disabled={disabled || lockedReason !== undefined}
+                        readOnlyReason={lockedReason ?? protectedReason}
+                        blocks={blocks === undefined ? undefined : {
+                          entry: (id) => blocks.entries.get(id),
+                          protection: (id) => blocks.protection(blocks.entries.get(id)),
+                          disabled: blocks.disabled,
+                          onEdit: (id, testId) => {
+                            const entry = blocks.entries.get(id);
+                            if (entry !== undefined) blocks.edit(entry, { row, day, testId });
+                          },
+                          onAdd: (testId) => blocks.add({ row, day, testId }),
+                        }}
                         isToday={day === todayKey}
                         onCommit={(seconds) =>
                           onCommitCell(row, dayIndex, seconds)
