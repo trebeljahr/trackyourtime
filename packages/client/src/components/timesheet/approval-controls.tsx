@@ -63,23 +63,32 @@ function ApprovalRecord({ record, review }: { record: TimesheetApprovalWire; rev
   </article>;
 }
 
-export function ApprovalControls({ weekStart, records, canReview, busy }: {
+type ApprovalControlsProps = {
   weekStart: string; records: TimesheetApprovalWire[]; canReview: boolean; busy: boolean;
-}): React.JSX.Element {
+};
+
+export function ApprovalControls(props: ApprovalControlsProps): React.JSX.Element {
+  const { user } = useAuth();
+  const { workspace } = useActiveWorkspace();
+  const scope = JSON.stringify([user?.id, workspace?.id, props.weekStart, getApiOrigin()]);
+  return <ScopedApprovalControls key={scope} {...props} />;
+}
+
+function ScopedApprovalControls({ weekStart, records, canReview, busy }: ApprovalControlsProps): React.JSX.Element {
   const t = useT("approvals");
   const queue = useOfflineQueueState();
   const { user } = useAuth();
   const { workspace } = useActiveWorkspace();
   const utils = trpc.useUtils();
   const mutating = useIsMutating();
-  const [confirmed, setConfirmed] = React.useState(false);
+  const [confirmation, setConfirmation] = React.useState<{ scope: string; records: TimesheetApprovalWire[] } | null>(null);
   const [checking, setChecking] = React.useState(false);
   const scope = JSON.stringify([user?.id, workspace?.id, weekStart, getApiOrigin()]);
   const scopeRef = React.useRef(scope);
-  scopeRef.current = scope;
+  React.useLayoutEffect(() => { scopeRef.current = scope; }, [scope]);
+  const confirmed = confirmation?.scope === scope && confirmation.records === records;
   const mounted = React.useRef(true);
-  React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  React.useEffect(() => { setConfirmed(false); }, [weekStart, workspace?.id, records]);
+  React.useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [reviewPage, setReviewPage] = React.useState(0);
   const review = trpc.approvals.reviewQueue.useQuery({ workspaceId: workspace?.id, page: reviewPage }, { enabled: canReview });
   const submit = trpc.approvals.submit.useMutation({
@@ -99,7 +108,7 @@ export function ApprovalControls({ weekStart, records, canReview, busy }: {
       if (!stillCurrent()) return;
       if (!isOnline() || queued > 0 || getHeldCount() > 0) { toast.error(t("pending")); return; }
       await submit.mutateAsync({ workspaceId: workspace!.id, weekStart, confirmedOnline: true, pendingLocalEdits: false });
-      if (stillCurrent()) setConfirmed(false);
+      if (stillCurrent()) setConfirmation(null);
     } catch {
       // Mutation errors are shown by onError; keep confirmation and local work.
     } finally {
@@ -111,7 +120,7 @@ export function ApprovalControls({ weekStart, records, canReview, busy }: {
     {records.map((record) => <ApprovalRecord key={record.id} record={record} review={false} />)}
     {periodIsLocked(records) ? <p>{t("locked")}</p> : <>
       <p className="text-sm">{t("draft")}</p>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />{t("confirm")}</label>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmation(event.target.checked ? { scope, records } : null)} />{t("confirm")}</label>
       <Button disabled={pending || !confirmed || submit.isPending} onClick={() => void handleSubmit()}>{t("submit")}</Button>
       {pending ? <p className="text-sm text-muted-foreground">{t("pending")}</p> : null}
     </>}

@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { TimesheetApprovalWire } from "@starter/shared";
 
 const state = vi.hoisted(() => ({
@@ -73,8 +73,33 @@ describe("approval submission", () => {
     state.refresh.mockImplementationOnce(() => new Promise<number>((done) => { resolve = done; }));
     mount(); fireEvent.click(screen.getByRole("checkbox")); fireEvent.click(screen.getByRole("button", { name: "Submit week" }));
     state[key] = "changed"; resolve(0);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Submit week" })).not.toBeDisabled());
+    await waitFor(() => expect(screen.getByRole("checkbox")).not.toBeChecked());
+    expect(screen.getByRole("button", { name: "Submit week" })).toBeDisabled();
     expect(state.mutate).not.toHaveBeenCalled();
+  });
+  it("requires fresh confirmation when approval records change", () => {
+    const records: TimesheetApprovalWire[] = [];
+    const view = render(<ApprovalControls weekStart="2026-09-14" records={records} canReview={false} busy={false} />);
+    fireEvent.click(screen.getByRole("checkbox"));
+    view.rerender(<ApprovalControls weekStart="2026-09-14" records={records} canReview={false} busy={false} />);
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    view.rerender(<ApprovalControls weekStart="2026-09-14" records={[]} canReview={false} busy={false} />);
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Submit week" })).toBeDisabled();
+  });
+  it("abandons a pending check across week changes, including returning to the old week", async () => {
+    let resolve!: (value: number) => void;
+    state.refresh.mockImplementationOnce(() => new Promise<number>((done) => { resolve = done; }));
+    const records: TimesheetApprovalWire[] = [];
+    const view = render(<ApprovalControls weekStart="2026-09-14" records={records} canReview={false} busy={false} />);
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Submit week" }));
+    view.rerender(<ApprovalControls weekStart="2026-09-21" records={records} canReview={false} busy={false} />);
+    view.rerender(<ApprovalControls weekStart="2026-09-14" records={records} canReview={false} busy={false} />);
+    await act(async () => { resolve(0); });
+    expect(state.mutate).not.toHaveBeenCalled();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Submit week" })).toBeDisabled();
   });
   it("locks an empty submitted period and offers withdrawal", () => {
     mount([record]); expect(screen.queryByRole("button", { name: "Submit week" })).toBeNull();
