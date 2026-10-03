@@ -69,6 +69,8 @@ export type NativeSession = {
 const listeners = new Set<Listener>();
 
 let token: string | null = null;
+// A delayed storage read must not undo a newer sign-in or sign-out.
+let tokenRevision = 0;
 let ready = false;
 // Rebuilt only when something changes, so `useSyncExternalStore` sees a
 // stable reference and does not re-render on every check.
@@ -215,16 +217,17 @@ let hydration: Promise<void> | null = null;
 const HYDRATE_TIMEOUT_MS = 5000;
 
 const readStoredToken = async (): Promise<void> => {
+  const revision = tokenRevision;
   try {
     const store = await loadSecureStore();
     if (!store) return;
     await enforceFreshInstall(store);
     const stored = await store.get();
-    token = stored && stored.length > 0 ? stored : null;
+    if (revision === tokenRevision) token = stored && stored.length > 0 ? stored : null;
   } catch {
     // An unreadable Keychain (locked device, a corrupted item) is "signed
     // out", never a crash on the launch path.
-    token = null;
+    if (revision === tokenRevision) token = null;
   }
 };
 
@@ -280,6 +283,7 @@ export const setNativeToken = async (next: string): Promise<void> => {
   if (!isTokenShell()) return;
   if (!next) return;
 
+  tokenRevision++;
   token = next;
   publish();
 
@@ -291,6 +295,7 @@ export const setNativeToken = async (next: string): Promise<void> => {
 export const clearNativeToken = async (): Promise<void> => {
   if (!isTokenShell()) return;
 
+  tokenRevision++;
   token = null;
   publish();
 
@@ -304,6 +309,7 @@ export const clearNativeToken = async (): Promise<void> => {
  */
 export const __resetNativeSessionForTests = (): void => {
   token = null;
+  tokenRevision = 0;
   ready = false;
   hydration = null;
   secureStorePromise = null;

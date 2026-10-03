@@ -21,6 +21,7 @@ type Harness = {
 
 const load = async (options: {
   native?: boolean;
+  readToken?: () => Promise<string | null>;
   keychain?: Record<string, string>;
   preferences?: Record<string, string>;
 } = {}): Promise<Harness> => {
@@ -37,7 +38,7 @@ const load = async (options: {
   vi.doMock("@aparajita/capacitor-secure-storage", () => ({
     SecureStorage: {
       setSynchronize: async () => undefined,
-      getItem: async (key: string) => keychain.get(key) ?? null,
+      getItem: async (key: string) => options.readToken ? options.readToken() : keychain.get(key) ?? null,
       setItem: async (key: string, value: string) => {
         keychain.set(key, value);
       },
@@ -314,5 +315,23 @@ describe("clearNativeToken", () => {
 
     expect(module.getNativeToken()).toBeNull();
     expect(keychain.has(TOKEN_KEY)).toBe(false);
+  });
+});
+
+
+describe("credentials changed during hydration", () => {
+  it.each(["sign-in", "sign-out", "read failure"])("does not undo %s with a late read", async (action) => {
+    let resolve!: (value: string | null) => void;
+    let reject!: (reason: Error) => void;
+    const readToken = vi.fn(() => new Promise<string | null>((yes, no) => { resolve = yes; reject = no; }));
+    const { module } = await load({ preferences: { [MARKER_KEY]: "1" }, readToken });
+    const hydration = module.hydrateNativeSession();
+    await vi.waitFor(() => expect(readToken).toHaveBeenCalledOnce());
+    if (action === "sign-out") await module.clearNativeToken();
+    else await module.setNativeToken("new-account-token");
+    if (action === "read failure") reject(new Error("locked"));
+    else resolve("old-account-token");
+    await hydration;
+    expect(module.getNativeToken()).toBe(action === "sign-out" ? null : "new-account-token");
   });
 });

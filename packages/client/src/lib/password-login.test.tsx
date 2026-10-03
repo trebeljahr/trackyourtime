@@ -166,7 +166,7 @@ describe("password login", () => {
       shell = platform;
       hydrateWith(null);
       const mount = await loadProvider(); mount();
-      await waitFor(() => expect(sessionCalls()).toHaveLength(1));
+      await waitFor(async () => expect((await import("./auth-client")).authClient.$store.atoms.session.get().isPending).toBe(false));
       await new Promise(resolve => setTimeout(resolve, 20));
       calls.length = 0;
       const client = await import("./auth-client");
@@ -181,10 +181,11 @@ describe("password login", () => {
       expect(client.hasFreshLoginSession()).toBe(true);
     });
   }
-  it("does not let a late anonymous read overwrite login", async () => {
+  it.each(["web", "capacitor"] as const)("does not let a late prior session overwrite login on %s", async (platform) => {
+    shell = platform;
     let release!: (response: Response) => void;
     respond = () => new Promise<Response>(resolve => { release = resolve; }) as unknown as Response;
-    hydrateWith(null);
+    hydrateWith(platform === "capacitor" ? "previous-token" : null);
     const mount = await loadProvider(); mount();
     await waitFor(() => expect(release).toBeTypeOf("function"));
     const client = await import("./auth-client");
@@ -197,7 +198,7 @@ describe("password login", () => {
   it("persists the native token before completing login", async () => {
     hydrateWith(null);
     const mount = await loadProvider(); mount();
-    await waitFor(() => expect(sessionCalls()).toHaveLength(1));
+    await waitFor(async () => expect((await import("./auth-client")).authClient.$store.atoms.session.get().isPending).toBe(false));
     await new Promise(resolve => setTimeout(resolve, 20));
     let release!: () => void;
     persistToken = () => new Promise(resolve => { release = resolve; });
@@ -208,7 +209,7 @@ describe("password login", () => {
     expect(done).toBe(false);
     await act(async () => { release(); await login; });
     await new Promise(resolve => setTimeout(resolve, 100));
-    expect(sessionCalls()).toHaveLength(1);
+    expect(sessionCalls()).toHaveLength(0);
     expect(token).toBe("tok-new");
   });
   it("fetches the session once for older servers", async () => {
@@ -219,7 +220,7 @@ describe("password login", () => {
     try {
       hydrateWith(null);
       const mount = await loadProvider(); mount();
-      await waitFor(() => expect(sessionCalls()).toHaveLength(1));
+      await waitFor(async () => expect((await import("./auth-client")).authClient.$store.atoms.session.get().isPending).toBe(false));
       await new Promise(resolve => setTimeout(resolve, 20));
       calls.length = 0;
       const client = await import("./auth-client");
@@ -241,7 +242,7 @@ describe("password login", () => {
   it("drops the login shortcut and identity on sign-out", async () => {
     hydrateWith(null);
     const mount = await loadProvider(); mount();
-    await waitFor(() => expect(sessionCalls()).toHaveLength(1));
+    await waitFor(async () => expect((await import("./auth-client")).authClient.$store.atoms.session.get().isPending).toBe(false));
     const client = await import("./auth-client");
     await act(async () => { await client.signInWithPassword("rico@example.com", "password"); });
     expect(client.hasFreshLoginSession()).toBe(true);

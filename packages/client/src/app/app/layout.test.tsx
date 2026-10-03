@@ -21,6 +21,7 @@ vi.mock("@/hooks/use-auth", () => ({ useAuth: () => useAuth() }));
 
 const getSession = vi.fn();
 vi.mock("@/lib/auth-client", () => ({
+  hasFreshLoginSession: () => false,
   // Arguments forwarded: whether the recheck bypasses better-auth's cookie
   // cache is the difference between noticing a deleted account and not.
   getSession: (options?: unknown) => getSession(options),

@@ -9,6 +9,7 @@ import { clientId, isElectron, isTokenShell } from "@/lib/shell";
 import {
   clearNativeToken,
   getNativeToken,
+  hydrateNativeSession,
   setNativeToken,
 } from "@/lib/native-session";
 import {
@@ -90,14 +91,43 @@ const clientHeader = (): string => clientId();
  * the token. A second, silent credential is exactly what makes a broken
  * bearer path look like it works.
  */
-const transportFetch: typeof fetch = (input, init) => {
+// Track the credential from the last completed validation attempt. A late
+// storage read can publish a different token after the hydration deadline.
+let nativeSessionRequestToken: string | null | undefined;
+export const getNativeSessionRequestToken = (): string | null | undefined =>
+  nativeSessionRequestToken;
+
+const transportFetch: typeof fetch = async (input, init) => {
   if (!isTokenShell() || input instanceof Request) return fetch(input, init);
-  const sent: RequestInit | undefined = isElectron()
-    ? { ...init, credentials: "omit" }
-    : init;
-  return whenApiOriginReady().then(() =>
-    fetchAuthWithTimeout(rebaseApiUrl(String(input)), sent),
-  );
+  const sessionRead = new URL(String(input)).pathname.endsWith("/get-session");
+  if (sessionRead) await hydrateNativeSession();
+  await whenApiOriginReady();
+  const url = new URL(rebaseApiUrl(String(input)));
+  const headers = new Headers(init?.headers);
+  const token = getNativeToken();
+  if (sessionRead) {
+    // A token shell has no cookie identity. Missing storage needs no request.
+    if (!token) {
+      nativeSessionRequestToken = null;
+      return Response.json(null);
+    }
+    // better-fetch built its headers before asynchronous storage was ready.
+    headers.set("authorization", `Bearer ${token}`);
+    url.searchParams.set("disableCookieCache", "true");
+  }
+  let response: Response;
+  try {
+    response = await fetchAuthWithTimeout(url.toString(), {
+      ...init,
+      headers,
+      ...(isElectron() ? { credentials: "omit" } : {}),
+    });
+  } finally {
+    if (sessionRead) nativeSessionRequestToken = token;
+  }
+  // A late answer must not restore a departed account or its token header.
+  if (sessionRead && token !== getNativeToken()) return Response.json(null);
+  return response;
 };
 
 // Requests already in flight when credentials change cannot overwrite the new
@@ -183,7 +213,12 @@ export const authClient = createAuthClient({
      */
     onSuccess: async (context) => {
       const issued = context.response.headers.get("set-auth-token");
-      if (issued) await setNativeToken(issued);
+      if (issued) {
+        if (isTokenShell() && new URL(context.request.url).pathname.endsWith("/get-session")) {
+          nativeSessionRequestToken = issued;
+        }
+        await setNativeToken(issued);
+      }
     },
   },
 });
@@ -206,6 +241,7 @@ export async function signInWithPassword(email: string, password: string) {
     if (data?.session && data.user && data.session.userId === data.user.id &&
         data.session.expiresAt instanceof Date && data.session.expiresAt.getTime() > Date.now()) {
       const session = { session: data.session, user: data.user };
+      if (isTokenShell()) nativeSessionRequestToken = getNativeToken();
       loginSession = { data: session, until: Date.now() + 15_000, origin: getApiOrigin(), token: getNativeToken() };
       const atom = authClient.$store.atoms.session;
       atom.set({ ...atom.get(), data: session, error: null, isPending: false, isRefetching: false });

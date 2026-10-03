@@ -1,22 +1,5 @@
 // @vitest-environment jsdom
-/**
- * The native session store, asserted end to end.
- *
- * `AuthProvider` mounts better-auth's `useSession()` at the root, and
- * better-auth fires its one `/get-session` on mount — before the Keychain
- * read that publishes the bearer token has settled. Without a refetch the
- * store caches the tokenless `null` forever, and `useAuth().user` is empty
- * for the life of the launch. That went unnoticed because a localhost API is
- * same-site with the dev WebView origin and sends the cookie anyway; against
- * `https://…` from `capacitor://localhost` nothing is sent at all.
- *
- * So this drives the real `@/lib/auth-client` (real better-auth client, real
- * `fetchOptions.auth` token getter) over a stubbed `fetch`, with a token that
- * arrives *after* mount, and asserts that a second `/get-session` goes out
- * carrying `Authorization: Bearer …` and that the provider then exposes the
- * user. Only the Keychain itself is faked — `native-session.test.ts` owns
- * that.
- */
+// Real auth client over a delayed fake native store.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
@@ -24,6 +7,8 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 type Snapshot = { token: string | null; ready: boolean };
 
+let shell: "web" | "capacitor" = "capacitor";
+let hydrated: (() => void)[] = [];
 let token: string | null = null;
 let ready = false;
 let snapshot: Snapshot = { token: null, ready: false };
@@ -39,10 +24,11 @@ const hydrateWith = (next: string | null): void => {
   token = next;
   ready = true;
   publish();
+  for (const resolve of hydrated.splice(0)) resolve();
 };
 
 vi.mock("@/lib/shell", async () =>
-  (await import("@/lib/shell-mock")).mockShellModule(() => "capacitor"),
+  (await import("@/lib/shell-mock")).mockShellModule(() => shell),
 );
 
 vi.mock("@/lib/native-session", () => ({
@@ -56,7 +42,7 @@ vi.mock("@/lib/native-session", () => ({
     };
   },
   // Hydration is driven by the test, not by mounting.
-  hydrateNativeSession: () => Promise.resolve(),
+  hydrateNativeSession: () => ready ? Promise.resolve() : new Promise<void>((resolve) => hydrated.push(resolve)),
   setNativeToken: async () => {},
   clearNativeToken: async () => {},
 }));
@@ -156,6 +142,8 @@ const loadProvider = async (): Promise<() => void> => {
 
 beforeEach(() => {
   calls.length = 0;
+  shell = "capacitor";
+  hydrated = [];
   token = null;
   ready = false;
   snapshot = { token: null, ready: false };
@@ -169,88 +157,54 @@ afterEach(() => {
 });
 
 describe("AuthProvider on native", () => {
-  it("re-resolves the session store once the token arrives after mount", async () => {
-    const renderProvider = await loadProvider();
-    renderProvider();
-
-    // The mount request is the tokenless one — that ordering is the whole
-    // defect, so it is asserted rather than assumed away.
-    await waitFor(() => {
-      expect(sessionCalls().length).toBe(1);
-    });
-    expect(sessionCalls()[0]?.authorization).toBeNull();
-    expect(screen.getByTestId("who").textContent).toBe("anonymous");
-
-    // The Keychain finally answers.
+  it("waits for the token before its only validation", async () => {
+    (await loadProvider())();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sessionCalls()).toHaveLength(0);
     hydrateWith("tok-abc");
-
-    await waitFor(() => {
-      expect(sessionCalls().length).toBe(2);
-    });
-    expect(sessionCalls()[1]?.authorization).toBe("Bearer tok-abc");
-
-    await waitFor(() => {
-      expect(screen.getByTestId("who").textContent).toBe("rico@example.com");
-    });
+    await waitFor(() => expect(screen.getByTestId("who").textContent).toBe("rico@example.com"));
+    expect(sessionCalls()).toHaveLength(1);
+    expect(sessionCalls()[0]?.authorization).toBe("Bearer tok-abc");
   });
 
-  it("does not refetch in a loop when the stored token is not accepted", async () => {
-    // A token the server has revoked answers null every time. One retry is a
-    // fix; a retry per render is a request storm on a phone.
+  it("does not retry a revoked stored token", async () => {
     respond = () => json(null);
-
-    const renderProvider = await loadProvider();
-    renderProvider();
-
-    await waitFor(() => {
-      expect(sessionCalls().length).toBe(1);
-    });
-
+    (await loadProvider())();
     hydrateWith("tok-revoked");
-
-    await waitFor(() => {
-      expect(sessionCalls().length).toBe(2);
-    });
-    expect(sessionCalls()[1]?.authorization).toBe("Bearer tok-revoked");
-
+    await waitFor(() => expect(sessionCalls()).toHaveLength(1));
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(sessionCalls().length).toBe(2);
+    expect(sessionCalls()).toHaveLength(1);
     expect(screen.getByTestId("who").textContent).toBe("anonymous");
   });
 
-  it("does not fire a second request when the token was already there", async () => {
-    // The Keychain can win the race against better-auth's on-mount fetch, in
-    // which case the first request already carries the header and a refetch
-    // would be a wasted round trip on every cold launch.
+  it("validates a token that was ready before mount once", async () => {
     hydrateWith("tok-early");
+    (await loadProvider())();
+    await waitFor(() => expect(screen.getByTestId("who").textContent).toBe("rico@example.com"));
+    expect(sessionCalls()).toHaveLength(1);
+  });
 
-    const renderProvider = await loadProvider();
-    renderProvider();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("who").textContent).toBe("rico@example.com");
-    });
-    expect(sessionCalls().length).toBe(1);
-    expect(sessionCalls()[0]?.authorization).toBe("Bearer tok-early");
+  it("validates a token arriving after the storage deadline once", async () => {
+    hydrateWith(null);
+    (await loadProvider())();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sessionCalls()).toHaveLength(0);
+    hydrateWith("tok-late");
+    await waitFor(() => expect(screen.getByTestId("who").textContent).toBe("rico@example.com"));
+    expect(sessionCalls()).toHaveLength(1);
+    expect(sessionCalls()[0]?.authorization).toBe("Bearer tok-late");
   });
 });
 
 describe("AuthProvider on web", () => {
-  it("issues exactly one session request and never a bearer header", async () => {
-    // The web path has no token by construction (`getNativeToken()` only
-    // returns a value under Capacitor), so the effect must be inert: the same
-    // single cookie-authenticated request as before this existed.
+  it("issues one cookie session request without a bearer header", async () => {
+    shell = "web";
     hydrateWith(null);
-
-    const renderProvider = await loadProvider();
-    renderProvider();
-
-    await waitFor(() => {
-      expect(sessionCalls().length).toBe(1);
-    });
+    (await loadProvider())();
+    await waitFor(() => expect(sessionCalls()).toHaveLength(1));
     await new Promise((resolve) => setTimeout(resolve, 100));
-
-    expect(sessionCalls().length).toBe(1);
+    expect(sessionCalls()).toHaveLength(1);
     expect(sessionCalls()[0]?.authorization).toBeNull();
+    expect(new URL(sessionCalls()[0]!.url).search).toBe("");
   });
 });
