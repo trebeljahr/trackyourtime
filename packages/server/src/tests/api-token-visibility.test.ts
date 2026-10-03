@@ -7,6 +7,7 @@
 // both, and this file is the proof that it is an intersection and not, say, a
 // union somebody "simplified" it into.
 import assert from "node:assert/strict";
+import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { describe, it } from "node:test";
 // Subpath import: a bare named import from "@starter/shared" throws under
 // tsx. See the note in duration.test.ts.
@@ -244,6 +245,8 @@ const stubbableSettings = WorkspaceSettingsModel as unknown as {
   }) => { lean: () => Promise<SettingsRow> };
 };
 const realSettingsFindOne = stubbableSettings.findOne;
+const stubMember = WorkspaceMember as unknown as { findOne: () => { lean: () => Promise<{ hourlyRate: null }> } };
+const realMemberFindOne = stubMember.findOne;
 
 /** Filters the services actually queried with, newest last. */
 let queried: Record<string, unknown>[] = [];
@@ -292,6 +295,7 @@ const withStubbedEntries = async (
     inserted.push(doc);
     throw duplicateKeyError();
   };
+  stubMember.findOne = () => ({ lean: async () => ({ hourlyRate: null }) });
   stubbableSettings.findOne = ({ workspaceId }) => ({
     lean: async () => ({ workspaceId, ...DEFAULT_WORKSPACE_SETTINGS }),
   });
@@ -302,6 +306,7 @@ const withStubbedEntries = async (
     stubbable.findOneAndUpdate = realFindOneAndUpdate;
     stubbable.create = realCreate;
     stubbableSettings.findOne = realSettingsFindOne;
+    stubMember.findOne = realMemberFindOne;
   }
 };
 

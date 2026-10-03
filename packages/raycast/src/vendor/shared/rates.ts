@@ -10,21 +10,24 @@ export type ResolveHourlyRateArgs = {
   billable: boolean;
   projectRate: number | null | undefined;
   defaultRate: number | null | undefined;
+  memberRate?: number | null;
 };
 
 /**
  * The rate to snapshot: the project's rate when it has one, otherwise the
- * workspace default. Non-billable entries never carry a rate.
+ * author's member rate, then the workspace default. Non-billable entries never carry a rate.
  */
 export const resolveHourlyRate = ({
   billable,
   projectRate,
+  memberRate,
   defaultRate,
 }: ResolveHourlyRateArgs): number | null => {
   if (!billable) return null;
   if (typeof projectRate === "number" && Number.isFinite(projectRate)) {
     return projectRate;
   }
+  if (typeof memberRate === "number" && Number.isFinite(memberRate)) return memberRate;
   if (typeof defaultRate === "number" && Number.isFinite(defaultRate)) {
     return defaultRate;
   }
@@ -50,11 +53,13 @@ export type ProjectBillingDefaults = {
 export const projectBillableByDefault = (
   project: ProjectBillingDefaults,
   defaultRate: number | null | undefined,
+  memberRate?: number | null,
 ): boolean => {
   if (!project.billableDefault) return false;
   const rate = resolveHourlyRate({
     billable: true,
     projectRate: project.hourlyRate,
+    memberRate,
     defaultRate,
   });
   return rate !== null && rate > 0;

@@ -17,6 +17,7 @@ import { ImportBatch } from "../models/ImportBatch.js";
 import { BusinessProfileModel } from "../models/BusinessProfile.js";
 import { actOnTimesheet, approvalEntries, configureApprovals, invoiceApprovalEligibility, ownApprovalWeek, reviewQueue, submitTimesheet, type ApprovalActor } from "../services/approvals/service.js";
 import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction, deferAfterCommit } from "../services/business-transaction.js";
+import { bulkEditEntries, executeBulkEdit, mongoBulkEntryStore } from "../services/entries/bulk.js";
 import { createEntry, updateEntry } from "../services/entries/crud.js";
 import { continueEntryDetailed, personReach, startTimerDetailed, stopTimer } from "../services/entries/timer.js";
 import { finalizeStop } from "../services/entry-stop.js";
@@ -142,6 +143,8 @@ describe("timesheet transaction safety", { skip: skipWithoutDatabase }, () => {
     await assert.rejects(TimeEntry.updateOne({ _id: outside._id }, { $set: { end: new Date(boundary.getTime() + 1) } }), { message: "TIMESHEET_LOCKED" });
     await assert.rejects(TimeEntry.create(row({ start: new Date(boundary.getTime() - 1), end: new Date(boundary.getTime() + 1) })), { message: "TIMESHEET_LOCKED" });
     await assert.rejects(TimeEntry.insertMany([row({ start: new Date(boundary.getTime() - 1), end: new Date(boundary.getTime() + 1) })]), { message: "TIMESHEET_LOCKED" });
+    await assert.rejects(TimeEntry.updateOne({ _id: outside._id }, { $set: { start: 1, end: 2 } }), { message: "TIMESHEET_INVALID_INTERVAL" });
+    await assert.rejects(TimeEntry.insertMany([row({ start: 1, end: 2 })]), { message: "TIMESHEET_INVALID_INTERVAL" });
     const ending = new Date("2026-09-21T00:00:00.000Z");
     const after = await TimeEntry.create(row({ start: ending, end: new Date(ending.getTime() + 1000) }));
     await assert.rejects(TimeEntry.updateOne({ _id: after._id }, { $set: { start: new Date(ending.getTime() - 1) } }), { message: "TIMESHEET_LOCKED" });
@@ -260,6 +263,27 @@ describe("timesheet transaction safety", { skip: skipWithoutDatabase }, () => {
     });
     assert.equal(await TimeEntry.countDocuments({ workspaceId: WS }), 1);
     assert.deepEqual(published, [2]);
+  });
+
+  it("bulk edits resolve author rates and report a raced approval as locked", async (t) => {
+    if (!requireTransactions(t)) return;
+    await enabled();
+    const entry = await TimeEntry.create(row({ billable: false, hourlyRate: null }));
+    const input = { workspaceId: WS, entries: [{ id: String(entry._id), expectedUpdatedAt: entry.updatedAt.toISOString() }], operation: { kind: "update" as const, billable: true } };
+    assert.equal((await bulkEditEntries(author, input)).results[0]?.success, true);
+    const priced = await TimeEntry.findById(entry._id).lean(); assert.ok(priced);
+    assert.equal(priced.hourlyRate, 90);
+    const next = { ...input, entries: [{ id: String(entry._id), expectedUpdatedAt: priced.updatedAt.toISOString() }], operation: { kind: "update" as const, billable: false } };
+    const raced = await executeBulkEdit(author, next, {
+      ...mongoBulkEntryStore,
+      write: async (...args) => { await submit(); return mongoBulkEntryStore.write(...args); },
+    });
+    assert.deepEqual(raced.results, [{ id: String(entry._id), success: false, reason: "locked" }]);
+    assert.equal((await TimeEntry.findById(entry._id).lean())?.billable, true);
+    const blocked = await bulkEditEntries(author, next);
+    assert.equal(blocked.phase, "validation");
+    const refusal = blocked.results[0]; assert.ok(refusal && !refusal.success);
+    assert.equal(refusal.reason, "locked");
   });
 
   it("retries tRPC-wrapped transient transaction errors", async (t) => {

@@ -7,7 +7,7 @@ export { defaultManualRange } from "./core/entry-fields.js";
 export { buildOptimisticEntry, decorateEntry, stoppedEntryShape } from "./core/entry-shape.js";
 export type { EntryShapeContext, ShapeableTask } from "./core/entry-shape.js";
 export { createId, deviceTimeZone } from "./core/ids.js";
-export { OFFLINE_QUEUE_STORAGE_KEY, createTempId, decodeOfflineMutation, describeQueuedMutation, heldReasons, holdBlocksReplay, isTempId, scopedTempIdOf, tempIdOf } from "./core/offline-ops.js";
+export { OFFLINE_QUEUE_STORAGE_KEY, createTempId, decodeOfflineMutation, describeQueuedMutation, heldReasons, holdBlocksReplay, isTempId, scopedTempIdOf } from "./core/offline-ops.js";
 export type { OfflineCreateInput, OfflineOp, OfflinePayloadMap, OfflineStartInput, OfflineUpdateInput, QueuedMutationSummary, StoredOfflinePayload } from "./core/offline-ops.js";
 export { applyOverlay, decodeStoredOverlay, emptyOverlay, encodeStoredOverlay, isOverlayEmpty, overlayRunning, resolveRunning, withOptimisticEntry, withOptimisticPatch, withOptimisticRemoval, withoutResolved } from "./core/offline-overlay.js";
 export type { OfflineOverlay } from "./core/offline-overlay.js";

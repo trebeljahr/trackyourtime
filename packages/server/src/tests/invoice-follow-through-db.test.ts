@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, afterEach, before, describe, it } from "node:test";
+import { supportsBusinessTransactions } from "../services/business-transaction.js";
 import { Invoice } from "../models/Invoice.js";
 import {
   changeFollowThrough,
@@ -59,7 +60,7 @@ const consent = (id: string, enabled = true) => ({
 });
 
 describe(
-  "invoice accounting on standalone Mongo",
+  "invoice accounting on Mongo",
   { skip: skipWithoutDatabase },
   () => {
     before(async () =>
@@ -147,7 +148,7 @@ describe(
         invoice.entryIds.length,
       );
     });
-    it("interrupted deletion stays visible and retry releases entries without reopening edits", async (t) => {
+    it("interrupted deletion rolls back with transactions or stays visibly pending on standalone", async (t) => {
       const invoice = await draft();
       const fail = t.mock.method(TimeEntry, "updateMany", () => {
         throw new Error("Synthetic release failure");
@@ -158,26 +159,30 @@ describe(
       );
       fail.mock.restore();
       const visible = await owner().list({});
+      const transactions = await supportsBusinessTransactions();
       assert.equal(
-        visible.invoices.find((row) => row.id === invoice.id)?.deletionPending,
-        true,
+        Boolean(visible.invoices.find((row) => row.id === invoice.id)?.deletionPending),
+        !transactions,
       );
-      const pending = await owner().get({ id: invoice.id });
-      await assert.rejects(
-        owner().update({
-          id: invoice.id,
-          updatedAt: pending.updatedAt,
-          notes: "Cannot edit",
-        }),
-      );
-      await assert.rejects(
-        owner().updateStatus({ id: invoice.id, status: "sent" }),
-      );
-      await assert.rejects(owner().exportPdf({ id: invoice.id }));
-      await assert.rejects(owner().exportXrechnung({ id: invoice.id }));
-      await assert.rejects(
-        owner().attachEinvoiceData({ id: invoice.id, confirm: true }),
-      );
+      assert.equal(await TimeEntry.countDocuments({ invoiceId: invoice.id }), invoice.entryIds.length);
+      if (!transactions) {
+        const pending = await owner().get({ id: invoice.id });
+        await assert.rejects(
+          owner().update({
+            id: invoice.id,
+            updatedAt: pending.updatedAt,
+            notes: "Cannot edit",
+          }),
+        );
+        await assert.rejects(
+          owner().updateStatus({ id: invoice.id, status: "sent" }),
+        );
+        await assert.rejects(owner().exportPdf({ id: invoice.id }));
+        await assert.rejects(owner().exportXrechnung({ id: invoice.id }));
+        await assert.rejects(
+          owner().attachEinvoiceData({ id: invoice.id, confirm: true }),
+        );
+      }
       await owner().remove({ id: invoice.id });
       assert.equal(await Invoice.countDocuments({ _id: invoice.id }), 0);
       assert.equal(

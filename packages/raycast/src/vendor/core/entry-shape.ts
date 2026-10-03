@@ -52,7 +52,7 @@ export type EntryShapeContext = {
   /** Null while `settings.get` is still in flight. */
   settings: Pick<
     ResolvedSettings,
-    "workspaceId" | "userId" | "currency" | "defaultHourlyRate"
+    "workspaceId" | "userId" | "currency" | "defaultHourlyRate" | "memberHourlyRate"
   > | null;
   source: EntrySource;
 };
@@ -142,6 +142,7 @@ export const buildOptimisticEntry = (
   const hourlyRate = resolveHourlyRate({
     billable: args.billable,
     projectRate: project.projectRate,
+    memberRate: settings?.memberHourlyRate,
     defaultRate: settings?.defaultHourlyRate ?? null,
   });
   const durationSec =
@@ -196,11 +197,13 @@ export const stoppedEntryShape = (
   const project = projectFacts(context, running.projectId);
   const safeEnd =
     Date.parse(end) > Date.parse(running.start) ? end : running.start;
-  const hourlyRate = resolveHourlyRate({
+  const ownWorkspace = settings?.workspaceId === running.workspaceId && settings?.userId === running.authorId;
+  const hourlyRate = ownWorkspace ? resolveHourlyRate({
     billable: running.billable,
     projectRate: project.projectRate,
+    memberRate: settings?.memberHourlyRate,
     defaultRate: settings?.defaultHourlyRate ?? null,
-  });
+  }) : running.hourlyRate;
   const durationSec = durationBetween(running.start, safeEnd);
 
   return {
@@ -208,7 +211,7 @@ export const stoppedEntryShape = (
     end: safeEnd,
     durationSec,
     hourlyRate,
-    currency: settings?.currency ?? running.currency,
+    currency: ownWorkspace ? settings!.currency : running.currency,
     updatedAt: safeEnd,
     projectName: project.projectName,
     projectColor: project.projectColor,

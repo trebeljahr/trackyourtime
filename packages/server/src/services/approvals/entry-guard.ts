@@ -64,6 +64,12 @@ function record(value: unknown): Record<string, unknown> {
 
 /** Only supported, inspectable update operators. Never guess at a pipeline's
  * proposed interval; a future writer must explicitly add its operation here. */
+function guardDate(value: unknown): Date {
+  // Match supported app inputs exactly. Stringifying a numeric epoch changes
+  // its meaning (for example 1 becomes January 2001) before Mongoose casts it.
+  return value instanceof Date ? new Date(value.getTime()) : typeof value === "string" ? new Date(value) : new Date(NaN);
+}
+
 function proposedSpan(before: Span, update: Record<string, unknown>): Span {
   const set = record(update.$set);
   for (const [operator, values] of Object.entries(update)) {
@@ -74,8 +80,8 @@ function proposedSpan(before: Span, update: Record<string, unknown>): Span {
     }
   }
   return { ...before,
-    start: set.start === undefined ? before.start : new Date(set.start instanceof Date ? set.start.getTime() : String(set.start)),
-    end: set.end === undefined ? before.end : set.end === null ? null : new Date(set.end instanceof Date ? set.end.getTime() : String(set.end)),
+    start: set.start === undefined ? before.start : guardDate(set.start),
+    end: set.end === undefined ? before.end : set.end === null ? null : guardDate(set.end),
   };
 }
 
@@ -107,7 +113,7 @@ export function entryApprovalGuards(schema: Schema<ITimeEntry>): void {
     for (const doc of Array.isArray(docs) ? docs : [docs]) {
       const row = record(doc);
       if (typeof row.workspaceId !== "string" || typeof row.authorId !== "string") throw approvalConflict();
-      spans.push({ workspaceId: row.workspaceId, authorId: row.authorId, start: new Date(row.start instanceof Date ? row.start.getTime() : String(row.start)), end: row.end == null ? null : new Date(row.end instanceof Date ? row.end.getTime() : String(row.end)) });
+      spans.push({ workspaceId: row.workspaceId, authorId: row.authorId, start: guardDate(row.start), end: row.end == null ? null : guardDate(row.end) });
     }
     await assertEntriesWritable(spans);
   });
@@ -128,7 +134,12 @@ export function installEntryTransactionBoundary(model: Model<ITimeEntry>): void 
   };
   const save = model.prototype.save;
   model.prototype.save = function (this: ITimeEntry, ...args: unknown[]): Promise<unknown> {
-    return withBusinessTransaction(() => Reflect.apply(save, this, args));
+    return withBusinessTransaction(() => {
+      const session = transactionSession();
+      // Explicit save options also attach the session to the document, which
+      // Mongoose needs to restore isNew/modified paths after a retry.
+      return Reflect.apply(save, this, session ? [{ ...record(args[0]), session }, ...args.slice(1)] : args);
+    });
   };
   const insertMany = model.insertMany;
   model.insertMany = function (...args: unknown[]): Promise<unknown> {

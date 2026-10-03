@@ -15,6 +15,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import mongoose from "mongoose";
+import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import type { TimeEntry as TimeEntryWire } from "@starter/shared";
 import { TimeEntry, type TimeEntryDocLike } from "../models/TimeEntry.js";
 import { DEFAULT_WORKSPACE_SETTINGS, WorkspaceSettingsModel } from "../models/Settings.js";
@@ -67,7 +68,9 @@ const entries = TimeEntry as unknown as {
 const settings = WorkspaceSettingsModel as unknown as {
   findOne: (filter: { workspaceId: string }) => Lean<Record<string, unknown>>;
 };
+const members = WorkspaceMember as unknown as { findOne: () => Lean<{ hourlyRate: null }> };
 const real = {
+  membersFindOne: members.findOne,
   findOne: entries.findOne,
   findOneAndUpdate: entries.findOneAndUpdate,
   create: entries.create,
@@ -78,6 +81,7 @@ let running: TimeEntryDocLike[];
 let queried: Record<string, unknown>[];
 
 beforeEach(() => {
+  members.findOne = () => ({ lean: async () => ({ hourlyRate: null }) });
   running = [];
   queried = [];
   entries.findOne = (filter) => ({
@@ -116,6 +120,7 @@ afterEach(() => {
   entries.findOneAndUpdate = real.findOneAndUpdate;
   entries.create = real.create;
   settings.findOne = real.settingsFindOne;
+  members.findOne = real.membersFindOne;
 });
 
 const names = async (id: string): Promise<string> => ({ "ws-a": "Acme", "ws-b": "Zeta" })[id] ?? "";

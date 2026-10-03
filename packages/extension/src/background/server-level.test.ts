@@ -188,14 +188,24 @@ test("a 400 on a row of a higher level than the server is held, not dropped", as
   expect(getServerLevels().apiLevel(origin)).toBe(API_LEVEL - 1);
 });
 
-test("a 400 from a server that is new enough still drops the row", async () => {
+test("a 400 from a server that is new enough holds the row for recovery", async () => {
   recordLevel(API_LEVEL);
   server.apiLevel = API_LEVEL;
   await enqueueOffline("entries.start", startInput("bad"), "tmp_1");
   server.refuse = { path: "entries.start", status: 400, code: "BAD_REQUEST", message: "invalid" };
 
   expect(await flushQueue()).toBe(0);
-  expect(await getOfflineQueue().size()).toBe(0);
+  expect(await getOfflineQueue().size()).toBe(1);
+  expect((await listHeldRows()).map((row) => row.hold)).toEqual(["refused"]);
+});
+
+test("an approval conflict holds local work for deliberate recovery", async () => {
+  recordLevel(API_LEVEL); server.apiLevel = API_LEVEL;
+  await enqueueOffline("entries.start", startInput("Keep my work"), "tmp_approval");
+  server.refuse = { path: "entries.start", status: 409, code: "CONFLICT", message: "TIMESHEET_LOCKED" };
+  expect(await flushQueue()).toBe(0);
+  expect(await getOfflineQueue().size()).toBe(1);
+  expect((await listHeldRows()).map((row) => row.hold)).toEqual(["refused"]);
 });
 
 test("a server without a procedure makes the flush ask for its level", async () => {

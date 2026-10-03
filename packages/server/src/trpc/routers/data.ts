@@ -103,7 +103,7 @@ import {
   pickCatalogColor,
   PROJECT_COLOR_OFFSET,
 } from "./clients.js";
-import { router, workspaceProcedure } from "../trpc.js";
+import { router, workspaceProcedure, businessProcedure } from "../trpc.js";
 
 /** Entries are written in batches this size — one round trip per chunk. */
 const INSERT_CHUNK = 500;
@@ -1288,7 +1288,7 @@ export const dataRouter = router({
     }),
 
   /** Write the file. Same input, same parser, same rows as the preview. */
-  commit: workspaceProcedure
+  commit: businessProcedure
     .input(importInputSchema)
     .mutation(async ({ ctx, input }): Promise<ImportResult> => {
       const { parsed, timeZone } = readFile(input);
@@ -1519,7 +1519,7 @@ export const dataRouter = router({
    * that was really tracked in it. The batch records that it happened, and
    * changing it back is an ordinary settings edit.
    */
-  undo: workspaceProcedure
+  undo: businessProcedure
     .input(importUndoSchema)
     .mutation(async ({ ctx, input }): Promise<ImportUndoResult> => {
       const workspaceId = ctx.workspaceId;

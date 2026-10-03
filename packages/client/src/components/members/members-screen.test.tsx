@@ -42,6 +42,7 @@ const state: {
 
 const invitationsListQuery = vi.fn();
 const calls = {
+  updateRate: vi.fn(async (_input: unknown) => ({})),
   updateRole: vi.fn(async (_input: unknown) => ({})),
   updateVisibility: vi.fn(async (_input: unknown) => ({})),
   remove: vi.fn(async (_input: unknown) => ({ ok: true })),
@@ -79,6 +80,7 @@ vi.mock("@/lib/trpc", () => ({
       list: {
         useQuery: () => ({ data: state.members, isPending: false, isError: false }),
       },
+      updateRate: mutation((input) => calls.updateRate(input)),
       updateRole: mutation((input) => calls.updateRole(input)),
       updateVisibility: mutation((input) => calls.updateVisibility(input)),
       remove: mutation((input) => calls.remove(input)),

@@ -34,3 +34,5 @@ export * from "./desktop-shortcuts.js";
 export * from "./avatar.js";
 
 export * from "./approvals.js";
+
+export * from "./approval-errors.js";

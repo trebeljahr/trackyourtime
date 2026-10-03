@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import * as React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { TimesheetApprovalWire } from "@starter/shared";
 
 const state = vi.hoisted(() => ({
@@ -43,6 +45,7 @@ beforeEach(() => {
   state.isMutating = 0; state.mutate.mockClear(); state.refresh.mockReset(); state.refresh.mockResolvedValue(0);
   state.workspaceId = "w"; state.userId = "u"; state.origin = "https://example.test";
 });
+afterEach(cleanup);
 describe("approval submission", () => {
   it("requires explicit confirmation and waits for the online mutation", async () => {
     mount(); const button = screen.getByRole("button", { name: "Submit week" });

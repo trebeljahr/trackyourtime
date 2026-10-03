@@ -70,6 +70,8 @@ export type WorkspaceMemberRow = {
   role: WorkspaceRole;
   canViewOthersTime: boolean;
   canViewOthersMoney: boolean;
+  /** Absent when the viewer cannot see this member’s money. Null inherits. */
+  hourlyRate?: number | null;
   joinedAt: string;
   isSelf: boolean;
 };
@@ -197,6 +199,10 @@ export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 
 export const memberIdSchema = z.object({ workspaceId, memberId: recordId });
 export type MemberIdInput = z.infer<typeof memberIdSchema>;
+
+export const updateMemberRateSchema = memberIdSchema.extend({
+  hourlyRate: z.number().finite().min(0).max(1_000_000).nullable(),
+});
 
 export const updateRoleSchema = z.object({
   workspaceId,

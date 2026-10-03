@@ -95,6 +95,7 @@ const settingsSchema = z.looseObject({
   userId: z.string(),
   currency: z.string().min(1),
   defaultHourlyRate: z.number().min(0),
+  memberHourlyRate: z.number().finite().min(0).nullable().optional(),
 });
 
 const reader =

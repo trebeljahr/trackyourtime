@@ -1,13 +1,6 @@
 import { z } from "zod";
 import { addDaysToKey, zonedDayStartMs } from "./timezone.js";
 
-export const APPROVAL_REFUSALS = [
-  "TIMESHEET_INVALID_INTERVAL", "TIMESHEET_LOCKED", "TIMESHEET_TRANSACTION_REQUIRED", "TIMESHEET_TRANSACTIONS_UNAVAILABLE",
-  "TIMESHEET_RUNNING_ENTRY", "TIMESHEET_CROSS_WEEK_ENTRY", "TIMESHEET_REASON_REQUIRED",
-  "TIMESHEET_INVOICED", "TIMESHEET_STALE", "TIMESHEET_REVIEW_PERMISSION", "TIMESHEET_DISABLED",
-  "TIMESHEET_FUTURE_WEEK", "TIMESHEET_PENDING_EDITS", "TIMESHEET_APPROVAL_REQUIRED", "TIMESHEET_INVALID_WEEK",
-] as const;
-export type ApprovalRefusal = typeof APPROVAL_REFUSALS[number];
 export const approvalWeekSchema = z.object({ workspaceId: z.string().min(1).max(64).optional(), weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 export const approvalSubmitSchema = approvalWeekSchema.extend({ confirmedOnline: z.literal(true), pendingLocalEdits: z.literal(false) });
 export const approvalActionSchema = z.object({
@@ -33,9 +26,4 @@ export function approvalWeekBounds(weekStart: string, timeZone: string): { start
 }
 export function intervalIntersects(start: Date, end: Date | null, from: Date, to: Date): boolean {
   return start < to && (end === null || end > from || (end.getTime() === start.getTime() && start >= from));
-}
-
-/** Stable entry-write conflicts must never delete queued local work. */
-export function isTimesheetWriteRefusal(message: string): boolean {
-  return ["TIMESHEET_LOCKED", "TIMESHEET_TRANSACTION_REQUIRED", "TIMESHEET_TRANSACTIONS_UNAVAILABLE", "TIMESHEET_APPROVAL_REQUIRED", "TIMESHEET_INVALID_INTERVAL"].includes(message);
 }

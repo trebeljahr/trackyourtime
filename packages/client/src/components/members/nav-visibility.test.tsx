@@ -6,6 +6,8 @@ import { permissionsFor, type WorkspaceSummary } from "@starter/shared";
 
 import { workspaceFor } from "./member-fixtures";
 
+vi.mock("@/components/settings/approval-settings", () => ({ ApprovalSettings: () => null }));
+
 let active: WorkspaceSummary | null = null;
 vi.mock("@/components/members/use-active-workspace", () => ({
   useActiveWorkspace: () => ({

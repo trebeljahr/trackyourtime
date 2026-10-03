@@ -116,7 +116,7 @@ export const protectedProcedure = publicProcedure.use(async ({ ctx, next }) => {
  *    FORBIDDEN would confirm the workspace exists.
  */
 export const workspaceProcedure = protectedProcedure.use(
-  async ({ ctx, next, getRawInput, type, path }) => {
+  async ({ ctx, next, getRawInput, type }) => {
     const requested = workspaceIdFromInput(await getRawInput());
     const resolve = () => (type === "query" && ctx.resolveRequestWorkspace
       ? ctx.resolveRequestWorkspace(requested)
@@ -139,13 +139,17 @@ export const workspaceProcedure = protectedProcedure.use(
         visibility: resolved.visibility,
       },
     });
-    const run = async () => {
-      const result = await data();
-      if (!result.ok) throw result.error;
-      return result;
-    };
-    const execute = () => type === "mutation" && /^(data\.(commit|undo)$|invoices\.(create|remove)$|approvals\.)/.test(path)
-      ? withBusinessTransaction(run) : data();
-    return ctx.res ? timeServerWork(ctx.res, "data", execute) : execute();
+    return ctx.res ? timeServerWork(ctx.res, "data", data) : data();
   },
+);
+
+
+/** A database-only multi-write operation, independent of how its router is
+ * mounted. Direct callers receive the same transaction boundary as appRouter. */
+export const businessProcedure = workspaceProcedure.use(async ({ next }) =>
+  withBusinessTransaction(async () => {
+    const result = await next();
+    if (!result.ok) throw result.error;
+    return result;
+  }),
 );

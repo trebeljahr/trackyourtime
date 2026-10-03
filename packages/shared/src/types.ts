@@ -1,3 +1,4 @@
+import type { InvoiceFollowThrough, InvoiceBalance } from "./invoice-follow-through.js";
 import type {
   EinvoiceFill,
   ElectronicAddressScheme,
@@ -743,8 +744,8 @@ export type InvoiceUpdateRefusal =
 
 /** A generated invoice for one client, over one date range or none. */
 export type Invoice = {
-  followThrough?: import("./invoice-follow-through.js").InvoiceFollowThrough;
-  balance?: import("./invoice-follow-through.js").InvoiceBalance;
+  followThrough?: InvoiceFollowThrough;
+  balance?: InvoiceBalance;
   timezone?: string;
   issued?: boolean;
   deletionPending?: boolean;

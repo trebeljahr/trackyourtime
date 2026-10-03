@@ -1,3 +1,4 @@
+import { businessProcedure } from "../trpc.js";
 import { revisionFilter } from "../../services/invoice-follow-through.js";
 import { invoiceFollowThroughProcedures } from "./invoice-follow-through.js";
 import { clientEntryFilter } from "../../services/entries/refs.js";
@@ -891,7 +892,7 @@ export const invoicesRouter = router({
    * choosing against entries they may not own — and it would race, since the
    * preview the user looked at may be seconds stale.
    */
-  create: workspaceProcedure
+  create: businessProcedure
     .input(createInvoiceSchema)
     .mutation(async ({ ctx, input }): Promise<InvoiceWire> => {
       requireInvoiceAuthoring(ctx);
@@ -1400,7 +1401,7 @@ export const invoicesRouter = router({
    * deleting it would leave a hole in the numbering an accountant has to
    * explain. Only a draft — a document nobody outside has seen — can go.
    */
-  remove: workspaceProcedure
+  remove: businessProcedure
     .input(idInputSchema)
     .mutation(async ({ ctx, input }): Promise<InvoiceRemoveResult> => {
       requireInvoiceById(ctx);

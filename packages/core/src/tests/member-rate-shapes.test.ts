@@ -39,6 +39,6 @@ test("project override wins over member, including zero", () => {
 
 test("approval conflicts retain offline edits instead of dropping them", async () => {
   const { classifyReplayOutcome } = await import("../offline-replay.js");
-  const result = await classifyReplayOutcome({ message: "TIMESHEET_LOCKED", data: { code: "CONFLICT", httpStatus: 409 } }, {}, { isTransportFailure: () => false });
+  const result = await classifyReplayOutcome({ message: "TIMESHEET_LOCKED", data: { code: "CONFLICT", httpStatus: 409 } }, { op: "entries.update" }, { isTransportFailure: () => false });
   assert.deepEqual(result, { kind: "hold", reason: "refused", message: "TIMESHEET_LOCKED", code: "CONFLICT" });
 });
