@@ -57,6 +57,7 @@ import {
   useActiveWorkspace,
   WorkspaceSwitcher,
 } from "@/components/workspace-switcher";
+import { useQueryPersistence } from "@/hooks/use-query-persistence";
 import { useNativeLifecycle } from "@/hooks/use-native-lifecycle";
 import { VersionBanner } from "@/components/version-banner";
 import { refreshServerLevel } from "@/lib/server-level";
@@ -356,6 +357,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
   const status = useSync();
+  useQueryPersistence();
   const t = useT("shell");
   // Resume/pause for the native shells. A no-op on web, where nothing ever
   // calls the handlers it registers.

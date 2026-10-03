@@ -40,6 +40,7 @@ vi.mock("@/lib/running-mirror", () => ({
   writeRunningMirror: (entry: unknown) => writeRunningMirror(entry),
 }));
 
+const { QUERY_SNAPSHOT_KEY } = await import("./query-persistence");
 const { createAppQueryClient } = await import("./query-client");
 const { onSignOut, signOut } = await import("./auth-client");
 const activeWorkspace = await import("./active-workspace");
@@ -78,6 +79,7 @@ describe("signOut", () => {
     await activeWorkspace.applyWorkspaceList([workspace("ws-a", true), workspace("ws-b", false)], "u1");
     queryClient.setQueryData([["entries", "list"], { type: "query" }], ["A's entry"]);
     queryClient.setQueryData([["entries", "current"], { type: "query" }], { id: "running" });
+    window.localStorage.setItem(QUERY_SNAPSHOT_KEY, "saved catalog");
     const cleanup = vi.fn();
     const unregister = onSignOut(cleanup);
 
@@ -88,6 +90,7 @@ describe("signOut", () => {
     expect(writeRunningMirror).toHaveBeenCalledWith(null);
     expect(activeWorkspace.getActiveWorkspaceId()).toBeNull();
     expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem(QUERY_SNAPSHOT_KEY)).toBeNull();
     unregister();
   });
 
@@ -106,6 +109,7 @@ describe("signOut", () => {
   });
 
   it("still forgets everything when the server never heard the sign-out", async () => {
+    window.localStorage.setItem(QUERY_SNAPSHOT_KEY, "saved catalog");
     authSignOut.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     queryClient.setQueryData([["entries", "list"], { type: "query" }], ["A's entry"]);
 
@@ -113,5 +117,6 @@ describe("signOut", () => {
 
     expect(queryClient.getQueryData([["entries", "list"], { type: "query" }])).toBeUndefined();
     expect(writeRunningMirror).toHaveBeenCalledWith(null);
+    expect(window.localStorage.getItem(QUERY_SNAPSHOT_KEY)).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import {
   onlineManager,
 } from "@tanstack/react-query";
 
+import { getQueryPersistence } from "@/lib/app-query-persistence";
 import { noteNotFound } from "@/lib/active-workspace";
 import {
   isAuthError,
@@ -52,8 +53,11 @@ let appQueryClient: QueryClient | null = null;
 export const clearAppQueryCache = async (): Promise<void> => {
   const client = appQueryClient;
   if (client === null) return;
+  // Invalidate pending snapshot work synchronously, before cancellation settles.
+  const forgotten = getQueryPersistence(client).forget();
   await client.cancelQueries();
   client.clear();
+  await forgotten;
 };
 
 export const createAppQueryClient = (): QueryClient => {
@@ -88,6 +92,7 @@ export const createAppQueryClient = (): QueryClient => {
       staleTime: 60_000,
     });
   }
+  getQueryPersistence(appQueryClient);
   return appQueryClient;
 };
 

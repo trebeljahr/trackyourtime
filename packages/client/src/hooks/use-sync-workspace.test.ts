@@ -16,6 +16,7 @@ vi.mock("@/lib/native-session", () => ({
 }));
 vi.mock("better-auth/react", () => ({
   createAuthClient: () => ({
+    $store: { atoms: { session: { get: () => ({ data: null }), set: vi.fn() } } },
     signOut: async () => ({ data: null, error: null }),
     signIn: vi.fn(),
     signUp: vi.fn(),

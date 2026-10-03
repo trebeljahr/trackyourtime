@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OfflineStartInput } from "@starter/core";
 
@@ -54,6 +55,8 @@ const {
   sealOfflineQueueOwner,
   setOfflineQueueOwner,
 } = await import("./offline");
+const { createAppQueryClient } = await import("./query-client");
+const { QUERY_SNAPSHOT_KEY } = await import("./query-persistence");
 const { accountHasPassword, deleteAccount } = await import("./auth-client");
 
 const startInput = (description: string): OfflineStartInput => ({
@@ -69,6 +72,9 @@ const startInput = (description: string): OfflineStartInput => ({
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  window.localStorage.clear();
+  createAppQueryClient();
+  window.localStorage.setItem(QUERY_SNAPSHOT_KEY, "saved catalog");
   __resetOfflineQueueForTests();
   __resetOfflineQueueOwnerForTests();
   deleteResult = { data: { success: true }, error: null };
@@ -94,6 +100,7 @@ describe("deleteAccount", () => {
     expect(await owners()).toEqual(["user-b"]);
     expect(writeRunningMirror).toHaveBeenCalledWith(null);
     expect(clearNativeToken).toHaveBeenCalledOnce();
+    expect(window.localStorage.getItem(QUERY_SNAPSHOT_KEY)).toBeNull();
   });
 
   it("sends no password field at all for an account without one", async () => {
@@ -115,6 +122,7 @@ describe("deleteAccount", () => {
     expect(await owners()).toEqual(["user-b", "user-a"]);
     expect(writeRunningMirror).not.toHaveBeenCalled();
     expect(clearNativeToken).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(QUERY_SNAPSHOT_KEY)).toBe("saved catalog");
   });
 
   it("treats a request that never got an answer as a failure, not a deletion", async () => {
