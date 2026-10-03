@@ -251,6 +251,25 @@ before this change still connects wherever `/ws` is still routed.
    coordinate queue ownership across tabs/processes. Legacy calls without an
    ID remain supported but do not provide durable replay.
 
+   Raycast persists its six entry writes before HTTP and sends `continue` as a
+   durable start after reading the source entry. Its macOS commands share a
+   kernel lock under `environment.supportPath`; a crashed command releases the
+   lock. Requests have a 30-second deadline. A lost reply retains the original
+   input and ID, and automatic cancellation refuses an already-submitted or
+   ambiguous legacy row. Legacy queue rows need explicit recovery review.
+
+   `node --import tsx scripts/rolling-integration.mts` runs two real servers
+   against a fresh local Mongo replica set and Redis container, using synthetic
+   accounts. Run from an isolated checkout without `packages/server/.env.development`,
+   with built workspace dependencies, local `mongod` and an already-present
+   `redis:7-alpine` image. The proof checks Redis fan-out and recovery, socket
+   authorization, response-loss replay, accepted-request drain and scheduler
+   takeover. It removes its own fixture processes/data afterward. Core native
+   and Raycast transports run in Node; this does not certify installed native
+   shells or the Raycast host runtime. Raycast's package tests additionally
+   exercise its actual API/queue boundary with a synthetic host and transport,
+   and separate-process kernel-lock ownership including owner death.
+
    The compose apps they replaced are kept, stopped, as
    `tracktime-{server,client}-legacy-compose` for
    `hatchkit migrate-runtime --rollback`. Those read `SERVER_IMAGE` /
