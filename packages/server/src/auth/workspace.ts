@@ -126,3 +126,29 @@ export async function resolveWorkspace(
   const membership = await lookups.membership(fallback, args.user.id);
   return membership ? resolved(fallback, membership) : null;
 }
+
+/**
+ * One resolver per HTTP context, bound to its authenticated user and default.
+ * Only query-only requests may reuse authorization. Mutation batches can change
+ * membership/permissions (including through non-workspace procedures), so they
+ * must do fresh lookups even while another operation is still in flight.
+ */
+export function createRequestWorkspaceResolver(
+  scope: { user: WorkspaceOwner; activeWorkspaceId: string | null },
+  requestType: string,
+  lookups: WorkspaceLookups = mongooseLookups,
+): (requested: string | null) => Promise<ResolvedWorkspace | null> {
+  const resolutions = new Map<string | null, Promise<ResolvedWorkspace | null>>();
+  return (requested) => {
+    if (requestType !== "query") {
+      return resolveWorkspace({ ...scope, requested }, lookups);
+    }
+    const existing = resolutions.get(requested);
+    if (existing) return existing;
+    // Keep implicit scope separate from explicit IDs: stale defaults may fall
+    // back, while an explicit missing membership must remain NOT_FOUND.
+    const pending = resolveWorkspace({ ...scope, requested }, lookups);
+    resolutions.set(requested, pending);
+    return pending;
+  };
+}

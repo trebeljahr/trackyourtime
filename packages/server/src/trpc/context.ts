@@ -1,6 +1,7 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import { getAuth, writeSessionClientVersion } from "../auth/auth.js";
 import { recordSessionClientVersion } from "../auth/client-version.js";
+import { createRequestWorkspaceResolver } from "../auth/workspace.js";
 import { fromNodeHeaders } from "better-auth/node";
 
 /**
@@ -37,7 +38,7 @@ function readSessionId(session: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-export async function createContext({ req, res }: CreateExpressContextOptions) {
+export async function createContext({ req, res, info }: CreateExpressContextOptions) {
   const auth = getAuth();
   const session = await auth.api.getSession({
     headers: fromNodeHeaders(req.headers),
@@ -73,6 +74,10 @@ export async function createContext({ req, res }: CreateExpressContextOptions) {
        */
       activeWorkspaceId: readActiveWorkspaceId(session),
       sessionId: readSessionId(session),
+      resolveRequestWorkspace: createRequestWorkspaceResolver(
+        { user: session.user, activeWorkspaceId: readActiveWorkspaceId(session) },
+        info.type,
+      ),
     };
   }
 
@@ -87,4 +92,7 @@ export async function createContext({ req, res }: CreateExpressContextOptions) {
   };
 }
 
-export type Context = Awaited<ReturnType<typeof createContext>>;
+// Direct callers without an HTTP request keep the uncached authorization path.
+export type Context = Omit<Awaited<ReturnType<typeof createContext>>, "resolveRequestWorkspace"> & {
+  resolveRequestWorkspace?: ReturnType<typeof createRequestWorkspaceResolver>;
+};

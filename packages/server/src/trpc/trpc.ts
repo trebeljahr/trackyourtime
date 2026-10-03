@@ -112,12 +112,15 @@ export const protectedProcedure = publicProcedure.use(async ({ ctx, next }) => {
  *    FORBIDDEN would confirm the workspace exists.
  */
 export const workspaceProcedure = protectedProcedure.use(
-  async ({ ctx, next, getRawInput }) => {
-    const resolved = await resolveWorkspace({
-      user: ctx.user,
-      requested: workspaceIdFromInput(await getRawInput()),
-      activeWorkspaceId: ctx.activeWorkspaceId,
-    });
+  async ({ ctx, next, getRawInput, type }) => {
+    const requested = workspaceIdFromInput(await getRawInput());
+    const resolved = await (type === "query" && ctx.resolveRequestWorkspace
+      ? ctx.resolveRequestWorkspace(requested)
+      : resolveWorkspace({
+          user: ctx.user,
+          requested,
+          activeWorkspaceId: ctx.activeWorkspaceId,
+        }));
 
     if (!resolved) throw new TRPCError({ code: "NOT_FOUND" });
 
