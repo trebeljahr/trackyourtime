@@ -36,7 +36,10 @@ export type InvoiceCredit = {
   number: string;
   originalNumber: string;
   reason: string;
+  /** Exact audit instant, separate from the issue calendar date. */
   at: string;
+  /** YYYY-MM-DD in the original invoice timezone. Absent on older credits. */
+  issueDate?: string;
   by: string;
   snapshot: InvoiceCreditSnapshot;
   replacementId?: string;

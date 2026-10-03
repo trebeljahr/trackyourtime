@@ -9,6 +9,7 @@ import {
   invoiceBalance,
   invoiceDay,
   moneyMinor,
+  type InvoiceCredit,
   type InvoiceCreditSnapshot,
   type InvoiceFollowThrough,
   type InvoicePayment,
@@ -241,6 +242,7 @@ export function creditInvoice(
     originalNumber: wire.number,
     reason: input.reason,
     at: now.toISOString(),
+    issueDate: invoiceDay(now, wire.timezone ?? "UTC"),
     by,
     snapshot: creditSnapshot(wire),
     ...(input.replacement
@@ -249,6 +251,12 @@ export function creditInvoice(
   };
   if (f.reminders) f.reminders.enabled = false;
   return f;
+}
+/** Older credits keep their original UTC date; never reinterpret them in a new timezone. */
+export function creditIssueDate(
+  credit: Pick<InvoiceCredit, "issueDate" | "at">,
+): string {
+  return credit.issueDate ?? credit.at.slice(0, 10);
 }
 /** Retrying a correction repairs an interrupted draft creation without another credit. */
 export async function ensureReplacement(
@@ -267,7 +275,8 @@ export async function ensureReplacement(
   const numbers = await Invoice.find({ workspaceId: original.workspaceId })
     .select("number")
     .lean();
-  const year = new Date(credit.at).getUTCFullYear();
+  const issueDate = creditIssueDate(credit);
+  const year = Number(issueDate.slice(0, 4));
   for (const number of invoiceNumberCandidates(
     nextInvoiceNumber(
       numbers.map((row) => row.number),
@@ -284,8 +293,8 @@ export async function ensureReplacement(
         number,
         status: "draft",
         replacementFor: String(original._id),
-        issueDate: new Date(credit.at.slice(0, 10)),
-        dueDate: new Date(credit.at.slice(0, 10)),
+        issueDate: new Date(issueDate),
+        dueDate: new Date(issueDate),
         from: snapshot.from ? new Date(snapshot.from) : null,
         to: snapshot.to ? new Date(snapshot.to) : null,
         lineItems: snapshot.lineItems.map((line, index) => ({

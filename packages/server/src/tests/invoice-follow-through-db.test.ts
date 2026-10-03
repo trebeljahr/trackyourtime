@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, afterEach, before, describe, it } from "node:test";
 import { Invoice } from "../models/Invoice.js";
+import {
+  changeFollowThrough,
+  creditInvoice,
+  ensureReplacement,
+  loadFollowThrough,
+} from "../services/invoice-follow-through.js";
+import { pageTexts } from "./support/pdf-text.js";
 import { TimeEntry } from "../models/TimeEntry.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { invoicesRouter } from "../trpc/routers/invoices.js";
@@ -219,6 +226,57 @@ describe(
       assert.match(
         Buffer.from(pdf.base64, "base64").subarray(0, 4).toString(),
         /%PDF/,
+      );
+    });
+    it("keeps a Sydney Jan 1 credit PDF and replacement in the new year when retried in another timezone", async () => {
+      const invoice = await sent();
+      await Invoice.updateOne(
+        { _id: invoice.id },
+        { $set: { timezone: "Australia/Sydney", locale: "en" } },
+      );
+      const input = {
+        id: invoice.id,
+        requestId: randomUUID(),
+        reason: "Year boundary",
+        replacement: true,
+      };
+      const instant = new Date("2026-12-31T13:05:00.000Z");
+      const credited = await changeFollowThrough(
+        invoice.id,
+        WORKSPACE,
+        (wire) => creditInvoice(wire, input, OWNER, instant),
+      );
+      assert.equal(credited.followThrough!.credit!.at, instant.toISOString());
+      assert.equal(credited.followThrough!.credit!.issueDate, "2027-01-01");
+      const firstPdf = await owner().exportCreditPdf({ id: invoice.id });
+      assert.match(
+        pageTexts(Buffer.from(firstPdf.base64, "base64")).join(" "),
+        /Issue date2027-01-01/,
+      );
+
+      // Simulate later settings and a retry after credit persisted but before draft creation.
+      await Invoice.updateOne(
+        { _id: invoice.id },
+        { $set: { timezone: "America/Los_Angeles" } },
+      );
+      await ensureReplacement(await loadFollowThrough(invoice.id, WORKSPACE));
+      const replacement = await owner().get({
+        id: credited.followThrough!.credit!.replacementId!,
+      });
+      assert.match(replacement.number, /^2027-/);
+      assert.equal(replacement.issueDate.slice(0, 10), "2027-01-01");
+      assert.equal(replacement.dueDate.slice(0, 10), "2027-01-01");
+      const retried = await owner().credit(input);
+      assert.equal(retried.followThrough!.credit!.issueDate, "2027-01-01");
+      assert.equal(retried.followThrough!.credit!.at, instant.toISOString());
+      const secondPdf = await owner().exportCreditPdf({ id: invoice.id });
+      assert.deepEqual(
+        pageTexts(Buffer.from(secondPdf.base64, "base64")),
+        pageTexts(Buffer.from(firstPdf.base64, "base64")),
+      );
+      assert.equal(
+        await Invoice.countDocuments({ replacementFor: invoice.id }),
+        1,
       );
     });
     it("mixed VAT replacement preserves the credit snapshot and recomputes an edited draft coherently", async () => {

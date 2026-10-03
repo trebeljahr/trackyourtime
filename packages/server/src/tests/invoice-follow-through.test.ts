@@ -5,6 +5,7 @@ import { invoiceBalance, moneyMinor, nextReminderDay } from "@starter/shared";
 import {
   appendInvoicePayment,
   creditInvoice,
+  creditIssueDate,
 } from "../services/invoice-follow-through.js";
 import { previewInvoiceReminder } from "../services/scheduler/invoice-reminders.js";
 import { readyInvoice } from "./support/einvoice-invoice.js";
@@ -291,6 +292,39 @@ describe("invoice follow-through arithmetic", () => {
       followThrough.credit?.snapshot.lineItems[0]?.label,
       "Later change",
     );
+  });
+  it("snapshots Sydney's issue calendar date across the year boundary and later timezone changes", () => {
+    const invoice = { ...readyInvoice(), timezone: "Australia/Sydney" };
+    const instant = new Date("2026-12-31T13:05:00.000Z");
+    const input = {
+      requestId: randomUUID(),
+      reason: "Year boundary",
+      replacement: true,
+    };
+    const followThrough = creditInvoice(invoice, input, "owner", instant);
+    const credit = followThrough.credit!;
+    assert.equal(credit.at, "2026-12-31T13:05:00.000Z");
+    assert.equal(credit.issueDate, "2027-01-01");
+    for (const timezone of ["UTC", "America/Los_Angeles", "Pacific/Honolulu"]) {
+      const retried = creditInvoice(
+        { ...invoice, timezone, followThrough },
+        input,
+        "owner",
+        new Date("2027-01-03T00:00:00Z"),
+      );
+      assert.equal(creditIssueDate(retried.credit!), "2027-01-01");
+      assert.equal(retried.credit!.at, instant.toISOString());
+    }
+    const legacy = { ...credit };
+    delete legacy.issueDate;
+    assert.equal(creditIssueDate(legacy), "2026-12-31");
+    const utcCredit = creditInvoice(
+      { ...invoice, timezone: undefined },
+      input,
+      "owner",
+      instant,
+    ).credit!;
+    assert.equal(utcCredit.issueDate, "2026-12-31");
   });
   it("reminders need consent, stop on settlement/credit and have only three steps", () => {
     const invoice = readyInvoice();

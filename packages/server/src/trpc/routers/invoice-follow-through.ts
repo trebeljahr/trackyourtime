@@ -13,6 +13,7 @@ import {
   appendInvoicePayment,
   changeFollowThrough,
   creditInvoice,
+  creditIssueDate,
   ensureReplacement,
   invoiceRefusal,
   loadFollowThrough,
@@ -148,7 +149,7 @@ export const invoiceFollowThroughProcedures = {
           number: credit.originalNumber,
           reason: credit.reason,
         },
-        issueDate: credit.at,
+        issueDate: creditIssueDate(credit),
         notes: credit.reason,
         paymentTerms: null,
       };
