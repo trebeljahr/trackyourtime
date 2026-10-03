@@ -109,19 +109,10 @@ function EntryRowImpl({
 
   const [draft, setDraft] = React.useState(entry.description);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
-  const [deleteSubmitted, setDeleteSubmitted] = React.useState(false);
   const canDelete =
     (syncing || (user?.id !== undefined && entry.authorId === user.id)) &&
     entry.invoiceId == null;
-  const deleting = mutations.removeEntryPendingId === entry.id;
   const anyDeletePending = mutations.removeEntryPendingId != null;
-
-  React.useEffect(() => {
-    if (deleteSubmitted && !deleting) {
-      setDeleteSubmitted(false);
-      setDeleteOpen(false);
-    }
-  }, [deleteSubmitted, deleting]);
 
   const commitDescription = React.useCallback((): void => {
     setEditingDescription(false);
@@ -547,7 +538,7 @@ function EntryRowImpl({
           closeOnConfirm={false}
           onConfirm={() => {
             if (!canDelete || anyDeletePending) return;
-            setDeleteSubmitted(true);
+            setDeleteOpen(false);
             mutations.removeEntry(entry);
           }}
           testId="confirm-entry-delete"

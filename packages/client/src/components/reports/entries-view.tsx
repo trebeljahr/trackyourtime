@@ -106,7 +106,7 @@ export function EntriesView({
       );
       if (project) setEditingProject(project);
     },
-    [projectsQuery.data],
+    [projectsQuery.data, setEditingProject],
   );
 
   // ── sorting (URL-backed, applied to the loaded pages) ──────────────
@@ -166,7 +166,7 @@ export function EntriesView({
       else next.delete(id);
       return next;
     });
-  }, [eligibleIds]);
+  }, [eligibleIds, setSelected]);
 
   const toggleAll = React.useCallback(
     (isSelected: boolean): void => {
@@ -174,7 +174,7 @@ export function EntriesView({
         isSelected ? new Set(eligible.slice(0, 100).map((entry) => entry.id)) : new Set()
       );
     },
-    [eligible]
+    [eligible, setSelected]
   );
 
   // One server request validates every target; no optimistic partial rewrite.
@@ -182,7 +182,7 @@ export function EntriesView({
   const [bulkPending, setBulkPending] = React.useState(false);
   const [bulkResult, setBulkResult] = React.useState<{ key: string; result: BulkEditEntriesResult } | null>(null);
   const currentKey = React.useRef(filterKey);
-  currentKey.current = filterKey;
+  React.useLayoutEffect(() => { currentKey.current = filterKey; }, [filterKey]);
   const busy = React.useRef(false);
 
   const runBulk = (operation: BulkEditEntriesInput["operation"]): void => {
