@@ -47,6 +47,18 @@ const getStorage = (): KeyValueStorage => {
   return storage;
 };
 
+type GuideStatus = "enrolled" | "tracking" | "billing" | "dismissed" | "completed";
+type LoadedGuideStatus = { scope: string; status: GuideStatus | null };
+
+const parseGuideStatus = (value: string | null): GuideStatus | null =>
+  value === "enrolled" ||
+  value === "tracking" ||
+  value === "billing" ||
+  value === "dismissed" ||
+  value === "completed"
+    ? value
+    : null;
+
 type ChecklistItemProps = {
   complete: boolean;
   label: string;
@@ -82,7 +94,6 @@ export function FirstRunGuide({
   /** True only after the initial history query confirms there are no visible entries. */
   canEnroll: boolean;
 }): React.JSX.Element | null {
-  type GuideStatus = "enrolled" | "tracking" | "billing" | "dismissed" | "completed";
   const t = useT("tracker");
   const { user } = useAuth();
   const { workspace } = useActiveWorkspace();
@@ -105,9 +116,9 @@ export function FirstRunGuide({
   const canConfirmEmptyWorkspace = Boolean(
     workspace && (workspace.memberCount === 1 || workspace.permissions.viewOthersTime),
   );
-  const [loadedScope, setLoadedScope] = React.useState<string | null>(null);
-  const [status, setStatus] = React.useState<GuideStatus | null>(null);
-  const statusForScope = loadedScope === scope ? status : null;
+  const [loaded, setLoaded] = React.useState<LoadedGuideStatus | null>(null);
+  const loadedScope = loaded?.scope ?? null;
+  const statusForScope = loadedScope === scope ? loaded?.status ?? null : null;
   const shouldLoadChecklist =
     scope !== null &&
     (statusForScope === "enrolled" ||
@@ -136,29 +147,27 @@ export function FirstRunGuide({
   });
   React.useEffect(() => {
     let active = true;
-    setLoadedScope(null);
-    setStatus(null);
     if (scope === null) return () => { active = false; };
     void getStorage().getItem(scope).then((value) => {
       if (!active) return;
-      setStatus(
-        value === "enrolled" ||
-          value === "tracking" ||
-          value === "billing" ||
-          value === "dismissed" ||
-          value === "completed"
-          ? value
-          : null,
-      );
-      setLoadedScope(scope);
+      setLoaded({ scope, status: parseGuideStatus(value) });
     });
     return () => { active = false; };
   }, [scope]);
 
   React.useEffect(() => {
     if (scope === null || loadedScope !== scope || statusForScope !== null || hasAnyEntry || !canEnroll || !canConfirmEmptyWorkspace) return;
-    setStatus("enrolled");
-    void getStorage().setItem(scope, "enrolled");
+    let active = true;
+    const markEnrolled = (): void => {
+      if (!active) return;
+      setLoaded((current) =>
+        current?.scope === scope && current.status === null
+          ? { scope, status: "enrolled" }
+          : current,
+      );
+    };
+    void getStorage().setItem(scope, "enrolled").then(markEnrolled, markEnrolled);
+    return () => { active = false; };
   }, [canConfirmEmptyWorkspace, canEnroll, hasAnyEntry, loadedScope, scope, statusForScope]);
 
   const projectRows = projects.data ?? [];
@@ -188,19 +197,28 @@ export function FirstRunGuide({
 
   React.useEffect(() => {
     if (
-      scope !== null &&
-      loadedScope === scope &&
-      (statusForScope === "tracking" || statusForScope === "billing") &&
-      complete
-    ) {
-      setStatus("completed");
-      void getStorage().setItem(scope, "completed");
-    }
+      scope === null ||
+      loadedScope !== scope ||
+      (statusForScope !== "tracking" && statusForScope !== "billing") ||
+      !complete
+    ) return;
+    let active = true;
+    const completedPath = statusForScope;
+    const markCompleted = (): void => {
+      if (!active) return;
+      setLoaded((current) =>
+        current?.scope === scope && current.status === completedPath
+          ? { scope, status: "completed" }
+          : current,
+      );
+    };
+    void getStorage().setItem(scope, "completed").then(markCompleted, markCompleted);
+    return () => { active = false; };
   }, [complete, loadedScope, scope, statusForScope]);
 
   const setGuideStatus = (next: "enrolled" | "tracking" | "billing" | "dismissed"): void => {
-    if (scope === null) return;
-    setStatus(next);
+    if (scope === null || loadedScope !== scope) return;
+    setLoaded({ scope, status: next });
     void getStorage().setItem(scope, next);
   };
 
@@ -214,6 +232,7 @@ export function FirstRunGuide({
     statusForScope === null ||
     statusForScope === "dismissed" ||
     statusForScope === "completed" ||
+    complete ||
     projects.data === undefined
   ) {
     return null;
