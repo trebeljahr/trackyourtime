@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import { MongoClient } from "mongodb";
 import { test, expect, type Page } from "@playwright/test";
@@ -68,6 +69,7 @@ test.beforeAll(async () => {
       env: {
         ...process.env,
         NODE_ENV: "test",
+        E2E_DISABLE_AUTH_RATE_LIMIT: "1",
         PORT: TARGET_PORT,
         MONGODB_URI: targetUri(),
         REDIS_URL: "",
@@ -85,7 +87,14 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (target?.pid) {
     try {
-      process.kill(-target.pid, "SIGTERM");
+      // This disposable database is dropped below. Stop the whole owned group
+      // immediately: production's drain delay otherwise holds the port across
+      // retries, and the next target exits before it can listen.
+      const exited = target.exitCode === null && target.signalCode === null
+        ? once(target, "exit")
+        : Promise.resolve();
+      process.kill(-target.pid, "SIGKILL");
+      await exited;
     } catch {
       /* already gone */
     }

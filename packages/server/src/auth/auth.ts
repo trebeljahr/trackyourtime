@@ -70,13 +70,13 @@ export async function initAuth(): Promise<void> {
     database: mongodbAdapter(db),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
-    // The desktop E2E suite runs a throwaway API on loopback. Its many fresh
+    // E2E suites run throwaway APIs on loopback. Their many fresh
     // accounts share one IP and exhaust Better Auth's 3-per-10-second sign-in
     // bucket. Only that explicitly marked local API skips auth rate limiting.
     rateLimit: {
       enabled: authRateLimitEnabled(
         env.BETTER_AUTH_URL,
-        process.env.DESKTOP_E2E_DISABLE_AUTH_RATE_LIMIT,
+        process.env.E2E_DISABLE_AUTH_RATE_LIMIT,
       ),
     },
     /**

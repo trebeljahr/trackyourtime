@@ -137,7 +137,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
         TRUSTED_ORIGINS: "app://-",
         SCHEDULER_ENABLED: "false",
         DESKTOP_E2E_REQUEST_LOG: log,
-        DESKTOP_E2E_DISABLE_AUTH_RATE_LIMIT: "1",
+        E2E_DISABLE_AUTH_RATE_LIMIT: "1",
       },
     });
   const api = startApi(API_PORT, API_ORIGIN, mongoUri, requestLog);

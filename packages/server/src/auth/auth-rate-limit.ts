@@ -1,7 +1,7 @@
-/** Desktop E2E alone may skip Better Auth's shared-IP sign-in limit. */
-export function authRateLimitEnabled(baseUrl: string, desktopE2eOverride: string | undefined): boolean {
+/** Explicitly marked E2E APIs on loopback alone may skip Better Auth's shared-IP sign-in limit. */
+export function authRateLimitEnabled(baseUrl: string, e2eOverride: string | undefined): boolean {
   return !(
-    desktopE2eOverride === "1" &&
+    e2eOverride === "1" &&
     new URL(baseUrl).hostname === "127.0.0.1"
   );
 }

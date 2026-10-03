@@ -27,6 +27,7 @@ export default defineConfig({
       timeout: 30_000,
       env: {
         NODE_ENV: "test",
+        E2E_DISABLE_AUTH_RATE_LIMIT: "1",
         PORT: E2E_SERVER_PORT,
         MONGODB_URI:
           process.env.MONGODB_URI ??
