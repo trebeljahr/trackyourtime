@@ -29,7 +29,7 @@ import cors from "cors";
 import express from "express";
 
 import { trustedOriginsForRequest } from "../auth/extension-origins.js";
-import { corsOptionsFor } from "../app.js";
+import { corsOptionsFor, extensionCorsOptions } from "../app.js";
 
 const FIREFOX_ORIGIN = "moz-extension://42a04a0c-c28d-4f59-8694-9623ce55de3d";
 const WEB_ORIGIN = "https://trackyourtime.dev";
@@ -142,7 +142,7 @@ describe("the CORS answer for an extension origin", () => {
         done(
           null,
           req.headers.origin === FIREFOX_ORIGIN && !req.headers.cookie
-            ? { origin: FIREFOX_ORIGIN, credentials: false, exposedHeaders: ["set-auth-token"] }
+            ? extensionCorsOptions(FIREFOX_ORIGIN)
             : corsOptionsFor(req as never),
         ),
       ),
@@ -168,6 +168,8 @@ describe("the CORS answer for an extension origin", () => {
         "access-control-request-headers": "x-trackyourtime-client",
       },
     });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-max-age"), "600");
     assert.equal(preflight.headers.get("access-control-allow-origin"), FIREFOX_ORIGIN);
     assert.equal(preflight.headers.get("access-control-allow-credentials"), null);
     // Header names are still reflected: trust is decided by origin alone.

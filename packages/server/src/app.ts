@@ -38,6 +38,11 @@ const IMPORT_BODY_LIMIT = `${Math.ceil((MAX_IMPORT_BYTES * 2) / 1_000_000)}mb`;
  */
 const AVATAR_BODY_LIMIT = `${Math.ceil((MAX_AVATAR_BYTES * 1.5) / 1000)}kb`;
 
+// Cache successful preflights for ten minutes, bounding stale permissions after
+// an origin-policy change. Browsers may evict sooner; different URLs (including
+// tRPC batch paths/query strings), methods or headers can need new preflights.
+const CORS_PREFLIGHT_MAX_AGE_SECONDS = 600;
+
 /**
  * CORS for every route. Exported so a test can drive the exact options.
  *
@@ -51,6 +56,7 @@ export function corsOptions(trustedOrigins: string[]): cors.CorsOptions {
   return {
     origin: trustedOrigins.length > 0 ? trustedOrigins : false,
     credentials: true,
+    maxAge: CORS_PREFLIGHT_MAX_AGE_SECONDS,
     /**
      * The bearer plugin hands a non-cookie client its session token on
      * `set-auth-token`. A cross-origin caller (the browser extension) can
@@ -74,7 +80,12 @@ export function corsOptions(trustedOrigins: string[]): cors.CorsOptions {
  * token, so they lose nothing.
  */
 export function extensionCorsOptions(origin: string): cors.CorsOptions {
-  return { origin, credentials: false, exposedHeaders: ["set-auth-token"] };
+  return {
+    origin,
+    credentials: false,
+    maxAge: CORS_PREFLIGHT_MAX_AGE_SECONDS,
+    exposedHeaders: ["set-auth-token"],
+  };
 }
 
 /**
