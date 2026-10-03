@@ -8,7 +8,7 @@ const fake = vi.hoisted(() => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("@/lib/auth-client", () => ({
-  signIn: { email: fake.signIn }, authClient: {}, getSession: async () => undefined,
+  signInWithPassword: fake.signIn, authClient: {}, getSession: async () => undefined,
   isTwoFactorChallenge: () => false, POST_AUTH_REDIRECT: "/app/track",
 }));
 vi.mock("@/lib/api-origin", () => ({
@@ -34,7 +34,7 @@ it("populates both fields and waits for explicit login before sending credential
   expect(screen.getByTestId("login-password")).toHaveValue("fake-password");
   expect(fake.signIn).not.toHaveBeenCalled();
   fireEvent.click(screen.getByTestId("login-submit"));
-  await waitFor(() => expect(fake.signIn).toHaveBeenCalledWith({ email: "saved@example.com", password: "fake-password" }));
+  await waitFor(() => expect(fake.signIn).toHaveBeenCalledWith("saved@example.com", "fake-password"));
 });
 it("clears a selected website credential when the server changes", () => {
   render(<LoginPage />);

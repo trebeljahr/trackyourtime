@@ -26,7 +26,7 @@ const signInEmail = vi.fn(async () => ({ error: null }));
 const signInMagicLink = vi.fn(async () => ({ error: null }));
 const signUpEmail = vi.fn(async () => ({ error: null }));
 vi.mock("@/lib/auth-client", () => ({
-  signIn: { email: (...args: unknown[]) => signInEmail(...(args as [])) },
+  signInWithPassword: (...args: unknown[]) => signInEmail(...(args as [])),
   signUp: { email: (...args: unknown[]) => signUpEmail(...(args as [])) },
   getSession: vi.fn(async () => ({ data: null })),
   authClient: {
@@ -111,9 +111,7 @@ describe("login ?next=", () => {
     (screen.getByTestId("login-email") as HTMLInputElement).value = "saved@example.com";
     (screen.getByTestId("login-password") as HTMLInputElement).value = "saved-password";
     fireEvent.click(screen.getByTestId("login-submit"));
-    await waitFor(() => expect(signInEmail).toHaveBeenCalledWith({
-      email: "saved@example.com", password: "saved-password",
-    }));
+    await waitFor(() => expect(signInEmail).toHaveBeenCalledWith("saved@example.com", "saved-password"));
   });
 
   it("returns to the invitation after signing in", async () => {
