@@ -181,6 +181,6 @@ describe("the CORS answer for an extension origin", () => {
     const actual = await fetch(`${base}/api/health`, { headers: { origin: FIREFOX_ORIGIN } });
     assert.equal(actual.headers.get("access-control-allow-origin"), FIREFOX_ORIGIN);
     assert.equal(actual.headers.get("access-control-allow-credentials"), null);
-    assert.equal(actual.headers.get("access-control-expose-headers"), "set-auth-token");
+    assert.equal(actual.headers.get("access-control-expose-headers"), "set-auth-token,Server-Timing");
   });
 });
