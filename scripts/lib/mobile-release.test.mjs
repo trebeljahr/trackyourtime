@@ -270,6 +270,12 @@ describe("mobile-release.yml", () => {
     assert.match(workflow, /push:\s*\n\s*tags:\s*\n\s*- "v\*"/);
   });
 
+  it("can release one mobile platform without uploading the other", () => {
+    assert.match(workflow, /platform:\s*\n\s*description: "Mobile platform to release"[\s\S]*?default: all/);
+    assert.match(workflow, /android:\s*\n\s*if: github.event_name != 'workflow_dispatch' \|\| inputs.platform != 'ios'/);
+    assert.match(workflow, /ios:\s*\n\s*if: github.event_name != 'workflow_dispatch' \|\| inputs.platform != 'android'/);
+  });
+
   it("uploads artifacts only from a build the plan allowed", () => {
     // One block per step; an upload-artifact step with no plan guard is how a
     // tag run with no secrets would attach something that looks like a release.

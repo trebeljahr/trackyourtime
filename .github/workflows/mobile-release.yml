@@ -96,6 +96,15 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      platform:
+        description: "Mobile platform to release"
+        required: true
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+        default: all
       play-track:
         description: "Google Play track for the signed AAB. A prerelease tag is refused anything but internal"
         required: true
@@ -142,6 +151,7 @@ env:
 
 jobs:
   android:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'ios'
     runs-on: ubuntu-latest
     # Job-level, not step-level: a step's own `env:` is not in scope for that
     # step's `if:`. KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD are the names
@@ -264,6 +274,7 @@ jobs:
           userFraction: ${{ steps.plan.outputs.user_fraction }}
 
   ios:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'android'
     runs-on: macos-latest
     # Job-level for the same reason as Android: the `if:` guards below read the
     # plan, and every step that uses a secret reads it from here.

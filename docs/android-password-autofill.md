@@ -42,6 +42,10 @@ deployment cannot add the native plugin or manifest metadata to installed apps.
 The JSON endpoint must return HTTP 200, `application/json`, without redirects.
 Provider association caches can delay recognition after deployment.
 
+For an Android-only update, dispatch `mobile-release.yml` on `main` with
+`platform=android` and the existing Play track. This increments `versionCode`
+without publishing an iOS build or creating an all-platform release tag.
+
 Validate on the installed, release-signed build with a configured password
 provider and a saved `trackyourtime.dev` login. Check picker selection fills both
 fields, cancellation leaves them alone, login succeeds, and switching to a
