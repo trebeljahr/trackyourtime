@@ -28,7 +28,7 @@ vi.mock("@/lib/shell", async () =>
 );
 vi.mock("@/components/google-sign-in-button", () => ({ GoogleSignInButton: () => null }));
 vi.mock("@/lib/auth-client", () => ({
-  signIn: { email: (args: unknown) => signInEmail(args) },
+  signInWithPassword: (email: string, password: string) => signInEmail({ email, password }),
   getSession: () => getSession(),
   authClient: {
     sendVerificationEmail: (args: unknown) => sendVerificationEmail(args),

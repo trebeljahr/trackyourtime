@@ -1,5 +1,7 @@
 "use client";
 
+import { markLoginSubmitted } from "@/lib/startup-timing";
+
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -92,6 +94,7 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    markLoginSubmitted();
     // Password managers can fill the DOM without dispatching React change events.
     const form = new FormData(e.currentTarget);
     const email = String(form.get("username") ?? "");

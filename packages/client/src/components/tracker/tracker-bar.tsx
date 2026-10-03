@@ -1,4 +1,5 @@
 "use client";
+import { trackerDataReady } from "@/lib/startup-timing";
 import { PRODUCT_NAME } from "@/lib/site-links";
 
 import * as React from "react";
@@ -59,6 +60,9 @@ export function TrackerBar(): React.JSX.Element {
   // too — see providers/offline-queue-provider.tsx.
   const { pending, foreign, held, online, authBlocked } = useOfflineQueueState();
   const projects = trpc.projects.list.useQuery({});
+  React.useEffect(() => {
+    trackerDataReady("projects", projects.isSuccess);
+  }, [projects.isSuccess]);
   const { activeId, workspaces } = useActiveWorkspace();
 
   const [manualOpen, setManualOpen] = React.useState(false);

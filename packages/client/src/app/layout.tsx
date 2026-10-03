@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { TRPCProvider } from "@/providers/trpc-provider";
+import { StartupTiming } from "@/components/startup-timing";
 import { AuthProvider } from "@/providers/auth-provider";
 import { MobileBridgeLoader } from "@/mobile/MobileBridgeLoader";
 import { Toaster } from "@/components/ui/sonner";
@@ -94,6 +95,7 @@ export default function RootLayout({
           <TRPCProvider>
             <DeployRecovery />
             <AuthProvider>
+              <StartupTiming />
               <ExtensionBridge />
               {children}
             </AuthProvider>

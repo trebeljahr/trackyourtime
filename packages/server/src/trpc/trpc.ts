@@ -1,3 +1,4 @@
+import { timeServerWork } from "../middleware/server-timing.js";
 import { initTRPC, TRPCError } from "@trpc/server";
 import type { Context } from "./context.js";
 import {
@@ -114,17 +115,20 @@ export const protectedProcedure = publicProcedure.use(async ({ ctx, next }) => {
 export const workspaceProcedure = protectedProcedure.use(
   async ({ ctx, next, getRawInput, type }) => {
     const requested = workspaceIdFromInput(await getRawInput());
-    const resolved = await (type === "query" && ctx.resolveRequestWorkspace
+    const resolve = () => (type === "query" && ctx.resolveRequestWorkspace
       ? ctx.resolveRequestWorkspace(requested)
       : resolveWorkspace({
           user: ctx.user,
           requested,
           activeWorkspaceId: ctx.activeWorkspaceId,
         }));
+    const resolved = ctx.res
+      ? await timeServerWork(ctx.res, "workspace", resolve)
+      : await resolve();
 
     if (!resolved) throw new TRPCError({ code: "NOT_FOUND" });
 
-    return next({
+    const data = () => next({
       ctx: {
         ...ctx,
         workspaceId: resolved.workspaceId,
@@ -132,5 +136,6 @@ export const workspaceProcedure = protectedProcedure.use(
         visibility: resolved.visibility,
       },
     });
+    return ctx.res ? timeServerWork(ctx.res, "data", data) : data();
   },
 );

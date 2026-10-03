@@ -2,6 +2,7 @@ import express, { type RequestHandler } from "express";
 import helmet from "helmet";
 import cors from "cors";
 import morgan from "morgan";
+import { allowServerTiming, timeServerWork } from "./middleware/server-timing.js";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { toNodeHandler } from "better-auth/node";
 import {
@@ -62,7 +63,7 @@ export function corsOptions(trustedOrigins: string[]): cors.CorsOptions {
      * `set-auth-token`. A cross-origin caller (the browser extension) can
      * only read that header if it is explicitly exposed.
      */
-    exposedHeaders: ["set-auth-token"],
+    exposedHeaders: ["set-auth-token", "Server-Timing"],
   };
 }
 
@@ -84,7 +85,7 @@ export function extensionCorsOptions(origin: string): cors.CorsOptions {
     origin,
     credentials: false,
     maxAge: CORS_PREFLIGHT_MAX_AGE_SECONDS,
-    exposedHeaders: ["set-auth-token"],
+    exposedHeaders: ["set-auth-token", "Server-Timing"],
   };
 }
 
@@ -125,13 +126,17 @@ export function createApp() {
   // answered without Allow-Credentials. See corsOptionsFor above.
   app.use(cors((req, done) => done(null, corsOptionsFor(req))));
 
+  app.use(["/api/auth", "/api/trpc"], allowServerTiming);
+
   // ── 1. better-auth — BEFORE express.json() ────────────────────────
   // better-auth handles its own body parsing. Mounting express.json()
   // before this will consume the body and break auth.
   app.all("/api/auth/{*any}", (req, res, next) => {
     try {
       const auth = getAuth();
-      return toNodeHandler(auth)(req, res);
+      return toNodeHandler((request: Request) =>
+        timeServerWork(res, "auth", () => auth.handler(request)),
+      )(req, res);
     } catch (err) {
       next(err);
     }

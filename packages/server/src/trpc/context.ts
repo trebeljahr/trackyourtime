@@ -1,3 +1,4 @@
+import { startServerTiming } from "../middleware/server-timing.js";
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import { getAuth, writeSessionClientVersion } from "../auth/auth.js";
 import { recordSessionClientVersion } from "../auth/client-version.js";
@@ -40,13 +41,14 @@ function readSessionId(session: unknown): string | null {
 
 export async function createContext({ req, res, info }: CreateExpressContextOptions) {
   const auth = getAuth();
+  const stopAuthTiming = startServerTiming(res, "auth");
   const session = await auth.api.getSession({
     headers: fromNodeHeaders(req.headers),
     // Authorization (including API-token creation) must observe revocation,
     // not the five-minute session-data cookie. Keep normal session refresh
     // enabled for active cookie and bearer/device clients.
     query: { disableCookieCache: true },
-  });
+  }).finally(stopAuthTiming);
 
   if (session?.user) {
     // Moves Settings → Devices forward when a newer build uses this session.

@@ -60,10 +60,22 @@ describe("application CORS preflight caching", () => {
         assert.match(response.headers.get("vary") ?? "", /Access-Control-Request-Headers/);
       }
       const actual = await fetch(`${base}/api/health`, { headers: { origin } });
-      assert.equal(actual.headers.get("access-control-expose-headers"), "set-auth-token");
+      assert.equal(actual.headers.get("access-control-expose-headers"), "set-auth-token,Server-Timing");
       assert.equal(actual.headers.get("access-control-max-age"), null);
     });
   }
+
+  it("grants timing access on actual auth/trpc responses only for CORS-approved origins", async () => {
+    for (const origin of [WEB, "capacitor://localhost", CHROME, FIREFOX, SAFARI, "https://untrusted.cors.test"]) {
+      for (const path of ["/api/auth/get-session", "/api/trpc/health.check"]) {
+        // Auth is deliberately uninitialized: even error responses must retain
+        // timing access for trusted callers without broadening origin trust.
+        const response = await fetch(`${base}${path}`, { headers: { origin } });
+        assert.equal(response.headers.get("timing-allow-origin"),
+          origin === "https://untrusted.cors.test" ? null : origin);
+      }
+    }
+  });
 
   it("does not grant access to unlisted or malformed origins or cookie-bearing extensions", async () => {
     const cases = [

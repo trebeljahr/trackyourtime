@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { trackerDataReady } from "@/lib/startup-timing";
 import { Loader2, Timer, Upload } from "lucide-react";
 import { toLocalDateKey, type DetailedEntry } from "@starter/shared";
 
@@ -154,8 +155,8 @@ export function EntryList(): React.JSX.Element {
   // The query, not `useRunningEntry` — this only needs to know WHICH day is
   // live, and the hook's live clock would re-render the whole list once a
   // second to answer a question whose answer changes twice a day.
-  const running =
-    trpc.entries.current.useQuery(undefined, { staleTime: 15_000 }).data ?? null;
+  const current = trpc.entries.current.useQuery(undefined, { staleTime: 15_000 });
+  const running = current.data ?? null;
   const [editing, setEditing] = React.useState<DetailedEntry | null>(null);
 
   const query = trpc.entries.list.useInfiniteQuery(TRACKER_LIST_INPUT, {
@@ -167,6 +168,11 @@ export function EntryList(): React.JSX.Element {
     refetchOnWindowFocus: true,
     staleTime: 30_000,
   });
+
+  React.useEffect(() => {
+    trackerDataReady("current", current.isSuccess);
+    trackerDataReady("entries", query.isSuccess);
+  }, [current.isSuccess, query.isSuccess]);
 
   // Only the viewer's own entries: see components/tracker/own-entries.ts for
   // why a colleague's row must never reach an editable list.
