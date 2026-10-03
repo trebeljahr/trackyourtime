@@ -73,3 +73,11 @@ test("legacy ambiguous writes are held without contacting any server", async () 
   assert.equal(report.held, 1);
   assert.equal((await queue.list())[0]!.hold?.code, "LEGACY_WRITE_OUTCOME_UNKNOWN");
 });
+
+
+test("standalone Mongo refusal holds the saved request for deliberate retry", async () => {
+  const { ApiError } = await import("../api-client.js");
+  const { classifyReplayOutcome } = await import("../offline-replay.js");
+  const result = await classifyReplayOutcome(new ApiError("DURABLE_REPLAY_REQUIRES_REPLICA_SET", "PRECONDITION_FAILED", 412), { op: "entries.start" });
+  assert.deepEqual(result, { kind: "hold", reason: "refused", message: "DURABLE_REPLAY_REQUIRES_REPLICA_SET", code: "PRECONDITION_FAILED" });
+});
