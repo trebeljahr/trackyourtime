@@ -1,6 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  FALLBACK_RESYNC_MS, HEALTH_LEASE_MS, holdSyncSnapshots, needsSyncReconciliation,
+  reconcileQueries, reconcileInvalidatedReads, unsafeStartupQueries,
+} from "@/lib/sync-reconciliation";
 import {
   createId,
   createSyncClient,
@@ -203,6 +208,7 @@ export const invalidateFor = (utils: Utils, event: SyncEvent): void => {
  */
 export const useSync = (): SyncStatus => {
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const utilsRef = React.useRef(utils);
   const userId = useAuth().user?.id ?? null;
   const userIdRef = React.useRef(userId);
@@ -241,6 +247,29 @@ export const useSync = (): SyncStatus => {
     const url = resolveSyncUrl(getApiOrigin(), window.location.origin);
     if (url === "") return;
 
+    const held = holdSyncSnapshots();
+    const startupQueries = unsafeStartupQueries(queryClient);
+    let active = true;
+    let firstFence = true;
+    let fenced = false;
+    let distributedAt: number | null = null;
+    let lastRefresh = Date.now();
+    let legacyFence: ReturnType<typeof setTimeout> | undefined;
+    const reconcile = (queries = queryClient.getQueryCache().getAll()) => {
+      const workspaceId = getActiveWorkspaceId();
+      reconcileQueries(queryClient, queries, () => active && workspaceId === getActiveWorkspaceId());
+      lastRefresh = Date.now();
+    };
+    const finishFence = () => {
+      if (fenced || !active) return;
+      fenced = true;
+      clearTimeout(legacyFence);
+      // Held requests have not taken a snapshot yet, so need no second fetch.
+      reconcile(firstFence && held.pending() ? startupQueries : undefined);
+      firstFence = false;
+      held.release();
+    };
+
     const client = createSyncClient({
       url,
       // A getter, so a reconnect re-reads it rather than re-offering the
@@ -249,9 +278,25 @@ export const useSync = (): SyncStatus => {
       clientVersion: APP_VERSION,
       onStatus: (status) => {
         setStatus(status);
-        // A reconnect may have crossed instances and missed process-local
-        // events. The database is authoritative; refetch every mounted query.
-        if (status === "open") void utilsRef.current.invalidate();
+        if (status === "open") {
+          // Older servers omit the fence frame. Their room join is synchronous
+          // with upgrade; retain catch-up after a bounded compatibility wait.
+          legacyFence = setTimeout(finishFence, 1000);
+        } else {
+          fenced = false;
+          distributedAt = null;
+          clearTimeout(legacyFence);
+        }
+      },
+      onSyncState: (distributed) => {
+        const now = Date.now();
+        const recovered = fenced && distributed &&
+          (distributedAt === null || now - distributedAt >= HEALTH_LEASE_MS);
+        distributedAt = distributed ? now : null;
+        // Pub/sub does not replay the gap that just ended. Catch up before
+        // promoting this connection back to the slower safety sweep.
+        if (recovered) reconcile();
+        finishFence();
       },
       /*
        * The server closed us with 4401: this device's session no longer
@@ -279,36 +324,41 @@ export const useSync = (): SyncStatus => {
         // Read per event, not captured: the socket is per person and is NOT
         // reopened on a workspace switch, so the active workspace can change
         // under a live client.
-        switch (syncEventReach(event, eventWorkspaceId, getActiveWorkspaceId())) {
-          case "all":
-            invalidateFor(utilsRef.current, event);
-            return;
-          case "timer":
-            void utilsRef.current.entries.current.invalidate();
-            return;
-          case "membership":
-            void utilsRef.current.workspaces.list.invalidate();
-            return;
-          case "ignore":
-            return;
-        }
+        const workspaceId = getActiveWorkspaceId();
+        reconcileInvalidatedReads(queryClient, () => {
+          switch (syncEventReach(event, eventWorkspaceId, workspaceId)) {
+            case "all":
+              invalidateFor(utilsRef.current, event);
+              return;
+            case "timer":
+              void utilsRef.current.entries.current.invalidate();
+              return;
+            case "membership":
+              void utilsRef.current.workspaces.list.invalidate();
+              return;
+            case "ignore":
+              return;
+          }
+        }, () => active && workspaceId === getActiveWorkspaceId());
       },
     });
 
     client.connect();
     activeClient = client;
-    // During a rolling deploy, two healthy instances can hold sockets at once.
-    // Fanout is process-local, so an open socket can miss writes made through
-    // the other instance. Bound that stale window without needing a disconnect.
+    // Pub/sub has no replay, and old replicas may still write during a rollout.
+    // Keep a five-minute safety sweep; degraded/legacy/disconnected feeds use 30s.
     const resync = window.setInterval(() => {
-      if (client.status() === "open") void utilsRef.current.invalidate();
-    }, 30_000);
+      if (needsSyncReconciliation(Date.now(), lastRefresh, distributedAt)) reconcile();
+    }, FALLBACK_RESYNC_MS);
     return () => {
+      active = false;
+      held.release();
+      clearTimeout(legacyFence);
       window.clearInterval(resync);
       if (activeClient === client) activeClient = null;
       client.close();
     };
-  }, [sessionReady, nativeToken, serverOrigin, epoch]);
+  }, [sessionReady, nativeToken, serverOrigin, epoch, queryClient]);
 
   return useSyncStatus();
 };

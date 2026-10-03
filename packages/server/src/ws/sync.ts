@@ -6,7 +6,7 @@ import {
   userRoomId,
 } from "@starter/shared";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
-import { roomManager } from "./handler.js";
+import { syncTransport } from "./handler.js";
 
 /** Re-exported so mutations never hand-roll the room name. */
 export { userRoomId };
@@ -28,7 +28,7 @@ export function publishToUser(
 ): void {
   if (!userId) return;
   try {
-    roomManager.broadcast(userRoomId(userId), {
+    syncTransport.publish(userId, {
       type: "tt:sync",
       event,
       ...(originId ? { originId } : {}),

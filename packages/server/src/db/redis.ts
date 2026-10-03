@@ -18,8 +18,13 @@ export async function connectRedis(): Promise<void> {
     lazyConnect: true,
   });
 
-  await redis.connect();
-  console.log("[redis] Connected to Redis");
+  redis.on("error", () => {});
+  try {
+    await redis.connect();
+    console.log("[redis] Connected to Redis");
+  } catch {
+    console.warn("[redis] Unavailable; reconnecting with sync reconciliation fallback");
+  }
 }
 
 export async function disconnectRedis(): Promise<void> {

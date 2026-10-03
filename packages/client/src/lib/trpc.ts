@@ -14,6 +14,8 @@ import {
 import { APP_VERSION } from "@/lib/app-version";
 import { currentServerApiLevel, noteClientTooOld } from "@/lib/server-level";
 
+import { fetchSyncSnapshot, trackSyncQuery } from "@/lib/sync-reconciliation";
+
 export const trpc = createTRPCReact<AppRouter>();
 
 /**
@@ -42,6 +44,20 @@ export const workspaceLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => 
     ? withWorkspaceId(op.input, getActiveWorkspaceId())
     : withWorkspaceId(op.input, PENDING_WORKSPACE);
   return next(input === op.input ? op : { ...op, input });
+};
+
+/** Track query lifetime through decoding, since streamed fetch ends at headers. */
+export const syncSnapshotLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => {
+  if (op.type !== "query") return next(op);
+  return observable((observer) => {
+    const done = trackSyncQuery();
+    const subscription = next(op).subscribe({
+      next: (value) => { done(); observer.next(value); },
+      error: (error) => { done(); observer.error(error); },
+      complete: () => { done(); observer.complete(); },
+    });
+    return () => { done(); subscription.unsubscribe(); };
+  });
 };
 
 /** Replace (or drop) the pending marker in one batched input object. */
@@ -159,38 +175,41 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
      * `src/lib/trpc.test.ts` asserts rather than assumes.
      */
     fetch(url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
-      if (!isTokenShell()) {
-        const token = getNativeToken();
-        return fetch(url, {
-          ...options,
-          credentials: token ? "omit" : "include",
-        });
-      }
-      // The token shells choose their server at runtime (`lib/api-origin.ts`).
-      // The link above keeps the build-time URL; the request is rebased
-      // here, and only once the stored choice has been read, so nothing
-      // can leave for a server the person has already moved away from.
-      // The workspace choice is read the same way, and an operation that
-      // got ahead of it has its marker settled before it leaves.
-      return Promise.all([
-        whenApiOriginReady(),
-        whenActiveWorkspaceReady(),
-      ]).then(() => {
-        const token = getNativeToken();
-        const settled = settlePendingWorkspace(
-          String(url),
-          options,
-          getActiveWorkspaceId()
-        );
-        // Capture auth and credentials together after readiness. A token
-        // can change while the server/workspace choices are being read.
-        const headers = new Headers(settled.init?.headers);
-        if (token) headers.set("authorization", `Bearer ${token}`);
-        else headers.delete("authorization");
-        return fetch(rebaseApiUrl(settled.url), {
-          ...settled.init,
-          headers,
-          credentials: token ? "omit" : "include",
+      const query = !options?.method || options.method === "GET";
+      return fetchSyncSnapshot(query, () => {
+        if (!isTokenShell()) {
+          const token = getNativeToken();
+          return fetch(url, {
+            ...options,
+            credentials: token ? "omit" : "include",
+          });
+        }
+        // The token shells choose their server at runtime (`lib/api-origin.ts`).
+        // The link above keeps the build-time URL; the request is rebased
+        // here, and only once the stored choice has been read, so nothing
+        // can leave for a server the person has already moved away from.
+        // The workspace choice is read the same way, and an operation that
+        // got ahead of it has its marker settled before it leaves.
+        return Promise.all([
+          whenApiOriginReady(),
+          whenActiveWorkspaceReady(),
+        ]).then(() => {
+          const token = getNativeToken();
+          const settled = settlePendingWorkspace(
+            String(url),
+            options,
+            getActiveWorkspaceId()
+          );
+          // Capture auth and credentials together after readiness. A token
+          // can change while the server/workspace choices are being read.
+          const headers = new Headers(settled.init?.headers);
+          if (token) headers.set("authorization", `Bearer ${token}`);
+          else headers.delete("authorization");
+          return fetch(rebaseApiUrl(settled.url), {
+            ...settled.init,
+            headers,
+            credentials: token ? "omit" : "include",
+          });
         });
       });
     },
@@ -209,6 +228,7 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
   return trpc.createClient({
     links: [
       workspaceLink(),
+      syncSnapshotLink(),
       versionRefusalLink(),
       splitLink({
         // Queries do not set response headers. Keep mutations on ordinary

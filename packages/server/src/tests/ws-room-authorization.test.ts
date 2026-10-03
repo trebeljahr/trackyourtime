@@ -197,7 +197,7 @@ test("a join-room message naming another user's room moves nothing and closes no
 
   assertHasNothingOfVictims(attacker);
   assert.deepEqual(
-    attacker.received.filter((message) => message.type !== "tt:sync"),
+    attacker.received.filter((message) => message.type !== "tt:sync" && message.type !== "tt:sync-state"),
     [],
     "an ignored frame is not answered with an error either",
   );
@@ -220,4 +220,13 @@ test("every device of one user shares that user's room", async (t) => {
   await publishToBoth(laptop, colleague, "devices");
   await phone.next(isInvoice("victim-devices"));
   assertHasNothingOfVictims(colleague);
+});
+
+test("subscription fence arrives after authenticated room placement", async (t) => {
+  const { server, port } = await startServer();
+  const client = await connect(port, "fence-user");
+  t.after(() => { client.ws.close(); server.close(); });
+  await client.next((message) => message.type === "tt:sync-state");
+  assert.equal(roomManager.socketsIn(userRoomId("fence-user")).length, 1);
+  assert.deepEqual(client.received[0], { type: "tt:sync-state", distributed: false });
 });

@@ -165,7 +165,7 @@ describe("version handshake", () => {
     vi.doMock("@/lib/app-version", () => ({ APP_VERSION: "" }));
     const { getTRPCClient } = await import("@/lib/trpc");
     const config = getTRPCClient() as unknown as { links: LinkOptions[] };
-    const link = config.links[2];
+    const link = config.links.at(-1);
     if (!link) throw new Error("no http link");
     expect(link.headers()).toEqual({
       "x-trackyourtime-client": "web",

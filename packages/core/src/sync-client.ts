@@ -20,6 +20,8 @@ export type SyncClientOptions = {
    */
   onEvent: (event: SyncEvent, originId?: string, workspaceId?: string) => void;
   onStatus?: (status: SyncStatus) => void;
+  /** Room joined, then periodic cross-instance delivery health. Older servers omit it. */
+  onSyncState?: (distributed: boolean) => void;
   /**
    * better-auth session token, for clients with no cookie (Raycast, the
    * extensions, the native shells). Obtain it from `signInWithPassword()` or
@@ -124,6 +126,7 @@ export const createSyncClient = ({
   url,
   onEvent,
   onStatus,
+  onSyncState,
   token,
   onSessionRevoked,
   clientVersion,
@@ -179,6 +182,10 @@ export const createSyncClient = ({
     }
     if (typeof parsed !== "object" || parsed === null) return;
     const message = parsed as ServerToClientMessage;
+    if (message.type === "tt:sync-state" && typeof message.distributed === "boolean") {
+      try { onSyncState?.(message.distributed); } catch { /* Isolate consumers. */ }
+      return;
+    }
     if (!("type" in message) || !isSyncMessage(message)) return;
     try {
       onEvent(message.event, message.originId, message.workspaceId);

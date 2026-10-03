@@ -306,3 +306,24 @@ test("an ordinary close still reconnects and never reports a revocation", async 
   await until(() => client.status() === "open", "the socket to come back");
   assert.equal(revoked, 0, "an ordinary close is not a revocation");
 });
+
+test("sync state frames report delivery health without becoming mutation events", async () => {
+  const server = await harness();
+  after(() => server.close());
+  const health: boolean[] = [];
+  let events = 0;
+  const client = createSyncClient({
+    url: server.url,
+    onSyncState: (distributed) => { health.push(distributed); },
+    onEvent: () => { events += 1; },
+  });
+  after(() => client.close());
+  client.connect();
+  await until(() => client.status() === "open", "the socket to open");
+  server.sendRaw(JSON.stringify({ type: "tt:sync-state", distributed: true }));
+  server.sendRaw(JSON.stringify({ type: "tt:sync-state", distributed: "bad" }));
+  server.sendRaw(JSON.stringify({ type: "tt:sync-state", distributed: false }));
+  server.send({ kind: "settings.changed" });
+  await until(() => events === 1, "the mutation frame");
+  assert.deepEqual(health, [true, false]);
+});

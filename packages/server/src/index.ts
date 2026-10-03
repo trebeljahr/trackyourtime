@@ -6,9 +6,9 @@ import { createApp, setDraining } from "./app.js";
 import { connectToDB, disconnectFromDB } from "./db/connection.js";
 import { BootRefusedError, prepareDatabase } from "./db/prepare.js";
 import { SchemaTooNewError } from "./services/migrations/index.js";
-import { connectRedis, disconnectRedis } from "./db/redis.js";
+import { connectRedis, disconnectRedis, getRedis } from "./db/redis.js";
 import { initAuth, disconnectAuth } from "./auth/auth.js";
-import { setupWebSocket } from "./ws/handler.js";
+import { setupWebSocket, syncTransport } from "./ws/handler.js";
 import { startWebhookSweeper } from "./services/webhooks/sweeper.js";
 import {
   registerBuiltInJobs,
@@ -30,6 +30,8 @@ async function start(): Promise<void> {
     // anything else reads or writes, and long before listen.
     await prepareDatabase();
     await connectRedis();
+    const redis = getRedis();
+    if (redis) await syncTransport.start(redis);
 
     // 2. Initialize auth (needs DB connection)
     await initAuth();
@@ -100,6 +102,7 @@ async function shutdown(signal: string): Promise<void> {
 
   // Disconnect from databases and auth
   await disconnectAuth();
+  syncTransport.stop();
   await disconnectRedis();
   await disconnectFromDB();
 

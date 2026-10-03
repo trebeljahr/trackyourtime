@@ -3,6 +3,8 @@ import type { Server } from "http";
 import { enforceMaxEntryDuration } from "../services/runaway.js";
 import { authenticateUpgrade, probeUpgradeSession } from "./auth.js";
 import { RoomManager } from "./rooms.js";
+import { SyncTransport, syncNamespace } from "./sync-transport.js";
+import { userRoomId } from "@starter/shared";
 import {
   SESSION_REVOKED_CLOSE_CODE,
   SessionWatch,
@@ -33,6 +35,9 @@ type AuthedSocket = WebSocket & {
 };
 
 export const roomManager = new RoomManager();
+export const syncTransport = new SyncTransport((userId, message) => {
+  roomManager.broadcast(userRoomId(userId), message);
+}, syncNamespace(env.MONGODB_URI));
 
 /** Live sockets, and the session lookup that keeps each one honest. */
 export const sessionWatch = new SessionWatch();
@@ -201,6 +206,13 @@ export function setupWebSocket(
     // The person's own room (`user:<userId>`), so every device of this user
     // receives the sync events addressed to this user — and nothing else.
     roomManager.join(userId, ws);
+    const sendSyncState = (): void => {
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: "tt:sync-state", distributed: syncTransport.healthy() }));
+      }
+    };
+    // Sent only after room placement; onopen alone is not a subscription fence.
+    sendSyncState();
 
     // A device reconnecting is one of the moments that resolves "what is
     // running", so it is one of the moments the runaway guard is evaluated
@@ -224,6 +236,7 @@ export function setupWebSocket(
       }
       isAlive = false;
       ws.ping();
+      sendSyncState();
     }, PING_INTERVAL_MS);
 
     // Client frames are ignored — all of them. The protocol has no client →
@@ -251,5 +264,6 @@ export function setupWebSocket(
   }, SESSION_RECHECK_INTERVAL_MS);
   recheckInterval.unref?.();
 
+  wss.on("close", () => clearInterval(recheckInterval));
   return wss;
 }
