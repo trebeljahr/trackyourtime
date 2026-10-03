@@ -88,7 +88,10 @@
     "test:android:emulator": "node scripts/android-emulator-smoke.mjs",
     "dev:extension:prod": "pnpm --filter @starter/extension run dev:prod",
     "hmr:extension": "pnpm --filter @starter/extension run hmr",
-    "hmr:extension:local": "pnpm --filter @starter/extension run hmr:local"
+    "hmr:extension:local": "pnpm --filter @starter/extension run hmr:local",
+    "backup:status": "hatchkit backup status --project tracktime",
+    "backup:list": "hatchkit backup snapshots --project tracktime",
+    "backup:restore": "hatchkit backup restore --project tracktime"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
