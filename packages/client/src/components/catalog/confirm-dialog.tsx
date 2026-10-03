@@ -22,6 +22,8 @@ export type ConfirmDialogProps = {
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
+  pending?: boolean;
+  closeOnConfirm?: boolean;
   testId?: string;
 };
 
@@ -34,6 +36,8 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   onConfirm,
+  pending = false,
+  closeOnConfirm = true,
   testId = "confirm-dialog",
 }: ConfirmDialogProps): React.JSX.Element {
   const tc = useT("common");
@@ -51,6 +55,7 @@ export function ConfirmDialog({
         <DialogFooter>
           <Button
             variant="outline"
+            disabled={pending}
             onClick={() => onOpenChange(false)}
             data-testid="confirm-cancel"
           >
@@ -58,9 +63,10 @@ export function ConfirmDialog({
           </Button>
           <Button
             variant="destructive"
+            disabled={pending}
             onClick={() => {
               onConfirm();
-              onOpenChange(false);
+              if (closeOnConfirm) onOpenChange(false);
             }}
             data-testid="confirm-accept"
           >

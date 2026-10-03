@@ -62,6 +62,11 @@ export const tracker: Translation<typeof source> = {
     actions: "Aktionen für den Eintrag",
     pin: "Zu Favoriten hinzufügen",
     unpin: "Aus Favoriten entfernen",
+    delete: {
+      title: "Diesen Zeiteintrag löschen?",
+      identity: "{date} · {duration}",
+      confirm: "Eintrag löschen",
+    },
   },
   editDialog: {
     title: "Eintrag bearbeiten",

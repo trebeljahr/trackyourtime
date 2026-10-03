@@ -235,6 +235,8 @@ export type EntryMutations = {
   updateEntry: (args: UpdateEntryArgs) => void;
   duplicateEntry: (entry: DetailedEntry) => void;
   removeEntry: (entry: DetailedEntry) => void;
+  /** Entry id while the tracker delete request is in flight. */
+  removeEntryPendingId: string | null;
   /** Truncate the running entry, then optionally reopen it. See idle guard. */
   splitAtIdle: (args: SplitAtIdleArgs) => void;
   /**
@@ -258,6 +260,7 @@ export type EntryMutations = {
 export const useEntryMutations = (): EntryMutations => {
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
+  const [removeEntryPendingId, setRemoveEntryPendingId] = React.useState<string | null>(null);
 
   // `removeEntry` is declared below the mutations that need to call it, so the
   // toast action reaches it through a ref rather than reordering the file.
@@ -924,6 +927,7 @@ export const useEntryMutations = (): EntryMutations => {
         translate("tracker")("mutations.deleteFailed")
       ),
     onSettled: (_data, _error, _raw, context) => {
+      setRemoveEntryPendingId(null);
       if (context?.queued) return;
       refetchWhenQuiet();
     },
@@ -1142,6 +1146,7 @@ export const useEntryMutations = (): EntryMutations => {
 
   const removeEntry = React.useCallback(
     (entry: DetailedEntry): void => {
+      if (removeEntryPendingId !== null) return;
       if (isTempId(entry.id)) {
         // Never reached the server — drop it locally and cancel its replay.
         dropEntry(entry.id);
@@ -1151,9 +1156,10 @@ export const useEntryMutations = (): EntryMutations => {
         void cancelQueuedForTemp(entry.id);
         return;
       }
+      setRemoveEntryPendingId(entry.id);
       removeMutation.mutate({ id: entry.id, originId: ORIGIN_ID });
     },
-    [dropEntry, removeMutation, utils]
+    [dropEntry, removeEntryPendingId, removeMutation, utils]
   );
 
   /*
@@ -1214,6 +1220,7 @@ export const useEntryMutations = (): EntryMutations => {
       updateEntry,
       duplicateEntry,
       removeEntry,
+      removeEntryPendingId,
       splitAtIdle,
       resolveRunaway,
       isBusy,
@@ -1227,6 +1234,7 @@ export const useEntryMutations = (): EntryMutations => {
       updateEntry,
       duplicateEntry,
       removeEntry,
+      removeEntryPendingId,
       splitAtIdle,
       resolveRunaway,
       isBusy,

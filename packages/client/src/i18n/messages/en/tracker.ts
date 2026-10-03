@@ -68,6 +68,11 @@ export const tracker = {
     actions: "Entry actions",
     pin: "Add to favorites",
     unpin: "Remove from favorites",
+    delete: {
+      title: "Delete this time entry?",
+      identity: "{date} · {duration}",
+      confirm: "Delete entry",
+    },
   },
   editDialog: {
     title: "Edit entry",

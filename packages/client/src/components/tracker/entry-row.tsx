@@ -27,6 +27,7 @@ import {
 } from "@starter/core";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/catalog/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +44,8 @@ import { TimeField } from "@/components/tracker/time-field";
 import type { EntryMutations } from "@/components/tracker/use-entry-mutations";
 import type { QuickStarts } from "@/hooks/use-favorites";
 import { useT } from "@/i18n/use-t";
+import { useFormat } from "@/i18n/use-format";
+import { useAuth } from "@/hooks/use-auth";
 import { isTempId } from "@/lib/offline";
 import { useFormatSettings } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -83,6 +86,8 @@ function EntryRowImpl({
   nested = false,
 }: EntryRowProps): React.JSX.Element {
   const format = useFormatSettings();
+  const localizedFormat = useFormat();
+  const { user } = useAuth();
   const t = useT("tracker");
   const tc = useT("common");
   const running = entry.end === null;
@@ -103,6 +108,20 @@ function EntryRowImpl({
   );
 
   const [draft, setDraft] = React.useState(entry.description);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleteSubmitted, setDeleteSubmitted] = React.useState(false);
+  const canDelete =
+    (syncing || (user?.id !== undefined && entry.authorId === user.id)) &&
+    entry.invoiceId == null;
+  const deleting = mutations.removeEntryPendingId === entry.id;
+  const anyDeletePending = mutations.removeEntryPendingId != null;
+
+  React.useEffect(() => {
+    if (deleteSubmitted && !deleting) {
+      setDeleteSubmitted(false);
+      setDeleteOpen(false);
+    }
+  }, [deleteSubmitted, deleting]);
 
   const commitDescription = React.useCallback((): void => {
     setEditingDescription(false);
@@ -492,13 +511,44 @@ function EntryRowImpl({
             </DropdownMenuItem>
             <DropdownMenuItem
               variant="destructive"
-              onSelect={() => mutations.removeEntry(entry)}
+              disabled={!canDelete || anyDeletePending}
+              onSelect={() => setDeleteOpen(true)}
               data-testid="entry-menu-delete"
             >
               <Trash2 /> {tc("actions.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <ConfirmDialog
+          open={deleteOpen}
+          onOpenChange={(open) => {
+            if (anyDeletePending) return;
+            setDeleteOpen(open);
+          }}
+          title={t("row.delete.title")}
+          description={
+            <div className="space-y-1">
+              <p>{entry.description.trim() || t("quickStart.noDescription")}</p>
+              <p>
+                {t("row.delete.identity", {
+                  date: localizedFormat.date(entry.start, "dayLabel"),
+                  duration: entry.end === null
+                    ? t("row.running")
+                    : format.duration(entry.durationSec),
+                })}
+              </p>
+            </div>
+          }
+          confirmLabel={t("row.delete.confirm")}
+          pending={anyDeletePending}
+          closeOnConfirm={false}
+          onConfirm={() => {
+            if (!canDelete || anyDeletePending) return;
+            setDeleteSubmitted(true);
+            mutations.removeEntry(entry);
+          }}
+          testId="confirm-entry-delete"
+        />
         </div>
       </div>
     </div>

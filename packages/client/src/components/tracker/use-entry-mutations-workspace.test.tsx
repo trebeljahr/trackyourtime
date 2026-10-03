@@ -249,4 +249,18 @@ describe("entry mutations across workspaces", () => {
 
     expect(enqueued).toEqual([{ op: "entries.start", workspaceId: B.id }]);
   });
+
+  it("keeps a failed delete visible through the localized mutation error", async () => {
+    const input = { id: "e1", originId: "origin" };
+    const opts = optionsFor("entries.remove");
+    const context = await opts.onMutate?.(input);
+
+    await opts.onError?.(
+      Object.assign(new Error("nope"), { data: { code: "FORBIDDEN" } }),
+      input,
+      context,
+    );
+
+    expect(toastError).toHaveBeenCalledWith(expect.any(String));
+  });
 });
