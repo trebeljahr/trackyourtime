@@ -44,6 +44,22 @@ describe("durable entry operations", { skip: skipWithoutDatabase }, () => {
     assert.equal(await TimeEntry.countDocuments(), 1);
   });
 
+
+  it("dedicated operation route requires identity and guards mixed-version retries", async (t) => {
+    const request = input();
+    const { operationId, workspaceId: workspace, ...payload } = request;
+    const durable = { operation: "entries.create" as const, operationId, workspaceId: workspace, input: payload };
+    if (!transactions) {
+      await assert.rejects(client().applyOperation(durable), { message: "DURABLE_REPLAY_REQUIRES_REPLICA_SET" });
+      assert.equal(await TimeEntry.countDocuments(), 0); return;
+    }
+    const first = await client().applyOperation(durable);
+    assert.deepEqual(await client().applyOperation(durable), first);
+    assert.equal(await TimeEntry.countDocuments(), 1);
+    await assert.rejects(client().applyOperation({ ...durable, operationId: undefined } as never), (error: unknown) => (error as { code: string }).code === "BAD_REQUEST");
+    assert.equal(await TimeEntry.countDocuments(), 1);
+  });
+
   it("one committed result survives a dropped response and concurrent retries", async (t) => {
     if (!transactions) return t.skip("replica set required");
     const request = input();

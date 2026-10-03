@@ -244,6 +244,9 @@ before this change still connects wherever `/ws` is still routed.
    another operation or parsed payload returns HTTP 409 `OPERATION_ID_REUSED`.
    Receipts have no TTL and survive entry deletion, so an old retry cannot
    recreate deleted time. Account/workspace deletion removes their receipts.
+   Durable clients send `{ operation, operationId, workspaceId, input }` to
+   `entries.applyOperation`. This separate route makes an old replica refuse
+   the write rather than silently stripping the ID from a legacy route.
    Clients must persist the ID and fixed input before the first attempt and
    coordinate queue ownership across tabs/processes. Legacy calls without an
    ID remain supported but do not provide durable replay.

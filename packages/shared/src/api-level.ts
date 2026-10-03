@@ -115,7 +115,7 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     "Member rate editing and author-specific billing defaults.",
     "Optional transactional timesheet submission, review and period locks; approval eligibility for invoices.",
   ] },
-  { level: 12, release: "0.2.2", added: ["Durable entry operation IDs with transactional receipts and a database capability handshake."] },
+  { level: 12, release: "0.2.2", added: ["entries.applyOperation with transactional receipts and a database capability handshake."] },
 ];
 
 /**

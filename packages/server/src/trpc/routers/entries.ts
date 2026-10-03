@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { withEntryOperation } from "../../services/entries/operation.js";
 // The tRPC surface over the entry services.
 //
@@ -93,7 +94,32 @@ async function withReplaced(
   return { ...started.entry, replaced };
 }
 
+/** A distinct path is required: old replicas strip unknown fields on legacy
+ * mutations. They must refuse this procedure before a durable write can happen. */
+const durableOperationSchema = z.discriminatedUnion("operation", [
+  z.object({ operation: z.literal("entries.start"), input: startTimerSchema }),
+  z.object({ operation: z.literal("entries.stop"), input: stopTimerSchema }),
+  z.object({ operation: z.literal("entries.create"), input: createEntrySchema }),
+  z.object({ operation: z.literal("entries.update"), input: updateEntrySchema }),
+  z.object({ operation: z.literal("entries.remove"), input: entryIdInputSchema }),
+  z.object({ operation: z.literal("entries.discard"), input: discardTimerSchema }),
+]).and(z.object({ operationId: z.uuid(), workspaceId: z.string().min(1).optional() }));
+
 export const entriesRouter = router({
+  applyOperation: workspaceProcedure.input(durableOperationSchema).mutation(async ({ ctx, input }) => {
+    const scope = scopeFromContext(ctx);
+    const payload = { ...input.input, operationId: input.operationId };
+    return withEntryOperation(scope, input.operation, payload, async () => {
+      switch (input.operation) {
+        case "entries.start": return withReplaced(await startTimerDetailed(scope, input.input, personReach), ctx.workspaceId);
+        case "entries.stop": return stopTimer(scope, input.input, personReach);
+        case "entries.create": return createEntry(scope, input.input);
+        case "entries.update": return updateEntry(scope, input.input);
+        case "entries.remove": return deleteEntry(scope, input.input);
+        case "entries.discard": return discardTimer(scope, input.input);
+      }
+    });
+  }),
   bulkEdit: workspaceProcedure.input(bulkEditEntriesSchema).mutation(
     async ({ ctx, input }) => bulkEditEntries(scopeFromContext(ctx), input),
   ),
