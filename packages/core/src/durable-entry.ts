@@ -74,3 +74,18 @@ export const durableQueuedWrite = (error: unknown): DurableQueuedWriteError | nu
   }
   return null;
 };
+
+/** Bound exclusive queue ownership even when a connection never answers. */
+export const durableRequestSignal = (previous?: AbortSignal | null): AbortSignal => {
+  const controller = new AbortController();
+  const abort = () => controller.abort(previous?.reason);
+  if (previous?.aborted) abort();
+  else previous?.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(() => {
+    previous?.removeEventListener("abort", abort);
+    controller.abort(new Error("Saved write request timed out"));
+  }, 30_000);
+  // Node commands must not live for another 30 seconds just for this timer.
+  (timer as unknown as { unref?: () => void }).unref?.();
+  return controller.signal;
+};

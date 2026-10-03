@@ -1,3 +1,4 @@
+import { durableRequestSignal } from "./durable-entry.js";
 import { CLIENT_TOO_OLD, versionHeaders, type VersionRefusal } from "@starter/shared";
 
 /**
@@ -225,6 +226,7 @@ export const createApiClient = ({
 
     const response = await doFetch(url.toString(), {
       method,
+      ...(path === "entries.applyOperation" ? { signal: durableRequestSignal() } : {}),
       headers: headers(),
       // Cookie auth for same-site browser callers; harmless with a token.
       credentials: token ? "omit" : "include",
