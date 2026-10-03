@@ -314,8 +314,9 @@ export const summaryReportSchemaOut: z.ZodType<SummaryReportResult> = z.object({
   totalSec: z.number(),
   billableSec: z.number(),
   // Nullable for the shape's sake: REST refuses (403) the one visibility that
-  // withholds report money, so a served report always carries numbers here.
+  // withholds report money. Mixed-currency reports use totalAmounts instead.
   totalAmount: z.number().nullable(),
+  totalAmounts: z.array(z.object({ currency: z.string(), amount: z.number() })).nullable().optional(),
   currency: z.string(),
   groups: z.array(
     z.object({
@@ -325,6 +326,8 @@ export const summaryReportSchemaOut: z.ZodType<SummaryReportResult> = z.object({
       seconds: z.number(),
       billableSec: z.number(),
       amount: z.number().nullable(),
+      amounts: z.array(z.object({ currency: z.string(), amount: z.number() })).nullable().optional(),
+      currency: z.string().optional(),
     }),
   ),
   timeline: z.array(
@@ -721,6 +724,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
     output: listOf(detailedEntrySchema, {
       totalSec: z.number(),
       totalAmount: z.number().nullable(),
+      totalAmounts: z.array(z.object({ currency: z.string(), amount: z.number() })).nullable().optional(),
       currency: z.string(),
     }),
   },

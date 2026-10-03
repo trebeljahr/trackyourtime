@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { DetailedEntry, SummaryGroup } from "@starter/shared";
 
 import { DetailedTable, DEFAULT_DETAILED_SORT } from "./detailed-table";
-import { MONEY_WITHHELD, formatReportMoney, sumReportMoney } from "./report-money";
+import { MONEY_WITHHELD, formatReportAmounts, formatReportMoney, sumReportMoney } from "./report-money";
 import { SummaryTable } from "./summary-table";
 
 /*
@@ -140,4 +140,25 @@ describe("DetailedTable with a colleague's withheld row", () => {
     expect(within(screen.getByTestId("detailed-row-colleague")).queryByText(/€/)).toBeNull();
     expect(amountCell("own")).toHaveTextContent("€90.00");
   });
+});
+
+it("formats each report bucket in its snapshot currency and keeps legacy server fallback", () => {
+  const formatter = (amount: number, currency = "GBP") => `${currency} ${amount.toFixed(2)}`;
+  expect(formatReportAmounts([{ currency: "EUR", amount: 10 }, { currency: "USD", amount: 20 }], null, "GBP", formatter)).toBe("EUR 10.00 · USD 20.00");
+  expect(formatReportAmounts(undefined, 10, "EUR", formatter)).toBe("EUR 10.00");
+  expect(formatReportAmounts(null, null, "EUR", formatter)).toBe(MONEY_WITHHELD);
+  render(<SummaryTable groups={[{ ...group("history", 10), currency: "EUR", amounts: [{ currency: "EUR", amount: 10 }] }]} totalSec={3600} billableSec={3600} totalAmount={10} totalAmounts={[{ currency: "EUR", amount: 10 }]} currency="EUR" duration={duration} money={formatter} dimensionLabel="Project" />);
+  expect(screen.getByTestId("summary-total-amount")).toHaveTextContent("EUR 10.00");
+  expect(within(screen.getByTestId("summary-row-history")).getByText("EUR 10.00")).toBeInTheDocument();
+});
+
+it("detailed rows use their own currency after workspace currency changes", () => {
+  render(<DetailedTable entries={[{ ...entry("eur", 10, 10), currency: "EUR" }, { ...entry("usd", 20, 20), currency: "USD" }]}
+    selected={new Set()} onToggle={() => undefined} onToggleAll={() => undefined}
+    sort={DEFAULT_DETAILED_SORT} onSort={() => undefined} duration={duration}
+    money={(amount, currency = "GBP") => `${currency} ${amount.toFixed(2)}`}
+    clock={(iso) => iso.slice(11, 16)} />);
+  expect(screen.getByTestId("detailed-row-eur")).toHaveTextContent("EUR 10.00");
+  expect(screen.getByTestId("detailed-row-usd")).toHaveTextContent("USD 20.00");
+  expect(screen.queryByText(/GBP/)).toBeNull();
 });

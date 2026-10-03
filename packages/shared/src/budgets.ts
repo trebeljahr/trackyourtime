@@ -18,7 +18,8 @@
  *    explain rather than silently folded into the total.
  */
 
-import { entryAmount, sumAmounts } from "./rates.js";
+import { entryAmount, normalizeCurrency, sumAmounts } from "./rates.js";
+export { normalizeCurrency } from "./rates.js";
 
 const SECONDS_PER_HOUR = 3600;
 
@@ -93,10 +94,6 @@ export type BudgetProgress = {
 /** True when the project has any target at all — 0 counts, null does not. */
 export const hasBudgetTarget = (budget: ProjectBudget): boolean =>
   budget.estimatedHours !== null || budget.budgetAmount !== null;
-
-/** ISO 4217 codes are compared case-insensitively; "eur" and "EUR" are one. */
-export const normalizeCurrency = (currency: string): string =>
-  currency.trim().toUpperCase();
 
 /**
  * Progress as a fraction of the target.

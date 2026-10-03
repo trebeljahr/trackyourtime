@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import type { DetailedEntry } from "@starter/shared";
-import { formatReportMoney } from "@/components/reports/report-money";
+import { formatReportAmounts } from "@/components/reports/report-money";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -108,7 +108,7 @@ export type DetailedTableProps = {
   sort: DetailedSort;
   onSort: (field: DetailedSortField) => void;
   duration: (seconds: number) => string;
-  money: (amount: number) => string;
+  money: (amount: number, currency?: string) => string;
   clock: (iso: string) => string;
   /**
    * Opens the project a row is filed under. Omitted where the project rows
@@ -283,7 +283,7 @@ export function DetailedTable({
                 {duration(entry.durationSec)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {formatReportMoney(entry.amount, money)}
+                {formatReportAmounts(undefined, entry.amount, entry.currency, money)}
               </TableCell>
               <TableCell className="hidden" data-mobile-details>
                 <details>
@@ -314,7 +314,7 @@ export function DetailedTable({
                         : clock(entry.end ?? entry.start)}
                     </dd>
                     <dt>{tc("fields.amount")}</dt>
-                    <dd>{formatReportMoney(entry.amount, money)}</dd>
+                    <dd>{formatReportAmounts(undefined, entry.amount, entry.currency, money)}</dd>
                   </dl>
                   {onEditProject && projectId !== null ? (
                     <Button

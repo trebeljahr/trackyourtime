@@ -71,3 +71,7 @@ export const entryAmount = (
 /** Sum a list of amounts without accumulating float drift. */
 export const sumAmounts = (amounts: number[]): number =>
   Math.round(amounts.reduce((total, amount) => total + amount * 100, 0)) / 100;
+
+/** Canonical currency code shared by budgets and report totals. */
+export const normalizeCurrency = (currency: string): string =>
+  currency.trim().toUpperCase();

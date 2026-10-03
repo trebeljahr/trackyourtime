@@ -44,7 +44,8 @@ import {
   formatClockInZone,
   formatDuration,
   resolveTimeZone,
-  sumAmounts,
+  sumCurrencyAmounts,
+  type CurrencyAmount,
   type DetailedEntry,
   type DetailedReportResult,
   type Locale,
@@ -529,6 +530,25 @@ async function bufferDocument(
   });
 }
 
+/** One row per currency; continuation lines carry no duration. */
+function currencyRows(
+  table: Table,
+  cells: PdfCells,
+  amounts: readonly CurrencyAmount[],
+  format: PdfFormat,
+  total = false,
+): void {
+  const write = total ? table.total : table.row;
+  if (amounts.length === 0) {
+    write({ ...cells, amount: format.amount(0) });
+    return;
+  }
+  amounts.forEach((bucket, index) => write({
+    ...(index === 0 ? cells : {}),
+    amount: `${format.amount(bucket.amount)} ${sanitizePdfText(bucket.currency)}`,
+  }));
+}
+
 // ── renderers ────────────────────────────────────────────────────────
 
 /**
@@ -594,26 +614,25 @@ export async function renderSummaryPdf(
   meta: PdfReportMeta,
   groupBy?: ReportGroupBy,
 ): Promise<Buffer> {
-  const currency = sanitizePdfText(result.currency || meta.currency);
+  const currency = sanitizePdfText(result.totalAmounts?.map((bucket) => bucket.currency).join(" / ") || result.currency || meta.currency);
   // Money is decided by the RESULT, which the report builder already
   // projected — the renderer never re-derives it from a visibility. With it
   // withheld the stat, the column and the total go entirely: a PDF has no
   // dash to explain, and an "Amount" column of blanks reads as zero.
-  const money = result.moneyVisible !== false && result.totalAmount !== null;
+  const money = result.moneyVisible !== false && result.totalAmounts !== null
+    && (result.totalAmounts !== undefined || result.totalAmount !== null);
+  const amounts = result.totalAmounts ?? [{ amount: result.totalAmount ?? 0, currency }];
+  const mixed = amounts.length > 1;
 
-  return bufferDocument(meta, "portrait", (sheet) => {
+  return bufferDocument({ ...meta, currency: amounts.map((bucket) => bucket.currency).join(" / ") || currency }, "portrait", (sheet) => {
     const { t, format } = sheet;
     drawStats(sheet, [
       { label: t("stats.totalTracked"), value: formatDuration(result.totalSec, "hms") },
       { label: t("stats.billable"), value: formatDuration(result.billableSec, "hms") },
-      ...(money
-        ? [
-            {
-              label: t("stats.amount", { currency }),
-              value: format.amount(result.totalAmount ?? 0),
-            },
-          ]
-        : []),
+      ...(money ? amounts.map((bucket) => ({
+        label: t("stats.amount", { currency: bucket.currency }),
+        value: format.amount(bucket.amount),
+      })) : []),
     ]);
 
     const table = createTable(sheet, [
@@ -636,21 +655,33 @@ export async function renderSummaryPdf(
       table.empty(t("empty.range"));
     } else {
       for (const group of result.groups) {
-        table.row({
+        const cells = {
           label: summaryGroupLabel(sheet, groupBy, group),
           duration: formatDuration(group.seconds, "hms"),
           billable: formatDuration(group.billableSec, "hms"),
-          ...(money ? { amount: format.amount(group.amount ?? 0) } : {}),
-        });
+          ...(money ? { amount: mixed ? "" : format.amount(group.amount ?? 0) } : {}),
+        };
+        if (money && mixed) {
+          if (group.amounts === undefined && group.amount === null) {
+            table.row({ ...cells, amount: "—" });
+          } else {
+            currencyRows(table, cells, group.amounts ?? [{
+              amount: group.amount ?? 0, currency: group.currency || result.currency,
+            }], format);
+          }
+        }
+        else table.row(cells);
       }
     }
 
-    table.total({
+    const totals = {
       label: t("total"),
       duration: formatDuration(result.totalSec, "hms"),
       billable: formatDuration(result.billableSec, "hms"),
       ...(money ? { amount: format.amount(result.totalAmount ?? 0) } : {}),
-    });
+    };
+    if (money && mixed) currencyRows(table, totals, amounts, format, true);
+    else table.total(totals);
   });
 }
 
@@ -679,7 +710,7 @@ export async function renderDetailedPdf(
   meta: PdfReportMeta,
 ): Promise<Buffer> {
   const timeZone = resolveTimeZone(meta.timeZone);
-  const currency = sanitizePdfText(result.currency || meta.currency);
+  const currency = sanitizePdfText(result.totalAmounts?.map((bucket) => bucket.currency).join(" / ") || result.currency || meta.currency);
   const nowMs = Date.now();
 
   const totalSec = result.entries.reduce(
@@ -688,18 +719,19 @@ export async function renderDetailedPdf(
   );
   // See `renderSummaryPdf`: withheld money removes the columns, not the
   // values. The total is summed only when every row may carry money.
-  const money = result.moneyVisible !== false;
-  const totalAmount = money
-    ? sumAmounts(result.entries.map((entry) => entry.amount ?? 0))
-    : 0;
+  const money = result.moneyVisible !== false && result.entries.every((entry) => entry.amount !== null);
+  const amounts = money ? sumCurrencyAmounts(result.entries) ?? [] : [];
+  const mixed = amounts.length > 1;
+  const totalAmount = amounts[0]?.amount ?? 0;
+  const amountCurrency = amounts[0]?.currency ?? currency;
 
-  return bufferDocument(meta, "portrait", (sheet) => {
+  return bufferDocument({ ...meta, currency: amounts.map((bucket) => bucket.currency).join(" / ") || currency }, "portrait", (sheet) => {
     const { t, format } = sheet;
     drawStats(sheet, [
       { label: t("stats.entries"), value: format.count(result.entries.length) },
       { label: t("stats.totalTracked"), value: formatDuration(totalSec, "hms") },
       ...(money
-        ? [{ label: t("stats.amount", { currency }), value: format.amount(totalAmount) }]
+        ? amounts.map((bucket) => ({ label: t("stats.amount", { currency: bucket.currency }), value: format.amount(bucket.amount) }))
         : []),
     ]);
 
@@ -716,7 +748,7 @@ export async function renderDetailedPdf(
         ? [
             {
               key: "amount",
-              header: t("columns.amount", { currency }),
+              header: t("columns.amount", { currency: mixed ? amounts.map((bucket) => bucket.currency).join(" / ") : amountCurrency }),
               width: 74,
               align: "right" as const,
             },
@@ -737,16 +769,18 @@ export async function renderDetailedPdf(
           project:
             entry.taskName === null ? project : `${project} / ${entry.taskName}`,
           billable: entry.billable ? t("billableMark") : "",
-          ...(money ? { amount: format.amount(entry.amount ?? 0) } : {}),
+          ...(money ? { amount: mixed ? `${format.amount(entry.amount ?? 0)} ${sanitizePdfText(entry.currency)}` : format.amount(entry.amount ?? 0) } : {}),
         });
       }
     }
 
-    table.total({
+    const totals = {
       date: t("total"),
       duration: formatDuration(totalSec, "hms"),
       ...(money ? { amount: format.amount(totalAmount) } : {}),
-    });
+    };
+    if (money && mixed) currencyRows(table, totals, amounts, format, true);
+    else table.total(totals);
   });
 }
 

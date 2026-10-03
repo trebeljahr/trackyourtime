@@ -9466,6 +9466,32 @@
                             "null"
                           ]
                         },
+                        "totalAmounts": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "currency": {
+                                    "type": "string"
+                                  },
+                                  "amount": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "currency",
+                                  "amount"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "currency": {
                           "type": "string"
                         },
@@ -9497,6 +9523,35 @@
                                   "number",
                                   "null"
                                 ]
+                              },
+                              "amounts": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "currency": {
+                                          "type": "string"
+                                        },
+                                        "amount": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "currency",
+                                        "amount"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "currency": {
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -10085,6 +10140,32 @@
                       "type": [
                         "number",
                         "null"
+                      ]
+                    },
+                    "totalAmounts": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string"
+                              },
+                              "amount": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "currency",
+                              "amount"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
                       ]
                     },
                     "currency": {

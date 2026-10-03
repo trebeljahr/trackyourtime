@@ -156,6 +156,17 @@ describe("groupEntriesByDay", () => {
   });
 });
 
+it("keeps a day's earnings separate after the workspace currency changes", () => {
+  const [day] = groupEntriesByDay([entry({ currency: "EUR", amount: 60 }), entry({ currency: "USD", amount: 90 })]);
+  expect(day!.amount).toBeNull();
+  expect(day!.amounts).toEqual([{ currency: "EUR", amount: 60 }, { currency: "USD", amount: 90 }]);
+});
+
+it("withholds the entire day total when a colleague's money is hidden", () => {
+  const [day] = groupEntriesByDay([entry({ amount: 60 }), entry({ amount: null, hourlyRate: null })]);
+  expect(day!.amounts).toBeNull();
+});
+
 describe("dayHeadingLabel", () => {
   const now = new Date(2026, 7, 21, 12, 0, 0);
 

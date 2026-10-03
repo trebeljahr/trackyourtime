@@ -1,3 +1,4 @@
+import type { CurrencyAmounts } from "./report-currency.js";
 import type { ReportGroupBy, TimeEntry } from "./types.js";
 
 /** Shared filter surface for every report and the entry list. */
@@ -61,8 +62,12 @@ export type SummaryGroup = {
   color: string | null;
   seconds: number;
   billableSec: number;
-  /** `null` when the report's money is withheld — see {@link ReportMoney}. */
+  /** Legacy scalar: null for mixed currencies or withheld money. */
   amount: ReportMoney;
+  /** Optional for older servers. Null only when money is withheld. */
+  amounts?: CurrencyAmounts;
+  /** Currency of the legacy scalar, when known. */
+  currency?: string;
 };
 
 /** One group's share of a single timeline day. */
@@ -92,11 +97,14 @@ export type SummaryTimelinePoint = {
 export type SummaryReportResult = {
   totalSec: number;
   billableSec: number;
+  /** Legacy scalar: null for mixed currencies or withheld money. */
   totalAmount: ReportMoney;
+  /** Per-currency earnings; absent on older servers, null when withheld. */
+  totalAmounts?: CurrencyAmounts;
   currency: string;
   groups: SummaryGroup[];
   timeline: SummaryTimelinePoint[];
-  /** False when every money field above is withheld as `null`. */
+  /** False only when money is withheld; mixed currencies remain visible. */
   moneyVisible: boolean;
 };
 
@@ -123,9 +131,12 @@ export type DetailedReportResult = {
   entries: DetailedEntry[];
   nextCursor?: string;
   totalSec: number;
+  /** Legacy scalar: null for mixed currencies or withheld money. */
   totalAmount: ReportMoney;
+  /** Per-currency earnings; absent on older servers, null when withheld. */
+  totalAmounts?: CurrencyAmounts;
   currency: string;
-  /** False when `totalAmount` and every row's money are withheld. */
+  /** False only when money is withheld; mixed currency totals remain visible. */
   moneyVisible: boolean;
 };
 

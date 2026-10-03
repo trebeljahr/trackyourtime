@@ -13,6 +13,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { SummaryReportResult, CurrencyAmounts } from "@starter/shared";
 import type { ApiTokenScope } from "@starter/shared/api-tokens";
 import {
   clientListSchema,
@@ -400,17 +401,16 @@ export const TOOLS: readonly ToolDefinition[] = [
       const { data } = await client.request("GET", "/reports/summary", {
         query: { ...filters, ...range, timeZone: zone },
       });
-      const report = data as {
-        totalSec: number;
-        billableSec: number;
-        totalAmount: number;
-        currency: string;
-        groups: { label: string; seconds: number; amount: number }[];
-      };
+      const report = data as SummaryReportResult;
+      const money = (amounts: CurrencyAmounts | undefined, amount: number | null, currency: string): string =>
+        amounts === null ? "—" : amounts === undefined
+          ? amount === null ? "—" : `${amount.toFixed(2)} ${currency}`
+          : amounts.length === 0 ? `0.00 ${currency}`
+          : amounts.map((bucket) => `${bucket.amount.toFixed(2)} ${bucket.currency}`).join("; ");
       const lines = [
-        `${duration(report.totalSec)} tracked (${duration(report.billableSec)} billable, ${report.totalAmount.toFixed(2)} ${report.currency}) between ${range.from} and ${range.to}, grouped by ${filters.groupBy}:`,
+        `${duration(report.totalSec)} tracked (${duration(report.billableSec)} billable, ${money(report.totalAmounts, report.totalAmount, report.currency)}) between ${range.from} and ${range.to}, grouped by ${filters.groupBy}:`,
         ...report.groups.map(
-          (group) => `- ${group.label}: ${duration(group.seconds)}, ${group.amount.toFixed(2)} ${report.currency}`,
+          (group) => `- ${group.label}: ${duration(group.seconds)}, ${money(group.amounts, group.amount, group.currency || report.currency)}`,
         ),
       ];
       return textResult(lines.join("\n"), data);

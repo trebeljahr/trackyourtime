@@ -77,7 +77,7 @@ export type FormatSettings = {
   durationShort: (seconds: number) => string;
   /** Live duration of an entry, running entries measured against `nowMs`. */
   entryDuration: (entry: DurationEntry, nowMs?: number) => number;
-  money: (amount: number) => string;
+  money: (amount: number, currency?: string) => string;
   clock: (iso: string) => string;
 };
 
@@ -109,7 +109,7 @@ export const useFormatSettings = (): FormatSettings => {
       durationShort: (seconds) => formatDurationShortFor(seconds, locale),
       entryDuration: (entry, nowMs = Date.now()) =>
         entryDurationSec(entry, nowMs),
-      money: (amount) => formatLocaleMoney(amount, currency, locale),
+      money: (amount, entryCurrency = currency) => formatLocaleMoney(amount, entryCurrency, locale),
       clock: (iso) => formatTime(iso, locale, timeFormat),
     }),
     [settings, locale, query.data, currency, timeFormat, durationFormat, weekStartsOn]

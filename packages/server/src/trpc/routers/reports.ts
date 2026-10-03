@@ -37,7 +37,9 @@ import {
   exportPdfSchema,
   formatDuration,
   summaryReportSchema,
-  sumAmounts,
+  sumCurrencyAmounts,
+  singleCurrencyMoney,
+  type CurrencyAmount,
   trackedSpanSchema,
   addDaysToKey,
   dayKeyInZone,
@@ -732,11 +734,12 @@ const groupIdentity = (
 export type GroupAccumulator = GroupIdentity & {
   seconds: number;
   billableSec: number;
-  amounts: number[];
+  amounts: CurrencyAmount[];
 };
 
 /** What one measured entry contributes to whichever groups it lands in. */
 export type GroupContribution = {
+  currency: string;
   seconds: number;
   billableSec: number;
   amount: number;
@@ -764,7 +767,7 @@ export const accumulateGroups = (
     };
     group.seconds += contribution.seconds;
     group.billableSec += contribution.billableSec;
-    if (contribution.amount !== 0) group.amounts.push(contribution.amount);
+    if (contribution.amount !== 0) group.amounts.push({ amount: contribution.amount, currency: contribution.currency });
     groups.set(identity.key, group);
   }
 };
@@ -774,14 +777,12 @@ export const sortGroups = (
   groups: Iterable<GroupAccumulator>,
 ): SummaryGroup[] =>
   [...groups]
-    .map(({ key, label, color, seconds, billableSec, amounts }) => ({
-      key,
-      label,
-      color,
-      seconds,
-      billableSec,
-      amount: sumAmounts(amounts),
-    }))
+    .map(({ key, label, color, seconds, billableSec, amounts }) => {
+      const buckets = sumCurrencyAmounts(amounts);
+      const scalar = singleCurrencyMoney(buckets, "");
+      return { key, label, color, seconds, billableSec, amount: scalar.amount,
+        currency: scalar.currency, amounts: buckets };
+    })
     .sort((a, b) => b.seconds - a.seconds || a.key.localeCompare(b.key));
 
 // ── report bodies (shared by the queries and by exportCsv) ───────────
@@ -795,6 +796,7 @@ const emptySummary = (
   totalSec: 0,
   billableSec: 0,
   totalAmount: moneyVisible ? 0 : null,
+  totalAmounts: moneyVisible ? [] : null,
   currency,
   groups: [],
   timeline: dayKeysInRange(range.fromMs, range.toMs, timeZone).map((date) => ({
@@ -823,7 +825,8 @@ export const withholdSummaryMoney = (
 ): SummaryReportResult => ({
   ...result,
   totalAmount: null,
-  groups: result.groups.map((group) => ({ ...group, amount: null })),
+  totalAmounts: null,
+  groups: result.groups.map((group) => ({ ...group, amount: null, amounts: null })),
   moneyVisible: false,
 });
 
@@ -859,6 +862,7 @@ export const projectDetailedReport = (
       amount: null,
     })),
     totalAmount: null,
+    totalAmounts: null,
     moneyVisible: false,
   };
 };
@@ -935,7 +939,7 @@ export const buildSummary = async (
   const groups = new Map<string, GroupAccumulator>();
   let totalSec = 0;
   let billableSec = 0;
-  const amounts: number[] = [];
+  const amounts: CurrencyAmount[] = [];
 
   for (const doc of docs) {
     const measured = measureEntry(doc, range, nowMs, calendar);
@@ -945,7 +949,7 @@ export const buildSummary = async (
     // must not inherit the tag fan-out's deliberate over-count.
     totalSec += measured.seconds;
     billableSec += measured.billableSec;
-    if (measured.amount !== 0) amounts.push(measured.amount);
+    if (measured.amount !== 0) amounts.push({ amount: measured.amount, currency: doc.currency });
 
     const identities =
       groupBy === "tag"
@@ -964,6 +968,7 @@ export const buildSummary = async (
       seconds: measured.seconds,
       billableSec: measured.billableSec,
       amount: measured.amount,
+      currency: doc.currency,
     });
 
     for (const slice of measured.slices) {
@@ -996,11 +1001,14 @@ export const buildSummary = async (
 
   const sortedGroups: SummaryGroup[] = sortGroups(groups.values());
 
+  const totalAmounts = sumCurrencyAmounts(amounts);
+  const scalar = singleCurrencyMoney(totalAmounts, settings.currency);
   const result: SummaryReportResult = {
     totalSec,
     billableSec,
-    totalAmount: sumAmounts(amounts),
-    currency: settings.currency,
+    totalAmount: scalar.amount,
+    totalAmounts,
+    currency: scalar.currency,
     groups: sortedGroups,
     timeline: [...timeline.values()],
     moneyVisible: true,
@@ -1065,6 +1073,7 @@ export const buildDetailed = async (
         entries: [],
         totalSec: 0,
         totalAmount: 0,
+        totalAmounts: [],
         currency: settings.currency,
         moneyVisible: true,
       },
@@ -1076,12 +1085,12 @@ export const buildDetailed = async (
   // paginated total would be a lie on every page but the last.
   const allMatching = withTotals
     ? await TimeEntry.find({ $and: conditions })
-        .select("start end durationSec billable hourlyRate")
+        .select("start end durationSec billable hourlyRate currency")
         .lean()
     : [];
 
   let totalSec = 0;
-  const amounts: number[] = [];
+  const amounts: CurrencyAmount[] = [];
   for (const entry of allMatching) {
     const startMs = entry.start.getTime();
     const rawEndMs = entry.end === null ? nowMs : entry.end.getTime();
@@ -1104,7 +1113,7 @@ export const buildDetailed = async (
       seconds,
       entry.billable ? entry.hourlyRate : null,
     );
-    if (amount !== 0) amounts.push(amount);
+    if (amount !== 0) amounts.push({ amount, currency: entry.currency });
   }
 
   const pageConditions = [...conditions];
@@ -1140,13 +1149,16 @@ export const buildDetailed = async (
       ? encodeCursor(lastDoc.start, String(lastDoc._id))
       : undefined;
 
+  const totalAmounts = sumCurrencyAmounts(amounts);
+  const scalar = singleCurrencyMoney(totalAmounts, settings.currency);
   return projectDetailedReport(
     {
       entries,
       ...(nextCursor ? { nextCursor } : {}),
       totalSec,
-      totalAmount: sumAmounts(amounts),
-      currency: settings.currency,
+      totalAmount: scalar.amount,
+      totalAmounts,
+      currency: scalar.currency,
       moneyVisible: true,
     },
     scope.visibility,
@@ -1288,19 +1300,26 @@ export const summaryCsvColumns = (moneyVisible: boolean): CsvColumn[] =>
 
 /** Exported for the unit tests. */
 export const summaryCsvRows = (result: SummaryReportResult): CsvRow[] =>
-  result.groups.map((group) => ({
-    label: group.label,
-    duration: formatDuration(group.seconds, "hms"),
-    hours: decimalHours(group.seconds),
-    seconds: group.seconds,
-    billableHours: decimalHours(group.billableSec),
-    billableSeconds: group.billableSec,
-    // Not written at all when withheld. The column is dropped too, but a row
-    // that never held the value cannot leak it through a later column change.
-    ...(result.moneyVisible
-      ? { amount: group.amount, currency: result.currency }
-      : {}),
-  }));
+  result.groups.flatMap((group): CsvRow[] => {
+    const time = {
+      label: group.label,
+      duration: formatDuration(group.seconds, "hms"),
+      hours: decimalHours(group.seconds),
+      seconds: group.seconds,
+      billableHours: decimalHours(group.billableSec),
+      billableSeconds: group.billableSec,
+    };
+    if (!result.moneyVisible) return [time];
+    const amounts = group.amounts ?? [{ amount: group.amount ?? 0, currency: group.currency || result.currency }];
+    if (amounts.length === 0) return [{ ...time, amount: 0, currency: group.currency || result.currency }];
+    // Additional currency rows carry no time: summing the CSV preserves both
+    // duration totals and independent monetary totals without conversion.
+    return amounts.map((bucket, index) => ({
+      ...(index === 0 ? time : { label: group.label }),
+      amount: bucket.amount,
+      currency: bucket.currency,
+    }));
+  });
 
 const ALL_DETAILED_COLUMNS: readonly CsvColumn[] = [
   { key: "date", header: "Date" },

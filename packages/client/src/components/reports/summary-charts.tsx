@@ -1,5 +1,7 @@
 "use client";
 
+import { sumCurrencyAmounts } from "@starter/shared";
+
 import * as React from "react";
 import { BarChart3, PieChart as PieChartIcon } from "lucide-react";
 import {
@@ -28,6 +30,8 @@ import { useT } from "@/i18n/use-t";
 import {
   MONEY_WITHHELD,
   sumReportMoney,
+  formatReportAmounts,
+  formatReportMoney,
 } from "@/components/reports/report-money";
 import { isDrillableKey } from "@/components/reports/drill";
 import { groupColorMap } from "@/components/reports/group-colors";
@@ -188,6 +192,7 @@ function BreakdownTooltip({
   // `null` into a confident 0.
   const rawAmount = slice?.["amount"];
   const amountLabel =
+    typeof slice?.["moneyLabel"] === "string" ? slice["moneyLabel"] :
     typeof rawAmount === "number" && Number.isFinite(rawAmount)
       ? asMoney(rawAmount)
       : MONEY_WITHHELD;
@@ -394,6 +399,7 @@ type Slice = {
   seconds: number;
   /** `null` when the report's money is withheld. */
   amount: number | null;
+  moneyLabel: string;
   share: number;
   fill: string;
 };
@@ -402,7 +408,7 @@ export type GroupBreakdownChartProps = {
   groups: SummaryGroup[];
   totalSec: number;
   duration: (seconds: number) => string;
-  money: (amount: number) => string;
+  money: (amount: number, currency?: string) => string;
   /** What the groups are, which names the heading. */
   groupBy: ReportGroupBy;
   /**
@@ -446,6 +452,7 @@ export function GroupBreakdownChart({
       label: group.label,
       seconds: group.seconds,
       amount: group.amount,
+      moneyLabel: formatReportAmounts(group.amounts, group.amount, group.currency, money),
       share: (group.seconds / total) * 100,
       fill: colors.get(group.key) ?? CHART_FALLBACK,
     }));
@@ -456,14 +463,19 @@ export function GroupBreakdownChart({
         key: "__other",
         label: t("charts.more", { count: tail.length }),
         seconds,
-        amount: sumReportMoney(tail.map((group) => group.amount)),
+        amount: null,
+        moneyLabel: tail.every((group) => group.amounts !== undefined)
+          ? formatReportAmounts(
+              tail.some((group) => group.amounts === null) ? null : sumCurrencyAmounts(tail.flatMap((group) => group.amounts ?? [])),
+              null, undefined, money)
+          : formatReportMoney(sumReportMoney(tail.map((group) => group.amount)), money),
         share: (seconds / total) * 100,
         fill: "hsl(var(--muted-foreground))",
       });
     }
 
     return mapped;
-  }, [groups, totalSec, t]);
+  }, [groups, totalSec, t, money]);
 
   return (
     <Card className="min-w-0">

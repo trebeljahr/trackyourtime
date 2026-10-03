@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { SummaryGroup } from "@starter/shared";
+import type { SummaryGroup, CurrencyAmounts } from "@starter/shared";
 
 import { BudgetMeterCell } from "@/components/budget-meter";
 import {
@@ -18,7 +18,7 @@ import { CHART_COLORS, groupColorMap } from "@/components/reports/group-colors";
 import { useFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
 import type { BudgetView } from "@/lib/budget-view";
-import { formatReportMoney } from "@/components/reports/report-money";
+import { formatReportAmounts } from "@/components/reports/report-money";
 
 export type SummaryTableProps = {
   groups: SummaryGroup[];
@@ -26,8 +26,10 @@ export type SummaryTableProps = {
   billableSec: number;
   /** `null` when the report's money is withheld from the caller. */
   totalAmount: number | null;
+  totalAmounts?: CurrencyAmounts;
+  currency?: string;
   duration: (seconds: number) => string;
-  money: (amount: number) => string;
+  money: (amount: number, currency?: string) => string;
   /** Column heading for the group key, e.g. "Project". */
   dimensionLabel: string;
   /**
@@ -62,6 +64,8 @@ export function SummaryTable({
   totalSec,
   billableSec,
   totalAmount,
+  totalAmounts,
+  currency,
   duration,
   money,
   dimensionLabel,
@@ -192,7 +196,7 @@ export function SummaryTable({
                 {duration(group.seconds)}
               </TableCell>
               <TableCell data-label={tc("fields.amount")} className="text-right tabular-nums">
-                {formatReportMoney(group.amount, money)}
+                {formatReportAmounts(group.amounts, group.amount, group.currency || currency, money)}
               </TableCell>
               {budgetFor ? (
                 <TableCell data-label={t("summary.budget")} data-testid={`summary-budget-${group.key}`}>
@@ -232,7 +236,7 @@ export function SummaryTable({
             data-label={tc("fields.amount")}
             data-testid="summary-total-amount"
           >
-            {formatReportMoney(totalAmount, money)}
+            {formatReportAmounts(totalAmounts, totalAmount, currency, money)}
           </TableCell>
           {budgetFor ? <TableCell /> : null}
         </TableRow>

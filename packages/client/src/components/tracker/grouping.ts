@@ -1,4 +1,4 @@
-import { sumAmounts, toLocalDateKey, type DetailedEntry } from "@starter/shared";
+import { sumCurrencyAmounts, singleCurrencyMoney, type CurrencyAmounts, toLocalDateKey, type DetailedEntry } from "@starter/shared";
 
 import type { ClientLocale } from "@/i18n/config";
 import { formatDate } from "@/i18n/format";
@@ -13,7 +13,8 @@ export type DayGroup = {
   /** Finished seconds only — the running entry is added live by the header. */
   totalSec: number;
   billableSec: number;
-  amount: number;
+  amount: number | null;
+  amounts: CurrencyAmounts;
 };
 
 /**
@@ -40,6 +41,7 @@ export const groupEntriesByDay = (entries: DetailedEntry[]): DayGroup[] => {
         totalSec: 0,
         billableSec: 0,
         amount: 0,
+        amounts: [],
       };
       days.push(currentDay);
     }
@@ -51,12 +53,8 @@ export const groupEntriesByDay = (entries: DetailedEntry[]): DayGroup[] => {
   }
 
   for (const day of days) {
-    // A colleague's row whose money is withheld arrives with `amount: null`;
-    // it contributes nothing to the day's own-visible total rather than
-    // failing the sum.
-    day.amount = sumAmounts(
-      day.entries.flatMap((entry) => (entry.amount === null ? [] : [entry.amount]))
-    );
+    day.amounts = sumCurrencyAmounts(day.entries);
+    day.amount = singleCurrencyMoney(day.amounts, "").amount;
   }
 
   return days;

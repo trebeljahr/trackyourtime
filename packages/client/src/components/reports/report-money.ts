@@ -1,3 +1,5 @@
+import type { CurrencyAmounts } from "@starter/shared";
+
 /**
  * What a report shows in place of money the caller may not see.
  *
@@ -29,3 +31,15 @@ export const sumReportMoney = (
   }
   return total;
 };
+
+/** Prefer currency buckets; old servers still supply a scalar and currency. */
+export const formatReportAmounts = (
+  amounts: CurrencyAmounts | undefined,
+  amount: number | null,
+  currency: string | undefined,
+  money: (amount: number, currency?: string) => string,
+): string => amounts === undefined
+  ? formatReportMoney(amount, (value) => money(value, currency))
+  : amounts === null ? MONEY_WITHHELD
+  : amounts.length === 0 ? money(0, currency)
+  : amounts.map((bucket) => money(bucket.amount, bucket.currency)).join(" · ");

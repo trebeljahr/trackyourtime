@@ -4,6 +4,8 @@ import * as React from "react";
 import { Clock, ListChecks, Loader2, Table2 } from "lucide-react";
 import {
   entryAmount,
+  sumCurrencyAmounts,
+  singleCurrencyMoney,
   resolveHourlyRate,
   type DetailedEntry,
 } from "@starter/shared";
@@ -36,7 +38,7 @@ import {
   type SortDirection,
 } from "@/components/reports/detailed-table";
 import { KpiRow, type KpiItem } from "@/components/reports/kpi-row";
-import { MONEY_WITHHELD } from "@/components/reports/report-money";
+import { formatReportAmounts } from "@/components/reports/report-money";
 import { MoneyHiddenNote } from "@/components/reports/member-reporting";
 import {
   KpiRowSkeleton,
@@ -210,35 +212,41 @@ export function EntriesView({
 
         utils.reports.detailed.setInfiniteData(input, (old) => {
           if (!old) return old;
+          let secondsDelta = 0;
+          const deltas: { currency: string; amount: number }[] = [];
+          const nextPages = old.pages.map((page) => {
+            const entries: DetailedEntry[] = [];
+            for (const entry of page.entries) {
+              if (!targets.has(entry.id)) {
+                entries.push(entry);
+                continue;
+              }
+              const patched = patch(entry);
+              if (patched === null) secondsDelta += entry.durationSec;
+              else entries.push(patched);
+              deltas.push({ currency: entry.currency, amount: -(entry.amount ?? 0) });
+              if (patched !== null) {
+                deltas.push({ currency: patched.currency, amount: patched.amount ?? 0 });
+              }
+            }
+            return { ...page, entries };
+          });
           return {
             ...old,
-            pages: old.pages.map((page) => {
-              let secondsDelta = 0;
-              let amountDelta = 0;
-              const next: DetailedEntry[] = [];
-              for (const entry of page.entries) {
-                if (!targets.has(entry.id)) {
-                  next.push(entry);
-                  continue;
-                }
-                const patched = patch(entry);
-                if (patched === null) {
-                  secondsDelta += entry.durationSec;
-                  amountDelta += entry.amount ?? 0;
-                  continue;
-                }
-                next.push(patched);
-                amountDelta += (entry.amount ?? 0) - (patched.amount ?? 0);
-              }
+            pages: nextPages.map((page) => {
+              const totalAmounts = page.totalAmounts === undefined ? undefined
+                : page.totalAmounts === null ? null
+                : sumCurrencyAmounts([...page.totalAmounts, ...deltas]);
               return {
                 ...page,
-                entries: next,
                 totalSec: Math.max(0, page.totalSec - secondsDelta),
-                // A withheld total stays withheld; there is nothing to adjust.
-                totalAmount:
-                  page.totalAmount === null
-                    ? null
-                    : round2(page.totalAmount - amountDelta),
+                ...(totalAmounts === undefined ? {
+                  totalAmount: page.totalAmount === null ? null : round2(page.totalAmount + deltas.reduce((sum, delta) => sum + delta.amount, 0)),
+                } : {
+                  totalAmounts,
+                  totalAmount: singleCurrencyMoney(totalAmounts, page.currency).amount,
+                  currency: singleCurrencyMoney(totalAmounts, page.currency).currency,
+                }),
               };
             }),
           };
@@ -351,14 +359,16 @@ export function EntriesView({
       },
       {
         label: t("kpi.amountEarned"),
-        value:
-          totals && totals.totalAmount === null
-            ? MONEY_WITHHELD
-            : fmt.money(totals?.totalAmount ?? 0),
-        hint: totals?.currency ?? fmt.currency,
-        icon:
-          currencyIcon(totals?.currency ?? fmt.currency) ??
-          CURRENCY_FALLBACK_ICON,
+        value: formatReportAmounts(
+          totals?.totalAmounts,
+          totals?.totalAmount ?? (totals ? null : 0),
+          totals?.currency ?? fmt.currency,
+          fmt.money,
+        ),
+        hint: totals?.totalAmounts?.map((bucket) => bucket.currency).join(" · ") || totals?.currency || fmt.currency,
+        icon: (totals?.totalAmounts?.length ?? 0) > 1
+          ? CURRENCY_FALLBACK_ICON
+          : currencyIcon(totals?.currency ?? fmt.currency) ?? CURRENCY_FALLBACK_ICON,
         testId: "kpi-amount",
       },
       {

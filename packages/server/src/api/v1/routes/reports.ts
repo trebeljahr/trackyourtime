@@ -92,6 +92,7 @@ export const reportHandlers: ApiHandlers = {
       nextCursor: result.nextCursor ?? null,
       totalSec: result.totalSec,
       totalAmount: result.totalAmount,
+      totalAmounts: result.totalAmounts,
       currency: result.currency,
     });
   },

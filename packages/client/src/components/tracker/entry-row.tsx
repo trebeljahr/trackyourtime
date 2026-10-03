@@ -389,7 +389,7 @@ function EntryRowImpl({
         >
           {entry.hourlyRate === null || entry.amount === null
             ? ""
-            : format.money(entry.amount)}
+            : format.money(entry.amount, entry.currency)}
         </span>
 
         {/* The running entry gets Stop, not Continue. "Continuing" something

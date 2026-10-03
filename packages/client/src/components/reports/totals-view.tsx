@@ -42,7 +42,7 @@ import {
 } from "@/components/reports/group-by";
 import { MoneyHiddenNote } from "@/components/reports/member-reporting";
 import { KpiRow, type KpiItem } from "@/components/reports/kpi-row";
-import { MONEY_WITHHELD } from "@/components/reports/report-money";
+import { formatReportAmounts } from "@/components/reports/report-money";
 import {
   ChartSkeleton,
   KpiRowSkeleton,
@@ -268,14 +268,16 @@ export function TotalsView({
       },
       {
         label: t("kpi.amountEarned"),
-        value:
-          result && result.totalAmount === null
-            ? MONEY_WITHHELD
-            : fmt.money(result?.totalAmount ?? 0),
-        hint: result?.currency ?? fmt.currency,
-        icon:
-          currencyIcon(result?.currency ?? fmt.currency) ??
-          CURRENCY_FALLBACK_ICON,
+        value: formatReportAmounts(
+          result?.totalAmounts,
+          result?.totalAmount ?? (result ? null : 0),
+          result?.currency ?? fmt.currency,
+          fmt.money,
+        ),
+        hint: result?.totalAmounts?.map((bucket) => bucket.currency).join(" · ") || result?.currency || fmt.currency,
+        icon: (result?.totalAmounts?.length ?? 0) > 1
+          ? CURRENCY_FALLBACK_ICON
+          : currencyIcon(result?.currency ?? fmt.currency) ?? CURRENCY_FALLBACK_ICON,
         testId: "kpi-amount",
       },
     ];
@@ -405,7 +407,7 @@ export function TotalsView({
               groups={result.groups}
               totalSec={result.totalSec}
               duration={fmt.duration}
-              money={fmt.money}
+              money={(amount, currency) => fmt.money(amount, currency || result.currency)}
               groupBy={groupBy}
               onSelectGroup={drillIntoGroup}
             />
@@ -444,6 +446,8 @@ export function TotalsView({
               totalSec={result.totalSec}
               billableSec={result.billableSec}
               totalAmount={result.totalAmount}
+              totalAmounts={result.totalAmounts}
+              currency={result.currency}
               duration={fmt.duration}
               money={fmt.money}
               dimensionLabel={dimension}

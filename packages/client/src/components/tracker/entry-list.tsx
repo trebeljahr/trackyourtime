@@ -102,9 +102,9 @@ function DayHeader({
         <span className="text-muted-foreground" data-testid="day-count">
           {tc("counts.entries", { count: group.entryCount })}
         </span>
-        {group.amount > 0 ? (
+        {group.amounts === null || group.amounts.length > 0 ? (
           <span className="text-muted-foreground" data-testid="day-amount">
-            {format.money(group.amount)}
+            {group.amounts === null ? "—" : group.amounts.map(({ amount, currency }) => format.money(amount, currency)).join(" · ")}
           </span>
         ) : null}
         <span className="flex items-center gap-1.5">

@@ -204,8 +204,8 @@ test("a dangling tag id is dropped, never rendered as a blank group", () => {
 test("the tag fan-out over-sums the groups on purpose, never the total", () => {
   // Two entries: one carrying two tags, one untagged.
   const entries = [
-    { tagIds: [DEEP_WORK, ADMIN], seconds: 7200, billableSec: 7200, amount: 180 },
-    { tagIds: [], seconds: 1800, billableSec: 0, amount: 0 },
+    { tagIds: [DEEP_WORK, ADMIN], seconds: 7200, billableSec: 7200, amount: 180, currency: "EUR" },
+    { tagIds: [], seconds: 1800, billableSec: 0, amount: 0, currency: "EUR" },
   ];
 
   const groups = new Map<string, GroupAccumulator>();
@@ -253,16 +253,19 @@ test("sortGroups puts the biggest group first and breaks ties by key", () => {
     seconds: 600,
     billableSec: 0,
     amount: 0,
+    currency: "EUR",
   });
   accumulateGroups(groups, tagGroupIdentities([RESEARCH], TAGS), {
     seconds: 600,
     billableSec: 0,
     amount: 0,
+    currency: "EUR",
   });
   accumulateGroups(groups, tagGroupIdentities([DEEP_WORK], TAGS), {
     seconds: 3600,
     billableSec: 0,
     amount: 0,
+    currency: "EUR",
   });
 
   assert.deepEqual(
@@ -280,11 +283,13 @@ test("accumulateGroups is a plain accumulate for the partitioning groupings", ()
     seconds: 1200,
     billableSec: 1200,
     amount: 40,
+    currency: "EUR",
   });
   accumulateGroups(groups, [project], {
     seconds: 600,
     billableSec: 0,
     amount: 0,
+    currency: "EUR",
   });
 
   assert.deepEqual(sortGroups(groups.values()), [
@@ -295,6 +300,8 @@ test("accumulateGroups is a plain accumulate for the partitioning groupings", ()
       seconds: 1800,
       billableSec: 1200,
       amount: 40,
+      amounts: [{ amount: 40, currency: "EUR" }],
+      currency: "EUR",
     },
   ]);
 });

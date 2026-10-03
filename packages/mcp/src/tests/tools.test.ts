@@ -305,6 +305,26 @@ describe("ranges and queries", () => {
     assert.match(textOf(result), /- Website: 1h 30m, 90\.00 EUR/);
     await close();
   });
+
+  it("summary_report prints separate historical currencies instead of a converted total", async () => {
+    const api = fakeApi({
+      "GET /me": meRoute(ALL_SCOPES),
+      "GET /reports/summary": () => ({ status: 200, body: { data: {
+        totalSec: 7200, billableSec: 7200, totalAmount: null, currency: "GBP",
+        totalAmounts: [{ currency: "EUR", amount: 10 }, { currency: "USD", amount: 20 }],
+        groups: [{ key: "p1", label: "Website", seconds: 7200, amount: null,
+          amounts: [{ currency: "EUR", amount: 10 }, { currency: "USD", amount: 20 }] }],
+      } } }),
+    });
+    const { client, close } = await connect(api.fetch);
+    try {
+      const result = await client.callTool({ name: "summary_report", arguments: {
+        from: "2026-09-01", to: "2026-09-30", groupBy: "project", timeZone: "UTC",
+      } });
+      assert.match(textOf(result), /10\.00 EUR; 20\.00 USD/);
+      assert.doesNotMatch(textOf(result).split("\n\n")[0]!, /30\.00|GBP/);
+    } finally { await close(); }
+  });
 });
 
 describe("the docs page", () => {
