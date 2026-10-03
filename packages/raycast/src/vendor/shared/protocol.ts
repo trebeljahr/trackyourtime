@@ -15,6 +15,7 @@ import type { TimeEntry } from "./types.js";
 // ── Server → Client ──────────────────────────────────────────────────
 
 export type ServerToClientMessage =
+  | { type: "tt:sync-state"; distributed: boolean }
   | {
       type: "tt:sync";
       event: SyncEvent;
