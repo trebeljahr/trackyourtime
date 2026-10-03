@@ -170,6 +170,22 @@ export type PreferencesStorageOptions = {
   loadPlugin?: () => Promise<PreferencesPlugin | null>;
 };
 
+const localStorageBacking = () => {
+  const unavailable = {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  };
+  if (typeof window === "undefined") return unavailable;
+  try {
+    return window.localStorage;
+  } catch {
+    // Preferences remains usable in a native shell even when WebKit denies its
+    // localStorage getter; the no-op value is only the unavailable fallback.
+    return unavailable;
+  }
+};
+
 /**
  * A Preferences-backed store. Every method waits on the same one-time
  * initialisation, so the migration can never interleave with a write.
@@ -185,7 +201,7 @@ export const preferencesStorage = ({
   const fallback = webStorage(
     strict || typeof window === "undefined"
       ? { getItem: () => null, setItem: () => {}, removeItem: () => {} }
-      : window.localStorage,
+      : localStorageBacking(),
   );
 
   let ready: Promise<PreferencesPlugin | null> | null = null;

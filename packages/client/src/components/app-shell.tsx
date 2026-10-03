@@ -73,10 +73,25 @@ import { handleBackPress } from "@/mobile/back-button";
 import { setMobileHandlers } from "@/mobile/bridge";
 import { cn } from "@/lib/utils";
 import { useVisibleNavSections } from "@/components/members/nav-visibility";
+import { DOCS_URL } from "@/lib/site-links";
 
 // Re-exported because this module has always been where they lived; the rule
 // itself now sits in lib/nav.ts so the tab bar can share it without a cycle.
 export { isActiveRoute, type NavItem };
+
+export function DocsLink({ onClick }: { onClick?: () => void }): React.JSX.Element {
+  const t = useT("shell");
+  return (
+    <a
+      href={DOCS_URL}
+      onClick={onClick}
+      className="flex min-h-11 items-center rounded-md px-2 text-sm text-muted-foreground underline-offset-4 hover:bg-accent/60 hover:text-foreground hover:underline"
+      data-testid="app-docs-link"
+    >
+      {t("nav.docs")}
+    </a>
+  );
+}
 
 /**
  * Headings and labels are message keys, resolved with `t` at render time: this
@@ -445,6 +460,9 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
           </Link>
           <Separator />
           <SidebarNav pathname={pathname} />
+          <div className="mt-auto border-t border-border px-3 py-2">
+            <DocsLink />
+          </div>
         </aside>
 
         {/* Mobile drawer. No width gate: it is only ever rendered while
@@ -494,6 +512,9 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
                 </button>
               </div>
               <SidebarNav pathname={pathname} onNavigate={closeMobile} />
+              <div className="mt-auto border-t border-border px-3 py-2">
+                <DocsLink onClick={closeMobile} />
+              </div>
             </aside>
           </div>
         ) : null}

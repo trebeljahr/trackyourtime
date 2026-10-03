@@ -71,6 +71,7 @@ export const shell: Translation<typeof source> = {
   nav: {
     open: "Navigation öffnen",
     close: "Navigation schließen",
+    docs: "Hilfe und Dokumentation",
     sections: {
       manage: "Verwalten",
     },

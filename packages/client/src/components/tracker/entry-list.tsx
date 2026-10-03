@@ -9,6 +9,7 @@ import { toLocalDateKey, type DetailedEntry } from "@starter/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
+import { FirstRunGuide } from "@/components/first-run-guide";
 import { EntryEditDialog } from "@/components/tracker/entry-edit-dialog";
 import { EntryRow } from "@/components/tracker/entry-row";
 import {
@@ -182,6 +183,9 @@ export function EntryList(): React.JSX.Element {
       ownEntries(query.data?.pages.flatMap((page) => page.entries) ?? [], viewerId),
     [query.data, viewerId]
   );
+  const hasAnyWorkspaceEntry =
+    running !== null ||
+    (query.data?.pages.some((page) => page.entries.length > 0) ?? false);
   const days = React.useMemo(() => groupEntriesByDay(entries), [entries]);
 
   const runningDate =
@@ -259,28 +263,36 @@ export function EntryList(): React.JSX.Element {
   // filtered to nothing, that is "keep loading", not "nothing tracked yet".
   if (entries.length === 0 && !hasNextPage) {
     return (
-      <EmptyState
-        icon={Timer}
-        title={t("list.emptyTitle")}
-        description={t("list.emptyDescription")}
-        action={
-          // Somebody arriving from another tracker has years of history sitting
-          // in a file, and this screen is where they find out it can come with
-          // them. The empty state is the only place that question is live.
-          <Button type="button" variant="outline" asChild>
-            <Link href="/app/settings?tab=data" data-testid="entries-empty-import">
-              <Upload className="size-4" />
-              {t("list.importHistory")}
-            </Link>
-          </Button>
-        }
-        testId="entries-empty"
-      />
+      <div className="space-y-4">
+        <FirstRunGuide
+          hasAnyEntry={hasAnyWorkspaceEntry}
+          canEnroll={!hasAnyWorkspaceEntry && !hasNextPage && current.isSuccess}
+        />
+        <EmptyState
+          icon={Timer}
+          title={t("list.emptyTitle")}
+          description={t("list.emptyDescription")}
+          action={
+            // Somebody arriving from another tracker has years of history sitting
+            // in a file, and this screen is where they find out it can come with
+            // them. The empty state is the only place that question is live.
+            <Button type="button" variant="outline" asChild>
+              <Link href="/app/settings?tab=data" data-testid="entries-empty-import">
+                <Upload className="size-4" />
+                {t("list.importHistory")}
+              </Link>
+            </Button>
+          }
+          testId="entries-empty"
+        />
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6" data-testid="entry-list">
+    <div className="space-y-4">
+      <FirstRunGuide hasAnyEntry={hasAnyWorkspaceEntry} canEnroll={false} />
+      <div className="space-y-6" data-testid="entry-list">
       {days.map((day) => (
         <section
           key={day.date}
@@ -355,6 +367,7 @@ export function EntryList(): React.JSX.Element {
         onClose={closeEditor}
         mutations={mutations}
       />
+      </div>
     </div>
   );
 }

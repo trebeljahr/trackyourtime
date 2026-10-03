@@ -61,6 +61,7 @@ vi.mock("@/components/tracker/entry-row", () => ({
   ),
 }));
 vi.mock("@/components/tracker/entry-edit-dialog", () => ({ EntryEditDialog: () => null }));
+vi.mock("@/components/first-run-guide", () => ({ FirstRunGuide: () => null }));
 vi.mock("@/components/tracker/live-duration", () => ({ LiveDuration: () => null }));
 vi.mock("@/lib/format", () => ({
   useFormatSettings: () => ({

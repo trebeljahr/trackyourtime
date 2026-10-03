@@ -294,6 +294,7 @@ export function TrackerBar(): React.JSX.Element {
       data-running-id={running?.id ?? ""}
     >
       <div
+        id="tracker-composer"
         className="flex flex-col gap-2"
         data-testid="tracker-composer"
       >

@@ -65,6 +65,24 @@ describe("preferencesStorage", () => {
     expect(await storage.getItem("k")).toBeNull();
   });
 
+  it("keeps using native Preferences when the localStorage getter is unavailable", async () => {
+    const original = Object.getOwnPropertyDescriptor(window, "localStorage");
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => { throw new Error("storage unavailable"); },
+    });
+    try {
+      const plugin = fakePlugin();
+      const storage = preferencesStorage({ loadPlugin: async () => plugin });
+      await storage.setItem("guide", "enrolled");
+      expect(await storage.getItem("guide")).toBe("enrolled");
+      expect(plugin.store.get("guide")).toBe("enrolled");
+    } finally {
+      if (original) Object.defineProperty(window, "localStorage", original);
+      else Reflect.deleteProperty(window, "localStorage");
+    }
+  });
+
   it("hands a queue left in localStorage over on first use", async () => {
     window.localStorage.setItem(QUEUE_KEY, '[{"id":"q1","op":"entries.start"}]');
     const plugin = fakePlugin();

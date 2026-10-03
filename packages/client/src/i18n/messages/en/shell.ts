@@ -77,6 +77,7 @@ export const shell = {
   nav: {
     open: "Open navigation",
     close: "Close navigation",
+    docs: "Help and documentation",
     sections: {
       manage: "Manage",
     },
