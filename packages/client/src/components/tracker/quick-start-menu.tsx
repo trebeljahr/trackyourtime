@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, ChevronUp, Pin, PinOff, Play, Zap } from "lucide-react";
+import { ChevronDown, ChevronUp, Pin, PinOff, Play, History } from "lucide-react";
 import {
   isBrokenQuickStart,
   repairQuickStart,
@@ -14,7 +14,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { BillableGlyph } from "@/components/tracker/billable-glyph";
@@ -211,17 +210,7 @@ function QuickStartMenuItem({
   );
 }
 
-/**
- * The tracker bar's "Quick start" menu: the handful of things this person
- * actually tracks, two clicks from running.
- *
- * It used to be a rail of chips above the composer. That rail was always on
- * screen, said nothing about what it was, and pushed the one field the bar is
- * really about down the page. A single labelled button costs one extra click
- * and buys back the top of the screen — and inside the menu there is room to
- * say which rows are pinned and which are simply recent, which the chips never
- * could.
- */
+/** Separate shortcuts for recent work and pinned favorites. */
 export function QuickStartMenu({
   mutations,
 }: {
@@ -258,33 +247,35 @@ export function QuickStartMenu({
   if (quickStarts.isLoading || quickStarts.items.length === 0) return null;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-8 shrink-0 gap-1.5 px-2 text-muted-foreground"
-          aria-label={t("quickStart.trigger")}
-          title={t("quickStart.triggerTitle")}
-          data-testid="quick-start-trigger"
-        >
-          <Zap className="size-4" />
-          {/* Keep the label on small screens so the action stays clear. */}
-          <span>{t("quickStart.trigger")}</span>
-        </Button>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent
-        align="start"
-        className="max-h-[60vh] w-80 overflow-y-auto"
-        data-testid="quick-start-menu"
-      >
-        {favorites.length > 0 ? (
-          <>
-            <DropdownMenuLabel>{t("quickStart.favorites")}</DropdownMenuLabel>
-            {favorites.map((item, index) => (
+    <div className="flex max-w-full flex-wrap items-center gap-1">
+      {([
+        { kind: "recent", label: t("quickStart.recent"), items: recents, Icon: History },
+        { kind: "favorite", label: t("quickStart.favorites"), items: favorites, Icon: Pin },
+      ] as const).map(({ kind, label, items, Icon }) => (
+        <DropdownMenu key={kind}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-8 shrink-0 gap-1.5 px-2 text-muted-foreground cap-touch"
+              aria-label={label}
+              data-testid={`${kind}-start-trigger`}
+            >
+              <Icon className="size-4" />
+              <span>{label}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="max-h-[60vh] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto"
+            data-testid={`${kind}-start-menu`}
+          >
+            <DropdownMenuLabel>{label}</DropdownMenuLabel>
+            {items.length === 0 ? (
+              <DropdownMenuItem disabled>{t("quickStart.empty")}</DropdownMenuItem>
+            ) : items.map((item, index) => (
               <QuickStartMenuItem
-                key={item.id}
+                key={item.kind === "favorite" ? item.id : item.key}
                 item={item}
                 index={index}
                 favoriteCount={favorites.length}
@@ -294,31 +285,9 @@ export function QuickStartMenu({
                 onMove={quickStarts.move}
               />
             ))}
-          </>
-        ) : null}
-
-        {favorites.length > 0 && recents.length > 0 ? (
-          <DropdownMenuSeparator />
-        ) : null}
-
-        {recents.length > 0 ? (
-          <>
-            <DropdownMenuLabel>{t("quickStart.recents")}</DropdownMenuLabel>
-            {recents.map((item) => (
-              <QuickStartMenuItem
-                key={item.key}
-                item={item}
-                index={0}
-                favoriteCount={favorites.length}
-                onStart={start}
-                onPin={pin}
-                onUnpin={quickStarts.unpin}
-                onMove={quickStarts.move}
-              />
-            ))}
-          </>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ))}
+    </div>
   );
 }

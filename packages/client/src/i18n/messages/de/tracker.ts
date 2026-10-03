@@ -98,6 +98,8 @@ export const tracker: Translation<typeof source> = {
     created: "Tätigkeit „{name}“ erstellt",
   },
   quickStart: {
+    recent: "Zuletzt",
+    empty: "Noch keine Einträge",
     trigger: "Schnellstart",
     triggerTitle: "Etwas starten, das du schon erfasst hast",
     favorites: "Favoriten",

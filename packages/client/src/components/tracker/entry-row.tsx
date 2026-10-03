@@ -54,7 +54,7 @@ const MINUTE_MS = 60_000;
  * caption until pointed at. A combobox trigger's last child is its chevron.
  */
 const META_CONTROL =
-  "h-7 w-auto min-w-0 shrink justify-start px-2 text-xs text-muted-foreground hover:text-foreground [&>svg:last-child]:opacity-0 group-hover/row:[&>svg:last-child]:opacity-50 focus-visible:[&>svg:last-child]:opacity-50";
+  "h-auto min-h-7 w-auto max-w-full min-w-0 shrink-0 whitespace-normal [&_span.truncate]:whitespace-normal [&_span.truncate]:overflow-visible [&_span.truncate]:break-words justify-start px-2 text-xs text-muted-foreground hover:text-foreground [&>svg:last-child]:opacity-0 group-hover/row:[&>svg:last-child]:opacity-50 focus-visible:[&>svg:last-child]:opacity-50";
 
 export type EntryRowProps = {
   entry: DetailedEntry;
@@ -254,7 +254,7 @@ function EntryRowImpl({
             calendar: filing a past entry under a project that does not exist
             yet is exactly when you need to make one. The chevrons show on hover
             and focus only — on every row at once they were most of the noise. */}
-        <div className="flex min-w-0 flex-nowrap items-center">
+        <div className="flex min-w-0 flex-wrap items-center gap-y-1">
           <ProjectTaskPicker
             value={fields}
             onChange={applyFields}
@@ -266,15 +266,13 @@ function EntryRowImpl({
             testIdPrefix="entry"
           />
 
-          {/* The chips ARE the trigger, so tagging costs one click and the row
-              keeps its height however many tags it carries — the overflow
-              collapses into "+N" rather than wrapping. */}
+          {/* Tags wrap with the filing controls; extra tags still use +N. */}
           <TagPicker
             value={entry.tagIds}
             disabled={syncing}
             maxChips={2}
             placeholder=""
-            className="h-7 w-auto shrink-0 border-0 px-2 text-xs shadow-none"
+            className="h-auto min-h-7 w-auto max-w-full min-w-0 whitespace-normal border-0 px-2 py-1 text-xs shadow-none [&>span]:flex-wrap [&>span>span]:h-auto [&>span>span]:min-h-5 [&>span>span]:max-w-full [&_.truncate]:whitespace-normal [&_.truncate]:break-words"
             testId="entry-tags"
             onChange={(ids) => mutations.updateEntry({ id: entry.id, tagIds: ids })}
           />

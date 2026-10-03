@@ -104,6 +104,8 @@ export const tracker = {
     created: "Task \"{name}\" created",
   },
   quickStart: {
+    recent: "Recent",
+    empty: "No entries yet",
     trigger: "Quick start",
     triggerTitle: "Start something you tracked before",
     favorites: "Favorites",
