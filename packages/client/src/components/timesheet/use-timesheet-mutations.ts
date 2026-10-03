@@ -114,6 +114,7 @@ export const useTimesheetMutations = (
 
   const invalidate = React.useCallback((): void => {
     void utils.entries.invalidate();
+    void utils.tasks.invalidate();
     void utils.reports.invalidate();
   }, [utils]);
 

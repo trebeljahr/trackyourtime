@@ -385,6 +385,8 @@ export const useEntryMutations = (): EntryMutations => {
 
   const invalidate = React.useCallback(async (): Promise<void> => {
     await utils.entries.invalidate();
+    // Task suggestions include project membership derived from time entries.
+    await utils.tasks.invalidate();
     await utils.reports.invalidate();
   }, [utils]);
 

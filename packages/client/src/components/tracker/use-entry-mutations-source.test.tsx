@@ -36,6 +36,7 @@ vi.mock("@/lib/trpc", () => {
     clients: { list: { getData: () => [] } },
     settings: { get: { getData: () => null } },
     reports: { invalidate: asyncNoop },
+    tasks: { invalidate: asyncNoop },
   };
   return {
     trpc: {

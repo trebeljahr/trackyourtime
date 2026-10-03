@@ -129,6 +129,7 @@ export const invalidateFor = (utils: Utils, event: SyncEvent): void => {
     case "timer.started":
     case "timer.stopped":
       void utils.entries.invalidate();
+      void utils.tasks.invalidate();
       void utils.reports.invalidate();
       return;
     case "catalog.changed":

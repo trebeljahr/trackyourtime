@@ -392,6 +392,7 @@ export const useOfflineQueue = (): OfflineQueueState => {
 
       if (applied > 0 || rejected > 0 || stale > 0 || result.flushed > 0) {
         await utilsRef.current.entries.invalidate();
+        await utilsRef.current.tasks.invalidate();
         await utilsRef.current.reports.invalidate();
       }
     } finally {

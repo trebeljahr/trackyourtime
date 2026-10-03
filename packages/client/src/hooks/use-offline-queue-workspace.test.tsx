@@ -66,6 +66,7 @@ vi.mock("@/lib/trpc", () => {
   const utils = {
     entries: { invalidate: async () => undefined },
     reports: { invalidate: async () => undefined },
+    tasks: { invalidate: async () => undefined },
     workspaces: { list: { fetch: () => listAnswer() } },
   };
   return {

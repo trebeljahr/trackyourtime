@@ -89,6 +89,15 @@ describe("invalidateFor and a newer server", () => {
     return { utils: utils as unknown as Parameters<typeof invalidateFor>[0], calls };
   };
 
+  it.each(["entry.upserted", "entry.deleted", "timer.started", "timer.stopped"])(
+    "refreshes task project membership after %s",
+    (kind) => {
+      const { utils, calls } = fakeUtils();
+      invalidateFor(utils, { kind } as SyncEvent);
+      expect(calls).toEqual(["entries", "tasks", "reports"]);
+    },
+  );
+
   it("refetches everything for an event kind this build does not know", () => {
     const { utils, calls } = fakeUtils();
     invalidateFor(utils, { kind: "timer.paused" } as unknown as SyncEvent);

@@ -73,7 +73,7 @@ vi.mock("@/lib/trpc", () => {
     },
     reports: { invalidate: asyncNoop },
     projects: { list: { getData: () => [] } },
-    tasks: { list: { getData: () => [] } },
+    tasks: { list: { getData: () => [] }, invalidate: asyncNoop },
     settings: { get: { getData: () => null } },
   };
   return {
