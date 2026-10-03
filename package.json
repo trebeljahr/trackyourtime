@@ -92,8 +92,8 @@
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
-    "@capacitor/cli": "^8.3.4",
-    "@playwright/test": "^1.60.0",
+    "@capacitor/cli": "^8.5.2",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^25.8.0",
     "concurrently": "^9.2.1",
     "electron": "^42.1.0",
@@ -104,9 +104,9 @@
     "icon-gen": "^5.0.0",
     "mongodb": "^7.7.0",
     "sharp": "^0.34.5",
-    "tsx": "^4.22.0",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "wait-on": "^9.0.10"
+    "wait-on": "^9.5.1"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^8.0.1",
