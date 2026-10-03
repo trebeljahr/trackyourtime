@@ -98,6 +98,7 @@ export type InvoiceReminderDependencies = {
   send: (mail: EmailParams) => Promise<void>;
   configured: () => boolean;
   beforeRecheck?: () => Promise<void>;
+  signal?: AbortSignal;
 };
 /** Injectable clock and mailer: tests never touch the configured real transport. */
 export async function runInvoiceReminders(
@@ -106,6 +107,7 @@ export async function runInvoiceReminders(
   let cursor: import("mongoose").Types.ObjectId | undefined;
   // Cursor batches bound memory without starving later invoice ids.
   while (true) {
+    deps.signal?.throwIfAborted();
     const candidates = await Invoice.find({
       "followThrough.reminders.enabled": true,
       status: { $in: ["sent", "paid"] },
@@ -117,6 +119,7 @@ export async function runInvoiceReminders(
       .lean();
     if (!candidates.length) break;
     for (const candidate of candidates) {
+      deps.signal?.throwIfAborted();
       const now = deps.now();
       const wire = toClientInvoice(candidate);
       const reminder = candidate.followThrough?.reminders;
@@ -162,6 +165,7 @@ export async function runInvoiceReminders(
       };
       let outcome: "sent" | "failed" | "cancelled" = "cancelled";
       let failure: string | undefined;
+      let attempted = false;
       try {
         // Re-read consent, settlement, credit and membership immediately before handing anything to mail.
         await deps.beforeRecheck?.();
@@ -184,10 +188,12 @@ export async function runInvoiceReminders(
             { ...toClientInvoice(fresh), timezone: consent.timezone },
             deps.now(),
           ) === day;
+        deps.signal?.throwIfAborted();
         if (sendable && consent) {
           if (!deps.configured()) throw new Error("transport-unavailable");
           // Provider acceptance is not guaranteed inbox delivery. A process crash after
           // SMTP acceptance can be retried; we deliberately make no exactly-once claim.
+          attempted = true;
           await deps.send(
             previewInvoiceReminder(
               toClientInvoice(fresh),
@@ -198,7 +204,16 @@ export async function runInvoiceReminders(
           );
           outcome = "sent";
         }
-      } catch {
+      } catch (error) {
+        if (!attempted && deps.signal?.aborted) {
+          // Shutdown is not revoked consent or a delivery attempt. Release
+          // only this claim and leave reminders eligible for the next process.
+          await Invoice.updateOne(filter, {
+            $unset: { "followThrough.reminders.claim": "" },
+            $inc: { followThroughRevision: 1 },
+          });
+          throw error;
+        }
         outcome = "failed";
         failure = "invoice-reminder-delivery-failed";
       }
@@ -240,8 +255,9 @@ export async function runInvoiceReminders(
   }
 }
 export function registerInvoiceReminderJob(): void {
-  registerRecurringJob(INVOICE_REMINDER_JOB, 5 * 60_000, async () =>
+  registerRecurringJob(INVOICE_REMINDER_JOB, 5 * 60_000, async ({ signal }) =>
     runInvoiceReminders({
+      signal,
       now: () => new Date(),
       send: sendEmail,
       configured: isEmailDeliveryConfigured,

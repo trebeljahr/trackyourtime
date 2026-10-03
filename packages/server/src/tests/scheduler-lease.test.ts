@@ -10,6 +10,7 @@ import {
   claimScheduledJob,
   ensureScheduledJob,
   releaseScheduledJob,
+  renewScheduledJob,
 } from "../services/scheduler/lease.js";
 import {
   createJobRegistry,
@@ -65,6 +66,7 @@ describe("scheduler configuration", () => {
     let ticks = 0;
     const scheduler: Scheduler = {
       owner: "never",
+      stop: async () => {},
       tick: async () => {
         ticks += 1;
       },
@@ -184,6 +186,36 @@ describe("scheduler lease", { skip: skipWithoutDatabase }, () => {
     );
     const row = await ScheduledJob.findOne({ name: "test-job" }).lean();
     assert.equal(row?.lockedBy, "survivor");
+  });
+
+  it("keeps a slow live run leased when another process reaches the next interval", async () => {
+    let started = false, runs = 0;
+    let finish!: () => void;
+    const running = new Promise<void>((resolve) => { finish = resolve; });
+    const [first, second] = processes(2, (process) => async () => {
+      runs += 1;
+      if (process === 0) { started = true; await running; }
+    }, 1000, 300);
+    const tick = first.tick();
+    try {
+      for (let attempt = 0; !started && attempt < 100; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.equal(started, true);
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      await second.tick();
+      assert.equal(runs, 1);
+    } finally { finish(); await tick; await first.stop(); await second.stop(); }
+  });
+
+  it("renews only an owned live lease, never a successor or expired claim", async () => {
+    await ensureScheduledJob("test-job", MINUTE, at(0));
+    await claimScheduledJob({ name: "test-job", owner: "first", intervalMs: MINUTE, leaseMs: MINUTE, now: at(0) });
+    assert.equal(await renewScheduledJob({ name: "test-job", owner: "other", leaseMs: MINUTE, now: at(30_000) }), false);
+    assert.equal(await renewScheduledJob({ name: "test-job", owner: "first", leaseMs: MINUTE, now: at(30_000) }), true);
+    assert.equal(await claimScheduledJob({ name: "test-job", owner: "second", intervalMs: MINUTE, leaseMs: MINUTE, now: at(MINUTE) }), null);
+    assert.equal(await renewScheduledJob({ name: "test-job", owner: "first", leaseMs: MINUTE, now: at(90_000) }), false);
+    assert.ok(await claimScheduledJob({ name: "test-job", owner: "second", intervalMs: MINUTE, leaseMs: MINUTE, now: at(90_000) }));
+    assert.equal(await renewScheduledJob({ name: "test-job", owner: "first", leaseMs: MINUTE, now: at(90_001) }), false);
+    assert.equal(await releaseScheduledJob({ name: "test-job", owner: "first", error: null }), false);
   });
 
   it("records a failure on the row and clears it after a success", async () => {

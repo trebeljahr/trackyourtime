@@ -1,4 +1,4 @@
-import nodemailer, { type Transporter } from "nodemailer";
+import { EMAIL_DELIVERY_TIMEOUT_MS, sendSmtpWithDeadline } from "./email-deadline.js";
 import type { Locale } from "@starter/shared";
 import { env } from "../config/env.js";
 import { serverT } from "../i18n/index.js";
@@ -32,29 +32,6 @@ export function resolveSmtpSecure(secure: string, port: number): boolean {
  */
 export function isEmailDeliveryConfigured(): boolean {
   return selectEmailTransport(env) !== "console";
-}
-
-// Lazily constructed and memoized, the same shape as storage.ts's getS3():
-// an unconfigured server must never build a transport, and a configured one
-// should keep a single pooled connection rather than reconnecting per email.
-let _transporter: Transporter | null = null;
-
-function getTransporter(): Transporter {
-  if (!_transporter) {
-    const port = Number.parseInt(env.SMTP_PORT, 10) || 587;
-    _transporter = nodemailer.createTransport({
-      host: env.SMTP_HOST,
-      port,
-      secure: resolveSmtpSecure(env.SMTP_SECURE, port),
-      // Only offer credentials when there are credentials. Passing
-      // { user: "", pass: "" } makes nodemailer attempt AUTH and fail against
-      // a relay that does not want any.
-      ...(env.SMTP_USER
-        ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD } }
-        : {}),
-    });
-  }
-  return _transporter;
 }
 
 /**
@@ -91,7 +68,13 @@ async function sendViaSmtp(params: EmailParams): Promise<void> {
   }
 
   try {
-    await getTransporter().sendMail({
+    const port = Number.parseInt(env.SMTP_PORT, 10) || 587;
+    await sendSmtpWithDeadline({
+      host: env.SMTP_HOST,
+      port,
+      secure: resolveSmtpSecure(env.SMTP_SECURE, port),
+      ...(env.SMTP_USER ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD } } : {}),
+    }, {
       from,
       to: params.to,
       ...((params.replyTo || env.EMAIL_REPLY_TO) ? { replyTo: params.replyTo || env.EMAIL_REPLY_TO } : {}),
@@ -164,12 +147,14 @@ async function sendViaListmonk(params: EmailParams): Promise<void> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(listmonkTxBody(params, env)),
+    signal: AbortSignal.timeout(EMAIL_DELIVERY_TIMEOUT_MS),
   });
 
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Listmonk /api/tx error (${response.status}): ${text}`);
   }
+  await response.body?.cancel();
 }
 
 /**

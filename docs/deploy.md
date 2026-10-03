@@ -225,10 +225,17 @@ before this change still connects wherever `/ws` is still routed.
    mode and reports `rollingReady: false`. Web clients retain 30-second fallback
    reconciliation when distributed sync is unavailable and a five-minute
    safety refresh while healthy. Validate native and Raycast reconnects too.
-   Scheduler and webhook polling stop when drain starts. Scheduler jobs already
-   in flight can finish during drain, but an unbounded reminder scan can exceed
-   the remaining deadline. Interrupted webhook deliveries retain their durable
-   retry/lease behavior; this is not an exactly-once delivery guarantee.
+   Scheduler and webhook polling stop when drain starts. Reminder scans stop
+   between records and before starting mail delivery; a claimed invoice reminder
+   interrupted before delivery keeps its consent and becomes eligible again.
+   In-flight mail has a 10-second absolute network deadline, including SMTP
+   sockets. Scheduler leases renew while accepted work finishes. Renewal failure
+   or lease expiry aborts the handler before its next unit of work; releases
+   and renewals are fenced by a unique owner per run. Handlers must honor their
+   abort signal, and database outages can still consume the hard exit deadline.
+   SMTP acceptance followed by a lost response remains ambiguous. Interrupted
+   mail and webhook deliveries retain their retry behavior; this is not an
+   exactly-once delivery guarantee.
    Offline create/start replay currently has no durable operation identifier:
    a committed write whose response is lost can be duplicated on retry. Do not
    certify offline mutation replay as exactly-once until that protocol is added.

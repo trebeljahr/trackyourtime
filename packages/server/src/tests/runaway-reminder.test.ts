@@ -114,6 +114,20 @@ describe("runaway-reminder job", { skip: skipWithoutDatabase }, () => {
     broadcasts = [];
   });
 
+  it("shutdown between enforcement and mail does not claim a reminder", async () => {
+    await givenSettings({ maxHours: 8, behavior: "ask" });
+    const id = await givenRunning(10);
+    const controller = new AbortController();
+    const { deps, sent } = fakes({ enforce: async (...args) => {
+      const result = await enforceMaxEntryDuration(...args);
+      controller.abort(new Error("shutdown"));
+      return result;
+    } });
+    await assert.rejects(runRunawayReminders(NOW, deps, controller.signal), /shutdown/);
+    assert.equal(sent.length, 0);
+    assert.equal((await read(id))?.reminderSentAt, undefined);
+  });
+
   it("cap: ends the entry at start + limit with no client asking, and syncs the stop", async () => {
     await givenSettings({ maxHours: 8, behavior: "cap" });
     const id = await givenRunning(10);

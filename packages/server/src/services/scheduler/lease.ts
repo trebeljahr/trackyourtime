@@ -47,7 +47,7 @@ export async function ensureScheduledJob(
           lastError: null,
         },
       },
-      { upsert: true },
+      { upsert: true, timeoutMS: 5_000 },
     );
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
@@ -57,6 +57,7 @@ export async function ensureScheduledJob(
   await ScheduledJob.updateOne(
     { name, nextRunAt: { $gt: latest } },
     { $set: { nextRunAt: latest } },
+    { timeoutMS: 5_000 },
   );
 }
 
@@ -96,8 +97,23 @@ export async function claimScheduledJob(args: {
         lastRunAt: now,
       },
     },
-    { returnDocument: "after" },
+    { returnDocument: "after", timeoutMS: 5_000 },
   ).lean<ScheduledJobDocLike | null>();
+}
+
+/** Extend only our still-live claim. An expired claim cannot be revived. */
+export async function renewScheduledJob(args: {
+  name: string;
+  owner: string;
+  leaseMs: number;
+  now: Date;
+}): Promise<boolean> {
+  const result = await ScheduledJob.updateOne(
+    { name: args.name, lockedBy: args.owner, lockedUntil: { $gt: args.now } },
+    { $set: { lockedUntil: new Date(args.now.getTime() + args.leaseMs) } },
+    { timeoutMS: 5_000 },
+  );
+  return result.matchedCount === 1;
 }
 
 /**
@@ -123,6 +139,7 @@ export async function releaseScheduledJob(args: {
           error === null ? null : error.slice(0, SCHEDULED_JOB_ERROR_MAX_LENGTH),
       },
     },
+    { timeoutMS: 5_000 },
   );
   return result.modifiedCount === 1;
 }

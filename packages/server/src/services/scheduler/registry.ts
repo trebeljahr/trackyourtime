@@ -6,7 +6,11 @@
 // row, and exactly one of them runs each interval.
 
 /** What a handler is given. `now` is the instant the run was claimed at. */
-export type ScheduledJobContext = { now: Date };
+export type ScheduledJobContext = {
+  now: Date;
+  /** Stop before the next unit of work on shutdown or lost lease ownership. */
+  signal: AbortSignal;
+};
 
 export type ScheduledJobHandler = (context: ScheduledJobContext) => Promise<void>;
 
@@ -20,9 +24,9 @@ export type RecurringJob = {
 
 export type RecurringJobOptions = {
   /**
-   * Defaults to the interval. Raise it for a job that can legitimately run
-   * longer than its own interval, or a slow run's lease lapses and the next
-   * slot starts beside it.
+   * Defaults to the interval. Renewed while the handler runs. It must exceed
+   * the longest uninterruptible operation and tolerate a delayed renewal; a
+   * failed renewal asks the handler to stop before its next unit of work.
    */
   leaseMs?: number;
 };

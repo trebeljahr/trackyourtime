@@ -11,6 +11,7 @@ import {
   claimScheduledJob,
   ensureScheduledJob,
   releaseScheduledJob,
+  renewScheduledJob,
 } from "./lease.js";
 import { jobRegistry, type JobRegistry, type RecurringJob } from "./registry.js";
 
@@ -29,6 +30,8 @@ export type Scheduler = {
    * and the next poll tries again either way.
    */
   tick: (now?: Date) => Promise<void>;
+  /** Abort between units of work, then wait until handlers really finish. */
+  stop: () => Promise<void>;
 };
 
 /**
@@ -39,10 +42,24 @@ export function createScheduler(options: {
   registry?: JobRegistry;
   owner?: string;
   logger?: SchedulerLogger;
+  /** Injectable storage for lifecycle tests without a database. */
+  leases?: {
+    ensure: typeof ensureScheduledJob;
+    claim: typeof claimScheduledJob;
+    renew: typeof renewScheduledJob;
+    release: typeof releaseScheduledJob;
+  };
 } = {}): Scheduler {
   const registry = options.registry ?? jobRegistry;
   const owner = options.owner ?? `${hostname()}:${process.pid}:${randomUUID()}`;
   const logger = options.logger ?? console;
+  const leases = options.leases ?? {
+    ensure: ensureScheduledJob, claim: claimScheduledJob,
+    renew: renewScheduledJob, release: releaseScheduledJob,
+  };
+  let stopped = false;
+  const controllers = new Set<AbortController>();
+  const passes = new Set<Promise<void>>();
 
   // Jobs this process has in flight. The interval keeps firing while a slow
   // run is going; without this the process would try to claim a job it is
@@ -52,39 +69,100 @@ export function createScheduler(options: {
 
   const runOne = async (job: RecurringJob, now: Date): Promise<void> => {
     running.add(job.name);
+    const controller = new AbortController();
+    controllers.add(controller);
+    // Each claim has a different owner, including successive runs by this process.
+    const claimOwner = `${owner}:${randomUUID()}`;
+    let renewal: NodeJS.Timeout | undefined;
+    let expiry: NodeJS.Timeout | undefined;
+    let renewing: Promise<void> | undefined;
+    let finished = false;
+    let leaseLost = false;
+    const started = performance.now();
+    const clock = (): Date => new Date(now.getTime() + performance.now() - started);
+    const lost = (): void => {
+      leaseLost = true;
+      controller.abort(new Error("Scheduled job lease lost"));
+    };
+    const armExpiry = (until: number): void => {
+      clearTimeout(expiry);
+      expiry = setTimeout(lost, Math.max(1, until - clock().getTime()));
+      expiry.unref();
+    };
+    const scheduleRenewal = (): void => {
+      if (finished || leaseLost) return;
+      renewal = setTimeout(() => {
+        const renewedAt = clock();
+        renewing = leases.renew({
+          name: job.name, owner: claimOwner, leaseMs: job.leaseMs, now: renewedAt,
+        }).then((owned) => {
+          if (!owned) lost();
+          else if (!finished && !leaseLost) {
+            armExpiry(renewedAt.getTime() + job.leaseMs);
+          }
+        }).catch(lost).finally(() => {
+          renewing = undefined;
+          scheduleRenewal();
+        });
+      }, Math.max(1, Math.min(30_000, job.leaseMs / 3)));
+      renewal.unref();
+    };
     try {
-      await ensureScheduledJob(job.name, job.intervalMs, now);
-      const claimed = await claimScheduledJob({
-        name: job.name,
-        owner,
-        intervalMs: job.intervalMs,
-        leaseMs: job.leaseMs,
-        now,
+      if (stopped) return;
+      await leases.ensure(job.name, job.intervalMs, now);
+      if (stopped) return;
+      const claimed = await leases.claim({
+        name: job.name, owner: claimOwner, intervalMs: job.intervalMs,
+        leaseMs: job.leaseMs, now,
       });
       if (!claimed) return;
-
+      if (clock().getTime() >= now.getTime() + job.leaseMs) lost();
+      armExpiry(now.getTime() + job.leaseMs);
+      scheduleRenewal();
       let error: string | null = null;
       try {
-        await job.handler({ now });
+        controller.signal.throwIfAborted();
+        await job.handler({ now, signal: controller.signal });
       } catch (caught) {
-        error = caught instanceof Error ? caught.message : String(caught);
-        logger.error(`[scheduler] Job "${job.name}" failed:`, caught);
+        if (!stopped) {
+          error = caught instanceof Error ? caught.message : String(caught);
+          logger.error(`[scheduler] Job "${job.name}" failed:`, caught);
+        }
+      } finally {
+        finished = true;
+        clearTimeout(renewal);
+        clearTimeout(expiry);
+        // Do not let a late renewal extend a released or subsequently re-claimed job.
+        await renewing;
       }
-      await releaseScheduledJob({ name: job.name, owner, error });
+      await leases.release({ name: job.name, owner: claimOwner, error });
     } catch (caught) {
-      // The database, not the job. The row keeps whatever state the last
-      // write left it in, and a held lease lapses on its own.
+      // Never release while work is still running. On storage failure the
+      // existing claim remains fenced by owner and eventually expires.
       logger.error(`[scheduler] Could not run job "${job.name}":`, caught);
     } finally {
+      finished = true;
+      clearTimeout(renewal);
+      clearTimeout(expiry);
+      controllers.delete(controller);
       running.delete(job.name);
     }
   };
 
   return {
     owner,
-    tick: async (now = new Date()) => {
+    tick: (now = new Date()) => {
+      if (stopped) return Promise.resolve();
       const due = registry.list().filter((job) => !running.has(job.name));
-      await Promise.all(due.map((job) => runOne(job, now)));
+      const pass = Promise.all(due.map((job) => runOne(job, now))).then(() => {});
+      passes.add(pass);
+      void pass.finally(() => passes.delete(pass));
+      return pass;
+    },
+    stop: async () => {
+      stopped = true;
+      for (const controller of controllers) controller.abort(new Error("Scheduler stopping"));
+      await Promise.all(passes);
     },
   };
 }
@@ -99,6 +177,7 @@ export function shouldStartScheduler(source: {
 
 let timer: NodeJS.Timeout | null = null;
 let ticking: Promise<void> | null = null;
+let activeScheduler: Scheduler | null = null;
 
 /**
  * Start polling. Call after the database connects.
@@ -118,6 +197,7 @@ export function startScheduler(
   if (!shouldStartScheduler(config)) return false;
   if (timer) return true;
 
+  activeScheduler = scheduler;
   const poll = (): void => {
     if (ticking) return;
     ticking = scheduler.tick().finally(() => {
@@ -136,6 +216,9 @@ export async function stopScheduler(): Promise<void> {
     clearInterval(timer);
     timer = null;
   }
+  const active = activeScheduler;
+  activeScheduler = null;
+  await active?.stop();
   if (ticking) await ticking;
 }
 

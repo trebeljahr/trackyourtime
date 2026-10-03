@@ -83,6 +83,7 @@ export type UpdateCheckDeps = {
   release: string;
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  signal?: AbortSignal;
 };
 
 /**
@@ -90,6 +91,7 @@ export type UpdateCheckDeps = {
  * `newestVersion`, records why, and rethrows so the scheduler logs it.
  */
 export async function runUpdateCheck(deps: UpdateCheckDeps): Promise<string | null> {
+  deps.signal?.throwIfAborted();
   const doFetch = deps.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const now = (deps.now ?? (() => new Date()))();
   const collection = deps.db.collection<StoredReleaseCheck>(APP_META_COLLECTION);
@@ -99,7 +101,7 @@ export async function runUpdateCheck(deps: UpdateCheckDeps): Promise<string | nu
         accept: "application/vnd.github+json",
         "user-agent": `trackyourtime-server/${deps.release || "unknown"}`,
       },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.any([AbortSignal.timeout(FETCH_TIMEOUT_MS), ...(deps.signal ? [deps.signal] : [])]),
     });
     if (!response.ok) throw new Error(`GitHub answered HTTP ${response.status}`);
     const newest = newestStableRelease(await response.json());
@@ -134,9 +136,9 @@ export function registerUpdateCheckJob(
   deps: { db: () => Db | undefined; release: string },
   registry: JobRegistry = jobRegistry,
 ): void {
-  registry.register(UPDATE_CHECK_JOB, UPDATE_CHECK_INTERVAL_MS, async () => {
+  registry.register(UPDATE_CHECK_JOB, UPDATE_CHECK_INTERVAL_MS, async ({ signal }) => {
     const db = deps.db();
     if (!db) throw new Error("the database is not connected");
-    await runUpdateCheck({ db, release: deps.release });
+    await runUpdateCheck({ db, release: deps.release, signal });
   }, { leaseMs: 5 * 60 * 1000 });
 }

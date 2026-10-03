@@ -493,6 +493,29 @@ describe(
         },
       });
     });
+    it("shutdown after a claim preserves consent and leaves no delivery attempt", async () => {
+      const invoice = await sent();
+      await owner().setReminders(consent(invoice.id));
+      const controller = new AbortController();
+      await assert.rejects(runInvoiceReminders({
+        now: () => new Date("2026-10-20T12:00:00Z"),
+        configured: () => true,
+        signal: controller.signal,
+        beforeRecheck: async () => { controller.abort(new Error("shutdown")); },
+        send: async () => { assert.fail("shutdown must not start delivery"); },
+      }), /shutdown/);
+      const reminder = (await owner().get({ id: invoice.id })).followThrough?.reminders;
+      assert.equal(reminder?.enabled, true);
+      assert.equal(reminder?.claim, undefined);
+      assert.equal(reminder?.lastAttemptAt, undefined);
+      assert.deepEqual(reminder?.sentDays, []);
+      let sentCount = 0;
+      await runInvoiceReminders({
+        now: () => new Date("2026-10-20T12:00:00Z"), configured: () => true,
+        send: async () => { sentCount += 1; },
+      });
+      assert.equal(sentCount, 1, "the next process can resume the untouched reminder");
+    });
     it("late opt-in sends one reminder and records skipped stages", async () => {
       const invoice = await sent();
       await owner().setReminders(consent(invoice.id));

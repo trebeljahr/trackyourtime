@@ -116,7 +116,9 @@ const defaultDeps = (): RunawayReminderDeps => ({
 export async function runRunawayReminders(
   now: Date,
   overrides: Partial<RunawayReminderDeps> = {},
+  signal?: AbortSignal,
 ): Promise<RunawayReminderSummary> {
+  signal?.throwIfAborted();
   const deps = { ...defaultDeps(), ...overrides };
   const authorIds = (await TimeEntry.distinct("authorId", {
     end: null,
@@ -133,8 +135,9 @@ export async function runRunawayReminders(
   let firstError: unknown = null;
 
   for (const authorId of authorIds) {
+    signal?.throwIfAborted();
     try {
-      await remindOne(authorId, now, deps, summary);
+      await remindOne(authorId, now, deps, summary, signal);
     } catch (error) {
       summary.failed += 1;
       firstError ??= error;
@@ -157,6 +160,7 @@ async function remindOne(
   now: Date,
   deps: RunawayReminderDeps,
   summary: RunawayReminderSummary,
+  signal?: AbortSignal,
 ): Promise<void> {
   // Person-scoped, never confined to a workspace: this is the person's own
   // guard, run on their behalf, and it publishes into the entry's workspace.
@@ -166,6 +170,7 @@ async function remindOne(
     return;
   }
 
+  signal?.throwIfAborted();
   const running = await TimeEntry.findOne({ authorId, end: null }).lean();
   if (!running) return;
 
@@ -181,6 +186,7 @@ async function remindOne(
   const to = await deps.findUserEmail(authorId);
   if (!to) return;
 
+  signal?.throwIfAborted();
   const entryId = String(running._id);
   const claimed = await TimeEntry.findOneAndUpdate(
     runawayReminderClaimFilter(entryId, due, now),
@@ -198,6 +204,9 @@ async function remindOne(
   }
 
   try {
+    signal?.throwIfAborted();
+    const locale = await preferredLocale([authorId]);
+    signal?.throwIfAborted();
     await deps.sendEmail(
       buildRunawayReminderEmail({
         to,
@@ -206,7 +215,7 @@ async function remindOne(
         now,
         limitSec: due.kind === "limit" ? due.limitSec : null,
         trackUrl: deps.trackUrl,
-        locale: await preferredLocale([authorId]),
+        locale,
       }),
     );
     summary.emailed += 1;
@@ -225,7 +234,7 @@ async function remindOne(
 export function registerRunawayReminderJob(
   registry: JobRegistry = jobRegistry,
 ): void {
-  registry.register(RUNAWAY_REMINDER_JOB, RUNAWAY_REMINDER_INTERVAL_MS, async ({ now }) => {
-    await runRunawayReminders(now);
+  registry.register(RUNAWAY_REMINDER_JOB, RUNAWAY_REMINDER_INTERVAL_MS, async ({ now, signal }) => {
+    await runRunawayReminders(now, {}, signal);
   });
 }

@@ -1724,14 +1724,21 @@ The database-backed unit tests (`scheduler-lease`, `runaway-reminder`) skip
 without `TEST_MONGODB_URI`, and each connects to a throwaway database of its
 own (`tests/support/test-database.ts`). CI sets it.
 
-Four rules, each of which fails quietly if broken:
+Scheduler rules:
 
 - **The claim moves `nextRunAt` forward, not the release.** That is what makes
   it once per interval rather than once per free moment. `lockedUntil` only
   keeps a run slower than its interval from starting beside itself; a process
   that dies mid-run loses that run and frees the job when the lease lapses.
-- **Release filters on `lockedBy`.** A process whose lease lapsed and was taken
-  over must not clear the new holder's lease on its way out.
+- **Renewal and release filter on a unique `lockedBy` per run.** Renewal also
+  requires a live lease; an expired holder cannot revive its claim or clear a
+  successor's lease. The scheduler renews until its handler actually finishes,
+  including during shutdown. Failed renewal or expiry aborts the job signal.
+- **Handlers check their `signal` between records and before side effects.**
+  `stopScheduler()` signals active jobs immediately and waits for real completion;
+  it never abandons a handler promise and releases its lease early. Reminder
+  jobs finish accepted mail within its 10-second network deadline. New jobs must
+  bound individual operations too; a signal cannot undo an external side effect.
 - **`runaway-reminder` (every 5 min) calls `enforceMaxEntryDuration` and nothing
   else to enforce**, per person with a timer running. The lazy call sites in
   `entries/timer.ts` and `ws/handler.ts` stay as the fallback, and both are
