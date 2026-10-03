@@ -113,10 +113,12 @@ describe("timesheet individual block writes", () => {
     expect(state.week.entries[1]).toBe(sibling);
   });
 
-  it("adds an offline block with no tracker cache without changing either sibling", async () => {
+  it.each(["offline", "server"] as const)("adds the exact returned %s block without a tracker cache or changing siblings", async (destination) => {
     const { result, create } = harness();
     act(() => result.current.add(target()));
     const range = result.current.manual!.range;
+    const returned = makeEntry(destination === "offline" ? "temp-exact-created-id" : "server-exact-created-id", range.start, range.end);
+    create.mockResolvedValue({ ok: true, saved: destination, entry: returned });
     await act(async () => {
       await result.current.mutations.createManualEntry({ ...result.current.manual!.seed, ...range });
     });
@@ -124,6 +126,8 @@ describe("timesheet individual block writes", () => {
     expect(state.week.entries).toHaveLength(3);
     expect(state.week.entries[0]).toBe(first);
     expect(state.week.entries[1]).toBe(sibling);
+    expect(state.week.entries[2]).toMatchObject({ id: returned.id, authorId: returned.authorId,
+      workspaceId: returned.workspaceId, start: returned.start, end: returned.end });
     expect(grid().rows[0]!.cells[0]!.seconds).toBe(10800);
   });
 
