@@ -127,6 +127,10 @@ export const shell = {
       signupFailed: "Could not create the account. Try again.",
     },
     login: {
+      passwordFill: "Use a saved password",
+      passwordOpening: "Opening password manager…",
+      passwordNone: "No saved password was found for Track Your Time. Enter your password or sign in with your browser.",
+      passwordUnavailable: "Could not open your password manager. Enter your password or sign in with your browser.",
       magicSend: "Email me a sign-in link",
       magicSending: "Sending link…",
       magicSent: "Check your inbox. If this account can use a sign-in link, it will arrive shortly. The link expires in five minutes.",

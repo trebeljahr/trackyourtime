@@ -1,5 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
+    <string name="asset_statements" translatable="false">[{\"include\": \"https://trackyourtime.dev/.well-known/assetlinks.json\"}]</string>
     <string name="app_name">Track Your Time</string>
     <string name="title_activity_main">Track Your Time</string>
     <string name="package_name">com.ricoslabs.trackyourtime</string>

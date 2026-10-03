@@ -121,6 +121,10 @@ export const shell: Translation<typeof source> = {
       signupFailed: "Das Konto konnte nicht erstellt werden. Versuch es noch einmal.",
     },
     login: {
+      passwordFill: "Gespeichertes Passwort verwenden",
+      passwordOpening: "Passwortmanager wird geöffnet …",
+      passwordNone: "Kein gespeichertes Passwort für Track Your Time gefunden. Gib es ein oder melde dich mit deinem Browser an.",
+      passwordUnavailable: "Dein Passwortmanager konnte nicht geöffnet werden. Gib dein Passwort ein oder melde dich mit deinem Browser an.",
       magicSend: "Anmeldelink per E-Mail senden",
       magicSending: "Link wird gesendet …",
       magicSent: "Prüfe deinen Posteingang. Wenn dieses Konto einen Anmeldelink nutzen kann, kommt er gleich. Der Link gilt fünf Minuten.",

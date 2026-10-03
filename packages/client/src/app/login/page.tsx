@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -16,6 +16,8 @@ import { NativeServerPicker } from "@/components/server-picker";
 import { PasswordInput } from "@/components/ui/password-input";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { BrowserSignIn } from "@/components/browser-sign-in";
+import { AndroidPasswordFill } from "@/components/android-password-fill";
+import { subscribeApiOrigin } from "@/lib/api-origin";
 import {
   TwoFactorChallenge,
   type ChallengeOutcome,
@@ -37,6 +39,14 @@ export default function LoginPage() {
   const tc = useT("common");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const filledFromAndroid = useRef(false);
+  useEffect(() => subscribeApiOrigin(() => {
+    if (filledFromAndroid.current) {
+      filledFromAndroid.current = false;
+      setEmail("");
+      setPassword("");
+    }
+  }), []);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [magicLoading, setMagicLoading] = useState(false);
@@ -80,8 +90,14 @@ export default function LoginPage() {
     setRevoked(consumeSessionRevokedNotice());
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Password managers can fill the DOM without dispatching React change events.
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("username") ?? "");
+    const password = String(form.get("password") ?? "");
+    setEmail(email);
+    setPassword(password);
     setError("");
     setLoading(true);
 
@@ -254,6 +270,8 @@ export default function LoginPage() {
               id="email"
               name="username"
               type="email"
+              inputMode="email"
+              spellCheck={false}
               autoComplete="username"
               autoCapitalize="none"
               value={email}
@@ -288,6 +306,13 @@ export default function LoginPage() {
             {loading ? t("auth.login.submitting") : t("auth.login.submit")}
           </button>
         </form>
+
+        <AndroidPasswordFill disabled={loading} onFill={(credential) => {
+          filledFromAndroid.current = true;
+          setEmail(credential.email);
+          setPassword(credential.password);
+          setError("");
+        }} />
 
         {!tokenShell && (
           <div className="space-y-2">

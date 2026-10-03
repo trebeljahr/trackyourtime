@@ -2,6 +2,13 @@
   {
     "relation": ["delegate_permission/common.get_login_creds"],
     "target": {
+      "namespace": "web",
+      "site": "https://trackyourtime.dev"
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.get_login_creds"],
+    "target": {
       "namespace": "android_app",
       "package_name": "com.ricoslabs.trackyourtime",
       "sha256_cert_fingerprints": [

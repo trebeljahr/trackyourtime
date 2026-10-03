@@ -106,6 +106,16 @@ describe("login ?next=", () => {
     expect(screen.getByTestId("login-password")).toHaveAttribute("autocomplete", "current-password");
   });
 
+  it("submits values filled without React change events", async () => {
+    render(<LoginPage />);
+    (screen.getByTestId("login-email") as HTMLInputElement).value = "saved@example.com";
+    (screen.getByTestId("login-password") as HTMLInputElement).value = "saved-password";
+    fireEvent.click(screen.getByTestId("login-submit"));
+    await waitFor(() => expect(signInEmail).toHaveBeenCalledWith({
+      email: "saved@example.com", password: "saved-password",
+    }));
+  });
+
   it("returns to the invitation after signing in", async () => {
     visit(`?next=${encodeURIComponent("/invite/?id=inv1")}`);
     render(<LoginPage />);

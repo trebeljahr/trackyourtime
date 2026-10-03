@@ -39,6 +39,9 @@ const config: CapacitorConfig = {
 
   android: {
     allowMixedContent: false,
+    // Native credential results contain passwords. Never log bridge payloads,
+    // including in debug builds used to diagnose autofill.
+    loggingBehavior: "none",
   },
 
   /*
