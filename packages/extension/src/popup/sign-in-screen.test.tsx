@@ -183,3 +183,33 @@ test("confirmed web sign-in stays in the popup with no code or browser navigatio
   expect(html).not.toContain('data-testid="device-user-code"');
   expect(html).toContain('data-testid="device-cancel"');
 });
+
+
+test("web sign-in shows a spinner until the request finishes and prevents repeat clicks", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let finish!: (result: boolean) => void;
+  const confirm = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<SignInScreen {...props}
+      webAccount={{ userId: "u1", email: "u@example.com", image: "https://example.com/photo.png", sessionCreatedAt: 123 }}
+      onConfirmWebAccount={confirm} />));
+    const button = container.querySelector<HTMLButtonElement>('[data-testid="open-web-app"]')!;
+    await act(async () => button.click());
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(button.querySelector(".sign-in__spinner")).not.toBeNull();
+    expect(button.querySelector("img")).toBeNull();
+    expect(container.querySelector('[data-testid="sign-in-submit"]')?.textContent).toBe("Sign in with email");
+    await act(async () => button.click());
+    expect(confirm).toHaveBeenCalledTimes(1);
+    await act(async () => finish(false));
+    expect(button.disabled).toBe(false);
+    expect(button.querySelector(".sign-in__spinner")).toBeNull();
+    expect(button.querySelector("img")).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});

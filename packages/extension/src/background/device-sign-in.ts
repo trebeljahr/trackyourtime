@@ -162,7 +162,7 @@ const sourceFor = (purpose: DeviceAuthPurpose): "web" | "device" =>
  * One `/device/token` exchange for `record`, and everything that follows an
  * answer. Call only from inside {@link serially}.
  */
-const exchangeOnce = async (record: PendingDeviceAuth): Promise<DeviceExchangeOutcome> => {
+const exchangeOnce = async (record: PendingDeviceAuth, publishSnapshot: boolean): Promise<DeviceExchangeOutcome> => {
   const current = await ensureReady();
   if (!isLivePendingDeviceAuth(record, current.apiUrl, Date.now())) {
     return endWithout(record, "expired", "expired");
@@ -208,7 +208,7 @@ const exchangeOnce = async (record: PendingDeviceAuth): Promise<DeviceExchangeOu
   // Approval can finish with no popup open. Prepare its first signed-in frame
   // now, and notify an open popup through the snapshot storage change.
   // The pending code is already cleared, so this read cannot exchange it again.
-  await buildState().then(savePopupSnapshot).catch(() => undefined);
+  if (publishSnapshot) await buildState().then(savePopupSnapshot).catch(() => undefined);
   // `flushQueue` claims rows from before the owner stamp for this account and
   // sends what is this account's.
   await flushQueue().catch(() => undefined);
@@ -219,14 +219,17 @@ const exchangeOnce = async (record: PendingDeviceAuth): Promise<DeviceExchangeOu
 /**
  * Exchange `record` up to `attempts` times, `delayMs` apart while the server
  * still says pending. Call only from inside {@link serially}.
+ * Disable snapshot publication only when the caller builds and saves the
+ * popup response itself after the exchange.
  */
 export const exchangePendingDeviceAuth = async (
   record: PendingDeviceAuth,
   attempts = 1,
   delayMs = 1000,
+  publishSnapshot = true,
 ): Promise<DeviceExchangeOutcome> => {
   for (let attempt = 1; ; attempt += 1) {
-    const outcome = await exchangeOnce(record);
+    const outcome = await exchangeOnce(record, publishSnapshot);
     if (outcome !== "pending" || attempt >= attempts) return outcome;
     await sleep(delayMs);
   }

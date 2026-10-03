@@ -2148,3 +2148,15 @@ button.tag:hover .tag__x {
 @media (prefers-reduced-motion: reduce) {
   .theme-toggle > summary { transition: none; }
 }
+
+.sign-in__spinner {
+  flex-shrink: 0;
+  vertical-align: middle;
+  animation: sign-in-spin 0.8s linear infinite;
+}
+@keyframes sign-in-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .sign-in__spinner { animation: none; }
+}
+
+.button > .sign-in__spinner { margin-inline-end: 8px; }

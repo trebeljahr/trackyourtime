@@ -172,7 +172,9 @@ export const confirmWebAccount = (userId: string, sessionCreatedAt: number): Pro
     if (browser) {
       try {
         await approveBrowserDevice(current.apiUrl, browser.token, record.userCode);
-        await exchangePendingDeviceAuth(record, 1);
+        // The popup message handler builds and saves the fresh state after this
+        // action. Avoid loading every catalog and today total twice.
+        await exchangePendingDeviceAuth(record, 1, 1000, false);
       } catch {
         await clearPendingDeviceAuth();
         await chrome.alarms.clear(DEVICE_AUTH_ALARM);

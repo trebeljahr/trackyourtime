@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type JSX } from "react";
-import { Pencil } from "lucide-react";
+import { LoaderCircle, Pencil } from "lucide-react";
 import { sameServerOrigin } from "@starter/core";
 import type { DeviceSignInError, PendingDeviceSignIn } from "../lib/messaging";
 import { describeDeviceSignInError } from "./errors";
@@ -53,22 +53,21 @@ export function SignInScreen({
   const t = useT("popup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<"email" | "device" | "web" | "cancel" | null>(null);
+  const busy = busyAction !== null;
   const [changingServer, setChangingServer] = useState(false);
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     if (busy) return;
-    setBusy(true);
-    await onSignIn(email, password);
-    setBusy(false);
+    setBusyAction("email");
+    try { await onSignIn(email, password); } finally { setBusyAction(null); }
   };
 
-  const runDevice = async (action: () => Promise<boolean>): Promise<void> => {
+  const runDevice = async (kind: "device" | "web" | "cancel", action: () => Promise<boolean>): Promise<void> => {
     if (busy) return;
-    setBusy(true);
-    await action();
-    setBusy(false);
+    setBusyAction(kind);
+    try { await action(); } finally { setBusyAction(null); }
   };
 
   const notice =
@@ -116,7 +115,7 @@ export function SignInScreen({
               type="button"
               className="button button--block"
               disabled={busy}
-              onClick={() => void runDevice(onCancelDeviceSignIn)}
+              onClick={() => void runDevice("cancel", onCancelDeviceSignIn)}
               data-testid="device-cancel"
             >
               {t("signIn.deviceCancel")}
@@ -178,7 +177,7 @@ export function SignInScreen({
                 disabled={busy}
                 data-testid="sign-in-submit"
               >
-                {busy ? t("signIn.submitting") : t("signIn.submit")}
+                {busyAction === "email" ? t("signIn.submitting") : t("signIn.submit")}
               </button>
             </form>
 
@@ -187,9 +186,11 @@ export function SignInScreen({
               type="button"
               className="button button--block"
               disabled={busy}
-              onClick={() => void runDevice(onStartDeviceSignIn)}
+              onClick={() => void runDevice("device", onStartDeviceSignIn)}
+              aria-busy={busyAction === "device"}
               data-testid="sign-in-web-app"
             >
+              {busyAction === "device" ? <LoaderCircle className="sign-in__spinner" size={16} aria-hidden="true" /> : null}
               {t("signIn.withWebApp")}
             </button>
             {webAccount && onConfirmWebAccount ? (
@@ -199,16 +200,17 @@ export function SignInScreen({
                   type="button"
                   className="button button--block web-account__button"
                   disabled={busy}
-                  onClick={() => void runDevice(() => onConfirmWebAccount(webAccount.userId, webAccount.sessionCreatedAt))}
+                  onClick={() => void runDevice("web", () => onConfirmWebAccount(webAccount.userId, webAccount.sessionCreatedAt))}
+                  aria-busy={busyAction === "web"}
                   data-testid="open-web-app"
                 >
                   <span className="web-account__avatar" aria-hidden="true">
-                    {webAccount.email.charAt(0).toUpperCase()}
-                    {webAccount.image ? <img key={webAccount.image} src={webAccount.image} alt="" referrerPolicy="no-referrer"
+                    {busyAction === "web" ? <LoaderCircle className="sign-in__spinner" size={18} /> : webAccount.email.charAt(0).toUpperCase()}
+                    {webAccount.image && busyAction !== "web" ? <img key={webAccount.image} src={webAccount.image} alt="" referrerPolicy="no-referrer"
                       onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
                   </span>
                   <span className="web-account__identity" data-testid="web-account-identity">
-                    <span>{busy ? t("signIn.submitting") : t("signIn.openWebApp")}</span>
+                    <span>{busyAction === "web" ? t("signIn.submitting") : t("signIn.openWebApp")}</span>
                     <strong className="web-account__email">{webAccount.email}</strong>
                   </span>
                 </button>

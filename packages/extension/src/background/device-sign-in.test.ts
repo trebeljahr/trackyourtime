@@ -18,6 +18,8 @@ import {
 } from "../test/fake-auth-server";
 import {
   attemptPendingDeviceSignIn,
+  exchangePendingDeviceAuth,
+  serially,
   cancelDeviceSignIn,
   isAllowedVerificationUrl,
   startDeviceSignIn,
@@ -100,6 +102,18 @@ describe("startDeviceSignIn", () => {
     expect(fakeChrome.alarms.has(DEVICE_AUTH_ALARM)).toBe(false);
     expect(await loadPopupSnapshot()).toMatchObject({ signedIn: true, email: "u@example.com" });
     expect(await attemptPendingDeviceSignIn()).toBeNull();
+  });
+
+  test("popup-owned exchanges leave the full data load to the response handler", async () => {
+    await startDeviceSignIn();
+    server.token = "approved";
+    server.calls = [];
+    const record = (await loadPendingDeviceAuth())!;
+    expect(await serially(() => exchangePendingDeviceAuth(record, 1, 1000, false))).toBe("signed-in");
+    expect(await loadSession()).toMatchObject({ userId: "user-u" });
+    expect(server.calls.some((path) => path.includes("projects.list"))).toBe(false);
+    expect((await buildState()).signedIn).toBe(true);
+    expect(server.calls.some((path) => path.includes("projects.list"))).toBe(true);
   });
 
   test("opening the popup finishes it too", async () => {
