@@ -64,7 +64,7 @@ const entry = (
 const actions = {
   update: vi.fn(),
   remove: vi.fn(),
-  create: vi.fn(),
+  create: vi.fn<CalendarActions["create"]>(async () => ({ ok: true, saved: "server" })),
 } as unknown as CalendarActions;
 
 /** Six four-minute entries inside one twenty-minute window, plus a long one. */

@@ -54,17 +54,18 @@ export function EntryEditDialog({
     <Dialog
       open={entry !== null}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) editor.dismiss();
       }}
     >
-      <DialogContent data-testid="entry-edit-dialog">
+      <DialogContent data-testid="entry-edit-dialog" showCloseButton={!editor.pending}>
         <DialogHeader>
           <DialogTitle>{t("editDialog.title")}</DialogTitle>
           <DialogDescription>{t("editDialog.description")}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <fieldset disabled={editor.pending} className="min-w-0 space-y-4" aria-busy={editor.pending}>
           <EntryFieldsEditor
+            disabled={editor.pending}
             value={editor.fields}
             onChange={editor.setFields}
             idPrefix="entry-edit"
@@ -146,13 +147,16 @@ export function EntryEditDialog({
               />
             </div>
           </div>
-        </div>
+        </fieldset>
+
+        {editor.error ? <p role="alert" className="text-sm text-destructive" data-testid="entry-edit-error">{editor.error} {t("mutations.draftKept")}</p> : null}
 
         <DialogFooter>
           <Button
             type="button"
             variant="outline"
-            onClick={onClose}
+            onClick={editor.dismiss}
+            disabled={editor.pending}
             data-testid="entry-edit-cancel"
           >
             {tc("actions.cancel")}
@@ -160,6 +164,7 @@ export function EntryEditDialog({
           <Button
             type="button"
             onClick={editor.save}
+            disabled={editor.pending}
             data-testid="entry-edit-save"
           >
             {tc("actions.save")}

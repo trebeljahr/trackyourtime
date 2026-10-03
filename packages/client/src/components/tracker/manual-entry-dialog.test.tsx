@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { EntryMutationResult } from "@/lib/entry-mutation-result";
 import type { ManualEntryArgs } from "./use-entry-mutations";
 
 vi.mock("@/i18n/use-t", () => ({ useT: () => (key: string) => key }));
@@ -14,7 +15,8 @@ vi.mock("@/i18n/use-format", () => ({
 vi.mock("@/lib/format", () => ({
   useFormatSettings: () => ({ timeFormat: "24h", durationFormat: "hms" }),
 }));
-vi.mock("@starter/core", () => ({
+vi.mock("@starter/core", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@starter/core")>()),
   deviceTimeZone: () => "Europe/Berlin",
   defaultManualRange: () => ({
     start: "2026-03-28T22:30:00.000Z",
@@ -48,7 +50,7 @@ const seed = {
 };
 
 const renderDialog = (range: { start: string; end: string }) => {
-  const onAdd = vi.fn<(args: ManualEntryArgs) => void>();
+  const onAdd = vi.fn<(args: ManualEntryArgs) => Promise<EntryMutationResult>>().mockResolvedValue({ ok: true, saved: "server" });
   render(
     <ManualEntryDialog
       open
@@ -72,21 +74,21 @@ const secondsBetween = (args: ManualEntryArgs): number =>
   (Date.parse(args.end) - Date.parse(args.start)) / 1000;
 
 describe("ManualEntryDialog date and time editing", () => {
-  it("rolls an earlier end time to the next local day when end is edited first", () => {
+  it("rolls an earlier end time to the next local day when end is edited first", async () => {
     const onAdd = renderDialog({
       start: "2026-10-01T21:30:00.000Z", // 23:30 Berlin
       end: "2026-10-01T21:30:00.000Z",
     });
 
     commitTime("manual-entry-end", "00:30");
-    fireEvent.click(screen.getByTestId("manual-entry-add"));
+    await act(async () => { fireEvent.click(screen.getByTestId("manual-entry-add")); });
 
     expect(onAdd).toHaveBeenCalledOnce();
     expect(secondsBetween(onAdd.mock.calls[0]![0])).toBe(3600);
     expect(onAdd.mock.calls[0]![0].end).toBe("2026-10-01T22:30:00.000Z");
   });
 
-  it("rolls the end when moving the start later, then accepts the end time", () => {
+  it("rolls the end when moving the start later, then accepts the end time", async () => {
     const onAdd = renderDialog({
       start: "2026-10-01T20:30:00.000Z", // 22:30 Berlin
       end: "2026-10-01T20:30:00.000Z",
@@ -94,7 +96,7 @@ describe("ManualEntryDialog date and time editing", () => {
 
     commitTime("manual-entry-start", "23:30");
     commitTime("manual-entry-end", "00:30");
-    fireEvent.click(screen.getByTestId("manual-entry-add"));
+    await act(async () => { fireEvent.click(screen.getByTestId("manual-entry-add")); });
 
     expect(onAdd).toHaveBeenCalledOnce();
     expect(secondsBetween(onAdd.mock.calls[0]![0])).toBe(3600);
@@ -102,7 +104,7 @@ describe("ManualEntryDialog date and time editing", () => {
     expect(onAdd.mock.calls[0]![0].end).toBe("2026-10-01T22:30:00.000Z");
   });
 
-  it("preserves elapsed duration when the start date moves across a DST change", () => {
+  it("preserves elapsed duration when the start date moves across a DST change", async () => {
     const onAdd = renderDialog({
       start: "2026-03-28T22:30:00.000Z", // 23:30 Berlin
       end: "2026-03-28T23:30:00.000Z", // 00:30 Berlin next day
@@ -111,7 +113,7 @@ describe("ManualEntryDialog date and time editing", () => {
     fireEvent.change(screen.getByTestId("manual-entry-date"), {
       target: { value: "2026-03-29" },
     });
-    fireEvent.click(screen.getByTestId("manual-entry-add"));
+    await act(async () => { fireEvent.click(screen.getByTestId("manual-entry-add")); });
 
     expect(onAdd).toHaveBeenCalledOnce();
     const saved = onAdd.mock.calls[0]![0];
@@ -120,7 +122,7 @@ describe("ManualEntryDialog date and time editing", () => {
     expect(saved.end).toBe("2026-03-29T22:30:00.000Z");
   });
 
-  it("allows an explicit multi-day end date", () => {
+  it("allows an explicit multi-day end date", async () => {
     const onAdd = renderDialog({
       start: "2026-10-01T21:30:00.000Z",
       end: "2026-10-01T22:30:00.000Z",
@@ -129,12 +131,12 @@ describe("ManualEntryDialog date and time editing", () => {
     fireEvent.change(screen.getByTestId("manual-entry-end-date"), {
       target: { value: "2026-10-03" },
     });
-    fireEvent.click(screen.getByTestId("manual-entry-add"));
+    await act(async () => { fireEvent.click(screen.getByTestId("manual-entry-add")); });
 
     expect(onAdd.mock.calls[0]![0].end).toBe("2026-10-02T22:30:00.000Z");
   });
 
-  it("rejects an inverted same-day end and clears the error after duration correction", () => {
+  it("rejects an inverted same-day end and clears the error after duration correction", async () => {
     const onAdd = renderDialog({
       start: "2026-10-01T21:30:00.000Z", // 23:30 Berlin
       end: "2026-10-01T22:30:00.000Z", // 00:30 Berlin next day
@@ -152,12 +154,12 @@ describe("ManualEntryDialog date and time editing", () => {
     expect(screen.getByTestId("manual-entry-add")).not.toBeDisabled();
     expect(screen.getByText("manualDialog.endDateHint")).toBeTruthy();
 
-    fireEvent.click(screen.getByTestId("manual-entry-add"));
+    await act(async () => { fireEvent.click(screen.getByTestId("manual-entry-add")); });
     expect(onAdd).toHaveBeenCalledOnce();
     expect(secondsBetween(onAdd.mock.calls[0]![0])).toBe(7200);
   });
 
-  it("clears an invalid end-date selection after a valid date correction", () => {
+  it("clears an invalid end-date selection after a valid date correction", async () => {
     const onAdd = renderDialog({
       start: "2026-10-01T21:30:00.000Z",
       end: "2026-10-01T22:30:00.000Z",
@@ -172,11 +174,11 @@ describe("ManualEntryDialog date and time editing", () => {
     });
 
     expect(screen.getByTestId("manual-entry-add")).not.toBeDisabled();
-    fireEvent.click(screen.getByTestId("manual-entry-add"));
+    await act(async () => { fireEvent.click(screen.getByTestId("manual-entry-add")); });
     expect(onAdd).toHaveBeenCalledOnce();
   });
 
-  it("refuses to add while either date field is invalid", () => {
+  it("refuses to add while either date field is invalid", async () => {
     const onAdd = renderDialog({
       start: "2026-10-01T21:30:00.000Z",
       end: "2026-10-01T22:30:00.000Z",
@@ -185,18 +187,18 @@ describe("ManualEntryDialog date and time editing", () => {
     fireEvent.change(screen.getByTestId("manual-entry-end-date"), {
       target: { value: "" },
     });
-    fireEvent.click(screen.getByTestId("manual-entry-add"));
+    await act(async () => { fireEvent.click(screen.getByTestId("manual-entry-add")); });
 
     expect(onAdd).not.toHaveBeenCalled();
   });
 
-  it("keeps seconds unchanged when neither time field is edited", () => {
+  it("keeps seconds unchanged when neither time field is edited", async () => {
     const onAdd = renderDialog({
       start: "2026-10-01T21:30:17.000Z",
       end: "2026-10-01T22:30:42.000Z",
     });
 
-    fireEvent.click(screen.getByTestId("manual-entry-add"));
+    await act(async () => { fireEvent.click(screen.getByTestId("manual-entry-add")); });
 
     expect(onAdd.mock.calls[0]![0].start).toBe("2026-10-01T21:30:17.000Z");
     expect(onAdd.mock.calls[0]![0].end).toBe("2026-10-01T22:30:42.000Z");

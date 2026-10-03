@@ -17,6 +17,8 @@ import {
 } from "@starter/core";
 
 import { useEntryFields } from "@/components/entry-fields/use-entry-fields";
+import { useEntrySubmission } from "@/components/tracker/use-entry-submission";
+import type { EntryMutationResult } from "@/lib/entry-mutation-result";
 import type { UpdateEntryArgs } from "@/components/tracker/use-entry-mutations";
 
 /**
@@ -139,11 +141,14 @@ export type EntryEditor = {
   changeEndDay: (dayKey: DayKey) => void;
   setDurationSeconds: (seconds: number) => void;
   save: () => void;
+  pending: boolean;
+  error: string | null;
+  dismiss: () => void;
 };
 
 export type UseEntryEditorOptions = {
   /** Applies the update. `EntryMutations["updateEntry"]` in the app. */
-  onSave: (args: UpdateEntryArgs) => void;
+  onSave: (args: UpdateEntryArgs) => Promise<EntryMutationResult>;
   /** Called after a successful save — closing the dialog, in the app. */
   onDone: () => void;
 };
@@ -213,11 +218,11 @@ export const useEntryEditor = (
     [start]
   );
 
-  const save = React.useCallback((): void => {
+  const submission = useEntrySubmission(entryId, onDone);
+  const save = (): void => {
     if (entry === null) return;
-    onSave(entryUpdateFrom(entry, fields, { start, end }));
-    onDone();
-  }, [end, entry, fields, onDone, onSave, start]);
+    submission.submit(() => onSave(entryUpdateFrom(entry, fields, { start, end })));
+  };
 
   return {
     fields,
@@ -236,5 +241,8 @@ export const useEntryEditor = (
     changeEndDay,
     setDurationSeconds,
     save,
+    pending: submission.pending,
+    error: submission.error,
+    dismiss: submission.dismiss,
   };
 };

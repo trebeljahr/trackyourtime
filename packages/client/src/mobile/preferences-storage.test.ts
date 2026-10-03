@@ -277,3 +277,35 @@ describe("preferencesStorage", () => {
     });
   });
 });
+
+
+describe("strict storage for durable offline drafts", () => {
+  it("surfaces native read/write/remove failures", async () => {
+    const plugin = fakePlugin();
+    const storage = preferencesStorage({ strict: true, loadPlugin: async () => plugin });
+    plugin.get.mockRejectedValueOnce(new Error("Read failed"));
+    await expect(storage.getItem(QUEUE_KEY)).rejects.toThrow("Read failed");
+    plugin.set.mockRejectedValueOnce(new Error("Disk full"));
+    await expect(storage.setItem(QUEUE_KEY, "draft")).rejects.toThrow("Disk full");
+    plugin.remove.mockRejectedValueOnce(new Error("Remove failed"));
+    await expect(storage.removeItem(QUEUE_KEY)).rejects.toThrow("Remove failed");
+    await storage.setItem(QUEUE_KEY, "retry");
+    expect(await storage.getItem(QUEUE_KEY)).toBe("retry");
+  });
+
+  it("does not acknowledge an offline save without the native plugin", async () => {
+    const storage = preferencesStorage({ strict: true, loadPlugin: async () => null });
+    await expect(storage.setItem(QUEUE_KEY, "draft")).rejects.toThrow("Persistent native storage is unavailable");
+  });
+
+  it("preserves legacy queued drafts and retries a failed migration", async () => {
+    window.localStorage.setItem(QUEUE_KEY, "old draft");
+    const plugin = fakePlugin();
+    const storage = preferencesStorage({ strict: true, migrateKeys: [QUEUE_KEY], loadPlugin: async () => plugin });
+    plugin.set.mockRejectedValueOnce(new Error("Disk full"));
+    await expect(storage.setItem(QUEUE_KEY, "new draft")).rejects.toThrow("Disk full");
+    expect(window.localStorage.getItem(QUEUE_KEY)).toBe("old draft");
+    expect(await storage.getItem(QUEUE_KEY)).toBe("old draft");
+    expect(window.localStorage.getItem(QUEUE_KEY)).toBeNull();
+  });
+});

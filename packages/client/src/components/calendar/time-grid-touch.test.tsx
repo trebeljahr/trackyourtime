@@ -125,7 +125,7 @@ const ENTRY = {
 const actions = {
   update: vi.fn(),
   remove: vi.fn(),
-  create: vi.fn(),
+  create: vi.fn<CalendarActions["create"]>(async () => ({ ok: true, saved: "server" })),
 } as unknown as CalendarActions;
 
 const onSwipe = vi.fn();

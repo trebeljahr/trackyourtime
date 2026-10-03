@@ -1,5 +1,6 @@
 import type { DesktopActivity, DesktopActivityInterval } from "@starter/shared";
 
+import { entryMutationScope, sameEntryMutationScope, type EntryMutationResult } from "@/lib/entry-mutation-result";
 import type { ManualEntryArgs } from "@/components/tracker/use-entry-mutations";
 
 /**
@@ -42,11 +43,12 @@ export type AcceptRequest = DesktopActivityInterval & {
 };
 
 export type AcceptOutcome =
-  | { ok: true; start: number; end: number }
+  | { ok: true; start: number; end: number; saved: "server" | "offline" }
   | {
       ok: false;
       reason: "already-tracked" | "no-scope" | "bad-range" | "workspace-changed";
-    };
+    }
+  | { ok: false; reason: "save-failed"; message: string };
 
 /** The catalog as the cache knows it; null for a list that has not loaded. */
 export type KnownCatalog = {
@@ -62,7 +64,7 @@ export type AcceptDeps = {
   /** Everything tracked that overlaps the range, freshly read. */
   tracked: (range: DesktopActivityInterval) => Promise<DesktopActivityInterval[]>;
   catalog: () => KnownCatalog;
-  createManualEntry: (args: ManualEntryArgs) => void;
+  createManualEntry: (args: ManualEntryArgs) => Promise<EntryMutationResult>;
   now: () => number;
 };
 
@@ -101,6 +103,7 @@ export const acceptSuggestion = async (
   // person was looking at when they pressed Add, never in one switched to
   // while the check was in flight.
   const workspaceId = deps.workspaceId();
+  const scope = entryMutationScope();
   const now = deps.now();
   const range = {
     start: request.start - ACCEPT_CONTEXT_MS,
@@ -114,14 +117,16 @@ export const acceptSuggestion = async (
     tracked,
   });
   if (!check.ok) return check;
-  if (deps.workspaceId() !== workspaceId) return { ok: false, reason: "workspace-changed" };
+  if (deps.workspaceId() !== workspaceId || !sameEntryMutationScope(scope)) return { ok: false, reason: "workspace-changed" };
 
   const fields = withKnownCatalog(request.fields, deps.catalog());
-  deps.createManualEntry({
+  const saved = await deps.createManualEntry({
     ...fields,
     start: new Date(check.start).toISOString(),
     end: new Date(check.end).toISOString(),
   });
+  if (!saved.ok) return { ok: false, reason: "save-failed", message: saved.message };
+  if (deps.workspaceId() !== workspaceId || !sameEntryMutationScope(scope)) return { ok: false, reason: "workspace-changed" };
   await deps.activity.markAccepted({ start: check.start, end: check.end }).catch(() => undefined);
-  return { ok: true, start: check.start, end: check.end };
+  return { ok: true, start: check.start, end: check.end, saved: saved.saved };
 };

@@ -47,6 +47,7 @@ import {
 } from "@/lib/offline";
 import { entrySource } from "@/lib/shell";
 import { userErrorMessage } from "@/lib/error-message";
+import { entryMutationScope, sameEntryMutationScope, type EntryMutationResult, type EntryMutationScope } from "@/lib/entry-mutation-result";
 
 /**
  * The entry list covers all of history and is paged with the server cursor, so
@@ -63,6 +64,8 @@ type Utils = ReturnType<typeof trpc.useUtils>;
 type ListSnapshot = ReturnType<Utils["entries"]["list"]["getInfiniteData"]>;
 
 type MutationContext = {
+  scope?: EntryMutationScope;
+  errorMessage?: string;
   previousCurrent?: TimeEntry | null;
   previousList?: ListSnapshot;
   /** Set when this mutation invented an entry the server has not seen yet. */
@@ -92,6 +95,8 @@ type MutationContext = {
  * `onMutate` has produced a context, which is what lets a settling write see a
  * start that is still busy inserting its temp row.
  */
+class EntryScopeChangedError extends Error {}
+
 const TRACKER_WRITE_META = { trackerWrite: true } as const;
 
 /*
@@ -128,8 +133,9 @@ const isRefetchingWrite = (
 /** False once the user has switched away from the workspace this write began in. */
 const stillInWorkspace = (context: MutationContext | undefined): boolean =>
   context === undefined ||
-  context.workspaceId === undefined ||
-  context.workspaceId === getActiveWorkspaceId();
+  (context.scope !== undefined
+    ? sameEntryMutationScope(context.scope)
+    : context.workspaceId === undefined || context.workspaceId === getActiveWorkspaceId());
 
 /**
  * The toast for a start that ended a timer in another workspace. One running
@@ -151,8 +157,8 @@ export const announceReplacedTimer = (result: unknown): void => {
 // here is gone, and the extension replays tagged rows through the same
 // contract rather than only this client understanding them.
 type StartInput = OfflineStartInput;
-type CreateInput = OfflineCreateInput;
-type UpdateInput = OfflineUpdateInput;
+type CreateInput = OfflineCreateInput & { workspaceId?: string };
+type UpdateInput = OfflineUpdateInput & { workspaceId?: string };
 
 const byStartDesc = (a: DetailedEntry, b: DetailedEntry): number => {
   const delta = Date.parse(b.start) - Date.parse(a.start);
@@ -231,8 +237,8 @@ export type EntryMutations = {
   /** `end` defaults to now; idle detection passes the instant input stopped. */
   stopTimer: (end?: string) => void;
   continueEntry: (entry: DetailedEntry) => void;
-  createManualEntry: (args: ManualEntryArgs) => void;
-  updateEntry: (args: UpdateEntryArgs) => void;
+  createManualEntry: (args: ManualEntryArgs) => Promise<EntryMutationResult>;
+  updateEntry: (args: UpdateEntryArgs) => Promise<EntryMutationResult>;
   duplicateEntry: (entry: DetailedEntry) => void;
   removeEntry: (entry: DetailedEntry) => void;
   /** Entry id while the tracker delete request is in flight. */
@@ -262,6 +268,9 @@ export const useEntryMutations = (): EntryMutations => {
   const queryClient = useQueryClient();
   const [removeEntryPendingId, setRemoveEntryPendingId] = React.useState<string | null>(null);
   const removeEntryPendingRef = React.useRef(false);
+  // Per invocation, so concurrent callers never borrow another save's outcome.
+  const saveScopes = React.useRef(new WeakMap<object, EntryMutationScope>());
+  const saveFailures = React.useRef(new WeakMap<object, EntryMutationResult>());
 
   // `removeEntry` is declared below the mutations that need to call it, so the
   // toast action reaches it through a ref rather than reordering the file.
@@ -350,12 +359,13 @@ export const useEntryMutations = (): EntryMutations => {
     [patchList]
   );
 
-  const snapshot = React.useCallback(async (): Promise<MutationContext> => {
+  const snapshot = React.useCallback(async (scope = entryMutationScope()): Promise<MutationContext> => {
     // Read before the awaits below: this is the workspace the user acted in.
-    const workspaceId = getActiveWorkspaceId();
+    const workspaceId = scope.workspaceId;
     await utils.entries.current.cancel();
     await utils.entries.list.cancel();
     return {
+      scope,
       workspaceId,
       previousCurrent: utils.entries.current.getData(),
       previousList: utils.entries.list.getInfiniteData(TRACKER_LIST_INPUT),
@@ -485,14 +495,22 @@ export const useEntryMutations = (): EntryMutations => {
          * duplicated by queueing it.
          */
         if (isDocumentUnloading() && isOnline()) return;
-        if (context) context.queued = true;
-        await enqueue(context?.tempId, context?.workspaceId ?? null);
+        try {
+          await enqueue(context?.tempId, context?.workspaceId ?? null);
+          if (context) context.queued = true;
+        } catch {
+          rollback(context);
+          const message = translate("tracker")("mutations.storageFailed");
+          if (context) context.errorMessage = message;
+          if (stillInWorkspace(context)) toast.error(message);
+        }
         return;
       }
       rollback(context);
       const message =
         userErrorMessage(error, fallbackMessage);
-      toast.error(message);
+      if (context) context.errorMessage = message;
+      if (stillInWorkspace(context)) toast.error(message);
     },
     [rollback]
   );
@@ -575,9 +593,16 @@ export const useEntryMutations = (): EntryMutations => {
           entry = { ...entry, ...(await utils.client.entries.update.mutate(input)) };
         } catch (error) {
           if (isNetworkError(error)) {
-            await enqueueOffline("entries.update", input, undefined, context.workspaceId);
-            context.queued = true;
-            entry = { ...entry, start };
+            try {
+              await enqueueOffline("entries.update", input, undefined, context.workspaceId, context.scope);
+              context.queued = true;
+              entry = { ...entry, start };
+            } catch {
+              // The start already succeeded. A failed amendment must never
+              // fall through to onError and enqueue that start a second time.
+              toast.error(translate("tracker")("mutations.storageFailed"));
+              break;
+            }
           } else {
             toast.error(userErrorMessage(error, translate("tracker")("mutations.saveFailed")));
             break;
@@ -635,7 +660,8 @@ export const useEntryMutations = (): EntryMutations => {
               start: context?.pendingStart ?? (raw as OfflineStartInput).start,
             },
             tempId,
-            workspaceId
+            workspaceId,
+            context?.scope
           ),
         translate("tracker")("mutations.startFailed")
       ),
@@ -743,7 +769,8 @@ export const useEntryMutations = (): EntryMutations => {
               originId: ORIGIN_ID,
             },
             tempId,
-            workspaceId
+            workspaceId,
+            context?.scope
           );
         },
         translate("tracker")("mutations.stopFailed")
@@ -759,14 +786,15 @@ export const useEntryMutations = (): EntryMutations => {
     meta: TRACKER_WRITE_META,
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as CreateInput;
-      const context = await snapshot();
+      const context = await snapshot(saveScopes.current.get(raw));
+      if (!stillInWorkspace(context)) throw new EntryScopeChangedError(translate("tracker")("mutations.scopeChanged"));
       context.tempId = createTempId();
       insertEntry(
         buildEntry({
           id: context.tempId,
           description: input.description,
           clientId: input.clientId,
-        projectId: input.projectId,
+          projectId: input.projectId,
           taskId: input.taskId,
           billable: input.billable,
           start: input.start,
@@ -780,19 +808,28 @@ export const useEntryMutations = (): EntryMutations => {
       if (!stillInWorkspace(context)) return;
       if (context?.tempId) replaceEntry(context.tempId, toDetailed(entry));
     },
-    onError: (error, raw, context) =>
-      handleError(
+    onError: async (error, raw, context) => {
+      if (context === undefined || error instanceof EntryScopeChangedError) {
+        // onMutate failed before transport. No optimistic context means no
+        // request to recover, and queueing would turn a failed save into a
+        // hidden write that a retry could duplicate.
+        saveFailures.current.set(raw, { ok: false, message: error instanceof EntryScopeChangedError
+          ? error.message
+          : userErrorMessage(error, translate("tracker")("mutations.saveFailed")) });
+        return;
+      }
+      await handleError(
         error,
         context,
-        (tempId, workspaceId) =>
-          enqueueOffline(
-            "entries.create",
-            raw as OfflineCreateInput,
-            tempId,
-            workspaceId
-          ),
+        (tempId, workspaceId) => enqueueOffline(
+          "entries.create", raw as OfflineCreateInput, tempId, workspaceId, context?.scope
+        ),
         translate("tracker")("mutations.addFailed")
-      ),
+      );
+      saveFailures.current.set(raw, context?.queued
+        ? { ok: true, saved: "offline" }
+        : { ok: false, message: context?.errorMessage ?? userErrorMessage(error, translate("tracker")("mutations.addFailed")) });
+    },
     onSettled: (_data, _error, _raw, context) => {
       if (context?.queued) return;
       refetchWhenQuiet();
@@ -804,7 +841,8 @@ export const useEntryMutations = (): EntryMutations => {
     meta: TRACKER_WRITE_META,
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as UpdateInput;
-      const context = await snapshot();
+      const context = await snapshot(saveScopes.current.get(raw));
+      if (!stillInWorkspace(context)) throw new EntryScopeChangedError(translate("tracker")("mutations.scopeChanged"));
       const settings = utils.settings.get.getData();
 
       patchList((entries) =>
@@ -883,19 +921,28 @@ export const useEntryMutations = (): EntryMutations => {
       replaceEntry(entry.id, toDetailed(entry));
       if (entry.end === null) utils.entries.current.setData(undefined, entry);
     },
-    onError: (error, raw, context) =>
-      handleError(
+    onError: async (error, raw, context) => {
+      if (context === undefined || error instanceof EntryScopeChangedError) {
+        // onMutate failed before transport. No optimistic context means no
+        // request to recover, and queueing would turn a failed save into a
+        // hidden write that a retry could duplicate.
+        saveFailures.current.set(raw, { ok: false, message: error instanceof EntryScopeChangedError
+          ? error.message
+          : userErrorMessage(error, translate("tracker")("mutations.saveFailed")) });
+        return;
+      }
+      await handleError(
         error,
         context,
-        (_tempId, workspaceId) =>
-          enqueueOffline(
-            "entries.update",
-            raw as OfflineUpdateInput,
-            undefined,
-            workspaceId
-          ),
+        (_tempId, workspaceId) => enqueueOffline(
+          "entries.update", raw as OfflineUpdateInput, undefined, workspaceId, context?.scope
+        ),
         translate("tracker")("mutations.saveFailed")
-      ),
+      );
+      saveFailures.current.set(raw, context?.queued
+        ? { ok: true, saved: "offline" }
+        : { ok: false, message: context?.errorMessage ?? userErrorMessage(error, translate("tracker")("mutations.saveFailed")) });
+    },
     onSettled: (_data, _error, _raw, context) => {
       if (context?.queued) return;
       refetchWhenQuiet();
@@ -976,7 +1023,7 @@ export const useEntryMutations = (): EntryMutations => {
         {
           description: args.description,
           clientId: args.clientId,
-          projectId: args.projectId,
+        projectId: args.projectId,
           taskId: args.taskId ?? null,
           billable: args.billable,
         },
@@ -1027,10 +1074,14 @@ export const useEntryMutations = (): EntryMutations => {
         // still belongs after it, and will replay in that order. A refusal
         // from the server is different: the stop did not happen, and opening a
         // second entry on top of a still-running one would only make it worse.
-        if (isNetworkError(error)) openResumed();
+        const persisted = queryClient.getMutationCache().findAll({
+          predicate: (mutation) => mutation.state.variables === stopInput &&
+            (mutation.state.context as MutationContext | undefined)?.queued === true,
+        }).length > 0;
+        if (isNetworkError(error) && persisted) openResumed();
       });
     },
-    [startTimer, stopMutation]
+    [queryClient, startTimer, stopMutation]
   );
 
   const continueEntry = React.useCallback(
@@ -1052,7 +1103,7 @@ export const useEntryMutations = (): EntryMutations => {
   );
 
   const createManualEntry = React.useCallback(
-    (args: ManualEntryArgs): void => {
+    async (args: ManualEntryArgs): Promise<EntryMutationResult> => {
       const input: CreateInput = {
         description: args.description,
         clientId: args.clientId,
@@ -1066,13 +1117,24 @@ export const useEntryMutations = (): EntryMutations => {
         tagIds: args.tagIds ?? [],
         originId: ORIGIN_ID,
       };
-      createMutation.mutate(input);
+      const scope = entryMutationScope();
+      if (scope.workspaceId !== null) input.workspaceId = scope.workspaceId;
+      saveScopes.current.set(input, scope);
+      try {
+        await createMutation.mutateAsync(input);
+        return { ok: true, saved: "server" };
+      } catch (error) {
+        return saveFailures.current.get(input) ?? { ok: false, message: userErrorMessage(error, translate("tracker")("mutations.addFailed")) };
+      } finally {
+        saveFailures.current.delete(input);
+        saveScopes.current.delete(input);
+      }
     },
     [createMutation]
   );
 
   const updateEntry = React.useCallback(
-    (args: UpdateEntryArgs): void => {
+    async (args: UpdateEntryArgs): Promise<EntryMutationResult> => {
       if (isTempId(args.id)) {
         const cached = utils.entries.current.getData();
         const running = cached === undefined ? timerStore.getState().running : cached;
@@ -1082,9 +1144,10 @@ export const useEntryMutations = (): EntryMutations => {
           Object.keys(args).every((key) => key === "id" || key === "start")
         ) {
           const start = args.start;
-          const workspaceId = getActiveWorkspaceId();
+          const scope = entryMutationScope();
+          const workspaceId = scope.workspaceId;
           const apply = (): void => {
-            if (workspaceId !== getActiveWorkspaceId()) return;
+            if (!sameEntryMutationScope(scope)) return;
             const cachedCurrent = utils.entries.current.getData();
             const current = cachedCurrent === undefined ? timerStore.getState().running : cachedCurrent;
             if (current?.id === args.id) {
@@ -1107,25 +1170,42 @@ export const useEntryMutations = (): EntryMutations => {
           if (pendingStart) {
             (pendingStart.state.context as MutationContext).pendingStart = start;
             apply();
-          } else {
-            void amendQueuedStart(args.id, start, workspaceId).then((saved) => {
-              if (saved) apply();
-              else {
-                toast.info(translate("tracker")("mutations.stillSyncing"));
-                refetchWhenQuiet();
-              }
-            }).catch((error: unknown) => {
-              toast.error(userErrorMessage(error, translate("tracker")("mutations.saveFailed")));
-            });
+            // The timer caller keeps its optimistic edit, but a draft cannot
+            // close until the start and amendment actually persist.
+            return { ok: false, message: translate("tracker")("mutations.stillSyncing") };
           }
-          return;
+          try {
+            const saved = await amendQueuedStart(args.id, start, workspaceId);
+            if (saved) {
+              apply();
+              return { ok: true, saved: "offline" };
+            }
+            toast.info(translate("tracker")("mutations.stillSyncing"));
+            refetchWhenQuiet();
+          } catch {
+            const message = translate("tracker")("mutations.storageFailed");
+            toast.error(message);
+            return { ok: false, message };
+          }
+          return { ok: false, message: translate("tracker")("mutations.stillSyncing") };
         }
         // Other edits of temporary entries still wait for their server id.
-        toast.info(translate("tracker")("mutations.stillSyncing"));
-        return;
+        const message = translate("tracker")("mutations.stillSyncing");
+        toast.info(message);
+        return { ok: false, message };
       }
-      const input: UpdateInput = { ...args, originId: ORIGIN_ID };
-      updateMutation.mutate(input);
+      const scope = entryMutationScope();
+      const input: UpdateInput = { ...args, originId: ORIGIN_ID, ...(scope.workspaceId === null ? {} : { workspaceId: scope.workspaceId }) };
+      saveScopes.current.set(input, scope);
+      try {
+        await updateMutation.mutateAsync(input);
+        return { ok: true, saved: "server" };
+      } catch (error) {
+        return saveFailures.current.get(input) ?? { ok: false, message: userErrorMessage(error, translate("tracker")("mutations.saveFailed")) };
+      } finally {
+        saveFailures.current.delete(input);
+        saveScopes.current.delete(input);
+      }
     },
     [updateMutation, utils, queryClient, patchList, refetchWhenQuiet]
   );

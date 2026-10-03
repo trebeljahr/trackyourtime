@@ -16,7 +16,7 @@ import type {
 let shell: "web" | "electron" = "web";
 vi.mock("@/lib/shell", async () => (await import("@/lib/shell-mock")).mockShellModule(() => shell));
 
-const createManualEntry = vi.fn();
+const createManualEntry = vi.fn(async () => ({ ok: true, saved: "server" } as const));
 vi.mock("@/components/tracker/use-entry-mutations", () => ({
   TRACKER_LIST_INPUT: { from: "2000-01-01", to: "2999-12-31", limit: 50 },
   useEntryMutations: () => ({ createManualEntry }),

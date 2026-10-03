@@ -154,6 +154,9 @@ export const tracker = {
     editTime: "Edit time…",
   },
   mutations: {
+    storageFailed: "Could not save on this device. Free some storage space and try again.",
+    draftKept: "Your draft is kept here. Check the fields and try again, or cancel.",
+    scopeChanged: "Your account or workspace changed. Cancel and reopen this editor before saving.",
     startFailed: "Could not start the timer",
     stopFailed: "Could not stop the timer",
     addFailed: "Could not add the entry",

@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EntryFieldsEditor } from "@/components/entry-fields/entry-fields-editor";
 import { useEntryFields } from "@/components/entry-fields/use-entry-fields";
+import { useEntrySubmission } from "@/components/tracker/use-entry-submission";
+import { useT as useTrackerT } from "@/i18n/use-t";
 import { toast } from "@/components/ui/sonner";
 import { useT } from "@/i18n/use-t";
 import { formatDayLabel, useFormatSettings } from "@/lib/format";
@@ -59,6 +61,9 @@ export function EntryCreateDialog({
     setEnd(format.clock(draft.end));
   }
 
+  const submission = useEntrySubmission(draft, onClose);
+  const tt = useTrackerT("tracker");
+
   const submit = (): void => {
     if (!draft) return;
     const startIso = parseTimeOfDay(start, draft.start);
@@ -72,22 +77,21 @@ export function EntryCreateDialog({
       return;
     }
 
-    actions.create({
+    submission.submit(() => actions.create({
       ...fields,
       start: startIso,
       end: endIso,
-    });
-    onClose();
+    }));
   };
 
   return (
     <Dialog
       open={draft !== null}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) submission.dismiss();
       }}
     >
-      <DialogContent data-testid="calendar-create-dialog" className="sm:max-w-md">
+      <DialogContent showCloseButton={!submission.pending} data-testid="calendar-create-dialog" className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("create.title")}</DialogTitle>
           <DialogDescription>
@@ -95,8 +99,9 @@ export function EntryCreateDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <fieldset disabled={submission.pending} className="min-w-0 space-y-4">
           <EntryFieldsEditor
+            disabled={submission.pending}
             value={fields}
             onChange={setFields}
             autoFocus
@@ -132,17 +137,19 @@ export function EntryCreateDialog({
               />
             </div>
           </div>
-        </div>
+        </fieldset>
+        {submission.error ? <p role="alert" className="text-sm text-destructive">{submission.error} {tt("mutations.draftKept")}</p> : null}
 
         <DialogFooter>
           <Button
             variant="ghost"
             data-testid="calendar-create-cancel"
-            onClick={onClose}
+            onClick={submission.dismiss}
+            disabled={submission.pending}
           >
             {tc("actions.cancel")}
           </Button>
-          <Button data-testid="calendar-create-submit" onClick={submit}>
+          <Button data-testid="calendar-create-submit" onClick={submit} disabled={submission.pending}>
             {t("create.submit")}
           </Button>
         </DialogFooter>

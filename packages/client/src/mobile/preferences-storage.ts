@@ -110,6 +110,7 @@ const loadPreferences = (): Promise<PreferencesPlugin | null> => {
 const migrateFromLocalStorage = async (
   plugin: PreferencesPlugin,
   keys: readonly string[],
+  strict = false,
 ): Promise<void> => {
   let legacyMarker: Promise<boolean> | null = null;
   const legacyMarkerPresent = (): Promise<boolean> => {
@@ -130,7 +131,8 @@ const migrateFromLocalStorage = async (
     let local: string | null = null;
     try {
       local = window.localStorage.getItem(key);
-    } catch {
+    } catch (error) {
+      if (strict) throw error;
       local = null;
     }
 
@@ -160,6 +162,8 @@ const migrateFromLocalStorage = async (
 };
 
 export type PreferencesStorageOptions = {
+  /** Durable records must surface bridge/storage failures to their caller. */
+  strict?: boolean;
   /** Keys to hand over from `localStorage` on first use. */
   migrateKeys?: readonly string[];
   /** Test seam. */
@@ -175,10 +179,11 @@ export type PreferencesStorageOptions = {
  */
 export const preferencesStorage = ({
   migrateKeys = [],
+  strict = false,
   loadPlugin = loadPreferences,
 }: PreferencesStorageOptions = {}): KeyValueStorage => {
   const fallback = webStorage(
-    typeof window === "undefined"
+    strict || typeof window === "undefined"
       ? { getItem: () => null, setItem: () => {}, removeItem: () => {} }
       : window.localStorage,
   );
@@ -188,16 +193,23 @@ export const preferencesStorage = ({
   const ensure = (): Promise<PreferencesPlugin | null> => {
     ready ??= (async () => {
       const plugin = await loadPlugin();
-      if (plugin === null) return null;
+      if (plugin === null) {
+        if (strict) throw new Error("Persistent native storage is unavailable");
+        return null;
+      }
       try {
-        await migrateFromLocalStorage(plugin, migrateKeys);
-      } catch {
+        await migrateFromLocalStorage(plugin, migrateKeys, strict);
+      } catch (error) {
+        if (strict) throw error;
         // A failed migration must not take the queue down with it. The rows
         // stay in localStorage; the marker is not written, so the next launch
         // tries again.
       }
       return plugin;
-    })();
+    })().catch((error: unknown) => {
+      ready = null;
+      throw error;
+    });
     return ready;
   };
 
@@ -208,7 +220,8 @@ export const preferencesStorage = ({
       try {
         const { value } = await plugin.get({ key });
         return value ?? null;
-      } catch {
+      } catch (error) {
+        if (strict) throw error;
         return null;
       }
     },
@@ -217,8 +230,9 @@ export const preferencesStorage = ({
       if (plugin === null) return fallback.setItem(key, value);
       try {
         await plugin.set({ key, value });
-      } catch {
-        /* nothing useful to do at the call site — the caller is a queue write */
+      } catch (error) {
+        if (strict) throw error;
+        /* Best effort for caches; durable queues opt into strict mode. */
       }
     },
     removeItem: async (key) => {
@@ -226,7 +240,8 @@ export const preferencesStorage = ({
       if (plugin === null) return fallback.removeItem(key);
       try {
         await plugin.remove({ key });
-      } catch {
+      } catch (error) {
+        if (strict) throw error;
         /* ignore */
       }
     },

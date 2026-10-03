@@ -12,6 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { EntryFieldsEditor } from "@/components/entry-fields/entry-fields-editor";
 import { useEntryFields } from "@/components/entry-fields/use-entry-fields";
+import { useEntrySubmission } from "@/components/tracker/use-entry-submission";
+import { useT as useTrackerT } from "@/i18n/use-t";
 import { toast } from "@/components/ui/sonner";
 import { useT } from "@/i18n/use-t";
 import { formatDayLabel, useFormatSettings } from "@/lib/format";
@@ -33,6 +35,7 @@ export type EntryCreatePopoverProps = {
   /** The draft block: a press on it (a drag of its edges) must not close this. */
   draftRef: React.RefObject<HTMLElement | null>;
   onClose: () => void;
+  onPendingChange?: (pending: boolean) => void;
 };
 
 /**
@@ -48,6 +51,7 @@ export function EntryCreatePopover({
   actions,
   draftRef,
   onClose,
+  onPendingChange,
 }: EntryCreatePopoverProps): React.JSX.Element {
   const format = useFormatSettings();
   const t = useT("calendar");
@@ -99,13 +103,18 @@ export function EntryCreatePopover({
     onRangeChange(next);
   };
 
+  const submission = useEntrySubmission(day, onClose);
+  React.useEffect(() => {
+    onPendingChange?.(submission.pending);
+    return () => onPendingChange?.(false);
+  }, [onPendingChange, submission.pending]);
+  const tt = useTrackerT("tracker");
   const submit = (): void => {
-    actions.create({
+    submission.submit(() => actions.create({
       ...fields,
       start: startIso,
       end: endIso,
-    });
-    onClose();
+    }));
   };
 
   const durationSec = Math.max(0, (range.endMin - range.startMin) * 60);
@@ -124,7 +133,9 @@ export function EntryCreatePopover({
         // tabbable, which is the same field — but only after the animation.
         event.preventDefault();
       }}
+      onEscapeKeyDown={(event) => { if (submission.pending) event.preventDefault(); }}
       onInteractOutside={(event) => {
+        if (submission.pending) { event.preventDefault(); return; }
         // A press on the draft block is a drag of its edges or a move, not
         // a dismissal — the grid owns that gesture and the popover follows.
         const target = event.target;
@@ -137,82 +148,86 @@ export function EntryCreatePopover({
         {formatDayLabel(startIso, format.locale)}
       </div>
 
-      <EntryFieldsEditor
-        value={fields}
-        onChange={setFields}
-        fields={["description", "projectTask", "tags"]}
-        autoFocus
-        descriptionPlaceholder={t("create.descriptionPlaceholder")}
-        onSubmit={submit}
-        idPrefix="calendar-create"
-        testIdPrefix="calendar-create"
-      />
+      <fieldset disabled={submission.pending} className="min-w-0 space-y-3">
+        <EntryFieldsEditor
+          disabled={submission.pending}
+          value={fields}
+          onChange={setFields}
+          fields={["description", "projectTask", "tags"]}
+          autoFocus
+          descriptionPlaceholder={t("create.descriptionPlaceholder")}
+          onSubmit={submit}
+          idPrefix="calendar-create"
+          testIdPrefix="calendar-create"
+        />
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="calendar-create-start">{tc("fields.start")}</Label>
-          <Input
-            id="calendar-create-start"
-            data-testid="calendar-create-start"
-            className="tabular-nums"
-            value={start}
-            onChange={(event) => {
-              setStart(event.target.value);
-            }}
-            onBlur={() => {
-              commitTime("start", start);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="calendar-create-start">{tc("fields.start")}</Label>
+            <Input
+              id="calendar-create-start"
+              data-testid="calendar-create-start"
+              className="tabular-nums"
+              value={start}
+              onChange={(event) => {
+                setStart(event.target.value);
+              }}
+              onBlur={() => {
                 commitTime("start", start);
-              }
-            }}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="calendar-create-end">{tc("fields.end")}</Label>
-          <Input
-            id="calendar-create-end"
-            data-testid="calendar-create-end"
-            className="tabular-nums"
-            value={end}
-            onChange={(event) => {
-              setEnd(event.target.value);
-            }}
-            onBlur={() => {
-              commitTime("end", end);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitTime("start", start);
+                }
+              }}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="calendar-create-end">{tc("fields.end")}</Label>
+            <Input
+              id="calendar-create-end"
+              data-testid="calendar-create-end"
+              className="tabular-nums"
+              value={end}
+              onChange={(event) => {
+                setEnd(event.target.value);
+              }}
+              onBlur={() => {
                 commitTime("end", end);
-              }
-            }}
-          />
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitTime("end", end);
+                }
+              }}
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Switch
-            id="calendar-create-billable"
-            data-testid="calendar-create-billable"
-            checked={fields.billable}
-            onCheckedChange={(billable) => {
-              setFields({ ...fields, billable });
-            }}
-          />
-          <Label htmlFor="calendar-create-billable">{tc("fields.billable")}</Label>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="calendar-create-billable"
+              data-testid="calendar-create-billable"
+              checked={fields.billable}
+              onCheckedChange={(billable) => {
+                setFields({ ...fields, billable });
+              }}
+            />
+            <Label htmlFor="calendar-create-billable">{tc("fields.billable")}</Label>
+          </div>
+          <span
+            className="text-muted-foreground text-sm tabular-nums"
+            data-testid="calendar-create-duration"
+          >
+            {format.duration(durationSec)}
+          </span>
         </div>
-        <span
-          className="text-muted-foreground text-sm tabular-nums"
-          data-testid="calendar-create-duration"
-        >
-          {format.duration(durationSec)}
-        </span>
-      </div>
 
+      </fieldset>
+      {submission.error ? <p role="alert" className="text-sm text-destructive">{submission.error} {tt("mutations.draftKept")}</p> : null}
       <Separator />
 
       <div className="flex items-center justify-end gap-2">
@@ -220,11 +235,12 @@ export function EntryCreatePopover({
           variant="ghost"
           size="sm"
           data-testid="calendar-create-cancel"
-          onClick={onClose}
+          onClick={submission.dismiss}
+          disabled={submission.pending}
         >
           {tc("actions.cancel")}
         </Button>
-        <Button size="sm" data-testid="calendar-create-submit" onClick={submit}>
+        <Button size="sm" data-testid="calendar-create-submit" onClick={submit} disabled={submission.pending}>
           {t("create.submit")}
         </Button>
       </div>

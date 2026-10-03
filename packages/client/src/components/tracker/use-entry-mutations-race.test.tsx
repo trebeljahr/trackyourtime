@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 /**
  * A stop followed at once by a start must not wipe the new timer off the list.
  *
@@ -31,12 +32,21 @@ vi.mock("@/components/ui/sonner", () => ({
   toast: { error: vi.fn(), message: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
 
+let scopeWorkspace: string | null = null;
+let scopeOwner: string | null = null;
+vi.mock("@/lib/active-workspace", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/active-workspace")>()),
+  getActiveWorkspaceId: () => scopeWorkspace,
+  getKnownWorkspacesOwner: () => scopeOwner,
+}));
+
 const enqueueOffline = vi.fn(async (): Promise<void> => undefined);
 const amendQueuedStart = vi.fn(async (): Promise<boolean> => false);
 vi.mock("@/lib/offline", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/offline")>()),
   enqueueOffline,
   amendQueuedStart,
+  getOfflineQueueOwner: () => scopeOwner,
 }));
 
 vi.mock("@/lib/running-mirror", () => ({
@@ -211,7 +221,10 @@ beforeEach(() => {
   heldCalls.clear();
   callOrder = [];
   callInputs.clear();
-  enqueueOffline.mockClear();
+  enqueueOffline.mockReset();
+  enqueueOffline.mockResolvedValue(undefined);
+  scopeWorkspace = null;
+  scopeOwner = null;
   amendQueuedStart.mockReset();
   timerStore.getState().clear();
   mutations = null;
@@ -517,5 +530,156 @@ describe("a stop pressed while the start is still in flight", () => {
     expect(input.id).toBe("e2");
     expect(tempId).toBeUndefined();
     expect(screen.queryByTestId("running")).toBeNull();
+  });
+});
+
+
+describe("draft mutation completion", () => {
+  const manual = {
+    description: "Draft",
+    projectId: null,
+    billable: false,
+    start: "2026-10-01T09:00:00.000Z",
+    end: "2026-10-01T10:00:00.000Z",
+  };
+
+  for (const operation of ["create", "update"] as const) {
+    const begin = (): ReturnType<Mutations["createManualEntry"]> => {
+      if (!mutations) throw new Error("not mounted");
+      return operation === "create" ? mutations.createManualEntry(manual) : mutations.updateEntry({ id: "e1", description: "Draft" });
+    };
+    const path = `entries.${operation}`;
+
+    it(`${operation} waits for deferred server success`, async () => {
+      const request = deferred<unknown>();
+      held.set(path, request);
+      mount();
+      await screen.findByText("Before");
+      let settled = false;
+      let result!: ReturnType<typeof begin>;
+      act(() => { result = begin(); void result.then(() => { settled = true; }); });
+      await waitFor(() => expect(heldCalls.get(path)).toBe(1));
+      expect(settled).toBe(false);
+      const saved = entry({ ...manual, id: operation === "create" ? "e2" : "e1" });
+      serverEntries = [saved];
+      await act(async () => { request.resolve(saved); expect(await result).toEqual({ ok: true, saved: "server" }); });
+      expect(enqueueOffline).not.toHaveBeenCalled();
+    });
+
+    it(`${operation} returns refusal and rolls back optimism`, async () => {
+      const request = deferred<unknown>();
+      held.set(path, request);
+      mount();
+      await screen.findByText("Before");
+      let result!: ReturnType<typeof begin>;
+      act(() => { result = begin(); });
+      await screen.findByText("Draft");
+      const refusal = Object.assign(new Error("Entry is invoiced"), { data: { code: "FORBIDDEN" } });
+      await act(async () => { request.reject(refusal); expect(await result).toEqual({ ok: false, message: "Entry is invoiced" }); });
+      expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft");
+      expect(enqueueOffline).not.toHaveBeenCalled();
+    });
+
+    it(`${operation} waits for durable offline storage`, async () => {
+      const request = deferred<unknown>();
+      const storage = deferred<void>();
+      enqueueOffline.mockReturnValueOnce(storage.promise);
+      held.set(path, request);
+      mount();
+      await screen.findByText("Before");
+      let result!: ReturnType<typeof begin>;
+      let settled = false;
+      act(() => { result = begin(); void result.then(() => { settled = true; }); });
+      await waitFor(() => expect(heldCalls.get(path)).toBe(1));
+      await act(async () => request.reject(new TypeError("Failed to fetch")));
+      await waitFor(() => expect(enqueueOffline).toHaveBeenCalledTimes(1));
+      expect(settled).toBe(false);
+      expect(screen.getByTestId("rows")).toHaveTextContent("Draft");
+      await act(async () => { storage.resolve(); expect(await result).toEqual({ ok: true, saved: "offline" }); });
+    });
+
+    it(`${operation} returns failure and rolls back when storage fails`, async () => {
+      const request = deferred<unknown>();
+      enqueueOffline.mockRejectedValueOnce(new Error("Storage quota exceeded"));
+      held.set(path, request);
+      mount();
+      await screen.findByText("Before");
+      let result!: ReturnType<typeof begin>;
+      act(() => { result = begin(); });
+      await waitFor(() => expect(heldCalls.get(path)).toBe(1));
+      await act(async () => {
+        request.reject(new TypeError("Failed to fetch"));
+        expect(await result).toEqual({ ok: false, message: expect.stringContaining("storage space") });
+      });
+      expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft");
+    });
+
+    it(`${operation} stamps the original workspace/account after an offline failure`, async () => {
+      scopeWorkspace = "ws-a";
+      scopeOwner = "u-a";
+      const request = deferred<unknown>();
+      held.set(path, request);
+      mount();
+      await screen.findByText("Before");
+      let result!: ReturnType<typeof begin>;
+      act(() => { result = begin(); });
+      await waitFor(() => expect(heldCalls.get(path)).toBe(1));
+      expect(callInputs.get(path)).toMatchObject({ workspaceId: "ws-a" });
+      scopeWorkspace = "ws-b";
+      scopeOwner = "u-b";
+      const other = entry({ id: "other", description: "Other workspace", start: manual.start });
+      serverEntries = [other];
+      queryClient.setQueryData([["entries", "list"], { input: TRACKER_LIST_INPUT, type: "infinite" }], { pages: [{ entries: [other] }], pageParams: [null] });
+      await act(async () => { request.reject(new TypeError("Failed to fetch")); await result; });
+      expect(enqueueOffline).toHaveBeenCalledWith(path, expect.objectContaining({ workspaceId: "ws-a" }), (operation === "create" ? expect.any(String) : undefined), "ws-a", expect.objectContaining({ owner: "u-a" }));
+      expect(screen.getByTestId("rows")).toHaveTextContent("Other workspace");
+      expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft");
+    });
+  }
+
+  it("a temporary entry still syncing is not a completed save", async () => {
+    mount();
+    await screen.findByText("Before");
+    expect(await mutations?.updateEntry({ id: "temp-unsynced", description: "Draft" })).toEqual({ ok: false, message: expect.stringContaining("syncing") });
+    expect(heldCalls.get("entries.update")).toBeUndefined();
+  });
+
+  it("does not resume idle work after the offline stop failed to persist", async () => {
+    const stop = deferred<unknown>();
+    held.set("entries.stop", stop);
+    enqueueOffline.mockRejectedValueOnce(new Error("Disk full"));
+    mount();
+    await screen.findByText("Before");
+    act(() => mutations!.splitAtIdle({ end: "2026-10-01T09:00:00.000Z", resume: { description: "Resume", projectId: null, billable: false } }));
+    await waitFor(() => expect(heldCalls.get("entries.stop")).toBe(1));
+    await act(async () => stop.reject(new TypeError("Failed to fetch")));
+    await settleAll();
+    expect(heldCalls.get("entries.start")).toBeUndefined();
+  });
+
+  it("does not queue a request when snapshot fails before transport", async () => {
+    mount();
+    await screen.findByText("Before");
+    vi.spyOn(queryClient, "cancelQueries").mockRejectedValueOnce(new TypeError("Cancellation failed"));
+    let result!: Promise<import("@/lib/entry-mutation-result").EntryMutationResult>;
+    await act(async () => { result = mutations!.createManualEntry(manual); await result; });
+    expect(await result).toMatchObject({ ok: false });
+    expect(heldCalls.get("entries.create")).toBeUndefined();
+    expect(enqueueOffline).not.toHaveBeenCalled();
+  });
+
+  it("never sends a create when the account changes during snapshot cancellation", async () => {
+    scopeWorkspace = "ws-a";
+    scopeOwner = "u-a";
+    mount();
+    await screen.findByText("Before");
+    const cancel = deferred<void>();
+    vi.spyOn(queryClient, "cancelQueries").mockReturnValueOnce(cancel.promise);
+    let result!: Promise<import("@/lib/entry-mutation-result").EntryMutationResult>;
+    act(() => { result = mutations!.createManualEntry(manual); });
+    await act(async () => { scopeOwner = "u-b"; cancel.resolve(); });
+    expect(await result).toEqual({ ok: false, message: expect.stringContaining("account or workspace") });
+    expect(heldCalls.get("entries.create")).toBeUndefined();
+    expect(enqueueOffline).not.toHaveBeenCalled();
   });
 });

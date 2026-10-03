@@ -258,6 +258,10 @@ export function TimeGrid({
   /** The empty column a finger last pressed — see `handleColumnPointerDown`. */
   const touchColumnTapRef = React.useRef<number | null>(null);
   const draftRef = React.useRef<HTMLDivElement | null>(null);
+  const draftPendingRef = React.useRef(false);
+  const noteDraftPending = React.useCallback((pending: boolean): void => {
+    draftPendingRef.current = pending;
+  }, []);
   /** The finger resting on the grid, if any. */
   const touchPressRef = React.useRef<TouchPress | null>(null);
   /** Every finger on the grid, for the pinch. */
@@ -536,6 +540,7 @@ export function TimeGrid({
     selectedId !== null || openClusterId !== null || draft !== null;
 
   const closeEverything = (): void => {
+    if (draftPendingRef.current) return;
     closePopovers();
     setDraft(null);
   };
@@ -586,6 +591,7 @@ export function TimeGrid({
 
   /** The long press fired: the grid takes the finger over from the browser. */
   const armTouchPress = (pointerId: number): void => {
+    if (draftPendingRef.current) return;
     const press = touchPressRef.current;
     if (!press || press.pointerId !== pointerId || press.armed || !press.arm) {
       return;
@@ -726,6 +732,7 @@ export function TimeGrid({
     event: React.PointerEvent<HTMLDivElement>,
     mode: BlockDragMode
   ): void => {
+    if (draftPendingRef.current) return;
     event.stopPropagation();
     // A finger pans the grid through the draft, as through a saved block,
     // until it has rested long enough to be holding it.
@@ -744,6 +751,7 @@ export function TimeGrid({
     block: Segment,
     dayIndex: number
   ): void => {
+    if (draftPendingRef.current) return;
     event.stopPropagation();
     // A finger never arms move or resize on the press. With `touchAction:
     // "pan-y"` the browser owns the vertical pan, so the press that follows
@@ -787,6 +795,7 @@ export function TimeGrid({
     event: React.PointerEvent<HTMLDivElement>,
     dayIndex: number
   ): void => {
+    if (draftPendingRef.current) return;
     // A popover is a React child of its block, so React bubbles its events
     // up to this column even though the DOM node lives in a portal. Without
     // this, every click inside the editor closed it and armed a create-drag.
@@ -1438,7 +1447,7 @@ export function TimeGrid({
                     <Popover
                       open
                       onOpenChange={(open) => {
-                        if (!open) setDraft(null);
+                        if (!open && !draftPendingRef.current) setDraft(null);
                       }}
                     >
                       <PopoverAnchor asChild>
@@ -1470,6 +1479,7 @@ export function TimeGrid({
                         }}
                         actions={actions}
                         draftRef={draftRef}
+                        onPendingChange={noteDraftPending}
                         onClose={() => {
                           setDraft(null);
                         }}

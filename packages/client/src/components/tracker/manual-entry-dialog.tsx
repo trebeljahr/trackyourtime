@@ -22,6 +22,8 @@ import { Label } from "@/components/ui/label";
 import { DurationInput } from "@/components/duration-input";
 import { EntryFieldsEditor } from "@/components/entry-fields/entry-fields-editor";
 import { useEntryFields } from "@/components/entry-fields/use-entry-fields";
+import { useEntrySubmission } from "@/components/tracker/use-entry-submission";
+import type { EntryMutationResult } from "@/lib/entry-mutation-result";
 import { TimeField } from "@/components/tracker/time-field";
 import { movedEndDay, movedStartDay } from "@/components/tracker/use-entry-editor";
 import type {
@@ -57,7 +59,7 @@ export type ManualEntryDialogProps = {
    * Called with the entry instead of `mutations.createManualEntry` — for a
    * caller that checks the block before creating it (an activity suggestion).
    */
-  onAdd?: (args: ManualEntryArgs) => void;
+  onAdd?: (args: ManualEntryArgs) => Promise<EntryMutationResult>;
 };
 
 /**
@@ -110,31 +112,32 @@ export function ManualEntryDialog({
     Math.round((Date.parse(range.end) - Date.parse(range.start)) / 1000)
   );
 
-  const add = React.useCallback((): void => {
+  const submission = useEntrySubmission(open, () => onOpenChange(false));
+
+  const add = (): void => {
     if (!startDateValid || !endDateValid || seconds <= 0) return;
     const args: ManualEntryArgs = {
       ...fields,
       start: range.start,
       end: range.end,
     };
-    if (onAdd !== undefined) onAdd(args);
-    else mutations.createManualEntry(args);
-    onOpenChange(false);
-  }, [endDateValid, fields, mutations, onAdd, onOpenChange, range, seconds, startDateValid]);
+    submission.submit(() => onAdd !== undefined ? onAdd(args) : mutations.createManualEntry(args));
+  };
 
   const startDay = dayKeyInZone(Date.parse(range.start), zone);
   const endDay = dayKeyInZone(Date.parse(range.end), zone);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="manual-entry-dialog">
+    <Dialog open={open} onOpenChange={(next) => { if (!next) submission.dismiss(); }}>
+      <DialogContent data-testid="manual-entry-dialog" showCloseButton={!submission.pending}>
         <DialogHeader>
           <DialogTitle>{t("manualDialog.title")}</DialogTitle>
           <DialogDescription>{t("manualDialog.description")}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <fieldset disabled={submission.pending} className="min-w-0 space-y-4" aria-busy={submission.pending}>
           <EntryFieldsEditor
+            disabled={submission.pending}
             value={fields}
             onChange={setFields}
             autoFocus
@@ -295,13 +298,16 @@ export function ManualEntryDialog({
               />
             </div>
           </div>
-        </div>
+        </fieldset>
+
+        {submission.error ? <p role="alert" className="text-sm text-destructive" data-testid="manual-entry-error">{submission.error} {t("mutations.draftKept")}</p> : null}
 
         <DialogFooter>
           <Button
             type="button"
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={submission.dismiss}
+            disabled={submission.pending}
             data-testid="manual-entry-cancel"
           >
             {tc("actions.cancel")}
@@ -309,7 +315,7 @@ export function ManualEntryDialog({
           <Button
             type="button"
             onClick={add}
-            disabled={!startDateValid || !endDateValid || seconds <= 0}
+            disabled={submission.pending || !startDateValid || !endDateValid || seconds <= 0}
             data-testid="manual-entry-add"
           >
             {tc("actions.add")}

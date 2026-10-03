@@ -32,6 +32,7 @@ import {
 } from "./calendar-history";
 import { entrySource } from "@/lib/shell";
 import { ownEntries, useViewerId } from "@/components/tracker/own-entries";
+import { entryMutationScope, sameEntryMutationScope, type EntryMutationResult, type EntryMutationScope } from "@/lib/entry-mutation-result";
 import { userErrorMessage } from "@/lib/error-message";
 
 /** The exact `entries.list` input the calendar screen is showing. */
@@ -129,7 +130,7 @@ export type CalendarHistory = {
 
 export type CalendarActions = {
   update: (id: string, patch: EntryPatch) => void;
-  create: (draft: EntryDraft) => void;
+  create: (draft: EntryDraft) => Promise<EntryMutationResult>;
   remove: (id: string) => void;
   isMutating: boolean;
   history: CalendarHistory;
@@ -150,6 +151,7 @@ export const useCalendarActions = (
   const viewerId = useViewerId();
   const projects = trpc.projects.list.useQuery({});
   const projectsData = projects.data;
+  const createScopes = React.useRef(new WeakMap<object, EntryMutationScope>());
 
   const projectMeta = React.useCallback(
     (
@@ -190,7 +192,9 @@ export const useCalendarActions = (
 
   const updateMutation = trpc.entries.update.useMutation({
     onMutate: async (variables) => {
+      const scope = entryMutationScope();
       const previous = await snapshot();
+      if (!sameEntryMutationScope(scope)) throw new Error(translate("tracker")("mutations.scopeChanged"));
       utils.entries.list.setData(input, (current) => {
         if (!current) return current;
         return {
@@ -237,9 +241,10 @@ export const useCalendarActions = (
           ),
         };
       });
-      return { previous };
+      return { previous, scope };
     },
     onError: (error, _variables, context) => {
+      if (context && !sameEntryMutationScope(context.scope)) return;
       rollback(context?.previous);
       toast.error(userErrorMessage(error));
     },
@@ -248,7 +253,9 @@ export const useCalendarActions = (
 
   const createMutation = trpc.entries.create.useMutation({
     onMutate: async (variables) => {
+      const scope = createScopes.current.get(variables) ?? entryMutationScope();
       const previous = await snapshot();
+      if (!sameEntryMutationScope(scope)) throw new Error(translate("tracker")("mutations.scopeChanged"));
       const now = new Date().toISOString();
       const projectId = variables.projectId ?? null;
       const durationSec = durationOf(variables.start, variables.end);
@@ -286,9 +293,10 @@ export const useCalendarActions = (
           ? { ...current, entries: sortEntries([optimistic, ...current.entries]) }
           : current
       );
-      return { previous };
+      return { previous, scope };
     },
     onError: (error, _variables, context) => {
+      if (context && !sameEntryMutationScope(context.scope)) return;
       rollback(context?.previous);
       toast.error(userErrorMessage(error));
     },
@@ -297,7 +305,9 @@ export const useCalendarActions = (
 
   const removeMutation = trpc.entries.remove.useMutation({
     onMutate: async (variables) => {
+      const scope = entryMutationScope();
       const previous = await snapshot();
+      if (!sameEntryMutationScope(scope)) throw new Error(translate("tracker")("mutations.scopeChanged"));
       utils.entries.list.setData(input, (current) =>
         current
           ? {
@@ -308,9 +318,10 @@ export const useCalendarActions = (
             }
           : current
       );
-      return { previous };
+      return { previous, scope };
     },
     onError: (error, _variables, context) => {
+      if (context && !sameEntryMutationScope(context.scope)) return;
       rollback(context?.previous);
       toast.error(userErrorMessage(error));
     },
@@ -333,11 +344,16 @@ export const useCalendarActions = (
   );
 
   const applyCreate = React.useCallback(
-    (draft: EntryDraft): Promise<string | null> =>
-      createMutation
-        .mutateAsync({ ...draft, originId: ORIGIN_ID })
-        .then((created) => created.id)
-        .catch(() => null),
+    (draft: EntryDraft): Promise<{ id: string; ok: true } | { id: null; ok: false; message: string }> => {
+      const scope = entryMutationScope();
+      const variables = { ...draft, originId: ORIGIN_ID, ...(scope.workspaceId === null ? {} : { workspaceId: scope.workspaceId }) };
+      createScopes.current.set(variables, scope);
+      return createMutation
+        .mutateAsync(variables)
+        .then((created) => ({ id: created.id, ok: true as const }))
+        .catch((error: unknown) => ({ id: null, ok: false as const, message: userErrorMessage(error, translate("tracker")("mutations.addFailed")) }))
+        .finally(() => { createScopes.current.delete(variables); });
+    },
     [createMutation]
   );
 
@@ -395,8 +411,11 @@ export const useCalendarActions = (
    * its new id, or they would each undo into a "not found".
    */
   const createTracked = React.useCallback(
-    (draft: EntryDraft, stepId: number, replacing: string | null): void => {
-      void applyCreate(draft).then((id) => {
+    async (draft: EntryDraft, stepId: number, replacing: string | null): Promise<EntryMutationResult> => {
+      const scope = entryMutationScope();
+      const result = await applyCreate(draft);
+      const id = result.id;
+      if (sameEntryMutationScope(scope)) {
         writeHistory((current) => {
           if (id === null) return dropStep(current, stepId);
           const rebased =
@@ -405,7 +424,8 @@ export const useCalendarActions = (
               : replaceEntryId(current, replacing, id);
           return remapEntryId(rebased, stepId, id);
         });
-      });
+      }
+      return result.ok ? { ok: true, saved: "server" } : { ok: false, message: result.message };
     },
     [applyCreate, writeHistory]
   );
@@ -445,9 +465,9 @@ export const useCalendarActions = (
   );
 
   const create = React.useCallback(
-    (draft: EntryDraft): void => {
+    (draft: EntryDraft): Promise<EntryMutationResult> => {
       const step = record({ kind: "create", entryId: null, draft }, "create");
-      createTracked(draft, step.id, null);
+      return createTracked(draft, step.id, null);
     },
     [createTracked, record]
   );

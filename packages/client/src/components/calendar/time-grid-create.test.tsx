@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { DetailedEntry } from "@starter/shared";
 
 // Same reason as time-grid.test.tsx: display preferences come through tRPC.
@@ -65,7 +65,7 @@ const at = (hour: number, minute: number): string =>
 const actions = {
   update: vi.fn(),
   remove: vi.fn(),
-  create: vi.fn(),
+  create: vi.fn<CalendarActions["create"]>(async () => ({ ok: true, saved: "server" })),
 } as unknown as CalendarActions;
 
 /** One px per minute from 06:00: `clientY` 40 is 06:40. */
@@ -197,7 +197,7 @@ describe("TimeGrid create", () => {
     );
   });
 
-  it("creates the entry only from the Create button, with the draft's span", () => {
+  it("creates the entry only from the Create button, with the draft's span", async () => {
     renderGrid();
     clickGrid(40);
 
@@ -214,6 +214,34 @@ describe("TimeGrid create", () => {
         end: at(7, 30),
       })
     );
+    await waitFor(() => expect(screen.queryByTestId("calendar-create-draft")).not.toBeInTheDocument());
+  });
+
+  it("keeps a pending create open through grid clicks, Escape and rapid submit", async () => {
+    let finish!: (value: import("@/lib/entry-mutation-result").EntryMutationResult) => void;
+    vi.mocked(actions.create).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    renderGrid();
+    clickGrid(40);
+    fireEvent.click(screen.getByTestId("calendar-create-submit"));
+    fireEvent.click(screen.getByTestId("calendar-create-submit"));
+    clickGrid(200);
+    fireEvent.keyDown(screen.getByTestId("calendar-create-popover"), { key: "Escape" });
+    expect(actions.create).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("calendar-create-draft")).toBeInTheDocument();
+    await act(async () => finish({ ok: true, saved: "server" }));
+    expect(screen.queryByTestId("calendar-create-draft")).not.toBeInTheDocument();
+  });
+
+  it("retains the draft and error after a refused create", async () => {
+    vi.mocked(actions.create).mockResolvedValueOnce({ ok: false, message: "Permission changed" });
+    renderGrid();
+    clickGrid(40);
+    fireEvent.change(screen.getByTestId("calendar-create-description"), { target: { value: "Draft" } });
+    fireEvent.click(screen.getByTestId("calendar-create-submit"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Permission changed");
+    expect(screen.getByTestId("calendar-create-description")).toHaveValue("Draft");
+    expect(screen.getByTestId("calendar-create-draft")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("calendar-create-cancel"));
     expect(screen.queryByTestId("calendar-create-draft")).not.toBeInTheDocument();
   });
 

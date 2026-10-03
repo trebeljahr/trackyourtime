@@ -32,7 +32,6 @@ import {
   memoryStorage,
   OFFLINE_QUEUE_OWNER_STORAGE_KEY,
   OFFLINE_QUEUE_STORAGE_KEY,
-  webStorage,
   tempIdOf,
   type FlushResult,
   type FlushVerdict,
@@ -112,13 +111,24 @@ const resolveStorage = (): KeyValueStorage => {
   if (shouldUseNativeStorage()) {
     return preferencesStorage({
       migrateKeys: [OFFLINE_QUEUE_STORAGE_KEY, OFFLINE_QUEUE_OWNER_STORAGE_KEY],
+      strict: true,
     });
   }
   try {
-    return webStorage(window.localStorage);
-  } catch {
-    // Privacy mode / disabled storage — the queue still works for this tab.
-    return memoryStorage();
+    // Queue writes must reject on quota/privacy errors. The shared webStorage
+    // adapter is best effort for caches and cannot acknowledge a durable save.
+    const backing = window.localStorage;
+    return {
+      getItem: async (key) => backing.getItem(key),
+      setItem: async (key, value) => { backing.setItem(key, value); },
+      removeItem: async (key) => { backing.removeItem(key); },
+    };
+  } catch (error) {
+    return {
+      getItem: async () => { throw error; },
+      setItem: async () => { throw error; },
+      removeItem: async () => { throw error; },
+    };
   }
 };
 
@@ -272,11 +282,16 @@ const hydrateLastOwner = (): Promise<void> => {
     // A live owner set before the read landed always wins — it is the answer
     // this remembers a stale version of.
     if (lastOwner === null && stored) lastOwner = stored;
-  })();
+  })().catch((error: unknown) => {
+    hydration = null;
+    throw error;
+  });
   return hydration;
 };
 
 export const getOfflineQueueOwner = (): string | null => owner;
+/** Stamping only: a cold offline launch can still know its last account. */
+export const getOfflineQueueStampOwner = (): string | null => owner ?? lastOwner;
 
 /**
  * Point the queue at an account. Returns how many previously unowned rows this
@@ -330,18 +345,17 @@ export const setOfflineQueueOwner = async (
  * extension's `forgetSession()`.
  */
 export const sealOfflineQueueOwner = async (): Promise<number> => {
-  await hydrateLastOwner();
-  const departing = owner ?? lastOwner;
-  const adopted =
-    departing === null
-      ? 0
-      : await getOfflineQueue().adoptUnowned(departing, isOnThisServer);
-
-  owner = null;
-  lastOwner = null;
-  await getStorage().removeItem(OFFLINE_QUEUE_OWNER_STORAGE_KEY);
-  await refreshPendingCount();
-  return adopted;
+  try {
+    await hydrateLastOwner();
+    const departing = owner ?? lastOwner;
+    return departing === null ? 0 : await getOfflineQueue().adoptUnowned(departing, isOnThisServer);
+  } finally {
+    // A storage failure must not leave a departed account live in memory.
+    owner = null;
+    lastOwner = null;
+    await getStorage().removeItem(OFFLINE_QUEUE_OWNER_STORAGE_KEY).catch(() => undefined);
+    await refreshPendingCount().catch(() => undefined);
+  }
 };
 
 /**
@@ -504,7 +518,8 @@ export const enqueueOffline = async <K extends OfflineOp>(
   op: K,
   input: OfflinePayloadMap[K],
   tempId?: string,
-  workspaceId?: string | null
+  workspaceId?: string | null,
+  addressed?: { owner: string | null; server: string }
 ): Promise<void> => {
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
   await hydrateLastOwner();
@@ -523,11 +538,13 @@ export const enqueueOffline = async <K extends OfflineOp>(
   await getOfflineQueue().enqueue(
     op,
     payload,
-    owner ?? lastOwner ?? undefined,
-    getAbsoluteApiOrigin(),
-    workspaceId ?? getActiveWorkspaceId() ?? undefined,
+    (addressed === undefined ? owner ?? lastOwner : addressed.owner) ?? undefined,
+    addressed?.server ?? getAbsoluteApiOrigin(),
+    (workspaceId === undefined ? getActiveWorkspaceId() : workspaceId) ?? undefined,
   );
-  await refreshPendingCount();
+  // Persistence already succeeded. A failed count refresh must not invite a
+  // second submission of the same durable row.
+  await refreshPendingCount().catch(() => undefined);
 };
 
 /**

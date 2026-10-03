@@ -34,6 +34,7 @@ import { useIsElectron } from "@/hooks/use-shell";
 import { useFormat } from "@/i18n/use-format";
 import type { Translator } from "@/i18n/translator";
 import { useT } from "@/i18n/use-t";
+import type { EntryMutationResult } from "@/lib/entry-mutation-result";
 import { getActiveWorkspaceId } from "@/lib/active-workspace";
 import { desktopActivity } from "@/lib/desktop-activity";
 import { trpc } from "@/lib/trpc";
@@ -212,7 +213,7 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
   const [ruleFor, setRuleFor] = React.useState<DesktopActivitySuggestion | null>(null);
 
   const accept = React.useCallback(
-    async (start: number, end: number, edited: boolean, fields: AcceptFields): Promise<void> => {
+    async (start: number, end: number, edited: boolean, fields: AcceptFields): Promise<EntryMutationResult> => {
       setBusy(true);
       try {
         const outcome = await acceptSuggestion(
@@ -226,10 +227,17 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
             now: Date.now,
           },
         );
-        if (outcome.ok) toast.success(t("toasts.added"));
-        else toast.info(refusalMessage(outcome.reason, t));
+        if (outcome.ok) {
+          toast.success(t("toasts.added"));
+          return { ok: true, saved: outcome.saved };
+        }
+        const message = outcome.reason === "save-failed" ? outcome.message : refusalMessage(outcome.reason, t);
+        toast.info(message);
+        return { ok: false, message };
       } catch {
-        toast.error(t("toasts.addFailed"));
+        const message = t("toasts.addFailed");
+        toast.error(message);
+        return { ok: false, message };
       } finally {
         setBusy(false);
         await refresh({ fresh: true });
@@ -436,9 +444,9 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
         }
         mutations={mutations}
         onAdd={(args: ManualEntryArgs) => {
-          if (editing === null) return;
+          if (editing === null) return Promise.resolve({ ok: false, message: t("toasts.addFailed") });
           const edited = timesEdited(editing, args);
-          void accept(
+          return accept(
             edited ? Date.parse(args.start) : editing.start,
             edited ? Date.parse(args.end) : editing.end,
             edited,

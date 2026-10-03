@@ -161,7 +161,7 @@ export const useOfflineQueue = (): OfflineQueueState => {
   React.useEffect(() => {
     const list = workspacesQuery.data;
     if (list === undefined || userId === null) return;
-    void takeWorkspaceList(list, userId);
+    void takeWorkspaceList(list, userId).catch(() => toast.error(translate("tracker")("mutations.storageFailed")));
   }, [takeWorkspaceList, userId, workspacesQuery.data]);
 
   React.useEffect(
@@ -407,14 +407,14 @@ export const useOfflineQueue = (): OfflineQueueState => {
   }, [flush]);
 
   React.useEffect(() => {
-    void refreshPendingCount();
+    void refreshPendingCount().catch(() => toast.error(translate("tracker")("mutations.storageFailed")));
 
     // Through `subscribeNetwork` rather than `window.addEventListener("online")`
     // so this fires when a phone leaves airplane mode, which WKWebView does not
     // report as an `online` event at all.
     return subscribeNetwork(() => {
       if (!isOnline()) return;
-      void flushRef.current();
+      void flushRef.current().catch(() => toast.error(translate("tracker")("mutations.storageFailed")));
     });
   }, []);
 
@@ -422,7 +422,7 @@ export const useOfflineQueue = (): OfflineQueueState => {
   // earlier than the next user action, and more trustworthy than navigator.
   React.useEffect(() => {
     if (syncStatus !== "open") return;
-    void flushRef.current();
+    void flushRef.current().catch(() => toast.error(translate("tracker")("mutations.storageFailed")));
   }, [syncStatus]);
 
   // `authBlocked` is only ever reassigned by a flush that reaches its own
@@ -444,7 +444,9 @@ export const useOfflineQueue = (): OfflineQueueState => {
     let cancelled = false;
     void setOfflineQueueOwner(userId).then(() => {
       if (cancelled || userId === null) return;
-      void flushRef.current();
+      void flushRef.current().catch(() => toast.error(translate("tracker")("mutations.storageFailed")));
+    }).catch(() => {
+      if (!cancelled) toast.error(translate("tracker")("mutations.storageFailed"));
     });
     return () => {
       cancelled = true;

@@ -343,11 +343,15 @@ export const signOut: typeof authClient.signOut = async (...args) => {
   } finally {
     // Both run whatever the server said: a sign-out the network never
     // delivered still means this person is done with this device.
-    await sealOfflineQueueOwner();
-    await clearNativeToken();
-    await forgetAccountOnDevice();
-    const atom = authClient.$store.atoms.session;
-    atom.set({ ...atom.get(), data: null, error: null, isPending: false, isRefetching: false });
+    try {
+      await sealOfflineQueueOwner();
+    } finally {
+      // A failed durable queue write must not skip credential/cache cleanup.
+      await clearNativeToken();
+      await forgetAccountOnDevice();
+      const atom = authClient.$store.atoms.session;
+      atom.set({ ...atom.get(), data: null, error: null, isPending: false, isRefetching: false });
+    }
   }
 };
 

@@ -29,8 +29,9 @@ vi.mock("better-auth/client/plugins", () => ({
   twoFactorClient: () => ({}),
 }));
 
+const clearNativeToken = vi.fn(async () => undefined);
 vi.mock("@/lib/native-session", () => ({
-  clearNativeToken: async () => undefined,
+  clearNativeToken: () => clearNativeToken(),
   getNativeToken: () => null,
   setNativeToken: vi.fn(),
 }));
@@ -44,6 +45,7 @@ const { QUERY_SNAPSHOT_KEY } = await import("./query-persistence");
 const { createAppQueryClient } = await import("./query-client");
 const { onSignOut, signOut } = await import("./auth-client");
 const activeWorkspace = await import("./active-workspace");
+const offline = await import("./offline");
 
 const workspace = (id: string, isDefault: boolean): WorkspaceSummary => ({
   id,
@@ -71,6 +73,8 @@ describe("signOut", () => {
   beforeEach(() => {
     window.localStorage.clear();
     activeWorkspace.__resetActiveWorkspaceForTests();
+    vi.restoreAllMocks();
+    clearNativeToken.mockClear();
     writeRunningMirror.mockClear();
     queryClient = createAppQueryClient();
   });
@@ -106,6 +110,19 @@ describe("signOut", () => {
     } finally {
       (window as unknown as { electronAPI?: unknown }).electronAPI = undefined;
     }
+  });
+
+  it("still clears credentials and caches when queue storage fails", async () => {
+    await offline.setOfflineQueueOwner("u1");
+    await activeWorkspace.applyWorkspaceList([workspace("ws-a", true)], "u1");
+    queryClient.setQueryData([["entries", "list"], { type: "query" }], ["A's entry"]);
+    vi.spyOn(offline.getOfflineQueue(), "adoptUnowned").mockRejectedValueOnce(new Error("Storage failed"));
+    await expect(signOut()).rejects.toThrow("Storage failed");
+    expect(clearNativeToken).toHaveBeenCalledTimes(1);
+    expect(offline.getOfflineQueueOwner()).toBeNull();
+    expect(activeWorkspace.getActiveWorkspaceId()).toBeNull();
+    expect(queryClient.getQueryData([["entries", "list"], { type: "query" }])).toBeUndefined();
+    expect(writeRunningMirror).toHaveBeenCalledWith(null);
   });
 
   it("still forgets everything when the server never heard the sign-out", async () => {

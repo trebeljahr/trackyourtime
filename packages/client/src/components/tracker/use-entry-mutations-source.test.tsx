@@ -20,7 +20,9 @@ const mutationStub = (path: string) => ({
     mutate: (input: unknown) => {
       if (path === "entries.create") created.push(input);
     },
-    mutateAsync: asyncNoop,
+    mutateAsync: async (input: unknown) => {
+      if (path === "entries.create") created.push(input);
+    },
     isPending: false,
   }),
 });

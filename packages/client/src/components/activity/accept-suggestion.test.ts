@@ -48,8 +48,9 @@ const depsWith = (
   const markAccepted = vi.fn(async () => {
     calls.push("markAccepted");
   });
-  const createManualEntry = vi.fn(() => {
+  const createManualEntry = vi.fn(async () => {
     calls.push("create");
+    return { ok: true, saved: "server" } as const;
   });
   return {
     calls,
@@ -70,7 +71,7 @@ describe("acceptSuggestion", () => {
     const deps = depsWith({ ok: true, start: T0 + 10 * 60_000, end: T0 + HOUR });
     const outcome = await acceptSuggestion({ start: T0, end: T0 + HOUR, edited: false, fields }, deps);
 
-    expect(outcome).toEqual({ ok: true, start: T0 + 10 * 60_000, end: T0 + HOUR });
+    expect(outcome).toEqual({ ok: true, start: T0 + 10 * 60_000, end: T0 + HOUR, saved: "server" });
     expect(deps.calls).toEqual(["tracked", "checkAccept", "create", "markAccepted"]);
     expect(deps.checkAccept).toHaveBeenCalledWith({
       start: T0,
@@ -129,6 +130,26 @@ describe("acceptSuggestion", () => {
     const outcome = await acceptSuggestion({ start: T0, end: T0 + HOUR, edited: false, fields }, deps);
     expect(outcome).toEqual({ ok: false, reason: "workspace-changed" });
     expect(deps.createManualEntry).not.toHaveBeenCalled();
+  });
+
+  it("does not mark a refused save accepted", async () => {
+    const deps = depsWith({ ok: true, start: T0, end: T0 + HOUR });
+    deps.createManualEntry.mockResolvedValueOnce({ ok: false, message: "Storage unavailable" });
+    expect(await acceptSuggestion({ start: T0, end: T0 + HOUR, edited: false, fields }, deps)).toEqual({ ok: false, reason: "save-failed", message: "Storage unavailable" });
+    expect(deps.markAccepted).not.toHaveBeenCalled();
+  });
+
+  it("waits for the save before marking accepted", async () => {
+    const deps = depsWith({ ok: true, start: T0, end: T0 + HOUR });
+    let complete!: (result: import("@/lib/entry-mutation-result").EntryMutationResult) => void;
+    deps.createManualEntry.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
+    const pending = acceptSuggestion({ start: T0, end: T0 + HOUR, edited: false, fields }, deps);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(deps.markAccepted).not.toHaveBeenCalled();
+    complete({ ok: true, saved: "offline" });
+    expect(await pending).toEqual({ ok: true, start: T0, end: T0 + HOUR, saved: "offline" });
+    expect(deps.markAccepted).toHaveBeenCalledTimes(1);
   });
 
   it("still reports the entry when marking it accepted fails", async () => {
