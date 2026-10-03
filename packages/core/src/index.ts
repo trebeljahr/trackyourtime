@@ -31,3 +31,5 @@ export * from "./workspace-context.js";
 export * from "./activity/index.js";
 
 export { assertEntryClientSupported } from "./api-client.js";
+
+export * from "./durable-entry.js";

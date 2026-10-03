@@ -1,3 +1,4 @@
+import { isDurableEntryOp, durableEntryPayload, freezeDurableEntry, DurableQueuedWriteError, type QueueExclusive } from "./durable-entry.js";
 import { API_LEVEL } from "@starter/shared";
 import { ApiError } from "./api-client.js";
 import { createId } from "./ids.js";
@@ -9,6 +10,8 @@ export type QueuedMutation = {
   op: string;
   payload: unknown;
   createdAt: string;
+  /** Exact first attempted input, retained unchanged across retries. */
+  submittedInput?: Record<string, unknown>;
   /**
    * The account this row was queued under.
    *
@@ -126,7 +129,7 @@ export type FlushVerdict =
  */
 // v2 protects durable manual holds from v1 readers that discarded refusals.
 // Bare arrays and v1 envelopes remain readable without losing their payloads.
-export const QUEUE_FORMAT_VERSION = 2;
+export const QUEUE_FORMAT_VERSION = 3;
 
 /**
  * Where an unreadable stored queue is copied before the queue is reset. The
@@ -153,6 +156,13 @@ export class OfflineQueueLockedError extends Error {
 }
 
 export type OfflineQueue = {
+  /** Persist first, then send under the same exclusive store ownership. */
+  submit<T>(
+    op: string,
+    payload: unknown,
+    scope: { owner: string; server: string; workspaceId: string },
+    runner: (row: QueuedMutation) => Promise<T>,
+  ): Promise<T>;
   enqueue(
     op: string,
     payload: unknown,
@@ -466,9 +476,13 @@ export const adoptUnstampedWorkspace = (
 export const createOfflineQueue = ({
   storage,
   key = "trackyourtime.offline-queue",
+  exclusive,
+  durableEntries = false,
 }: {
   storage: KeyValueStorage;
   key?: string;
+  exclusive?: QueueExclusive;
+  durableEntries?: boolean;
 }): OfflineQueue => {
   /**
    * Set when the stored queue is in a format newer than this build — a
@@ -557,7 +571,8 @@ export const createOfflineQueue = ({
   // through the read-modify-write window.
   let chain: Promise<unknown> = Promise.resolve();
   const serial = <T>(task: () => Promise<T>): Promise<T> => {
-    const run = chain.then(task, task);
+    const owned = () => exclusive ? exclusive(task) : task();
+    const run = chain.then(owned, owned);
     chain = run.then(
       () => undefined,
       () => undefined,
@@ -565,21 +580,36 @@ export const createOfflineQueue = ({
     return run;
   };
 
+  const newRow = (op: string, payload: unknown, owner?: string, server?: string, workspaceId?: string): QueuedMutation => ({
+    id: createId(), op, payload: durableEntries ? durableEntryPayload(op, payload) : payload,
+    createdAt: new Date().toISOString(), owner, server,
+    ...(workspaceId ? { workspaceId } : {}), apiLevel: API_LEVEL,
+  });
+
   return {
+    submit: (op, payload, scope, runner) => serial(async () => {
+      const rows = await read();
+      const row = newRow(op, payload, scope.owner, scope.server, scope.workspaceId);
+      rows.push(row);
+      await write(rows);
+      // Preserve account/server FIFO. Work held for another workspace may still
+      // depend on the running timer, so never leapfrog it on a guess.
+      if (rows.some((earlier) => earlier.id !== row.id && earlier.owner === row.owner && earlier.server === row.server))
+        throw new DurableQueuedWriteError(row.id);
+      const frozen = freezeDurableEntry(row);
+      rows[rows.length - 1] = frozen;
+      await write(rows);
+      try {
+        const result = await runner(frozen);
+        await write(rows.filter((item) => item.id !== row.id));
+        return result;
+      } catch (error) {
+        throw new DurableQueuedWriteError(row.id, error);
+      }
+    }),
     enqueue: (op, payload, owner, server, workspaceId) =>
       serial(async () => {
-        const mutation: QueuedMutation = {
-          id: createId(),
-          op,
-          payload,
-          createdAt: new Date().toISOString(),
-          owner,
-          server,
-          ...(workspaceId ? { workspaceId } : {}),
-          // The level of the build writing the row, so a server that turns
-          // out to be older holds it instead of half-understanding it.
-          apiLevel: API_LEVEL,
-        };
+        const mutation = newRow(op, payload, owner, server, workspaceId);
         const mutations = await read();
         mutations.push(mutation);
         await write(mutations);
@@ -710,7 +740,7 @@ export const createOfflineQueue = ({
 
         // Index loop reads dependent payloads patched after a successful start.
         for (let index = 0; index < mutations.length; index += 1) {
-          const mutation = mutations[index];
+          let mutation = mutations[index];
           if (locked || !wanted(mutation)) {
             const asHeld = manualHold(mutation);
             leave(mutation, asHeld);
@@ -726,7 +756,16 @@ export const createOfflineQueue = ({
           }
           let verdict: void | FlushVerdict;
           try {
+            if (durableEntries && mutation.submittedInput === undefined && isDurableEntryOp(mutation.op) && typeof (mutation.payload as { input?: { operationId?: unknown } })?.input?.operationId !== "string") {
+              verdict = { hold: "refused", code: "LEGACY_WRITE_OUTCOME_UNKNOWN", message: "This older saved write may already have reached the server. Check your entries before recovering it." };
+            } else {
+            if (durableEntries) {
+              mutation = freezeDurableEntry(mutation);
+              mutations[index] = mutation;
+              await write([...kept, ...mutations.slice(index)]);
+            }
             verdict = await runner(mutation);
+            }
           } catch (error) {
             const remaining = [...kept, ...mutations.slice(index)];
             if (!locked && changed) await write(remaining);

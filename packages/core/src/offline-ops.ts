@@ -141,7 +141,7 @@ export type OfflineMutation = {
     /** Queue entry id, not the entry id. */
     queueId: string;
     op: K;
-    input: OfflinePayloadMap[K];
+    input: OfflinePayloadMap[K] & { operationId?: string };
     /** Temp id of the entry this mutation invented, when it invented one. */
     tempId?: string;
     /**
@@ -185,7 +185,7 @@ export const decodeOfflineMutation = (
   const stored = readStored(mutation.payload);
   if (stored === null) return null;
 
-  const decoded = decodeOp(mutation.id, mutation.op, stored);
+  const decoded = decodeOp(mutation.id, mutation.op, mutation.submittedInput === undefined ? stored : { ...stored, input: mutation.submittedInput });
   const inWorkspace =
     mutation.workspaceId === undefined
       ? decoded

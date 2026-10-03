@@ -30,6 +30,7 @@ import type { FlushVerdict, HoldReason } from "./offline-queue.js";
  */
 export type ReplayInput<K extends OfflineOp> = OfflinePayloadMap[K] & {
   workspaceId?: string;
+  operationId?: string;
 };
 
 /** One call per queued op. The caller binds these to its own API. */

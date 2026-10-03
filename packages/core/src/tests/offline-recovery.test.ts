@@ -53,8 +53,8 @@ const mutators = (
 const envelope = (json: string): QueuedMutation[] =>
   (JSON.parse(json) as { data: QueuedMutation[] }).data;
 
-test("manual recovery writes v2 so an older v1 reader locks the queue", async () => {
-  assert.equal(QUEUE_FORMAT_VERSION, 2);
+test("durable queue writes v3 so pre-receipt readers lock the queue", async () => {
+  assert.equal(QUEUE_FORMAT_VERSION, 3);
   const storage = memoryStorage();
   const queue = createOfflineQueue({ storage });
   await queue.enqueue(
