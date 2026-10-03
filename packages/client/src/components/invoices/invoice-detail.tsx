@@ -55,7 +55,7 @@ export function InvoiceDetail({
   onClose,
   onDeleted,
   onSelect,
-}: InvoiceDetailProps): React.JSX.Element {
+}: InvoiceDetailProps): React.JSX.Element | null {
   const { setStatus, removeInvoice, downloadPdf, isBusy } =
     useInvoiceMutations();
   const t = useT("reports");
@@ -104,6 +104,9 @@ export function InvoiceDetail({
       setDownloading(false);
     }
   };
+
+  // Cached data from the previous workspace has no authority in this view.
+  if (invoice.workspaceId !== activeId) return null;
 
   if (invoice.deletionPending)
     return (

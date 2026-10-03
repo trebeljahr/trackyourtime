@@ -27,10 +27,17 @@ const api = vi.hoisted(() => ({
     server: "https://synthetic.example.test",
   },
 }));
-vi.mock("@/lib/entry-mutation-result", () => ({
-  entryMutationScope: () => ({ ...api.scope }),
-  sameEntryMutationScope: (scope: typeof api.scope) =>
-    JSON.stringify(scope) === JSON.stringify(api.scope),
+// Keep the real shared scope helper; change its runtime identity sources.
+vi.mock("@/lib/active-workspace", () => ({
+  getActiveWorkspaceId: () => api.scope.workspaceId,
+  getKnownWorkspacesOwner: () => api.scope.owner,
+}));
+vi.mock("@/lib/offline", () => ({
+  getOfflineQueueOwner: () => api.scope.owner,
+  getOfflineQueueStampOwner: () => api.scope.owner,
+}));
+vi.mock("@/lib/api-origin", () => ({
+  getAbsoluteApiOrigin: () => api.scope.server,
 }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -244,6 +251,60 @@ describe("invoice follow-through controls", () => {
     expect(api.success).not.toHaveBeenCalled();
     expect(screen.getByTestId("invoice-payment-amount")).toHaveValue("25");
   });
+  it("refuses actions before rerender and hides a stale invoice after a workspace remount", () => {
+    const onSelect = vi.fn();
+    const view = render(
+      <InvoiceFollowThrough
+        invoice={invoice}
+        onSelect={onSelect}
+        scopeKey="old"
+      />,
+    );
+    fireEvent.change(screen.getByTestId("invoice-payment-amount"), {
+      target: { value: "25" },
+    });
+    fireEvent.change(screen.getByLabelText("Reminder recipient"), {
+      target: { value: "synthetic@example.test" },
+    });
+    api.scope.workspaceId = "different-workspace";
+    fireEvent.click(screen.getByTestId("invoice-record-payment"));
+    fireEvent.click(screen.getByRole("button", { name: "Preview reminder" }));
+    expect(api.pay).not.toHaveBeenCalled();
+    expect(api.preview).not.toHaveBeenCalled();
+
+    view.rerender(
+      <InvoiceFollowThrough
+        invoice={invoice}
+        onSelect={onSelect}
+        scopeKey="new"
+      />,
+    );
+    expect(
+      screen.queryByTestId("invoice-follow-through"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("invoice-record-payment"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Preview reminder" }),
+    ).not.toBeInTheDocument();
+    expect(api.credit).not.toHaveBeenCalled();
+    expect(api.reminders).not.toHaveBeenCalled();
+
+    view.rerender(
+      <InvoiceFollowThrough
+        invoice={{
+          ...invoice,
+          id: "current-invoice",
+          workspaceId: api.scope.workspaceId,
+        }}
+        onSelect={onSelect}
+        scopeKey="new"
+      />,
+    );
+    expect(screen.getByTestId("invoice-payment-amount")).toHaveValue("");
+    expect(screen.getByLabelText("Reminder recipient")).toHaveValue("");
+  });
   it("late payment responses cannot clear the next invoice's draft or invalidate its cache", async () => {
     let resolve!: (value: Invoice) => void;
     api.pay.mockImplementationOnce(
@@ -303,6 +364,11 @@ describe("invoice follow-through controls", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Credit and create replacement" }),
     );
+    api.scope = {
+      workspaceId: "different-workspace",
+      owner: "different-owner",
+      server: "https://other.example.test",
+    };
     view.rerender(
       <InvoiceFollowThrough
         invoice={invoice}
@@ -328,7 +394,11 @@ describe("invoice follow-through controls", () => {
       });
     });
     expect(onSelect).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Correction reason")).toHaveValue("");
+    expect(
+      screen.queryByLabelText("Correction reason"),
+    ).not.toBeInTheDocument();
+    expect(api.invalidate).not.toHaveBeenCalled();
+    expect(api.success).not.toHaveBeenCalled();
   });
   it("late preview responses cannot populate another invoice or scope", async () => {
     let resolve!: (value: {
@@ -353,6 +423,7 @@ describe("invoice follow-through controls", () => {
       target: { value: "old@example.test" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Preview reminder" }));
+    api.scope.workspaceId = "different-workspace";
     view.rerender(
       <InvoiceFollowThrough
         invoice={invoice}
@@ -366,7 +437,9 @@ describe("invoice follow-through controls", () => {
     expect(
       screen.queryByTestId("invoice-reminder-preview"),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Reminder recipient")).toHaveValue("");
+    expect(
+      screen.queryByLabelText("Reminder recipient"),
+    ).not.toBeInTheDocument();
   });
   it("requires correction reason and explicit confirmation before full credit", async () => {
     api.credit.mockResolvedValue(invoice);

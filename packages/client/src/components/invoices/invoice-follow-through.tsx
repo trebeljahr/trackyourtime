@@ -24,11 +24,14 @@ type FollowThroughProps = {
 /** A scope/selection change discards drafts and pending-response authority together. */
 export function InvoiceFollowThrough(
   props: FollowThroughProps,
-): React.JSX.Element {
+): React.JSX.Element | null {
+  const scope = entryMutationScope();
+  if (props.invoice.workspaceId !== scope.workspaceId) return null;
   return (
     <InvoiceFollowThroughBody
       key={JSON.stringify([
         props.scopeKey,
+        scope,
         props.invoice.workspaceId,
         props.invoice.id,
       ])}
@@ -80,7 +83,9 @@ function InvoiceFollowThroughBody({
     };
   }, []);
   const isCurrent = (): boolean =>
-    mounted.current && sameEntryMutationScope(operationScope);
+    mounted.current &&
+    invoice.workspaceId === operationScope.workspaceId &&
+    sameEntryMutationScope(operationScope);
   // Keep the same request id after a lost response. Successful writes clear the key.
   const requests = React.useRef(new Map<string, string>());
   const requestId = (key: string): string => {
