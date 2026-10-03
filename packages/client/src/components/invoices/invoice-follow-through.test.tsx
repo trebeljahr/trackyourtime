@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -18,6 +19,8 @@ const api = vi.hoisted(() => ({
   preview: vi.fn(),
   invalidate: vi.fn(),
   pdf: vi.fn(),
+  success: vi.fn(),
+  error: vi.fn(),
 }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -37,7 +40,7 @@ vi.mock("@/lib/trpc", () => ({
 }));
 vi.mock("@/hooks/use-sync", () => ({ ORIGIN_ID: "test" }));
 vi.mock("@/components/ui/sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: api.success, error: api.error },
 }));
 vi.mock("@/lib/download", () => ({ downloadBase64: vi.fn() }));
 const invoice: Invoice = {
@@ -133,6 +136,36 @@ describe("invoice follow-through controls", () => {
       screen.queryByRole("button", { name: "Issue full credit" }),
     ).not.toBeInTheDocument();
   });
+  it("displays the entered payment date without a viewer-timezone conversion", () => {
+    render(
+      <InvoiceFollowThrough
+        invoice={{
+          ...invoice,
+          timezone: "America/Los_Angeles",
+          followThrough: {
+            payments: [
+              {
+                requestId: "p",
+                kind: "payment",
+                amountMinor: 100,
+                at: "2026-11-01T00:00:00.000Z",
+                recordedAt: "2026-11-01T09:30:00.000Z",
+                by: "owner",
+                note: "DST date",
+              },
+            ],
+          },
+        }}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("invoice-follow-through")).toHaveTextContent(
+      "2026-11-01",
+    );
+    expect(screen.getByTestId("invoice-follow-through")).not.toHaveTextContent(
+      "2026-10-31",
+    );
+  });
   it("reuses the payment request id when retrying a lost response", async () => {
     api.pay
       .mockRejectedValueOnce(new Error("lost response"))
@@ -150,6 +183,150 @@ describe("invoice follow-through controls", () => {
     expect(api.pay.mock.calls[0]?.[0].requestId).toBe(
       api.pay.mock.calls[1]?.[0].requestId,
     );
+  });
+  it("reports a confirmed payment truthfully when refreshing the invoice fails", async () => {
+    api.pay.mockResolvedValueOnce(invoice);
+    api.invalidate.mockRejectedValueOnce(new Error("refresh unavailable"));
+    render(<InvoiceFollowThrough invoice={invoice} onSelect={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("invoice-payment-amount"), {
+      target: { value: "25" },
+    });
+    fireEvent.click(screen.getByTestId("invoice-record-payment"));
+    await waitFor(() =>
+      expect(api.error).toHaveBeenCalledWith(
+        expect.stringContaining("The change was saved"),
+      ),
+    );
+    expect(api.success).toHaveBeenCalledWith("Invoice updated");
+    expect(api.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("Could not save"),
+    );
+    expect(screen.getByTestId("invoice-payment-amount")).toHaveValue("");
+    expect(api.pay).toHaveBeenCalledTimes(1);
+  });
+  it("late payment responses cannot clear the next invoice's draft or invalidate its cache", async () => {
+    let resolve!: (value: Invoice) => void;
+    api.pay.mockImplementationOnce(
+      () =>
+        new Promise<Invoice>((done) => {
+          resolve = done;
+        }),
+    );
+    const view = render(
+      <InvoiceFollowThrough
+        invoice={invoice}
+        onSelect={vi.fn()}
+        scopeKey="account-a"
+      />,
+    );
+    fireEvent.change(screen.getByTestId("invoice-payment-amount"), {
+      target: { value: "25" },
+    });
+    fireEvent.click(screen.getByTestId("invoice-record-payment"));
+    view.rerender(
+      <InvoiceFollowThrough
+        invoice={{ ...invoice, id: "next-invoice" }}
+        onSelect={vi.fn()}
+        scopeKey="account-b"
+      />,
+    );
+    fireEvent.change(screen.getByTestId("invoice-payment-amount"), {
+      target: { value: "73" },
+    });
+    await act(async () => {
+      resolve(invoice);
+    });
+    expect(screen.getByTestId("invoice-payment-amount")).toHaveValue("73");
+    expect(api.invalidate).not.toHaveBeenCalled();
+    expect(api.success).not.toHaveBeenCalled();
+  });
+  it("late correction responses cannot navigate after an account/server/workspace switch", async () => {
+    let resolve!: (value: Invoice) => void;
+    api.credit.mockImplementationOnce(
+      () =>
+        new Promise<Invoice>((done) => {
+          resolve = done;
+        }),
+    );
+    const onSelect = vi.fn();
+    const view = render(
+      <InvoiceFollowThrough
+        invoice={invoice}
+        onSelect={onSelect}
+        scopeKey="server-a/account-a/workspace-a"
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Correction reason"), {
+      target: { value: "Correction" },
+    });
+    fireEvent.click(screen.getByLabelText(/This issues a full credit/));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Credit and create replacement" }),
+    );
+    view.rerender(
+      <InvoiceFollowThrough
+        invoice={invoice}
+        onSelect={onSelect}
+        scopeKey="server-b/account-b/workspace-b"
+      />,
+    );
+    await act(async () => {
+      resolve({
+        ...invoice,
+        followThrough: {
+          credit: {
+            requestId: "request",
+            number: "CN-2026-001",
+            originalNumber: "2026-001",
+            reason: "Correction",
+            at: "2026-10-03",
+            by: "owner",
+            snapshot: invoice,
+            replacementId: "old-replacement",
+          },
+        },
+      });
+    });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Correction reason")).toHaveValue("");
+  });
+  it("late preview responses cannot populate another invoice or scope", async () => {
+    let resolve!: (value: {
+      to: string;
+      subject: string;
+      text: string;
+    }) => void;
+    api.preview.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const view = render(
+      <InvoiceFollowThrough
+        invoice={invoice}
+        onSelect={vi.fn()}
+        scopeKey="a"
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Reminder recipient"), {
+      target: { value: "old@example.test" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview reminder" }));
+    view.rerender(
+      <InvoiceFollowThrough
+        invoice={invoice}
+        onSelect={vi.fn()}
+        scopeKey="b"
+      />,
+    );
+    await act(async () => {
+      resolve({ to: "old@example.test", subject: "Old", text: "Old invoice" });
+    });
+    expect(
+      screen.queryByTestId("invoice-reminder-preview"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Reminder recipient")).toHaveValue("");
   });
   it("requires correction reason and explicit confirmation before full credit", async () => {
     api.credit.mockResolvedValue(invoice);

@@ -197,6 +197,7 @@ export const reports: Translation<typeof source> = {
   },
 
   followThrough: {
+    refreshFailed: "Die Änderung wurde gespeichert, aber die Rechnung konnte nicht aktualisiert werden. Lade sie erneut, um den aktuellen Saldo zu sehen.",
     balanceUnavailable: "Der Saldo dieser Rechnung kann nicht sicher berechnet werden. Zahlungen, Stornierungen und Erinnerungen sind nicht verfügbar.",
     balanceUnavailableShort: "Saldo nicht verfügbar",
     deletionPending: "Das Löschen wurde unterbrochen. Dieser Entwurf ist gesperrt. Versuche es erneut, um verbleibende Zeiten freizugeben und das Löschen abzuschließen.",

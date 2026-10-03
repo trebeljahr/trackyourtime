@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useLocale } from "@/i18n/locale-store";
 import { useT } from "@/i18n/use-t";
+import { useAuth } from "@/hooks/use-auth";
+import { useActiveWorkspace } from "@/components/workspace-switcher";
+import {
+  subscribeApiOrigin,
+  getApiOriginSnapshot,
+  getServerApiOriginSnapshot,
+} from "@/lib/api-origin";
 import { useServerSupports } from "@/lib/server-level";
 import { EinvoicePanel } from "./einvoice-panel";
 import { InvoiceEditForm } from "./invoice-edit-form";
@@ -52,6 +59,18 @@ export function InvoiceDetail({
   const { setStatus, removeInvoice, downloadPdf, isBusy } =
     useInvoiceMutations();
   const t = useT("reports");
+  const { user } = useAuth();
+  const { activeId } = useActiveWorkspace();
+  const apiOrigin = React.useSyncExternalStore(
+    subscribeApiOrigin,
+    getApiOriginSnapshot,
+    getServerApiOriginSnapshot,
+  );
+  const scopeKey = JSON.stringify([
+    apiOrigin.choice?.origin ?? "default",
+    user?.id,
+    activeId,
+  ]);
   const locale = useLocale();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
@@ -231,7 +250,8 @@ export function InvoiceDetail({
       <EinvoicePanel invoice={invoice} />
       {followThrough ? (
         <InvoiceFollowThrough
-          key={invoice.id}
+          key={JSON.stringify([scopeKey, invoice.id])}
+          scopeKey={scopeKey}
           invoice={invoice}
           onSelect={onSelect}
         />

@@ -222,6 +222,7 @@ export const reports = {
   },
 
   followThrough: {
+    refreshFailed: "The change was saved, but the invoice could not be refreshed. Reload to see the latest balance.",
     balanceUnavailable: "This invoice’s balance cannot be calculated safely. Payments, credits and reminders are unavailable.",
     balanceUnavailableShort: "Balance unavailable",
     deletionPending: "Deletion was interrupted. This draft is locked. Retry to release any remaining time and finish deleting it.",

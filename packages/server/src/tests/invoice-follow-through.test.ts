@@ -115,6 +115,39 @@ describe("invoice follow-through arithmetic", () => {
       ),
     );
   });
+  it("payment dates stay calendar dates across Los Angeles midnight and both DST changes", () => {
+    const invoice = { ...readyInvoice(), timezone: "America/Los_Angeles" };
+    for (const instant of [
+      "2026-03-08T09:30:00Z",
+      "2026-03-08T10:30:00Z",
+      "2026-03-09T06:30:00Z",
+    ]) {
+      const result = appendInvoicePayment(
+        invoice,
+        { ...command("1"), at: "2026-03-08T00:00:00.000Z" },
+        "owner",
+        new Date(instant),
+      );
+      assert.equal(result.payments?.[0]?.at.slice(0, 10), "2026-03-08");
+      assert.throws(() =>
+        appendInvoicePayment(
+          invoice,
+          { ...command("1"), at: "2026-03-09T00:00:00.000Z" },
+          "owner",
+          new Date(instant),
+        ),
+      );
+    }
+    for (const instant of ["2026-11-01T08:30:00Z", "2026-11-01T09:30:00Z"]) {
+      const result = appendInvoicePayment(
+        invoice,
+        { ...command("1"), at: "2026-11-01T00:00:00.000Z" },
+        "owner",
+        new Date(instant),
+      );
+      assert.equal(result.payments?.[0]?.at.slice(0, 10), "2026-11-01");
+    }
+  });
   it("keeps partial payments exact and refuses changed request ids, overpayment and repeated reversals", () => {
     const invoice = { ...readyInvoice(), total: 1.0 };
     const first = command("0.29");

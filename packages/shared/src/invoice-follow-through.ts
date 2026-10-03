@@ -6,6 +6,7 @@ export type InvoicePayment = {
   kind: "payment" | "reversal" | "refund";
   /** Integer invoice units from currencyScale; never floating point arithmetic. */
   amountMinor: number;
+  /** User-entered calendar date, encoded at UTC midnight; interpreted in the invoice timezone, never shifted for display. */
   at: string;
   recordedAt: string;
   by: string;

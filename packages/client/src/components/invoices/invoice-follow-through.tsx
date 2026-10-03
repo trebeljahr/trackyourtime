@@ -11,13 +11,32 @@ import { downloadBase64 } from "@/lib/download";
 import { ORIGIN_ID } from "@/hooks/use-sync";
 import { toast } from "@/components/ui/sonner";
 
-export function InvoiceFollowThrough({
-  invoice,
-  onSelect,
-}: {
+type FollowThroughProps = {
   invoice: Invoice;
   onSelect: (id: string) => void;
-}): React.JSX.Element {
+  scopeKey?: string;
+};
+
+/** A scope/selection change discards drafts and pending-response authority together. */
+export function InvoiceFollowThrough(
+  props: FollowThroughProps,
+): React.JSX.Element {
+  return (
+    <InvoiceFollowThroughBody
+      key={JSON.stringify([
+        props.scopeKey,
+        props.invoice.workspaceId,
+        props.invoice.id,
+      ])}
+      {...props}
+    />
+  );
+}
+function InvoiceFollowThroughBody({
+  invoice,
+  onSelect,
+  scopeKey,
+}: FollowThroughProps): React.JSX.Element {
   const t = useT("reports");
   const f = useFormat();
   const utils = trpc.useUtils();
@@ -47,6 +66,15 @@ export function InvoiceFollowThrough({
   } | null>(null);
   const [busy, setBusy] = React.useState(false);
   const inFlight = React.useRef(false);
+  const previewGeneration = React.useRef(0);
+  const mounted = React.useRef(true);
+  React.useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const isCurrent = (): boolean => mounted.current;
   // Keep the same request id after a lost response. Successful writes clear the key.
   const requests = React.useRef(new Map<string, string>());
   const requestId = (key: string): string => {
@@ -59,28 +87,49 @@ export function InvoiceFollowThrough({
   const run = async (
     action: () => Promise<unknown>,
     key?: string,
+    write = true,
   ): Promise<void> => {
-    if (inFlight.current) return;
+    if (inFlight.current || !isCurrent()) return;
     inFlight.current = true;
     setBusy(true);
     try {
       await action();
+      if (!isCurrent()) return;
       if (key) requests.current.delete(key);
-      await utils.invoices.invalidate();
-      toast.success(t("followThrough.saved"));
+      if (write) {
+        // The server confirmed this write. A cache refresh cannot undo it.
+        toast.success(t("followThrough.saved"));
+        try {
+          await utils.invoices.invalidate();
+        } catch {
+          if (isCurrent()) toast.error(t("followThrough.refreshFailed"));
+        }
+      }
     } catch {
-      toast.error(t("followThrough.error"));
+      if (isCurrent()) toast.error(t("followThrough.error"));
     } finally {
-      inFlight.current = false;
-      setBusy(false);
+      if (isCurrent()) {
+        inFlight.current = false;
+        setBusy(false);
+      }
     }
   };
+
   const record = (
     kind: "payment" | "refund" | "reversal",
     value = amount,
     reverses?: string,
   ): void => {
-    const key = JSON.stringify({ kind, value, at, note, reverses });
+    const key = JSON.stringify({
+      scopeKey,
+      workspaceId: invoice.workspaceId,
+      invoiceId: invoice.id,
+      kind,
+      value,
+      at,
+      note,
+      reverses,
+    });
     void run(async () => {
       await pay.mutateAsync({
         id: invoice.id,
@@ -92,11 +141,17 @@ export function InvoiceFollowThrough({
         ...(reverses ? { reverses } : {}),
         originId: ORIGIN_ID,
       });
-      setAmount("");
+      if (isCurrent()) setAmount("");
     }, key);
   };
   const issueCredit = (replacement: boolean): void => {
-    const key = JSON.stringify({ reason, replacement });
+    const key = JSON.stringify({
+      scopeKey,
+      workspaceId: invoice.workspaceId,
+      invoiceId: invoice.id,
+      reason,
+      replacement,
+    });
     void run(async () => {
       const result = await credit.mutateAsync({
         id: invoice.id,
@@ -105,7 +160,7 @@ export function InvoiceFollowThrough({
         replacement,
         originId: ORIGIN_ID,
       });
-      if (result.followThrough?.credit?.replacementId)
+      if (isCurrent() && result.followThrough?.credit?.replacementId)
         onSelect(result.followThrough.credit.replacementId);
     }, key);
   };
@@ -277,12 +332,17 @@ export function InvoiceFollowThrough({
             variant="outline"
             disabled={busy}
             onClick={() =>
-              void run(async () => {
-                const pdf = await utils.invoices.exportCreditPdf.fetch({
-                  id: invoice.id,
-                });
-                downloadBase64(pdf.filename, pdf.base64, pdf.mimeType);
-              })
+              void run(
+                async () => {
+                  const pdf = await utils.invoices.exportCreditPdf.fetch({
+                    id: invoice.id,
+                  });
+                  if (isCurrent())
+                    downloadBase64(pdf.filename, pdf.base64, pdf.mimeType);
+                },
+                undefined,
+                false,
+              )
             }
           >
             {t("followThrough.downloadCredit")}
@@ -364,6 +424,7 @@ export function InvoiceFollowThrough({
               type="email"
               value={recipient}
               onChange={(e) => {
+                previewGeneration.current++;
                 setRecipient(e.target.value);
                 setPreview(null);
               }}
@@ -374,6 +435,7 @@ export function InvoiceFollowThrough({
             <Input
               value={timezone}
               onChange={(e) => {
+                previewGeneration.current++;
                 setTimezone(e.target.value);
                 setPreview(null);
               }}
@@ -392,15 +454,20 @@ export function InvoiceFollowThrough({
             variant="outline"
             disabled={busy || !recipient}
             onClick={() =>
-              void run(async () =>
-                setPreview(
-                  await utils.invoices.reminderPreview.fetch({
+              void run(
+                async () => {
+                  const generation = previewGeneration.current;
+                  const result = await utils.invoices.reminderPreview.fetch({
                     id: invoice.id,
                     enabled,
                     recipient,
                     timezone,
-                  }),
-                ),
+                  });
+                  if (isCurrent() && generation === previewGeneration.current)
+                    setPreview(result);
+                },
+                undefined,
+                false,
               )
             }
           >
