@@ -72,6 +72,8 @@ export const tracker: Translation<typeof source> = {
   manualDialog: {
     title: "Zeiteintrag hinzufügen",
     description: "Trag Arbeitszeit nach, die du nicht mit dem Timer erfasst hast.",
+    endDateHint: "Wähle bei Arbeit nach Mitternacht den nächsten oder einen späteren Tag.",
+    invalidEndDate: "Das Ende muss nach dem Beginn liegen. Wähle ein späteres Datum oder eine spätere Uhrzeit.",
   },
   entryFields: {
     clientNeedsUpdate: "Server aktualisieren, um Kunden unabhängig zu wählen.",

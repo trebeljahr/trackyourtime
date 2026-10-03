@@ -78,6 +78,8 @@ export const tracker = {
   manualDialog: {
     title: "Add time entry",
     description: "Log a block of work that was not timed.",
+    endDateHint: "For work that passed midnight, choose the next day or a later date.",
+    invalidEndDate: "The end must be after the start. Choose a later date or time.",
   },
   entryFields: {
     clientNeedsUpdate: "Update the server to choose clients independently.",

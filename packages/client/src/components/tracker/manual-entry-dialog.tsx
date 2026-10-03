@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { dayKeyInZone, rollEndAfterStart, withDayInZone } from "@starter/shared";
+import { addDaysToKey, dayKeyInZone, withDayInZone } from "@starter/shared";
 import {
   defaultManualRange,
   deviceTimeZone,
@@ -23,6 +23,7 @@ import { DurationInput } from "@/components/duration-input";
 import { EntryFieldsEditor } from "@/components/entry-fields/entry-fields-editor";
 import { useEntryFields } from "@/components/entry-fields/use-entry-fields";
 import { TimeField } from "@/components/tracker/time-field";
+import { movedEndDay, movedStartDay } from "@/components/tracker/use-entry-editor";
 import type {
   EntryMutations,
   ManualEntryArgs,
@@ -30,10 +31,10 @@ import type {
 import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 
-const clampEnd = (start: string, end: string): string =>
-  Date.parse(end) > Date.parse(start)
-    ? end
-    : new Date(Date.parse(start) + 60_000).toISOString();
+const isValidDayKey = (value: string): boolean =>
+  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(`${value}T00:00:00.000Z`)) &&
+  dayKeyInZone(Date.parse(`${value}T00:00:00.000Z`), "UTC") === value;
 
 /** What the tracker bar hands over when the dialog opens. */
 export type ManualEntrySeed = {
@@ -92,10 +93,16 @@ export function ManualEntryDialog({
   );
 
   const [range, setRange] = React.useState(defaultManualRange);
+  const [startDateValid, setStartDateValid] = React.useState(true);
+  const [endDateValid, setEndDateValid] = React.useState(true);
   const [wasOpen, setWasOpen] = React.useState(false);
   if (wasOpen !== open) {
     setWasOpen(open);
-    if (open) setRange(seedRange ?? defaultManualRange());
+    if (open) {
+      setRange(seedRange ?? defaultManualRange());
+      setStartDateValid(true);
+      setEndDateValid(true);
+    }
   }
 
   const seconds = Math.max(
@@ -104,17 +111,19 @@ export function ManualEntryDialog({
   );
 
   const add = React.useCallback((): void => {
-    // Roll a midnight-crossing end forward rather than clamping it: 23:30 to
-    // 00:30 is an hour of work, and clamping would throw that away.
+    if (!startDateValid || !endDateValid || seconds <= 0) return;
     const args: ManualEntryArgs = {
       ...fields,
       start: range.start,
-      end: rollEndAfterStart(range.start, range.end),
+      end: range.end,
     };
     if (onAdd !== undefined) onAdd(args);
     else mutations.createManualEntry(args);
     onOpenChange(false);
-  }, [fields, mutations, onAdd, onOpenChange, range]);
+  }, [endDateValid, fields, mutations, onAdd, onOpenChange, range, seconds, startDateValid]);
+
+  const startDay = dayKeyInZone(Date.parse(range.start), zone);
+  const endDay = dayKeyInZone(Date.parse(range.end), zone);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -135,29 +144,64 @@ export function ManualEntryDialog({
           />
 
           <div className="space-y-2">
-            <Label htmlFor="manual-entry-date">{tc("fields.date")}</Label>
+            <Label htmlFor="manual-entry-date">{t("fields.startDate")}</Label>
             <Input
               id="manual-entry-date"
               type="date"
               value={dayKeyInZone(Date.parse(range.start), zone)}
               onChange={(event) => {
+                const day = event.target.value;
+                if (!isValidDayKey(day)) {
+                  setStartDateValid(false);
+                  return;
+                }
+                setStartDateValid(true);
+                setEndDateValid(true);
                 // Moving the date carries the end with it, so the block keeps
                 // its length instead of silently stretching.
-                setRange((current) => {
-                  const start = withDayInZone(
-                    current.start,
-                    event.target.value,
-                    zone
-                  );
-                  const delta = Date.parse(start) - Date.parse(current.start);
-                  return {
-                    start,
-                    end: new Date(Date.parse(current.end) + delta).toISOString(),
-                  };
-                });
+                setRange((current) => movedStartDay(current, day, zone));
               }}
               data-testid="manual-entry-date"
+              aria-invalid={!startDateValid || undefined}
+              required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="manual-entry-end-date">{t("fields.endDate")}</Label>
+            <Input
+              id="manual-entry-end-date"
+              type="date"
+              value={endDay}
+              min={startDay}
+              onChange={(event) => {
+                const day = event.target.value;
+                if (!isValidDayKey(day) || day < startDay) {
+                  setEndDateValid(false);
+                  return;
+                }
+                const next = movedEndDay(range, day, zone);
+                if (Date.parse(next.end) <= Date.parse(range.start)) {
+                  setEndDateValid(false);
+                  return;
+                }
+                setEndDateValid(true);
+                setRange(next);
+              }}
+              data-testid="manual-entry-end-date"
+              aria-invalid={!endDateValid || undefined}
+              aria-describedby="manual-entry-end-date-hint"
+              required
+            />
+            <p
+              className="text-xs text-muted-foreground"
+              id="manual-entry-end-date-hint"
+              role={endDateValid ? undefined : "alert"}
+            >
+              {endDateValid
+                ? t("manualDialog.endDateHint")
+                : t("manualDialog.invalidEndDate")}
+            </p>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
@@ -165,30 +209,70 @@ export function ManualEntryDialog({
               <Label>{tc("fields.start")}</Label>
               <TimeField
                 value={range.start}
+                timeZone={zone}
                 timeFormat={format.timeFormat}
                 aria-label={t("fields.startTime")}
                 testId="manual-entry-start"
-                onCommit={(iso) =>
-                  setRange((current) => ({
-                    start: iso,
-                    end: clampEnd(iso, current.end),
-                  }))
-                }
+                onCommit={(iso) => {
+                  setEndDateValid(true);
+                  setRange((current) => {
+                    let end = current.end;
+                    const currentStartDay = dayKeyInZone(
+                      Date.parse(current.start),
+                      zone
+                    );
+                    const currentEndDay = dayKeyInZone(
+                      Date.parse(current.end),
+                      zone
+                    );
+                    if (
+                      Date.parse(end) <= Date.parse(iso) &&
+                      currentEndDay === currentStartDay
+                    ) {
+                      end = withDayInZone(
+                        end,
+                        addDaysToKey(currentStartDay, 1),
+                        zone
+                      );
+                    }
+                    return { start: iso, end };
+                  });
+                }}
               />
             </div>
             <div className="space-y-2">
               <Label>{tc("fields.end")}</Label>
               <TimeField
                 value={range.end}
+                timeZone={zone}
                 timeFormat={format.timeFormat}
                 aria-label={t("fields.endTime")}
                 testId="manual-entry-end"
-                onCommit={(iso) =>
-                  setRange((current) => ({
-                    start: current.start,
-                    end: clampEnd(current.start, iso),
-                  }))
-                }
+                onCommit={(iso) => {
+                  setEndDateValid(true);
+                  setRange((current) => {
+                    let end = iso;
+                    const currentStartDay = dayKeyInZone(
+                      Date.parse(current.start),
+                      zone
+                    );
+                    const currentEndDay = dayKeyInZone(
+                      Date.parse(current.end),
+                      zone
+                    );
+                    if (
+                      Date.parse(end) <= Date.parse(current.start) &&
+                      currentEndDay === currentStartDay
+                    ) {
+                      end = withDayInZone(
+                        end,
+                        addDaysToKey(currentStartDay, 1),
+                        zone
+                      );
+                    }
+                    return { start: current.start, end };
+                  });
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -199,14 +283,15 @@ export function ManualEntryDialog({
                 aria-label={tc("fields.duration")}
                 testId="manual-entry-duration"
                 className="w-28"
-                onCommit={(next) =>
+                onCommit={(next) => {
+                  setEndDateValid(true);
                   setRange((current) => ({
                     start: current.start,
                     end: new Date(
                       Date.parse(current.start) + Math.max(60, next) * 1000
                     ).toISOString(),
-                  }))
-                }
+                  }));
+                }}
               />
             </div>
           </div>
@@ -221,7 +306,12 @@ export function ManualEntryDialog({
           >
             {tc("actions.cancel")}
           </Button>
-          <Button type="button" onClick={add} data-testid="manual-entry-add">
+          <Button
+            type="button"
+            onClick={add}
+            disabled={!startDateValid || !endDateValid || seconds <= 0}
+            data-testid="manual-entry-add"
+          >
             {tc("actions.add")}
           </Button>
         </DialogFooter>
