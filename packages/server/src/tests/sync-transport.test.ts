@@ -15,6 +15,7 @@ class Connection extends EventEmitter {
   status = "wait";
   channel = "";
   failPublish = false;
+  subscribeBarrier: Promise<void> | null = null;
   constructor(readonly broker: Broker) { super(); }
   duplicate(options: Record<string, unknown>) {
     assert.equal(options.enableOfflineQueue, false, "outage events must never be queued");
@@ -25,7 +26,7 @@ class Connection extends EventEmitter {
     if (!this.broker.available) { this.disconnect(); throw new Error("Redis unavailable"); }
     this.status = "ready"; this.emit("ready");
   }
-  async subscribe(channel: string) { this.channel = channel; }
+  async subscribe(channel: string) { this.channel = channel; await this.subscribeBarrier; }
   async publish(channel: string, message: string) {
     if (this.failPublish) throw new Error("lost Redis");
     for (const client of this.broker.clients) {
@@ -42,11 +43,12 @@ async function replicas() {
   const broker = new Broker();
   const receivedA: [string, Message][] = [];
   const receivedB: [string, Message][] = [];
-  const a = new SyncTransport((user, message) => receivedA.push([user, message]), "database-a");
-  const b = new SyncTransport((user, message) => receivedB.push([user, message]), "database-a");
+  const resyncs = { a: 0, b: 0 };
+  const a = new SyncTransport((user, message) => receivedA.push([user, message]), "database-a", () => { resyncs.a += 1; });
+  const b = new SyncTransport((user, message) => receivedB.push([user, message]), "database-a", () => { resyncs.b += 1; });
   const root = broker.connection() as unknown as Redis;
   await a.start(root); await b.start(root); await tick();
-  return { broker, a, b, receivedA, receivedB };
+  return { broker, a, b, receivedA, receivedB, resyncs };
 }
 
 test("two replicas deliver once locally and remotely, preserving recipient, workspace and origin", async () => {
@@ -84,7 +86,7 @@ test("publisher failure keeps local delivery and cannot queue a stale projected 
     assert.equal(a.healthy(), false); assert.equal(receivedA.length, 1); assert.equal(receivedB.length, 0);
     a.publish("user", event); await tick(); assert.equal(receivedA.length, 2);
     broker.clients[1]!.failPublish = false;
-    await broker.clients[2]!.connect(); await tick();
+    await broker.clients[1]!.connect(); await tick();
     assert.equal(a.healthy(), true); assert.equal(receivedB.length, 0);
     a.publish("user", event); await tick(); assert.equal(receivedB.length, 1);
   } finally { a.stop(); b.stop(); }
@@ -125,4 +127,54 @@ test("Redis unavailable at startup retains local delivery and can recover", asyn
     await broker.clients[1]!.connect(); await broker.clients[2]!.connect(); await tick();
     assert.equal(transport.healthy(), true);
   } finally { transport.stop(); }
+});
+
+
+test("a publisher-only gap forces local and healthy peer snapshots without waiting for a heartbeat", async () => {
+  const { broker, a, b, receivedB, resyncs } = await replicas();
+  try {
+    broker.clients[1]!.disconnect();
+    assert.equal(a.healthy(), false);
+    assert.equal(b.healthy(), true);
+    assert.deepEqual(resyncs, { a: 1, b: 0 });
+    a.publish("user", event);
+    await broker.clients[1]!.connect(); await tick();
+    assert.equal(a.healthy(), true);
+    assert.deepEqual(receivedB, [], "missed payloads cannot be replayed after authorization changes");
+    assert.deepEqual(resyncs, { a: 2, b: 1 }, "recovery refreshes clients on both sides, including healthy peers");
+  } finally { a.stop(); b.stop(); }
+});
+
+test("publish rejection recovers through a peer resync even without a socket close event", async () => {
+  const { broker, a, b, resyncs } = await replicas();
+  try {
+    broker.clients[1]!.failPublish = true;
+    a.publish("user", event); await tick();
+    assert.equal(a.healthy(), false);
+    assert.equal(resyncs.a, 1);
+    broker.clients[1]!.failPublish = false;
+    await broker.clients[1]!.connect(); await tick();
+    assert.deepEqual(resyncs, { a: 2, b: 1 });
+  } finally { a.stop(); b.stop(); }
+});
+
+test("stale subscribe acknowledgments cannot restore health and shutdown cancels recovery", async () => {
+  const { broker, a, b, resyncs } = await replicas();
+  try {
+    const subscriber = broker.clients[2]!;
+    subscriber.disconnect();
+    let releaseOld!: () => void;
+    subscriber.subscribeBarrier = new Promise<void>((resolve) => { releaseOld = resolve; });
+    await subscriber.connect();
+    subscriber.disconnect();
+    let releaseNew!: () => void;
+    subscriber.subscribeBarrier = new Promise<void>((resolve) => { releaseNew = resolve; });
+    await subscriber.connect();
+    releaseOld(); await tick();
+    assert.equal(a.healthy(), false, "old connection acknowledgment cannot certify the new subscription");
+    a.stop();
+    releaseNew(); await tick();
+    assert.equal(a.healthy(), false);
+    assert.equal(resyncs.b, 0, "stopped transports cannot ask peers to reconnect");
+  } finally { a.stop(); b.stop(); }
 });

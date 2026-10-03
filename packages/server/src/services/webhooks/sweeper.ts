@@ -13,14 +13,14 @@ export const WEBHOOK_SWEEP_INTERVAL_MS = 10_000;
 let timer: NodeJS.Timeout | null = null;
 
 /**
- * True while a pass is in flight.
+ * The pass currently in flight, also awaited during graceful shutdown.
  *
  * The interval keeps firing while a sweep is waiting on a slow endpoint, and
  * without this guard those passes stack up: each one claims its own batch and
  * the process ends up holding far more concurrent requests than
  * `WEBHOOK_SWEEP_BATCH` implies.
  */
-let sweeping = false;
+let sweeping: Promise<void> | null = null;
 
 /**
  * Start the delivery loop.
@@ -33,10 +33,13 @@ let sweeping = false;
  * Idempotent, so a double call cannot start two loops racing for the same
  * pending rows.
  */
-export function startWebhookSweeper(): void {
-  if (env.isTest || timer) return;
+export function startWebhookSweeper({
+  isTest = env.isTest,
+  runSweep = runWebhookSweep,
+}: { isTest?: boolean; runSweep?: () => Promise<unknown> } = {}): void {
+  if (isTest || timer) return;
   timer = setInterval(() => {
-    void sweepOnce();
+    void sweepOnce(runSweep);
   }, WEBHOOK_SWEEP_INTERVAL_MS);
   timer.unref();
 }
@@ -48,21 +51,19 @@ export function startWebhookSweeper(): void {
  * kill the interval and silently stop every webhook in the deployment until
  * somebody restarts the process.
  */
-async function sweepOnce(): Promise<void> {
-  if (sweeping) return;
-  sweeping = true;
-  try {
-    await runWebhookSweep();
-  } catch {
+function sweepOnce(runSweep: () => Promise<unknown>): Promise<void> {
+  if (sweeping) return sweeping;
+  sweeping = Promise.resolve().then(runSweep).then(() => undefined).catch(() => {
     // Next tick tries again. See the doc comment.
-  } finally {
-    sweeping = false;
-  }
+  }).finally(() => { sweeping = null; });
+  return sweeping;
 }
 
-/** Stop the loop. Called from the graceful-shutdown path. */
-export function stopWebhookSweeper(): void {
-  if (!timer) return;
-  clearInterval(timer);
-  timer = null;
+/** Stop polling and wait for the already claimed pass before closing the DB. */
+export async function stopWebhookSweeper(): Promise<void> {
+  if (timer) {
+    clearInterval(timer);
+    timer = null;
+  }
+  if (sweeping) await sweeping;
 }

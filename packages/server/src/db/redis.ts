@@ -29,7 +29,10 @@ export async function connectRedis(): Promise<void> {
 
 export async function disconnectRedis(): Promise<void> {
   if (!redis) return;
-  await redis.quit();
+  const connection = redis;
   redis = null;
+  // A socket that is reconnecting cannot acknowledge QUIT. No queued writes
+  // depend on this shared connection during shutdown, so close it directly.
+  connection.disconnect();
   console.log("[redis] Disconnected from Redis");
 }

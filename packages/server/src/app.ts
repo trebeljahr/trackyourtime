@@ -22,8 +22,9 @@ import { notFoundHandler, errorHandler } from "./middleware/error-handler.js";
 import { env, getTrustedOrigins, trustsExtensionOrigins } from "./config/env.js";
 import { extensionOriginTrusted } from "./auth/extension-origins.js";
 
-let draining = false;
-export const setDraining = (): void => { draining = true; };
+import { isDraining, readiness } from "./readiness.js";
+import { syncTransport } from "./ws/runtime.js";
+export { setDraining } from "./readiness.js";
 
 /**
  * Body ceiling for an import request. {@link MAX_IMPORT_BYTES} of file, plus
@@ -204,7 +205,7 @@ export function createApp() {
 
   // ── 6. Health endpoint ─────────────────────────────────────────────
   app.get("/api/health", (req, res) => {
-    if (draining) {
+    if (isDraining()) {
       res.status(503).json({ status: "draining" });
       return;
     }
@@ -220,8 +221,13 @@ export function createApp() {
       res.setHeader("Access-Control-Allow-Origin", "*");
     }
     const origin = req.headers.origin;
-    res.json({
-      status: "ok",
+    const db = isDatabaseReady();
+    const distributed = syncTransport.healthy();
+    const health = readiness(db, !!env.REDIS_URL, distributed);
+    res.status(health.ready ? 200 : 503).json({
+      status: health.ready ? "ok" : "unavailable",
+      syncDistributed: distributed,
+      rollingReady: health.rollingReady,
       // Names the software, so "a server answered" and "a Track Your Time
       // server answered" are different results for a client validating an
       // address somebody typed.
@@ -249,7 +255,7 @@ export function createApp() {
               enabled: trustsExtensionOrigins(),
             })
           : null,
-      db: isDatabaseReady(),
+      db,
       // Where this API's web app lives. The browser extension has only an API
       // URL configured, and needs somewhere to send "Open Track Your Time" — asking
       // the server beats making the user configure a second URL that must

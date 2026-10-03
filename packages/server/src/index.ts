@@ -2,14 +2,16 @@
 import "./instrument.js";
 
 import { createServer } from "http";
-import { createApp, setDraining } from "./app.js";
+import { createApp } from "./app.js";
+import { setDraining } from "./readiness.js";
+import { closeHttpServer } from "./shutdown.js";
 import { connectToDB, disconnectFromDB } from "./db/connection.js";
 import { BootRefusedError, prepareDatabase } from "./db/prepare.js";
 import { SchemaTooNewError } from "./services/migrations/index.js";
 import { connectRedis, disconnectRedis, getRedis } from "./db/redis.js";
 import { initAuth, disconnectAuth } from "./auth/auth.js";
 import { setupWebSocket, syncTransport } from "./ws/handler.js";
-import { startWebhookSweeper } from "./services/webhooks/sweeper.js";
+import { startWebhookSweeper, stopWebhookSweeper } from "./services/webhooks/sweeper.js";
 import {
   registerBuiltInJobs,
   startScheduler,
@@ -82,9 +84,19 @@ let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
+  // Bounds the complete shutdown for both signals, including drain and cleanup.
+  const deadline = setTimeout(() => {
+    console.error("[server] Forced exit after timeout");
+    process.exit(1);
+  }, 28_000);
+  deadline.unref();
   console.log(`\n[server] ${signal} received, shutting down gracefully...`);
 
   setDraining();
+  // Stop claiming background work immediately; the current pass gets the
+  // entire drain window before HTTP, auth, and databases are closed.
+  const jobsStopped = stopScheduler();
+  const webhooksStopped = stopWebhookSweeper();
   // Give Coolify's health probe time to remove this replica from Caddy.
   await new Promise((resolve) => setTimeout(resolve, 20_000));
 
@@ -94,11 +106,10 @@ async function shutdown(signal: string): Promise<void> {
   }
 
   // Stop accepting new connections
-  const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+  const closed = closeHttpServer(server);
 
   // Let a job run in flight finish before its database goes away
-  await stopScheduler();
-  await closed;
+  await Promise.all([jobsStopped, webhooksStopped, closed]);
 
   // Disconnect from databases and auth
   await disconnectAuth();
@@ -106,20 +117,12 @@ async function shutdown(signal: string): Promise<void> {
   await disconnectRedis();
   await disconnectFromDB();
 
+  clearTimeout(deadline);
   console.log("[server] Shutdown complete");
   process.exit(0);
 }
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
-
-// Coolify/Docker stop timeout must exceed this bound (see docs/deploy.md).
-const FORCE_EXIT_MS = 35_000;
-process.on("SIGTERM", () => {
-  setTimeout(() => {
-    console.error("[server] Forced exit after timeout");
-    process.exit(1);
-  }, FORCE_EXIT_MS).unref();
-});
 
 start();

@@ -159,6 +159,8 @@ describe("over HTTP", () => {
   it("/api/health reports the handshake and keeps `version` as the commit", async () => {
     const response = await fetch(`${base}/api/health`);
     const body = (await response.json()) as Record<string, unknown>;
+    assert.equal(response.status, 503, "the isolated app has no connected database");
+    assert.equal(body.rollingReady, false);
     assert.equal(body.apiLevel, API_LEVEL);
     assert.equal(body.minClientApiLevel, MIN_CLIENT_API_LEVEL);
     assert.equal(body.commit, env.COMMIT_SHA);

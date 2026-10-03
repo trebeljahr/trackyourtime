@@ -199,14 +199,39 @@ before this change still connects wherever `/ws` is still routed.
    port 6477 for the client and `/api/health` on port 5159 for the server.
    Confirm neither app has a fixed host port or container name. The runtime
    returns 503 on the probe for 20 seconds after SIGTERM, then closes active
-   sockets and HTTP traffic. Set the container stop grace period to at least
-   40 seconds; a 10-second Docker default would kill the process before the
-   drain finishes. Verify the live Coolify stop behavior before relying on it.
-   Existing WebSocket sessions reconnect. While replicas overlap, web clients
-   refresh cached state every 30 seconds and again on reconnect because sync
-   fanout is process-local. This bounds stale web views but does not promise
-   instant cross-replica events for other clients; test each active client in
-   the rollout and add shared fanout if that latency is unacceptable.
+   sockets and stops accepting HTTP traffic. Total shutdown is capped at 28
+   seconds, including the 20-second drain, to fit a 30-second provider stop
+   deadline. A 10-second Docker default would kill the process before the drain
+   finishes. Verify the actual Coolify stop command, not only container settings.
+   Accepted HTTP requests finish before database shutdown within that deadline,
+   including requests using keep-alive connections. New WebSocket upgrades are refused once drain
+   starts, including authentication lookups that were already in flight.
+
+   All overlapping replicas must share the same MongoDB URI (apart from its
+   credentials/query options) and Redis service. Sync delivery uses a database
+   namespace and preserves each event's recipient, workspace, and origin.
+   Redis interruptions close affected WebSockets with code 1012. Once shared
+   delivery recovers, a Redis control message also reconnects healthy peers,
+   whose clients might have missed a write on the interrupted publisher.
+   Clients refetch durable state on reconnect; missed event payloads are never
+   replayed. Both overlapping revisions must support this recovery message.
+   First adoption from a process-local or older transport requires a controlled
+   reconnect and client refetch before claiming this guarantee.
+
+   `/api/health` returns 503 when MongoDB is disconnected or a configured Redis
+   sync transport is unavailable. `syncDistributed` reports the subscription
+   and publisher state; `rollingReady` additionally requires MongoDB readiness
+   and configured Redis. Redis-less self-hosting still works in single-process
+   mode and reports `rollingReady: false`. Web clients retain 30-second fallback
+   reconciliation when distributed sync is unavailable and a five-minute
+   safety refresh while healthy. Validate native and Raycast reconnects too.
+   Scheduler and webhook polling stop when drain starts. Scheduler jobs already
+   in flight can finish during drain, but an unbounded reminder scan can exceed
+   the remaining deadline. Interrupted webhook deliveries retain their durable
+   retry/lease behavior; this is not an exactly-once delivery guarantee.
+   Offline create/start replay currently has no durable operation identifier:
+   a committed write whose response is lost can be duplicated on retry. Do not
+   certify offline mutation replay as exactly-once until that protocol is added.
 
    The compose apps they replaced are kept, stopped, as
    `tracktime-{server,client}-legacy-compose` for

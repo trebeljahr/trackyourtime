@@ -150,3 +150,21 @@ test("broadcasting to a room with no sockets is a no-op", () => {
   rooms.broadcast(userRoomId("nobody"), settingsChanged());
   assert.equal(rooms.getRoomCount(), 0);
 });
+
+test("transport reset removes every room before closing sockets, including when one close fails", () => {
+  const rooms = new RoomManager();
+  const codes: number[] = [];
+  for (const user of ["first", "second"]) {
+    const socket = fakeSocket();
+    socket.close = (code) => {
+      assert.equal(rooms.roomOf(socket), undefined);
+      if (user === "first") throw new Error("socket already gone");
+      codes.push(code!);
+    };
+    rooms.join(user, socket);
+  }
+  rooms.reconnectAll();
+  assert.deepEqual(codes, [1012]);
+  assert.equal(rooms.getConnectionCount(), 0);
+  assert.equal(rooms.getRoomCount(), 0);
+});

@@ -60,6 +60,14 @@ export class RoomManager {
     }
   }
 
+  /** Lost pub/sub events need an authoritative client refetch, never replay. */
+  reconnectAll(): void {
+    for (const socket of this.socketToRoom.keys()) {
+      this.leave(socket);
+      try { socket.close(1012, "Sync transport reset"); } catch { /* Continue with other sockets. */ }
+    }
+  }
+
   /** The sockets currently in a room. */
   socketsIn(roomId: string): WebSocket[] {
     return [...(this.rooms.get(roomId) ?? [])];

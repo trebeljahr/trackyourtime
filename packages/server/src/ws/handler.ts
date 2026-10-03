@@ -2,9 +2,9 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { Server } from "http";
 import { enforceMaxEntryDuration } from "../services/runaway.js";
 import { authenticateUpgrade, probeUpgradeSession } from "./auth.js";
-import { RoomManager } from "./rooms.js";
-import { SyncTransport, syncNamespace } from "./sync-transport.js";
-import { userRoomId } from "@starter/shared";
+import { roomManager, syncTransport } from "./runtime.js";
+import { isDraining } from "../readiness.js";
+export { roomManager, syncTransport } from "./runtime.js";
 import {
   SESSION_REVOKED_CLOSE_CODE,
   SessionWatch,
@@ -33,11 +33,6 @@ type AuthedSocket = WebSocket & {
   userId?: string;
   probeSession?: SessionProbe;
 };
-
-export const roomManager = new RoomManager();
-export const syncTransport = new SyncTransport((userId, message) => {
-  roomManager.broadcast(userRoomId(userId), message);
-}, syncNamespace(env.MONGODB_URI));
 
 /** Live sockets, and the session lookup that keeps each one honest. */
 export const sessionWatch = new SessionWatch();
@@ -127,6 +122,12 @@ export function setupWebSocket(
       return;
     }
 
+    const unavailable = (): boolean => isDraining() || !server.listening || (!!env.REDIS_URL && !syncTransport.healthy());
+    const refuseUnavailable = (): void => {
+      socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+    };
+    if (unavailable()) { refuseUnavailable(); return; }
+
     // Origin validation in production
     if (env.isProduction) {
       const trusted = getTrustedOrigins();
@@ -165,7 +166,11 @@ export function setupWebSocket(
     // Authenticate. An unauthenticated socket has no room to be placed in,
     // so refuse the upgrade outright rather than holding a connection open
     // that can do nothing.
-    const authenticated = await deps.authenticate(req);
+    let authenticated: Awaited<ReturnType<typeof deps.authenticate>>;
+    try { authenticated = await deps.authenticate(req); }
+    catch { refuseUnavailable(); return; }
+    // Authentication can outlive the drain transition or a Redis disconnect.
+    if (unavailable()) { refuseUnavailable(); return; }
     if (!authenticated?.session.user?.id) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
