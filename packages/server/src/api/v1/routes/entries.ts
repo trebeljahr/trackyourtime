@@ -1,3 +1,4 @@
+import { withEntryOperation } from "../../../services/entries/operation.js";
 // Time-entry routes.
 //
 // Every handler is a thin shell: parse with the SAME zod schema the tRPC
@@ -95,7 +96,7 @@ export const entryHandlers: ApiHandlers = {
     const input = parseWith(createEntrySchema, asObject(req.body));
     // Not projected: writes are author-only, so the entry that comes back is
     // the caller's own and its rate is their own money.
-    sendData(res, await createEntry(scope, input));
+    sendData(res, await withEntryOperation(scope, "api:entries.create", input, () => createEntry(scope, input)));
   },
 
   "patch /entries/:id": async (req, res) => {
@@ -108,7 +109,7 @@ export const entryHandlers: ApiHandlers = {
       ...asObject(req.body),
       id: req.params.id,
     });
-    sendData(res, await updateEntry(scope, input));
+    sendData(res, await withEntryOperation(scope, "api:entries.update", input, () => updateEntry(scope, input)));
   },
 
   "delete /entries/:id": async (req, res) => {
@@ -133,11 +134,11 @@ export const entryHandlers: ApiHandlers = {
     // timers. See `startTimer`.
     sendData(
       res,
-      await startTimer(
+      await withEntryOperation(scope, "api:entries.start", input, () => startTimer(
         scope,
         { source: "api", ...input },
         workspaceReach(scope.workspaceId),
-      ),
+      )),
     );
   },
 
@@ -149,7 +150,7 @@ export const entryHandlers: ApiHandlers = {
     // never issued for and fires `entry.stopped` webhooks into that other
     // workspace. A timer running outside this workspace reads as no timer at
     // all — 404, never 403.
-    sendData(res, await stopTimer(scope, input, workspaceReach(scope.workspaceId)));
+    sendData(res, await withEntryOperation(scope, "api:entries.stop", input, () => stopTimer(scope, input, workspaceReach(scope.workspaceId))));
   },
 };
 

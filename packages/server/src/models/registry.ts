@@ -16,6 +16,7 @@ import "./Settings.js";
 import "./Tag.js";
 import "./Task.js";
 import "./TimeEntry.js";
+import "./EntryOperation.js";
 import "./WebhookDelivery.js";
 import "./WebhookSubscription.js";
 import "./WorkspaceMember.js";

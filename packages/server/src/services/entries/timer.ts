@@ -144,6 +144,7 @@ const timerRunningElsewhere = (): TRPCError =>
 
 /** `discard` drops an entry without keeping it; defaults to the running one. */
 export const discardTimerSchema = z.object({
+  operationId: z.uuid().optional(),
   id: z.string().min(1).optional(),
   originId: z.string().max(64).optional(),
 });

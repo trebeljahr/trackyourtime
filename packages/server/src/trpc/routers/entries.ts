@@ -1,3 +1,4 @@
+import { withEntryOperation } from "../../services/entries/operation.js";
 // The tRPC surface over the entry services.
 //
 // Every resolver here is one line: resolve the scope, call the service. The
@@ -20,6 +21,7 @@ import {
   entryListSchema,
   continueEntrySchema,
   idInputSchema,
+  entryIdInputSchema,
   entryDescriptionsSchema,
   recentEntriesSchema,
   resolveRunawaySchema,
@@ -149,17 +151,17 @@ export const entriesRouter = router({
       // of a session principal pressing Start, and it is what keeps them from
       // ending up with two running timers. `replaced` names it when it ran in
       // another workspace.
-      withReplaced(
+      withEntryOperation(scopeFromContext(ctx), "entries.start", input, async () => withReplaced(
         await startTimerDetailed(scopeFromContext(ctx), input, personReach),
         ctx.workspaceId,
-      ),
+      )),
     ),
 
   stop: workspaceProcedure
     .input(stopTimerSchema)
     .mutation(async ({ ctx, input }): Promise<TimeEntryWire> =>
       // `personReach` — see `current` above.
-      stopTimer(scopeFromContext(ctx), input, personReach),
+      withEntryOperation(scopeFromContext(ctx), "entries.stop", input, () => stopTimer(scopeFromContext(ctx), input, personReach)),
     ),
 
   resolveRunaway: workspaceProcedure
@@ -172,7 +174,7 @@ export const entriesRouter = router({
     .input(discardTimerSchema)
     .mutation(
       async ({ ctx, input }): Promise<{ success: true; id: string }> =>
-        discardTimer(scopeFromContext(ctx), input),
+        withEntryOperation(scopeFromContext(ctx), "entries.discard", input, () => discardTimer(scopeFromContext(ctx), input)),
     ),
 
   continue: workspaceProcedure
@@ -187,19 +189,19 @@ export const entriesRouter = router({
   create: workspaceProcedure
     .input(createEntrySchema)
     .mutation(async ({ ctx, input }): Promise<TimeEntryWire> =>
-      createEntry(scopeFromContext(ctx), input),
+      withEntryOperation(scopeFromContext(ctx), "entries.create", input, () => createEntry(scopeFromContext(ctx), input)),
     ),
 
   update: workspaceProcedure
     .input(updateEntrySchema)
     .mutation(async ({ ctx, input }): Promise<TimeEntryWire> =>
-      updateEntry(scopeFromContext(ctx), input),
+      withEntryOperation(scopeFromContext(ctx), "entries.update", input, () => updateEntry(scopeFromContext(ctx), input)),
     ),
 
   remove: workspaceProcedure
-    .input(idInputSchema)
+    .input(entryIdInputSchema)
     .mutation(
       async ({ ctx, input }): Promise<{ success: true; id: string }> =>
-        deleteEntry(scopeFromContext(ctx), input),
+        withEntryOperation(scopeFromContext(ctx), "entries.remove", input, () => deleteEntry(scopeFromContext(ctx), input)),
     ),
 });

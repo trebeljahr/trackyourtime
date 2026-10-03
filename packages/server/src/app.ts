@@ -1,3 +1,4 @@
+import { supportsBusinessTransactions } from "./services/business-transaction.js";
 import express, { type RequestHandler } from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -204,7 +205,7 @@ export function createApp() {
   registerApiV1Routes(app);
 
   // ── 6. Health endpoint ─────────────────────────────────────────────
-  app.get("/api/health", (req, res) => {
+  app.get("/api/health", async (req, res) => {
     if (isDraining()) {
       res.status(503).json({ status: "draining" });
       return;
@@ -228,6 +229,7 @@ export function createApp() {
       status: health.ready ? "ok" : "unavailable",
       syncDistributed: distributed,
       rollingReady: health.rollingReady,
+      capabilities: { durableEntryReplay: await supportsBusinessTransactions().catch(() => false) },
       // Names the software, so "a server answered" and "a Track Your Time
       // server answered" are different results for a client validating an
       // address somebody typed.

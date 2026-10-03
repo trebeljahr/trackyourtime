@@ -24,6 +24,7 @@ export {
  */
 export type DeletionCollection =
   | "timeEntries"
+  | "entryOperations"
   | "timesheetApprovals"
   | "timesheetPolicies"
   | "workspaceWriteFences"
@@ -87,6 +88,7 @@ export function workspaceDeletionSteps(workspaceId: string): DeletionStep[] {
   return [
     // Refuse locked time before removing the workspace's other records.
     scoped("timeEntries"),
+    scoped("entryOperations"),
     scoped("timesheetApprovals"),
     scoped("timesheetPolicies"),
     { collection: "workspaceWriteFences", filter: { _id: workspaceId } },
@@ -177,6 +179,7 @@ export function memberDepartureSteps(
 export function userScopedSteps(user: { id: string; email?: string | null }): DeletionStep[] {
   const email = (user.email ?? "").trim().toLowerCase();
   return [
+    { collection: "entryOperations", filter: { userId: user.id } },
     { collection: "apiTokens", filter: { userId: user.id } },
     { collection: "favorites", filter: { userId: user.id } },
     { collection: "userPreferences", filter: { userId: user.id } },

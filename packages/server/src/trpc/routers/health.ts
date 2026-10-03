@@ -1,3 +1,4 @@
+import { supportsBusinessTransactions } from "../../services/business-transaction.js";
 import { router, publicProcedure } from "../trpc.js";
 import { isDatabaseReady } from "../../db/connection.js";
 import { env } from "../../config/env.js";
@@ -6,10 +7,11 @@ import { resolveAuthConfig } from "../../auth/account-security.js";
 import { API_LEVEL, MIN_CLIENT_API_LEVEL } from "@starter/shared";
 
 export const healthRouter = router({
-  check: publicProcedure.query(() => {
+  check: publicProcedure.query(async () => {
     return {
       status: "ok" as const,
       db: isDatabaseReady(),
+      capabilities: { durableEntryReplay: await supportsBusinessTransactions().catch(() => false) },
       timestamp: new Date().toISOString(),
       /** The same handshake fields as `/api/health`; see app.ts. */
       release: env.RELEASE,

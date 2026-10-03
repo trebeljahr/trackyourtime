@@ -399,6 +399,9 @@ export const updateTaskSchema = z.object({
 
 // ── timer / entries ──────────────────────────────────────────────────
 
+export const entryOperationId = z.uuid().optional();
+export const entryIdInputSchema = idInputSchema.extend({ operationId: entryOperationId });
+
 export const startTimerSchema = z.object({
   description: entryDescription.optional(),
   clientId: idString.nullish(),
@@ -410,6 +413,7 @@ export const startTimerSchema = z.object({
   source: entrySourceSchema.optional(),
   timeZone: entryTimeZone,
   tagIds: entryTagIds,
+  operationId: entryOperationId,
   originId,
 });
 
@@ -418,6 +422,7 @@ export const stopTimerSchema = z.object({
   id: idString.optional(),
   /** Defaults to "now" on the server when omitted. */
   end: isoDateTimeSchema.optional(),
+  operationId: entryOperationId,
   originId,
 });
 
@@ -443,6 +448,7 @@ export const createEntrySchema = z
     source: entrySourceSchema.optional(),
     timeZone: entryTimeZone,
     tagIds: entryTagIds,
+    operationId: entryOperationId,
     originId,
   })
   .refine(endAfterStart, endAfterStartIssue);
@@ -460,6 +466,7 @@ export const updateEntrySchema = z
     end: isoDateTimeSchema.nullish(),
     /** Replaces the whole set — omit to leave the entry's tags untouched. */
     tagIds: entryTagIds,
+    operationId: entryOperationId,
     originId,
   })
   .refine(endAfterStart, endAfterStartIssue);

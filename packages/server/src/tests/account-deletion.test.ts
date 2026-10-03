@@ -443,3 +443,14 @@ test("account deletion clears solo approval metadata but preserves shared audit 
   assert.deepEqual(store.rows.timesheetPolicies?.map((row) => row.workspaceId), [TEAM]);
   assert.deepEqual(store.rows.workspaceWriteFences?.map((row) => row._id), [TEAM]);
 });
+
+test("account deletion removes retained operation results without touching another user's receipts", async () => {
+  const store = memoryRowStore({ ...seed(), entryOperations: [
+    { id: "solo", workspaceId: SOLO, userId: ALICE, result: { description: "Private" } },
+    { id: "shared", workspaceId: TEAM, userId: ALICE, result: { description: "Private" } },
+    { id: "left-before-deletion", workspaceId: "former-team", userId: ALICE, result: {} },
+    { id: "other", workspaceId: TEAM, userId: BOB, result: {} },
+  ] });
+  await deleteAccountData(store, alice);
+  assert.deepEqual(store.rows.entryOperations?.map((row) => row.id), ["other"]);
+});

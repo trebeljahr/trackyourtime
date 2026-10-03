@@ -236,9 +236,17 @@ before this change still connects wherever `/ws` is still routed.
    SMTP acceptance followed by a lost response remains ambiguous. Interrupted
    mail and webhook deliveries retain their retry behavior; this is not an
    exactly-once delivery guarantee.
-   Offline create/start replay currently has no durable operation identifier:
-   a committed write whose response is lost can be duplicated on retry. Do not
-   certify offline mutation replay as exactly-once until that protocol is added.
+   API level 12 accepts a UUID `operationId` for all six queued entry mutations.
+   A replica set or mongos is required: the receipt and business changes commit
+   together. Standalone Mongo refuses an identified operation with HTTP 412
+   `DURABLE_REPLAY_REQUIRES_REPLICA_SET` before writes; `/api/health` and
+   `health.check` expose `capabilities.durableEntryReplay`. Reusing an ID with
+   another operation or parsed payload returns HTTP 409 `OPERATION_ID_REUSED`.
+   Receipts have no TTL and survive entry deletion, so an old retry cannot
+   recreate deleted time. Account/workspace deletion removes their receipts.
+   Clients must persist the ID and fixed input before the first attempt and
+   coordinate queue ownership across tabs/processes. Legacy calls without an
+   ID remain supported but do not provide durable replay.
 
    The compose apps they replaced are kept, stopped, as
    `tracktime-{server,client}-legacy-compose` for
