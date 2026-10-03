@@ -21,6 +21,16 @@ const api = vi.hoisted(() => ({
   pdf: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
+  scope: {
+    workspaceId: "workspace",
+    owner: "owner",
+    server: "https://synthetic.example.test",
+  },
+}));
+vi.mock("@/lib/entry-mutation-result", () => ({
+  entryMutationScope: () => ({ ...api.scope }),
+  sameEntryMutationScope: (scope: typeof api.scope) =>
+    JSON.stringify(scope) === JSON.stringify(api.scope),
 }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -79,6 +89,11 @@ const invoice: Invoice = {
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  api.scope = {
+    workspaceId: "workspace",
+    owner: "owner",
+    server: "https://synthetic.example.test",
+  };
   api.invalidate.mockResolvedValue(undefined);
 });
 
@@ -203,6 +218,31 @@ describe("invoice follow-through controls", () => {
     );
     expect(screen.getByTestId("invoice-payment-amount")).toHaveValue("");
     expect(api.pay).toHaveBeenCalledTimes(1);
+  });
+  it("uses the shared scope guard before a changed identity has rerendered", async () => {
+    let resolve!: (value: Invoice) => void;
+    api.pay.mockImplementationOnce(
+      () =>
+        new Promise<Invoice>((done) => {
+          resolve = done;
+        }),
+    );
+    render(<InvoiceFollowThrough invoice={invoice} onSelect={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("invoice-payment-amount"), {
+      target: { value: "25" },
+    });
+    fireEvent.click(screen.getByTestId("invoice-record-payment"));
+    api.scope = {
+      workspaceId: "different-workspace",
+      owner: "different-owner",
+      server: "https://other.example.test",
+    };
+    await act(async () => {
+      resolve(invoice);
+    });
+    expect(api.invalidate).not.toHaveBeenCalled();
+    expect(api.success).not.toHaveBeenCalled();
+    expect(screen.getByTestId("invoice-payment-amount")).toHaveValue("25");
   });
   it("late payment responses cannot clear the next invoice's draft or invalidate its cache", async () => {
     let resolve!: (value: Invoice) => void;

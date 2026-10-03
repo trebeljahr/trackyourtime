@@ -8,6 +8,10 @@ import { useT } from "@/i18n/use-t";
 import { useFormat } from "@/i18n/use-format";
 import { trpc } from "@/lib/trpc";
 import { downloadBase64 } from "@/lib/download";
+import {
+  entryMutationScope,
+  sameEntryMutationScope,
+} from "@/lib/entry-mutation-result";
 import { ORIGIN_ID } from "@/hooks/use-sync";
 import { toast } from "@/components/ui/sonner";
 
@@ -68,13 +72,15 @@ function InvoiceFollowThroughBody({
   const inFlight = React.useRef(false);
   const previewGeneration = React.useRef(0);
   const mounted = React.useRef(true);
+  const [operationScope] = React.useState(entryMutationScope);
   React.useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
-  const isCurrent = (): boolean => mounted.current;
+  const isCurrent = (): boolean =>
+    mounted.current && sameEntryMutationScope(operationScope);
   // Keep the same request id after a lost response. Successful writes clear the key.
   const requests = React.useRef(new Map<string, string>());
   const requestId = (key: string): string => {
