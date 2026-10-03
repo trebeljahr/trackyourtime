@@ -7,7 +7,10 @@ import type { ReportFilters, WeekStart } from "@starter/shared";
 import {
   rangeForPreset,
   type DateRange,
+  type DateRangePickerPresetId,
 } from "@/components/date-range-picker";
+import { parseReportPreset, relativeReportRange, REPORT_PRESET_PARAM } from "@/lib/saved-report-views";
+import { trpc } from "@/lib/trpc";
 import { useFormatSettings } from "@/lib/format";
 import {
   parseReportView,
@@ -143,7 +146,7 @@ export type UseReportFiltersResult = {
   setView: (view: ReportView) => void;
   /** True when anything beyond the date range narrows the report. */
   isFiltered: boolean;
-  setRange: (range: DateRange) => void;
+  setRange: (range: DateRange, preset?: DateRangePickerPresetId | null) => void;
   setIds: (key: IdFilterKey, ids: string[]) => void;
   setBillable: (value: BillableFilter) => void;
   setSearch: (value: string) => void;
@@ -210,22 +213,36 @@ export const useReportFilters = (
   const searchParams = useSearchParams();
   const { weekStartsOn } = useFormatSettings();
 
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const today = relativeReportRange("today", weekStartsOn, now, DEVICE_TIME_ZONE).from;
+  const preset = parseReportPreset(searchParams.get(REPORT_PRESET_PARAM));
+  const spanQuery = trpc.reports.trackedSpan.useQuery(
+    { timeZone: DEVICE_TIME_ZONE }, { enabled: preset === "allTime", staleTime: 5 * 60_000 },
+  );
+  const spanFrom = spanQuery.data?.from;
+  const spanTo = spanQuery.data?.to;
   const fromParam = parseDateKey(searchParams.get(REPORT_PARAM.from));
   const toParam = parseDateKey(searchParams.get(REPORT_PARAM.to));
 
   // Recomputed only when the calendar day rolls over, so "this week" cannot
   // produce a new object on every render and thrash the query key.
   const defaultRange = React.useMemo(
-    () => rangeForPreset("thisWeek", weekStartsOn),
-    [weekStartsOn]
+    () => rangeForPreset("thisWeek", weekStartsOn, new Date(`${today}T12:00:00`)),
+    [weekStartsOn, today]
   );
 
   const range = React.useMemo<DateRange>(() => {
+    if (preset === "allTime" && spanFrom && spanTo) return { from: spanFrom, to: spanTo };
+    if (preset && preset !== "allTime") return rangeForPreset(preset, weekStartsOn, new Date(`${today}T12:00:00`));
     if (fromParam === null && toParam === null) return defaultRange;
     const from = fromParam ?? toParam ?? defaultRange.from;
     const to = toParam ?? fromParam ?? defaultRange.to;
     return from > to ? { from: to, to: from } : { from, to };
-  }, [defaultRange, fromParam, toParam]);
+  }, [defaultRange, fromParam, toParam, preset, weekStartsOn, today, spanFrom, spanTo]);
 
   const projectsParam = searchParams.get(REPORT_PARAM.projects);
   const clientsParam = searchParams.get(REPORT_PARAM.clients);
@@ -270,6 +287,9 @@ export const useReportFilters = (
       options?: SetParamsOptions
     ): void => {
       const next = new URLSearchParams(searchString);
+      if ((REPORT_PARAM.from in patch || REPORT_PARAM.to in patch) && !(REPORT_PRESET_PARAM in patch)) {
+        next.delete(REPORT_PRESET_PARAM);
+      }
       for (const [key, value] of Object.entries(patch)) {
         if (value === null || value === "") next.delete(key);
         else next.set(key, value);
@@ -290,8 +310,9 @@ export const useReportFilters = (
   );
 
   const setRange = React.useCallback(
-    (next: DateRange): void => {
+    (next: DateRange, preset?: DateRangePickerPresetId | null): void => {
       setParams({
+        [REPORT_PRESET_PARAM]: preset ?? null,
         [REPORT_PARAM.from]: next.from,
         [REPORT_PARAM.to]: next.to,
       });

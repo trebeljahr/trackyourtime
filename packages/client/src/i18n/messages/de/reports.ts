@@ -4,6 +4,21 @@ import type { reports as source } from "../en/reports";
 
 /** German `reports`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const reports: Translation<typeof source> = {
+  saved: {
+    "rangeUnavailable": "Der erfasste Zeitraum ist noch nicht verfügbar. Prüfe deine Verbindung und lade die Ansicht erneut.",
+    "load": "Ansicht laden",
+    "label": "Gespeicherte Ansichten",
+    "name": "Name der Ansicht",
+    "saveCurrent": "Aktuelle Ansicht speichern",
+    "rename": "Umbenennen",
+    "delete": "Ansicht löschen",
+    "loading": "Gespeicherte Ansichten werden geladen…",
+    "loadFailed": "Gespeicherte Ansichten konnten nicht geladen werden.",
+    "writeFailed": "Änderungen konnten nicht gespeichert werden. Deine gespeicherten Ansichten bleiben erhalten.",
+    "retry": "Erneut versuchen",
+    "saved": "Gespeicherte Ansichten aktualisiert",
+    "duplicate": "Wähle einen anderen Namen."
+  },
   invoiceIdentity: {
     profileMissing: "Dein Unternehmensprofil hat keine Adresse, also nennt diese Rechnung keinen Aussteller.",
     profileLink: "Unternehmensprofil vervollständigen",
@@ -173,6 +188,35 @@ export const reports: Translation<typeof source> = {
   },
 
   bulk: {
+    selectFirst: "Alle auswählen wählt die ersten {count} bearbeitbaren Einträge aus.",
+    editLabels: "Tätigkeit und Schlagwörter bearbeiten",
+    changeTask: "Tätigkeit ändern",
+    clearTaskHint: "Wenn „Tätigkeit ändern“ aktiviert ist, entfernt die Auswahl ohne Tätigkeit die Tätigkeit aus allen ausgewählten Einträgen.",
+    labelsDescription: "Nur die gewählten Änderungen anwenden. Fehlgeschlagene Einträge bleiben ausgewählt.",
+    apply: "Änderungen anwenden",
+    limit: "Bis zu 100 Einträge pro Stapel",
+    updated: "{count, plural, one {# Eintrag aktualisiert} other {# Einträge aktualisiert}}",
+    partial: "Einige Einträge wurden nicht aktualisiert. Prüfe die Gründe und lade vor dem nächsten Versuch neu.",
+    serverTooOld: "Aktualisiere deinen Server, um mehrere Einträge auf einmal zu bearbeiten.",
+    tagModes: {
+      "keep": "Schlagwörter beibehalten",
+      "set": "Alle Schlagwörter ersetzen",
+      "add": "Schlagwörter hinzufügen",
+      "remove": "Schlagwörter entfernen",
+      "clear": "Alle Schlagwörter entfernen"
+    },
+    reasons: {
+      "not-found": "Eintrag fehlt oder kann nicht mehr von dir bearbeitet werden",
+      "conflict": "Eintrag wurde geändert; lade vor dem nächsten Versuch neu",
+      "invoiced": "Abgerechnete Zeit kann so nicht geändert werden",
+      "locked": "Freigegebene Zeit ist gesperrt",
+      "invalid-reference": "Projekt, Tätigkeit oder Schlagwort ist nicht verfügbar",
+      "too-many-tags": "Dies würde 20 Schlagwörter überschreiten",
+      "not-applied": "Nicht angewendet, weil ein anderer Eintrag ungültig war oder der Stapel unterbrochen wurde",
+      "write-failed": "Speichern fehlgeschlagen; lade vor dem nächsten Versuch neu",
+      "unconfirmed": "Speichern konnte nicht bestätigt werden; lade neu, um das Ergebnis zu prüfen"
+    },
+
     region: "Sammelaktionen",
     setProject: "Projekt festlegen",
     markBillable: "Als abrechenbar markieren",

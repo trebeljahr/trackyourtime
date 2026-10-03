@@ -15,6 +15,7 @@
 //    another workspace is indistinguishable from a missing one (NOT_FOUND,
 //    never FORBIDDEN).
 import {
+  bulkEditEntriesSchema,
   createEntrySchema,
   entryListSchema,
   continueEntrySchema,
@@ -32,6 +33,7 @@ import {
   type DescriptionSuggestion,
   workspaceScopeSchema,
 } from "@starter/shared";
+import { bulkEditEntries } from "../../services/entries/bulk.js";
 import { scopeFromContext } from "../../services/scope.js";
 import {
   createEntry,
@@ -90,6 +92,9 @@ async function withReplaced(
 }
 
 export const entriesRouter = router({
+  bulkEdit: workspaceProcedure.input(bulkEditEntriesSchema).mutation(
+    async ({ ctx, input }) => bulkEditEntries(scopeFromContext(ctx), input),
+  ),
   list: workspaceProcedure
     .input(entryListSchema)
     .query(

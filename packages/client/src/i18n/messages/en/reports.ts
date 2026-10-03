@@ -7,6 +7,21 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const reports = {
+  saved: {
+    "rangeUnavailable": "The tracked date range is not available yet. Check your connection, then load the view again.",
+    "load": "Load view",
+    "label": "Saved views",
+    "name": "View name",
+    "saveCurrent": "Save current view",
+    "rename": "Rename",
+    "delete": "Delete view",
+    "loading": "Loading saved views…",
+    "loadFailed": "Could not load saved views.",
+    "writeFailed": "Could not save changes. Your saved views were kept.",
+    "retry": "Retry",
+    "saved": "Saved views updated",
+    "duplicate": "Choose a different name."
+  },
   invoiceIdentity: {
     profileMissing: "Your business profile has no address, so this invoice will not say who issued it.",
     profileLink: "Complete the business profile",
@@ -197,6 +212,35 @@ export const reports = {
   },
 
   bulk: {
+    selectFirst: "Select all selects the first {count} editable entries.",
+    editLabels: "Edit task and tags",
+    changeTask: "Change task",
+    clearTaskHint: "With “Change task” checked, choosing no task clears the task on every selected entry.",
+    labelsDescription: "Apply only the changes you choose. Failed entries stay selected.",
+    apply: "Apply changes",
+    limit: "Up to 100 entries per batch",
+    updated: "{count, plural, one {# entry updated} other {# entries updated}}",
+    partial: "Some entries were not updated. Review the reasons and reload before retrying.",
+    serverTooOld: "Update your server to use bulk entry editing.",
+    tagModes: {
+      "keep": "Keep tags",
+      "set": "Replace all tags",
+      "add": "Add tags",
+      "remove": "Remove tags",
+      "clear": "Clear all tags"
+    },
+    reasons: {
+      "not-found": "Entry missing or no longer editable by you",
+      "conflict": "Entry changed; reload before retrying",
+      "invoiced": "Invoiced time cannot be changed this way",
+      "locked": "Approved time is locked",
+      "invalid-reference": "Project, task or tag is unavailable",
+      "too-many-tags": "This would exceed 20 tags",
+      "not-applied": "Not applied because another target failed validation or the batch was interrupted",
+      "write-failed": "Write failed; reload before retrying",
+      "unconfirmed": "Write could not be confirmed; reload to check the result"
+    },
+
     region: "Bulk actions",
     setProject: "Set project",
     markBillable: "Mark billable",

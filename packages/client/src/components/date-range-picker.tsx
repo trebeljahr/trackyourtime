@@ -190,7 +190,7 @@ export const formatRangeLabel = (
 
 export type DateRangePickerProps = {
   value: DateRange;
-  onChange: (range: DateRange) => void;
+  onChange: (range: DateRange, preset?: DateRangePickerPresetId | null) => void;
   weekStartsOn?: WeekStart;
   /**
    * The span of everything tracked. When given, an "All time" preset is
@@ -244,7 +244,7 @@ export function DateRangePicker({
 
   const applyPreset = React.useCallback(
     (preset: DateRangePresetId): void => {
-      onChange(rangeForPreset(preset, weekStartsOn));
+      onChange(rangeForPreset(preset, weekStartsOn), preset);
       setOpen(false);
     },
     [onChange, weekStartsOn]
@@ -252,7 +252,7 @@ export function DateRangePicker({
 
   const applyAllTime = React.useCallback((): void => {
     if (!allTime) return;
-    onChange({ from: allTime.from, to: allTime.to });
+    onChange({ from: allTime.from, to: allTime.to }, "allTime");
     setOpen(false);
   }, [allTime, onChange]);
 
@@ -267,7 +267,7 @@ export function DateRangePicker({
       if (candidate.from > candidate.to) return;
       if (candidate.from === value.from && candidate.to === value.to) return;
 
-      onChange(candidate);
+      onChange(candidate, null);
     },
     [draft, onChange, value.from, value.to]
   );

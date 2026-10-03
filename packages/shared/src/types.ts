@@ -837,3 +837,12 @@ export type InvoiceRecipient = Omit<ClientBilling, "preferredFormat" | "defaultT
   /** The client's display name at issue time — same value as `clientName`. */
   name: string;
 };
+
+/** Bulk requests validate all targets first; races can still leave partial success. */
+export type BulkEntryFailure = "not-found" | "conflict" | "invoiced" | "locked" |
+  "invalid-reference" | "too-many-tags" | "not-applied" | "write-failed" | "unconfirmed";
+export type BulkEditEntriesResult = {
+  atomic: false;
+  phase: "validation" | "write";
+  results: ({ id: string; success: true } | { id: string; success: false; reason: BulkEntryFailure })[];
+};

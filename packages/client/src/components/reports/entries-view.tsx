@@ -3,11 +3,8 @@
 import * as React from "react";
 import { Clock, ListChecks, Loader2, Table2 } from "lucide-react";
 import {
-  entryAmount,
-  sumCurrencyAmounts,
-  singleCurrencyMoney,
-  resolveHourlyRate,
-  type DetailedEntry,
+  type BulkEditEntriesInput,
+  type BulkEditEntriesResult,
 } from "@starter/shared";
 
 import { EmptyState } from "@/components/empty-state";
@@ -16,12 +13,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
 import { ORIGIN_ID } from "@/hooks/use-sync";
 import { CURRENCY_FALLBACK_ICON, currencyIcon } from "@/lib/currency";
-import { translate } from "@/i18n/translate";
 import { useFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
 import { userErrorMessage } from "@/lib/error-message";
 import { useFormatSettings } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/hooks/use-auth";
+import { useActiveWorkspace } from "@/components/workspace-switcher";
+import { getAbsoluteApiOrigin } from "@/lib/api-origin";
+import { useServerSupports } from "@/lib/server-level";
+import { bulkFailures, selectableBulkEntries } from "./bulk-selection";
 import { ProjectFormDialog } from "@/components/catalog/project-form-dialog";
 import {
   CLIENT_LIST_INPUT,
@@ -51,11 +52,6 @@ import {
 
 const PAGE_SIZE = 50;
 
-/** Mutates one entry in the cached page and returns it, or null to drop it. */
-type EntryPatch = (entry: DetailedEntry) => DetailedEntry | null;
-
-const round2 = (value: number): number => Math.round(value * 100) / 100;
-
 /**
  * Reports → Entries: every entry in the filtered range, sortable, editable in
  * bulk, one page at a time.
@@ -70,6 +66,11 @@ export function EntriesView({
   const t = useT("reports");
   const tc = useT("common");
   const utils = trpc.useUtils();
+  const { user } = useAuth();
+  const { activeId } = useActiveWorkspace();
+  const server = getAbsoluteApiOrigin();
+  const supportsBulk = useServerSupports("entries.bulkEdit");
+  const scopeKey = JSON.stringify([user?.id, activeId, server]);
 
   const input = React.useMemo(
     () => ({ ...reportFilters, limit: PAGE_SIZE }),
@@ -107,22 +108,6 @@ export function EntriesView({
     },
     [projectsQuery.data],
   );
-
-  const projectsById = React.useMemo(() => {
-    const map = new Map<
-      string,
-      { name: string; color: string; clientName: string | null; hourlyRate: number | null }
-    >();
-    for (const project of projectsQuery.data ?? []) {
-      map.set(project.id, {
-        name: project.name,
-        color: project.color,
-        clientName: project.clientName,
-        hourlyRate: project.hourlyRate,
-      });
-    }
-    return map;
-  }, [projectsQuery.data]);
 
   // ── sorting (URL-backed, applied to the loaded pages) ──────────────
   const sortField = getParam(REPORT_PARAM.sort);
@@ -165,188 +150,75 @@ export function EntriesView({
 
   // A filter change reloads a different set of rows, so a selection made
   // against the old set must not survive it.
-  const filterKey = JSON.stringify(reportFilters);
+  const filterKey = JSON.stringify([scopeKey, reportFilters]);
   const [lastFilterKey, setLastFilterKey] = React.useState(filterKey);
   if (lastFilterKey !== filterKey) {
     setLastFilterKey(filterKey);
     if (selected.size > 0) setSelected(new Set());
   }
 
+  const eligible = React.useMemo(() => selectableBulkEntries(loadedEntries, user?.id ?? null, activeId), [loadedEntries, user?.id, activeId]);
+  const eligibleIds = React.useMemo(() => new Set(eligible.map((entry) => entry.id)), [eligible]);
   const toggle = React.useCallback((id: string, isSelected: boolean): void => {
     setSelected((current) => {
       const next = new Set(current);
-      if (isSelected) next.add(id);
+      if (isSelected && eligibleIds.has(id) && next.size < 100) next.add(id);
       else next.delete(id);
       return next;
     });
-  }, []);
+  }, [eligibleIds]);
 
   const toggleAll = React.useCallback(
     (isSelected: boolean): void => {
       setSelected(
-        isSelected ? new Set(loadedEntries.map((entry) => entry.id)) : new Set()
+        isSelected ? new Set(eligible.slice(0, 100).map((entry) => entry.id)) : new Set()
       );
     },
-    [loadedEntries]
+    [eligible]
   );
 
-  // ── bulk mutations, optimistic over the infinite cache ─────────────
-  const updateEntry = trpc.entries.update.useMutation();
-  const removeEntry = trpc.entries.remove.useMutation();
+  // One server request validates every target; no optimistic partial rewrite.
+  const editEntries = trpc.entries.bulkEdit.useMutation();
   const [bulkPending, setBulkPending] = React.useState(false);
+  const [bulkResult, setBulkResult] = React.useState<{ key: string; result: BulkEditEntriesResult } | null>(null);
+  const currentKey = React.useRef(filterKey);
+  currentKey.current = filterKey;
+  const busy = React.useRef(false);
 
-  const runBulk = React.useCallback(
-    (
-      ids: string[],
-      patch: EntryPatch,
-      perform: (id: string) => Promise<unknown>,
-      successMessage: string
-    ): void => {
-      if (ids.length === 0) return;
-      const targets = new Set(ids);
-      setBulkPending(true);
-
-      void (async () => {
-        await utils.reports.detailed.cancel(input);
-        const snapshot = utils.reports.detailed.getInfiniteData(input);
-
-        utils.reports.detailed.setInfiniteData(input, (old) => {
-          if (!old) return old;
-          let secondsDelta = 0;
-          const deltas: { currency: string; amount: number }[] = [];
-          const nextPages = old.pages.map((page) => {
-            const entries: DetailedEntry[] = [];
-            for (const entry of page.entries) {
-              if (!targets.has(entry.id)) {
-                entries.push(entry);
-                continue;
-              }
-              const patched = patch(entry);
-              if (patched === null) secondsDelta += entry.durationSec;
-              else entries.push(patched);
-              deltas.push({ currency: entry.currency, amount: -(entry.amount ?? 0) });
-              if (patched !== null) {
-                deltas.push({ currency: patched.currency, amount: patched.amount ?? 0 });
-              }
-            }
-            return { ...page, entries };
-          });
-          return {
-            ...old,
-            pages: nextPages.map((page) => {
-              const totalAmounts = page.totalAmounts === undefined ? undefined
-                : page.totalAmounts === null ? null
-                : sumCurrencyAmounts([...page.totalAmounts, ...deltas]);
-              return {
-                ...page,
-                totalSec: Math.max(0, page.totalSec - secondsDelta),
-                ...(totalAmounts === undefined ? {
-                  totalAmount: page.totalAmount === null ? null : round2(page.totalAmount + deltas.reduce((sum, delta) => sum + delta.amount, 0)),
-                } : {
-                  totalAmounts,
-                  totalAmount: singleCurrencyMoney(totalAmounts, page.currency).amount,
-                  currency: singleCurrencyMoney(totalAmounts, page.currency).currency,
-                }),
-              };
-            }),
-          };
+  const runBulk = (operation: BulkEditEntriesInput["operation"]): void => {
+    if (!supportsBulk || busy.current || !activeId || !user || selected.size === 0) return;
+    const requestKey = filterKey;
+    const targets = loadedEntries.filter((entry) => selected.has(entry.id));
+    if (targets.length !== selected.size) return;
+    busy.current = true; setBulkPending(true); setBulkResult(null);
+    void (async () => {
+      try {
+        const result = await editEntries.mutateAsync({
+          workspaceId: activeId, originId: ORIGIN_ID, operation,
+          entries: targets.map((entry) => ({ id: entry.id, expectedUpdatedAt: entry.updatedAt })),
         });
-
-        try {
-          await Promise.all(ids.map(perform));
-          setSelected(new Set());
-          toast.success(successMessage);
-        } catch (error) {
-          utils.reports.detailed.setInfiniteData(input, () => snapshot);
-          toast.error(
-            userErrorMessage(error, translate("reports")("detailed.toast.failed"))
-          );
-        } finally {
-          setBulkPending(false);
-          void utils.reports.invalidate();
-          void utils.entries.invalidate();
+        if (currentKey.current !== requestKey) return;
+        setSelected(bulkFailures(result));
+        setBulkResult({ key: requestKey, result });
+        const succeeded = result.results.filter((row) => row.success).length;
+        if (succeeded) toast.success(t("bulk.updated", { count: succeeded }));
+        if (succeeded !== result.results.length) toast.error(t("bulk.partial"));
+        void utils.reports.invalidate(); void utils.entries.invalidate();
+      } catch (error) {
+        if (currentKey.current === requestKey) {
+          toast.error(userErrorMessage(error, t("detailed.toast.failed")));
+          // The connection may have failed after writes committed. Keep every
+          // target selected and reload revisions before offering a retry.
+          void utils.reports.invalidate(); void utils.entries.invalidate();
         }
-      })();
-    },
-    [input, utils]
-  );
-
-  const selectedIds = React.useMemo(() => [...selected], [selected]);
-
-  const handleSetProject = React.useCallback(
-    (projectId: string | null): void => {
-      const project = projectId === null ? undefined : projectsById.get(projectId);
-      runBulk(
-        selectedIds,
-        (entry) => {
-          const rate = resolveHourlyRate({
-            billable: entry.billable,
-            projectRate: project?.hourlyRate ?? null,
-            defaultRate: fmt.settings.defaultHourlyRate,
-          });
-          return {
-            ...entry,
-            projectId,
-            // The task is left alone: it names what the work was, which moving
-            // the entry to another project does not revise.
-            projectName: project?.name ?? null,
-            projectColor: project?.color ?? null,
-            clientName: project?.clientName ?? null,
-            hourlyRate: rate,
-            amount: entryAmount(entry.durationSec, rate),
-          };
-        },
-        (id) =>
-          updateEntry.mutateAsync({ id, projectId, originId: ORIGIN_ID }),
-        projectId === null
-          ? t("detailed.toast.removedProject", { count: selectedIds.length })
-          : t("detailed.toast.moved", {
-              count: selectedIds.length,
-              project: project?.name ?? t("detailed.toast.theProject"),
-            })
-      );
-    },
-    [fmt.settings.defaultHourlyRate, projectsById, runBulk, selectedIds, t, updateEntry]
-  );
-
-  const handleSetBillable = React.useCallback(
-    (billable: boolean): void => {
-      runBulk(
-        selectedIds,
-        (entry) => {
-          const project =
-            entry.projectId === null
-              ? undefined
-              : projectsById.get(entry.projectId);
-          const rate = resolveHourlyRate({
-            billable,
-            projectRate: project?.hourlyRate ?? null,
-            defaultRate: fmt.settings.defaultHourlyRate,
-          });
-          return {
-            ...entry,
-            billable,
-            hourlyRate: rate,
-            amount: entryAmount(entry.durationSec, rate),
-          };
-        },
-        (id) => updateEntry.mutateAsync({ id, billable, originId: ORIGIN_ID }),
-        billable
-          ? t("detailed.toast.markedBillable", { count: selectedIds.length })
-          : t("detailed.toast.markedNonBillable", { count: selectedIds.length })
-      );
-    },
-    [fmt.settings.defaultHourlyRate, projectsById, runBulk, selectedIds, t, updateEntry]
-  );
-
-  const handleDelete = React.useCallback((): void => {
-    runBulk(
-      selectedIds,
-      () => null,
-      (id) => removeEntry.mutateAsync({ id, originId: ORIGIN_ID }),
-      t("detailed.toast.deleted", { count: selectedIds.length })
-    );
-  }, [removeEntry, runBulk, selectedIds, t]);
+      } finally {
+        busy.current = false; setBulkPending(false);
+      }
+    })();
+  };
+  const handleSetProject = (projectId: string | null): void => runBulk({ kind: "update", projectId });
+  const handleSetBillable = (billable: boolean): void => runBulk({ kind: "update", billable });
+  const handleDelete = (): void => runBulk({ kind: "delete" });
 
   const kpis = React.useMemo<KpiItem[]>(
     () => [
@@ -389,6 +261,7 @@ export function EntriesView({
       {isLoading ? <KpiRowSkeleton /> : <KpiRow items={kpis} />}
       <MoneyHiddenNote moneyVisible={totals?.moneyVisible} />
 
+      {eligible.length > 100 ? <p className="text-sm text-muted-foreground" data-testid="bulk-selection-limit">{t("bulk.selectFirst", { count: 100 })}</p> : null}
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
@@ -408,6 +281,9 @@ export function EntriesView({
             <DetailedTable
               entries={entries}
               selected={selected}
+              selectableIds={eligibleIds}
+              selectionPending={bulkPending}
+              maxSelection={100}
               onToggle={toggle}
               onToggleAll={toggleAll}
               sort={sort}
@@ -438,14 +314,24 @@ export function EntriesView({
         </CardContent>
       </Card>
 
+      {!supportsBulk ? <p role="status" className="text-sm text-muted-foreground">{t("bulk.serverTooOld")}</p> : null}
+      {bulkResult?.key === filterKey && bulkResult.result.results.some((row) => !row.success) ? (
+        <div role="alert" className="space-y-1 text-sm" data-testid="bulk-failures">
+          <p>{t("bulk.partial")}</p>
+          <ul>{bulkResult.result.results.filter((row) => !row.success).map((row) => (
+            <li key={row.id}>{loadedEntries.find((entry) => entry.id === row.id)?.description || tc("empty.noDescription")}: {row.success ? "" : t(`bulk.reasons.${row.reason}`)}</li>
+          ))}</ul>
+        </div>
+      ) : null}
       {selected.size > 0 ? (
         <BulkActionBar
           count={selected.size}
-          pending={bulkPending}
+          pending={bulkPending || !supportsBulk}
           onClear={() => setSelected(new Set())}
           onSetProject={handleSetProject}
           onSetBillable={handleSetBillable}
           onDelete={handleDelete}
+          onEditLabels={(patch) => runBulk({ kind: "update", ...patch })}
         />
       ) : null}
 

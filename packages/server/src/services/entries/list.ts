@@ -270,7 +270,9 @@ export async function listEntries(
     },
   ];
 
-  const rows = await TimeEntry.aggregate<EntryAggregate>(pipeline);
+  // Literal description search is paginated and time-bounded, even without
+  // an index suitable for substring matching over a long history.
+  const rows = await TimeEntry.aggregate<EntryAggregate>(pipeline, input.search?.trim() ? { maxTimeMS: 3_000 } : {});
   const page = rows.slice(0, limit).map(toDetailedEntry);
   const last = page[page.length - 1];
 

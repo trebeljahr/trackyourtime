@@ -3,6 +3,10 @@
 import * as React from "react";
 import { Loader2, Trash2, X } from "lucide-react";
 
+import type { BulkEditEntriesInput } from "@starter/shared";
+import { TaskPicker } from "@/components/task-picker";
+import { TagPicker } from "@/components/tags/tag-picker";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ProjectPicker } from "@/components/project-picker";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -25,6 +29,7 @@ export type BulkActionBarProps = {
   onSetProject: (projectId: string | null) => void;
   onSetBillable: (billable: boolean) => void;
   onDelete: () => void;
+  onEditLabels: (patch: Omit<Extract<BulkEditEntriesInput["operation"], { kind: "update" }>, "kind">) => void;
 };
 
 /**
@@ -38,7 +43,13 @@ export function BulkActionBar({
   onSetProject,
   onSetBillable,
   onDelete,
+  onEditLabels,
 }: BulkActionBarProps): React.JSX.Element {
+  const [labelsOpen, setLabelsOpen] = React.useState(false);
+  const [applyTask, setApplyTask] = React.useState(false);
+  const [taskId, setTaskId] = React.useState<string | null>(null);
+  const [tagMode, setTagMode] = React.useState<"keep" | "set" | "add" | "remove" | "clear">("keep");
+  const [tagIds, setTagIds] = React.useState<string[]>([]);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const t = useT("reports");
   const tc = useT("common");
@@ -89,6 +100,12 @@ export function BulkActionBar({
         {t("bulk.markNonBillable")}
       </Button>
 
+      <Button type="button" variant="outline" size="sm" disabled={pending}
+        onClick={() => { setApplyTask(false); setTaskId(null); setTagMode("keep"); setTagIds([]); setLabelsOpen(true); }} data-testid="bulk-edit-labels">
+        {t("bulk.editLabels")}
+      </Button>
+      <span className="text-xs text-muted-foreground">{t("bulk.limit")}</span>
+
       <Button
         type="button"
         variant="destructive"
@@ -110,12 +127,36 @@ export function BulkActionBar({
         variant="ghost"
         size="sm"
         className="ml-auto"
+        disabled={pending}
         onClick={onClear}
         data-testid="bulk-clear"
       >
         <X className="size-4" />
         {t("bulk.clearSelection")}
       </Button>
+
+      <Dialog open={labelsOpen} onOpenChange={setLabelsOpen}>
+        <DialogContent data-testid="bulk-label-dialog">
+          <DialogHeader><DialogTitle>{t("bulk.editLabels")}</DialogTitle><DialogDescription>{t("bulk.labelsDescription")}</DialogDescription></DialogHeader>
+          <label className="flex items-center gap-2"><Checkbox checked={applyTask} disabled={pending} onCheckedChange={(value) => setApplyTask(value === true)} data-testid="bulk-change-task" />{t("bulk.changeTask")}</label>
+          <TaskPicker value={taskId} onChange={setTaskId} disabled={!applyTask || pending} allowCreate={false} testId="bulk-set-task" />
+          <p className="text-xs text-muted-foreground">{t("bulk.clearTaskHint")}</p>
+          <label className="space-y-1 text-sm"><span>{tc("fields.tags")}</span>
+            <select value={tagMode} disabled={pending} onChange={(event) => setTagMode(event.target.value as typeof tagMode)} className="block h-9 w-full rounded-md border bg-background px-2" data-testid="bulk-tag-mode">
+              {(["keep", "set", "add", "remove", "clear"] as const).map((mode) => <option key={mode} value={mode}>{t(`bulk.tagModes.${mode}`)}</option>)}
+            </select>
+          </label>
+          {tagMode !== "keep" && tagMode !== "clear" ? <TagPicker value={tagIds} onChange={setTagIds} disabled={pending} testId="bulk-tag-picker" /> : null}
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline" disabled={pending}>{tc("actions.cancel")}</Button></DialogClose>
+            <Button disabled={pending || (!applyTask && tagMode === "keep") || ((tagMode === "add" || tagMode === "remove") && tagIds.length === 0)} data-testid="bulk-label-apply" onClick={() => {
+              const tags = tagMode === "keep" ? undefined : tagMode === "clear" ? { mode: "clear" as const } : { mode: tagMode, ids: tagIds };
+              onEditLabels({ ...(applyTask ? { taskId } : {}), ...(tags ? { tags } : {}) });
+              setLabelsOpen(false);
+            }}>{t("bulk.apply")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent data-testid="bulk-delete-dialog">

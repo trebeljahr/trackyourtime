@@ -31,6 +31,17 @@ export const shell = {
     system: "System",
   },
   palette: {
+    entries: "Time entries",
+    searchWaiting: "Waiting for your account and workspace…",
+    searchLoading: "Searching entries…",
+    searchError: "Entry search failed. Select to retry.",
+    searchEmpty: "No entries match. Try a different description.",
+    searchMore: "Showing the 10 newest matches. Refine your search for older entries.",
+    entryReadOnly: "You can view this entry. Only its author can edit it.",
+    entryStart: "Start",
+    entryEnd: "End",
+    entryRunning: "Running",
+
     title: "Command palette",
     description: "Search for an action, a page, a project, a client, a task or a tag.",
     placeholder: "Type a command or search…",

@@ -103,6 +103,9 @@ function SortButton({
 export type DetailedTableProps = {
   entries: DetailedEntry[];
   selected: ReadonlySet<string>;
+  selectableIds?: ReadonlySet<string>;
+  selectionPending?: boolean;
+  maxSelection?: number;
   onToggle: (id: string, selected: boolean) => void;
   onToggleAll: (selected: boolean) => void;
   sort: DetailedSort;
@@ -121,6 +124,9 @@ export type DetailedTableProps = {
 export function DetailedTable({
   entries,
   selected,
+  selectableIds,
+  selectionPending = false,
+  maxSelection,
   onToggle,
   onToggleAll,
   sort,
@@ -133,7 +139,8 @@ export function DetailedTable({
   const t = useT("reports");
   const tc = useT("common");
   const f = useFormat();
-  const allSelected = entries.length > 0 && selected.size >= entries.length;
+  const selectable = entries.filter((entry) => !selectableIds || selectableIds.has(entry.id));
+  const allSelected = selectable.length > 0 && selectable.every((entry) => selected.has(entry.id));
   const someSelected = selected.size > 0 && !allSelected;
 
   return (
@@ -142,11 +149,12 @@ export function DetailedTable({
         <TableRow>
           <TableHead className="w-10">
             <Checkbox
+              disabled={selectionPending || selectable.length === 0}
               checked={
                 allSelected ? true : someSelected ? "indeterminate" : false
               }
               onCheckedChange={(value) => onToggleAll(value === true)}
-              aria-label={t("detailed.selectAll")}
+              aria-label={maxSelection !== undefined && selectable.length > maxSelection ? t("bulk.selectFirst", { count: maxSelection }) : t("detailed.selectAll")}
               data-testid="detailed-select-all"
             />
           </TableHead>
@@ -195,6 +203,7 @@ export function DetailedTable({
             >
               <TableCell>
                 <Checkbox
+                  disabled={selectionPending || (selectableIds !== undefined && !selectableIds.has(entry.id)) || (maxSelection !== undefined && selected.size >= maxSelection && !isSelected)}
                   checked={isSelected}
                   onCheckedChange={(value) =>
                     onToggle(entry.id, value === true)

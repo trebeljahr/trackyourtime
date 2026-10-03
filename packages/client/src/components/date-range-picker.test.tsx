@@ -149,6 +149,6 @@ describe("range presets", () => {
     );
     fireEvent.click(screen.getByTestId("picker-preset-allTime"));
 
-    expect(onChange).toHaveBeenCalledWith(span);
+    expect(onChange).toHaveBeenCalledWith(span, "allTime");
   });
 });

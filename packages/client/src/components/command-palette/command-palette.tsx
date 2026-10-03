@@ -2,6 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import type { DetailedEntry } from "@starter/shared";
+import { useAuth } from "@/hooks/use-auth";
+import { getAbsoluteApiOrigin } from "@/lib/api-origin";
+import { EntrySearchResults } from "./entry-search-results";
+import { SearchEntryDialog, type SelectedSearchEntry } from "./search-entry-dialog";
 import { defaultFilter } from "cmdk";
 
 import {
@@ -104,8 +109,16 @@ export function CommandPalette({
 }: CommandPaletteProps): React.JSX.Element {
   const t = useT("shell");
   const close = React.useCallback((): void => onOpenChange(false), [onOpenChange]);
+  const { user } = useAuth();
+  const [selected, setSelected] = React.useState<SelectedSearchEntry | null>(null);
+  const openEntry = (entry: DetailedEntry): void => {
+    if (!user) return;
+    setSelected({ entry, userId: user.id, server: getAbsoluteApiOrigin() });
+    close();
+  };
 
   return (
+    <>
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
@@ -121,15 +134,19 @@ export function CommandPalette({
     >
       {/* Radix does not render closed content, so the queries and mutation
           hooks below exist only while the palette is open. */}
-      <PaletteBody close={close} sections={sections} />
+      <PaletteBody close={close} sections={sections} onOpenEntry={openEntry} />
     </CommandDialog>
+    {selected ? <SearchEntryDialog selected={selected} onClose={() => setSelected(null)} /> : null}
+    </>
   );
 }
 
 function PaletteBody({
   close,
   sections,
+  onOpenEntry,
 }: {
+  onOpenEntry: (entry: DetailedEntry) => void;
   close: () => void;
   sections: readonly PaletteSection[];
 }): React.JSX.Element {
@@ -231,7 +248,8 @@ function PaletteBody({
         data-testid="command-palette-input"
       />
       <CommandList className="max-h-[min(24rem,60dvh)]">
-        <CommandEmpty>{t("palette.empty")}</CommandEmpty>
+        {search.trim() === "" || discardPage ? <CommandEmpty>{t("palette.empty")}</CommandEmpty> : null}
+        {!discardPage && search.trim() ? <EntrySearchResults search={search} onOpen={onOpenEntry} /> : null}
         {groups.map((group) => (
           <CommandGroup
             key={group.id}

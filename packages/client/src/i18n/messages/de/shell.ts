@@ -28,6 +28,17 @@ export const shell: Translation<typeof source> = {
     system: "System",
   },
   palette: {
+    entries: "Zeiteinträge",
+    searchWaiting: "Warte auf dein Konto und deinen Arbeitsbereich…",
+    searchLoading: "Einträge werden gesucht…",
+    searchError: "Eintragssuche fehlgeschlagen. Zum Wiederholen auswählen.",
+    searchEmpty: "Keine passenden Einträge. Versuche eine andere Beschreibung.",
+    searchMore: "Die 10 neuesten Treffer werden angezeigt. Grenze die Suche für ältere Einträge ein.",
+    entryReadOnly: "Du kannst diesen Eintrag ansehen. Nur die Person, die ihn erfasst hat, kann ihn bearbeiten.",
+    entryStart: "Beginn",
+    entryEnd: "Ende",
+    entryRunning: "Läuft",
+
     title: "Befehlspalette",
     description: "Suche nach einer Aktion, einer Seite, einem Projekt, einem Kunden, einer Tätigkeit oder einem Schlagwort.",
     placeholder: "Befehl eingeben oder suchen …",

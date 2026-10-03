@@ -13,6 +13,7 @@ const mutations = {
 const push = vi.fn();
 let runningEntry: { id: string; description: string } | null = null;
 
+vi.mock("./entry-search-results", () => ({ EntrySearchResults: () => null }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("@/components/tracker/use-entry-mutations", () => ({
   useEntryMutations: () => mutations,

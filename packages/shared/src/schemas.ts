@@ -464,6 +464,32 @@ export const updateEntrySchema = z
   })
   .refine(endAfterStart, endAfterStartIssue);
 
+/** One bounded request; each target carries the revision the viewer selected. */
+export const bulkEditEntriesSchema = z.object({
+  workspaceId: idString.optional(),
+  entries: z.array(z.object({ id: idString, expectedUpdatedAt: isoDateTimeSchema }).strict())
+    .min(1).max(100)
+    .refine((rows) => new Set(rows.map((row) => row.id)).size === rows.length),
+  operation: z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("update"),
+      projectId: idString.nullish(),
+      taskId: idString.nullish(),
+      billable: z.boolean().optional(),
+      tags: z.discriminatedUnion("mode", [
+        z.object({ mode: z.literal("set"), ids: z.array(idString).max(20) }).strict(),
+        z.object({ mode: z.literal("add"), ids: z.array(idString).min(1).max(20) }).strict(),
+        z.object({ mode: z.literal("remove"), ids: z.array(idString).min(1).max(20) }).strict(),
+        z.object({ mode: z.literal("clear") }).strict(),
+      ]).optional(),
+    }).strict().refine((patch) => patch.projectId !== undefined || patch.taskId !== undefined ||
+      patch.billable !== undefined || patch.tags !== undefined),
+    z.object({ kind: z.literal("delete") }).strict(),
+  ]),
+  originId,
+}).strict();
+export type BulkEditEntriesInput = z.infer<typeof bulkEditEntriesSchema>;
+
 export const entryListSchema = z.object({
   from: isoDateOrDateTimeSchema,
   to: isoDateOrDateTimeSchema,

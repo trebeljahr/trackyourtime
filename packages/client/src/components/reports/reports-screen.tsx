@@ -13,6 +13,7 @@ import { EntriesView } from "@/components/reports/entries-view";
 import { ExportMenu } from "@/components/reports/export-menu";
 import { effectiveGroupBy } from "@/components/reports/group-by";
 import { useMemberReporting } from "@/components/reports/member-reporting";
+import { SavedReportViews } from "@/components/reports/saved-views";
 import { ReportFiltersBar } from "@/components/reports/report-filters";
 import { ReportPageSkeleton } from "@/components/reports/report-skeletons";
 import { TotalsView } from "@/components/reports/totals-view";
@@ -110,6 +111,7 @@ export function ReportsScreen(): React.JSX.Element {
       </header>
 
       <ReportFiltersBar filters={filters} memberFilter={memberReporting} />
+      <SavedReportViews filters={filters} />
 
       <DrillTrail filters={filters} />
 
