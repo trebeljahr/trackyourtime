@@ -66,6 +66,8 @@ type ListSnapshot = ReturnType<Utils["entries"]["list"]["getInfiniteData"]>;
 type MutationContext = {
   scope?: EntryMutationScope;
   errorMessage?: string;
+  /** Exact optimistic entry retained for callers with no tracker list loaded. */
+  savedEntry?: DetailedEntry;
   previousCurrent?: TimeEntry | null;
   previousList?: ListSnapshot;
   /** Set when this mutation invented an entry the server has not seen yet. */
@@ -789,19 +791,25 @@ export const useEntryMutations = (): EntryMutations => {
       const context = await snapshot(saveScopes.current.get(raw));
       if (!stillInWorkspace(context)) throw new EntryScopeChangedError(translate("tracker")("mutations.scopeChanged"));
       context.tempId = createTempId();
-      insertEntry(
-        buildEntry({
-          id: context.tempId,
-          description: input.description,
-          clientId: input.clientId,
-          projectId: input.projectId,
-          taskId: input.taskId,
-          billable: input.billable,
-          start: input.start,
-          end: input.end,
-          tagIds: input.tagIds ?? [],
-        })
-      );
+      const optimistic = buildEntry({
+        id: context.tempId,
+        description: input.description,
+        clientId: input.clientId,
+        projectId: input.projectId,
+        taskId: input.taskId,
+        billable: input.billable,
+        start: input.start,
+        end: input.end,
+        tagIds: input.tagIds ?? [],
+      });
+      context.savedEntry = {
+        ...optimistic,
+        workspaceId: context.scope?.workspaceId ?? optimistic.workspaceId,
+        authorId: context.scope?.owner ?? optimistic.authorId,
+        source: input.source,
+        timeZone: input.timeZone,
+      };
+      insertEntry(context.savedEntry);
       return context;
     },
     onSuccess: (entry, _raw, context) => {
@@ -827,7 +835,7 @@ export const useEntryMutations = (): EntryMutations => {
         translate("tracker")("mutations.addFailed")
       );
       saveFailures.current.set(raw, context?.queued
-        ? { ok: true, saved: "offline" }
+        ? { ok: true, saved: "offline", entry: context.savedEntry }
         : { ok: false, message: context?.errorMessage ?? userErrorMessage(error, translate("tracker")("mutations.addFailed")) });
     },
     onSettled: (_data, _error, _raw, context) => {
@@ -864,7 +872,7 @@ export const useEntryMutations = (): EntryMutations => {
           });
           const durationSec = end === null ? 0 : durationBetween(start, end);
 
-          return {
+          const updated: DetailedEntry = {
             ...entry,
             description: input.description ?? entry.description,
             clientId: input.clientId === undefined ? entry.clientId : input.clientId,
@@ -885,6 +893,8 @@ export const useEntryMutations = (): EntryMutations => {
             clientName: (input.clientId === undefined ? entry.clientId : input.clientId) === undefined ? project.clientName : shapeContext().clients?.find((client) => client.id === (input.clientId === undefined ? entry.clientId : input.clientId))?.name ?? null,
             amount: entryAmount(durationSec, hourlyRate),
           };
+          context.savedEntry = updated;
+          return updated;
         })
       );
 
@@ -940,7 +950,7 @@ export const useEntryMutations = (): EntryMutations => {
         translate("tracker")("mutations.saveFailed")
       );
       saveFailures.current.set(raw, context?.queued
-        ? { ok: true, saved: "offline" }
+        ? { ok: true, saved: "offline", ...(context.savedEntry === undefined ? {} : { entry: context.savedEntry }) }
         : { ok: false, message: context?.errorMessage ?? userErrorMessage(error, translate("tracker")("mutations.saveFailed")) });
     },
     onSettled: (_data, _error, _raw, context) => {
@@ -1120,9 +1130,10 @@ export const useEntryMutations = (): EntryMutations => {
       const scope = entryMutationScope();
       if (scope.workspaceId !== null) input.workspaceId = scope.workspaceId;
       saveScopes.current.set(input, scope);
+      const catalog = shapeContext();
       try {
-        await createMutation.mutateAsync(input);
-        return { ok: true, saved: "server" };
+        const saved = await createMutation.mutateAsync(input);
+        return { ok: true, saved: "server", entry: decorateEntry(catalog, saved) };
       } catch (error) {
         return saveFailures.current.get(input) ?? { ok: false, message: userErrorMessage(error, translate("tracker")("mutations.addFailed")) };
       } finally {
@@ -1130,7 +1141,7 @@ export const useEntryMutations = (): EntryMutations => {
         saveScopes.current.delete(input);
       }
     },
-    [createMutation]
+    [createMutation, shapeContext]
   );
 
   const updateEntry = React.useCallback(
@@ -1197,9 +1208,10 @@ export const useEntryMutations = (): EntryMutations => {
       const scope = entryMutationScope();
       const input: UpdateInput = { ...args, originId: ORIGIN_ID, ...(scope.workspaceId === null ? {} : { workspaceId: scope.workspaceId }) };
       saveScopes.current.set(input, scope);
+      const catalog = shapeContext();
       try {
-        await updateMutation.mutateAsync(input);
-        return { ok: true, saved: "server" };
+        const saved = await updateMutation.mutateAsync(input);
+        return { ok: true, saved: "server", entry: decorateEntry(catalog, saved) };
       } catch (error) {
         return saveFailures.current.get(input) ?? { ok: false, message: userErrorMessage(error, translate("tracker")("mutations.saveFailed")) };
       } finally {
@@ -1207,7 +1219,7 @@ export const useEntryMutations = (): EntryMutations => {
         saveScopes.current.delete(input);
       }
     },
-    [updateMutation, utils, queryClient, patchList, refetchWhenQuiet]
+    [updateMutation, utils, queryClient, patchList, refetchWhenQuiet, shapeContext]
   );
 
   const duplicateEntry = React.useCallback(

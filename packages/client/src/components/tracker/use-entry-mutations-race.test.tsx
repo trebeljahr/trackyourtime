@@ -40,7 +40,7 @@ vi.mock("@/lib/active-workspace", async (importOriginal) => ({
   getKnownWorkspacesOwner: () => scopeOwner,
 }));
 
-const enqueueOffline = vi.fn(async (): Promise<void> => undefined);
+const enqueueOffline = vi.fn<typeof import("@/lib/offline").enqueueOffline>(async (): Promise<void> => undefined);
 const amendQueuedStart = vi.fn(async (): Promise<boolean> => false);
 vi.mock("@/lib/offline", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/offline")>()),
@@ -562,7 +562,7 @@ describe("draft mutation completion", () => {
       expect(settled).toBe(false);
       const saved = entry({ ...manual, id: operation === "create" ? "e2" : "e1" });
       serverEntries = [saved];
-      await act(async () => { request.resolve(saved); expect(await result).toEqual({ ok: true, saved: "server" }); });
+      await act(async () => { request.resolve(saved); expect(await result).toEqual({ ok: true, saved: "server", entry: expect.objectContaining({ id: saved.id, start: saved.start, end: saved.end }) }); });
       expect(enqueueOffline).not.toHaveBeenCalled();
     });
 
@@ -595,7 +595,7 @@ describe("draft mutation completion", () => {
       await waitFor(() => expect(enqueueOffline).toHaveBeenCalledTimes(1));
       expect(settled).toBe(false);
       expect(screen.getByTestId("rows")).toHaveTextContent("Draft");
-      await act(async () => { storage.resolve(); expect(await result).toEqual({ ok: true, saved: "offline" }); });
+      await act(async () => { storage.resolve(); expect(await result).toEqual({ ok: true, saved: "offline", entry: expect.objectContaining({ description: "Draft" }) }); });
     });
 
     it(`${operation} returns failure and rolls back when storage fails`, async () => {
@@ -636,6 +636,34 @@ describe("draft mutation completion", () => {
       expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft");
     });
   }
+
+  it("returns the exact durable temp entry without a mounted tracker list", async () => {
+    scopeWorkspace = "ws-a";
+    scopeOwner = "u-a";
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = trpc.createClient({ links: [fakeLink] });
+    function EditorOnly(): null {
+      const hook = useEntryMutations();
+      React.useEffect(() => { mutations = hook; }, [hook]);
+      return null;
+    }
+    render(<trpc.Provider client={client} queryClient={queryClient}><QueryClientProvider client={queryClient}><EditorOnly /></QueryClientProvider></trpc.Provider>);
+    expect(queryClient.getQueryData([["entries", "list"], { input: TRACKER_LIST_INPUT, type: "infinite" }])).toBeUndefined();
+    const request = deferred<unknown>();
+    held.set("entries.create", request);
+    let result!: Promise<import("@/lib/entry-mutation-result").EntryMutationResult>;
+    act(() => { result = mutations!.createManualEntry(manual); });
+    await waitFor(() => expect(heldCalls.get("entries.create")).toBe(1));
+    // The consumer can even discard the optional tracker cache before failure.
+    queryClient.removeQueries({ predicate: (query) => JSON.stringify(query.queryKey).includes('"entries","list"') });
+    await act(async () => request.reject(new TypeError("Failed to fetch")));
+    const saved = await result;
+    expect(saved).toMatchObject({ ok: true, saved: "offline", entry: { workspaceId: "ws-a", authorId: "u-a", description: "Draft", start: manual.start, end: manual.end, source: "web" } });
+    if (!saved.ok || !saved.entry) throw new Error("missing created entry");
+    expect(saved.entry.id).toBe(enqueueOffline.mock.calls[0]?.[2]);
+    expect(saved.entry.id).toMatch(/^temp-/);
+    expect(queryClient.getQueryData([["entries", "list"], { input: TRACKER_LIST_INPUT, type: "infinite" }])).toBeUndefined();
+  });
 
   it("a temporary entry still syncing is not a completed save", async () => {
     mount();
