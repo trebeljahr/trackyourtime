@@ -31,6 +31,7 @@ import { translate } from "@/i18n/translate";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import {
   consumeSessionRevokedNotice,
+  subscribeSessionRevokedNotice,
   type SessionRevokedNotice,
 } from "@/lib/session-revoked";
 import { authPageHref, safeNextFromSearch } from "@/lib/safe-next";
@@ -90,6 +91,10 @@ export default function LoginPage() {
     // After mount, for the prerender reason spelled out above.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRevoked(consumeSessionRevokedNotice());
+    return subscribeSessionRevokedNotice(() => {
+      const notice = consumeSessionRevokedNotice();
+      if (notice) setRevoked(notice);
+    });
   }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

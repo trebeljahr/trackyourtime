@@ -10,7 +10,7 @@
  * their afternoon has been lost.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
@@ -68,6 +68,13 @@ describe("the login screen after a revocation", () => {
     const notice = await screen.findByTestId("login-revoked");
     expect(notice.textContent).toContain("You were signed out");
     expect(notice.textContent).toContain("3 unsent changes are still saved");
+  });
+
+  it("shows the notice when session cleanup navigates here before revocation finishes", async () => {
+    render(<LoginPage />);
+    expect(screen.queryByTestId("login-revoked")).toBeNull();
+    await act(async () => { await revoke(1); });
+    expect((await screen.findByTestId("login-revoked")).textContent).toContain("1 unsent change");
   });
 
   it("does not claim a queue that is empty", async () => {

@@ -71,6 +71,13 @@ export type SessionRevokedDeps = {
 // ── the notice the login screen picks up ─────────────────────────────
 
 let notice: SessionRevokedNotice | null = null;
+const noticeListeners = new Set<() => void>();
+
+/** A session-store update may navigate to login before revocation finishes. */
+export const subscribeSessionRevokedNotice = (listener: () => void): (() => void) => {
+  noticeListeners.add(listener);
+  return () => { noticeListeners.delete(listener); };
+};
 
 /**
  * Read the notice once and clear it.
@@ -122,6 +129,7 @@ const run = async (deps: SessionRevokedDeps): Promise<void> => {
   }
 
   notice = { pending };
+  for (const listener of noticeListeners) listener();
   deps.notify({ pending });
   deps.redirect();
 };
