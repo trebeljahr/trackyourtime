@@ -1,5 +1,6 @@
 import { createTRPCReact } from "@trpc/react-query";
-import { httpBatchLink, type TRPCLink } from "@trpc/client";
+import { httpBatchLink, httpBatchStreamLink, splitLink, type TRPCLink } from "@trpc/client";
+import { observable } from "@trpc/server/observable";
 import { assertEntryClientSupported, CLIENT_TOO_OLD, versionHeaders, withWorkspaceId } from "@starter/core";
 import type { AppRouter } from "@starter/server/trpc";
 import { clientId, isTokenShell } from "@/lib/shell";
@@ -123,74 +124,101 @@ export const isClientTooOldBody = (body: unknown): boolean => {
 };
 
 /**
- * Tell the level cache when the server refused this build, so the app shell
- * shows "Update the app" instead of a string of generic errors. Only a 412 is
- * read — the refusal's status — and the response handed on is untouched.
+ * Streaming sends headers before procedures finish, so even a refusal can
+ * arrive under HTTP 200. Observe decoded errors on both transports instead of
+ * cloning/reading a response body (which would wait for the entire batch).
  */
-export const watchVersionRefusal = async (response: Response): Promise<Response> => {
-  if (response.status !== 412) return response;
-  try {
-    if (isClientTooOldBody(await response.clone().json())) noteClientTooOld();
-  } catch {
-    // Not JSON: not a version refusal.
-  }
-  return response;
-};
+export const versionRefusalLink = (): TRPCLink<AppRouter> => () => ({ op, next }) =>
+  observable((observer) => next(op).subscribe({
+    next: (value) => observer.next(value),
+    complete: () => observer.complete(),
+    error: (error) => {
+      if (isClientTooOldBody({ error })) noteClientTooOld();
+      observer.error(error);
+    },
+  }));
 
-export function getTRPCClient() {
+/** Older WebViews can have fetch without tRPC's stream decoding primitives. */
+export const supportsBatchStreaming = (): boolean =>
+  typeof ReadableStream !== "undefined" &&
+  typeof WritableStream !== "undefined" &&
+  typeof TransformStream !== "undefined" &&
+  typeof TextDecoderStream !== "undefined" &&
+  typeof Response !== "undefined" &&
+  "body" in Response.prototype;
+
+/** Disable streaming per client, or with an operation's context.skipStreaming. */
+export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolean } = {}): ReturnType<typeof trpc.createClient> {
+  const options = {
+    url: `${process.env.NEXT_PUBLIC_API_URL || ""}/api/trpc`,
+    /**
+     * The phone and desktop shells authenticate with a bearer token, not a
+     * cookie: a `capacitor://localhost` or `app://-` document is cross-site
+     * to the API whatever SameSite says. With no token — every web request — this is exactly
+     * `credentials: "include"` and no `authorization` header, which
+     * `src/lib/trpc.test.ts` asserts rather than assumes.
+     */
+    fetch(url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
+      if (!isTokenShell()) {
+        const token = getNativeToken();
+        return fetch(url, {
+          ...options,
+          credentials: token ? "omit" : "include",
+        });
+      }
+      // The token shells choose their server at runtime (`lib/api-origin.ts`).
+      // The link above keeps the build-time URL; the request is rebased
+      // here, and only once the stored choice has been read, so nothing
+      // can leave for a server the person has already moved away from.
+      // The workspace choice is read the same way, and an operation that
+      // got ahead of it has its marker settled before it leaves.
+      return Promise.all([
+        whenApiOriginReady(),
+        whenActiveWorkspaceReady(),
+      ]).then(() => {
+        const token = getNativeToken();
+        const settled = settlePendingWorkspace(
+          String(url),
+          options,
+          getActiveWorkspaceId()
+        );
+        // Capture auth and credentials together after readiness. A token
+        // can change while the server/workspace choices are being read.
+        const headers = new Headers(settled.init?.headers);
+        if (token) headers.set("authorization", `Bearer ${token}`);
+        else headers.delete("authorization");
+        return fetch(rebaseApiUrl(settled.url), {
+          ...settled.init,
+          headers,
+          credentials: token ? "omit" : "include",
+        });
+      });
+    },
+    headers: () => {
+      const token = getNativeToken();
+      return {
+        "x-trackyourtime-client": clientId(),
+        // The version handshake (docs/versioning.md). Additive: the
+        // client kind above is unchanged, because it decides the device
+        // label and the session window.
+        ...versionHeaders(APP_VERSION),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      };
+    },
+  };
   return trpc.createClient({
     links: [
       workspaceLink(),
-      httpBatchLink({
-        url: `${process.env.NEXT_PUBLIC_API_URL || ""}/api/trpc`,
-        /**
-         * The phone and desktop shells authenticate with a bearer token, not a
-         * cookie: a `capacitor://localhost` or `app://-` document is cross-site
-         * to the API whatever SameSite says. With no token — every web request — this is exactly
-         * `credentials: "include"` and no `authorization` header, which
-         * `src/lib/trpc.test.ts` asserts rather than assumes.
-         */
-        fetch(url, options) {
-          if (!isTokenShell()) {
-            const token = getNativeToken();
-            return fetch(url, {
-              ...options,
-              credentials: token ? "omit" : "include",
-            }).then(watchVersionRefusal);
-          }
-          // The token shells choose their server at runtime (`lib/api-origin.ts`).
-          // The link above keeps the build-time URL; the request is rebased
-          // here, and only once the stored choice has been read, so nothing
-          // can leave for a server the person has already moved away from.
-          // The workspace choice is read the same way, and an operation that
-          // got ahead of it has its marker settled before it leaves.
-          return Promise.all([
-            whenApiOriginReady(),
-            whenActiveWorkspaceReady(),
-          ]).then(() => {
-            const token = getNativeToken();
-            const settled = settlePendingWorkspace(
-              String(url),
-              options as RequestInit | undefined,
-              getActiveWorkspaceId()
-            );
-            return fetch(rebaseApiUrl(settled.url), {
-              ...settled.init,
-              credentials: token ? "omit" : "include",
-            }).then(watchVersionRefusal);
-          });
-        },
-        headers: () => {
-          const token = getNativeToken();
-          return {
-            "x-trackyourtime-client": clientId(),
-            // The version handshake (docs/versioning.md). Additive: the
-            // client kind above is unchanged, because it decides the device
-            // label and the session window.
-            ...versionHeaders(APP_VERSION),
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          };
-        },
+      versionRefusalLink(),
+      splitLink({
+        // Queries do not set response headers. Keep mutations on ordinary
+        // JSON batches so their HTTP status/header behavior stays intact.
+        // CapacitorHttp patching is disabled in capacitor.config.ts: phones
+        // use WebView fetch. Older WebViews fall back without a polyfill.
+        condition: (op) => op.type === "query" && streamQueries &&
+          op.context.skipStreaming !== true && supportsBatchStreaming(),
+        true: httpBatchStreamLink({ ...options, streamHeader: "accept" }),
+        false: httpBatchLink(options),
       }),
     ],
   });

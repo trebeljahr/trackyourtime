@@ -37,7 +37,13 @@ const loadLink = async (options: {
 
   const captured: LinkOptions[] = [];
 
+  const capture = (opts: LinkOptions) => {
+    captured.push(opts);
+    return opts;
+  };
   vi.doMock("@trpc/client", () => ({
+    httpBatchStreamLink: capture,
+    splitLink: (opts: { false: LinkOptions }) => opts.false,
     httpBatchLink: (opts: LinkOptions) => {
       captured.push(opts);
       return opts;
@@ -144,7 +150,11 @@ describe("tRPC link on native", () => {
 describe("version handshake", () => {
   it("never sends an empty or malformed version, but still declares the level", async () => {
     vi.resetModules();
-    vi.doMock("@trpc/client", () => ({ httpBatchLink: (opts: LinkOptions) => opts }));
+    vi.doMock("@trpc/client", () => ({
+      httpBatchLink: (opts: LinkOptions) => opts,
+      httpBatchStreamLink: (opts: LinkOptions) => opts,
+      splitLink: (opts: { false: LinkOptions }) => opts.false,
+    }));
     vi.doMock("@trpc/react-query", () => ({
       createTRPCReact: () => ({ createClient: (config: { links: LinkOptions[] }) => config }),
     }));
@@ -155,7 +165,7 @@ describe("version handshake", () => {
     vi.doMock("@/lib/app-version", () => ({ APP_VERSION: "" }));
     const { getTRPCClient } = await import("@/lib/trpc");
     const config = getTRPCClient() as unknown as { links: LinkOptions[] };
-    const link = config.links[1];
+    const link = config.links[2];
     if (!link) throw new Error("no http link");
     expect(link.headers()).toEqual({
       "x-trackyourtime-client": "web",
