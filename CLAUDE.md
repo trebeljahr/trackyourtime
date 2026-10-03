@@ -2441,18 +2441,24 @@ Raycast lists it under "Not synced". `HoldReason` in `offline-queue.ts` is a
 union that will grow. Rules that fail quietly if broken:
 
 - **One classifier.** `classifyReplayOutcome` in `offline-replay.ts` turns a
-  failed replay into `retry-later` / `hold` / `drop` for all three clients. A
+  failed replay into `retry-later` / `hold` / `applied` for all three clients. A
   client supplies only its transport test and its membership re-check.
   `holdRefusal` is the seam for a hold that depends on the row, such as a 400
   from a server older than the row's API level.
 - **`unknown-procedure` is tRPC's message, not the status.** tRPC answers an
   unknown path with NOT_FOUND/404 and `No procedure found on path "…"`. An
   application NOT_FOUND, such as "entry gone" or a stop with nothing running,
-  has the same code and still drops. It is checked before the permanent set,
+  has the same code and is held for manual recovery. It is checked before the permanent set,
   or a newer client's `entries.discard` against an older self-hosted server
   is deleted.
 - **`unknown-op` is never written onto a row.** Every read computes it again
   (`holdReasonOf`), so a newer build that can decode the row releases it.
+  `refused` and `stale-stop` are durable manual holds; never released by a clock,
+  launch, or automatic reconnect. Recovery shows the original content and reason,
+  offers an input repair, retry of the scoped temp chain, JSON export and explicit
+  discard. Repairs keep `originalPayload`; a successful start checkpoints the
+  resolved stop target before a later failure or reload. Export requires the
+  current owner and server; replay also requires workspace membership.
   `unknown-procedure` is written with `at` and asked again after
   `HELD_RETRY_MS` (one hour). The web app also asks again on the first flush
   of a document.
@@ -2463,12 +2469,13 @@ union that will grow. Rules that fail quietly if broken:
   drop. `holdBlocksReplay` releases the hold the moment the level cache
   reports enough. A row with no stamp, or a server of unknown level, is sent as
   before. docs/versioning.md → "Gating a feature on the server".
-- **Holds follow the temp-id chain** (`chainOf: tempIdOf` on `flush`,
+- **Holds follow the entire scoped temp-id chain** (`chainOf: scopedTempIdOf` on `flush`,
   `heldReasons` for counts). A stop that is replayed without its held start
   ends whatever runs on the server.
 - **Held rows are not pending.** They are left out of every "is something
   ahead of a new mutation" count, the same way left-workspace rows are.
-- **The stored queue is `{ v: 1, data: rows }`** (docs/versioning.md, rule 4). A bare array is still read as v1.
+- **The stored queue is `{ v: 2, data: rows }`** (docs/versioning.md, rule 4). Bare arrays and v1 envelopes are still readable. The v2 envelope prevents older
+  versioned readers from discarding a manual hold they do not understand.
   An unreadable value is copied to `trackyourtime.offline-queue.corrupt.<ms>`
   before the reset. A `v` newer than `QUEUE_FORMAT_VERSION` locks the queue:
   its rows are held `unknown-op`, `enqueue`/`remove` throw

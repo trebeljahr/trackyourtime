@@ -94,6 +94,9 @@ import {
 import {
   adoptSession,
   discardHeldRow,
+  retryHeldRow,
+  exportHeldRow,
+  targetsForHeldRow,
   ensureReady,
   ensureSyncConnected,
   flushQueue,
@@ -392,6 +395,8 @@ const requireActivity = (done: boolean): void => {
 
 const apply = async (message: PopupToBackground): Promise<void> => {
   switch (message.type) {
+    case "queue:targets-held":
+    case "queue:export-held":
     case "state:get":
       return;
     case "auth:sign-in":
@@ -565,6 +570,9 @@ const apply = async (message: PopupToBackground): Promise<void> => {
         );
       }
       return;
+    case "queue:retry-held":
+      await retryHeldRow(message.id, message.input);
+      return;
     case "queue:discard-held":
       if (!(await discardHeldRow(message.id))) {
         throw new BackgroundError(
@@ -602,10 +610,12 @@ const handle = async (message: unknown): Promise<BackgroundResponse> => {
 
   try {
     await ensureReady();
+    const exportJson = message.type === "queue:export-held" ? await exportHeldRow(message.id) : undefined;
+    const recoveryTargets = message.type === "queue:targets-held" ? await targetsForHeldRow(message.id) : undefined;
     await apply(message);
     // Every success carries the full fresh snapshot, built after the mutation
     // landed, so the popup never has to guess what its own action did.
-    return { ok: true, state: remember(await buildState()) };
+    return { ok: true, state: remember(await buildState()), ...(exportJson === undefined ? {} : { exportJson }), ...(recoveryTargets === undefined ? {} : { recoveryTargets }) };
   } catch (error) {
     if (isUnauthorized(error)) {
       // The token was revoked from Settings → Devices, or it expired. Only

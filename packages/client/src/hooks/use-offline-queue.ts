@@ -6,6 +6,7 @@ import {
   classifyReplayOutcome,
   flushVerdictFor,
   type WorkspaceSummary,
+  type FlushVerdict,
 } from "@starter/core";
 
 import { toast } from "@/components/ui/sonner";
@@ -236,7 +237,7 @@ export const useOfflineQueue = (): OfflineQueueState => {
     async (
       mutation: OfflineMutation,
       context: { createdAt: string; resolved: ReplayIdMap }
-    ): Promise<void> =>
+    ): Promise<void | FlushVerdict> =>
       replayOfflineMutation(mutators, idleWatcher, mutation, context),
     [mutators]
   );
@@ -306,12 +307,12 @@ export const useOfflineQueue = (): OfflineQueueState => {
       retriedHeldRef.current = true;
       const result = await flushOfflineQueue(async (mutation, meta) => {
         try {
-          await dispatchRef.current(mutation, {
+          const verdict = await dispatchRef.current(mutation, {
             createdAt: meta.createdAt,
             resolved,
           });
           applied += 1;
-          return undefined;
+          return verdict;
         } catch (error) {
           /*
            * One classifier for every client (`classifyReplayOutcome` in core):
@@ -326,7 +327,7 @@ export const useOfflineQueue = (): OfflineQueueState => {
            *   confirmed a membership again: the list asked for above is only
            *   as fresh as the start of the flush;
            * - a refusal on the merits (400/403/404/409/410/422) and a stop too
-           *   old to target are dropped, and said out loud below.
+           *   old to target are held for manual recovery, and said out loud below.
            */
           const outcome = await classifyReplayOutcome(error, mutation, {
             isTransportFailure: isNetworkError,
@@ -344,12 +345,12 @@ export const useOfflineQueue = (): OfflineQueueState => {
           if (outcome.kind === "retry-later" && outcome.reason === "unauthorized") {
             blocked = true;
           }
-          if (outcome.kind === "drop") {
+          if (outcome.kind === "hold") {
             if (outcome.reason === "stale-stop") stale += 1;
-            else rejected += 1;
+            else if (outcome.reason === "refused") rejected += 1;
           }
           if (outcome.kind === "hold") {
-            heldNow += 1;
+            if (outcome.reason !== "refused" && outcome.reason !== "stale-stop") heldNow += 1;
             // The server lacks a procedure: its level may be older than this
             // cache believes. Asked again, so the next flush (and the banner)
             // judge by what it says now.
@@ -363,12 +364,8 @@ export const useOfflineQueue = (): OfflineQueueState => {
       if (levelStale) void refreshServerLevel();
 
       /*
-       * Say something when a row is lost.
-       *
-       * Both counters mean "the user tracked this and it is not going to
-       * exist". Silently deleting somebody's time and then invalidating the
-       * caches so the day looks emptier than they remember is the worst
-       * possible way to handle it.
+       * Refused work stays on this device. Point to the recovery controls
+       * rather than implying it will retry on its own.
        */
       const t = translate("tracker");
       if (rejected > 0) {
@@ -395,6 +392,8 @@ export const useOfflineQueue = (): OfflineQueueState => {
         await utilsRef.current.tasks.invalidate();
         await utilsRef.current.reports.invalidate();
       }
+    } catch {
+      toast.error(translate("tracker")("offlineQueue.storageFailed"));
     } finally {
       runningRef.current = false;
       setIsFlushing(false);

@@ -27,10 +27,13 @@ import { useT } from "@/i18n/use-t";
 import { useOfflineQueueState } from "@/providers/offline-queue-provider";
 import {
   discardForeignQueued,
+  subscribePending,
+  getRecoveryRevision,
   listForeignQueued,
   type ForeignQueuedRow,
   type OfflineOp,
 } from "@/lib/offline";
+import { QueueRecovery } from "./queue-recovery";
 import { getAbsoluteApiOrigin } from "@/lib/api-origin";
 
 /**
@@ -68,6 +71,8 @@ import { getAbsoluteApiOrigin } from "@/lib/api-origin";
 
 /** Catalog keys per hold reason. A new reason is a type error here. */
 const HELD_KEYS = {
+  refused: { title: "foreignQueue.held.refused.title", description: "foreignQueue.held.refused.description" },
+  "stale-stop": { title: "foreignQueue.held.staleStop.title", description: "foreignQueue.held.staleStop.description" },
   "unknown-op": {
     title: "foreignQueue.held.unknownOp.title",
     description: "foreignQueue.held.unknownOp.description",
@@ -160,6 +165,7 @@ const groupRows = (rows: ForeignQueuedRow[]): Group[] => {
 export function ForeignQueuePanel(): React.JSX.Element | null {
   const { foreign: others, held } = useOfflineQueueState();
   const foreign = others + held;
+  const revision = React.useSyncExternalStore(subscribePending, getRecoveryRevision, () => 0);
   const t = useT("settings");
   const tc = useT("common");
   const f = useFormat();
@@ -177,7 +183,7 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
     return () => {
       cancelled = true;
     };
-  }, [foreign]);
+  }, [foreign, revision]);
 
   // Nothing to say when the device is holding nobody else's work, and a card
   // that permanently reports "none" is noise on a screen that already has a
@@ -316,6 +322,7 @@ export function ForeignQueuePanel(): React.JSX.Element | null {
                     <span className="text-xs text-muted-foreground tabular-nums">
                       {formatAt(row.at)}
                     </span>
+                    <QueueRecovery row={row} />
                   </li>
                 ))}
               </ul>

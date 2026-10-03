@@ -4,6 +4,7 @@ import {
   corruptQueueKey,
   createOfflineQueue,
   OfflineQueueLockedError,
+  QUEUE_FORMAT_VERSION,
   type QueuedMutation,
 } from "../offline-queue.js";
 import {
@@ -47,7 +48,7 @@ const unknownPath = (path: string): ApiError =>
 
 // ── the classifier ───────────────────────────────────────────────────
 
-test("an unknown procedure holds; an application NOT_FOUND drops", async () => {
+test("an unknown procedure holds; an application NOT_FOUND is kept for repair", async () => {
   assert.deepEqual(
     await classifyReplayOutcome(unknownPath("entries.discard"), row()),
     { kind: "hold", reason: "unknown-procedure" },
@@ -55,11 +56,11 @@ test("an unknown procedure holds; an application NOT_FOUND drops", async () => {
   // The runaway guard capped the entry a queued stop meant to close.
   assert.deepEqual(
     await classifyReplayOutcome(new ApiError("No running entry", "NOT_FOUND", 404), row()),
-    { kind: "drop", reason: "refused" },
+    { kind: "hold", reason: "refused", message: "No running entry", code: "NOT_FOUND" },
   );
   assert.deepEqual(
     await classifyReplayOutcome(new ApiError("Entry not found", "NOT_FOUND", 404), row()),
-    { kind: "drop", reason: "refused" },
+    { kind: "hold", reason: "refused", message: "Entry not found", code: "NOT_FOUND" },
   );
   // A message that merely mentions the phrase is not tRPC's own.
   assert.equal(
@@ -89,7 +90,7 @@ test("400, 403, 409, 410 and 422 are refusals on the merits", async () => {
   ] as const) {
     assert.deepEqual(
       await classifyReplayOutcome(new ApiError("no", code, status), row()),
-      { kind: "drop", reason: "refused" },
+      { kind: "hold", reason: "refused", message: "no", code },
       code,
     );
   }
@@ -127,10 +128,10 @@ test("UNAUTHORIZED retries later with its own reason", async () => {
   );
 });
 
-test("a stale id-less stop drops", async () => {
+test("a stale id-less stop is kept for repair", async () => {
   assert.deepEqual(
     await classifyReplayOutcome(new StaleQueuedStopError("2026-09-01T00:00:00Z"), row()),
-    { kind: "drop", reason: "stale-stop" },
+    { kind: "hold", reason: "stale-stop", message: "Queued stop is too old to apply to an unidentified entry" },
   );
 });
 
@@ -145,7 +146,7 @@ test("a tRPC client error shape is read like an ApiError", async () => {
   const noStatus = Object.assign(new Error("bad"), { data: { code: "BAD_REQUEST" } });
   assert.deepEqual(
     await classifyReplayOutcome(noStatus, row(), { isTransportFailure: () => false }),
-    { kind: "drop", reason: "refused" },
+    { kind: "hold", reason: "refused", message: "bad", code: "BAD_REQUEST" },
   );
 });
 
@@ -166,7 +167,7 @@ test("a NOT_FOUND on a stamped row is kept unless membership is confirmed", asyn
   );
   assert.deepEqual(
     await classifyReplayOutcome(notFound, stamped, { stillMember: async () => true }),
-    { kind: "drop", reason: "refused" },
+    { kind: "hold", reason: "refused", message: "Entry not found", code: "NOT_FOUND" },
   );
 });
 
@@ -186,7 +187,7 @@ test("flushVerdictFor rethrows retry-later and hands back holds", () => {
   const error = new Error("x");
   assert.throws(() => flushVerdictFor({ kind: "retry-later", reason: "server" }, error), /x/);
   assert.deepEqual(flushVerdictFor({ kind: "hold", reason: "unknown-op" }, error), { hold: "unknown-op" });
-  assert.equal(flushVerdictFor({ kind: "drop", reason: "refused" }, error), undefined);
+  assert.deepEqual(flushVerdictFor({ kind: "hold", reason: "refused", message: "no" }, error), { hold: "refused", message: "no" });
 });
 
 // ── hold helpers ─────────────────────────────────────────────────────
@@ -211,7 +212,7 @@ test("an unknown-procedure hold is retried hourly, or when asked", () => {
   assert.equal(holdBlocksReplay(row(), { now }), false);
 });
 
-test("heldReasons follows a temp-id chain in order, and only forwards", () => {
+test("heldReasons keeps the entire temp-id chain together", () => {
   const rows: QueuedMutation[] = [
     row({ id: "stop-before", op: "entries.stop", payload: stop("t1") }),
     row({ id: "start", op: "entries.future", payload: start("t1") }),
@@ -220,6 +221,7 @@ test("heldReasons follows a temp-id chain in order, and only forwards", () => {
   ];
   const held = heldReasons(rows);
   assert.deepEqual([...held.entries()], [
+    ["stop-before", "unknown-op"],
     ["start", "unknown-op"],
     ["stop", "unknown-op"],
   ]);
@@ -287,7 +289,7 @@ test("the queue is written as a versioned envelope and reads the legacy array", 
 
   await queue.enqueue("entries.stop", stop());
   const stored = JSON.parse((await storage.getItem(KEY)) ?? "null") as { v: number; data: unknown[] };
-  assert.equal(stored.v, 1);
+  assert.equal(stored.v, QUEUE_FORMAT_VERSION);
   assert.equal(stored.data.length, 2);
   assert.equal((await queue.list()).length, 2);
 });
@@ -332,7 +334,7 @@ test("an unreadable queue is copied aside before it is reset", async () => {
 test("a queue in a newer format is listed as held and never overwritten", async () => {
   const storage = recordingStorage();
   const stored = JSON.stringify({
-    v: 2,
+    v: QUEUE_FORMAT_VERSION + 1,
     data: [{ id: "n", op: "entries.start", payload: start("t"), createdAt: "2026-09-14T09:00:00Z", level: 9 }],
     extra: true,
   });
@@ -358,7 +360,7 @@ test("a queue in a newer format is listed as held and never overwritten", async 
   assert.equal(storage.raw.get(KEY), stored);
 });
 
-test("a stored hold with a reason this build does not know is dropped on read", async () => {
+test("a future hold reason is preserved and blocked on read", async () => {
   const storage = memoryStorage();
   await storage.setItem(
     KEY,
@@ -372,5 +374,6 @@ test("a stored hold with a reason this build does not know is dropped on read", 
     }),
   );
   const rows = await createOfflineQueue({ storage }).list();
-  assert.deepEqual(rows.map((it) => it.hold?.reason ?? null), [null, null, "unknown-procedure"]);
+  assert.deepEqual(rows.map((it) => it.hold?.reason ?? null), ["some-future-reason", null, "unknown-procedure"]);
+  assert.equal(holdBlocksReplay(rows[0], { retryHeld: true }), true);
 });

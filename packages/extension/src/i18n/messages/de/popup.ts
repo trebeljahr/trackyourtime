@@ -5,6 +5,32 @@ import type { popup as source } from "../en/popup";
 /** German `popup`. Terms follow packages/client/src/i18n/GLOSSARY.de.md; voice is „du“. */
 export const popup: Translation<typeof source> = {
   workspace: {
+    recovery: {
+      description: "Beschreibung",
+      start: "Startdatum und Uhrzeit",
+      end: "Enddatum und Uhrzeit",
+      clearCatalog: "Nicht verfügbare Auswahl für Kunde, Projekt, Tätigkeit und Schlagwörter entfernen",
+      advanced: "Erweiterte Details",
+      useJson: "Erweitertes JSON statt der Felder oben verwenden",
+      invalidJson: "Gib gültiges JSON mit einem Objekt aus Eingabefeldern ein oder nutze die normalen Korrekturfelder.",
+      invalidDate: "Gib ein gültiges Datum und eine Uhrzeit ein.",
+      endBeforeStart: "Das Ende muss nach dem Start liegen. Korrigiere Datum und Uhrzeit vor dem erneuten Senden.",
+      targetRequired: "Wähle den ursprünglichen Eintrag für diesen Stopp. Der heutige Timer wird nie automatisch gewählt.",
+      loadTargets: "Einträge rund um diesen Stopp suchen",
+      target: "Ursprünglichen Eintrag beenden",
+      chooseTarget: "Ursprünglichen Eintrag wählen",
+      untitled: "Eintrag ohne Titel",
+
+      title: "{count, plural, one {# Änderung braucht} other {# Änderungen brauchen}} Aufmerksamkeit",
+      original: "Ursprüngliche Änderung",
+      input: "Eingabefelder (JSON)",
+      edit: "Felder korrigieren",
+      retry: "Diese Kette erneut senden",
+      download: "Kopie herunterladen",
+      hint: "Deine Arbeit ist hier gespeichert. Prüfe den Grund und korrigiere Felder oder Zeiten vor dem erneuten Senden. Ein Stopp braucht seine ursprüngliche Eintrags-ID. Start und Stopp bleiben zusammen. Du kannst eine Kopie herunterladen oder die Kette verwerfen.",
+      failed: "Die Änderung konnte nicht wiederhergestellt werden. Prüfe Felder, Eintrags-ID, Anmeldung und Zugriff auf den Arbeitsbereich. Deine Arbeit bleibt gespeichert.",
+    },
+
     label: "Arbeitsbereich",
     heldTitle: "{count, plural, one {# Änderung} other {# Änderungen}} nicht gesendet",
     heldHint: "In einem Arbeitsbereich in die Warteschlange gestellt, zu dem dein Konto nicht mehr gehört. Sie werden an keinen anderen Arbeitsbereich gesendet. Bitte einen Inhaber, dich wieder hinzuzufügen, um sie zu synchronisieren, oder verwirf sie hier.",

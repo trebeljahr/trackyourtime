@@ -293,7 +293,31 @@ export const settings: Translation<typeof source> = {
     },
   },
   foreignQueue: {
+      recovery: {
+        description: "Beschreibung",
+        start: "Startdatum und Uhrzeit",
+        end: "Enddatum und Uhrzeit",
+        clearCatalog: "Nicht verfügbare Auswahl für Kunde, Projekt, Tätigkeit und Schlagwörter entfernen",
+        advanced: "Erweiterte Details",
+        useJson: "Erweitertes JSON statt der Felder oben verwenden",
+        invalidJson: "Gib gültiges JSON mit einem Objekt aus Eingabefeldern ein oder nutze die normalen Korrekturfelder.",
+        invalidDate: "Gib ein gültiges Datum und eine Uhrzeit ein.",
+        endBeforeStart: "Das Ende muss nach dem Start liegen. Korrigiere Datum und Uhrzeit vor dem erneuten Senden.",
+        targetRequired: "Wähle den ursprünglichen Eintrag für diesen Stopp. Der heutige Timer wird nie automatisch gewählt.",
+        loadTargets: "Einträge rund um diesen Stopp suchen",
+        target: "Ursprünglichen Eintrag beenden",
+        chooseTarget: "Ursprünglichen Eintrag wählen",
+        untitled: "Eintrag ohne Titel",
+
+        original: "Ursprüngliche Änderung", input: "Eingabefelder (JSON)", edit: "Felder korrigieren", retry: "Diese Kette erneut senden", download: "Kopie herunterladen",
+        hint: "Korrigiere die Beschreibung, Daten oder nicht verfügbare Auswahl vor dem erneuten Senden. Ein Stopp braucht die ursprüngliche Eintrags-ID; er beendet den heutigen Timer nie auf Verdacht. Start und Stopp werden gemeinsam erneut gesendet. Der ursprüngliche Inhalt bleibt bis zur Synchronisierung oder zum Verwerfen gespeichert.",
+        failed: "Diese Änderung konnte nicht wiederhergestellt werden. Prüfe die Felder, Eintrags-ID, Anmeldung und den Zugriff auf den Arbeitsbereich. Deine gespeicherte Arbeit bleibt erhalten.",
+      },
+
     held: {
+      refused: { title: "Änderungen brauchen deine Aufmerksamkeit", description: "{count, plural, one {# Änderung wurde} other {# Änderungen wurden}} vom Server abgelehnt. Deine ursprüngliche Arbeit ist hier gespeichert. Prüfe den Grund, korrigiere die Felder und sende erneut, lade eine Kopie herunter oder verwirf sie." },
+      staleStop: { title: "Alte Stopps brauchen einen Eintrag", description: "{count, plural, one {# Stopp braucht} other {# Stopps brauchen}} die ursprüngliche Eintrags-ID, um sicher erneut gesendet zu werden. Deine Arbeit bleibt hier gespeichert." },
+
       unknownOp: {
         title: "Wartet auf eine neuere App-Version",
         description:

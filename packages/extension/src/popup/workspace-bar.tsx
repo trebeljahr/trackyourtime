@@ -1,7 +1,8 @@
 import { useState, type JSX } from "react";
-import type { WorkspaceSummary } from "@starter/core";
+import type { RecoveryTarget, WorkspaceSummary } from "@starter/core";
 import type { ExtensionTranslator } from "../i18n";
 import type { HeldSyncRow } from "../lib/messaging";
+import { QueueRecovery } from "./queue-recovery";
 import { ConfirmPanel } from "./confirm-panel";
 
 /**
@@ -64,6 +65,9 @@ export function WorkspacePicker({
 export type HeldQueueProps = {
   rows: HeldSyncRow[];
   onDiscard: (id: string) => Promise<boolean>;
+  onRetry?: (id: string, input?: unknown) => Promise<boolean>;
+  onExport?: (id: string) => Promise<string | null>;
+  onTargets?: (id: string) => Promise<RecoveryTarget[]>;
   t: ExtensionTranslator<"popup">;
 };
 
@@ -74,6 +78,8 @@ export type HeldQueueProps = {
 type HeldGroup = "left" | NonNullable<HeldSyncRow["hold"]>;
 
 const GROUP_ORDER: readonly HeldGroup[] = [
+  "refused",
+  "stale-stop",
   "other-account",
   "left",
   "server-too-old",
@@ -83,6 +89,8 @@ const GROUP_ORDER: readonly HeldGroup[] = [
 
 /** Catalog keys per group. A new `HoldReason` is a type error here. */
 const GROUP_KEYS = {
+  refused: { title: "workspace.recovery.title", hint: "workspace.recovery.hint" },
+  "stale-stop": { title: "workspace.recovery.title", hint: "workspace.recovery.hint" },
   left: { title: "workspace.heldTitle", hint: "workspace.heldHint" },
   "other-account": {
     title: "workspace.otherAccount.title",
@@ -110,7 +118,7 @@ const GROUP_KEYS = {
  * no server has seen. So they are listed by what they were and where, and the
  * one way out is a deliberate, confirmed discard of a named row.
  */
-export function HeldQueue({ rows, onDiscard, t }: HeldQueueProps): JSX.Element | null {
+export function HeldQueue({ rows, onDiscard, onRetry, onExport, onTargets, t }: HeldQueueProps): JSX.Element | null {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   if (rows.length === 0) return null;
@@ -180,6 +188,7 @@ export function HeldQueue({ rows, onDiscard, t }: HeldQueueProps): JSX.Element |
                 ) : (
                   <li key={row.queueId} className="held-queue__row" data-testid="held-queue-row">
                     <span>{label(row)}</span>
+                    <QueueRecovery row={row} onRetry={onRetry} onExport={onExport} onTargets={onTargets} t={t} />
                     <button
                       type="button"
                       className="button--link"

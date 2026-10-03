@@ -84,6 +84,9 @@ export type TrackerScreenProps = {
   onSwitchWorkspace: (workspaceId: string) => Promise<boolean>;
   /** Discards one change held for a workspace the person has left. */
   onDiscardHeld: (id: string) => Promise<boolean>;
+  onRetryHeld?: (id: string, input?: unknown) => Promise<boolean>;
+  onExportHeld?: (id: string) => Promise<string | null>;
+  onTargetsHeld?: (id: string) => Promise<import("@starter/core").RecoveryTarget[]>;
 };
 
 /**
@@ -165,6 +168,9 @@ export function TrackerScreen({
   onCreateTask,
   onSwitchWorkspace,
   onDiscardHeld,
+  onRetryHeld,
+  onExportHeld,
+  onTargetsHeld,
 }: TrackerScreenProps): JSX.Element {
   const t = useT("popup");
   const locale = usePopupLocale();
@@ -691,7 +697,7 @@ export function TrackerScreen({
           </div>
         )}
 
-        <HeldQueue rows={state.heldSync} onDiscard={onDiscardHeld} t={t} />
+        <HeldQueue rows={state.heldSync} onDiscard={onDiscardHeld} onRetry={onRetryHeld} onExport={onExportHeld} onTargets={onTargetsHeld} t={t} />
 
         <p
           className="notice tracker-toast"

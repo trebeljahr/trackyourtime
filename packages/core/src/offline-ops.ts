@@ -29,7 +29,8 @@ export const OFFLINE_QUEUE_STORAGE_KEY = "trackyourtime.offline-queue";
  * It is an id, not a credential: the token lives in the Keychain, this lives
  * beside the data it describes.
  */
-export const OFFLINE_QUEUE_OWNER_STORAGE_KEY = "trackyourtime.offline-queue-owner";
+export const OFFLINE_QUEUE_OWNER_STORAGE_KEY =
+  "trackyourtime.offline-queue-owner";
 
 /** Entries invented client-side carry this prefix until the server replies. */
 export const TEMP_ID_PREFIX = "temp-";
@@ -266,11 +267,13 @@ export const HELD_RETRY_MS = 60 * 60 * 1000;
  *   sooner when the caller says so (a launch, a resume).
  */
 export const HOLD_RELEASE: Readonly<
-  Record<HoldReason, "new-build" | "server">
+  Record<HoldReason, "new-build" | "server" | "manual">
 > = {
   "unknown-op": "new-build",
   "unknown-procedure": "server",
   "server-too-old": "server",
+  refused: "manual",
+  "stale-stop": "manual",
 };
 
 /**
@@ -285,8 +288,18 @@ export const tempIdOf = (
   return typeof tempId === "string" && tempId.length > 0 ? tempId : undefined;
 };
 
+/** A temp chain never crosses an account, server or workspace boundary. */
+export const scopedTempIdOf = (row: QueuedMutation): string | undefined => {
+  const tempId = tempIdOf(row);
+  return tempId === undefined
+    ? undefined
+    : JSON.stringify([row.owner, row.server, row.workspaceId, tempId]);
+};
+
 /** Why this row on its own is held, or null. Chains are `heldReasons`. */
 export const holdReasonOf = (row: QueuedMutation): HoldReason | null => {
+  if (row.hold && !Object.hasOwn(HOLD_RELEASE, row.hold.reason))
+    return "unknown-op";
   if (row.hold?.reason === "unknown-op") return "unknown-op";
   if (decodeOfflineMutation(row) === null) return "unknown-op";
   return row.hold?.reason ?? null;
@@ -314,7 +327,7 @@ export const holdBlocksReplay = (
 ): boolean => {
   const reason = holdReasonOf(row);
   if (reason === null) return false;
-  if (HOLD_RELEASE[reason] === "new-build") return true;
+  if (HOLD_RELEASE[reason] !== "server") return true;
   if (
     reason === "server-too-old" &&
     options.serverApiLevel !== undefined &&
@@ -342,10 +355,24 @@ export const heldReasons = (
   const held = new Map<string, HoldReason>();
   const chains = new Map<string, HoldReason>();
   for (const row of rows) {
-    const link = tempIdOf(row);
+    const link = scopedTempIdOf(row);
+    const reason = holdReasonOf(row);
+    if (link !== undefined && reason !== null) {
+      const previous = chains.get(link);
+      // A future row makes the whole chain unreadable. Otherwise manual
+      // recovery takes precedence over a hold that can end on a clock.
+      if (
+        previous === undefined ||
+        reason === "unknown-op" ||
+        (previous !== "unknown-op" && HOLD_RELEASE[reason] !== "server")
+      )
+        chains.set(link, reason);
+    }
+  }
+  for (const row of rows) {
+    const link = scopedTempIdOf(row);
     const reason =
-      holdReasonOf(row) ??
-      (link === undefined ? null : (chains.get(link) ?? null));
+      (link === undefined ? null : chains.get(link)) ?? holdReasonOf(row);
     if (reason === null) continue;
     held.set(row.id, reason);
     if (link !== undefined && !chains.has(link)) chains.set(link, reason);

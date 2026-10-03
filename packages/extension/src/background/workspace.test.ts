@@ -15,6 +15,8 @@ import { loadWorkspaceChoice } from "../lib/workspace-choice";
 import {
   applyEvent,
   discardHeldRow,
+  exportHeldRow,
+  retryHeldRow,
   enqueueOffline,
   entriesAreStale,
   flushQueue,
@@ -378,7 +380,7 @@ test("a NOT_FOUND from a workspace just left keeps the row instead of dropping i
   expect(await listHeldRows()).toHaveLength(1);
 });
 
-test("a FORBIDDEN refusal drops that one row and lets the rest through", async () => {
+test("a FORBIDDEN refusal holds that one row and lets the rest through", async () => {
   await resolveWorkspaces();
   await enqueueOffline("entries.update", { id: "e-1", description: "x" } as never);
   await enqueueOffline("entries.start", startInput("next"), "tmp_2");
@@ -386,7 +388,8 @@ test("a FORBIDDEN refusal drops that one row and lets the rest through", async (
 
   expect(await flushQueue()).toBe(0);
   expect(server.calls.some((call) => call.path === "entries.start")).toBe(true);
-  expect(await getOfflineQueue().size()).toBe(0);
+  expect(await getOfflineQueue().size()).toBe(1);
+  expect((await listHeldRows())[0]?.hold).toBe("refused");
 });
 
 test("legacy unstamped rows are adopted by the resolved workspace", async () => {
@@ -441,9 +444,9 @@ test("a server without the procedure holds the row and its chain, and the rest s
   await flushQueue();
   expect(server.calls.some((call) => call.path === "entries.discard")).toBe(false);
 
-  // The way out is deliberate, one named row at a time.
+  // Discarding either member removes the entire chain.
   expect(await discardHeldRow(held[1]?.queueId ?? "")).toBe(true);
-  expect(await getOfflineQueue().size()).toBe(1);
+  expect(await getOfflineQueue().size()).toBe(0);
 });
 
 test("a row this build cannot read is held, never sent and never dropped", async () => {
@@ -459,14 +462,14 @@ test("a row this build cannot read is held, never sent and never dropped", async
   expect(held?.hold).toBe("unknown-op");
 });
 
-test("an application NOT_FOUND in a workspace the person is still in drops the row", async () => {
+test("an application NOT_FOUND remains available for recovery", async () => {
   await resolveWorkspaces();
   await enqueueOffline("entries.stop", { end: "2026-09-14T10:00:00.000Z", originId: "o" });
   server.refuse = { path: "entries.stop", status: 404, code: "NOT_FOUND", message: "No running entry" };
 
   expect(await flushQueue()).toBe(0);
-  expect(await getOfflineQueue().size()).toBe(0);
-  expect(await listHeldRows()).toHaveLength(0);
+  expect(await getOfflineQueue().size()).toBe(1);
+  expect((await listHeldRows())[0]?.hold).toBe("refused");
 });
 
 // ── whose rows ───────────────────────────────────────────────────────
@@ -504,4 +507,46 @@ test("rows from before the owner stamp are claimed by the account that flushes t
 
   expect(await flushQueue()).toBe(0);
   expect(server.calls.some((call) => call.path === "entries.start")).toBe(true);
+});
+
+test("refused work survives a worker reload, supports repair/retry and scoped export", async () => {
+  await resolveWorkspaces();
+  await enqueueOffline("entries.update", { id: "e-1", description: "original" } as never);
+  server.refuse = { path: "entries.update", status: 403, code: "FORBIDDEN", message: "Role changed" };
+  await flushQueue();
+  await reload();
+  server.calls = [];
+  await flushQueue();
+  expect(server.calls.some((call) => call.path === "entries.update")).toBe(false);
+  const [held] = await listHeldRows();
+  expect(held?.recovery?.message).toBe("Role changed");
+  expect(JSON.parse(await exportHeldRow(held!.queueId)).data[0].payload.input.description).toBe("original");
+  server.refuse = null;
+  await retryHeldRow(held!.queueId, { id: "e-1", description: "repaired" });
+  expect(server.calls.find((call) => call.path === "entries.update")?.input?.description).toBe("repaired");
+  expect(await getOfflineQueue().size()).toBe(0);
+});
+
+test("another account cannot export or retry a held payload", async () => {
+  await resolveWorkspaces();
+  const row = await getOfflineQueue().enqueue("entries.start", { input: startInput("secret"), tempId: "temp-secret" }, COLLEAGUE, "http://127.0.0.1:9", A);
+  await getOfflineQueue().amendRows((rows) => rows.map((part) => ({ ...part, hold: { reason: "refused", at: part.createdAt } })));
+  expect(JSON.parse(await exportHeldRow(row.id)).data).toEqual([]);
+  const [held] = await listHeldRows();
+  expect(held?.description).toBeNull();
+  expect(held?.recovery).toBeUndefined();
+  await expect(retryHeldRow(row.id)).rejects.toThrow("RECOVERY_SCOPE_CHANGED");
+  expect((await getOfflineQueue().list())[0].payload).toEqual(row.payload);
+});
+
+test("an old generic stop is retained without reaching the server", async () => {
+  await resolveWorkspaces();
+  await enqueueOffline("entries.stop", { end: "2020-01-01T10:00:00Z", originId: "o" });
+  await getOfflineQueue().amendRows((rows) => rows.map((row) => ({ ...row, createdAt: "2020-01-01T00:00:00Z" })));
+  server.calls = [];
+  await flushQueue();
+  expect(server.calls.some((call) => call.path === "entries.stop")).toBe(false);
+  const [held] = await listHeldRows();
+  expect(held?.hold).toBe("stale-stop");
+  await expect(retryHeldRow(held!.queueId)).rejects.toThrow("RECOVERY_STOP_TARGET_REQUIRED");
 });

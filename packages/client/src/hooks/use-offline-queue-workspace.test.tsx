@@ -184,7 +184,7 @@ describe("useOfflineQueue in several workspaces", () => {
     expect(result.current.authBlocked).toBe(false);
   });
 
-  it("a FORBIDDEN on one row drops that row and keeps flushing, with no sign-in copy", async () => {
+  it("a FORBIDDEN on one row retains that row for recovery and keeps flushing, with no sign-in copy", async () => {
     await offline.enqueueOffline("entries.start", start("refused"), "temp-1", A.id);
     await offline.enqueueOffline("entries.start", start("fine"), "temp-2", A.id);
     failNext.set(
@@ -199,7 +199,8 @@ describe("useOfflineQueue in several workspaces", () => {
     });
 
     expect(sent.map((call) => call.input.description)).toEqual(["fine"]);
-    expect(await offline.getOfflineQueue().size()).toBe(0);
+    expect(await offline.getOfflineQueue().size()).toBe(1);
+    expect((await offline.getOfflineQueue().list())[0].hold?.reason).toBe("refused");
     expect(result.current.authBlocked).toBe(false);
     expect(toastError).toHaveBeenCalledWith(
       "One offline change could not be saved",
@@ -315,7 +316,7 @@ describe("a NOT_FOUND mid-flush", () => {
     );
   });
 
-  it("still drops, out loud, a NOT_FOUND in a workspace the person is still in", async () => {
+  it("keeps, with recovery copy, a NOT_FOUND in a workspace the person is still in", async () => {
     await offline.enqueueOffline("entries.start", start("entry gone"), "temp-1", A.id);
     listAnswer = async () => [A, B];
     failNext.set("entries.start:entry gone", notFound());
@@ -325,7 +326,8 @@ describe("a NOT_FOUND mid-flush", () => {
       await result.current.flush();
     });
 
-    expect(await offline.getOfflineQueue().size()).toBe(0);
+    expect(await offline.getOfflineQueue().size()).toBe(1);
+    expect((await offline.getOfflineQueue().list())[0].hold?.reason).toBe("refused");
     expect(toastError).toHaveBeenCalledWith(
       "One offline change could not be saved",
       expect.anything(),
@@ -425,8 +427,8 @@ describe("a server without the procedure", () => {
       await result.current.flush();
     });
 
-    expect(await offline.getOfflineQueue().size()).toBe(0);
-    expect(offline.getHeldCount()).toBe(0);
+    expect(await offline.getOfflineQueue().size()).toBe(1);
+    expect(offline.getHeldCount()).toBe(1);
     expect(toastError).toHaveBeenCalledWith(
       "One offline change could not be saved",
       expect.anything(),

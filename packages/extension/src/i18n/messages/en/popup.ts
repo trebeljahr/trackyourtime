@@ -11,6 +11,32 @@
  */
 export const popup = {
   workspace: {
+    recovery: {
+      description: "Description",
+      start: "Start date and time",
+      end: "End date and time",
+      clearCatalog: "Clear unavailable client, project, task and tags",
+      advanced: "Advanced details",
+      useJson: "Use advanced JSON instead of the fields above",
+      invalidJson: "Enter valid JSON with an object of input fields, or use the ordinary repair fields.",
+      invalidDate: "Enter a valid date and time.",
+      endBeforeStart: "End must be after start. Correct the dates and times before retrying.",
+      targetRequired: "Choose the original entry this stop belongs to. Today’s timer is never selected for you.",
+      loadTargets: "Find entries around this stop",
+      target: "Original entry to close",
+      chooseTarget: "Choose the original entry",
+      untitled: "Untitled entry",
+
+      title: "{count, plural, one {# change needs} other {# changes need}} attention",
+      original: "Original change",
+      input: "Input fields (JSON)",
+      edit: "Repair fields",
+      retry: "Retry this chain",
+      download: "Download a copy",
+      hint: "Your work is saved here. Review the reason and correct fields or times before retrying. A stop needs its original entry ID. Start/stop chains stay together. You can download a copy or discard the chain.",
+      failed: "Could not recover this change. Check the fields, entry ID, sign-in and workspace access. Your work is still saved.",
+    },
+
     label: "Workspace",
     heldTitle: "{count, plural, one {# change} other {# changes}} not sent",
     heldHint: "Queued in a workspace your account no longer belongs to. They are not sent to any other workspace. Ask an owner to add you back to sync them, or discard them here.",

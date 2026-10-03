@@ -1,0 +1,264 @@
+import {
+  decodeOfflineMutation,
+  heldReasons,
+  holdReasonOf,
+  scopedTempIdOf,
+  isTempId,
+} from "./offline-ops.js";
+import {
+  isQueuedOn,
+  QUEUE_FORMAT_VERSION,
+  type OfflineQueue,
+  type QueuedMutation,
+} from "./offline-queue.js";
+
+export type RecoveryScope = {
+  owner: string | null;
+  server: string;
+  legacyServer: string;
+  memberWorkspaceIds: ReadonlySet<string>;
+};
+
+/** Export needs ownership and server identity, including rows in a left workspace. */
+export const ownsRecoveryRow = (
+  row: QueuedMutation,
+  scope: RecoveryScope,
+): boolean =>
+  scope.owner !== null &&
+  row.owner === scope.owner &&
+  isQueuedOn(row, scope.server, scope.legacyServer);
+
+export const recoveryChain = (
+  rows: readonly QueuedMutation[],
+  id: string,
+): QueuedMutation[] => {
+  const row = rows.find((candidate) => candidate.id === id);
+  if (!row) return [];
+  const chain = scopedTempIdOf(row);
+  return chain === undefined
+    ? [row]
+    : rows.filter((candidate) => scopedTempIdOf(candidate) === chain);
+};
+
+export const exportRecoveryRows = (
+  rows: readonly QueuedMutation[],
+  scope: RecoveryScope,
+  ids?: readonly string[],
+): string => {
+  const selected =
+    ids === undefined ? rows : rows.filter((row) => ids.includes(row.id));
+  const included = new Set(
+    selected.flatMap((row) =>
+      recoveryChain(rows, row.id).map((part) => part.id),
+    ),
+  );
+  return JSON.stringify(
+    {
+      v: QUEUE_FORMAT_VERSION,
+      data: rows.filter(
+        (row) => included.has(row.id) && ownsRecoveryRow(row, scope),
+      ),
+    },
+    null,
+    2,
+  );
+};
+
+/**
+ * A user edits the input only. Identity, operation and temp chain stay fixed.
+ * The server validates domain fields again; an unsafe generic stop is refused
+ * locally even when the person explicitly retries it.
+ */
+export const retryRecoveryRow = async (
+  queue: OfflineQueue,
+  scope: () => RecoveryScope | Promise<RecoveryScope>,
+  id: string,
+  input?: unknown,
+): Promise<number> => {
+  let changed = 0;
+  await queue.amendRows(async (rows) => {
+    const current = await scope();
+    const chain = recoveryChain(rows, id);
+    const holds = heldReasons(rows);
+    if (chain.length === 0 || !chain.some((row) => holds.has(row.id)))
+      throw new Error("RECOVERY_NOT_HELD");
+    for (const row of chain) {
+      if (
+        !ownsRecoveryRow(row, current) ||
+        (row.workspaceId !== undefined &&
+          !current.memberWorkspaceIds.has(row.workspaceId))
+      )
+        throw new Error("RECOVERY_SCOPE_CHANGED");
+      const decoded = decodeOfflineMutation(row);
+      if (decoded === null || holdReasonOf(row) === "unknown-op")
+        throw new Error("RECOVERY_UPDATE_REQUIRED");
+      const replacement =
+        row.id === id && input !== undefined ? input : decoded.input;
+      if (
+        typeof replacement !== "object" ||
+        replacement === null ||
+        Array.isArray(replacement)
+      )
+        throw new Error("RECOVERY_INVALID_INPUT");
+      const fields = replacement as Record<string, unknown>;
+      // No request-body workspace override or identity changes from an editor.
+      if (
+        ["workspaceId", "owner", "server", "userId"].some(
+          (key) => key in fields,
+        )
+      )
+        throw new Error("RECOVERY_INVALID_INPUT");
+      if (
+        decoded.op === "entries.stop" &&
+        (!fields.id || typeof fields.id !== "string" || isTempId(fields.id))
+      ) {
+        const hasStart = chain.some((part) => part.op === "entries.start");
+        if (!hasStart) throw new Error("RECOVERY_STOP_TARGET_REQUIRED");
+      }
+    }
+    const ids = new Set(chain.map((row) => row.id));
+    changed = chain.length;
+    return rows.map((row) => {
+      if (!ids.has(row.id)) return row;
+      const next = { ...row };
+      delete next.hold;
+      if (row.id === id && input !== undefined) {
+        next.originalPayload = row.originalPayload ?? row.payload;
+        next.payload = { ...(row.payload as Record<string, unknown>), input };
+      }
+      return next;
+    });
+  });
+  return changed;
+};
+
+/** One durable write removes the entire authorized temp chain. */
+export const discardRecoveryRow = async (
+  queue: OfflineQueue,
+  scope: () => RecoveryScope | Promise<RecoveryScope>,
+  id: string,
+): Promise<number> => {
+  let removed = 0;
+  await queue.amendRows(async (rows) => {
+    const chain = recoveryChain(rows, id);
+    const current = await scope();
+    if (!chain.every((row) => ownsRecoveryRow(row, current)))
+      throw new Error("RECOVERY_SCOPE_CHANGED");
+    const ids = new Set(chain.map((row) => row.id));
+    removed = ids.size;
+    return rows.filter((row) => !ids.has(row.id));
+  });
+  return removed;
+};
+
+export type RecoveryFieldEdits = {
+  description?: string;
+  start?: string;
+  end?: string;
+  id?: string;
+  clearCatalog?: boolean;
+};
+
+/** Ordinary repair fields preserve all untouched inputs and identity stamps. */
+export const repairRecoveryInput = (
+  op: string,
+  original: unknown,
+  edits: RecoveryFieldEdits,
+): Record<string, unknown> => {
+  if (
+    typeof original !== "object" ||
+    original === null ||
+    Array.isArray(original)
+  )
+    throw new Error("RECOVERY_INVALID_INPUT");
+  const next = { ...original } as Record<string, unknown>;
+  if (edits.description !== undefined) next.description = edits.description;
+  if (edits.id !== undefined) next.id = edits.id.trim();
+  for (const field of ["start", "end"] as const) {
+    if (edits[field] === undefined) continue;
+    const time = Date.parse(edits[field]);
+    if (!Number.isFinite(time)) throw new Error("RECOVERY_INVALID_DATE");
+    next[field] = new Date(time).toISOString();
+  }
+  for (const field of ["start", "end"] as const) {
+    const required =
+      field === "start"
+        ? ["entries.start", "entries.create"].includes(op)
+        : ["entries.stop", "entries.create"].includes(op);
+    if (
+      (required || (next[field] !== undefined && next[field] !== null)) &&
+      (typeof next[field] !== "string" ||
+        !Number.isFinite(Date.parse(next[field] as string)))
+    )
+      throw new Error("RECOVERY_INVALID_DATE");
+  }
+  if (edits.clearCatalog) {
+    for (const field of ["clientId", "projectId", "taskId", "tagIds"]) {
+      // On an update, omitted references leave the server's existing values
+      // alone and avoid restrictions on invoiced entries. New work has none.
+      if (op === "entries.update") delete next[field];
+      else next[field] = field === "tagIds" ? [] : null;
+    }
+  }
+  if (
+    typeof next.start === "string" &&
+    typeof next.end === "string" &&
+    Date.parse(next.end) <= Date.parse(next.start)
+  )
+    throw new Error("RECOVERY_END_BEFORE_START");
+  return next;
+};
+
+/** Local date/time value for standard browser controls; no locale in stored ISO. */
+export const recoveryLocalTime = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 19);
+};
+
+export type RecoveryTarget = { id: string; description: string; start: string };
+
+/** Candidates are owned by the caller, in this row's workspace and old enough. */
+export const recoveryStopTargets = (
+  entries: readonly {
+    id: string;
+    description: string;
+    start: string;
+    authorId?: string;
+    workspaceId: string;
+  }[],
+  row: QueuedMutation,
+  scope: RecoveryScope,
+): RecoveryTarget[] => {
+  if (!ownsRecoveryRow(row, scope)) return [];
+  const mutation = decodeOfflineMutation(row);
+  if (mutation?.op !== "entries.stop") return [];
+  const end = Date.parse(mutation.input.end);
+  return entries
+    .filter(
+      (entry) =>
+        entry.authorId === scope.owner &&
+        entry.workspaceId === row.workspaceId &&
+        Date.parse(entry.start) <= end,
+    )
+    .map(({ id, description, start }) => ({ id, description, start }));
+};
+
+export const recoveryStopRange = (
+  input: unknown,
+): { from: string; to: string; limit: number } => {
+  const end =
+    typeof input === "object" && input !== null
+      ? (input as { end?: unknown }).end
+      : undefined;
+  const at = typeof end === "string" ? Date.parse(end) : NaN;
+  if (!Number.isFinite(at)) throw new Error("RECOVERY_INVALID_DATE");
+  return {
+    from: new Date(at - 14 * 24 * 60 * 60_000).toISOString(),
+    to: new Date(at + 24 * 60 * 60_000).toISOString(),
+    limit: 100,
+  };
+};

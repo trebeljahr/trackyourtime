@@ -56,8 +56,8 @@ export type QueuedMutation = {
   workspaceId?: string;
   /**
    * Why a replay put this row aside instead of sending or dropping it, and
-   * when. Written only for holds that can end on their own — the server gained
-   * the procedure — so a flush knows when to ask again (`holdBlocksReplay` in
+   * when. Includes manual holds for refused work and unsafe old stops, plus holds
+   * that can end when the server changes (`holdBlocksReplay` in
    * `offline-ops.ts`). A row this build cannot decode is never stamped: that
    * hold is recomputed on every read, which is what releases it the moment a
    * newer build that understands it is installed.
@@ -65,6 +65,8 @@ export type QueuedMutation = {
    * Optional forever, like every other stamp.
    */
   hold?: QueuedHold;
+  /** First payload before a user repair; retained until sync or explicit discard. */
+  originalPayload?: unknown;
   /**
    * The `API_LEVEL` of the build that queued this row — what the row may need
    * of the server. A server whose known level is lower cannot be trusted with
@@ -94,19 +96,29 @@ export type QueuedMutation = {
  *   that queued the row (`QueuedMutation.apiLevel`). Released the moment the
  *   server reports a level high enough.
  */
-export type HoldReason = "unknown-op" | "unknown-procedure" | "server-too-old";
+export type HoldReason =
+  | "unknown-op"
+  | "unknown-procedure"
+  | "server-too-old"
+  | "refused"
+  | "stale-stop";
 
 export type QueuedHold = {
   reason: HoldReason;
   /** When the hold was last confirmed — the clock a retry is measured from. */
   at: string;
+  /** Server refusal, kept for the owner to inspect. */
+  message?: string;
+  code?: string;
 };
 
 /**
  * What a flush runner may answer instead of resolving (sent, drop the row) or
  * throwing (stop, keep this row and everything behind it).
  */
-export type FlushVerdict = { hold: HoldReason };
+export type FlushVerdict =
+  | { hold: HoldReason; message?: string; code?: string }
+  | { resolvedTempId: string; serverId: string };
 
 /**
  * The format `createOfflineQueue` writes: `{ v, data: rows }`, the same
@@ -114,7 +126,9 @@ export type FlushVerdict = { hold: HoldReason };
  * whose answer to a newer version is a miss: here that would be an empty
  * queue, overwritten by the next enqueue. See docs/versioning.md, rule 4.
  */
-export const QUEUE_FORMAT_VERSION = 1;
+// v2 protects durable manual holds from v1 readers that discarded refusals.
+// Bare arrays and v1 envelopes remain readable without losing their payloads.
+export const QUEUE_FORMAT_VERSION = 2;
 
 /**
  * Where an unreadable stored queue is copied before the queue is reset. The
@@ -132,7 +146,9 @@ export class OfflineQueueLockedError extends Error {
   readonly version: number;
 
   constructor(version: number) {
-    super(`Offline queue is stored in format v${version}, newer than this build`);
+    super(
+      `Offline queue is stored in format v${version}, newer than this build`,
+    );
     this.name = "OfflineQueueLockedError";
     this.version = version;
   }
@@ -144,13 +160,19 @@ export type OfflineQueue = {
     payload: unknown,
     owner?: string,
     server?: string,
-    workspaceId?: string
+    workspaceId?: string,
   ): Promise<QueuedMutation>;
   list(): Promise<QueuedMutation[]>;
   /** Amend payloads atomically with respect to enqueue and replay. */
   amendPayloads(
-    amend: (row: QueuedMutation) => unknown | undefined
+    amend: (row: QueuedMutation) => unknown | undefined,
   ): Promise<number>;
+  /** Atomic recovery edit: persistence must succeed before it is reported. */
+  amendRows(
+    amend: (
+      rows: readonly QueuedMutation[],
+    ) => QueuedMutation[] | Promise<QueuedMutation[]>,
+  ): Promise<void>;
   size(): Promise<number>;
   remove(id: string): Promise<void>;
   clear(): Promise<void>;
@@ -163,7 +185,7 @@ export type OfflineQueue = {
    */
   adoptUnowned(
     owner: string,
-    where?: (mutation: QueuedMutation) => boolean
+    where?: (mutation: QueuedMutation) => boolean,
   ): Promise<number>;
   /**
    * Stamp every row that names no server with `server`, and report how many.
@@ -183,7 +205,7 @@ export type OfflineQueue = {
    */
   adoptUnstampedWorkspace(
     workspaceId: string,
-    where?: (mutation: QueuedMutation) => boolean
+    where?: (mutation: QueuedMutation) => boolean,
   ): Promise<number>;
   /**
    * Run `runner` over the queue in order, dropping each mutation as it
@@ -201,7 +223,7 @@ export type OfflineQueue = {
    */
   flush(
     runner: (mutation: QueuedMutation) => Promise<void | FlushVerdict>,
-    options?: FlushOptions
+    options?: FlushOptions,
   ): Promise<FlushResult>;
 };
 
@@ -238,14 +260,20 @@ export type FlushResult = {
  * fact about the build reading the row, recomputed on every read, and a stored
  * copy would outlive the upgrade that ends it.
  */
-const STORED_HOLD_REASONS: readonly string[] = ["unknown-procedure", "server-too-old"];
+const STORED_HOLD_REASONS: readonly string[] = [
+  "unknown-procedure",
+  "server-too-old",
+  "refused",
+  "stale-stop",
+];
 
 const readHold = (value: unknown): QueuedHold | undefined => {
   if (typeof value !== "object" || value === null) return undefined;
   const { reason, at } = value as { reason?: unknown; at?: unknown };
-  if (typeof reason !== "string" || !STORED_HOLD_REASONS.includes(reason)) return undefined;
+  if (typeof reason !== "string" || reason === "unknown-op") return undefined;
   if (typeof at !== "string") return undefined;
-  return { reason: reason as HoldReason, at };
+  // Preserve future holds; offline-ops treats them as unknown-op and blocks replay.
+  return { ...(value as QueuedHold), reason: reason as HoldReason, at };
 };
 
 const isQueuedMutation = (value: unknown): value is QueuedMutation => {
@@ -276,7 +304,8 @@ const normalize = (mutation: QueuedMutation): QueuedMutation => {
     typeof mutation.workspaceId === "string" && mutation.workspaceId.length > 0
       ? mutation.workspaceId
       : undefined;
-  const hold = mutation.hold === undefined ? undefined : readHold(mutation.hold);
+  const hold =
+    mutation.hold === undefined ? undefined : readHold(mutation.hold);
   const apiLevel =
     typeof mutation.apiLevel === "number" &&
     Number.isInteger(mutation.apiLevel) &&
@@ -316,7 +345,7 @@ const normalize = (mutation: QueuedMutation): QueuedMutation => {
  */
 export const isReplayableBy = (
   mutation: Pick<QueuedMutation, "owner">,
-  owner: string | null
+  owner: string | null,
 ): boolean => {
   if (owner === null) return false;
   return mutation.owner === undefined || mutation.owner === owner;
@@ -332,7 +361,7 @@ export const isReplayableBy = (
  */
 export const isForeignTo = (
   mutation: Pick<QueuedMutation, "owner">,
-  owner: string | null
+  owner: string | null,
 ): boolean => mutation.owner !== undefined && mutation.owner !== owner;
 
 /**
@@ -348,7 +377,7 @@ export const isForeignTo = (
 export const isQueuedOn = (
   mutation: Pick<QueuedMutation, "server">,
   server: string,
-  legacyServer: string
+  legacyServer: string,
 ): boolean => sameServerOrigin(mutation.server ?? legacyServer, server);
 
 /**
@@ -370,7 +399,7 @@ export const isQueuedOn = (
  */
 export const isReplayableIn = (
   mutation: Pick<QueuedMutation, "workspaceId">,
-  memberWorkspaceIds: ReadonlySet<string>
+  memberWorkspaceIds: ReadonlySet<string>,
 ): boolean =>
   mutation.workspaceId === undefined ||
   memberWorkspaceIds.has(mutation.workspaceId);
@@ -383,7 +412,7 @@ export const isReplayableIn = (
  */
 export const isForeignWorkspace = (
   mutation: Pick<QueuedMutation, "workspaceId">,
-  memberWorkspaceIds: ReadonlySet<string>
+  memberWorkspaceIds: ReadonlySet<string>,
 ): boolean =>
   mutation.workspaceId !== undefined &&
   !memberWorkspaceIds.has(mutation.workspaceId);
@@ -404,7 +433,7 @@ export const isForeignWorkspace = (
 export const refusalKeepsRow = async (
   error: unknown,
   row: { workspaceId?: string },
-  stillMember: (workspaceId: string) => Promise<boolean>
+  stillMember: (workspaceId: string) => Promise<boolean>,
 ): Promise<boolean> => {
   if (row.workspaceId === undefined) return false;
   if (!(error instanceof ApiError)) return false;
@@ -421,12 +450,12 @@ export const refusalKeepsRow = async (
 export const adoptUnstampedWorkspace = (
   rows: readonly QueuedMutation[],
   workspaceId: string,
-  where?: (mutation: QueuedMutation) => boolean
+  where?: (mutation: QueuedMutation) => boolean,
 ): QueuedMutation[] =>
   rows.map((row) =>
     row.workspaceId === undefined && (where === undefined || where(row))
       ? { ...row, workspaceId }
-      : row
+      : row,
   );
 
 /**
@@ -482,13 +511,12 @@ export const createOfflineQueue = ({
       await storage.setItem(copy, raw);
       await storage.removeItem(key);
       console.warn(
-        `[offline-queue] unreadable queue under "${key}" copied to "${copy}" and reset`
+        `[offline-queue] unreadable queue under "${key}" copied to "${copy}" and reset`,
       );
       return [];
     }
 
-    const version =
-      Array.isArray(parsed) ? 1 : (parsed as { v: number }).v;
+    const version = Array.isArray(parsed) ? 1 : (parsed as { v: number }).v;
     const mutations = rows.filter(isQueuedMutation).map(normalize);
     if (version > QUEUE_FORMAT_VERSION) {
       lockedVersion = version;
@@ -501,14 +529,15 @@ export const createOfflineQueue = ({
   };
 
   const write = async (mutations: QueuedMutation[]): Promise<void> => {
-    if (lockedVersion !== null) throw new OfflineQueueLockedError(lockedVersion);
+    if (lockedVersion !== null)
+      throw new OfflineQueueLockedError(lockedVersion);
     if (mutations.length === 0) {
       await storage.removeItem(key);
       return;
     }
     await storage.setItem(
       key,
-      JSON.stringify({ v: QUEUE_FORMAT_VERSION, data: mutations })
+      JSON.stringify({ v: QUEUE_FORMAT_VERSION, data: mutations }),
     );
   };
 
@@ -533,7 +562,7 @@ export const createOfflineQueue = ({
     const run = chain.then(task, task);
     chain = run.then(
       () => undefined,
-      () => undefined
+      () => undefined,
     );
     return run;
   };
@@ -575,6 +604,12 @@ export const createOfflineQueue = ({
         return changed;
       }),
 
+    amendRows: (amend) =>
+      serial(async () => {
+        const rows = await read();
+        await write(await amend(rows));
+      }),
+
     size: () => serial(async () => (await read()).length),
 
     remove: (id) =>
@@ -593,46 +628,63 @@ export const createOfflineQueue = ({
       }),
 
     adoptUnowned: (owner, where) =>
-      serial(() => bestEffort(async () => {
-        const mutations = await read();
-        // `where` keeps an account from claiming rows it could never have
-        // made: an account on one server adopting a row queued against another.
-        const claimable = (m: QueuedMutation): boolean =>
-          m.owner === undefined && (where === undefined || where(m));
-        const unowned = mutations.filter(claimable);
-        if (unowned.length === 0) return 0;
-        await write(mutations.map((m) => (claimable(m) ? { ...m, owner } : m)));
-        return unowned.length;
-      })),
+      serial(() =>
+        bestEffort(async () => {
+          const mutations = await read();
+          // `where` keeps an account from claiming rows it could never have
+          // made: an account on one server adopting a row queued against another.
+          const claimable = (m: QueuedMutation): boolean =>
+            m.owner === undefined && (where === undefined || where(m));
+          const unowned = mutations.filter(claimable);
+          if (unowned.length === 0) return 0;
+          await write(
+            mutations.map((m) => (claimable(m) ? { ...m, owner } : m)),
+          );
+          return unowned.length;
+        }),
+      ),
 
     adoptUnserved: (server) =>
-      serial(() => bestEffort(async () => {
-        const mutations = await read();
-        const unserved = mutations.filter((m) => m.server === undefined);
-        if (unserved.length === 0) return 0;
-        await write(
-          mutations.map((m) => (m.server === undefined ? { ...m, server } : m))
-        );
-        return unserved.length;
-      })),
+      serial(() =>
+        bestEffort(async () => {
+          const mutations = await read();
+          const unserved = mutations.filter((m) => m.server === undefined);
+          if (unserved.length === 0) return 0;
+          await write(
+            mutations.map((m) =>
+              m.server === undefined ? { ...m, server } : m,
+            ),
+          );
+          return unserved.length;
+        }),
+      ),
 
     adoptUnstampedWorkspace: (workspaceId, where) =>
-      serial(() => bestEffort(async () => {
-        const mutations = await read();
-        const next = adoptUnstampedWorkspace(mutations, workspaceId, where);
-        const adopted = next.filter(
-          (row, index) => row !== mutations[index]
-        ).length;
-        if (adopted === 0) return 0;
-        await write(next);
-        return adopted;
-      })),
+      serial(() =>
+        bestEffort(async () => {
+          const mutations = await read();
+          const next = adoptUnstampedWorkspace(mutations, workspaceId, where);
+          const adopted = next.filter(
+            (row, index) => row !== mutations[index],
+          ).length;
+          if (adopted === 0) return 0;
+          await write(next);
+          return adopted;
+        }),
+      ),
 
     flush: (runner, options) =>
       serial(async () => {
-        const mutations = await read();
+        let mutations = await read();
         const locked = lockedVersion !== null;
-        const wanted = options?.filter ?? (() => true);
+        const filter = options?.filter ?? (() => true);
+        const manualHold = (row: QueuedMutation): boolean =>
+          row.hold !== undefined &&
+          (row.hold.reason === "refused" ||
+            row.hold.reason === "stale-stop" ||
+            !STORED_HOLD_REASONS.includes(row.hold.reason));
+        const wanted = (row: QueuedMutation): boolean =>
+          !manualHold(row) && filter(row);
         const chainOf = options?.chainOf ?? (() => undefined);
         // Rows left in place, in order, so they can be written back ahead of
         // whatever is still unprocessed when a flush stops early.
@@ -640,6 +692,13 @@ export const createOfflineQueue = ({
         // Chains with a row that was not run, and whether that row was held:
         // nothing later in them may run.
         const stranded = new Map<string, boolean>();
+        // Block a chain even when the held/filtered row appears after its
+        // start. Retrying only half the chain would strand a new running timer.
+        for (const row of mutations) {
+          const link = chainOf(row);
+          if (link !== undefined && !wanted(row))
+            stranded.set(link, manualHold(row));
+        }
         let flushed = 0;
         let held = 0;
         let changed = false;
@@ -647,12 +706,17 @@ export const createOfflineQueue = ({
         const leave = (mutation: QueuedMutation, asHeld: boolean): void => {
           kept.push(mutation);
           const link = chainOf(mutation);
-          if (link !== undefined && !stranded.get(link)) stranded.set(link, asHeld);
+          if (link !== undefined && !stranded.get(link))
+            stranded.set(link, asHeld);
         };
 
-        for (const [index, mutation] of mutations.entries()) {
+        // Index loop reads dependent payloads patched after a successful start.
+        for (let index = 0; index < mutations.length; index += 1) {
+          const mutation = mutations[index];
           if (locked || !wanted(mutation)) {
-            leave(mutation, false);
+            const asHeld = manualHold(mutation);
+            leave(mutation, asHeld);
+            if (asHeld) held += 1;
             continue;
           }
           const link = chainOf(mutation);
@@ -667,7 +731,7 @@ export const createOfflineQueue = ({
             verdict = await runner(mutation);
           } catch (error) {
             const remaining = [...kept, ...mutations.slice(index)];
-            if (!locked && (changed || flushed > 0)) await write(remaining);
+            if (!locked && changed) await write(remaining);
             return {
               flushed,
               skipped: kept.length,
@@ -686,15 +750,49 @@ export const createOfflineQueue = ({
             leave(
               {
                 ...mutation,
-                hold: { reason: verdict.hold, at: new Date().toISOString() },
+                hold: {
+                  reason: verdict.hold,
+                  at: new Date().toISOString(),
+                  ...(verdict.message ? { message: verdict.message } : {}),
+                  ...(verdict.code ? { code: verdict.code } : {}),
+                },
               },
-              true
+              true,
             );
-            changed = true;
+            await write([...kept, ...mutations.slice(index + 1)]);
+            changed = false;
             continue;
+          }
+          if (verdict && "resolvedTempId" in verdict) {
+            const link = chainOf(mutation);
+            mutations = mutations.map((next, nextIndex) => {
+              if (
+                nextIndex <= index ||
+                next.op !== "entries.stop" ||
+                link === undefined ||
+                chainOf(next) !== link
+              )
+                return next;
+              const payload = next.payload as { input?: unknown };
+              if (typeof payload?.input !== "object" || payload.input === null)
+                return next;
+              return {
+                ...next,
+                originalPayload: next.originalPayload ?? next.payload,
+                payload: {
+                  ...payload,
+                  input: { ...payload.input, id: verdict.serverId },
+                },
+              };
+            });
           }
           flushed += 1;
           changed = true;
+          // Checkpoint each applied row and its resolved dependants. A later
+          // rejected stop can then be repaired after a reload without replaying
+          // its start or guessing which timer is running.
+          await write([...kept, ...mutations.slice(index + 1)]);
+          changed = false;
         }
 
         if (!locked && changed) await write(kept);

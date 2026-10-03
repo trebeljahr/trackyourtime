@@ -287,7 +287,7 @@ describe("another account's queued rows", () => {
     __resetOfflineQueueOwnerForTests();
   });
 
-  it("describes them well enough for a person to decide", async () => {
+  it("shows operation metadata while hiding another account's work content", async () => {
     await setOfflineQueueOwner("user-a");
     await enqueueOffline("entries.start", startInput("Design review"), "temp-1");
     await enqueueOffline("entries.stop", {
@@ -301,10 +301,10 @@ describe("another account's queued rows", () => {
       "entries.start",
       "entries.stop",
     ]);
-    // The start carries what the work was called and when it happened; a stop
-    // carries neither, so it falls back to when it was queued.
-    expect(rows[0].description).toBe("Design review");
-    expect(rows[0].at).toBe("2026-08-21T09:00:00.000Z");
+    // Another account cannot inspect the payload or its original work date.
+    expect(rows[0].description).toBeNull();
+    expect(rows[0].recovery).toBeUndefined();
+    expect(rows[0].at).toBe((await getOfflineQueue().list())[0].createdAt);
     expect(rows[1].description).toBeNull();
     expect(Number.isNaN(Date.parse(rows[1].at))).toBe(false);
   });

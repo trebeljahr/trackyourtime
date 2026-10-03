@@ -169,13 +169,14 @@ export const tracker: Translation<typeof source> = {
     reorderFailed: "Deine Favoriten konnten nicht neu sortiert werden",
   },
   offlineQueue: {
+    storageFailed: "Das Synchronisierungsergebnis konnte auf diesem Gerät nicht gespeichert werden. Deine gespeicherte Arbeit bleibt hier. Prüfe den freien Speicher und öffne Einstellungen → Geräte zur Wiederherstellung.",
     rejected:
       "{count, plural, one {Eine Offline-Änderung konnte nicht gespeichert werden} other {# Offline-Änderungen konnten nicht gespeichert werden}}",
-    rejectedDescription: "Der Server hat sie abgelehnt, deshalb wurden sie verworfen.",
+    rejectedDescription: "Deine Änderungen sind auf diesem Gerät gespeichert. Öffne Einstellungen → Geräte, um sie zu korrigieren und erneut zu senden oder eine Kopie herunterzuladen.",
     stale:
       "{count, plural, one {Ein alter Eintrag konnte nicht beendet werden} other {# alte Einträge konnten nicht beendet werden}}",
     staleDescription:
-      "Ein Stopp, der vor mehr als einem Tag gespeichert wurde, verweist auf keinen Eintrag mehr, den wir sicher beenden können. Prüfe den Timer und stopp ihn von Hand.",
+      "Ein Stopp, der vor mehr als einem Tag gespeichert wurde, verweist auf keinen Eintrag mehr, den wir sicher beenden können. Er bleibt auf diesem Gerät gespeichert. Öffne Einstellungen → Geräte, um die ursprüngliche Eintrags-ID einzutragen oder eine Kopie herunterzuladen.",
     held:
       "{count, plural, one {Eine Offline-Änderung wartet} other {# Offline-Änderungen warten}}",
     heldDescription:

@@ -137,15 +137,15 @@ describe("offline rows and the server they were queued on", () => {
 
     const listed = await listForeignQueued();
     expect(listed.map((row) => [row.description, row.otherServer])).toEqual([
-      ["Cloud, me", CLOUD],
-      ["Cloud, other", CLOUD],
+      [null, CLOUD],
+      [null, CLOUD],
     ]);
 
     server.current = CLOUD;
     await setOfflineQueueOwner("cloud-other");
     const fromCloud = await listForeignQueued();
     expect(fromCloud.map((row) => [row.description, row.otherServer])).toEqual([
-      ["Cloud, me", null],
+      [null, null],
     ]);
   });
 

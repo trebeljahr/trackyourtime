@@ -420,10 +420,12 @@ The offline queue holds time that no server has seen. A row that a build
 cannot read is kept and shown, never read as a miss and never overwritten.
 
 The queue (`trackyourtime.offline-queue`, every client) is written as
-`{ "v": 1, "data": [rows] }` by `createOfflineQueue`, not through
+`{ "v": 2, "data": [rows] }` by `createOfflineQueue`, not through
 `decodeVersioned`, whose miss would be an empty queue. A bare array is read
-as version 1. A higher `v` locks the queue: its rows are listed as held
-`unknown-op`, and nothing is written back. A value that does not parse is
+as version 1. Manual recovery writes version 2 while continuing to read v1
+envelopes and bare arrays. Version 1 readers lock v2 instead of dropping
+refused changes using their older replay policy. A higher `v` locks the queue:
+its rows are listed as held `unknown-op`, and nothing is written back. A value that does not parse is
 copied to `trackyourtime.offline-queue.corrupt.<ms>` before the queue is reset.
 A row with an op this build does not know is held, not dropped. CLAUDE.md →
 "Held queue rows and the queue format" has the rest.

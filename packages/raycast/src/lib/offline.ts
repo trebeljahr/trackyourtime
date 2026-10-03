@@ -17,6 +17,17 @@ import {
   ApiError,
   classifyReplayOutcome,
   createOfflineQueue,
+  createApiClient,
+  type TimeEntry,
+  exportRecoveryRows,
+  retryRecoveryRow,
+  discardRecoveryRow,
+  ownsRecoveryRow,
+  recoveryChain,
+  recoveryStopTargets,
+  recoveryStopRange,
+  type RecoveryTarget,
+  scopedTempIdOf,
   decodeOfflineMutation,
   describeQueuedMutation,
   flushVerdictFor,
@@ -27,7 +38,6 @@ import {
   isQueuedOn,
   isReplayableBy,
   isReplayableIn,
-  tempIdOf,
   isTransportFailure as isTransportFailureCore,
   OFFLINE_QUEUE_STORAGE_KEY,
   replayOfflineMutation,
@@ -45,7 +55,7 @@ import {
   type WorkspaceSummary,
 } from "../vendor/index.js";
 import { NotSignedInError } from "./errors.js";
-import { getStoredUserId } from "./auth.js";
+import { getStoredSession, getStoredUserId } from "./auth.js";
 import { raycastStorage } from "./storage.js";
 import { apiUrl } from "./preferences.js";
 import { knownServerApiLevel, refreshServerLevel } from "./server-level.js";
@@ -294,6 +304,12 @@ export const heldCopy = (count: number, reason: HoldReason | null): { title: str
         title: `${changes} waiting for a server update`,
         subtitle: "Your server is older than this app; these changes will send once it's updated",
       };
+    case "refused":
+    case "stale-stop":
+      return {
+        title: `${changes} need your attention`,
+        subtitle: "Kept on this Mac. Review, repair and retry, export, or discard them",
+      };
     case null:
       return {
         title: `${changes} waiting for an update`,
@@ -305,6 +321,7 @@ export const heldCopy = (count: number, reason: HoldReason | null): { title: str
 export type ForeignQueuedRow = QueuedMutationSummary & {
   /** This account's row, in a workspace it no longer belongs to. */
   leftWorkspace: boolean;
+  recovery?: { input: unknown; originalPayload: unknown; needsStopTarget?: boolean; message?: string; code?: string };
 };
 
 /**
@@ -337,8 +354,23 @@ export async function listForeign(kind: KeptKind = "foreign"): Promise<ForeignQu
   // Names only from this account's own choice, so another account's rows are
   // never described with workspace names this account happens to know.
   const nameOf = await workspaceNameLookup();
+  const scope = await raycastRecoveryScope();
   return rows.map((row) => ({
     ...describeQueuedMutation(row, isForeignTo(row, owner) ? undefined : nameOf),
+    ...(!ownsRecoveryRow(row, scope)
+      ? { description: null, workspaceName: null, at: row.createdAt }
+      : {
+          recovery: {
+            input: decodeOfflineMutation(row)?.input ?? null,
+            originalPayload: row.originalPayload ?? row.payload,
+            needsStopTarget:
+              row.op === "entries.stop" &&
+              !(decodeOfflineMutation(row)?.input as { id?: string })?.id &&
+              !recoveryChain(rows, row.id).some((part) => part.op === "entries.start"),
+            message: row.hold?.message,
+            code: row.hold?.code,
+          },
+        }),
     hold: holds.get(row.id) ?? null,
     leftWorkspace: isInLeftWorkspace(row, owner, workspaces),
   }));
@@ -354,13 +386,54 @@ export async function listForeign(kind: KeptKind = "foreign"): Promise<ForeignQu
  * mechanism was built to avoid, and putting one behind a clock does not make
  * it less silent.
  */
+const raycastRecoveryScope = async () => ({
+  owner: await getStoredUserId(),
+  server: apiUrl(),
+  legacyServer: apiUrl(),
+  memberWorkspaceIds: new Set(((await knownWorkspaces()) ?? []).map((workspace) => workspace.id)),
+});
+
+export async function exportQueuedRecovery(id: string): Promise<string> {
+  await ready();
+  const rows = await getOfflineQueue().list();
+  return exportRecoveryRows(rows, await raycastRecoveryScope(), [id]);
+}
+
+export async function targetsForQueuedRecovery(id: string): Promise<RecoveryTarget[]> {
+  const rows = await getOfflineQueue().list();
+  const row = rows.find((part) => part.id === id);
+  const session = await getStoredSession();
+  const scope = await raycastRecoveryScope();
+  if (!session || !row || !ownsRecoveryRow(row, scope)) return [];
+  const decoded = decodeOfflineMutation(row);
+  if (decoded?.op !== "entries.stop") return [];
+  const api = createApiClient({ baseUrl: scope.server, token: session.token, clientId: "trackyourtime-raycast" });
+  const page = await api.query<{ entries: TimeEntry[] }>("entries.list", {
+    ...recoveryStopRange(decoded.input),
+    workspaceId: row.workspaceId,
+  });
+  return recoveryStopTargets(page.entries, row, await raycastRecoveryScope());
+}
+
+export async function retryQueuedRecovery(id: string, input?: unknown): Promise<void> {
+  await ready();
+  await retryRecoveryRow(getOfflineQueue(), raycastRecoveryScope, id, input);
+}
+
+export async function discardQueuedRecovery(id: string): Promise<void> {
+  await ready();
+  await discardRecoveryRow(getOfflineQueue(), raycastRecoveryScope, id);
+}
+
 export async function discardForeign(kind: KeptKind = "foreign"): Promise<number> {
   // Re-read rather than trusted from the list the alert showed: a row that
   // became sendable since is nobody's to delete.
   const { rows } = await keptRows(kind);
   const offline = getOfflineQueue();
-  for (const row of rows) await offline.remove(row.id);
-  return rows.length;
+  const all = await offline.list();
+  const ids = new Set(rows.flatMap((row) => recoveryChain(all, row.id).map((part) => part.id)));
+  await offline.amendRows((current) => current.filter((row) => !ids.has(row.id)));
+  return ids.size;
 }
 
 /**
@@ -400,7 +473,7 @@ export async function cancelQueuedForTemp(tempId: string): Promise<boolean> {
 const NO_IDLE_WATCHER = { noteServerId: (): void => undefined };
 
 export type FlushReport = FlushResult & {
-  /** Rows dropped because the server can never accept them. */
+  /** Rows held for manual repair after a server refusal. */
   refused: number;
   /** Id-less stops too old to guess an entry for. */
   stale: number;
@@ -414,11 +487,8 @@ export type FlushReport = FlushResult & {
  *
  * Stops at the first failure and leaves that row and everything behind it
  * queued — the queue's own contract — so a start is never replayed after the
- * stop that ended it. Two classes of failure are exceptions, and both are
- * dropped rather than allowed to wedge the queue forever: a permanent refusal
- * (the server has moved on — the runaway guard capping the entry a queued stop
- * meant to close is exactly this), and a stop that names no entry and is too
- * old to guess one for.
+ * stop that ended it. Permanent refusals and unsafe old stops are held for
+ * manual recovery, while unrelated work can still sync.
  */
 export async function flushOffline(
   mutators: OfflineReplayMutators,
@@ -461,11 +531,10 @@ export async function flushOffline(
       const levelHold = serverLevelHold(row, serverApiLevel);
       if (levelHold !== null) return { hold: levelHold };
       try {
-        await replayOfflineMutation(mutators, NO_IDLE_WATCHER, decoded, {
+        return await replayOfflineMutation(mutators, NO_IDLE_WATCHER, decoded, {
           createdAt: row.createdAt,
           resolved,
         });
-        return undefined;
       } catch (error) {
         // One classifier for every client (`classifyReplayOutcome` in core):
         // no answer, a lapsed session or a 5xx keeps the row and everything
@@ -481,9 +550,9 @@ export async function flushOffline(
         if (outcome.kind === "hold" && outcome.reason === "unknown-procedure") {
           metUnknownProcedure = true;
         }
-        if (outcome.kind === "drop") {
+        if (outcome.kind === "hold") {
           if (outcome.reason === "stale-stop") stale += 1;
-          else refused += 1;
+          else if (outcome.reason === "refused") refused += 1;
         }
         return flushVerdictFor(outcome, error);
       }
@@ -498,7 +567,7 @@ export async function flushOffline(
         !holdBlocksReplay(row, { serverApiLevel }),
       // A start and the stop that ends it share a temp id: when one is held
       // the other waits with it.
-      chainOf: tempIdOf,
+      chainOf: scopedTempIdOf,
     },
   );
 

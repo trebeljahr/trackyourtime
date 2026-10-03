@@ -30,6 +30,7 @@ import type {
   UpdateSettingsInput,
   VersionRefusal,
   WorkspaceSummary,
+  RecoveryTarget,
 } from "@starter/core";
 import type {
   ActivityRule,
@@ -436,6 +437,9 @@ export type PopupToBackground =
    * never replayed and never dropped on its own, because it is time no server
    * has seen. The worker refuses a row that is not held right now.
    */
+  | { type: "queue:targets-held"; id: string }
+  | { type: "queue:export-held"; id: string }
+  | { type: "queue:retry-held"; id: string; input?: unknown }
   | { type: "queue:discard-held"; id: string };
 
 /**
@@ -448,6 +452,7 @@ export type PopupToBackground =
  */
 export type HeldSyncRow = Omit<QueuedMutationSummary, "hold"> & {
   hold: QueuedMutationSummary["hold"] | "other-account";
+  recovery?: { input: unknown; originalPayload: unknown; needsStopTarget?: boolean; message?: string; code?: string };
 };
 
 /** The device authorization the popup is waiting on, as much as it may see. */
@@ -650,7 +655,7 @@ export type BackgroundState = {
 export type ErrorDetails = Readonly<Record<string, string | number | null>>;
 
 export type BackgroundResponse =
-  | { ok: true; state: BackgroundState }
+  | { ok: true; state: BackgroundState; exportJson?: string; recoveryTargets?: RecoveryTarget[] }
   | { ok: false; code: string; message: string; details?: ErrorDetails };
 
 const errorResponse = (code: string, message: string): BackgroundResponse => ({

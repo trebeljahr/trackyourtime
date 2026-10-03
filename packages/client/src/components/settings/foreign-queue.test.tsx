@@ -24,12 +24,16 @@ const discardForeignQueued = vi.fn(async (ids?: readonly string[]) =>
   ids === undefined ? rows.length : ids.length,
 );
 
+vi.mock("./queue-recovery", () => ({ QueueRecovery: () => null }));
+
 vi.mock("@/providers/offline-queue-provider", () => ({
   useOfflineQueueState: () => state,
 }));
 
 vi.mock("@/lib/offline", () => ({
   listForeignQueued: async () => rows,
+  subscribePending: () => () => undefined,
+  getRecoveryRevision: () => 0,
   discardForeignQueued: (ids?: readonly string[]) => discardForeignQueued(ids),
 }));
 

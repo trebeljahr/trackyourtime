@@ -21,6 +21,19 @@ import {
   serverLevelHold,
   createId,
   createOfflineQueue,
+  replayOfflineMutation,
+  type OfflineReplayMutators,
+  type ReplayIdMap,
+  type FlushVerdict,
+  exportRecoveryRows,
+  retryRecoveryRow,
+  discardRecoveryRow,
+  ownsRecoveryRow,
+  recoveryChain,
+  recoveryStopTargets,
+  recoveryStopRange,
+  type RecoveryTarget,
+  scopedTempIdOf,
   createSyncClient,
   decodeOfflineMutation,
   decodeVersioned,
@@ -1339,7 +1352,14 @@ export async function listHeldRows(): Promise<HeldSyncRow[]> {
     .filter((row) => held.has(row.id))
     .map((row) => ({
       ...describeQueuedMutation(row, workspaceNameFor),
+      ...(!ownsRecoveryRow(row, extensionRecoveryScope()) ? { description: null, workspaceName: null, at: row.createdAt } : {}),
       hold: held.get(row.id) ?? null,
+      ...(ownsRecoveryRow(row, extensionRecoveryScope()) ? { recovery: {
+        input: decodeOfflineMutation(row)?.input ?? null,
+        originalPayload: row.originalPayload ?? row.payload,
+        needsStopTarget: row.op === "entries.stop" && !(decodeOfflineMutation(row)?.input as { id?: string })?.id && !recoveryChain(rows, row.id).some((part) => part.op === "entries.start"),
+        message: row.hold?.message, code: row.hold?.code,
+      } } : {}),
     }));
 }
 
@@ -1350,10 +1370,44 @@ export async function listHeldRows(): Promise<HeldSyncRow[]> {
  * cannot delete a row that has become sendable again (the person was added
  * back) and is about to replay.
  */
+const extensionRecoveryScope = () => ({
+  owner: runtime?.session ? getKnownUserId() : null,
+  server: runtime?.apiUrl ?? DEFAULT_API_URL,
+  legacyServer: DEFAULT_API_URL,
+  memberWorkspaceIds: new Set((workspaceChoice.workspaces ?? []).map((workspace) => workspace.id)),
+});
+
+export async function exportHeldRow(id: string): Promise<string> {
+  await ensureReady();
+  const rows = await getOfflineQueue().list();
+  return exportRecoveryRows(rows, extensionRecoveryScope(), [id]);
+}
+
+export async function targetsForHeldRow(id: string): Promise<RecoveryTarget[]> {
+  const current = await ensureReady();
+  const rows = await getOfflineQueue().list();
+  const row = rows.find((part) => part.id === id);
+  if (!row || !ownsRecoveryRow(row, extensionRecoveryScope())) return [];
+  const decoded = decodeOfflineMutation(row);
+  if (decoded?.op !== "entries.stop") return [];
+  const page = await current.api.query<{ entries: TimeEntry[] }>("entries.list", { ...recoveryStopRange(decoded.input), workspaceId: row.workspaceId });
+  return recoveryStopTargets(page.entries, row, extensionRecoveryScope());
+}
+
+export async function retryHeldRow(id: string, input?: unknown): Promise<void> {
+  await ensureReady();
+  await retryRecoveryRow(getOfflineQueue(), extensionRecoveryScope, id, input);
+  await flushQueue();
+}
+
 export async function discardHeldRow(id: string): Promise<boolean> {
   const rows = await getOfflineQueue().list();
   if (!heldRowsIn(rows).has(id)) return false;
-  await getOfflineQueue().remove(id);
+  const ids = new Set(recoveryChain(rows, id).map((row) => row.id));
+  await getOfflineQueue().amendRows((current) => {
+    const heldNow = heldRowsIn(current);
+    return current.filter((row) => !ids.has(row.id) || !heldNow.has(row.id));
+  });
   return true;
 }
 
@@ -1849,6 +1903,7 @@ export async function flushQueue(): Promise<number> {
     isQueuedOn(row, current.apiUrl, DEFAULT_API_URL),
   );
 
+  const resolved: ReplayIdMap = new Map();
   const result = await offline.flush(
     async (row) => {
       const decoded = decodeOfflineMutation(row);
@@ -1862,18 +1917,26 @@ export async function flushQueue(): Promise<number> {
       const tooOld = serverLevelHold(row, serverApiLevel);
       if (tooOld !== null) return { hold: tooOld };
       let replayed: unknown;
+      let verdict: void | FlushVerdict;
       try {
         // The op string *is* the tRPC path, by design — so there is no dispatch
         // table here to drift out of step with the queue contract.
-        replayed = await current.api.mutate(decoded.op, replayInput(decoded));
+        const send = async (input: unknown): Promise<unknown> => {
+          replayed = await current.api.mutate(decoded.op, input);
+          return replayed;
+        };
+        const mutators: OfflineReplayMutators = {
+          "entries.start": send, "entries.stop": send, "entries.create": send,
+          "entries.update": send, "entries.remove": send, "entries.discard": send,
+        };
+        verdict = await replayOfflineMutation(mutators, { noteServerId: () => undefined }, decoded, { createdAt: row.createdAt, resolved });
       } catch (error) {
         // One classifier for every client (`classifyReplayOutcome` in core).
         // Anything the server can still accept later — a lapsed session, a
         // 500, a dead network — keeps its place and wedges the rest, so
         // ordering survives. A server without the procedure holds the row and
-        // carries on. A refusal on the merits is dropped (the runaway guard
-        // capping an entry this stop was going to close is exactly that) and
-        // the reconcile below pulls the truth back — except a NOT_FOUND that
+        // carries on. A refusal on the merits is held for manual recovery, and
+        // the reconcile below pulls the server truth back — except a NOT_FOUND that
         // may mean "you left this workspace": the list above can be a minute
         // old, so it is asked again, and the row kept unless its workspace is
         // demonstrably still a membership.
@@ -1881,7 +1944,7 @@ export async function flushQueue(): Promise<number> {
         // A 400 on a row that carries a level may be the server refusing a
         // field it does not know yet. When the level on hand does not already
         // explain it (unknown on a cold offline start, or stale), ask the
-        // server once before the classifier decides between hold and drop.
+        // server once before the classifier decides between a version hold and manual recovery.
         if (
           row.apiLevel !== undefined &&
           serverLevelHold(row, serverApiLevel) === null &&
@@ -1913,7 +1976,7 @@ export async function flushQueue(): Promise<number> {
       // would re-queue a mutation the server has already applied and replay it
       // twice.
       await noteReplayedStart(decoded, replayed);
-      return undefined;
+      return verdict;
     },
     {
       // Only rows made against the server in use. Rows written before the
@@ -1922,6 +1985,8 @@ export async function flushQueue(): Promise<number> {
       // keeps its place untouched rather than being sent somewhere it was
       // never meant for.
       filter: (row) =>
+        runtime === current &&
+        getKnownUserId() === me &&
         isQueuedOn(row, current.apiUrl, DEFAULT_API_URL) &&
         // Another account's row is held for that account.
         isReplayableBy(row, me) &&
@@ -1934,7 +1999,7 @@ export async function flushQueue(): Promise<number> {
         !holdBlocksReplay(row, { serverApiLevel }),
       // A start and the stop that ends it share a temp id, and stand or fall
       // together.
-      chainOf: tempIdOf,
+      chainOf: scopedTempIdOf,
     },
   );
 

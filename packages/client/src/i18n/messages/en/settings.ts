@@ -305,8 +305,32 @@ export const settings = {
     },
   },
   foreignQueue: {
+      recovery: {
+        description: "Description",
+        start: "Start date and time",
+        end: "End date and time",
+        clearCatalog: "Clear unavailable client, project, task and tags",
+        advanced: "Advanced details",
+        useJson: "Use advanced JSON instead of the fields above",
+        invalidJson: "Enter valid JSON with an object of input fields, or use the ordinary repair fields.",
+        invalidDate: "Enter a valid date and time.",
+        endBeforeStart: "End must be after start. Correct the dates and times before retrying.",
+        targetRequired: "Choose the original entry this stop belongs to. Today’s timer is never selected for you.",
+        loadTargets: "Find entries around this stop",
+        target: "Original entry to close",
+        chooseTarget: "Choose the original entry",
+        untitled: "Untitled entry",
+
+        original: "Original change", input: "Input fields (JSON)", edit: "Repair fields", retry: "Retry this chain", download: "Download a copy",
+        hint: "Correct the description, dates or unavailable selections before retrying. A stop needs the original entry ID; it never closes today's timer by guess. The whole start/stop chain retries together. Original content stays saved until sync or discard.",
+        failed: "Could not recover this change. Check the fields, entry ID, sign-in and workspace access. Your saved work is still here.",
+      },
+
     /** This account's rows that cannot be sent yet, by `HoldReason`. */
     held: {
+      refused: { title: "Changes need your attention", description: "{count, plural, one {# change was} other {# changes were}} refused by the server. Your original work is saved here. Review the reason, repair and retry, download a copy, or discard it." },
+      staleStop: { title: "Old stops need an entry", description: "{count, plural, one {# stop needs} other {# stops need}} its original entry ID before it can retry safely. Your work stays saved here." },
+
       unknownOp: {
         title: "Waiting for a newer app version",
         description:

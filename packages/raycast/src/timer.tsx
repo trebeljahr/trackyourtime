@@ -11,6 +11,7 @@ import {
   type DetailedFavorite,
 } from "./vendor/index.js";
 import { CompatibilityListSection } from "./components/compatibility-banner.js";
+import { OfflineRecovery } from "./components/offline-recovery.js";
 import { EditEntry } from "./components/edit-entry.js";
 import { LogTime } from "./components/log-time.js";
 import { SignedOutView } from "./components/signed-out.js";
@@ -468,6 +469,11 @@ export default function Timer(): React.JSX.Element {
               {...heldCopy(held, data?.heldReason ?? null)}
               actions={
                 <ActionPanel>
+                  <Action.Push
+                    title="Review Unsynced Changes…"
+                    icon={Icon.Pencil}
+                    target={<OfflineRecovery onChanged={revalidate} />}
+                  />
                   <Action title="Try Again" icon={Icon.ArrowClockwise} onAction={revalidate} />
                   <Action
                     title="Discard Them…"

@@ -175,13 +175,14 @@ export const tracker = {
     reorderFailed: "Could not reorder your favorites",
   },
   offlineQueue: {
+    storageFailed: "Could not save the sync result on this device. Your queued work stays here. Check available storage, then open Settings → Devices to recover it.",
     rejected:
       "{count, plural, one {One offline change could not be saved} other {# offline changes could not be saved}}",
-    rejectedDescription: "The server refused them, so they were discarded.",
+    rejectedDescription: "Your changes are saved on this device. Open Settings → Devices to repair and retry them, or download a copy.",
     stale:
       "{count, plural, one {An old entry could not be closed} other {# old entries could not be closed}}",
     staleDescription:
-      "A stop queued more than a day ago no longer names an entry we can safely end. Check the timer and stop it by hand.",
+      "A stop queued more than a day ago no longer names an entry we can safely end. It is saved on this device. Open Settings → Devices to enter the original entry ID or download a copy.",
     held:
       "{count, plural, one {One offline change is waiting} other {# offline changes are waiting}}",
     heldDescription:

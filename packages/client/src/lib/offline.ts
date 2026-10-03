@@ -18,6 +18,15 @@
 import { TRPCClientError } from "@trpc/client";
 import {
   createOfflineQueue,
+  exportRecoveryRows,
+  retryRecoveryRow,
+  discardRecoveryRow,
+  ownsRecoveryRow,
+  recoveryChain,
+  recoveryStopTargets,
+  recoveryStopRange,
+  type RecoveryTarget,
+  scopedTempIdOf,
   decodeOfflineMutation,
   describeQueuedMutation,
   heldReasons,
@@ -384,7 +393,10 @@ export const discardDeletedAccountQueue = async (
     (row) => isOnThisServer(row) && !isForeignTo(row, deletedUserId),
   );
 
-  for (const row of theirs) await offlineQueue.remove(row.id);
+  const ids = new Set(theirs.flatMap((row) => recoveryChain(rows, row.id).map((part) => part.id)));
+  await offlineQueue.amendRows((current) => {
+    return current.filter((row) => !ids.has(row.id) || !isOnThisServer(row) || isForeignTo(row, deletedUserId));
+  });
 
   owner = null;
   lastOwner = null;
@@ -407,6 +419,8 @@ type Listener = () => void;
 let pending = 0;
 let foreign = 0;
 let held = 0;
+let recoveryRevision = 0;
+export const getRecoveryRevision = (): number => recoveryRevision;
 const listeners = new Set<Listener>();
 
 const setCounts = (
@@ -414,9 +428,9 @@ const setCounts = (
   nextForeign: number,
   nextHeld: number
 ): void => {
-  if (nextPending === pending && nextForeign === foreign && nextHeld === held) {
-    return;
-  }
+  // Counts can stay equal when the owner, refusal reason or repaired input
+  // changes. Recovery views still need to read the current authorized rows.
+  recoveryRevision += 1;
   pending = nextPending;
   foreign = nextForeign;
   held = nextHeld;
@@ -500,10 +514,9 @@ export const hasReplayableRows = async (
   const against = owner ?? lastOwner;
   const rows = await getOfflineQueue().list();
   const serverApiLevel = currentServerApiLevel();
-  return rows.some(
-    (row) =>
-      !isElsewhere(row, against) &&
-      !holdBlocksReplay(row, { ...options, serverApiLevel }),
+  return rows.some((row) =>
+    !isElsewhere(row, against) &&
+    recoveryChain(rows, row.id).every((part) => !holdBlocksReplay(part, { ...options, serverApiLevel })),
   );
 };
 
@@ -630,6 +643,8 @@ export const flushOfflineQueue = async (
   const members =
     options.memberWorkspaceIds ?? getKnownWorkspaceIds() ?? new Set<string>();
   const now = Date.now();
+  const replayOwner = owner;
+  const replayServer = getAbsoluteApiOrigin();
   // Read once: every row of one flush is judged against the same server.
   const serverApiLevel = currentServerApiLevel();
   const result = await getOfflineQueue().flush(
@@ -647,7 +662,9 @@ export const flushOfflineQueue = async (
     },
     {
       filter: (row) =>
-        isReplayableBy(row, owner) &&
+        owner === replayOwner &&
+        getAbsoluteApiOrigin() === replayServer &&
+        isReplayableBy(row, replayOwner) &&
         isOnThisServer(row) &&
         isReplayableIn(row, members) &&
         !holdBlocksReplay(row, {
@@ -657,7 +674,7 @@ export const flushOfflineQueue = async (
         }),
       // A start and the stop that ends it share a temp id: when one is held
       // the other waits with it.
-      chainOf: tempIdOf,
+      chainOf: scopedTempIdOf,
     }
   );
   await refreshPendingCount();
@@ -686,6 +703,7 @@ export type ForeignQueuedRow = QueuedMutationSummary & {
    * differs: sign in as that account, or switch back to that server.
    */
   otherServer: string | null;
+  recovery?: { input: unknown; originalPayload: unknown; needsStopTarget?: boolean; message?: string; code?: string };
   /**
    * True when the row is this account's, on this server, in a workspace the
    * account no longer belongs to. Its own group on screen: nothing the person
@@ -716,6 +734,13 @@ export const listForeignQueued = async (): Promise<ForeignQueuedRow[]> => {
       const elsewhere = isElsewhere(row, against);
       return {
         ...describeQueuedMutation(row, workspaceNameFor),
+        ...(ownsRecoveryRow(row, recoveryScope()) ? { recovery: {
+          input: decodeOfflineMutation(row)?.input ?? null,
+          originalPayload: row.originalPayload ?? row.payload,
+        needsStopTarget: row.op === "entries.stop" && !(decodeOfflineMutation(row)?.input as { id?: string })?.id && !recoveryChain(rows, row.id).some((part) => part.op === "entries.start"),
+          message: row.hold?.message, code: row.hold?.code,
+        } } : {}),
+        ...(!ownsRecoveryRow(row, recoveryScope()) ? { description: null, workspaceName: null, at: row.createdAt } : {}),
         // Only this account's rows are described as held: another account's
         // or another server's row is grouped by whose it is.
         hold: elsewhere ? null : (holds.get(row.id) ?? null),
@@ -789,10 +814,45 @@ export const discardForeignQueued = async (
       (queueIds === undefined || queueIds.includes(row.id)),
   );
 
-  for (const row of theirs) await offlineQueue.remove(row.id);
+  const ids = new Set(theirs.flatMap((row) => recoveryChain(rows, row.id).map((part) => part.id)));
+  await offlineQueue.amendRows((current) => {
+    const currentOwner = owner ?? lastOwner;
+    const currentHolds = heldHere(current, currentOwner);
+    return current.filter((row) => !ids.has(row.id) || !(isElsewhere(row, currentOwner) || currentHolds.has(row.id)));
+  });
 
   if (theirs.length > 0) await refreshPendingCount();
-  return theirs.length;
+  return ids.size;
+};
+
+const recoveryScope = () => ({
+  owner,
+  server: getAbsoluteApiOrigin(),
+  legacyServer: getDefaultAbsoluteApiOrigin(),
+  memberWorkspaceIds: getKnownWorkspaceIds() ?? new Set<string>(),
+});
+
+export const exportQueuedRecovery = async (ids: readonly string[]): Promise<string> => {
+  await whenApiOriginReady();
+  return exportRecoveryRows(await getOfflineQueue().list(), recoveryScope(), ids);
+};
+
+export const queuedRecoveryTargetInput = async (id: string): Promise<{ row: QueuedMutation; input: { from: string; to: string; limit: number; workspaceId?: string } } | null> => {
+  const row = (await getOfflineQueue().list()).find((part) => part.id === id);
+  if (!row || !ownsRecoveryRow(row, recoveryScope())) return null;
+  const decoded = decodeOfflineMutation(row);
+  if (decoded?.op !== "entries.stop") return null;
+  return { row, input: { ...recoveryStopRange(decoded.input), workspaceId: row.workspaceId } };
+};
+
+export const filterQueuedRecoveryTargets = (entries: Parameters<typeof recoveryStopTargets>[0], row: QueuedMutation): RecoveryTarget[] =>
+  recoveryStopTargets(entries, row, recoveryScope());
+
+export const retryQueuedRecovery = async (id: string, input?: unknown): Promise<number> => {
+  await whenApiOriginReady();
+  const count = await retryRecoveryRow(getOfflineQueue(), recoveryScope, id, input);
+  await refreshPendingCount().catch(() => undefined);
+  return count;
 };
 
 export const clearOfflineQueue = async (): Promise<void> => {

@@ -48,7 +48,7 @@ export type OfflineReplayMutators = {
  */
 const inWorkspace = <K extends OfflineOp>(
   mutation: { workspaceId?: string },
-  input: OfflinePayloadMap[K]
+  input: OfflinePayloadMap[K],
 ): ReplayInput<K> =>
   mutation.workspaceId === undefined
     ? input
@@ -73,7 +73,7 @@ export const STALE_STOP_MS = 24 * 60 * 60 * 1000;
 /**
  * A queued stop that names no entry and is too old to guess for. Thrown
  * rather than returned so it travels the same path as a server refusal: the
- * row is dropped, and the caller tells the user rather than silently ending
+ * row is held for manual recovery rather than silently ending
  * whatever happens to be running now.
  */
 export class StaleQueuedStopError extends Error {
@@ -95,6 +95,10 @@ export class StaleQueuedStopError extends Error {
  */
 export type ReplayIdMap = Map<string, string>;
 
+// Keep the public temp-id map for overlay repair; targeting additionally
+// checks the workspace so an accidental temp-id collision cannot cross it.
+const scopedResolutions = new WeakMap<ReplayIdMap, Map<string, string>>();
+
 /** The id of the entry a replayed start produced, read defensively. */
 const replayedId = (result: unknown): string | null => {
   if (typeof result !== "object" || result === null) return null;
@@ -113,14 +117,21 @@ const replayedId = (result: unknown): string | null => {
 const targetedStopInput = (
   mutation: Extract<OfflineMutation, { op: "entries.stop" }>,
   resolved: ReplayIdMap,
-  queuedAt: string
+  queuedAt: string,
 ): OfflinePayloadMap["entries.stop"] => {
   if (mutation.input.id) return mutation.input;
 
-  const realId = mutation.tempId ? resolved.get(mutation.tempId) : undefined;
+  const realId = mutation.tempId
+    ? scopedResolutions
+        .get(resolved)
+        ?.get(JSON.stringify([mutation.workspaceId, mutation.tempId]))
+    : undefined;
   if (realId) return { ...mutation.input, id: realId };
 
-  if (Date.now() - Date.parse(queuedAt) > STALE_STOP_MS) {
+  if (
+    !Number.isFinite(Date.parse(queuedAt)) ||
+    Date.now() - Date.parse(queuedAt) > STALE_STOP_MS
+  ) {
     throw new StaleQueuedStopError(queuedAt);
   }
 
@@ -133,7 +144,7 @@ const targetedStopInput = (
  * Replay one queued mutation against the server.
  *
  * Rejections are the caller's problem — `flush` classifies them into "still
- * offline, keep the queue in order" and "the server refused it, drop it" — so
+ * offline, keep the queue in order" and "the server refused it, hold it for recovery" — so
  * nothing is caught here.
  */
 export const replayOfflineMutation = async (
@@ -143,8 +154,8 @@ export const replayOfflineMutation = async (
   context: { createdAt: string; resolved: ReplayIdMap } = {
     createdAt: new Date().toISOString(),
     resolved: new Map(),
-  }
-): Promise<void> => {
+  },
+): Promise<void | FlushVerdict> => {
   switch (mutation.op) {
     case "entries.start": {
       // The result is not discarded, unlike every other op below: a start made
@@ -153,39 +164,50 @@ export const replayOfflineMutation = async (
       // `observe` fails against the named entry and idle detection silently
       // never fires again for it.
       const entry = await mutators["entries.start"](
-        inWorkspace<"entries.start">(mutation, mutation.input)
+        inWorkspace<"entries.start">(mutation, mutation.input),
       );
       noteReplayedServerId(watcher, mutation, entry);
       const realId = replayedId(entry);
-      if (mutation.tempId && realId) context.resolved.set(mutation.tempId, realId);
+      if (mutation.tempId && realId) {
+        context.resolved.set(mutation.tempId, realId);
+        const scoped =
+          scopedResolutions.get(context.resolved) ?? new Map<string, string>();
+        scoped.set(
+          JSON.stringify([mutation.workspaceId, mutation.tempId]),
+          realId,
+        );
+        scopedResolutions.set(context.resolved, scoped);
+      }
+      if (mutation.tempId && realId)
+        return { resolvedTempId: mutation.tempId, serverId: realId };
       return;
     }
     case "entries.stop":
       await mutators["entries.stop"](
         inWorkspace<"entries.stop">(
           mutation,
-          targetedStopInput(mutation, context.resolved, context.createdAt)
-        )
+          targetedStopInput(mutation, context.resolved, context.createdAt),
+        ),
       );
       return;
     case "entries.create":
       await mutators["entries.create"](
-        inWorkspace<"entries.create">(mutation, mutation.input)
+        inWorkspace<"entries.create">(mutation, mutation.input),
       );
       return;
     case "entries.update":
       await mutators["entries.update"](
-        inWorkspace<"entries.update">(mutation, mutation.input)
+        inWorkspace<"entries.update">(mutation, mutation.input),
       );
       return;
     case "entries.remove":
       await mutators["entries.remove"](
-        inWorkspace<"entries.remove">(mutation, mutation.input)
+        inWorkspace<"entries.remove">(mutation, mutation.input),
       );
       return;
     case "entries.discard":
       await mutators["entries.discard"](
-        inWorkspace<"entries.discard">(mutation, mutation.input)
+        inWorkspace<"entries.discard">(mutation, mutation.input),
       );
       return;
   }
@@ -205,8 +227,8 @@ export const replayOfflineMutation = async (
  *   later. Kept in place, never replayed until its hold may have ended
  *   (`holdBlocksReplay`), never deleted without a person deciding. The flush
  *   carries on past it.
- * - `drop`: the server refused this row on the merits, or it is a stop too old
- *   to target. Removed, and said out loud.
+ * Refusals on the merits and unsafe old stops require manual recovery.
+ * They keep the original payload and never retry on a clock or page load.
  */
 export type ReplayOutcome =
   | { kind: "applied" }
@@ -214,8 +236,7 @@ export type ReplayOutcome =
       kind: "retry-later";
       reason: "transport" | "unauthorized" | "server" | "membership";
     }
-  | { kind: "hold"; reason: HoldReason }
-  | { kind: "drop"; reason: "stale-stop" | "refused" };
+  | { kind: "hold"; reason: HoldReason; message?: string; code?: string };
 
 /** What a client could read from a server's answer. */
 export type ReplayErrorFacts = {
@@ -252,7 +273,7 @@ export type ReplayClassifyContext<R extends ReplayRow = ReplayRow> = {
   /**
    * The seam for holds decided by what the row needs of the server rather
    * than by the error alone — a 400 from a server older than the row's API
-   * level, say. Consulted only for a refusal on the merits, before it drops.
+   * level, say. Consulted only for a refusal on the merits, before manual recovery.
    */
   holdRefusal?: (facts: ReplayErrorFacts, row: R) => HoldReason | null;
   /**
@@ -272,7 +293,7 @@ export type ReplayClassifyContext<R extends ReplayRow = ReplayRow> = {
  */
 export const serverLevelHold = (
   row: { apiLevel?: number },
-  serverApiLevel: number | null | undefined
+  serverApiLevel: number | null | undefined,
 ): HoldReason | null =>
   row.apiLevel !== undefined &&
   serverApiLevel !== undefined &&
@@ -303,9 +324,15 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
 };
 
 /** `ApiError`, or anything shaped like a tRPC client error. */
-export const readReplayErrorFacts = (error: unknown): ReplayErrorFacts | null => {
+export const readReplayErrorFacts = (
+  error: unknown,
+): ReplayErrorFacts | null => {
   if (error instanceof ApiError) {
-    return { code: error.code, httpStatus: error.httpStatus, message: error.message };
+    return {
+      code: error.code,
+      httpStatus: error.httpStatus,
+      message: error.message,
+    };
   }
   if (typeof error !== "object" || error === null) return null;
   const { data, message } = error as { data?: unknown; message?: unknown };
@@ -314,7 +341,10 @@ export const readReplayErrorFacts = (error: unknown): ReplayErrorFacts | null =>
   if (typeof code !== "string") return null;
   return {
     code,
-    httpStatus: typeof httpStatus === "number" ? httpStatus : STATUS_BY_CODE[code] ?? null,
+    httpStatus:
+      typeof httpStatus === "number"
+        ? httpStatus
+        : (STATUS_BY_CODE[code] ?? null),
     message: typeof message === "string" ? message : "",
   };
 };
@@ -323,7 +353,7 @@ export const readReplayErrorFacts = (error: unknown): ReplayErrorFacts | null =>
  * Decide what a replay that threw means for its row.
  *
  * The order is the policy:
- * 1. A stop too old to target is dropped — it would end whatever runs now.
+ * 1. A stop too old to target is held for manual recovery — it would end whatever runs now.
  * 2. No answer at all keeps the row.
  * 3. UNAUTHORIZED keeps it: "we do not know who you are" is no verdict.
  * 4. A server without the procedure holds it. Before the permanent set, which
@@ -339,10 +369,10 @@ export const readReplayErrorFacts = (error: unknown): ReplayErrorFacts | null =>
 export const classifyReplayOutcome = async <R extends ReplayRow>(
   error: unknown,
   row: R,
-  context: ReplayClassifyContext<R> = {}
+  context: ReplayClassifyContext<R> = {},
 ): Promise<ReplayOutcome> => {
   if (error instanceof StaleQueuedStopError) {
-    return { kind: "drop", reason: "stale-stop" };
+    return { kind: "hold", reason: "stale-stop", message: error.message };
   }
   const transport = context.isTransportFailure ?? isTransportFailure;
   if (transport(error)) return { kind: "retry-later", reason: "transport" };
@@ -352,10 +382,15 @@ export const classifyReplayOutcome = async <R extends ReplayRow>(
   if (facts.code === "UNAUTHORIZED" || facts.httpStatus === 401) {
     return { kind: "retry-later", reason: "unauthorized" };
   }
-  if (isUnknownProcedure(facts)) return { kind: "hold", reason: "unknown-procedure" };
+  if (isUnknownProcedure(facts))
+    return { kind: "hold", reason: "unknown-procedure" };
 
-  const status = facts.httpStatus ?? (facts.code ? STATUS_BY_CODE[facts.code] : undefined);
-  if (status === undefined || !isPermanentRejectionStatus(facts.code ?? "PARSE_ERROR", status)) {
+  const status =
+    facts.httpStatus ?? (facts.code ? STATUS_BY_CODE[facts.code] : undefined);
+  if (
+    status === undefined ||
+    !isPermanentRejectionStatus(facts.code ?? "PARSE_ERROR", status)
+  ) {
     return { kind: "retry-later", reason: "server" };
   }
 
@@ -372,11 +407,18 @@ export const classifyReplayOutcome = async <R extends ReplayRow>(
     context.stillMember !== undefined &&
     (facts.code === "NOT_FOUND" || status === 404)
   ) {
-    const confirmed = await context.stillMember(row.workspaceId).catch(() => false);
+    const confirmed = await context
+      .stillMember(row.workspaceId)
+      .catch(() => false);
     if (!confirmed) return { kind: "retry-later", reason: "membership" };
   }
 
-  return { kind: "drop", reason: "refused" };
+  return {
+    kind: "hold",
+    reason: "refused",
+    message: facts.message,
+    code: facts.code ?? undefined,
+  };
 };
 
 /**
@@ -386,14 +428,17 @@ export const classifyReplayOutcome = async <R extends ReplayRow>(
  */
 export const flushVerdictFor = (
   outcome: ReplayOutcome,
-  error: unknown
+  error: unknown,
 ): FlushVerdict | undefined => {
   switch (outcome.kind) {
     case "applied":
-    case "drop":
       return undefined;
     case "hold":
-      return { hold: outcome.reason };
+      return {
+        hold: outcome.reason,
+        ...(outcome.message ? { message: outcome.message } : {}),
+        ...(outcome.code ? { code: outcome.code } : {}),
+      };
     case "retry-later":
       throw error;
   }

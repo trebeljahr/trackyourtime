@@ -160,7 +160,7 @@ test("a server known to be older than the row holds it before sending", () => {
   assert.equal(serverLevelHold(row(), 0), null, "legacy row: send");
 });
 
-test("a 400 on a row of a higher level than the server holds; otherwise it drops", async () => {
+test("a 400 on a row of a higher level than the server holds; otherwise it needs manual recovery", async () => {
   const invalid = new ApiError("Invalid input", "BAD_REQUEST", 400);
   assert.deepEqual(
     await classifyReplayOutcome(invalid, row({ apiLevel: 3 }), { serverApiLevel: 2 }),
@@ -168,16 +168,16 @@ test("a 400 on a row of a higher level than the server holds; otherwise it drops
   );
   assert.deepEqual(
     await classifyReplayOutcome(invalid, row({ apiLevel: 2 }), { serverApiLevel: 2 }),
-    { kind: "drop", reason: "refused" },
+    { kind: "hold", reason: "refused", message: "Invalid input", code: "BAD_REQUEST" },
   );
   assert.deepEqual(
     await classifyReplayOutcome(invalid, row({ apiLevel: 3 })),
-    { kind: "drop", reason: "refused" },
+    { kind: "hold", reason: "refused", message: "Invalid input", code: "BAD_REQUEST" },
     "unknown server level: a 400 is a refusal as before",
   );
   assert.deepEqual(
     await classifyReplayOutcome(invalid, row(), { serverApiLevel: 0 }),
-    { kind: "drop", reason: "refused" },
+    { kind: "hold", reason: "refused", message: "Invalid input", code: "BAD_REQUEST" },
     "legacy row: a 400 is a refusal as before",
   );
   // Only a 400 says "a field it does not know": a 409 is on the merits.
@@ -185,7 +185,7 @@ test("a 400 on a row of a higher level than the server holds; otherwise it drops
     await classifyReplayOutcome(new ApiError("Conflict", "CONFLICT", 409), row({ apiLevel: 3 }), {
       serverApiLevel: 2,
     }),
-    { kind: "drop", reason: "refused" },
+    { kind: "hold", reason: "refused", message: "Conflict", code: "CONFLICT" },
   );
 });
 

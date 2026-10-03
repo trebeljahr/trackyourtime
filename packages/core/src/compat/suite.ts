@@ -330,13 +330,14 @@ function replayRunner(
   return async (row) => {
     try {
       const decoded = decodeOfflineMutation(row);
+      let verdict: void | FlushVerdict = undefined;
       if (decoded) {
-        await replayOfflineMutation(mutators, watcher, decoded, { createdAt: row.createdAt, resolved });
+        verdict = await replayOfflineMutation(mutators, watcher, decoded, { createdAt: row.createdAt, resolved });
       } else {
         await api.mutate(row.op, (row.payload as StoredOfflinePayload).input);
       }
       outcomes.push({ op: row.op, outcome: { kind: "applied" } });
-      return undefined;
+      return verdict;
     } catch (error) {
       const outcome = await classifyReplayOutcome(error, row);
       outcomes.push({ op: row.op, outcome });

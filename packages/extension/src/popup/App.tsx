@@ -826,6 +826,17 @@ export function App({ initialState = null }: { initialState?: BackgroundState | 
               onSwitchWorkspace: (workspaceId) =>
                 send({ type: "workspace:switch", workspaceId }),
               onDiscardHeld: (id) => send({ type: "queue:discard-held", id }),
+              onRetryHeld: (id, input) => send({ type: "queue:retry-held", id, input }),
+              onTargetsHeld: async (id) => {
+                const response = await sendToBackground({ type: "queue:targets-held", id });
+                return response.ok ? response.recoveryTargets ?? [] : [];
+              },
+              onExportHeld: async (id) => {
+                const response = await sendToBackground({ type: "queue:export-held", id });
+                if (!response.ok) return null;
+                setState((previous) => mergePopupSnapshot(previous, response.state));
+                return response.exportJson ?? null;
+              },
             }}
             settings={{
               state: visibleState!,
