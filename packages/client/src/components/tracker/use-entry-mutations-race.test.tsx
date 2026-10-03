@@ -63,6 +63,7 @@ vi.mock("@/lib/trpc", async () => {
 const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
 const { trpc } = await import("@/lib/trpc");
 const { timerStore } = await import("@/hooks/use-sync");
+const { OfflineQueueScopeNotReadyError } = await import("@/lib/offline");
 const { TRACKER_LIST_INPUT, useEntryMutations } = await import(
   "@/components/tracker/use-entry-mutations"
 );
@@ -265,7 +266,7 @@ describe("entry mutations racing each other", () => {
     amendQueuedStart.mockReturnValueOnce(amend.promise);
     const stop = deferred<unknown>();
     held.set("entries.stop", stop);
-    act(() => mutations?.updateEntry({ id: offline.id, start: "2026-09-30T08:00:00.000Z" }));
+    act(() => { void mutations?.updateEntry({ id: offline.id, start: "2026-09-30T08:00:00.000Z" }); });
     act(() => mutations?.stopTimer());
     await waitFor(() => expect(heldCalls.get("entries.stop")).toBe(1));
     expect(screen.getByTestId("current").textContent).toBe("");
@@ -291,7 +292,7 @@ describe("entry mutations racing each other", () => {
     await waitFor(() => expect(heldCalls.get("entries.start")).toBe(1));
     const tempId = screen.getByTestId("current").textContent!;
     const earlier = "2026-09-30T08:00:00.000Z";
-    act(() => mutations?.updateEntry({ id: tempId, start: earlier }));
+    act(() => { void mutations?.updateEntry({ id: tempId, start: earlier }); });
     const current = queryClient.getQueryCache().findAll().find((q) =>
       JSON.stringify(q.queryKey).includes('"current"'))?.state.data as TimeEntry;
     expect(current.start).toBe(earlier);
@@ -323,10 +324,10 @@ describe("entry mutations racing each other", () => {
     await waitFor(() => expect(heldCalls.get("entries.start")).toBe(1));
     const tempId = screen.getByTestId("current").textContent!;
     const earlier = "2026-09-30T08:00:00.000Z";
-    act(() => mutations?.updateEntry({ id: tempId, start: earlier }));
+    act(() => { void mutations?.updateEntry({ id: tempId, start: earlier }); });
     await act(async () => start.reject(new TypeError("Failed to fetch")));
     await waitFor(() => expect(queryClient.isMutating()).toBe(0));
-    expect(enqueueOffline).toHaveBeenCalledWith("entries.start", expect.objectContaining({ start: earlier }), tempId, null);
+    expect(enqueueOffline).toHaveBeenCalledWith("entries.start", expect.objectContaining({ start: earlier }), tempId, null, expect.objectContaining({ owner: null }));
   });
 
   it("keeps a just-started timer on the list when an earlier stop settles", async () => {
@@ -576,7 +577,7 @@ describe("draft mutation completion", () => {
       await screen.findByText("Draft");
       const refusal = Object.assign(new Error("Entry is invoiced"), { data: { code: "FORBIDDEN" } });
       await act(async () => { request.reject(refusal); expect(await result).toEqual({ ok: false, message: "Entry is invoiced" }); });
-      expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft");
+      await waitFor(() => expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft"));
       expect(enqueueOffline).not.toHaveBeenCalled();
     });
 
@@ -611,7 +612,23 @@ describe("draft mutation completion", () => {
         request.reject(new TypeError("Failed to fetch"));
         expect(await result).toEqual({ ok: false, message: expect.stringContaining("storage space") });
       });
-      expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft");
+      await waitFor(() => expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft"));
+    });
+
+    it(`${operation} keeps the draft unsaved when its original identity is unresolved`, async () => {
+      const request = deferred<unknown>();
+      held.set(path, request);
+      enqueueOffline.mockRejectedValueOnce(new OfflineQueueScopeNotReadyError());
+      mount();
+      await screen.findByText("Before");
+      let result!: ReturnType<typeof begin>;
+      act(() => { result = begin(); });
+      await waitFor(() => expect(heldCalls.get(path)).toBe(1));
+      await act(async () => {
+        request.reject(new TypeError("Failed to fetch"));
+        expect(await result).toEqual({ ok: false, message: expect.stringContaining("account or workspace is still loading") });
+      });
+      await waitFor(() => expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft"));
     });
 
     it(`${operation} stamps the original workspace/account after an offline failure`, async () => {
@@ -632,8 +649,8 @@ describe("draft mutation completion", () => {
       queryClient.setQueryData([["entries", "list"], { input: TRACKER_LIST_INPUT, type: "infinite" }], { pages: [{ entries: [other] }], pageParams: [null] });
       await act(async () => { request.reject(new TypeError("Failed to fetch")); await result; });
       expect(enqueueOffline).toHaveBeenCalledWith(path, expect.objectContaining({ workspaceId: "ws-a" }), (operation === "create" ? expect.any(String) : undefined), "ws-a", expect.objectContaining({ owner: "u-a" }));
-      expect(screen.getByTestId("rows")).toHaveTextContent("Other workspace");
-      expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft");
+      await waitFor(() => expect(screen.getByTestId("rows")).toHaveTextContent("Other workspace"));
+      await waitFor(() => expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft"));
     });
   }
 

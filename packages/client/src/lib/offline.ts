@@ -69,6 +69,7 @@ export type {
   OfflineUpdateInput,
 } from "@starter/core";
 
+import { translate } from "@/i18n/translate";
 import { currentServerApiLevel } from "@/lib/server-level";
 import {
   preferencesStorage,
@@ -506,6 +507,14 @@ export const hasReplayableRows = async (
   );
 };
 
+/** A captured draft must never become a row a later account can adopt. */
+export class OfflineQueueScopeNotReadyError extends Error {
+  constructor() {
+    super(translate("tracker")("mutations.scopeNotReady"));
+    this.name = "OfflineQueueScopeNotReadyError";
+  }
+}
+
 /**
  * Append a mutation that could not reach the server.
  *
@@ -521,16 +530,20 @@ export const enqueueOffline = async <K extends OfflineOp>(
   workspaceId?: string | null,
   addressed?: { owner: string | null; server: string }
 ): Promise<void> => {
+  // Explicit null means the original actor/workspace was unresolved. Waiting
+  // for hydration or borrowing the current session would change who owns this
+  // draft. Omitted stamps retain compatibility for existing legacy callers.
+  if (workspaceId === null || addressed?.owner === null) {
+    throw new OfflineQueueScopeNotReadyError();
+  }
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
   await hydrateLastOwner();
   // The stamp has to name the server the person actually chose, which on a
   // cold native launch may not have been read yet.
   await whenApiOriginReady();
-  // `lastOwner` is the fallback for a mutation made before the session
-  // resolved — routine on a cold offline launch, where the app is usable and
-  // `useSession()` has nothing to say. Only a device that has never had an
-  // account writes an unowned row now, and the first account to sign in
-  // adopts it.
+  // Callers that omit the captured actor keep the existing last-owner
+  // fallback for cold offline launches. Captured drafts require the explicit
+  // identity above and cannot be adopted by a later session.
   // The stored workspace choice is read asynchronously on a phone, and a row
   // stamped before it lands would be unstamped — claimable by whichever
   // workspace resolves first.

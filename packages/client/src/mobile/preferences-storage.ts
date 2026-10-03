@@ -86,9 +86,9 @@ const loadPreferences = (): Promise<PreferencesPlugin | null> => {
         remove: (options: { key: string }) => Preferences.remove(options),
       };
     } catch {
-      // A build that dropped the plugin must degrade, not crash: the SPM sync
-      // silently skips a plugin with no Package.swift, and the queue still
-      // works over localStorage — just without the durability guarantee.
+      // Best-effort caches may fall back to localStorage when the plugin is
+      // missing. Strict stores reject the missing plugin in ensure(), so a
+      // durable queue never acknowledges a fallback write.
       return null;
     }
   })();
@@ -174,8 +174,8 @@ export type PreferencesStorageOptions = {
  * A Preferences-backed store. Every method waits on the same one-time
  * initialisation, so the migration can never interleave with a write.
  *
- * When the plugin is unavailable the store falls back to `localStorage`, which
- * is what the app used before — worse, but working.
+ * Best-effort caches fall back to localStorage when the plugin is unavailable.
+ * Strict stores surface failures and require the native plugin.
  */
 export const preferencesStorage = ({
   migrateKeys = [],
@@ -201,7 +201,7 @@ export const preferencesStorage = ({
         await migrateFromLocalStorage(plugin, migrateKeys, strict);
       } catch (error) {
         if (strict) throw error;
-        // A failed migration must not take the queue down with it. The rows
+        // Best-effort callers may continue after a failed migration. The rows
         // stay in localStorage; the marker is not written, so the next launch
         // tries again.
       }

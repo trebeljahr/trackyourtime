@@ -24,10 +24,15 @@ vi.mock("@/components/tracker/use-entry-mutations", () => ({
 vi.mock("@/hooks/use-sync", () => ({ timerStore: { getState: () => ({ running: null }) } }));
 vi.mock("@/lib/offline", () => ({
   isNetworkError: () => false,
+  getOfflineQueueOwner: () => "u1",
+  getOfflineQueueStampOwner: () => "u1",
   listOwnQueuedMutations: async () => [],
 }));
 vi.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user: { id: "u1" } }) }));
-vi.mock("@/lib/active-workspace", () => ({ getActiveWorkspaceId: () => "w1" }));
+vi.mock("@/lib/active-workspace", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/active-workspace")>()),
+  getActiveWorkspaceId: () => "w1",
+}));
 const toastInfo = vi.fn();
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: (m: string) => toastInfo(m), error: vi.fn() } }));
 

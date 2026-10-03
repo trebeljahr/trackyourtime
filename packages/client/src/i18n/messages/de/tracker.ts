@@ -150,6 +150,7 @@ export const tracker: Translation<typeof source> = {
   mutations: {
     storageFailed: "Speichern auf diesem Gerät fehlgeschlagen. Gib Speicherplatz frei und versuche es erneut.",
     draftKept: "Dein Entwurf bleibt hier erhalten. Prüfe die Felder und versuche es erneut oder brich ab.",
+    scopeNotReady: "Dein Konto oder Arbeitsbereich wird noch geladen. Warte, bis das Laden abgeschlossen ist, öffne diesen Editor erneut und versuche es noch einmal.",
     scopeChanged: "Dein Konto oder Arbeitsbereich hat sich geändert. Brich ab und öffne den Editor erneut, bevor du speicherst.",
     startFailed: "Der Timer konnte nicht gestartet werden",
     stopFailed: "Der Timer konnte nicht gestoppt werden",

@@ -156,6 +156,7 @@ export const tracker = {
   mutations: {
     storageFailed: "Could not save on this device. Free some storage space and try again.",
     draftKept: "Your draft is kept here. Check the fields and try again, or cancel.",
+    scopeNotReady: "Your account or workspace is still loading. Wait for it to load, then reopen this editor and try again.",
     scopeChanged: "Your account or workspace changed. Cancel and reopen this editor before saving.",
     startFailed: "Could not start the timer",
     stopFailed: "Could not stop the timer",

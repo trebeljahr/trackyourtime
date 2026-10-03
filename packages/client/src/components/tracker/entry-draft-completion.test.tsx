@@ -8,8 +8,8 @@ import type { EntryFields } from "@starter/core";
 import type { EntryMutationResult } from "@/lib/entry-mutation-result";
 import type { EntryMutations } from "./use-entry-mutations";
 
-let workspace = "ws-a";
-let owner = "u-a";
+let workspace: string | null = "ws-a";
+let owner: string | null = "u-a";
 const listeners = new Set<() => void>();
 vi.mock("@/lib/active-workspace", () => ({
   getActiveWorkspaceId: () => workspace,
@@ -104,6 +104,30 @@ for (const mode of ["manual", "edit"] as const) {
       fireEvent.click(screen.getByTestId(`${prefix}-cancel`));
       expect(done).toHaveBeenCalledTimes(1);
     });
+
+    for (const unknown of ["account", "workspace"] as const) {
+      it(`keeps an unresolved ${unknown} draft with loading guidance`, async () => {
+        if (unknown === "account") owner = null;
+        else workspace = null;
+        const message = "Your account or workspace is still loading. Wait for it to load, then reopen this editor and try again.";
+        const write = vi.fn(async (): Promise<EntryMutationResult> => ({ ok: false, message }));
+        const { done, prefix, submit } = mount(write);
+        fireEvent.change(screen.getByTestId(`${prefix}-description`), { target: { value: "Cold draft" } });
+        fireEvent.click(submit);
+        expect(await screen.findByRole("alert")).toHaveTextContent(message);
+        expect(done).not.toHaveBeenCalled();
+        expect(screen.getByTestId(`${prefix}-description`)).toHaveValue("Cold draft");
+        act(() => {
+          workspace = "ws-b";
+          owner = "u-b";
+          listeners.forEach((notify) => notify());
+        });
+        fireEvent.click(submit);
+        expect(write).toHaveBeenCalledTimes(1);
+        expect(done).not.toHaveBeenCalled();
+        expect(screen.getByTestId(`${prefix}-cancel`)).toBeEnabled();
+      });
+    }
 
     it("closes after durable offline completion", async () => {
       const save = deferred<EntryMutationResult>();

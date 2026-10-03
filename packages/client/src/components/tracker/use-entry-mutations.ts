@@ -39,6 +39,7 @@ import {
   isNetworkError,
   isOnline,
   isTempId,
+  OfflineQueueScopeNotReadyError,
   type OfflineCreateInput,
   type OfflineIdInput,
   type OfflineStartInput,
@@ -500,9 +501,11 @@ export const useEntryMutations = (): EntryMutations => {
         try {
           await enqueue(context?.tempId, context?.workspaceId ?? null);
           if (context) context.queued = true;
-        } catch {
+        } catch (cause) {
           rollback(context);
-          const message = translate("tracker")("mutations.storageFailed");
+          const message = cause instanceof OfflineQueueScopeNotReadyError
+            ? cause.message
+            : translate("tracker")("mutations.storageFailed");
           if (context) context.errorMessage = message;
           if (stillInWorkspace(context)) toast.error(message);
         }
@@ -1117,7 +1120,7 @@ export const useEntryMutations = (): EntryMutations => {
       const input: CreateInput = {
         description: args.description,
         clientId: args.clientId,
-          projectId: args.projectId,
+        projectId: args.projectId,
         taskId: args.taskId ?? null,
         billable: args.billable,
         start: args.start,

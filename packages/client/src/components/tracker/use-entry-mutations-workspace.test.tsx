@@ -249,7 +249,7 @@ describe("entry mutations across workspaces", () => {
     );
 
     expect(setCurrent).not.toHaveBeenCalled();
-    expect(toastError).toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("queues an offline failure in the workspace the write began in", async () => {

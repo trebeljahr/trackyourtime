@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __resetOfflineQueueForTests, enqueueOffline, getOfflineQueue, setOfflineQueueOwner } from "./offline";
+import { __resetOfflineQueueForTests, __resetOfflineQueueOwnerForTests, adoptUnstampedOfflineRows, enqueueOffline, getOfflineQueue, OfflineQueueScopeNotReadyError, setOfflineQueueOwner } from "./offline";
 import { __resetActiveWorkspaceForTests } from "./active-workspace";
 import { OFFLINE_QUEUE_STORAGE_KEY, type OfflineCreateInput } from "@starter/core";
 
@@ -14,12 +14,37 @@ beforeEach(async () => {
   vi.restoreAllMocks();
   window.localStorage.clear();
   __resetOfflineQueueForTests();
+  __resetOfflineQueueOwnerForTests();
   __resetActiveWorkspaceForTests();
   await setOfflineQueueOwner("user-a");
 });
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe("browser offline save durability", () => {
+  for (const unknown of ["account", "workspace"] as const) {
+    it(`refuses an explicitly unresolved ${unknown} instead of minting an adoptable row`, async () => {
+      await setOfflineQueueOwner("user-b");
+      await expect(enqueueOffline("entries.create", input, "temp-cold-draft",
+        unknown === "workspace" ? null : "ws-a",
+        { owner: unknown === "account" ? null : "user-a", server: "http://localhost:3000" },
+      )).rejects.toBeInstanceOf(OfflineQueueScopeNotReadyError);
+      expect(await getOfflineQueue().list()).toEqual([]);
+      await setOfflineQueueOwner("user-c");
+      expect(await adoptUnstampedOfflineRows("ws-c")).toBe(0);
+      expect(await getOfflineQueue().list()).toEqual([]);
+    });
+  }
+
+  it("leaves a cold unresolved draft unqueued when another account resolves later", async () => {
+    __resetOfflineQueueOwnerForTests();
+    window.localStorage.clear();
+    await expect(enqueueOffline("entries.create", input, "temp-cold-draft", null,
+      { owner: null, server: "http://localhost:3000" },
+    )).rejects.toThrow("account or workspace is still loading");
+    await setOfflineQueueOwner("user-b");
+    expect(await adoptUnstampedOfflineRows("ws-b")).toBe(0);
+    expect(await getOfflineQueue().list()).toEqual([]);
+  });
   it("rejects a quota failure, leaves no queued success, then allows retry", async () => {
     const write = vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => { throw new DOMException("Disk full", "QuotaExceededError"); });
     await expect(enqueueOffline("entries.create", input, "temp-draft", "ws-a")).rejects.toThrow("Disk full");
