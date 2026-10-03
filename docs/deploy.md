@@ -1490,3 +1490,9 @@ The short version:
 
 Locally, the same rendering is
 `node scripts/desktop-manifests.mjs --artifacts <folder with the release files> --out manifests`.
+
+## Proposed same-origin web gateway
+
+The current hosted split remains active. See [the local gateway proposal](hosted-same-origin.md)
+for a tested path-routing model, cookie/callback migration blockers, and rollout
+and rollback gates. Do not give both Coolify apps the apex host to enable it.

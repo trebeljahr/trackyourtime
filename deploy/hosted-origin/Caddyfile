@@ -1,0 +1,24 @@
+# LOCAL proposal harness only. Nothing imports this file in hosted deployment.
+# Supply free high GATEWAY_PORT and explicit WEB_UPSTREAM / API_UPSTREAM URLs.
+# Keep one owner for the web origin; never add the apex to the API Coolify app.
+{
+	admin off
+	auto_https off
+}
+
+http://127.0.0.1:{$GATEWAY_PORT} {
+	bind 127.0.0.1
+	@api path /api /api/* /ws
+	handle @api {
+		# Preserve /api, query strings, cookies, redirects, version headers and
+		# WebSocket upgrades. For HTTPS upstreams, use their host for TLS/HTTP.
+		# Do not rewrite Set-Cookie, Location, Origin or Authorization.
+		reverse_proxy {$API_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+	handle {
+		# Use serve.mjs so legacy redirects, docs 404s and cache headers survive.
+		reverse_proxy {$WEB_UPSTREAM}
+	}
+}
