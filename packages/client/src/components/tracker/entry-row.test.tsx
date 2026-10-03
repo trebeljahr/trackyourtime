@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { DetailedEntry } from "@starter/shared";
 
 const userId = vi.hoisted(() => ({ value: "me" as string | undefined }));
@@ -76,7 +76,7 @@ const entry = (overrides: Partial<DetailedEntry> = {}): DetailedEntry =>
 const quickStarts = { favorites: [], pin: vi.fn(), unpin: vi.fn() } as never;
 const { EntryRow } = await import("./entry-row");
 
-function openDelete(entryValue = entry()): void {
+async function openDelete(entryValue = entry()): Promise<void> {
   render(
     <EntryRow
       entry={entryValue}
@@ -85,8 +85,12 @@ function openDelete(entryValue = entry()): void {
       onEdit={vi.fn()}
     />,
   );
-  fireEvent.click(screen.getByTestId("entry-menu"));
-  fireEvent.click(screen.getByTestId("entry-menu-delete"));
+  fireEvent.pointerDown(screen.getByTestId("entry-menu"), {
+    button: 0,
+    ctrlKey: false,
+    pointerType: "mouse",
+  });
+  fireEvent.click(await screen.findByTestId("entry-menu-delete"));
 }
 
 afterEach(() => {
@@ -98,11 +102,12 @@ afterEach(() => {
 
 describe("EntryRow deletion confirmation", () => {
   it("shows entry identity and cancels by mouse without deleting", async () => {
-    openDelete();
+    await openDelete();
 
     expect(await screen.findByTestId("confirm-entry-delete")).toBeVisible();
-    expect(screen.getByText("Prepare report")).toBeVisible();
-    expect(screen.getByText("Sep 14, 2026 · 1800s")).toBeVisible();
+    const dialog = screen.getByTestId("confirm-entry-delete");
+    expect(within(dialog).getByText("Prepare report")).toBeVisible();
+    expect(within(dialog).getByText("Sep 14, 2026 · 1800s")).toBeVisible();
     fireEvent.click(screen.getByTestId("confirm-cancel"));
 
     await waitFor(() => expect(screen.queryByTestId("confirm-entry-delete")).not.toBeInTheDocument());
@@ -110,14 +115,18 @@ describe("EntryRow deletion confirmation", () => {
   });
 
   it("cancels with Escape and calls deletion once after explicit confirmation", async () => {
-    openDelete();
+    await openDelete();
     await screen.findByTestId("confirm-entry-delete");
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("confirm-entry-delete")).not.toBeInTheDocument());
     expect(removeEntry).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByTestId("entry-menu"));
-    fireEvent.click(screen.getByTestId("entry-menu-delete"));
+    fireEvent.pointerDown(screen.getByTestId("entry-menu"), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    fireEvent.click(await screen.findByTestId("entry-menu-delete"));
     const accept = await screen.findByTestId("confirm-accept");
     fireEvent.click(accept);
     fireEvent.click(accept);
@@ -130,9 +139,13 @@ describe("EntryRow deletion confirmation", () => {
     render(
       <EntryRow entry={entry()} mutations={mutations} quickStarts={quickStarts} onEdit={vi.fn()} />,
     );
-    fireEvent.click(screen.getByTestId("entry-menu"));
+    fireEvent.pointerDown(screen.getByTestId("entry-menu"), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
 
-    expect(screen.getByTestId("entry-menu-delete")).toBeDisabled();
+    expect(await screen.findByTestId("entry-menu-delete")).toHaveAttribute("aria-disabled", "true");
     expect(removeEntry).not.toHaveBeenCalled();
   });
 
@@ -140,9 +153,9 @@ describe("EntryRow deletion confirmation", () => {
     { label: "an invoiced entry", overrides: { invoiceId: "invoice-1" } },
     { label: "a colleague's entry", overrides: { authorId: "someone-else" } },
   ])("does not offer deletion for $label", async ({ overrides }) => {
-    openDelete(entry(overrides));
+    await openDelete(entry(overrides));
 
-    expect(screen.getByTestId("entry-menu-delete")).toBeDisabled();
+    expect(await screen.findByTestId("entry-menu-delete")).toHaveAttribute("aria-disabled", "true");
     expect(screen.queryByTestId("confirm-entry-delete")).not.toBeInTheDocument();
   });
 });
