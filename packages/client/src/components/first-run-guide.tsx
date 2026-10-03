@@ -174,15 +174,13 @@ export function FirstRunGuide({
     clients.data !== undefined &&
     businessProfile.data !== undefined &&
     invoices.data !== undefined;
-  const showBilling = canUseBilling && billingDataLoaded;
-
   const billingComplete =
     billingDataLoaded &&
     (clients.data?.length ?? 0) > 0 &&
     projectRows.length > 0 &&
     hasRate &&
     hasBusinessDetails &&
-    (invoices.data?.length ?? 0) > 0;
+    (invoices.data?.invoices.length ?? 0) > 0;
   const complete =
     statusForScope === "tracking"
       ? hasAnyEntry
@@ -201,6 +199,7 @@ export function FirstRunGuide({
   }, [complete, loadedScope, scope, statusForScope]);
 
   const setGuideStatus = (next: "enrolled" | "tracking" | "billing" | "dismissed"): void => {
+    if (scope === null) return;
     setStatus(next);
     void getStorage().setItem(scope, next);
   };
@@ -275,7 +274,7 @@ export function FirstRunGuide({
               <ChecklistItem complete={(clients.data?.length ?? 0) > 0 && projectRows.length > 0} label={t("firstRun.clientProject")} href="/app/clients" />
               <ChecklistItem complete={hasRate} label={t("firstRun.rate")} href="/app/projects" />
               <ChecklistItem complete={hasBusinessDetails} label={t("firstRun.businessDetails")} href="/app/settings?tab=billing" />
-              <ChecklistItem complete={(invoices.data?.length ?? 0) > 0} label={t("firstRun.firstInvoice")} href="/app/invoices" />
+              <ChecklistItem complete={(invoices.data?.invoices.length ?? 0) > 0} label={t("firstRun.firstInvoice")} href="/app/invoices" />
             </ul>
           </section>
         ) : null}

@@ -11,7 +11,7 @@ const state = vi.hoisted(() => ({
   projects: [] as Array<{ id: string; hourlyRate: number | null }>,
   clients: [] as Array<{ id: string }>,
   profile: null as Record<string, unknown> | null,
-  invoices: [] as Array<{ id: string }>,
+  invoices: { invoices: [] as Array<{ id: string }> },
   defaultHourlyRate: 0,
 }));
 
@@ -72,7 +72,7 @@ beforeEach(() => {
   state.projects = [];
   state.clients = [];
   state.profile = null;
-  state.invoices = [];
+  state.invoices = { invoices: [] };
   state.defaultHourlyRate = 0;
 });
 
@@ -90,7 +90,7 @@ describe("FirstRunGuide", () => {
       country: "DE",
       postalCode: "10115",
     };
-    state.invoices = [{ id: "invoice-1" }];
+    state.invoices = { invoices: [{ id: "invoice-1" }] };
 
     render(<FirstRunGuide hasAnyEntry={false} canEnroll />);
 
@@ -150,7 +150,7 @@ describe("FirstRunGuide", () => {
       country: "DE",
       postalCode: "10115",
     };
-    state.invoices = [{ id: "invoice-1" }];
+    state.invoices = { invoices: [{ id: "invoice-1" }] };
     state.userId = "user-b";
     rerender(<FirstRunGuide hasAnyEntry canEnroll={false} />);
 
