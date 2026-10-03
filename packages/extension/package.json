@@ -27,7 +27,7 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^3.0.0",
     "@types/chrome": "^0.2.7",
-    "@types/node": "^25.8.0",
+    "@types/node": "^26.6.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.1.1",
