@@ -154,7 +154,7 @@ export function DetailedTable({
                 allSelected ? true : someSelected ? "indeterminate" : false
               }
               onCheckedChange={(value) => onToggleAll(value === true)}
-              aria-label={maxSelection !== undefined && selectable.length > maxSelection ? t("bulk.selectFirst", { count: maxSelection }) : t("detailed.selectAll")}
+              aria-label={maxSelection !== undefined && selectable.length > maxSelection ? t("bulk.selectFirst", { count: f.number(maxSelection) }) : t("detailed.selectAll")}
               data-testid="detailed-select-all"
             />
           </TableHead>

@@ -1,5 +1,5 @@
 {
-  "apiLevel": 9,
+  "apiLevel": 10,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -868,6 +868,191 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "entries.bulkEdit": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "expectedUpdatedAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                  "type": "string"
+                },
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "expectedUpdatedAt"
+              ],
+              "type": "object"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          },
+          "operation": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "billable": {
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "const": "update",
+                    "type": "string"
+                  },
+                  "projectId": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tags": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "ids": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 20,
+                            "type": "array"
+                          },
+                          "mode": {
+                            "const": "set",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "ids"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "ids": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 20,
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "mode": {
+                            "const": "add",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "ids"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "ids": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 20,
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "mode": {
+                            "const": "remove",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "ids"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "mode": {
+                            "const": "clear",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "taskId": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "originId": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "workspaceId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "entries",
+          "operation"
+        ],
         "type": "object"
       },
       "type": "mutation"

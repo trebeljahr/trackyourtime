@@ -46,7 +46,7 @@ import { env } from "../config/env.js";
 
 const listen = async (app: express.Express): Promise<{ server: Server; base: string }> => {
   const server = await new Promise<Server>((resolve) => {
-    const started = app.listen(0, () => resolve(started));
+    const started = app.listen(0, "127.0.0.1", () => resolve(started));
   });
   const { port } = server.address() as AddressInfo;
   return { server, base: `http://127.0.0.1:${port}` };

@@ -261,7 +261,7 @@ export function EntriesView({
       {isLoading ? <KpiRowSkeleton /> : <KpiRow items={kpis} />}
       <MoneyHiddenNote moneyVisible={totals?.moneyVisible} />
 
-      {eligible.length > 100 ? <p className="text-sm text-muted-foreground" data-testid="bulk-selection-limit">{t("bulk.selectFirst", { count: 100 })}</p> : null}
+      {eligible.length > 100 ? <p className="text-sm text-muted-foreground" data-testid="bulk-selection-limit">{t("bulk.selectFirst", { count: f.number(100) })}</p> : null}
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
