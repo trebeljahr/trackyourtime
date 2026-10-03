@@ -1,6 +1,10 @@
 "use client";
 
-import { QueryCache, QueryClient, onlineManager } from "@tanstack/react-query";
+import {
+  QueryCache,
+  QueryClient,
+  onlineManager,
+} from "@tanstack/react-query";
 
 import { noteNotFound } from "@/lib/active-workspace";
 import {
@@ -75,6 +79,15 @@ export const createAppQueryClient = (): QueryClient => {
         : {},
     },
   });
+  // Catalog data is shared by pickers and screens that often mount together.
+  // A short freshness window prevents remount/focus fetches while preserving
+  // explicit invalidation after writes and sync events. tRPC keys start with
+  // a [router, procedure] tuple; these prefixes cover every list input.
+  for (const router of ["projects", "clients", "tasks", "tags"] as const) {
+    appQueryClient.setQueryDefaults([[router, "list"]], {
+      staleTime: 60_000,
+    });
+  }
   return appQueryClient;
 };
 

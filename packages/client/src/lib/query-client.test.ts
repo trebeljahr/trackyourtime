@@ -18,7 +18,12 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
-import { MutationObserver, onlineManager } from "@tanstack/react-query";
+import {
+  focusManager,
+  MutationObserver,
+  onlineManager,
+  QueryObserver,
+} from "@tanstack/react-query";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -28,6 +33,7 @@ import {
 
 afterEach(() => {
   onlineManager.setOnline(true);
+  focusManager.setFocused(undefined);
 });
 
 /** Fire a mutation and report whether its `mutationFn` ever ran. */
@@ -60,6 +66,40 @@ const runMutation = async (
 };
 
 describe("createAppQueryClient", () => {
+  it.each(["projects", "clients", "tasks", "tags"] as const)(
+    "%s lists stay fresh across remount and focus, then refetch on invalidation",
+    async (router) => {
+      const client = createAppQueryClient();
+      const queryKey = [[router, "list"], { input: {}, type: "query" }] as const;
+      let requests = 0;
+      const options = client.defaultQueryOptions({
+        queryKey,
+        queryFn: async () => ++requests,
+      });
+      const first = new QueryObserver(client, options);
+      const unsubscribeFirst = first.subscribe(() => {});
+
+      await first.refetch();
+      unsubscribeFirst();
+
+      const remounted = new QueryObserver(client, options);
+      const unsubscribeRemounted = remounted.subscribe(() => {});
+      expect(requests).toBe(1);
+
+      client.mount();
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(requests).toBe(1);
+
+      await client.invalidateQueries({ queryKey: [[router, "list"]] });
+      expect(requests).toBe(2);
+
+      unsubscribeRemounted();
+      client.unmount();
+    },
+  );
+
   it("does not set networkMode on mutations globally", () => {
     const defaults = createAppQueryClient().getDefaultOptions();
     expect(defaults.mutations?.networkMode).toBeUndefined();
