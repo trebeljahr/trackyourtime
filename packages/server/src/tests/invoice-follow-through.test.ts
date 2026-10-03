@@ -42,6 +42,40 @@ describe("invoice follow-through arithmetic", () => {
       assert.equal(invoice.total, total);
     }
   });
+  it("represents invalid debt as unavailable and refuses accounting changes", () => {
+    for (const total of [NaN, Infinity, -1, 1e20]) {
+      const invoice = { ...readyInvoice(), total };
+      const balance = invoiceBalance(invoice, now);
+      assert.equal(balance.available, false);
+      assert.equal(balance.totalMinor, null);
+      assert.equal(balance.outstandingMinor, null);
+      assert.throws(
+        () => appendInvoicePayment(invoice, command("1"), "owner", now),
+        /invoice-balance-unavailable/,
+      );
+      assert.throws(
+        () =>
+          creditInvoice(
+            invoice,
+            { requestId: randomUUID(), reason: "Invalid", replacement: false },
+            "owner",
+            now,
+          ),
+        /invoice-balance-unavailable/,
+      );
+    }
+  });
+  it("reminder preview retains the fractional outstanding balance on historical JPY invoices", () => {
+    const invoice = { ...readyInvoice(), total: 0.5, currency: "JPY" };
+    const preview = previewInvoiceReminder(
+      invoice,
+      "synthetic@example.test",
+      "UTC",
+      now,
+    );
+    assert.match(preview.text, /(?:¥|JPY)\s*0\.50/);
+    assert.equal(preview.outstandingMinor, 50);
+  });
   it("uses the invoice timezone for calendar overdue days, including DST boundaries", () => {
     const invoice = {
       ...readyInvoice(),

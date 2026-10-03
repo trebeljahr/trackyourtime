@@ -222,6 +222,8 @@ export const reports = {
   },
 
   followThrough: {
+    balanceUnavailable: "This invoice’s balance cannot be calculated safely. Payments, credits and reminders are unavailable.",
+    balanceUnavailableShort: "Balance unavailable",
     deletionPending: "Deletion was interrupted. This draft is locked. Retry to release any remaining time and finish deleting it.",
     retryDelete: "Retry deletion",
     lateReminder: "Enabling reminders late sends only the latest due reminder; earlier stages are skipped.",

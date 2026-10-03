@@ -143,7 +143,11 @@ export function InvoiceList({
                 data-testid={`invoice-total-${invoice.id}`}
               >
                 {f.money(invoice.total, invoice.currency)}
-                {invoice.balance ? (
+                {invoice.balance?.available === false ? (
+                  <div className="text-xs text-muted-foreground">
+                    {t("followThrough.balanceUnavailableShort")}
+                  </div>
+                ) : invoice.balance ? (
                   <div className="text-xs text-muted-foreground">
                     {t("followThrough.outstanding")}:{" "}
                     {f.number(

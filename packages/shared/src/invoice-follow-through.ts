@@ -61,14 +61,25 @@ export type InvoiceFollowThrough = {
   credit?: InvoiceCredit;
   reminders?: InvoiceReminders;
 };
-export type InvoiceBalance = {
-  totalMinor: number;
-  paidMinor: number;
-  outstandingMinor: number;
-  refundDueMinor: number;
-  overdueDays: number;
-  legacySettled: boolean;
-};
+export type InvoiceBalance =
+  | {
+      available: true;
+      totalMinor: number;
+      paidMinor: number;
+      outstandingMinor: number;
+      refundDueMinor: number;
+      overdueDays: number;
+      legacySettled: boolean;
+    }
+  | {
+      available: false;
+      totalMinor: null;
+      paidMinor: null;
+      outstandingMinor: null;
+      refundDueMinor: null;
+      overdueDays: 0;
+      legacySettled: boolean;
+    };
 
 export function currencyScale(currency: string): number {
   // Historical invoice lines/totals use hundredths even for JPY. Keep that
@@ -117,32 +128,83 @@ export function invoiceBalance(
   now = new Date(),
 ): InvoiceBalance {
   const f = invoice.followThrough;
-  // Stored totals predate exact decimal payment input. Use the existing invoice
-  // rounding boundary; binary tails (0.1 + 0.2) must not break a list read.
-  const rounded = Math.round(invoice.total * currencyScale(invoice.currency));
-  const totalMinor = Number.isSafeInteger(rounded) ? Math.max(0, rounded) : 0;
   const legacySettled =
     f?.legacySettledMinor !== undefined ||
     (invoice.status === "paid" && f?.payments === undefined);
+  const unavailable: InvoiceBalance = {
+    available: false,
+    totalMinor: null,
+    paidMinor: null,
+    outstandingMinor: null,
+    refundDueMinor: null,
+    overdueDays: 0,
+    legacySettled,
+  };
+  // Stored totals predate exact decimal payment input. Use the established
+  // rounding boundary for binary tails, but never turn invalid debt into zero.
+  let scale: number;
+  try {
+    scale = currencyScale(invoice.currency);
+  } catch {
+    return unavailable;
+  }
+  const totalMinor = Math.round(invoice.total * scale);
+  if (
+    !Number.isFinite(invoice.total) ||
+    invoice.total < 0 ||
+    !Number.isSafeInteger(totalMinor)
+  )
+    return unavailable;
   let paidMinor = f?.legacySettledMinor ?? (legacySettled ? totalMinor : 0);
+  if (
+    !Number.isSafeInteger(paidMinor) ||
+    paidMinor < 0 ||
+    paidMinor > totalMinor
+  )
+    return unavailable;
   const entries = new Map<string, InvoicePayment>();
   for (const payment of f?.payments ?? []) {
+    if (
+      !Number.isSafeInteger(payment.amountMinor) ||
+      payment.amountMinor <= 0 ||
+      entries.has(payment.requestId)
+    )
+      return unavailable;
     const reversed = payment.reverses
       ? entries.get(payment.reverses)
       : undefined;
+    if (
+      payment.kind === "reversal" &&
+      (!reversed ||
+        reversed.kind === "reversal" ||
+        reversed.amountMinor !== payment.amountMinor)
+    )
+      return unavailable;
     const increases =
       payment.kind === "payment" ||
       (payment.kind === "reversal" && reversed?.kind === "refund");
     paidMinor += increases ? payment.amountMinor : -payment.amountMinor;
+    if (
+      !Number.isSafeInteger(paidMinor) ||
+      paidMinor < 0 ||
+      paidMinor > totalMinor
+    )
+      return unavailable;
     entries.set(payment.requestId, payment);
   }
   const outstandingMinor = f?.credit ? 0 : Math.max(0, totalMinor - paidMinor);
-  const day = invoiceDay(now, invoice.timezone ?? "UTC");
+  let day: string;
+  try {
+    day = invoiceDay(now, invoice.timezone ?? "UTC");
+  } catch {
+    return unavailable;
+  }
   // Invoice dates are date-only snapshots encoded at UTC midnight; timezone determines TODAY only.
   const elapsed = Math.floor(
     (Date.parse(day) - Date.parse(invoice.dueDate.slice(0, 10))) / 86_400_000,
   );
   return {
+    available: true,
     totalMinor,
     paidMinor,
     outstandingMinor,
@@ -165,6 +227,7 @@ export function nextReminderDay(
   const reminder = invoice.followThrough?.reminders;
   const balance = invoiceBalance(invoice, now);
   if (
+    !balance.available ||
     !reminder?.enabled ||
     invoice.followThrough?.credit ||
     invoice.status === "draft" ||

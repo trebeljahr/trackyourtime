@@ -15,7 +15,7 @@ import {
   sendEmail,
   type EmailParams,
 } from "../email.js";
-import { revisionFilter } from "../invoice-follow-through.js";
+import { invoiceRefusal, revisionFilter } from "../invoice-follow-through.js";
 import { registerRecurringJob } from "./registry.js";
 import { publishSync } from "../../ws/sync.js";
 
@@ -33,6 +33,7 @@ export function previewInvoiceReminder(
   outstandingMinor: number;
 } {
   const balance = invoiceBalance({ ...invoice, timezone }, now);
+  if (!balance.available) throw invoiceRefusal("invoice-balance-unavailable");
   const amount = new Intl.NumberFormat(invoice.locale ?? "en", {
     style: "currency",
     currency: invoice.currency,

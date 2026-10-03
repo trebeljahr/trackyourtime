@@ -58,6 +58,7 @@ export async function changeFollowThrough(
     const next = change(wire, doc);
     const after = { ...wire, followThrough: next };
     const balance = invoiceBalance(after);
+    if (!balance.available) throw invoiceRefusal("invoice-balance-unavailable");
     const status = next.credit
       ? wire.status
       : wire.status === "draft"
@@ -126,6 +127,7 @@ export function appendInvoicePayment(
   )
     throw invoiceRefusal("invoice-payment-invalid");
   const balance = invoiceBalance(wire, now);
+  if (!balance.available) throw invoiceRefusal("invoice-balance-unavailable");
   if (
     !Number.isSafeInteger(Math.round(wire.total * currencyScale(wire.currency)))
   )
@@ -226,6 +228,7 @@ export function creditInvoice(
   if (wire.status === "draft")
     throw invoiceRefusal("invoice-credit-issued-only");
   const balance = invoiceBalance(wire, now);
+  if (!balance.available) throw invoiceRefusal("invoice-balance-unavailable");
   if (
     !Number.isSafeInteger(Math.round(wire.total * currencyScale(wire.currency)))
   )

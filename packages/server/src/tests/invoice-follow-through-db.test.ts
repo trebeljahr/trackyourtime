@@ -81,6 +81,32 @@ describe(
       );
       assert.equal(saved.balance?.outstandingMinor, 0);
     });
+    it("an unsafe stored total remains visible as unavailable and cannot be settled or reminded", async () => {
+      const invoice = await sent();
+      await Invoice.updateOne({ _id: invoice.id }, { $set: { total: 1e20 } });
+      const row = (await owner().list({})).invoices.find(
+        (value) => value.id === invoice.id,
+      );
+      assert.equal(row?.balance?.available, false);
+      assert.equal(row?.balance?.outstandingMinor, null);
+      await assert.rejects(
+        owner().recordPayment(payment(invoice.id, "1")),
+        /invoice-balance-unavailable/,
+      );
+      await assert.rejects(
+        owner().updateStatus({ id: invoice.id, status: "paid" }),
+        /invoice-balance-unavailable/,
+      );
+      await assert.rejects(
+        owner().setReminders(consent(invoice.id)),
+        /invoice-balance-unavailable/,
+      );
+      await assert.rejects(
+        owner().reminderPreview(consent(invoice.id)),
+        /invoice-balance-unavailable/,
+      );
+      assert.equal((await owner().get({ id: invoice.id })).status, "sent");
+    });
     it("sent cannot return to draft, issued XML drafts cannot be edited/deleted", async () => {
       const invoice = await sent();
       await assert.rejects(

@@ -197,6 +197,8 @@ export const reports: Translation<typeof source> = {
   },
 
   followThrough: {
+    balanceUnavailable: "Der Saldo dieser Rechnung kann nicht sicher berechnet werden. Zahlungen, Stornierungen und Erinnerungen sind nicht verfügbar.",
+    balanceUnavailableShort: "Saldo nicht verfügbar",
     deletionPending: "Das Löschen wurde unterbrochen. Dieser Entwurf ist gesperrt. Versuche es erneut, um verbleibende Zeiten freizugeben und das Löschen abzuschließen.",
     retryDelete: "Löschen erneut versuchen",
     lateReminder: "Bei später Aktivierung wird nur die zuletzt fällige Erinnerung gesendet; frühere Schritte werden übersprungen.",

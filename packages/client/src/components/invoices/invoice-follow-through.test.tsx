@@ -64,6 +64,7 @@ const invoice: Invoice = {
   createdAt: "2026-09-01",
   updatedAt: "2026-09-01",
   balance: {
+    available: true,
     totalMinor: 10000,
     paidMinor: 0,
     outstandingMinor: 10000,
@@ -79,6 +80,59 @@ beforeEach(() => {
 });
 
 describe("invoice follow-through controls", () => {
+  it("shows historical JPY fractions without rounding away outstanding money", () => {
+    render(
+      <InvoiceFollowThrough
+        invoice={{
+          ...invoice,
+          currency: "JPY",
+          total: 12.5,
+          balance: {
+            available: true,
+            totalMinor: 1250,
+            paidMinor: 1200,
+            outstandingMinor: 50,
+            refundDueMinor: 0,
+            overdueDays: 2,
+            legacySettled: false,
+          },
+        }}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("invoice-follow-through")).toHaveTextContent(
+      /(?:¥|JPY)\s*0\.50/,
+    );
+  });
+  it("shows an unavailable balance and offers no accounting or reminder actions", () => {
+    render(
+      <InvoiceFollowThrough
+        invoice={{
+          ...invoice,
+          total: 1e20,
+          balance: {
+            available: false,
+            totalMinor: null,
+            paidMinor: null,
+            outstandingMinor: null,
+            refundDueMinor: null,
+            overdueDays: 0,
+            legacySettled: false,
+          },
+        }}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("invoice-balance-unavailable")).toHaveTextContent(
+      "cannot be calculated safely",
+    );
+    expect(
+      screen.queryByTestId("invoice-record-payment"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Issue full credit" }),
+    ).not.toBeInTheDocument();
+  });
   it("reuses the payment request id when retrying a lost response", async () => {
     api.pay
       .mockRejectedValueOnce(new Error("lost response"))

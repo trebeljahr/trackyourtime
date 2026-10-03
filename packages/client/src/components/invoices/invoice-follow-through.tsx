@@ -124,6 +124,15 @@ export function InvoiceFollowThrough({
     !fullCredit &&
     (balance?.outstandingMinor ?? 0) > 0;
   const payments = invoice.followThrough?.payments ?? [];
+  if (balance?.available === false)
+    return (
+      <section
+        className="border-t pt-4"
+        data-testid="invoice-balance-unavailable"
+      >
+        <p role="status">{t("followThrough.balanceUnavailable")}</p>
+      </section>
+    );
   return (
     <section
       className="space-y-4 border-t pt-4"

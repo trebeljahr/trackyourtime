@@ -1342,6 +1342,7 @@ export const invoicesRouter = router({
         .select(WITHOUT_ISSUED_XML_BYTES)
         .lean();
       if (!current) throw notFound();
+      if (input.status === "paid" && toClientInvoice(current).balance?.available === false) throw badRequest("invoice-balance-unavailable");
 
       if (current.deleting || current.followThrough?.credit || (input.status !== current.status && current.followThrough?.payments !== undefined)) {
         throw badRequest("invoice-use-payment-ledger");
