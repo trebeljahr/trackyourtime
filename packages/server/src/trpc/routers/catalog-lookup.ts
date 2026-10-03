@@ -1,3 +1,4 @@
+import { businessReads } from "../../services/business-transaction.js";
 // Loading just enough catalog to label a handful of quick starts.
 //
 // This is deliberately not the `$lookup` pipeline `entries.list` uses. That
@@ -47,17 +48,21 @@ export async function loadCatalogLookup(
   }
   if (projectIds.size === 0 && taskIds.size === 0 && clientIds.size === 0) return emptyCatalog();
 
-  const [projectDocs, taskDocs] = await Promise.all([
+  const [projectDocs, taskDocs] = await businessReads([
+    () => (
     projectIds.size === 0
       ? []
       : Project.find({ workspaceId, _id: { $in: objectIds(projectIds) } })
           .select({ name: 1, color: 1, clientId: 1, archived: 1 })
-          .lean(),
+          .lean()
+    ),
+    () => (
     taskIds.size === 0
       ? []
       : Task.find({ workspaceId, _id: { $in: objectIds(taskIds) } })
           .select({ name: 1 })
-          .lean(),
+          .lean()
+    )
   ]);
 
   const projects = new Map<string, CatalogProject>(

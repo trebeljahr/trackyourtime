@@ -1,3 +1,4 @@
+import { approvalsRouter } from "./routers/approvals.js";
 import { router } from "./trpc.js";
 import { healthRouter } from "./routers/health.js";
 import { profileRouter } from "./routers/profile.js";
@@ -21,6 +22,7 @@ import { invitationsRouter } from "./routers/invitations.js";
 
 export const appRouter = router({
   health: healthRouter,
+  approvals: approvalsRouter,
   profile: profileRouter,
   billing: billingRouter,
   // ── trackyourtime ──────────────────────────────────────────────────────

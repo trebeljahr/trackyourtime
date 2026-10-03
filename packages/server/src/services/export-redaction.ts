@@ -147,6 +147,7 @@ export function redactExportMoney(
   return {
     ...rest,
     moneyRedacted: true,
+    memberRates: document.memberRates?.map((member) => ({ ...member, hourlyRate: null })),
     settings,
     projects,
     entries,

@@ -81,6 +81,183 @@
       },
       "type": "mutation"
     },
+    "approvals.act": {
+      "input": {
+        "properties": {
+          "action": {
+            "enum": [
+              "withdraw",
+              "approve",
+              "reject",
+              "reopen"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[a-f0-9]{24}$",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "action"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "approvals.configure": {
+      "input": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "requireApprovedForInvoices": {
+            "type": "boolean"
+          },
+          "timeZone": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "workspaceId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "requireApprovedForInvoices",
+          "timeZone"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "approvals.entries": {
+      "input": {
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{24}$",
+            "type": "string"
+          },
+          "page": {
+            "default": 0,
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "type": "query"
+    },
+    "approvals.ownWeek": {
+      "input": {
+        "properties": {
+          "weekStart": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "workspaceId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "weekStart"
+        ],
+        "type": "object"
+      },
+      "type": "query"
+    },
+    "approvals.policy": {
+      "input": {
+        "properties": {
+          "workspaceId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "query"
+    },
+    "approvals.reviewQueue": {
+      "input": {
+        "properties": {
+          "page": {
+            "default": 0,
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "query"
+    },
+    "approvals.submit": {
+      "input": {
+        "properties": {
+          "confirmedOnline": {
+            "const": true,
+            "type": "boolean"
+          },
+          "pendingLocalEdits": {
+            "const": false,
+            "type": "boolean"
+          },
+          "weekStart": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "workspaceId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "weekStart",
+          "confirmedOnline",
+          "pendingLocalEdits"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
     "billing.status": {
       "input": null,
       "type": "query"
@@ -3143,6 +3320,40 @@
         },
         "required": [
           "memberId"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "members.updateRate": {
+      "input": {
+        "properties": {
+          "hourlyRate": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memberId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "workspaceId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "memberId",
+          "hourlyRate"
         ],
         "type": "object"
       },

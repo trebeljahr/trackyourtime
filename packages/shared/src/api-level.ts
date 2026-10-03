@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 10;
+export const API_LEVEL = 11;
 
 export type ApiLevelChange = {
   level: number;
@@ -111,6 +111,10 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     release: "0.2.2",
     added: ["entries.bulkEdit: bounded, revision-checked entry edits with per-entry outcomes."],
   },
+  { level: 11, release: "0.2.2", added: [
+    "Member rate editing and author-specific billing defaults.",
+    "Optional transactional timesheet submission, review and period locks; approval eligibility for invoices.",
+  ] },
 ];
 
 /**

@@ -33,6 +33,8 @@ export type IndexOutcome = {
  * failing is logged as a warning.
  */
 export const CRITICAL_INDEXES: readonly { model: string; keys: IndexKeys }[] = [
+  { model: "TimesheetPolicy", keys: { workspaceId: 1 } },
+  { model: "TimesheetApproval", keys: { workspaceId: 1, authorId: 1, start: 1, end: 1 } },
   { model: "TimeEntry", keys: { authorId: 1 } },
   { model: "WorkspaceMember", keys: { workspaceId: 1, userId: 1 } },
   { model: "Invoice", keys: { workspaceId: 1, number: 1 } },

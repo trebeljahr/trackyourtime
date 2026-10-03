@@ -1,7 +1,8 @@
-import { bulkEditEntriesSchema, type BulkEditEntriesInput, type BulkEditEntriesResult, type BulkEntryFailure } from "@starter/shared";
+import { isTimesheetWriteRefusal, bulkEditEntriesSchema, type BulkEditEntriesInput, type BulkEditEntriesResult, type BulkEntryFailure } from "@starter/shared";
 import { TimeEntry, toClientTimeEntry, type TimeEntryDocLike } from "../../models/TimeEntry.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
-import { getOrCreateWorkspaceSettings } from "../../models/Settings.js";
+import { getAuthorBillingSettings } from "../member-rate.js";
+import { entryIsApprovalLocked } from "../approvals/entry-guard.js";
 import { snapshotRate } from "../entry-stop.js";
 import { publishSync } from "../../ws/sync.js";
 import { emitWebhookEvent } from "../webhooks/emit.js";
@@ -15,8 +16,8 @@ type Operation = BulkEditEntriesInput["operation"];
 type Plan = { entry: BulkEntry; set: Record<string, unknown> };
 
 /**
- * Item 9 integration seam: preflight must check approval locks, and write must
- * run under the same approval/invoice transaction or lock as single-entry edits.
+ * Preflight checks approval locks; guarded TimeEntry writes atomically recheck
+ * under the same workspace fence used by single-entry edits and submissions.
  * Standalone deployments keep explicit outcomes; never advertise atomicity.
  */
 export type BulkEntryStore = {
@@ -115,7 +116,11 @@ export async function executeBulkEdit(scope: WorkspaceScope, raw: BulkEditEntrie
       } else {
         results.push({ id, success: false, reason: "conflict" });
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && isTimesheetWriteRefusal(error.message)) {
+        results.push({ id, success: false, reason: "locked" });
+        continue;
+      }
       // A transport error from Mongo can arrive after the write committed.
       // Keep selection and tell the user to reload before trying it again.
       results.push({ id, success: false, reason: "unconfirmed" });
@@ -135,8 +140,7 @@ export const mongoBulkEntryStore: BulkEntryStore = {
     const valid = ids.filter((id) => /^[a-f0-9]{24}$/i.test(id));
     return TimeEntry.find({ _id: { $in: valid }, workspaceId: scope.workspaceId, authorId: scope.userId }).lean();
   },
-  // Item 9 replaces this and wraps write with its shared locking policy.
-  locked: async () => false,
+  locked: async (_scope, entry) => entryIsApprovalLocked(entry),
   prepare: async (scope, entry, operation) => {
     if (operation.kind === "delete") return {};
     const set: Record<string, unknown> = {};
@@ -160,7 +164,7 @@ export const mongoBulkEntryStore: BulkEntryStore = {
       (operation.billable !== undefined && operation.billable !== entry.billable)) {
       const refs = await resolveRefs(scope.workspaceId, operation.projectId === undefined ? entry.projectId : operation.projectId,
         operation.taskId === undefined ? entry.taskId : operation.taskId);
-      const settings = await getOrCreateWorkspaceSettings(scope.workspaceId);
+      const settings = await getAuthorBillingSettings(scope.workspaceId, entry.authorId);
       Object.assign(set, snapshotRate(operation.billable ?? entry.billable, refs.project, settings));
       // Existing update semantics freeze a legacy client before moving projects.
       if (entry.clientId === undefined && operation.projectId !== undefined) {

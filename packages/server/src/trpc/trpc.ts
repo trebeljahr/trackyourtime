@@ -1,3 +1,5 @@
+import { APPROVAL_REFUSALS } from "@starter/shared";
+import { withBusinessTransaction } from "../services/business-transaction.js";
 import { timeServerWork } from "../middleware/server-timing.js";
 import { initTRPC, TRPCError } from "@trpc/server";
 import type { Context } from "./context.js";
@@ -29,6 +31,7 @@ const t = initTRPC.context<Context>().create({
       ...shape,
       data: {
         ...shape.data,
+        approvalRefusal: APPROVAL_REFUSALS.find((code) => code === error.message) ?? null,
         // The structured refusal of an e-invoice export or fill: which field
         // is missing and where to fix it. null on every other error, so the
         // client reads typed issues and never parses a message.
@@ -113,7 +116,7 @@ export const protectedProcedure = publicProcedure.use(async ({ ctx, next }) => {
  *    FORBIDDEN would confirm the workspace exists.
  */
 export const workspaceProcedure = protectedProcedure.use(
-  async ({ ctx, next, getRawInput, type }) => {
+  async ({ ctx, next, getRawInput, type, path }) => {
     const requested = workspaceIdFromInput(await getRawInput());
     const resolve = () => (type === "query" && ctx.resolveRequestWorkspace
       ? ctx.resolveRequestWorkspace(requested)
@@ -136,6 +139,13 @@ export const workspaceProcedure = protectedProcedure.use(
         visibility: resolved.visibility,
       },
     });
-    return ctx.res ? timeServerWork(ctx.res, "data", data) : data();
+    const run = async () => {
+      const result = await data();
+      if (!result.ok) throw result.error;
+      return result;
+    };
+    const execute = () => type === "mutation" && /^(data\.(commit|undo)$|invoices\.(create|remove)$|approvals\.)/.test(path)
+      ? withBusinessTransaction(run) : data();
+    return ctx.res ? timeServerWork(ctx.res, "data", execute) : execute();
   },
 );

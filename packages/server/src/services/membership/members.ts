@@ -19,6 +19,7 @@ import type {
   WorkspaceMemberRow,
   WorkspaceRole,
 } from "@starter/shared";
+import { TRPCError } from "@trpc/server";
 import { assertAllowed, membershipNotFound } from "./errors.js";
 import {
   removeMembership,
@@ -153,6 +154,9 @@ async function buildRows(
     ? await store.find("workspaceMembers", { workspaceId, userId: onlyUserId })
     : await mirrorRows(store, workspaceId);
   if (mirror.length === 0) return [];
+  const viewer = mirror.find((row) => asId(row.userId) === selfId) ??
+    (await store.find("workspaceMembers", { workspaceId, userId: selfId }))[0];
+  const seesMoney = viewer?.role === "owner" || viewer?.canViewOthersMoney === true;
   const userIds = mirror.map((row) => asId(row.userId)).filter((id): id is string => !!id);
   const [auth, users] = await Promise.all([
     store.find("authMembers", { organizationId: workspaceId, userId: { $in: userIds } }),
@@ -189,6 +193,8 @@ async function buildRows(
         role,
         canViewOthersTime: owner || row.canViewOthersTime === true,
         canViewOthersMoney: owner || row.canViewOthersMoney === true,
+        ...(seesMoney || userId === selfId
+          ? { hourlyRate: typeof row.hourlyRate === "number" ? row.hourlyRate : null } : {}),
         joinedAt: asDate(row.createdAt).toISOString(),
         isSelf: userId === selfId,
       };
@@ -348,4 +354,19 @@ export async function transferOwnership(
   });
   deps.publishWorkspace(actor.workspaceId, changed(actor.workspaceId, "transferred"));
   return { ok: true };
+}
+
+/** Rates are workspace business data; changing one affects future time only. */
+export async function updateMemberRate(
+  deps: MembershipDeps, actor: WorkspaceActor,
+  input: { memberId: string; hourlyRate: number | null },
+): Promise<WorkspaceMemberRow> {
+  const target = await findMember(deps.store, actor.workspaceId, input.memberId);
+  const [viewer] = await deps.store.find("workspaceMembers", { workspaceId: actor.workspaceId, userId: actor.userId });
+  if (actor.role !== "owner" && !(actor.role === "admin" && viewer?.canViewOthersMoney === true)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "member-rate-permission-required" });
+  }
+  await deps.store.updateMany("workspaceMembers", { workspaceId: actor.workspaceId, userId: target.userId }, { hourlyRate: input.hourlyRate });
+  deps.publishWorkspace(actor.workspaceId, { kind: "settings.changed" });
+  return rowFor(deps.store, actor.workspaceId, target.userId, actor.userId);
 }

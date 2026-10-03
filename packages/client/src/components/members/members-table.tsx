@@ -7,6 +7,7 @@ import type {
   WorkspacePermissions,
 } from "@starter/shared";
 
+import { MemberRateEditor } from "./member-rate-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -35,6 +36,8 @@ export type MembersTableProps = {
   permissions: WorkspacePermissions;
   /** The row a mutation is in flight for; its controls are disabled meanwhile. */
   busyMemberId: string | null;
+  onRateChange?: (row: WorkspaceMemberRow, rate: number | null) => void;
+  ratesSupported?: boolean;
   onRoleChange: (row: WorkspaceMemberRow, role: InvitableRole) => void;
   onVisibilityChange: (row: WorkspaceMemberRow, patch: VisibilityPatch) => void;
   /** Asks for confirmation; nothing is sent from the table itself. */
@@ -58,11 +61,14 @@ export function MembersTable({
   permissions,
   busyMemberId,
   onRoleChange,
+  onRateChange,
+  ratesSupported = false,
   onVisibilityChange,
   onRemove,
   onTransfer,
 }: MembersTableProps): React.JSX.Element {
   const t = useT("members");
+  const ta = useT("approvals");
   const tc = useT("common");
   const format = useFormat();
   const ownerCount = ownerCountOf(rows);
@@ -79,6 +85,7 @@ export function MembersTable({
             <TableHead>{t("table.role")}</TableHead>
             <TableHead>{t("table.time")}</TableHead>
             <TableHead>{t("table.money")}</TableHead>
+            {ratesSupported ? <TableHead>{ta("rate")}</TableHead> : null}
             <TableHead>{t("table.joined")}</TableHead>
             <TableHead className="text-right">{t("table.actions")}</TableHead>
           </TableRow>
@@ -182,6 +189,11 @@ export function MembersTable({
                   )}
                 </TableCell>
 
+                {ratesSupported ? <TableCell data-label={ta("rate")}>
+                  <MemberRateEditor rate={row.hourlyRate} busy={busy}
+                    canEdit={permissions.inviteMembers && permissions.viewOthersMoney}
+                    onSave={(rate) => onRateChange?.(row, rate)} />
+                </TableCell> : null}
                 <TableCell data-label={t("table.joined")} className="whitespace-nowrap text-muted-foreground">
                   {format.date(row.joinedAt, "medium")}
                 </TableCell>

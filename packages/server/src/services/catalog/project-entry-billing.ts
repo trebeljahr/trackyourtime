@@ -1,3 +1,4 @@
+import { businessReads } from "../business-transaction.js";
 // Carrying a project's billing change onto the time already booked on it.
 //
 // Entries snapshot their rate when they stop, so past earnings never shift
@@ -96,9 +97,13 @@ export async function projectBillingImpact(
   projectId: string,
 ): Promise<ProjectBillingImpact> {
   const own = ownProjectEntries(scope, projectId);
-  const [entries, invoiced] = await Promise.all([
-    TimeEntry.countDocuments({ ...own, invoiceId: null }),
-    TimeEntry.countDocuments({ ...own, invoiceId: { $ne: null } }),
+  const [entries, invoiced] = await businessReads([
+    () => (
+    TimeEntry.countDocuments({ ...own, invoiceId: null })
+    ),
+    () => (
+    TimeEntry.countDocuments({ ...own, invoiceId: { $ne: null } })
+    )
   ]);
   return { entries, invoiced };
 }

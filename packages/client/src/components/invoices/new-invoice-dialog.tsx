@@ -159,6 +159,7 @@ function NewInvoiceForm({
   const format = useFormatSettings();
   const f = useFormat();
   const t = useT("reports");
+  const ta = useT("approvals");
   const tc = useT("common");
   const { createInvoice, isCreating } = useInvoiceMutations();
 
@@ -575,6 +576,7 @@ function NewInvoiceForm({
           </p>
         ) : data ? (
           <>
+            {(data.skippedApproval ?? 0) > 0 ? <p className="rounded-md border px-3 py-2 text-sm" data-testid="invoice-preview-skipped-approval">{ta("unapproved", { count: data.skippedApproval ?? 0 })}</p> : null}
             {notices.map((notice) => (
               <p
                 key={notice.id}

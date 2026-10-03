@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import { normalizeClientBilling } from "@starter/shared";
 import { getBusinessProfile } from "../../models/BusinessProfile.js";
 import { Client } from "../../models/Client.js";
+import { businessReads } from "../business-transaction.js";
 import type { FillSources } from "./fill.js";
 
 /**
@@ -13,9 +14,9 @@ import type { FillSources } from "./fill.js";
  * nothing on the recipient side.
  */
 export async function loadFillSources(workspaceId: string, clientId: string): Promise<FillSources> {
-  const [profile, client] = await Promise.all([
-    getBusinessProfile(workspaceId),
-    mongoose.isValidObjectId(clientId)
+  const [profile, client] = await businessReads([
+    () => getBusinessProfile(workspaceId),
+    () => mongoose.isValidObjectId(clientId)
       ? Client.findOne({ _id: clientId, workspaceId }).select("billing").lean()
       : Promise.resolve(null),
   ]);

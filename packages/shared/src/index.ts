@@ -32,3 +32,5 @@ export * from "./desktop-bridge.js";
 export * from "./extension-bridge.js";
 export * from "./desktop-shortcuts.js";
 export * from "./avatar.js";
+
+export * from "./approvals.js";

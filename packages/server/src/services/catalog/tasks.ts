@@ -1,3 +1,4 @@
+import { transactional } from "../business-transaction.js";
 // Tasks are a flat, workspace-wide catalog — an entry carries a task and a
 // project side by side, and the task belongs to neither the project nor the
 // client above it. `list` rolls up tracked seconds per task in one aggregation
@@ -201,7 +202,7 @@ export async function archiveTask(
  * Always deletes. Entries booked on the task keep their tracked time and
  * their project, and simply fall back to "no task".
  */
-export async function removeTask(
+async function removeTaskImpl(
   scope: WorkspaceScope,
   input: { id: string; originId?: string },
 ): Promise<CatalogRemoveResult> {
@@ -241,3 +242,5 @@ export async function removeTask(
   // purpose — they decide whose caches are stale. Only the response narrows.
   return projectRemoveResult(result, own);
 }
+
+export const removeTask = transactional(removeTaskImpl);

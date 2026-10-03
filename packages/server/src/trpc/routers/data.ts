@@ -1,4 +1,5 @@
 import { toClientInvoice } from "../../models/Invoice.js";
+import { businessReads } from "../../services/business-transaction.js";
 // Getting a whole history in, and getting a whole workspace out.
 //
 // Import is an onboarding feature first: somebody arriving with years of
@@ -71,6 +72,9 @@ import { Invoice } from "../../models/Invoice.js";
 import { Project, DEFAULT_PROJECT_COLOR } from "../../models/Project.js";
 import { Tag, DEFAULT_TAG_COLOR } from "../../models/Tag.js";
 import { DEFAULT_TASK_COLOR, Task } from "../../models/Task.js";
+import { getAuthorBillingSettings } from "../../services/member-rate.js";
+import { TimesheetApproval, TimesheetPolicy } from "../../models/TimesheetApproval.js";
+import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { TimeEntry } from "../../models/TimeEntry.js";
 import {
   WorkspaceSettingsModel,
@@ -182,14 +186,22 @@ type ProjectRef = {
 };
 
 async function loadCatalog(workspaceId: string): Promise<CatalogIndex> {
-  const [clients, projects, tasks, tags] = await Promise.all([
-    Client.find({ workspaceId }, { name: 1 }).lean(),
+  const [clients, projects, tasks, tags] = await businessReads([
+    () => (
+    Client.find({ workspaceId }, { name: 1 }).lean()
+    ),
+    () => (
     Project.find(
       { workspaceId },
       { name: 1, clientId: 1, hourlyRate: 1, billableDefault: 1 },
-    ).lean(),
-    Task.find({ workspaceId }, { name: 1 }).lean(),
-    Tag.find({ workspaceId }, { name: 1 }).lean(),
+    ).lean()
+    ),
+    () => (
+    Task.find({ workspaceId }, { name: 1 }).lean()
+    ),
+    () => (
+    Tag.find({ workspaceId }, { name: 1 }).lean()
+    )
   ]);
 
   const index: CatalogIndex = {
@@ -926,19 +938,32 @@ async function buildWorkspaceExport(args: {
     catalogFavorites,
     catalogInvoices,
     businessProfile,
-  ] = await Promise.all([
-    Client.find({ workspaceId }).lean(),
-    Project.find({ workspaceId }).lean(),
-    Task.find({ workspaceId }).lean(),
-    Tag.find({ workspaceId }).lean(),
-    getOrCreateWorkspaceSettings(workspaceId),
+  ] = await businessReads([
+    () => (
+    Client.find({ workspaceId }).lean()
+    ),
+    () => (
+    Project.find({ workspaceId }).lean()
+    ),
+    () => (
+    Task.find({ workspaceId }).lean()
+    ),
+    () => (
+    Tag.find({ workspaceId }).lean()
+    ),
+    () => (
+    getOrCreateWorkspaceSettings(workspaceId)
+    ),
+    () => (
     // Pins are scoped by BOTH axes, exactly as `listFavorites` reads them: a
     // favorite is one person's shortcut into one workspace. Exporting every
     // member's would put a colleague's shortcuts in this person's backup and
     // give the restore nothing to write them onto.
     Favorite.find({ workspaceId, userId: visibility.userId })
       .sort({ order: 1, createdAt: 1 })
-      .lean(),
+      .lean()
+    ),
+    () => (
     // Invoices carry an author (`createdBy`) but no per-entry authorship, so
     // the same scope the entries use is applied to that field: a member
     // restricted to their own rows does not pull every colleague's invoice
@@ -961,7 +986,9 @@ async function buildWorkspaceExport(args: {
           // the newest invoices out of a file that still reads as a full backup.
           .limit(MAX_EXPORT_INVOICES + 1)
           .lean()
-      : Promise.resolve([]),
+      : Promise.resolve([])
+    ),
+    () => (
     // Omitted from the file while empty, so "never filled in" and "not
     // stated" read the same on the way back in: neither overwrites anything.
     // The issuer profile is the invoice header, payment details included, so
@@ -981,7 +1008,8 @@ async function buildWorkspaceExport(args: {
               ? { ...values, logo: logoToWire(logo).dataUrl }
               : values;
           })
-      : Promise.resolve(undefined),
+      : Promise.resolve(undefined)
+    )
   ]);
 
   const clientNameById = new Map(
@@ -1133,7 +1161,18 @@ async function buildWorkspaceExport(args: {
     }),
   );
 
+  const approvals = await TimesheetApproval.find({ workspaceId, ...(authorScope ?? {}), ...(dateRange ? { start: dateRange } : {}) }).sort({ start: 1 }).lean();
+  const members = await WorkspaceMember.find({ workspaceId, ...(visibility.canViewOthersMoney ? {} : { userId: visibility.userId }) }).lean();
+  const approvalPolicy = await TimesheetPolicy.findOne({ workspaceId }).lean();
   const document: WorkspaceExport = {
+    approvals: approvals.map((record) => ({
+      authorId: record.authorId, weekStart: record.weekStart, weekStartsOn: record.weekStartsOn,
+      timeZone: record.timeZone, start: record.start.toISOString(), end: record.end.toISOString(),
+      status: record.status, revision: record.revision,
+      history: record.history.map((item) => ({ action: item.action, actorId: item.actorId, at: item.at.toISOString(), reason: item.reason })),
+    })),
+    memberRates: members.map((member) => ({ userId: member.userId, hourlyRate: member.hourlyRate ?? null })),
+    ...(approvalPolicy ? { approvalPolicy: { enabled: approvalPolicy.enabled, requireApprovedForInvoices: approvalPolicy.requireApprovedForInvoices, timeZone: approvalPolicy.timeZone } } : {}),
     version: WORKSPACE_EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
     workspaceId,
@@ -1288,7 +1327,7 @@ export const dataRouter = router({
         requested: input.restoreSettings ?? false,
         originId: input.originId,
       });
-      const settings = await getOrCreateWorkspaceSettings(workspaceId);
+      const settings = await getAuthorBillingSettings(workspaceId, ctx.user.id);
 
       const created =
         (input.createMissing ?? true)

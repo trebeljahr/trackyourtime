@@ -1,3 +1,4 @@
+import { isTimesheetWriteRefusal } from "@starter/shared";
 /**
  * How a decoded queue row is turned back into a real API call, and what has to
  * be repaired once it lands.
@@ -382,6 +383,9 @@ export const classifyReplayOutcome = async <R extends ReplayRow>(
   if (facts.code === "UNAUTHORIZED" || facts.httpStatus === 401) {
     return { kind: "retry-later", reason: "unauthorized" };
   }
+  // A lock refusal needs a deliberate retry after withdrawal/reopening.
+  // Queue v2 keeps the edit in recovery without blocking unrelated work.
+  if (isTimesheetWriteRefusal(facts.message)) return { kind: "hold", reason: "refused", message: facts.message, code: facts.code ?? undefined };
   if (isUnknownProcedure(facts))
     return { kind: "hold", reason: "unknown-procedure" };
 

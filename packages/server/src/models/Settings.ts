@@ -1,3 +1,4 @@
+import { businessReads } from "../services/business-transaction.js";
 // Settings live in two collections, because they answer to two different
 // owners.
 //
@@ -11,6 +12,7 @@
 // The wire shape stays merged for now (see `getResolvedSettings`), so the
 // storage split — the expensive-to-change part — lands without any client
 // having to change. Splitting the procedure is a later, reversible step.
+import { WorkspaceMember } from "./WorkspaceMember.js";
 import mongoose, { Schema, type Document } from "mongoose";
 import {
   DEFAULT_IDLE_SETTINGS,
@@ -327,14 +329,16 @@ export async function getResolvedSettings(
   workspaceId: string,
   userId: string,
 ): Promise<ResolvedSettings> {
-  const [workspace, user] = await Promise.all([
-    getOrCreateWorkspaceSettings(workspaceId),
-    getOrCreateUserPreferences(userId),
+  const [workspace, user, member] = await businessReads([
+    () => getOrCreateWorkspaceSettings(workspaceId),
+    () => getOrCreateUserPreferences(userId),
+    () => WorkspaceMember.findOne({ workspaceId, userId }).select("hourlyRate").lean(),
   ]);
 
   return {
     workspaceId: workspace.workspaceId,
     userId: user.userId,
+    memberHourlyRate: member?.hourlyRate ?? null,
     defaultHourlyRate: workspace.defaultHourlyRate,
     currency: workspace.currency,
     weekStartsOn: workspace.weekStartsOn,

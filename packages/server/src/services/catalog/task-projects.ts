@@ -1,3 +1,4 @@
+import { businessReads } from "../business-transaction.js";
 // Which projects a task is weakly associated with.
 //
 // A task still belongs to no project: an entry carries both references side
@@ -56,16 +57,20 @@ function link(links: TaskProjectLinks, taskId: string, projectId: unknown): void
 export async function taskProjectLinks(
   scope: WorkspaceScope,
 ): Promise<TaskProjectLinks> {
-  const [pairs, legacy] = await Promise.all([
+  const [pairs, legacy] = await businessReads([
+    () => (
     TimeEntry.aggregate<{ _id: { taskId: string; projectId: string } }>(
       taskProjectPairsPipeline(scope.workspaceId, scope.visibility),
+    )
     ),
+    () => (
     Task.collection
       .find(
         { workspaceId: scope.workspaceId, projectId: { $type: "string" } },
         { projection: { projectId: 1 } },
       )
-      .toArray(),
+      .toArray()
+    )
   ]);
 
   const links: TaskProjectLinks = new Map();

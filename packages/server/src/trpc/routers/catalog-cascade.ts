@@ -1,3 +1,4 @@
+import { transactional } from "../../services/business-transaction.js";
 // Cascading deletes for the catalog (Client → Project, and Task alongside).
 //
 // Deleting a catalog row never deletes tracked time. Entries keep their
@@ -31,7 +32,7 @@ const EMPTY_RESULT: CatalogRemoveResult = {
  * project's children, so "Design review" outliving the project it happened on
  * is the correct outcome rather than collateral.
  */
-export async function cascadeDeleteProject(
+async function cascadeDeleteProjectImpl(
   workspaceId: string,
   projectId: string,
 ): Promise<CatalogRemoveResult> {
@@ -63,7 +64,7 @@ export async function cascadeDeleteProject(
  * Delete a task. Entries booked on it keep their project and fall back to
  * "no task".
  */
-export async function cascadeDeleteTask(
+async function cascadeDeleteTaskImpl(
   workspaceId: string,
   taskId: string,
 ): Promise<CatalogRemoveResult> {
@@ -88,7 +89,7 @@ export async function cascadeDeleteTask(
  * Delete a client. Its projects survive — they are detached, not deleted, so
  * no tracked time is orphaned by removing a grouping level above it.
  */
-export async function cascadeDeleteClient(
+async function cascadeDeleteClientImpl(
   workspaceId: string,
   clientId: string,
 ): Promise<CatalogRemoveResult> {
@@ -108,3 +109,9 @@ export async function cascadeDeleteClient(
 
   return { ...EMPTY_RESULT, projectsDetached: detached.modifiedCount };
 }
+
+export const cascadeDeleteProject = transactional(cascadeDeleteProjectImpl);
+
+export const cascadeDeleteTask = transactional(cascadeDeleteTaskImpl);
+
+export const cascadeDeleteClient = transactional(cascadeDeleteClientImpl);

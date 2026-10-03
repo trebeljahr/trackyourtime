@@ -1,3 +1,4 @@
+import { APPROVAL_REFUSALS } from "@starter/shared";
 import { translate } from "@/i18n/translate";
 import type { Translator } from "@/i18n/translator";
 import { isNetworkError } from "@/lib/offline";
@@ -39,7 +40,12 @@ export const userErrorMessage = (
   if (serverCode(error) === "INTERNAL_SERVER_ERROR") return generic;
   if (typeof error === "object" && error !== null) {
     const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim() !== "") return message;
+    if (typeof message === "string") {
+      const code = APPROVAL_REFUSALS.find((code) => code === message);
+      if (code) return translate("approvals")(`errors.${code}`);
+      if (message === "member-rate-permission-required") return translate("approvals")("errors.member-rate-permission-required");
+      if (message.trim() !== "") return message;
+    }
   }
   return generic;
 };

@@ -1,3 +1,4 @@
+import { deferAfterCommit } from "../business-transaction.js";
 // Where a mutation says "this happened"; nothing here talks to the network.
 //
 // Emission ENQUEUES: it writes one pending `WebhookDelivery` per interested
@@ -26,6 +27,7 @@ export function emitWebhookEvent(
   event: WebhookEvent,
   data: WebhookEventData,
 ): void {
+  if (deferAfterCommit(() => emitWebhookEvent(workspaceId, event, data))) return;
   if (!workspaceId) return;
 
   void (async () => {

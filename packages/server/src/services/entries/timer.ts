@@ -1,3 +1,4 @@
+import { transactional, transactionSession } from "../business-transaction.js";
 // The running timer: starting, stopping, discarding, continuing, and the
 // runaway prompt.
 //
@@ -30,7 +31,7 @@ import {
   type TimeEntry as TimeEntryWire,
 } from "@starter/shared";
 import { TimeEntry, toClientTimeEntry } from "../../models/TimeEntry.js";
-import { getOrCreateWorkspaceSettings } from "../../models/Settings.js";
+import { getAuthorBillingSettings } from "../member-rate.js";
 import { authorScopeFilter } from "../../models/WorkspaceMember.js";
 import { durationBetween, finalizeStop, snapshotRate } from "../entry-stop.js";
 import { enforceMaxEntryDuration } from "../runaway.js";
@@ -168,7 +169,7 @@ export type DiscardTimerInput = z.infer<typeof discardTimerSchema>;
  * anyway. The insert then loses to the running-entry unique index and the
  * caller gets a CONFLICT, which is the honest answer.
  */
-export const stopRunningEntry = async (
+const stopRunningEntryImpl = async (
   authorId: string,
   at: Date,
   reach: TimerReach,
@@ -235,7 +236,7 @@ export type StartedEntry = {
   stopped: TimeEntryWire | null;
 };
 
-export const startNewEntry = async (args: StartArgs): Promise<StartedEntry> => {
+const startNewEntryImpl = async (args: StartArgs): Promise<StartedEntry> => {
   const refs = await resolveRefs(args.workspaceId, args.projectId, args.taskId);
   const clientId = await resolveClientId(
     args.workspaceId,
@@ -243,7 +244,7 @@ export const startNewEntry = async (args: StartArgs): Promise<StartedEntry> => {
     refs.project,
   );
   const tagIds = (await resolveTagIds(args.workspaceId, args.tagIds)) ?? [];
-  const settings = await getOrCreateWorkspaceSettings(args.workspaceId);
+  const settings = await getAuthorBillingSettings(args.workspaceId, args.authorId);
   // The project's default as every client sees it: a project billing at 0 is
   // not billable (`projectBillableByDefault`).
   const billable =
@@ -289,6 +290,9 @@ export const startNewEntry = async (args: StartArgs): Promise<StartedEntry> => {
     return { entry: await insert(), stopped };
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
+    // Duplicate-key aborts a transaction. Do not issue more commands on that
+    // session; the complete domain operation rolls back and may be retried.
+    if (transactionSession()) throw new TRPCError({ code: "CONFLICT", message: "Another timer is already running" });
     // A concurrent start slipped in between our stop and our insert — or, for
     // a confined caller, the running entry is one this reach may not stop and
     // the retry will lose to the index again. Either way the second failure
@@ -391,7 +395,7 @@ export async function startTimer(
  * confined to its own workspace, so there is never anything to report, and
  * its wire shape does not change.
  */
-export async function startTimerDetailed(
+async function startTimerDetailedImpl(
   scope: WorkspaceScope,
   input: StartTimerInput,
   reach: TimerReach,
@@ -464,7 +468,7 @@ export async function startTimerDetailed(
   return started;
 }
 
-export async function stopTimer(
+async function stopTimerImpl(
   scope: WorkspaceScope,
   input: StopTimerInput,
   reach: TimerReach,
@@ -534,7 +538,7 @@ export async function stopTimer(
  * your own timer must work from wherever you happen to be. The event goes
  * into the entry's own workspace.
  */
-export async function resolveRunawayEntry(
+async function resolveRunawayEntryImpl(
   scope: WorkspaceScope,
   input: ResolveRunawayInput,
 ): Promise<TimeEntryWire> {
@@ -658,7 +662,7 @@ export async function resolveRunawayEntry(
 }
 
 /** Delete the running entry instead of keeping it. */
-export async function discardTimer(
+async function discardTimerImpl(
   scope: WorkspaceScope,
   input: DiscardTimerInput,
 ): Promise<{ success: true; id: string }> {
@@ -704,7 +708,7 @@ export async function continueEntry(
 }
 
 /** {@link continueEntry}, also reporting the running entry it closed. */
-export async function continueEntryDetailed(
+async function continueEntryDetailedImpl(
   scope: WorkspaceScope,
   input: ContinueEntryInput,
 ): Promise<StartedEntry> {
@@ -783,3 +787,17 @@ export async function replacedByStart(
     end: stopped.end,
   };
 }
+
+export const stopRunningEntry = transactional(stopRunningEntryImpl);
+
+export const startNewEntry = transactional(startNewEntryImpl);
+
+export const startTimerDetailed = transactional(startTimerDetailedImpl);
+
+export const stopTimer = transactional(stopTimerImpl);
+
+export const resolveRunawayEntry = transactional(resolveRunawayEntryImpl);
+
+export const discardTimer = transactional(discardTimerImpl);
+
+export const continueEntryDetailed = transactional(continueEntryDetailedImpl);

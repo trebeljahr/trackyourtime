@@ -1,3 +1,4 @@
+import { transactional, businessReads } from "../business-transaction.js";
 // Tags: cross-cutting labels, deliberately OUTSIDE the Client → Project → Task
 // tree. One entry lives at exactly one place in that tree but can carry any
 // number of tags.
@@ -128,7 +129,8 @@ export async function listTags(
 ): Promise<TagWithStats[]> {
   const workspaceId = scope.workspaceId;
 
-  const [docs, usage] = await Promise.all([
+  const [docs, usage] = await businessReads([
+    () => (
     Tag.find({
       workspaceId,
       ...(input.includeArchived ? {} : { archived: false }),
@@ -137,8 +139,11 @@ export async function listTags(
       // sort next to each other rather than in two alphabets.
       .collation({ locale: "en", strength: 2 })
       .sort({ name: 1 })
-      .lean(),
-    loadTagUsage(workspaceId, scope.visibility),
+      .lean()
+    ),
+    () => (
+    loadTagUsage(workspaceId, scope.visibility)
+    )
   ]);
 
   return docs.map((doc) => {
@@ -248,7 +253,7 @@ export async function updateTag(
 }
 
 /** Hard-deletes only when nothing references the tag; archives otherwise. */
-export async function removeTag(
+async function removeTagImpl(
   scope: WorkspaceScope,
   input: { id: string; originId?: string },
 ): Promise<TagRemoveResult> {
@@ -313,3 +318,5 @@ export async function removeTag(
   );
   return { deleted: true, archived: false, message: null };
 }
+
+export const removeTag = transactional(removeTagImpl);

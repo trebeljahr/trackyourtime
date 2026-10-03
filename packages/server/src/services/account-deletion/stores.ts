@@ -15,6 +15,7 @@ import {
 } from "../../models/Settings.js";
 import { Tag } from "../../models/Tag.js";
 import { Task } from "../../models/Task.js";
+import { TimesheetApproval, TimesheetPolicy, WorkspaceWriteFence } from "../../models/TimesheetApproval.js";
 import { TimeEntry } from "../../models/TimeEntry.js";
 import { WebhookDelivery } from "../../models/WebhookDelivery.js";
 import { WebhookSubscription } from "../../models/WebhookSubscription.js";
@@ -38,6 +39,9 @@ type AppCollection = Exclude<
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const APP_MODELS: Record<AppCollection, Model<any>> = {
   timeEntries: TimeEntry,
+  timesheetApprovals: TimesheetApproval,
+  timesheetPolicies: TimesheetPolicy,
+  workspaceWriteFences: WorkspaceWriteFence,
   clients: Client,
   projects: Project,
   tasks: Task,

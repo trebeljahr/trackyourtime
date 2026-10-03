@@ -1,3 +1,4 @@
+import { transactional } from "./business-transaction.js";
 /**
  * Writing the end of a time entry.
  *
@@ -12,7 +13,7 @@ import type {
 } from "@starter/shared";
 import { resolveHourlyRate } from "@starter/shared";
 import { Project, type ProjectDocLike } from "../models/Project.js";
-import { getOrCreateWorkspaceSettings } from "../models/Settings.js";
+import { getAuthorBillingSettings } from "./member-rate.js";
 import {
   TimeEntry,
   toClientTimeEntry,
@@ -56,12 +57,12 @@ export const snapshotRate = (
  * `runaway` is written in the same update as the stop, so a cap and the record
  * that explains it can never land apart.
  */
-export const finalizeStop = async (
+const finalizeStopImpl = async (
   running: TimeEntryDocLike,
   end: Date,
   runaway?: RunawayDoc,
 ): Promise<TimeEntryWire | null> => {
-  const settings = await getOrCreateWorkspaceSettings(running.workspaceId);
+  const settings = await getAuthorBillingSettings(running.workspaceId, running.authorId, running);
   const project = running.projectId
     ? await Project.findOne({
         _id: running.projectId,
@@ -90,3 +91,5 @@ export const finalizeStop = async (
 
   return stopped ? toClientTimeEntry(stopped) : null;
 };
+
+export const finalizeStop = transactional(finalizeStopImpl);

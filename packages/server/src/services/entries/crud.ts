@@ -1,3 +1,4 @@
+import { transactional } from "../business-transaction.js";
 // Manual entries: create, update, delete.
 //
 // Editing is AUTHOR-only, independent of viewing: `canViewOthersTime` grants
@@ -14,7 +15,7 @@ import {
 } from "@starter/shared";
 import { Project } from "../../models/Project.js";
 import { TimeEntry, toClientTimeEntry } from "../../models/TimeEntry.js";
-import { getOrCreateWorkspaceSettings } from "../../models/Settings.js";
+import { getAuthorBillingSettings } from "../member-rate.js";
 import { durationBetween, snapshotRate } from "../entry-stop.js";
 import { emitWebhookEvent } from "../webhooks/emit.js";
 import { publishSync } from "../../ws/sync.js";
@@ -34,7 +35,7 @@ import { resolveRefs, resolveClientId } from "./refs.js";
 import { resolveTagIds } from "./tags.js";
 
 /** Manual entry with an explicit start and end. */
-export async function createEntry(
+async function createEntryImpl(
   scope: WorkspaceScope,
   input: CreateEntryInput,
 ): Promise<TimeEntryWire> {
@@ -59,7 +60,7 @@ export async function createEntry(
     refs.project,
   );
   const tagIds = (await resolveTagIds(workspaceId, input.tagIds)) ?? [];
-  const settings = await getOrCreateWorkspaceSettings(workspaceId);
+  const settings = await getAuthorBillingSettings(workspaceId, scope.userId);
   // The project's default as every client sees it: a project billing at 0 is
   // not billable (`projectBillableByDefault`).
   const billable =
@@ -101,7 +102,7 @@ export async function createEntry(
   return entry;
 }
 
-export async function updateEntry(
+async function updateEntryImpl(
   scope: WorkspaceScope,
   input: UpdateEntryInput,
 ): Promise<TimeEntryWire> {
@@ -203,7 +204,7 @@ export async function updateEntry(
   let hourlyRate = existing.hourlyRate;
   let currency = existing.currency;
   if (resnapshot) {
-    const settings = await getOrCreateWorkspaceSettings(workspaceId);
+    const settings = await getAuthorBillingSettings(workspaceId, scope.userId);
     const snapshot = snapshotRate(billable, refs.project, settings);
     hourlyRate = snapshot.hourlyRate;
     currency = snapshot.currency;
@@ -254,7 +255,7 @@ export async function updateEntry(
   return entry;
 }
 
-export async function deleteEntry(
+async function deleteEntryImpl(
   scope: WorkspaceScope,
   input: { id: string; originId?: string },
 ): Promise<{ success: true; id: string }> {
@@ -304,3 +305,9 @@ export async function deleteEntry(
   });
   return { success: true, id: input.id };
 }
+
+export const createEntry = transactional(createEntryImpl);
+
+export const updateEntry = transactional(updateEntryImpl);
+
+export const deleteEntry = transactional(deleteEntryImpl);

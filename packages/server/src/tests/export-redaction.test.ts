@@ -111,6 +111,9 @@ const fixture = (): ExhaustiveExport => ({
   workspaceId: "workspace-1",
   currency: "EUR",
   settings: { defaultHourlyRate: 95, weekStartsOn: 1 },
+  approvals: [],
+  memberRates: [{ userId: "user-1", hourlyRate: 125 }],
+  approvalPolicy: { enabled: true, requireApprovedForInvoices: true, timeZone: "UTC" },
   businessProfile: {
     // Bytes on the profile leave with the profile: payment details and a
     // logo alike, so a redacted file drops the block whole.

@@ -355,6 +355,15 @@ export type WorkspaceExport = {
    * in v1 files.
    */
   invoices?: WorkspaceExportInvoice[];
+  /** Audit records only. Ordinary imports never restore approval authority. */
+  approvals?: {
+    authorId: string; weekStart: string; timeZone: string; weekStartsOn: number;
+    start: string; end: string; status: string; revision: number;
+    history: { action: string; actorId: string; at: string; reason: string }[];
+  }[];
+  /** Export only. Never restored into memberships by ordinary imports. */
+  memberRates?: { userId: string; hourlyRate: number | null }[];
+  approvalPolicy?: { enabled: boolean; requireApprovedForInvoices: boolean; timeZone: string };
 };
 
 /**

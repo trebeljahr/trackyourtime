@@ -1,3 +1,4 @@
+import { transactional, businessReads } from "../business-transaction.js";
 // Projects: the middle of the catalog, and the only catalog row that carries
 // money (an hourly rate and a budget).
 //
@@ -31,7 +32,7 @@ import {
 } from "../../models/Project.js";
 import { TimeEntry } from "../../models/TimeEntry.js";
 import { authorScopeFilter } from "../../models/WorkspaceMember.js";
-import { getOrCreateWorkspaceSettings } from "../../models/Settings.js";
+import { getAuthorBillingSettings } from "../member-rate.js";
 import { publishSync } from "../../ws/sync.js";
 import type { CatalogRemoveResult } from "../../trpc/routers/catalog-cascade.js";
 import { cascadeDeleteProject } from "../../trpc/routers/catalog-cascade.js";
@@ -130,7 +131,7 @@ async function aggregateProjects(
   match: Record<string, unknown>,
 ): Promise<ProjectWithStats[]> {
   const workspaceId = scope.workspaceId;
-  const settings = await getOrCreateWorkspaceSettings(workspaceId);
+  const settings = await getAuthorBillingSettings(workspaceId, scope.userId);
   const rows = await Project.aggregate<ProjectAggregateRow>([
     { $match: { workspaceId, ...match } },
     {
@@ -241,7 +242,7 @@ export async function createProject(
   });
   // Read for the budget's currency and for the answer's billable flag, which
   // depends on the workspace default rate.
-  const settings = await getOrCreateWorkspaceSettings(scope.workspaceId);
+  const settings = await getAuthorBillingSettings(scope.workspaceId, scope.userId);
   const created = await Project.create({
     workspaceId: scope.workspaceId,
     createdBy: scope.userId,
@@ -266,7 +267,7 @@ export async function createProject(
   return projectWire(created, settings);
 }
 
-export async function updateProject(
+async function updateProjectImpl(
   scope: WorkspaceScope,
   input: UpdateProjectInput,
 ): Promise<ProjectWire> {
@@ -278,7 +279,7 @@ export async function updateProject(
 
   // Read on every update: the answer's billable flag depends on the
   // workspace default rate.
-  const settings = await getOrCreateWorkspaceSettings(scope.workspaceId);
+  const settings = await getAuthorBillingSettings(scope.workspaceId, scope.userId);
 
   // Changing a budget's amount must keep the currency it was agreed in,
   // so the existing snapshot is read before it is overwritten. An
@@ -346,7 +347,7 @@ export async function updateProject(
  * The flag is a no-op for an update that changes neither the billable
  * default nor the rate: nothing about the entries' billing would move.
  */
-export async function updateProjectWithEntries(
+async function updateProjectWithEntriesImpl(
   scope: WorkspaceScope,
   input: UpdateProjectWithEntriesInput,
 ): Promise<ProjectUpdateResult> {
@@ -363,11 +364,15 @@ export async function updateProjectWithEntries(
   // entry's own flag is overwritten or left alone. Compared as the clients
   // saw it — through the zero-rate rule — so giving a rate to a project that
   // was billable at 0 counts as switching it on, and its entries follow.
-  const [before, settings] = await Promise.all([
+  const [before, settings] = await businessReads([
+    () => (
     Project.findOne({ _id: update.id, workspaceId: scope.workspaceId })
       .select("billableDefault hourlyRate")
-      .lean(),
-    getOrCreateWorkspaceSettings(scope.workspaceId),
+      .lean()
+    ),
+    () => (
+    getAuthorBillingSettings(scope.workspaceId, scope.userId)
+    )
   ]);
   if (!before) throw notFound();
   const wasBillable = projectBillableByDefault(
@@ -421,7 +426,7 @@ export async function archiveProject(
   );
   return projectWire(
     updated,
-    await getOrCreateWorkspaceSettings(scope.workspaceId),
+    await getAuthorBillingSettings(scope.workspaceId, scope.userId),
   );
 }
 
@@ -453,19 +458,23 @@ export async function ownCascadeCollateral(
   // Nothing to withhold, and no extra round trip for the common case.
   if (authorScope === null) return null;
 
-  const [entriesDetached, favoritesDetached] = await Promise.all([
+  const [entriesDetached, favoritesDetached] = await businessReads([
+    () => (
     TimeEntry.countDocuments({
       workspaceId: scope.workspaceId,
       ...match,
       ...authorScope,
-    }),
+    })
+    ),
+    () => (
     // A pin is filed under `userId`, not `authorId` — it is one person's
     // shortcut, so the caller's own pins are the ones they may be told about.
     Favorite.countDocuments({
       workspaceId: scope.workspaceId,
       ...match,
       userId: scope.visibility.userId,
-    }),
+    })
+    )
   ]);
 
   return { entriesDetached, favoritesDetached };
@@ -479,7 +488,7 @@ export async function ownCascadeCollateral(
  * The collateral it reports is the CALLER's when they may not see others'
  * work — `ownCascadeCollateral` above, and `projectRemoveResult` for why.
  */
-export async function removeProject(
+async function removeProjectImpl(
   scope: WorkspaceScope,
   input: { id: string; originId?: string },
 ): Promise<CatalogRemoveResult> {
@@ -518,3 +527,9 @@ export async function removeProject(
   }
   return projectRemoveResult(result, own);
 }
+
+export const updateProject = transactional(updateProjectImpl);
+
+export const updateProjectWithEntries = transactional(updateProjectWithEntriesImpl);
+
+export const removeProject = transactional(removeProjectImpl);

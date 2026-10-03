@@ -626,6 +626,8 @@ export type UserPreferences = {
  */
 export type ResolvedSettings = WorkspaceSettings & Omit<UserPreferences, "userId"> & {
   userId: string;
+  /** Caller’s own rate only. Absent on old servers; null inherits. */
+  memberHourlyRate?: number | null;
 };
 
 /**

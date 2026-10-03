@@ -165,7 +165,7 @@ export function FirstRunGuide({
   const profile = businessProfile.data ?? null;
   const issuer = profile ? normalizeIssuer(profile) : null;
   const hasRate =
-    format.settings.defaultHourlyRate > 0 ||
+    (format.settings.memberHourlyRate ?? format.settings.defaultHourlyRate) > 0 ||
     projectRows.some((project) => project.hourlyRate !== null && project.hourlyRate > 0);
   const hasBusinessDetails = Boolean(
     profile && issuer && !isIdentityEmpty(issuer) && !isPostalAddressMissing(profile),

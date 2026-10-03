@@ -8,6 +8,7 @@
 import {
   memberIdSchema,
   updateRoleSchema,
+  updateMemberRateSchema,
   updateVisibilitySchema,
   workspaceScopeSchema,
   type WorkspaceMemberRow,
@@ -19,6 +20,7 @@ import {
   removeMember,
   transferOwnership,
   updateMemberRole,
+  updateMemberRate,
   updateMemberVisibility,
   type WorkspaceActor,
 } from "../../services/membership/members.js";
@@ -42,6 +44,9 @@ export const membersRouter = router({
       async ({ ctx }): Promise<WorkspaceMemberRow[]> =>
         listMembers(await membershipDeps(), actorOf(ctx)),
     ),
+
+  updateRate: workspaceProcedure.input(updateMemberRateSchema).mutation(async ({ ctx, input }) =>
+    updateMemberRate(await membershipDeps(), actorOf(ctx), input)),
 
   updateRole: workspaceProcedure
     .input(updateRoleSchema)

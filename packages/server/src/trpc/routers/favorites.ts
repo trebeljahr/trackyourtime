@@ -34,7 +34,7 @@ import {
 } from "@starter/shared";
 import { Favorite, toClientFavorite } from "../../models/Favorite.js";
 import { Project } from "../../models/Project.js";
-import { getOrCreateWorkspaceSettings } from "../../models/Settings.js";
+import { getAuthorBillingSettings } from "../../services/member-rate.js";
 import { Task } from "../../models/Task.js";
 import { publishToUser } from "../../ws/sync.js";
 import { router, workspaceProcedure } from "../trpc.js";
@@ -140,7 +140,7 @@ export const favoritesRouter = router({
         (project
           ? projectBillableByDefault(
               project,
-              (await getOrCreateWorkspaceSettings(ctx.workspaceId))
+              (await getAuthorBillingSettings(ctx.workspaceId, ctx.user.id))
                 .defaultHourlyRate,
             )
           : false);

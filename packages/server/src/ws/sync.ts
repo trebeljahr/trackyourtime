@@ -1,3 +1,4 @@
+import { deferAfterCommit } from "../services/business-transaction.js";
 import type { SyncEvent, Visibility, WorkspaceRole } from "@starter/shared";
 import {
   canSeeEntry,
@@ -26,6 +27,7 @@ export function publishToUser(
   originId?: string,
   workspaceId?: string,
 ): void {
+  if (deferAfterCommit(() => publishToUser(userId, event, originId, workspaceId))) return;
   if (!userId) return;
   try {
     syncTransport.publish(userId, {
@@ -148,6 +150,7 @@ export async function publishSync(
   originId?: string,
   audience?: SyncAudience,
 ): Promise<void> {
+  if (deferAfterCommit(() => publishSync(workspaceId, event, originId, audience))) return;
   if (!workspaceId) return;
   try {
     const members = await WorkspaceMember.find({ workspaceId })

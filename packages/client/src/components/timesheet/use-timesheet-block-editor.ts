@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { zonedWallClockToMs, type DetailedEntry, type TimeEntry, type EntryListInput, type TimesheetRow } from "@starter/shared";
+import { resolveHourlyRate, zonedWallClockToMs, type DetailedEntry, type TimeEntry, type EntryListInput, type TimesheetRow } from "@starter/shared";
 import { decorateEntry } from "@/lib/entry-shape";
 import { getActiveWorkspaceId } from "@/lib/active-workspace";
 import { entryMutationScope, sameEntryMutationScope, type EntryMutationScope, type EntryMutationResult } from "@/lib/entry-mutation-result";
@@ -114,13 +114,22 @@ export const useTimesheetBlockEditor = (args: {
         // submitted fields onto the original record without guessing identity.
         const start = input.start ?? entry.start;
         const end = input.end === undefined ? entry.end : input.end;
+        const settings = utils.settings.get.getData();
+        const projectId = input.projectId === undefined ? entry.projectId : input.projectId;
+        const billable = input.billable ?? entry.billable;
+        const resnapshot = (projectId !== entry.projectId || billable !== entry.billable) &&
+          settings?.workspaceId === entry.workspaceId && settings?.userId === entry.authorId;
+        const hourlyRate = resnapshot ? resolveHourlyRate({
+          billable, projectRate: utils.projects.list.getData({})?.find((project) => project.id === projectId)?.hourlyRate,
+          memberRate: settings?.memberHourlyRate, defaultRate: settings?.defaultHourlyRate,
+        }) : entry.hourlyRate;
         const saved = result.entry ?? (result.saved === "offline" ? {
           ...entry,
           description: input.description ?? entry.description,
           clientId: input.clientId === undefined ? entry.clientId : input.clientId,
           projectId: input.projectId === undefined ? entry.projectId : input.projectId,
           taskId: input.taskId === undefined ? entry.taskId : input.taskId,
-          billable: input.billable ?? entry.billable,
+          billable, hourlyRate, currency: resnapshot ? settings!.currency : entry.currency,
           tagIds: input.tagIds ?? entry.tagIds,
           start, end,
           durationSec: end === null ? 0 : Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000)),

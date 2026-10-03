@@ -1,3 +1,4 @@
+import { transactional } from "./business-transaction.js";
 /**
  * The runaway-timer guard, evaluated on the server.
  *
@@ -105,7 +106,7 @@ export type GuardOutcome =
  * could not write. A guard that breaks `entries.current` is worse than a
  * runaway timer.
  */
-export async function enforceMaxEntryDuration(
+async function enforceMaxEntryDurationImpl(
   userId: string,
   confineToWorkspaceId: string | null,
   now: Date = new Date(),
@@ -286,3 +287,5 @@ export function runawayReminderClaimFilter(
 const publish = (workspaceId: string, event: SyncEvent): void => {
   void publishSync(workspaceId, event);
 };
+
+export const enforceMaxEntryDuration = transactional(enforceMaxEntryDurationImpl);

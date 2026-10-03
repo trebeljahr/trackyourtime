@@ -160,7 +160,9 @@ export const invalidateFor = (utils: Utils, event: SyncEvent): void => {
       void utils.reports.invalidate();
       return;
     case "settings.changed":
+      // Calendar/rate/approval policy changes affect editing and billing too.
       void utils.settings.invalidate();
+      void utils.invalidate();
       return;
     case "data.imported":
       // An import writes thousands of entries and the catalog behind them in

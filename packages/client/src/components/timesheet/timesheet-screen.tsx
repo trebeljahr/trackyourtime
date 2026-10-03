@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useIsMutating } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { parseISO } from "date-fns";
 import { CalendarRange, ChevronLeft, ChevronRight, Clock, Plus } from "lucide-react";
@@ -41,6 +42,8 @@ import { trpc } from "@/lib/trpc";
 import { TimesheetGrid } from "./timesheet-grid";
 import { useTimesheetMutations } from "./use-timesheet-mutations";
 import { useTimesheetRows } from "./use-timesheet-rows";
+import { ApprovalControls, periodIsLocked } from "./approval-controls";
+import { useServerSupports } from "@/lib/server-level";
 import { userErrorMessage } from "@/lib/error-message";
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
@@ -91,15 +94,23 @@ export function TimesheetScreen({ cellDisabledReason }: TimesheetScreenProps = {
   const tc = useT("common");
   const { user } = useAuth();
   const workspaceId = React.useSyncExternalStore(subscribeActiveWorkspace, getActiveWorkspaceId, () => null);
+  const mutationsInFlight = useIsMutating();
+  const ta = useT("approvals");
+  const approvalsSupported = useServerSupports("timesheets.approvals");
+  const policy = trpc.approvals.policy.useQuery({ workspaceId: workspaceId ?? undefined }, { enabled: approvalsSupported && workspaceId !== null });
+  const timeZone = policy.data?.enabled ? policy.data.timeZone : TIME_ZONE;
   const nowMs = useNow(RUNNING_TICK_MS);
 
-  const todayKey = dayKeyInZone(nowMs, TIME_ZONE);
+  const todayKey = dayKeyInZone(nowMs, timeZone);
   const currentWeek = weekStartKey(todayKey, fmt.weekStartsOn);
 
   const weekParam = searchParams.get(WEEK_PARAM);
   const weekStart =
     weekParam !== null && DAY_KEY.test(weekParam) ? weekParam : currentWeek;
 
+  const approvalWeek = trpc.approvals.ownWeek.useQuery({ workspaceId: workspaceId ?? undefined, weekStart }, { enabled: approvalsSupported && policy.data?.enabled === true });
+  const locked = periodIsLocked(approvalWeek.data?.records ?? []);
+  const approvalUnavailable = approvalsSupported && (policy.isPending || policy.isError || (policy.data?.enabled === true && (approvalWeek.isPending || approvalWeek.isError)));
   const days = React.useMemo(() => timesheetWeekDays(weekStart), [weekStart]);
   const lastDay = days[DAYS_PER_WEEK - 1] ?? weekStart;
 
@@ -124,13 +135,13 @@ export function TimesheetScreen({ cellDisabledReason }: TimesheetScreenProps = {
   // early hours of Monday out of the grid.
   const listInput = React.useMemo<EntryListInput>(
     () => ({
-      from: new Date(zonedDayStartMs(weekStart, TIME_ZONE)).toISOString(),
+      from: new Date(zonedDayStartMs(weekStart, timeZone)).toISOString(),
       to: new Date(
-        zonedDayStartMs(addDaysToKey(weekStart, DAYS_PER_WEEK), TIME_ZONE)
+        zonedDayStartMs(addDaysToKey(weekStart, DAYS_PER_WEEK), timeZone)
       ).toISOString(),
       limit: ENTRY_LIMIT,
     }),
-    [weekStart]
+    [weekStart, timeZone]
   );
 
   const entriesQuery = trpc.entries.list.useQuery(listInput, {
@@ -140,7 +151,6 @@ export function TimesheetScreen({ cellDisabledReason }: TimesheetScreenProps = {
 
   const projectsQuery = trpc.projects.list.useQuery({});
   const tasksQuery = trpc.tasks.list.useQuery({});
-  const membersQuery = trpc.members.list.useQuery(undefined, { staleTime: 60_000 });
 
   const { rows: pinnedRows, pin, unpin } = useTimesheetRows();
   const { applyPlan, isBusy } = useTimesheetMutations(listInput);
@@ -186,11 +196,11 @@ export function TimesheetScreen({ cellDisabledReason }: TimesheetScreenProps = {
       buildTimesheetGrid({
         entries: myEntries,
         days,
-        timeZone: TIME_ZONE,
+        timeZone: timeZone,
         nowMs,
         seeds,
       }),
-    [days, myEntries, nowMs, seeds]
+    [days, myEntries, nowMs, seeds, timeZone]
   );
 
   /**
@@ -200,15 +210,17 @@ export function TimesheetScreen({ cellDisabledReason }: TimesheetScreenProps = {
    */
   const truncated = entriesQuery.data?.nextCursor !== undefined;
   const unavailable = truncated || entriesQuery.isError || entriesQuery.isPlaceholderData ||
-    projectsQuery.isPending || projectsQuery.isError || !fmt.isLoaded || membersQuery.isPending;
-  // Older servers do not expose a member rate. Never read another member’s rate.
-  const member = membersQuery.data?.find((candidate) => candidate.userId === user?.id);
-  const memberRate = member !== undefined && "hourlyRate" in member && typeof member.hourlyRate === "number"
-    ? member.hourlyRate : null;
+    projectsQuery.isPending || projectsQuery.isError || !fmt.isLoaded || fmt.settings.workspaceId !== workspaceId || fmt.settings.userId !== user?.id;
+  // The resolved settings field is caller-only and keeps the editable default separate.
+  const memberRate = fmt.settings.userId === user?.id && fmt.settings.workspaceId === workspaceId
+    ? fmt.settings.memberHourlyRate : undefined;
+  const effectiveCellDisabledReason = React.useCallback((row: TimesheetRow, day: string): string | undefined =>
+    locked ? ta("locked") : approvalUnavailable ? ta("error") : cellDisabledReason?.(row, day),
+  [locked, approvalUnavailable, cellDisabledReason, ta]);
   const blockMutations = useEntryMutations();
   const blockEditor = useTimesheetBlockEditor({
-    entries: myEntries, userId: user?.id ?? null, listInput, timeZone: TIME_ZONE,
-    mutations: blockMutations, disabled: unavailable || isBusy, memberRate, cellDisabledReason,
+    entries: myEntries, userId: user?.id ?? null, listInput, timeZone,
+    mutations: blockMutations, disabled: unavailable || isBusy || locked || approvalUnavailable || mutationsInFlight > 0, memberRate, cellDisabledReason: effectiveCellDisabledReason,
   });
   const entryMap = React.useMemo(() => new Map(myEntries.map((entry) => [entry.id, entry])), [myEntries]);
   const protection = React.useCallback((entry: (typeof myEntries)[number] | undefined): string | null => {
@@ -218,18 +230,19 @@ export function TimesheetScreen({ cellDisabledReason }: TimesheetScreenProps = {
 
   const handleCommitCell = React.useCallback(
     (row: TimesheetRow, dayIndex: number, seconds: number): void => {
+      if (locked || approvalUnavailable) return;
       const cell = row.cells[dayIndex];
       if (cell === undefined || unavailable || blockMutations.isBusy || cellDisabledReason?.(row, cell.day) !== undefined) return;
       if (cell.entries.some((slice) => protection(entryMap.get(slice.id)) !== null)) return;
 
       const plan = planCellEdit({
         cell,
-        timeZone: TIME_ZONE,
+        timeZone: timeZone,
         targetSeconds: seconds,
       });
       applyPlan(plan, { projectId: row.projectId, taskId: row.taskId });
     },
-    [applyPlan, unavailable, blockMutations.isBusy, cellDisabledReason, protection, entryMap]
+    [applyPlan, unavailable, blockMutations.isBusy, cellDisabledReason, protection, entryMap, timeZone, locked, approvalUnavailable]
   );
 
   const detailHref = React.useCallback(
@@ -302,6 +315,8 @@ export function TimesheetScreen({ cellDisabledReason }: TimesheetScreenProps = {
         </div>
       </header>
 
+      {approvalUnavailable ? <p role="status">{ta("error")}</p> : null}
+      {policy.data?.enabled && approvalWeek.data ? <ApprovalControls weekStart={weekStart} records={approvalWeek.data.records} canReview={policy.data.canReview} busy={isBusy || blockMutations.isBusy || blockEditor.entry !== null || blockEditor.manual !== null} /> : null}
       <Card>
         <CardContent className="space-y-4 pt-6">
           {truncated ? (
@@ -335,10 +350,10 @@ export function TimesheetScreen({ cellDisabledReason }: TimesheetScreenProps = {
               onUnpinRow={(row) =>
                 unpin({ projectId: row.projectId, taskId: row.taskId })
               }
-              disabled={unavailable || blockMutations.isBusy}
-              cellDisabledReason={cellDisabledReason}
+              disabled={unavailable || blockMutations.isBusy || locked || approvalUnavailable || mutationsInFlight > 0}
+              cellDisabledReason={effectiveCellDisabledReason}
               blocks={{ entries: entryMap, protection, edit: blockEditor.edit, add: blockEditor.add,
-                disabled: isBusy || blockMutations.isBusy }}
+                disabled: isBusy || blockMutations.isBusy || locked || approvalUnavailable || mutationsInFlight > 0 }}
               todayKey={todayKey}
             />
           )}

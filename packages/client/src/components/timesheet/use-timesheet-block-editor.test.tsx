@@ -10,6 +10,7 @@ import type { EntryMutations, ManualEntryArgs, UpdateEntryArgs } from "@/compone
 
 const state = vi.hoisted(() => ({
   workspaceId: "workspace", owner: "me", server: "https://example.test",
+  settings: null as { workspaceId: string; userId: string; defaultHourlyRate: number; memberHourlyRate: number; currency: string } | null,
   week: { entries: [] as DetailedEntry[] }, tracker: [] as DetailedEntry[],
 }));
 vi.mock("@/lib/active-workspace", () => ({
@@ -42,7 +43,7 @@ vi.mock("@/lib/trpc", () => ({ trpc: { useUtils: () => ({
   } },
   projects: { list: { getData: () => [] } },
   tasks: { list: { getData: () => [] } },
-  settings: { get: { getData: () => null } },
+  settings: { get: { getData: () => state.settings } },
 }) } }));
 
 import { useTimesheetBlockEditor } from "./use-timesheet-block-editor";
@@ -86,6 +87,7 @@ beforeEach(() => {
   state.server = "https://example.test";
   state.week = { entries: [first, sibling] };
   state.tracker = [];
+  state.settings = null;
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -111,6 +113,24 @@ describe("timesheet individual block writes", () => {
     await act(async () => { await result.current.mutations.updateEntry({ id: first.id, end: "2026-03-28T10:00:00.000Z" }); });
     expect(state.week.entries[0]!.durationSec).toBe(7200);
     expect(state.week.entries[1]).toBe(sibling);
+  });
+
+  it("resnapshots an older offline block with the author's member rate", async () => {
+    state.settings = { workspaceId: "workspace", userId: "me", defaultHourlyRate: 0, memberHourlyRate: 95, currency: "CHF" };
+    const { result, update } = harness(); update.mockResolvedValue(saved);
+    act(() => result.current.edit(first, target()));
+    await act(async () => { await result.current.mutations.updateEntry({ id: first.id, billable: true }); });
+    expect(state.week.entries[0]).toMatchObject({ hourlyRate: 95, currency: "CHF", amount: 95 });
+    expect(state.week.entries[1]).toBe(sibling);
+  });
+  it("keeps an open draft but refuses its save after approval locks the cell", async () => {
+    const { result, rerender, props, update } = harness();
+    act(() => result.current.edit(first, target()));
+    rerender({ ...props, cellDisabledReason: () => "Approved period" });
+    await act(async () => {
+      expect(await result.current.mutations.updateEntry({ id: first.id, description: "Draft" })).toEqual({ ok: false, message: "Approved period" });
+    });
+    expect(update).not.toHaveBeenCalled(); expect(result.current.entry?.id).toBe(first.id);
   });
 
   it.each(["offline", "server"] as const)("adds the exact returned %s block without a tracker cache or changing siblings", async (destination) => {

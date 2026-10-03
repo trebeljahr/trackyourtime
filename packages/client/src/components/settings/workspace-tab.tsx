@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Users } from "lucide-react";
 
+import { ApprovalSettings } from "./approval-settings";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -77,6 +78,7 @@ export function WorkspaceTab(): React.JSX.Element {
               : t("workspaceTab.view")}
           </Link>
         </Button>
+        <ApprovalSettings />
       </CardContent>
     </Card>
   );

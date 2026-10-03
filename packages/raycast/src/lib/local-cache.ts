@@ -196,6 +196,7 @@ export const loadShapeContext = async (): Promise<EntryShapeContext> => {
           userId: cache.settings.userId,
           currency: cache.settings.currency,
           defaultHourlyRate: cache.settings.defaultHourlyRate,
+          memberHourlyRate: cache.settings.memberHourlyRate,
         }
       : null,
     source: SOURCE,

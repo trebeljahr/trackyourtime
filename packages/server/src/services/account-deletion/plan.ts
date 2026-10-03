@@ -24,6 +24,9 @@ export {
  */
 export type DeletionCollection =
   | "timeEntries"
+  | "timesheetApprovals"
+  | "timesheetPolicies"
+  | "workspaceWriteFences"
   | "clients"
   | "projects"
   | "tasks"
@@ -82,10 +85,14 @@ export function workspaceDeletionSteps(workspaceId: string): DeletionStep[] {
     filter: { workspaceId },
   });
   return [
+    // Refuse locked time before removing the workspace's other records.
+    scoped("timeEntries"),
+    scoped("timesheetApprovals"),
+    scoped("timesheetPolicies"),
+    { collection: "workspaceWriteFences", filter: { _id: workspaceId } },
     scoped("webhookDeliveries"),
     scoped("webhookSubscriptions"),
     scoped("apiTokens"),
-    scoped("timeEntries"),
     scoped("favorites"),
     scoped("invoices"),
     scoped("importBatches"),
@@ -135,6 +142,10 @@ export function memberDepartureSteps(
   webhookIds: readonly string[],
 ): DeletionStep[] {
   return [
+    {
+      collection: "timeEntries",
+      filter: { workspaceId, authorId: userId, invoiceId: null },
+    },
     ...(webhookIds.length > 0
       ? [
           {
@@ -146,10 +157,6 @@ export function memberDepartureSteps(
     { collection: "webhookSubscriptions", filter: { workspaceId, createdBy: userId } },
     { collection: "apiTokens", filter: { workspaceId, userId } },
     { collection: "favorites", filter: { workspaceId, userId } },
-    {
-      collection: "timeEntries",
-      filter: { workspaceId, authorId: userId, invoiceId: null },
-    },
     { collection: "importBatches", filter: { workspaceId, createdBy: userId } },
     {
       collection: "authInvitations",

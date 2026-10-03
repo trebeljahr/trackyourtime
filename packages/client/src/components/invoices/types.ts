@@ -69,6 +69,7 @@ export type InvoicePreviewData = {
   skippedMissingRate: number;
   /** Time in range already billed on an earlier invoice. */
   skippedInvoiced: number;
+  skippedApproval?: number;
   /** One row per VAT category and rate; null when the lines carry no category. */
   taxBreakdown: TaxBreakdownRow[] | null;
   /** The category and rate per line that create would stamp; null = unresolved. */

@@ -1,3 +1,4 @@
+import { TimesheetApproval, TimesheetPolicy } from "../../models/TimesheetApproval.js";
 // One shared workspace, three people, and every collection the visibility
 // tests read — held in memory.
 //
@@ -192,6 +193,8 @@ export const freshStore = (): Store => ({
  */
 export const installStore = (store: Store): (() => void) => {
   const restores = [
+    stubModel(TimesheetApproval, memoryCollection()),
+    stubModel(TimesheetPolicy, memoryCollection()),
     stubModel(WorkspaceMember, store.members),
     stubModel(TimeEntry, store.entries),
     stubModel(Project, store.projects),

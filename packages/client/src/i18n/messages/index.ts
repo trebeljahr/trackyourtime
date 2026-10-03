@@ -8,6 +8,8 @@
  */
 import type { Translation } from "@starter/shared";
 
+import { approvals as en_approvals } from "./en/approvals";
+import { approvals as de_approvals } from "./de/approvals";
 import { common as en_common } from "./en/common";
 import { tracker as en_tracker } from "./en/tracker";
 import { calendar as en_calendar } from "./en/calendar";
@@ -33,6 +35,7 @@ import { activity as de_activity } from "./de/activity";
 
 /** The source catalog. Its literal types drive key and argument checking. */
 export const en = {
+  approvals: en_approvals,
   common: en_common,
   tracker: en_tracker,
   calendar: en_calendar,
@@ -51,6 +54,7 @@ export type Namespace = keyof Messages;
 
 /** Typed against `en`: a missing, misspelled or extra key fails `tsc`. */
 export const de: Translation<Messages> = {
+  approvals: de_approvals,
   common: de_common,
   tracker: de_tracker,
   calendar: de_calendar,

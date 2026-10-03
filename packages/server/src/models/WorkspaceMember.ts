@@ -54,8 +54,7 @@ const workspaceMemberSchema = new Schema<IWorkspaceMember>(
       default: "member",
     },
     name: { type: String, required: true, default: "", maxlength: 200 },
-    // Nullable and unused until Stage 7 wires per-member rates. It ships in
-    // the first migration purely so there is never a second one.
+    // Null inherits the workspace default. Zero is an explicit rate.
     hourlyRate: { type: Number, default: null },
     // Defaults are the CLOSED position: a new member sees only their own work
     // until somebody grants more. Opening up is an action; it is never the

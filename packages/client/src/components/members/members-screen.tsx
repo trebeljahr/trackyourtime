@@ -25,6 +25,8 @@ import { PendingInvitations } from "@/components/members/pending-invitations";
 import { useActiveWorkspace } from "@/components/members/use-active-workspace";
 import type { Navigate } from "@/components/members/enter-workspace";
 import { useT } from "@/i18n/use-t";
+import { useServerSupports } from "@/lib/server-level";
+import { userErrorMessage } from "@/lib/error-message";
 import { trpc } from "@/lib/trpc";
 
 /** Which confirmation is open, and for whom. One slot, so two never stack. */
@@ -54,6 +56,8 @@ export type MembersScreenProps = {
  */
 export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Element {
   const t = useT("members");
+  const ta = useT("approvals");
+  const ratesSupported = useServerSupports("members.rates");
   const tc = useT("common");
   const utils = trpc.useUtils();
   const { workspace, isLoading: workspaceLoading } = useActiveWorkspace();
@@ -86,12 +90,13 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
 
   const fail = React.useCallback(
     (failure: unknown): void => {
-      toast.error(membershipErrorMessage(failure));
+      toast.error(failure instanceof Error && failure.message === "member-rate-permission-required" ? userErrorMessage(failure) : membershipErrorMessage(failure));
       refresh();
     },
     [refresh],
   );
 
+  const updateRate = trpc.members.updateRate.useMutation();
   const updateRole = trpc.members.updateRole.useMutation();
   const updateVisibility = trpc.members.updateVisibility.useMutation();
   const removeMember = trpc.members.remove.useMutation();
@@ -205,10 +210,13 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
         {t("page.description", { workspace: workspace.name })}
       </p>
 
+      {ratesSupported ? <p className="text-sm text-muted-foreground">{ta("rateHint")}</p> : null}
       <MembersTable
         rows={rows}
         permissions={permissions}
         busyMemberId={busyMemberId}
+        ratesSupported={ratesSupported}
+        onRateChange={(row, hourlyRate) => { void run(row, () => updateRate.mutateAsync({ memberId: row.memberId, hourlyRate }), ta("rateSaved")); }}
         onRoleChange={handleRoleChange}
         onVisibilityChange={handleVisibility}
         onRemove={(row) => setConfirm({ kind: "remove", row })}

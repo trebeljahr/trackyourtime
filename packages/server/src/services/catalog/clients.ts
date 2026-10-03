@@ -1,3 +1,4 @@
+import { transactional } from "../business-transaction.js";
 // Clients: the top of the catalog (Client → Project → Task).
 //
 // Every query is scoped by `workspaceId`, so a document owned by somebody else
@@ -245,7 +246,7 @@ export async function archiveClient(
  * Give this cascade entries or favorites to touch and that stops being true,
  * and it owes `ownCascadeCollateral` the same call the other two make.
  */
-export async function removeClient(
+async function removeClientImpl(
   scope: WorkspaceScope,
   input: { id: string; originId?: string },
 ): Promise<CatalogRemoveResult> {
@@ -266,3 +267,5 @@ export async function removeClient(
   );
   return result;
 }
+
+export const removeClient = transactional(removeClientImpl);

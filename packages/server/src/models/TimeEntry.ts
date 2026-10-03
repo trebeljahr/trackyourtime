@@ -1,3 +1,4 @@
+import { entryApprovalGuards, installEntryTransactionBoundary } from "../services/approvals/entry-guard.js";
 import mongoose, { Schema, type Document } from "mongoose";
 import type {
   EntrySource,
@@ -219,10 +220,14 @@ timeEntrySchema.index(
   { unique: true, partialFilterExpression: { end: null } },
 );
 
+entryApprovalGuards(timeEntrySchema);
+
 export const TimeEntry = mongoose.model<ITimeEntry>(
   "TimeEntry",
   timeEntrySchema,
 );
+
+installEntryTransactionBoundary(TimeEntry);
 
 /** Convert a TimeEntry document into the exact wire shape. */
 export function toClientTimeEntry(doc: TimeEntryDocLike): TimeEntryWire {

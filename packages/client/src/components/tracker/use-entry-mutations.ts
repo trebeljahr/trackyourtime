@@ -868,11 +868,14 @@ export const useEntryMutations = (): EntryMutations => {
           const start = input.start ?? entry.start;
           const end = input.end === undefined ? entry.end : input.end;
           const project = projectFacts(shapeContext(), projectId);
-          const hourlyRate = resolveHourlyRate({
+          const resnapshot = billable !== entry.billable || projectId !== entry.projectId || (entry.end === null && end !== null);
+          const ownWorkspace = settings?.workspaceId === entry.workspaceId && settings?.userId === entry.authorId;
+          const hourlyRate = resnapshot && ownWorkspace ? resolveHourlyRate({
             billable,
             projectRate: project.projectRate,
+            memberRate: settings?.memberHourlyRate,
             defaultRate: settings?.defaultHourlyRate ?? null,
-          });
+          }) : entry.hourlyRate;
           const durationSec = end === null ? 0 : durationBetween(start, end);
 
           const updated: DetailedEntry = {
@@ -890,6 +893,7 @@ export const useEntryMutations = (): EntryMutations => {
             tagIds: input.tagIds ?? entry.tagIds,
             durationSec,
             hourlyRate,
+            currency: resnapshot && ownWorkspace ? settings!.currency : entry.currency,
             updatedAt: nowIso(),
             projectName: project.projectName,
             projectColor: project.projectColor,

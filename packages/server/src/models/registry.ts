@@ -26,3 +26,5 @@ export function allModels(): mongoose.Model<unknown>[] {
     .map((model) => model as mongoose.Model<unknown>)
     .sort((a, b) => a.modelName.localeCompare(b.modelName));
 }
+
+import "./TimesheetApproval.js";

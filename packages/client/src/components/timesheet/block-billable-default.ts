@@ -7,6 +7,5 @@ export const blockBillableDefault = (
   memberRate: number | null | undefined,
 ): boolean => projectBillableByDefault({
   billableDefault: project?.billableDefault ?? true,
-  // Member rate takes precedence; an explicit zero also overrides a project.
-  hourlyRate: memberRate ?? project?.hourlyRate,
-}, workspaceRate);
+  hourlyRate: project?.hourlyRate,
+}, workspaceRate, memberRate);

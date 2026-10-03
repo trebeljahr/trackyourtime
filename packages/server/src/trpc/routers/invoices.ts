@@ -62,6 +62,8 @@ import {
   UserPreferencesModel,
 } from "../../models/Settings.js";
 import { Task } from "../../models/Task.js";
+import { transactionSession } from "../../services/business-transaction.js";
+import { invoiceApprovalEligibility } from "../../services/approvals/service.js";
 import { TimeEntry } from "../../models/TimeEntry.js";
 import {
   invoiceNumberCandidates,
@@ -170,6 +172,7 @@ export type BillableSelection = {
   skippedMissingRate: number;
   /** Entries excluded because they are already on another invoice. */
   skippedInvoiced: number;
+  skippedApproval?: number;
   /** Every currency seen among the billable entries, in first-seen order. */
   currencies: string[];
 };
@@ -455,6 +458,7 @@ export type InvoicePreview = {
   skippedMissingRate: number;
   /** Entries in this range already billed on an earlier invoice. */
   skippedInvoiced: number;
+  skippedApproval?: number;
   /**
    * The language `create` would snapshot when given no override: the
    * client's, else the issuer's explicit preference, else English.
@@ -599,7 +603,7 @@ const gatherTime = async (
     ),
     start: { $gte: range.from, $lt: range.to },
   })
-    .select("_id projectId taskId durationSec hourlyRate currency invoiceId")
+    .select("_id authorId start end projectId taskId durationSec hourlyRate currency invoiceId")
     .sort({ start: 1, _id: 1 })
     .limit(MAX_INVOICE_ENTRIES + 1)
     .lean();
@@ -634,7 +638,8 @@ const gatherTime = async (
         )
       : new Map<string, string>();
 
-  const candidates: BillableCandidate[] = rows.map((row) => ({
+  const eligible = await invoiceApprovalEligibility(workspaceId, rows);
+  const candidates: BillableCandidate[] = rows.filter((row) => row.invoiceId || eligible.has(String(row._id))).map((row) => ({
     id: String(row._id),
     projectId: row.projectId ?? null,
     projectName: row.projectId
@@ -648,7 +653,7 @@ const gatherTime = async (
     invoiceId: row.invoiceId ?? null,
   }));
 
-  return selectBillableEntries(candidates);
+  return { ...selectBillableEntries(candidates), skippedApproval: rows.filter((row) => !row.invoiceId && !eligible.has(String(row._id))).length };
 };
 
 /**
@@ -870,6 +875,7 @@ export const invoicesRouter = router({
         ),
         skippedMissingRate: gathered.selection.skippedMissingRate,
         skippedInvoiced: gathered.selection.skippedInvoiced,
+        skippedApproval: gathered.selection.skippedApproval ?? 0,
         locale,
         taxBreakdown: taxed.taxBreakdown,
         resolvedTax,
@@ -1010,6 +1016,7 @@ export const invoicesRouter = router({
               message: `Invoice number "${supplied}" is already used.`,
             });
           }
+          if (transactionSession()) throw new TRPCError({ code: "CONFLICT", message: "Invoice numbering changed. Try again." });
         }
       }
       if (!created) {

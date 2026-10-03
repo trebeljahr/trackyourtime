@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   profile: null as Record<string, unknown> | null,
   invoices: { invoices: [] as Array<{ id: string }> },
   defaultHourlyRate: 0,
+  memberHourlyRate: null as number | null,
 }));
 
 vi.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user: { id: state.userId } }) }));
@@ -28,7 +29,7 @@ vi.mock("@/mobile/preferences-storage", () => ({
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     settings: {
-      get: { useQuery: () => ({ data: { defaultHourlyRate: state.defaultHourlyRate } }) },
+      get: { useQuery: () => ({ data: { defaultHourlyRate: state.defaultHourlyRate, memberHourlyRate: state.memberHourlyRate } }) },
       businessProfile: { useQuery: () => ({ data: state.profile }) },
     },
     projects: { list: { useQuery: () => ({ data: state.projects }) } },
@@ -74,6 +75,7 @@ beforeEach(() => {
   state.profile = null;
   state.invoices = { invoices: [] };
   state.defaultHourlyRate = 0;
+  state.memberHourlyRate = null;
 });
 
 afterEach(cleanup);
@@ -117,6 +119,19 @@ describe("FirstRunGuide", () => {
     render(<FirstRunGuide hasAnyEntry canEnroll={false} />);
     expect(await screen.findByTestId("first-run-guide")).toBeInTheDocument();
     expect(screen.getByText("Start your first timer")).toHaveAttribute("data-complete", "true");
+  });
+
+  it("counts an own-member rate with no project or workspace rate", async () => {
+    state.memberHourlyRate = 95;
+    render(<FirstRunGuide hasAnyEntry={false} canEnroll />);
+    expect(await screen.findByTestId("first-run-guide")).toBeInTheDocument();
+    expect(screen.getByText("Set a project rate")).toHaveAttribute("data-complete", "true");
+  });
+  it("does not count a workspace rate overridden by a zero member rate", async () => {
+    state.defaultHourlyRate = 95; state.memberHourlyRate = 0;
+    render(<FirstRunGuide hasAnyEntry={false} canEnroll />);
+    expect(await screen.findByTestId("first-run-guide")).toBeInTheDocument();
+    expect(screen.getByText("Set a project rate")).toHaveAttribute("data-complete", "false");
   });
 
   it("counts the workspace default rate when no project has an override", async () => {

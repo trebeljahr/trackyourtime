@@ -9,7 +9,7 @@
 // a shared workspace, and that a run which dies half-way is finished by simply
 // running it again.
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, test } from "node:test";
 import { deleteAccountData } from "../services/account-deletion/delete-account.js";
 import {
   planWorkspaceExit,
@@ -136,6 +136,9 @@ const seed = (): NonNullable<Parameters<typeof memoryRowStore>[0]> => ({
     { id: "wd2", workspaceId: TEAM, subscriptionId: "wh_alice" },
     { id: "wd3", workspaceId: TEAM, subscriptionId: "wh_bob" },
   ],
+  timesheetApprovals: [{ workspaceId: SOLO, authorId: ALICE, status: "draft" }, { workspaceId: TEAM, authorId: ALICE, status: "approved" }],
+  timesheetPolicies: [{ workspaceId: SOLO }, { workspaceId: TEAM }],
+  workspaceWriteFences: [{ _id: SOLO }, { _id: TEAM }],
   workspaceSettings: [
     { workspaceId: SOLO },
     { workspaceId: TEAM },
@@ -430,4 +433,13 @@ describe("the row stores refuse filters that would match everything", () => {
     assert.equal(await routed.deleteMany("authMembers", { organizationId: "w" }), 1);
     assert.equal(await routed.deleteMany("authMembers", { workspaceId: "w" }), 0);
   });
+});
+
+
+test("account deletion clears solo approval metadata but preserves shared audit history", async () => {
+  const store = memoryRowStore(seed());
+  await deleteAccountData(store, alice);
+  assert.deepEqual(store.rows.timesheetApprovals?.map((row) => row.workspaceId), [TEAM]);
+  assert.deepEqual(store.rows.timesheetPolicies?.map((row) => row.workspaceId), [TEAM]);
+  assert.deepEqual(store.rows.workspaceWriteFences?.map((row) => row._id), [TEAM]);
 });

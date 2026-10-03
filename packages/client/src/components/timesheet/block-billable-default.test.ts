@@ -14,9 +14,9 @@ describe("new timesheet block billing defaults", () => {
     expect(blockBillableDefault({ billableDefault: false, hourlyRate: 90 }, 80, null)).toBe(false);
     expect(blockBillableDefault({ billableDefault: true, hourlyRate: 0 }, 80, null)).toBe(false);
   });
-  it("uses the member rate before project and workspace rates", () => {
+  it("uses project, then member, then workspace rates", () => {
     expect(blockBillableDefault(undefined, 0, 90)).toBe(true);
-    expect(blockBillableDefault({ billableDefault: true, hourlyRate: 0 }, 0, 90)).toBe(true);
-    expect(blockBillableDefault({ billableDefault: true, hourlyRate: 90 }, 80, 0)).toBe(false);
+    expect(blockBillableDefault({ billableDefault: true, hourlyRate: 0 }, 0, 90)).toBe(false);
+    expect(blockBillableDefault({ billableDefault: true, hourlyRate: 90 }, 80, 0)).toBe(true);
   });
 });
