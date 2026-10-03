@@ -394,11 +394,19 @@ describe(
       const restricted = invoicesRouter.createCaller(
         contextFor(ADMIN_NO_MONEY),
       );
+      await WorkspaceMember.create({
+        workspaceId: "other",
+        userId: OWNER,
+        role: "owner",
+        name: "Synthetic owner",
+        canViewOthersTime: true,
+        canViewOthersMoney: true,
+      });
       for (const caller of [
         restricted,
         invoicesRouter.createCaller({
           ...contextFor(OWNER),
-          workspaceId: "other",
+          activeWorkspaceId: "other",
         }),
       ]) {
         for (const operation of [

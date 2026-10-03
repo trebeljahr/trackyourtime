@@ -449,7 +449,7 @@ function drawHeaderBlock(sheet: Sheet): void {
   sheet.y = Math.max(recipientBottom, issuerBottom) + 8;
 
   const rows: [string, string][] = [
-    ...(invoice.documentKind === "credit" ? [] : [[t("status"), t("statusValue", { status: invoice.status })] as [string, string][]),
+    ...(invoice.documentKind === "credit" ? [] : [[t("status"), t("statusValue", { status: invoice.status })] as [string, string]]),
     [t("issueDate"), format.date(invoice.issueDate)],
     ...(invoice.documentKind === "credit" ? [[t("creditOriginal"), invoice.creditReference?.number ?? ""] as [string, string]] : [[t("dueDate"), format.date(invoice.dueDate)] as [string, string]]),
     // A blank invoice has no period and prints no Period row; every invoice

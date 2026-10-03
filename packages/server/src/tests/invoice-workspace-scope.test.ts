@@ -104,13 +104,19 @@ const invoiceDoc: InvoiceDocLike = {
   updatedAt: new Date("2026-09-01T00:00:00.000Z"),
 };
 
-/** Every filter these two resolvers build is a flat equality match. */
+/** Match the workspace/id equalities and the pending-deletion exclusion. */
 const matchesFilter = (
   doc: InvoiceDocLike,
   filter: Record<string, unknown>,
 ): boolean => {
   const fields: Record<string, unknown> = { ...doc, _id: String(doc._id) };
-  return Object.entries(filter).every(([key, value]) => fields[key] === value);
+  return Object.entries(filter).every(([key, value]) => {
+    if (key === "deleting") {
+      assert.deepEqual(value, { $ne: true });
+      return doc.deleting !== true;
+    }
+    return fields[key] === value;
+  });
 };
 
 type LeanQuery<T> = { lean: () => Promise<T>; select: (projection: string) => LeanQuery<T> };

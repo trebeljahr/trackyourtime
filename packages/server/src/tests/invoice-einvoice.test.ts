@@ -348,9 +348,9 @@ describe("e-invoice procedures", { skip: skipWithoutDatabase }, () => {
     // The en16931 file is stored separately, on its own first export.
     assert.equal(stored?.einvoice?.issuedXml?.en16931, undefined);
 
-    // Change what a fresh XML would say, and walk the status back: the stored bytes still win.
-    await Invoice.updateOne({ _id: id }, { $set: { clientName: "Renamed Kunde", notes: "later" } });
-    await owner().updateStatus({ id, status: "draft" });
+    // Issued documents cannot reopen. Even a legacy row already marked draft must serve its stored bytes.
+    await assert.rejects(owner().updateStatus({ id, status: "draft" }));
+    await Invoice.updateOne({ _id: id }, { $set: { clientName: "Renamed Kunde", notes: "later", status: "draft" } });
     const later = await owner().exportXrechnung({ id });
     assert.equal(later.base64, first.base64);
 
