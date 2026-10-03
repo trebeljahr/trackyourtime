@@ -36,7 +36,9 @@ function rowFor(page: Page, label: string): Locator {
 
 /** The seven day cells of a row, in column order. */
 function cellsOf(row: Locator): Locator {
-  return row.locator('[data-testid^="timesheet-cell-"]');
+  return row.locator(
+    '[data-testid^="timesheet-cell-"]:not([data-testid$="-blocks"])',
+  );
 }
 
 /**
@@ -93,6 +95,10 @@ test.describe("Weekly timesheet", () => {
     await monday.fill("2");
     await monday.press("Enter");
 
+    // A new optimistic block is protected until its server id arrives.
+    // Wait for the editable field to return before asserting its value.
+    await expect(monday).toHaveJSProperty("tagName", "INPUT");
+    await expect(monday).toBeEnabled();
     await expect(monday).toHaveValue("2:00:00");
     await expect(
       page.getByTestId("timesheet-day-total-0"),
@@ -147,6 +153,14 @@ test.describe("Weekly timesheet", () => {
     await expect(cells.nth(1)).toBeFocused();
 
     await cells.nth(1).press("Tab");
+    const tuesdayBlocks = rowFor(page, PROJECT_NAME)
+      .locator('[data-testid$="-1-blocks"]');
+    await expect(tuesdayBlocks).toBeFocused();
+    await tuesdayBlocks.press("Enter");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("dialog").press("Escape");
+    await expect(tuesdayBlocks).toBeFocused();
+    await tuesdayBlocks.press("Tab");
     await expect(cells.nth(2)).toBeFocused();
 
     await cells.nth(2).press("End");
@@ -159,6 +173,7 @@ test.describe("Weekly timesheet", () => {
     await cells.nth(0).fill("1");
     await cells.nth(0).press("ArrowRight");
     await expect(cells.nth(1)).toBeFocused();
+    await expect(cells.nth(0)).toHaveJSProperty("tagName", "INPUT");
     await expect(cells.nth(0)).toHaveValue("1:00:00");
   });
 

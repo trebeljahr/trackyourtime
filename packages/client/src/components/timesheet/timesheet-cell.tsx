@@ -184,6 +184,9 @@ function EditableCell({
   }
 
   const commit = React.useCallback((): boolean => {
+    // Pending writes must not steal keyboard focus from the next cell.
+    // Read-only inputs stay traversable, but cannot submit a stale draft.
+    if (disabled) return true;
     const parsed = parseTimesheetCell(draft);
     if (parsed === null || parsed > TIMESHEET_MAX_CELL_SECONDS) {
       setInvalid(true);
@@ -194,7 +197,7 @@ function EditableCell({
     setDraft(formatCell(parsed));
     if (parsed !== Math.round(cell.seconds)) onCommit(parsed);
     return true;
-  }, [cell.seconds, display, draft, formatCell, onCommit]);
+  }, [cell.seconds, disabled, display, draft, formatCell, onCommit]);
 
   /**
    * Left/Right leave the cell only when the caret has nowhere left to go
@@ -217,7 +220,8 @@ function EditableCell({
   return (
     <Input
       value={draft}
-      disabled={disabled}
+      readOnly={disabled}
+      aria-disabled={disabled || undefined}
       spellCheck={false}
       inputMode="decimal"
       autoComplete="off"
@@ -225,6 +229,7 @@ function EditableCell({
       aria-invalid={invalid || undefined}
       className={cn(
         cellClasses(isToday, cell.seconds === 0),
+        disabled && "cursor-not-allowed opacity-50",
         invalid && "border-destructive"
       )}
       onFocus={(event) => {
@@ -233,6 +238,7 @@ function EditableCell({
         event.target.select();
       }}
       onChange={(event) => {
+        if (disabled) return;
         committedByKey.current = false;
         setDraft(event.target.value);
         setInvalid(false);

@@ -155,6 +155,22 @@ describe("TimesheetCellField", () => {
     expect(onNavigate).toHaveBeenCalledWith("ArrowDown");
   });
 
+  it("keeps a cell focusable during a save without allowing another write", () => {
+    const { field, onCommit, onNavigate } = renderCell(cell(), vi.fn(), vi.fn(), {
+      disabled: true,
+    });
+    field.focus();
+    expect(field).toHaveFocus();
+    expect(field).toHaveAttribute("readonly");
+    expect(field).toHaveAttribute("aria-disabled", "true");
+    fireEvent.change(field, { target: { value: "2" } });
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    fireEvent.blur(field);
+    expect(onNavigate).toHaveBeenCalledWith("ArrowDown");
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(field).toHaveValue("");
+  });
+
   it("leaves the caret alone mid-word and only then moves cells", () => {
     const { onNavigate, field } = renderCell(cell());
 
