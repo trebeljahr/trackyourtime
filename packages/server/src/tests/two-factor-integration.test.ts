@@ -1,3 +1,4 @@
+import { loginSessionPlugin } from "../auth/login-session.js";
 /**
  * Two-factor sign-in, against the real better-auth.
  *
@@ -64,6 +65,7 @@ before(() => {
     plugins: [
       twoFactorPlugin(),
       bearer(),
+      loginSessionPlugin(),
       deviceAuthorization({ expiresIn: "10m", interval: "5s" }),
     ],
   });
@@ -316,6 +318,8 @@ describe("two-factor sign-in", () => {
     await auth.api.disableTwoFactor({ body: { password: PASSWORD }, headers: bearerHeaders(token) });
     assert.equal(userRow(email).twoFactorEnabled, false);
     const plain = await signIn(email);
+    assert.equal(plain.response.session.userId, plain.response.user.id);
+    assert.equal(plain.response.session.token, plain.response.token);
     assert.ok(plain.headers.get("set-auth-token"));
   });
 });

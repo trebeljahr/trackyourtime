@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { getSession } from "@/lib/auth-client";
+import { getSession, hasFreshLoginSession } from "@/lib/auth-client";
 import { useNativeSession } from "@/hooks/use-native-session";
 import { verdictForRejection, verdictForResult } from "@/lib/session-verdict";
 import { StartupScreen } from "@/components/startup-screen";
@@ -60,6 +60,8 @@ export default function ProtectedLayout({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRecheck(signedOutNative ? "out" : isAuthenticated ? "in" : "checking");
     if (signedOutNative) return;
+    // The password response was just validated by the server in this document.
+    if (isAuthenticated && hasFreshLoginSession()) return;
 
     // `hasStoredToken` is false on web by construction — `getNativeToken()`
     // only ever returns a value under Capacitor. `hasSession` is the web's

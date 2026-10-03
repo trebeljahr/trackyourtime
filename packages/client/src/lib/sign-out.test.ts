@@ -15,6 +15,7 @@ import type { WorkspaceSummary } from "@starter/core";
 const authSignOut = vi.fn(async () => ({ data: { success: true }, error: null }));
 vi.mock("better-auth/react", () => ({
   createAuthClient: () => ({
+    $store: { atoms: { session: { get: () => ({ data: null }), set: vi.fn() } } },
     signOut: () => authSignOut(),
     signIn: vi.fn(),
     signUp: vi.fn(),

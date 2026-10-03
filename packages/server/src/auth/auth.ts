@@ -1,3 +1,4 @@
+import { loginSessionPlugin } from "./login-session.js";
 import { emailLinkForWeb } from "./email-link.js";
 import { logAuthLink as logAuthUrl } from "./link-policy.js";
 import { betterAuth } from "better-auth";
@@ -320,6 +321,7 @@ export async function initAuth(): Promise<void> {
        * secret and then looked up: an unknown token simply matches no session.
        */
       bearer(),
+      loginSessionPlugin(),
 
       /**
        * Workspaces. One organization IS one trackyourtime workspace — the plugin

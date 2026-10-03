@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   authClient,
-  signIn,
+  signInWithPassword,
   getSession,
   isTwoFactorChallenge,
   POST_AUTH_REDIRECT,
@@ -105,7 +105,7 @@ export default function LoginPage() {
       // No `callbackURL` here, ever: sign-in answers with `{ url, redirect:
       // true }` when one is sent, and better-auth's client then reloads the
       // browser onto that URL instead of letting this page navigate.
-      const result = await signIn.email({ email, password });
+      const result = await signInWithPassword(email, password);
       if (result.error?.code === "EMAIL_NOT_VERIFIED") {
         // A fresh link, pointed at the web app rather than the API origin.
         const verification = await authClient
@@ -143,8 +143,6 @@ export default function LoginPage() {
           setStep("two-factor");
         }
       } else {
-        // See the note in signup: refresh the session before navigating.
-        await getSession();
         // Re-read at submit time rather than trusting state, so a submit that
         // beats the effect still honours the link it arrived with.
         router.replace(

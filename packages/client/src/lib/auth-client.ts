@@ -21,7 +21,7 @@ import {
   sealOfflineQueueOwner,
 } from "@/lib/offline";
 import { writeRunningMirror } from "@/lib/running-mirror";
-import { rebaseApiUrl, whenApiOriginReady } from "@/lib/api-origin";
+import { getApiOrigin, rebaseApiUrl, whenApiOriginReady } from "@/lib/api-origin";
 import { clearActiveWorkspace } from "@/lib/active-workspace";
 import { clearAppQueryCache } from "@/lib/query-client";
 import { forgetDesktopActivity } from "@/lib/desktop-activity";
@@ -90,7 +90,7 @@ const clientHeader = (): string => clientId();
  * the token. A second, silent credential is exactly what makes a broken
  * bearer path look like it works.
  */
-const authFetch: typeof fetch = (input, init) => {
+const transportFetch: typeof fetch = (input, init) => {
   if (!isTokenShell() || input instanceof Request) return fetch(input, init);
   const sent: RequestInit | undefined = isElectron()
     ? { ...init, credentials: "omit" }
@@ -98,6 +98,35 @@ const authFetch: typeof fetch = (input, init) => {
   return whenApiOriginReady().then(() =>
     fetchAuthWithTimeout(rebaseApiUrl(String(input)), sent),
   );
+};
+
+// Requests already in flight when credentials change cannot overwrite the new
+// identity. Keep this in memory only; a reload must validate with the server.
+let loginPending: Promise<void> | null = null;
+let loginSession: { data: SessionData; until: number; origin: string; token: string | null } | null = null;
+let authRevision = 0;
+export const isPasswordLoginPending = () => loginPending !== null;
+export const hasFreshLoginSession = () => {
+  const data = authClient.$store.atoms.session.get().data;
+  return !!loginSession && loginSession.until > Date.now() &&
+    data?.session.id === loginSession.data.session.id &&
+    loginSession.origin === getApiOrigin() &&
+    (!isTokenShell() || (!!getNativeToken() && getNativeToken() === loginSession.token));
+};
+const authFetch: typeof fetch = async (input, init) => {
+  const sessionRead = String(input).includes("/get-session");
+  const revision = authRevision;
+  if (sessionRead && loginPending) {
+    await loginPending;
+    if (loginSession) return Response.json(loginSession.data);
+  }
+  const response = await transportFetch(input, init);
+  if (sessionRead && revision !== authRevision) {
+    await loginPending;
+    // Discard both stale identity and stale set-auth-token headers.
+    return Response.json(loginSession?.data ?? null);
+  }
+  return response;
 };
 
 export const authClient = createAuthClient({
@@ -159,13 +188,39 @@ export const authClient = createAuthClient({
   },
 });
 
-// Re-export commonly used methods.
-//
-// `getSession` matters after sign-in and sign-up: it refreshes better-auth's
-// session store before the app navigates. Without it the protected layout can
-// read a still-empty session, decide the user is not authenticated, and bounce
-// them straight back to /login even though the cookie was set correctly.
+type SessionData = typeof authClient.$Infer.Session;
 export const { signIn, signUp, useSession, getSession } = authClient;
+
+/** Password login owns store hydration, including old-server compatibility. */
+export async function signInWithPassword(email: string, password: string) {
+  if (loginPending) throw new Error("A password login is already running");
+  let finish!: () => void;
+  loginPending = new Promise<void>((resolve) => { finish = resolve; });
+  loginSession = null;
+  const revision = ++authRevision;
+  try {
+    const result = await signIn.email({ email, password }, { disableSignal: true });
+    if (revision !== authRevision) throw new Error("Authentication changed during login");
+    if (result.error || isTwoFactorChallenge(result.data)) return result;
+    const data = result.data as typeof result.data & { session?: SessionData["session"] };
+    if (data?.session && data.user && data.session.userId === data.user.id &&
+        data.session.expiresAt instanceof Date && data.session.expiresAt.getTime() > Date.now()) {
+      const session = { session: data.session, user: data.user };
+      loginSession = { data: session, until: Date.now() + 15_000, origin: getApiOrigin(), token: getNativeToken() };
+      const atom = authClient.$store.atoms.session;
+      atom.set({ ...atom.get(), data: session, error: null, isPending: false, isRefetching: false });
+    } else {
+      // Older self-hosted servers do not yet include the session in sign-in.
+      finish();
+      loginPending = null;
+      await authClient.$store.atoms.session.get().refetch();
+    }
+    return result;
+  } finally {
+    finish();
+    loginPending = null;
+  }
+}
 
 /**
  * Re-read the session from the server and push it into every `useSession()`.
@@ -244,6 +299,9 @@ const forgetAccountOnDevice = async (): Promise<void> => {
  * ever seen.
  */
 export const signOut: typeof authClient.signOut = async (...args) => {
+  loginSession = null;
+  authRevision++;
+  await loginPending;
   try {
     return await authClient.signOut(...args);
   } finally {
@@ -252,6 +310,8 @@ export const signOut: typeof authClient.signOut = async (...args) => {
     await sealOfflineQueueOwner();
     await clearNativeToken();
     await forgetAccountOnDevice();
+    const atom = authClient.$store.atoms.session;
+    atom.set({ ...atom.get(), data: null, error: null, isPending: false, isRefetching: false });
   }
 };
 
@@ -322,6 +382,8 @@ export const deleteAccount = async (args: {
     return { ok: false, reason: "failed" };
   }
 
+  loginSession = null;
+  authRevision++;
   // The account is gone whatever happens below; a local cleanup that throws
   // must not report the deletion as failed.
   await Promise.allSettled([

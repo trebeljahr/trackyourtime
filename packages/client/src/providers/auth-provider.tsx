@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef } from "react";
-import { useSession } from "@/lib/auth-client";
+import { isPasswordLoginPending, useSession } from "@/lib/auth-client";
 import { useNativeSession } from "@/hooks/use-native-session";
 
 type AuthContextType = {
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resolvedFor = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!nativeReady || !nativeToken) return;
+    if (!nativeReady || !nativeToken || isPasswordLoginPending()) return;
     if (isPending) return;
     if (session?.user) return;
     if (resolvedFor.current === nativeToken) return;
