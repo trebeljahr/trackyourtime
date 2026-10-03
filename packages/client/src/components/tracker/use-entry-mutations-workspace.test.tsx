@@ -59,8 +59,10 @@ type MutationOptions = {
   onMutate?: (input: unknown) => Promise<unknown>;
   onSuccess?: (data: unknown, input: unknown, context: unknown) => unknown;
   onError?: (error: unknown, input: unknown, context: unknown) => Promise<unknown> | unknown;
+  onSettled?: (data: unknown, error: unknown, input: unknown, context: unknown) => unknown;
 };
 const options = new Map<string, MutationOptions>();
+const removedInputs: unknown[] = [];
 let currentData: TimeEntry | null | undefined;
 const setCurrent = vi.fn((_key: undefined, next: TimeEntry | null) => {
   currentData = next;
@@ -71,7 +73,13 @@ const asyncNoop = async (): Promise<void> => undefined;
 const mutationStub = (path: string) => ({
   useMutation: (opts: MutationOptions = {}) => {
     options.set(path, opts);
-    return { mutate: noop, mutateAsync: asyncNoop, isPending: false };
+    return {
+      mutate: (input: unknown) => {
+        if (path === "entries.remove") removedInputs.push(input);
+      },
+      mutateAsync: asyncNoop,
+      isPending: false,
+    };
   },
 });
 
@@ -106,6 +114,7 @@ vi.mock("@/lib/trpc", () => {
 
 const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
 const { useEntryMutations } = await import("@/components/tracker/use-entry-mutations");
+type EntryMutations = ReturnType<typeof useEntryMutations>;
 const activeWorkspace = await import("@/lib/active-workspace");
 
 const summary = (id: string, name: string, isDefault = false): WorkspaceSummary => ({
@@ -159,8 +168,9 @@ const startInput = {
   originId: "o",
 };
 
+let hookedMutations: EntryMutations | null = null;
 function Probe(): null {
-  useEntryMutations();
+  hookedMutations = useEntryMutations();
   return null;
 }
 
@@ -174,6 +184,8 @@ beforeEach(async () => {
   online = true;
   currentData = null;
   enqueued.length = 0;
+  removedInputs.length = 0;
+  hookedMutations = null;
   options.clear();
   toastMessage.mockClear();
   toastError.mockClear();
@@ -262,5 +274,13 @@ describe("entry mutations across workspaces", () => {
     );
 
     expect(toastError).toHaveBeenCalledWith(expect.any(String));
+  });
+
+  it("starts at most one delete when the confirmation handler fires twice synchronously", () => {
+    const row = entry({ id: "entry-delete", authorId: "u1" });
+    hookedMutations!.removeEntry(row as unknown as Parameters<EntryMutations["removeEntry"]>[0]);
+    hookedMutations!.removeEntry(row as unknown as Parameters<EntryMutations["removeEntry"]>[0]);
+
+    expect(removedInputs).toEqual([{ id: "entry-delete", originId: expect.any(String) }]);
   });
 });

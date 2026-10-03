@@ -527,17 +527,20 @@ function EntryRowImpl({
           }}
           title={t("row.delete.title")}
           description={
-            <div className="space-y-1">
-              <p>{entry.description.trim() || t("quickStart.noDescription")}</p>
-              <p>
+            <>
+              <span className="block">
+                {entry.description.trim() || t("quickStart.noDescription")}
+              </span>
+              <span className="block">
                 {t("row.delete.identity", {
                   date: localizedFormat.date(entry.start, "dayLabel"),
-                  duration: entry.end === null
-                    ? t("row.running")
-                    : format.duration(entry.durationSec),
+                  duration:
+                    entry.end === null
+                      ? t("row.running")
+                      : format.duration(entry.durationSec),
                 })}
-              </p>
-            </div>
+              </span>
+            </>
           }
           confirmLabel={t("row.delete.confirm")}
           pending={anyDeletePending}
