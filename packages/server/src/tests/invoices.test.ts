@@ -413,8 +413,8 @@ describe("isValidStatusTransition", () => {
   });
 
   it("walks back one step at a time", () => {
-    assert.equal(isValidStatusTransition("paid", "sent"), true);
-    assert.equal(isValidStatusTransition("sent", "draft"), true);
+    assert.equal(isValidStatusTransition("paid", "sent"), false);
+    assert.equal(isValidStatusTransition("sent", "draft"), false);
   });
 
   it("refuses to skip the middle in either direction", () => {

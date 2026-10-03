@@ -12,6 +12,12 @@
  * formatting (pdf-format.ts) and the messages only place the result.
  */
 export const invoice = {
+  creditTitle: "Credit note {number}",
+  creditContinued: "Credit note {number} · continued",
+  creditFooter: "Credit note {number} · {client}",
+  creditTotal: "Full credit ({currency})",
+  creditOriginal: "Original invoice",
+  creditReason: "Correction reason",
   title: "Invoice {number}",
   continued: "Invoice {number} · continued",
   footer: "Invoice {number} · {client}",

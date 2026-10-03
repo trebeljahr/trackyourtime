@@ -460,6 +460,7 @@ function ciiDocument(invoice: EinvoiceReadyInvoice, guidelineId: string): XmlNod
  * Reads every amount from the snapshot and never recomputes a rate or amount.
  */
 export function buildCiiXml(invoice: EinvoiceReadyInvoice, profile: EinvoiceProfile): string {
+  if (invoice.documentKind === "credit") throw new Error("invoice-credit-xml-unsupported");
   assertCiiInvariants(invoice);
   return render(ciiDocument(invoice, GUIDELINE_IDS[profile]));
 }

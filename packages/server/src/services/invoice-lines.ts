@@ -141,7 +141,15 @@ export function mergeDraftLines(
       while (taken.has(key) || seen.has(key));
     }
     seen.add(key);
-    lines.push(manualLine(key, edit, currency));
+    const prior = stored.find((line) => line.key === key);
+    const rebuilt = manualLine(key, edit, currency);
+    // A quantity/label edit is not a VAT edit. Keep mixed rates on replacement
+    // drafts (and ordinary manual lines) unless the request explicitly changes them.
+    if (!edit.tax && prior?.taxCategory) {
+      rebuilt.taxCategory = prior.taxCategory;
+      rebuilt.taxRate = prior.taxRate ?? 0;
+    }
+    lines.push(rebuilt);
     if (edit.tax) lineTax.push({ key, category: edit.tax.category, rate: edit.tax.rate });
   }
 

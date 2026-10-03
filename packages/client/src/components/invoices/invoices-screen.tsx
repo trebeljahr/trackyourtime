@@ -23,8 +23,17 @@ import { INVOICE_LIST_INPUT, type InvoiceRow } from "./types";
  */
 export function InvoicesScreen(): React.JSX.Element {
   const t = useT("reports");
-  const list = trpc.invoices.list.useQuery(INVOICE_LIST_INPUT);
+  const followThrough = useServerSupports("invoices.followThrough");
+  const [overdue, setOverdue] = React.useState(false);
+  const list = trpc.invoices.list.useInfiniteQuery(
+    followThrough ? { overdue } : INVOICE_LIST_INPUT,
+    { getNextPageParam: (page) => page.nextCursor },
+  );
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const detail = trpc.invoices.get.useQuery(
+    { id: selectedId ?? "" },
+    { enabled: selectedId !== null },
+  );
   const detailRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     if (selectedId && window.matchMedia("(width < 40rem)").matches) {
@@ -50,16 +59,16 @@ export function InvoicesScreen(): React.JSX.Element {
   }, []);
   if (linkedId !== null && list.data) {
     setLinkedId(null);
-    if (list.data.invoices.some((invoice) => invoice.id === linkedId))
-      setSelectedId(linkedId);
+    setSelectedId(linkedId);
   }
 
-  const invoices: InvoiceRow[] = list.data?.invoices ?? [];
-  // Resolved from the list rather than held as its own object, so a status
-  // change or a delete landing in the cache is reflected here immediately
-  // instead of leaving a stale copy on screen.
+  const invoices: InvoiceRow[] =
+    list.data?.pages.flatMap((page) => page.invoices) ?? [];
+  // Fetch selected ids independently so correction links survive filters and pagination.
   const selected =
-    invoices.find((invoice) => invoice.id === selectedId) ?? null;
+    detail.data ??
+    invoices.find((invoice) => invoice.id === selectedId) ??
+    null;
 
   return (
     <div className="space-y-6" data-testid="invoices-screen">
@@ -88,6 +97,16 @@ export function InvoicesScreen(): React.JSX.Element {
         </div>
       </div>
 
+      {followThrough ? (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={overdue}
+            onChange={(e) => setOverdue(e.target.checked)}
+          />
+          {t("followThrough.overdueOnly")}
+        </label>
+      ) : null}
       <div className={cn(selected && "hidden sm:block")}>
         <InvoiceList
           invoices={invoices}
@@ -97,6 +116,15 @@ export function InvoicesScreen(): React.JSX.Element {
           onCreate={() => setCreating("time")}
         />
       </div>
+      {list.hasNextPage ? (
+        <Button
+          variant="outline"
+          disabled={list.isFetchingNextPage}
+          onClick={() => void list.fetchNextPage()}
+        >
+          {t("followThrough.loadMore")}
+        </Button>
+      ) : null}
       {selected ? (
         <div
           ref={detailRef}
@@ -114,6 +142,7 @@ export function InvoicesScreen(): React.JSX.Element {
           </Button>
           <InvoiceDetail
             invoice={selected}
+            onSelect={setSelectedId}
             onClose={() => setSelectedId(null)}
             onDeleted={() => setSelectedId(null)}
           />

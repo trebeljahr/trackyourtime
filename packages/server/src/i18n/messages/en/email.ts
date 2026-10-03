@@ -12,6 +12,7 @@
  * once, in code, rather than trusted inside a message.
  */
 export const email = {
+  invoiceReminder: {"subject": "Payment reminder for invoice {number}", "body": "Invoice {number} has an outstanding balance of {amount}. Due on {date}. Please include the invoice number with your payment. If you have already paid, please contact the issuer."},
   magicLink: {
     subject: "Sign in to Track Your Time",
     intro: "Open this link to sign in to your Track Your Time account. It expires in five minutes:",

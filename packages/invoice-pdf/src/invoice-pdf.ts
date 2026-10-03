@@ -252,7 +252,7 @@ function drawFooter(sheet: Sheet): void {
     .fillColor(MUTED)
     .text(
       sanitizePdfText(
-        t("footer", { number: invoice.number, client: invoice.clientName }),
+        t(invoice.documentKind === "credit" ? "creditFooter" : "footer", { number: invoice.number, client: invoice.clientName }),
       ),
       sheet.left,
       y,
@@ -416,7 +416,7 @@ function drawHeaderBlock(sheet: Sheet): void {
     .fontSize(TITLE_SIZE)
     .fillColor(INK)
     .text(
-      fitText(doc, t("title", { number: invoice.number }), logo.titleWidth),
+      fitText(doc, t(invoice.documentKind === "credit" ? "creditTitle" : "title", { number: invoice.number }), logo.titleWidth),
       sheet.left,
       sheet.y,
       { width: logo.titleWidth, lineBreak: false },
@@ -449,9 +449,9 @@ function drawHeaderBlock(sheet: Sheet): void {
   sheet.y = Math.max(recipientBottom, issuerBottom) + 8;
 
   const rows: [string, string][] = [
-    [t("status"), t("statusValue", { status: invoice.status })],
+    ...(invoice.documentKind === "credit" ? [] : [[t("status"), t("statusValue", { status: invoice.status })] as [string, string][]),
     [t("issueDate"), format.date(invoice.issueDate)],
-    [t("dueDate"), format.date(invoice.dueDate)],
+    ...(invoice.documentKind === "credit" ? [[t("creditOriginal"), invoice.creditReference?.number ?? ""] as [string, string]] : [[t("dueDate"), format.date(invoice.dueDate)] as [string, string]]),
     // A blank invoice has no period and prints no Period row; every invoice
     // with a range prints one exactly as before.
     ...periodRow(invoice, t, format),
@@ -551,7 +551,7 @@ function ensureSpace(sheet: Sheet, columns: SizedColumn[], needed: number): void
     .fontSize(HEADING_SIZE)
     .fillColor(INK)
     .text(
-      sanitizePdfText(sheet.t("continued", { number: sheet.invoice.number })),
+      sanitizePdfText(sheet.t(sheet.invoice.documentKind === "credit" ? "creditContinued" : "continued", { number: sheet.invoice.number })),
       sheet.left,
       sheet.y,
       { width: sheet.width, lineBreak: false },
@@ -623,7 +623,7 @@ function drawTotals(sheet: Sheet, columns: SizedColumn[]): void {
     });
   }
   rows.push({
-    label: t("total", { currency: invoice.currency }),
+    label: t(invoice.documentKind === "credit" ? "creditTotal" : "total", { currency: invoice.currency }),
     value: format.amount(invoice.total),
     strong: true,
   });
@@ -762,7 +762,7 @@ export async function renderInvoicePdf(
   const locale: Locale = invoice.locale ?? "en";
   const t = invoiceT(locale);
   const format = pdfFormat(locale);
-  doc.info.Title = sanitizePdfText(t("title", { number: invoice.number }));
+  doc.info.Title = sanitizePdfText(t(invoice.documentKind === "credit" ? "creditTitle" : "title", { number: invoice.number }));
   doc.info.Creator = "Track Your Time";
   variant?.prepare(doc);
   const chunks: Uint8Array[] = [];
@@ -807,10 +807,10 @@ export async function renderInvoicePdf(
       drawTotals(sheet, columns);
       drawParagraph(sheet, columns, t("vatNote"), exemptionReasons(invoice).join("\n"), true);
 
-      drawParagraph(sheet, columns, t("notes"), invoice.notes);
+      drawParagraph(sheet, columns, t(invoice.documentKind === "credit" ? "creditReason" : "notes"), invoice.notes);
 
       const issuer = invoice.issuer ?? null;
-      if (issuer) {
+      if (issuer && invoice.documentKind !== "credit") {
         drawParagraph(
           sheet,
           columns,

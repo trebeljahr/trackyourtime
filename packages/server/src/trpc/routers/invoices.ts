@@ -1,3 +1,5 @@
+import { revisionFilter } from "../../services/invoice-follow-through.js";
+import { invoiceFollowThroughProcedures } from "./invoice-follow-through.js";
 import { clientEntryFilter } from "../../services/entries/refs.js";
 // IMPLEMENTED BY: invoicing agent
 //
@@ -89,7 +91,6 @@ import {
 import {
   hasAnyIssuedXml,
   invoiceEinvoiceProcedures,
-  WITHOUT_ISSUED_XML,
   WITHOUT_ISSUED_XML_BYTES,
 } from "./invoice-einvoice.js";
 
@@ -350,25 +351,11 @@ export function invoiceLineItems(
 
 // ── status transitions (pure) ────────────────────────────────────────
 
-/**
- * The legal moves, and only those.
- *
- * draft → sent → paid, and the same path backwards for the mistakes people
- * actually make (marked paid too early, sent by accident). Two things are
- * deliberately absent:
- *
- *  - draft → paid. Money arriving for a document nobody sent means the
- *    records disagree with reality; the fix is to send it, then mark it paid.
- *  - paid → draft. A paid invoice is a settled record. Walk it back one step
- *    at a time so the intermediate state is visible in the UI.
- *
- * Re-setting the status it already has is allowed: a retried mutation must
- * not fail just because it succeeded the first time.
- */
+/** Issued invoices never return to draft. Ledger reversals correct payments. */
 const ALLOWED_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
   draft: ["draft", "sent"],
-  sent: ["draft", "sent", "paid"],
-  paid: ["sent", "paid"],
+  sent: ["sent", "paid"],
+  paid: ["paid"],
 };
 
 export function isValidStatusTransition(
@@ -804,10 +791,11 @@ const draftUpdate = (
       workspaceId,
       status: "draft",
       updatedAt: readAt,
+      deleting: { $ne: true },
       "einvoice.issuedXml.en16931": { $in: [null] },
       "einvoice.issuedXml.xrechnung": { $in: [null] },
     },
-    update,
+    { ...update, $inc: { followThroughRevision: 1 } },
     { returnDocument: "after", projection: { "einvoice.issuedXml": 0 } },
   ).lean();
 
@@ -930,6 +918,7 @@ export const invoicesRouter = router({
       }
 
       const supplied = input.number?.trim();
+      if (supplied?.startsWith("CN-")) throw badRequest("invoice-reserved-number");
       // Sequenced by the ISSUE year, not today's: back-dating an invoice into
       // December must continue December's numbering, not start next year's.
       // The year is read off the ISO string rather than out of a Date, so the
@@ -962,6 +951,7 @@ export const invoicesRouter = router({
       const issuer = identity && logo ? { ...identity, logo } : identity;
 
       const draft = {
+        timezone: input.timezone ?? "UTC",
         workspaceId,
         createdBy: ctx.user.id,
         clientId: input.clientId,
@@ -1107,18 +1097,24 @@ export const invoicesRouter = router({
         });
       }
 
-      // One past the page, so "is there more?" needs no second query.
-      const docs = await Invoice.find({ $and: conditions })
-        .select(WITHOUT_ISSUED_XML)
-        .sort({ createdAt: -1, _id: -1 })
-        .limit(limit + 1)
-        .lean();
-
-      const page = docs.slice(0, limit).map(toClientInvoice);
-      const last = page[page.length - 1];
-      return docs.length > limit && last
-        ? { invoices: page, nextCursor: encodeCursor(last) }
-        : { invoices: page };
+      const page: InvoiceWire[] = [];
+      let scan: Record<string, unknown>[] = [...conditions];
+      while (page.length <= limit) {
+        const docs = await Invoice.find({ $and: scan }).select(WITHOUT_ISSUED_XML_BYTES)
+          .sort({ createdAt: -1, _id: -1 }).limit(200).lean();
+        if (!docs.length) break;
+        for (const doc of docs) {
+          const invoice = toClientInvoice(doc);
+          if (!input.overdue || (invoice.balance?.overdueDays ?? 0) > 0) page.push(invoice);
+          if (page.length > limit) break;
+        }
+        if (docs.length < 200 || page.length > limit) break;
+        const last = docs[docs.length - 1]!;
+        scan = [...conditions, { $or: [{ createdAt: { $lt: last.createdAt } }, { createdAt: last.createdAt, _id: { $lt: last._id } }] }];
+      }
+      const visible = page.slice(0, limit);
+      const last = visible[visible.length - 1];
+      return page.length > limit && last ? { invoices: visible, nextCursor: encodeCursor(last) } : { invoices: visible };
     }),
 
   get: workspaceProcedure
@@ -1129,7 +1125,7 @@ export const invoicesRouter = router({
         _id: requireObjectId(input.id, "Invoice not found"),
         workspaceId: ctx.workspaceId,
       })
-        .select(WITHOUT_ISSUED_XML)
+        .select(WITHOUT_ISSUED_XML_BYTES)
         .lean();
       if (!doc) throw notFound();
       return toClientInvoice(doc);
@@ -1172,6 +1168,7 @@ export const invoicesRouter = router({
           message: INVOICE_UPDATE_REFUSALS.einvoiceIssued,
         });
       }
+      if (input.number?.startsWith("CN-")) throw badRequest("invoice-reserved-number");
       const stored = toClientInvoice(doc);
 
       const issueDate =
@@ -1342,10 +1339,13 @@ export const invoicesRouter = router({
         _id: requireObjectId(input.id, "Invoice not found"),
         workspaceId,
       })
-        .select("status")
+        .select(WITHOUT_ISSUED_XML_BYTES)
         .lean();
       if (!current) throw notFound();
 
+      if (current.deleting || current.followThrough?.credit || (input.status !== current.status && current.followThrough?.payments !== undefined)) {
+        throw badRequest("invoice-use-payment-ledger");
+      }
       if (!isValidStatusTransition(current.status, input.status)) {
         throw badRequest(
           `An invoice cannot go from "${current.status}" to "${input.status}".`,
@@ -1353,8 +1353,8 @@ export const invoicesRouter = router({
       }
 
       const updated = await Invoice.findOneAndUpdate(
-        { _id: input.id, workspaceId, status: current.status },
-        { $set: { status: input.status } },
+        { _id: input.id, workspaceId, status: current.status, updatedAt: current.updatedAt, ...revisionFilter(current), deleting: { $ne: true } },
+        { $set: { status: input.status, ...(input.status === "paid" && current.followThrough?.reminders ? { "followThrough.reminders.enabled": false } : {}) }, $inc: { followThroughRevision: 1 } },
         { returnDocument: "after", projection: { "einvoice.issuedXml": 0 } },
       ).lean();
       // The `status: current.status` guard makes the write conditional on the
@@ -1401,11 +1401,12 @@ export const invoicesRouter = router({
         _id: requireObjectId(input.id, "Invoice not found"),
         workspaceId,
       })
-        .select("status number")
+        .select(WITHOUT_ISSUED_XML_BYTES)
         .lean();
       if (!invoice) throw notFound();
 
-      if (invoice.status !== "draft") {
+      if (invoice.replacementFor) throw badRequest("invoice-replacement-edit-or-issue");
+      if (invoice.status !== "draft" || hasAnyIssuedXml(invoice)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: `Invoice ${invoice.number} has been ${invoice.status} and is a record now — it cannot be deleted. Nothing may be deleted once it has left the building.`,
@@ -1413,6 +1414,11 @@ export const invoicesRouter = router({
       }
 
       const invoiceId = String(invoice._id);
+      // Claim deletion before releasing entries; every writer excludes a claimed draft.
+      const claimed = await Invoice.findOneAndUpdate({ _id: invoiceId, workspaceId, status: "draft",
+        "einvoice.issuedXml.en16931": { $in: [null] }, "einvoice.issuedXml.xrechnung": { $in: [null] } },
+        { $set: { deleting: true } }, { returnDocument: "after" }).lean();
+      if (!claimed) throw badRequest("invoice-changed");
 
       // Free the time FIRST, and match on `invoiceId` rather than the stored
       // `entryIds` so an entry stamped by a half-finished create is released
@@ -1446,8 +1452,9 @@ export const invoicesRouter = router({
       const doc = await Invoice.findOne({
         _id: requireObjectId(input.id, "Invoice not found"),
         workspaceId: ctx.workspaceId,
+        deleting: { $ne: true },
       })
-        .select(WITHOUT_ISSUED_XML)
+        .select(WITHOUT_ISSUED_XML_BYTES)
         .lean();
       if (!doc) throw notFound();
 
@@ -1466,4 +1473,5 @@ export const invoicesRouter = router({
 
   // einvoiceCheck, attachEinvoiceData, exportZugferd, exportXrechnung.
   ...invoiceEinvoiceProcedures,
+  ...invoiceFollowThroughProcedures,
 });

@@ -170,12 +170,13 @@ test.describe("Invoicing", () => {
     await expect(page.getByTestId("invoice-detail-status")).toHaveText("sent");
     // Sent has left the building: it is a record now, not a deletable draft.
     await expect(page.getByTestId("invoice-delete")).toHaveCount(0);
-    await expect(page.getByTestId("invoice-status-set-draft")).toBeVisible();
-
-    await page.getByTestId("invoice-status-set-paid").click();
-    await expect(page.getByTestId("invoice-detail-status")).toHaveText("paid");
-    // A paid invoice walks back one step at a time — never straight to draft.
     await expect(page.getByTestId("invoice-status-set-draft")).toHaveCount(0);
-    await expect(page.getByTestId("invoice-status-set-sent")).toBeVisible();
+
+    await page.getByTestId("invoice-payment-amount").fill("300");
+    await page.getByTestId("invoice-record-payment").click();
+    await expect(page.getByTestId("invoice-detail-status")).toHaveText("paid");
+    // Corrections append a ledger reversal; status cannot erase settlement history.
+    await expect(page.getByTestId("invoice-status-set-draft")).toHaveCount(0);
+    await expect(page.getByTestId("invoice-status-set-sent")).toHaveCount(0);
   });
 });

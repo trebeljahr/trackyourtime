@@ -1,3 +1,4 @@
+import { INVOICE_REMINDER_JOB, registerInvoiceReminderJob } from "./invoice-reminders.js";
 // The scheduler's public surface. Later jobs register through
 // `registerRecurringJob`; index.ts registers the built-in ones and starts the
 // loop.
@@ -33,6 +34,7 @@ export {
 /** Register every job this server ships with. Safe to call twice. */
 export function registerBuiltInJobs(): void {
   const registered = new Set(jobRegistry.list().map((job) => job.name));
+  if (!registered.has(INVOICE_REMINDER_JOB)) registerInvoiceReminderJob();
   if (!registered.has(RUNAWAY_REMINDER_JOB)) registerRunawayReminderJob();
   // Opt-in: without TRACKYOURTIME_UPDATE_CHECK no job exists to call GitHub.
   if (env.TRACKYOURTIME_UPDATE_CHECK && !registered.has(UPDATE_CHECK_JOB)) {

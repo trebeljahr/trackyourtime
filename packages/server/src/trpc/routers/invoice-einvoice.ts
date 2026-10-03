@@ -1,3 +1,4 @@
+import { revisionFilter } from "../../services/invoice-follow-through.js";
 // The e-invoice procedures of the invoices router: check, fill, and the two
 // exports (ZUGFeRD PDF, XRechnung XML). Spread into `invoicesRouter`, so the
 // client paths are `trpc.invoices.einvoiceCheck` and siblings.
@@ -88,7 +89,7 @@ const loadInvoiceDoc = async (
   // An id that could not address a document reads as missing, never as a
   // CastError 500.
   if (!mongoose.isValidObjectId(id)) throw notFound();
-  const doc = await Invoice.findOne({ _id: id, workspaceId }).select(projection).lean();
+  const doc = await Invoice.findOne({ _id: id, workspaceId, deleting: { $ne: true } }).select(projection).lean();
   if (!doc) throw notFound();
   return doc as StoredInvoiceDoc;
 };
@@ -124,7 +125,7 @@ const issuedOrGeneratedXml = async (
 
   const path = `einvoice.issuedXml.${profile}`;
   const result = await Invoice.updateOne(
-    { _id: id, workspaceId: doc.workspaceId, [path]: { $in: [null] } },
+    { _id: id, workspaceId: doc.workspaceId, deleting: { $ne: true }, [path]: { $in: [null] } },
     { $set: { [path]: { xml, generatedAt: new Date(), generator: EINVOICE_GENERATOR } } },
     { timestamps: false },
   );
@@ -197,7 +198,7 @@ export const invoiceEinvoiceProcedures = {
       requireInvoiceById(ctx);
       const workspaceId = ctx.workspaceId;
       const doc = await loadInvoiceDoc(workspaceId, input.id, WITHOUT_ISSUED_XML_BYTES);
-      if (hasAnyIssuedXml(doc)) {
+      if (hasAnyIssuedXml(doc) || doc.followThrough?.credit) {
         throw einvoiceFillRefused("FILL_LOCKED_BY_ISSUED_XML", FILL_LOCKED_MESSAGE);
       }
       const invoice = toClientInvoice(doc);
@@ -241,11 +242,15 @@ export const invoiceEinvoiceProcedures = {
           _id: input.id,
           workspaceId,
           updatedAt: doc.updatedAt,
+          ...revisionFilter(doc),
+          deleting: { $ne: true },
+          "followThrough.credit": { $exists: false },
           "einvoice.issuedXml.en16931": { $in: [null] },
           "einvoice.issuedXml.xrechnung": { $in: [null] },
         },
         {
           $set: plan.writes,
+          $inc: { followThroughRevision: 1 },
           $push: { "einvoice.fills": { at: new Date(), by: ctx.user.id, fields: plan.fields } },
         },
         { returnDocument: "after", projection: { "einvoice.issuedXml": 0 } },

@@ -59,7 +59,7 @@ export type InvoiceMutations = {
   /** Edit a draft; never throws. */
   updateInvoice: (vars: UpdateInvoiceVars) => Promise<UpdateInvoiceOutcome>;
   setStatus: (id: string, status: InvoiceStatus) => void;
-  removeInvoice: (id: string) => void;
+  removeInvoice: (id: string) => Promise<boolean>;
   /** Fetches the server-rendered PDF and hands it to the browser. */
   downloadPdf: (invoice: Pick<InvoiceRow, "id" | "number">) => Promise<void>;
   /** PDF/A-3 with the EN 16931 XML embedded. */
@@ -228,14 +228,12 @@ export function useInvoiceMutations(): InvoiceMutations {
 
   return {
     createInvoice: (vars) =>
-      create.mutateAsync({ ...vars, originId: ORIGIN_ID }).catch(() => null),
+      create.mutateAsync({ ...vars, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, originId: ORIGIN_ID }).catch(() => null),
     updateInvoice,
     setStatus: (id, status) => {
       updateStatus.mutate({ id, status, originId: ORIGIN_ID });
     },
-    removeInvoice: (id) => {
-      remove.mutate({ id, originId: ORIGIN_ID });
-    },
+    removeInvoice: (id) => remove.mutateAsync({ id, originId: ORIGIN_ID }).then(() => true).catch(() => false),
     downloadPdf,
     downloadZugferd: (invoice) => downloadEinvoice(invoice, "zugferd"),
     downloadXrechnung: (invoice) => downloadEinvoice(invoice, "xrechnung"),

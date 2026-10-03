@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { currencyScale } from "@starter/shared";
 import { FileText, Plus } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
@@ -101,7 +102,11 @@ export function InvoiceList({
               data-testid={`invoice-row-${invoice.id}`}
               data-status={invoice.status}
             >
-              <TableCell data-mobile-primary="true" data-label={t("invoices.columns.number")} className="font-medium">
+              <TableCell
+                data-mobile-primary="true"
+                data-label={t("invoices.columns.number")}
+                className="font-medium"
+              >
                 <button
                   type="button"
                   className="underline-offset-2 hover:underline"
@@ -114,27 +119,62 @@ export function InvoiceList({
                   {invoice.number}
                 </button>
               </TableCell>
-              <TableCell data-label={tc("fields.client")} data-testid={`invoice-client-${invoice.id}`}>
+              <TableCell
+                data-label={tc("fields.client")}
+                data-testid={`invoice-client-${invoice.id}`}
+              >
                 {invoice.clientName}
               </TableCell>
-              <TableCell data-label={t("invoices.columns.issued")} className="text-muted-foreground">
+              <TableCell
+                data-label={t("invoices.columns.issued")}
+                className="text-muted-foreground"
+              >
                 {formatDate(invoice.issueDate, f.locale)}
               </TableCell>
-              <TableCell data-label={t("invoices.columns.due")} className="text-muted-foreground">
+              <TableCell
+                data-label={t("invoices.columns.due")}
+                className="text-muted-foreground"
+              >
                 {formatDate(invoice.dueDate, f.locale)}
               </TableCell>
-              <TableCell data-label={tc("fields.total")}
+              <TableCell
+                data-label={tc("fields.total")}
                 className="text-right tabular-nums"
                 data-testid={`invoice-total-${invoice.id}`}
               >
                 {f.money(invoice.total, invoice.currency)}
+                {invoice.balance ? (
+                  <div className="text-xs text-muted-foreground">
+                    {t("followThrough.outstanding")}:{" "}
+                    {f.number(
+                      invoice.balance.outstandingMinor /
+                        currencyScale(invoice.currency),
+                      {
+                        style: "currency",
+                        currency: invoice.currency,
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: Math.log10(
+                          currencyScale(invoice.currency),
+                        ),
+                      },
+                    )}
+                  </div>
+                ) : null}
               </TableCell>
               <TableCell data-label={t("invoices.columns.status")}>
                 <Badge
                   variant={statusBadgeTone(invoice.status)}
                   data-testid={`invoice-status-${invoice.id}`}
                 >
-                  {statusLabel(invoice.status, f.locale)}
+                  {invoice.deletionPending
+                    ? t("followThrough.retryDelete")
+                    : invoice.followThrough?.credit
+                      ? t("followThrough.credited", {
+                          number: invoice.followThrough.credit.number,
+                        })
+                      : (invoice.balance?.overdueDays ?? 0) > 0
+                        ? t("followThrough.overdue")
+                        : statusLabel(invoice.status, f.locale)}
                 </Badge>
               </TableCell>
             </TableRow>

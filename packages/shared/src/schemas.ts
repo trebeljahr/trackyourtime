@@ -730,6 +730,7 @@ export const invoicePreviewSchema = z
 export const createInvoiceSchema = z
   .object({
     ...invoiceContentFields,
+    timezone: z.string().max(100).refine((value) => { try { new Intl.DateTimeFormat("en", { timeZone: value }); return true; } catch { return false; } }).optional(),
     issueDate: isoDateOrDateTimeSchema,
     dueDate: isoDateOrDateTimeSchema,
     /** Server-generated when omitted; must stay unique per owner. */
@@ -801,6 +802,7 @@ export const updateInvoiceStatusSchema = z.object({
 });
 
 export const invoiceListSchema = z.object({
+  overdue: z.boolean().optional(),
   status: invoiceStatusSchema.optional(),
   clientId: idString.optional(),
   cursor: z.string().optional(),

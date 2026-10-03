@@ -1,3 +1,4 @@
+import { toClientInvoice } from "../../models/Invoice.js";
 // Getting a whole history in, and getting a whole workspace out.
 //
 // Import is an onboarding feature first: somebody arriving with years of
@@ -1059,6 +1060,9 @@ async function buildWorkspaceExport(args: {
 
   const exportInvoices: WorkspaceExportInvoice[] = catalogInvoices.map(
     (invoice) => ({
+      ...(invoice.followThrough ? { followThrough: toClientInvoice(invoice).followThrough } : {}),
+      ...(invoice.timezone ? { timezone: invoice.timezone } : {}),
+      ...(invoice.replacementFor ? { replacementFor: invoice.replacementFor } : {}),
       number: invoice.number,
       // The name as it was at issue time, not as the client is called today —
       // the document was sent with this on it.

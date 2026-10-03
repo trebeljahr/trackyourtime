@@ -94,16 +94,11 @@ export const INVOICE_STATUSES: readonly InvoiceStatus[] = [
   "paid",
 ];
 
-/**
- * Mirror of the server's transition table (`routers/invoices.ts`).
- *
- * draft → sent → paid, plus one step back for the mistakes people actually
- * make. draft → paid and paid → draft are deliberately absent.
- */
+/** Mirror of the server: issued invoices stay issued; ledger entries correct payments. */
 const ALLOWED_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
   draft: ["draft", "sent"],
-  sent: ["draft", "sent", "paid"],
-  paid: ["sent", "paid"],
+  sent: ["sent", "paid"],
+  paid: ["paid"],
 };
 
 /**

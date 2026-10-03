@@ -4,6 +4,7 @@ import type { email as source } from "../en/email.js";
 
 /** German `email`. Terms follow packages/client/src/i18n/GLOSSARY.de.md; voice is „du“. */
 export const email: Translation<typeof source> = {
+  invoiceReminder: {"subject": "Zahlungserinnerung für Rechnung {number}", "body": "Für Rechnung {number} sind noch {amount} offen. Fällig am {date}. Bitte gib die Rechnungsnummer bei der Zahlung an. Falls du bereits bezahlt hast, kontaktiere bitte den Rechnungssteller."},
   magicLink: {
     subject: "Bei Track Your Time anmelden",
     intro: "Öffne diesen Link, um dich bei Track Your Time anzumelden. Er gilt fünf Minuten:",

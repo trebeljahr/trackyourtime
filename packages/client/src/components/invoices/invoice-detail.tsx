@@ -12,6 +12,7 @@ import { useT } from "@/i18n/use-t";
 import { useServerSupports } from "@/lib/server-level";
 import { EinvoicePanel } from "./einvoice-panel";
 import { InvoiceEditForm } from "./invoice-edit-form";
+import { InvoiceFollowThrough } from "./invoice-follow-through";
 import { InvoiceLines } from "./invoice-lines";
 import {
   canDeleteInvoice,
@@ -32,6 +33,7 @@ export type InvoiceDetailProps = {
   onClose: () => void;
   /** Called after a successful delete, so the screen can drop the selection. */
   onDeleted: () => void;
+  onSelect: (id: string) => void;
 };
 
 /**
@@ -45,6 +47,7 @@ export function InvoiceDetail({
   invoice,
   onClose,
   onDeleted,
+  onSelect,
 }: InvoiceDetailProps): React.JSX.Element {
   const { setStatus, removeInvoice, downloadPdf, isBusy } =
     useInvoiceMutations();
@@ -56,11 +59,23 @@ export function InvoiceDetail({
   // landing from elsewhere, leaves it.
   const [editing, setEditing] = React.useState(false);
   const serverEdits = useServerSupports("invoices.lines");
-  const editable = canDeleteInvoice(invoice.status) && serverEdits;
+  const followThrough = useServerSupports("invoices.followThrough");
+  const editable =
+    canDeleteInvoice(invoice.status) &&
+    !invoice.issued &&
+    !invoice.deletionPending &&
+    serverEdits;
   if (editing && !editable) setEditing(false);
 
-  const transitions = statusTransitions(invoice.status);
-  const deletable = canDeleteInvoice(invoice.status);
+  const transitions = invoice.followThrough?.credit
+    ? []
+    : statusTransitions(invoice.status).filter(
+        (status) => !followThrough || status !== "paid",
+      );
+  const deletable =
+    canDeleteInvoice(invoice.status) &&
+    !invoice.issued &&
+    !invoice.replacementFor;
 
   const handleDownload = async (): Promise<void> => {
     setDownloading(true);
@@ -70,6 +85,30 @@ export function InvoiceDetail({
       setDownloading(false);
     }
   };
+
+  if (invoice.deletionPending)
+    return (
+      <section
+        className="space-y-3 rounded border p-4"
+        data-testid="invoice-delete-pending"
+      >
+        <h2 className="font-semibold">{invoice.number}</h2>
+        <p>{t("followThrough.deletionPending")}</p>
+        <Button
+          disabled={isBusy}
+          onClick={() =>
+            void removeInvoice(invoice.id).then((removed) => {
+              if (removed) onDeleted();
+            })
+          }
+        >
+          {t("followThrough.retryDelete")}
+        </Button>
+        <Button variant="ghost" onClick={onClose}>
+          {t("invoices.detail.close")}
+        </Button>
+      </section>
+    );
 
   return (
     <section
@@ -81,7 +120,10 @@ export function InvoiceDetail({
       <header className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold" data-testid="invoice-detail-number">
+            <h2
+              className="text-lg font-semibold"
+              data-testid="invoice-detail-number"
+            >
               {invoice.number}
             </h2>
             <Badge
@@ -91,7 +133,10 @@ export function InvoiceDetail({
               {statusLabel(invoice.status, locale)}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground" data-testid="invoice-detail-client">
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="invoice-detail-client"
+          >
             {invoice.clientName}
           </p>
         </div>
@@ -109,17 +154,23 @@ export function InvoiceDetail({
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
         <div>
-          <dt className="text-muted-foreground">{t("invoices.columns.issued")}</dt>
+          <dt className="text-muted-foreground">
+            {t("invoices.columns.issued")}
+          </dt>
           <dd data-testid="invoice-detail-issued">
             {formatDate(invoice.issueDate, locale)}
           </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">{t("invoices.columns.due")}</dt>
-          <dd data-testid="invoice-detail-due">{formatDate(invoice.dueDate, locale)}</dd>
+          <dd data-testid="invoice-detail-due">
+            {formatDate(invoice.dueDate, locale)}
+          </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">{t("invoices.columns.billedRange")}</dt>
+          <dt className="text-muted-foreground">
+            {t("invoices.columns.billedRange")}
+          </dt>
           <dd data-testid="invoice-detail-range">
             {/* A blank invoice billed no tracked time and has no range. */}
             {invoice.from !== null && invoice.to !== null
@@ -130,7 +181,9 @@ export function InvoiceDetail({
         {/* The document's own language, snapshotted at creation. An invoice
             without one predates localisation and is English for good. */}
         <div>
-          <dt className="text-muted-foreground">{t("invoices.columns.language")}</dt>
+          <dt className="text-muted-foreground">
+            {t("invoices.columns.language")}
+          </dt>
           <dd data-testid="invoice-detail-language">
             {t(`invoices.languages.${invoice.locale ?? "en"}`)}
           </dd>
@@ -176,13 +229,27 @@ export function InvoiceDetail({
       ) : null}
 
       <EinvoicePanel invoice={invoice} />
+      {followThrough ? (
+        <InvoiceFollowThrough
+          key={invoice.id}
+          invoice={invoice}
+          onSelect={onSelect}
+        />
+      ) : null}
 
-      <p className="text-xs text-muted-foreground" data-testid="invoice-detail-entries">
+      <p
+        className="text-xs text-muted-foreground"
+        data-testid="invoice-detail-entries"
+      >
         {invoice.entryIds.length === 0
           ? t("invoices.detail.entriesNone")
           : deletable
-            ? t("invoices.detail.entriesDraft", { count: invoice.entryIds.length })
-            : t("invoices.detail.entriesFinal", { count: invoice.entryIds.length })}
+            ? t("invoices.detail.entriesDraft", {
+                count: invoice.entryIds.length,
+              })
+            : t("invoices.detail.entriesFinal", {
+                count: invoice.entryIds.length,
+              })}
       </p>
 
       <Separator />
@@ -257,8 +324,9 @@ export function InvoiceDetail({
         })}
         confirmLabel={t("invoices.detail.deleteDraft")}
         onConfirm={() => {
-          removeInvoice(invoice.id);
-          onDeleted();
+          void removeInvoice(invoice.id).then((removed) => {
+            if (removed) onDeleted();
+          });
         }}
         testId="invoice-delete-dialog"
       />

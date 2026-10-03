@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 8;
+export const API_LEVEL = 9;
 
 export type ApiLevelChange = {
   level: number;
@@ -105,6 +105,7 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
       "Optional start time on entries.resolveRunaway when setting the real end time.",
     ],
   },
+  { level: 9, release: "0.2.2", added: ["Invoice payment ledger, full credit/correction, reminders and overdue filter."] },
 ];
 
 /**

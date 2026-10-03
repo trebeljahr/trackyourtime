@@ -1,5 +1,6 @@
 import mongoose, { Schema, type Document } from "mongoose";
 import {
+  invoiceBalance,
   normalizeIssuer,
   normalizeRecipient,
   type Invoice as InvoiceWire,
@@ -42,6 +43,11 @@ export type StoredInvoiceIssuer = InvoiceIssuer & { logo?: StoredLogo | null };
  * customer.
  */
 export interface IInvoice extends Document {
+  followThrough?: import("@starter/shared").InvoiceFollowThrough;
+  followThroughRevision?: number;
+  timezone?: string;
+  replacementFor?: string;
+  deleting?: boolean;
   workspaceId: string;
   createdBy: string;
   number: string;
@@ -84,6 +90,11 @@ export interface IInvoice extends Document {
  */
 export type InvoiceDocLike = {
   _id?: unknown;
+  followThrough?: import("@starter/shared").InvoiceFollowThrough;
+  followThroughRevision?: number;
+  timezone?: string;
+  replacementFor?: string;
+  deleting?: boolean;
   workspaceId: string;
   createdBy: string;
   number: string;
@@ -188,6 +199,11 @@ const invoiceSchema = new Schema<IInvoice>(
   {
     // No `index: true` here — the compound indexes below already cover
     // workspaceId, and declaring both makes mongoose warn about a duplicate.
+    followThrough: { type: Schema.Types.Mixed },
+    followThroughRevision: { type: Number },
+    timezone: { type: String },
+    replacementFor: { type: String },
+    deleting: { type: Boolean },
     workspaceId: { type: String, required: true },
     createdBy: { type: String, required: true, default: "" },
     number: { type: String, required: true, maxlength: 40, trim: true },
@@ -241,6 +257,7 @@ const invoiceSchema = new Schema<IInvoice>(
 
 /** The invoice list is "newest first, for this owner". */
 invoiceSchema.index({ workspaceId: 1, createdAt: -1 });
+invoiceSchema.index({ "followThrough.reminders.enabled": 1, _id: 1 });
 invoiceSchema.index({ workspaceId: 1, status: 1, createdAt: -1 });
 invoiceSchema.index({ workspaceId: 1, clientId: 1, createdAt: -1 });
 
@@ -251,12 +268,18 @@ invoiceSchema.index({ workspaceId: 1, clientId: 1, createdAt: -1 });
  * read-then-write is racy under two concurrent creates.
  */
 invoiceSchema.index({ workspaceId: 1, number: 1 }, { unique: true });
+invoiceSchema.index({ workspaceId: 1, "followThrough.credit.number": 1 }, { unique: true, partialFilterExpression: { "followThrough.credit.number": { $type: "string" } } });
 
 export const Invoice = mongoose.model<IInvoice>("Invoice", invoiceSchema);
 
 /** Convert an Invoice document into the exact wire shape. */
 export function toClientInvoice(doc: InvoiceDocLike): InvoiceWire {
-  return {
+  const wire: InvoiceWire = {
+    ...(doc.followThrough ? { followThrough: structuredClone(doc.followThrough) } : {}),
+    ...(doc.timezone ? { timezone: doc.timezone } : {}),
+    ...(doc.replacementFor ? { replacementFor: doc.replacementFor } : {}),
+    ...(doc.deleting ? { deletionPending: true } : {}),
+    issued: Boolean(doc.einvoice?.issuedXml?.en16931 || doc.einvoice?.issuedXml?.xrechnung),
     id: String(doc._id),
     workspaceId: doc.workspaceId,
     createdBy: doc.createdBy,
@@ -305,6 +328,10 @@ export function toClientInvoice(doc: InvoiceDocLike): InvoiceWire {
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
+  // Claims are internal coordination tokens, never part of a response or export.
+  if (wire.followThrough?.reminders) delete wire.followThrough.reminders.claim;
+  wire.balance = invoiceBalance(wire);
+  return wire;
 }
 
 /**

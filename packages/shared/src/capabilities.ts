@@ -17,6 +17,7 @@
  * `capabilities.test.ts` in core fails when a level has no capability.
  */
 export const REQUIRES_API_LEVEL = {
+  "invoices.followThrough": 9,
   /** Editing a runaway timer's start together with its real end time. */
   "entries.resolveRunaway.start": 8,
   "entries.client": 7,

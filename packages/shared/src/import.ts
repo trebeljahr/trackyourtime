@@ -430,6 +430,9 @@ export type WorkspaceExportFavorite = {
  * it is re-derived from the entries.
  */
 export type WorkspaceExportInvoice = {
+  followThrough?: import("./invoice-follow-through.js").InvoiceFollowThrough;
+  timezone?: string;
+  replacementFor?: string;
   number: string;
   /** Snapshot of the client's name at issue time, as stored. */
   clientName: string;

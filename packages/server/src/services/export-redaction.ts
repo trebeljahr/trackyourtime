@@ -105,8 +105,9 @@ export function redactExportMoney(
   // and a tax amount) and a line's rate goes with the amounts; its category
   // and the payment terms sentence state no figure and stay.
   const invoices: WorkspaceExportInvoice[] | undefined = document.invoices
-    ? document.invoices.map(({ taxBreakdown: _breakdown, ...invoice }) => {
+    ? document.invoices.map(({ taxBreakdown: _breakdown, followThrough: _followThrough, ...invoice }) => {
         void _breakdown;
+        void _followThrough;
         return {
           ...invoice,
           subtotal: null,

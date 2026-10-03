@@ -255,6 +255,9 @@ const fixture = (): ExhaustiveExport => ({
   ],
   invoices: [
     {
+      followThrough: { payments: [{ requestId: "request", kind: "payment", amountMinor: 500, at: "2026-09-01", recordedAt: "2026-09-01", by: "secret-member", note: "private-reference" }] },
+      timezone: "UTC",
+      replacementFor: "original-id",
       number: "2026-014",
       clientName: "Internal",
       status: "sent",
@@ -350,7 +353,7 @@ const fixture = (): ExhaustiveExport => ({
  * at all — and an import reads their absence as "not said".
  */
 const IDENTITY_PATH =
-  /^(businessProfile|invoices\[\d+\]\.(issuer|recipient|taxBreakdown))(\.|\[|$)/;
+  /^(businessProfile|invoices\[\d+\]\.(issuer|recipient|taxBreakdown|followThrough))(\.|\[|$)/;
 
 /** Both configurations that are refused money, run through every rule below. */
 const REDACTED_VIEWERS: readonly Visibility[] = [
@@ -380,6 +383,7 @@ test("a redacted invoice loses its VAT breakdown and line rates, and keeps categ
     assert.ok(invoice);
     // Every row of a breakdown is a basis and a tax amount: it goes whole.
     assert.equal("taxBreakdown" in invoice, false);
+    assert.equal("followThrough" in invoice, false);
     assert.strictEqual(invoice.lineItems[0]?.taxRate, null);
     // A category and the due sentence state no figure.
     assert.equal(invoice.lineItems[0]?.taxCategory, "S");

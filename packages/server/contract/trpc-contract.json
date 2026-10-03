@@ -1,5 +1,5 @@
 {
-  "apiLevel": 8,
+  "apiLevel": 9,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -1968,6 +1968,10 @@
               }
             ]
           },
+          "timezone": {
+            "maxLength": 100,
+            "type": "string"
+          },
           "to": {
             "anyOf": [
               {
@@ -1992,6 +1996,42 @@
       },
       "type": "mutation"
     },
+    "invoices.credit": {
+      "input": {
+        "properties": {
+          "id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "originId": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "replacement": {
+            "default": false,
+            "type": "boolean"
+          },
+          "requestId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "requestId",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
     "invoices.einvoiceCheck": {
       "input": {
         "properties": {
@@ -2010,6 +2050,44 @@
         "required": [
           "id",
           "profile"
+        ],
+        "type": "object"
+      },
+      "type": "query"
+    },
+    "invoices.exportCreditPdf": {
+      "input": {
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "originId": {
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "type": "query"
+    },
+    "invoices.exportCreditXml": {
+      "input": {
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "originId": {
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -2093,6 +2171,9 @@
             "maximum": 200,
             "minimum": 1,
             "type": "integer"
+          },
+          "overdue": {
+            "type": "boolean"
           },
           "status": {
             "enum": [
@@ -2332,6 +2413,99 @@
       },
       "type": "query"
     },
+    "invoices.recordPayment": {
+      "input": {
+        "properties": {
+          "amount": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "payment",
+              "reversal",
+              "refund"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 500,
+            "type": "string"
+          },
+          "originId": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "requestId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "reverses": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "requestId",
+          "kind",
+          "amount",
+          "at"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "invoices.reminderPreview": {
+      "input": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "originId": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "recipient": {
+            "format": "email",
+            "maxLength": 254,
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string"
+          },
+          "timezone": {
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "enabled",
+          "recipient",
+          "timezone"
+        ],
+        "type": "object"
+      },
+      "type": "query"
+    },
     "invoices.remove": {
       "input": {
         "properties": {
@@ -2346,6 +2520,42 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "invoices.setReminders": {
+      "input": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "originId": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "recipient": {
+            "format": "email",
+            "maxLength": 254,
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string"
+          },
+          "timezone": {
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "enabled",
+          "recipient",
+          "timezone"
         ],
         "type": "object"
       },

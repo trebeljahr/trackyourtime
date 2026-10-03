@@ -741,6 +741,14 @@ export type InvoiceUpdateRefusal =
 
 /** A generated invoice for one client, over one date range or none. */
 export type Invoice = {
+  followThrough?: import("./invoice-follow-through.js").InvoiceFollowThrough;
+  balance?: import("./invoice-follow-through.js").InvoiceBalance;
+  timezone?: string;
+  issued?: boolean;
+  deletionPending?: boolean;
+  replacementFor?: string;
+  documentKind?: "invoice" | "credit";
+  creditReference?: { number: string; reason: string };
   id: string;
   workspaceId: string;
   /** Audit only — never used for scoping. */

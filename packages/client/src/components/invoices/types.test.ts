@@ -40,11 +40,11 @@ describe("statusTransitions", () => {
   });
 
   it("lets a sent invoice go either way", () => {
-    expect(statusTransitions("sent")).toEqual(["draft", "paid"]);
+    expect(statusTransitions("sent")).toEqual(["paid"]);
   });
 
   it("walks a paid invoice back one step at a time", () => {
-    expect(statusTransitions("paid")).toEqual(["sent"]);
+    expect(statusTransitions("paid")).toEqual([]);
   });
 
   it("never offers draft → paid, which the server refuses", () => {
