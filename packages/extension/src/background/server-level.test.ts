@@ -60,7 +60,7 @@ const server = {
 const reply = (status: number, body: unknown): Response =>
   new Response(JSON.stringify(body), { status });
 
-const fakeFetch = async (url: string): Promise<Response> => {
+const fakeFetch = async (url: string, init?: RequestInit): Promise<Response> => {
   const parsed = new URL(url);
   if (parsed.pathname === "/api/health") {
     server.calls.push("health");
@@ -74,7 +74,12 @@ const fakeFetch = async (url: string): Promise<Response> => {
       apiLevel: server.apiLevel,
     });
   }
-  const path = parsed.pathname.replace(/^\/api\/trpc\//, "");
+  let path = parsed.pathname.replace(/^\/api\/trpc\//, "");
+  if (path === "entries.applyOperation") {
+    const envelope = JSON.parse(String(init?.body));
+    expect(envelope.operationId).toEqual(expect.any(String));
+    path = envelope.operation;
+  }
   server.calls.push(path);
   if (path === "workspaces.list") return reply(200, { result: { data: [membership] } });
   if (server.versionRefusal && path.startsWith("entries.")) {

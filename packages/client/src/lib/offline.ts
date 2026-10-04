@@ -1,13 +1,10 @@
 /**
  * Offline plumbing for the tracker.
  *
- * Every entry mutation goes out optimistically. When the request cannot reach
- * the server — the browser is offline, or the fetch fails at the transport
- * layer — the optimistic cache update stands and the mutation lands here, in a
- * durable FIFO — `localStorage` in a browser, Capacitor Preferences on the
- * native shells. On reconnect the queue is replayed in the order the user
- * performed the actions, so start/stop keeps working with the network fully
- * off.
+ * Every supported entry write is saved before its first HTTP request. The
+ * same identity and input survive network failure, process death, and a reply
+ * lost after the server commits. Reconnect replays the saved requests in order.
+ * Storage is strict localStorage on web and Preferences on native shells.
  *
  * The op/payload contract itself now lives in `@starter/core` so the browser
  * extension writes rows this client can replay, and vice versa. What stays
@@ -18,6 +15,8 @@
 import { TRPCClientError } from "@trpc/client";
 import {
   createOfflineQueue,
+  webQueueExclusive,
+  durableQueuedWrite,
   exportRecoveryRows,
   retryRecoveryRow,
   ownsRecoveryRow,
@@ -120,6 +119,7 @@ const resolveStorage = (): KeyValueStorage => {
     return preferencesStorage({
       migrateKeys: [OFFLINE_QUEUE_STORAGE_KEY, OFFLINE_QUEUE_OWNER_STORAGE_KEY],
       strict: true,
+      migrationExclusive: webQueueExclusive(OFFLINE_QUEUE_STORAGE_KEY),
     });
   }
   try {
@@ -159,6 +159,14 @@ export const getOfflineQueue = (): OfflineQueue => {
     queue = createOfflineQueue({
       storage: getStorage(),
       key: OFFLINE_QUEUE_STORAGE_KEY,
+      durableEntries: true,
+      exclusive: typeof window === "undefined" ? undefined : async (task) => {
+        // Finish a native store migration under this same lock before entering
+        // normal queue ownership. Acquiring it from a storage read inside the
+        // queue would wait for itself; initialization must happen first.
+        await getStorage().getItem(OFFLINE_QUEUE_OWNER_STORAGE_KEY);
+        return webQueueExclusive(OFFLINE_QUEUE_STORAGE_KEY)(task);
+      },
     });
   }
   return queue;
@@ -349,13 +357,15 @@ export const setOfflineQueueOwner = async (
  * `lastOwner` afterwards is what keeps the next account's pre-resolution rows
  * from being stamped with the departed one.
  *
- * The queue itself is untouched. That is the whole difference from the
- * extension's `forgetSession()`.
+ * The queue itself stays available for a later sign-in by the same account.
  */
 export const sealOfflineQueueOwner = async (): Promise<number> => {
   try {
     await hydrateLastOwner();
     const departing = owner ?? lastOwner;
+    // Fence senders immediately, before waiting for an in-flight queue owner.
+    owner = null;
+    lastOwner = null;
     return departing === null ? 0 : await getOfflineQueue().adoptUnowned(departing, isOnThisServer);
   } finally {
     // A storage failure must not leave a departed account live in memory.
@@ -527,7 +537,7 @@ export class OfflineQueueScopeNotReadyError extends Error {
 }
 
 /**
- * Append a mutation that could not reach the server.
+ * Append a new operation that has never been sent to the server.
  *
  * `workspaceId` is the workspace the mutation was MADE in, captured by the
  * caller when the user acted. It defaults to the active workspace now, which
@@ -571,6 +581,45 @@ export const enqueueOffline = async <K extends OfflineOp>(
   await refreshPendingCount().catch(() => undefined);
 };
 
+/** The only live entry-write boundary: the request already exists on disk. */
+export const submitDurableEntry = async <T>(
+  op: OfflineOp,
+  raw: unknown,
+  send: (input: Record<string, unknown>) => Promise<T>,
+): Promise<T> => {
+  await Promise.all([hydrateLastOwner(), whenApiOriginReady(), whenActiveWorkspaceReady()]);
+  const input = { ...(raw as Record<string, unknown>) };
+  const captured = input.__durableScope as { owner: string | null; server: string; workspaceId: string | null } | undefined;
+  delete input.__durableScope;
+  const tempId = typeof input.__durableTempId === "string" ? input.__durableTempId : undefined;
+  delete input.__durableTempId;
+  if (input.workspaceId === "trackyourtime:pending-workspace") delete input.workspaceId;
+  const workspaceId = captured ? captured.workspaceId : typeof input.workspaceId === "string" ? input.workspaceId : getActiveWorkspaceId();
+  const actor = captured ? captured.owner : owner ?? lastOwner;
+  const server = captured?.server ?? getAbsoluteApiOrigin();
+  if (!actor || !workspaceId) throw new OfflineQueueScopeNotReadyError();
+  try {
+    return await getOfflineQueue().submit(op, { input, ...(tempId ? { tempId } : {}) }, { owner: actor, server, workspaceId }, (row) => {
+      if ((owner ?? lastOwner) !== actor || getAbsoluteApiOrigin() !== server)
+        throw new OfflineQueueScopeNotReadyError();
+      return send(row.submittedInput!);
+    });
+  } finally {
+    await refreshPendingCount().catch(() => undefined);
+  }
+};
+
+/** Attach the optimistic entry to its existing saved request, never enqueue twice. */
+export const retainDurableEntry = async (error: unknown, tempId?: string): Promise<boolean> => {
+  const queued = durableQueuedWrite(error);
+  if (!queued) return false;
+  if (tempId) await getOfflineQueue().amendPayloads((row) => row.id === queued.rowId
+    ? { ...(row.payload as StoredOfflinePayload), tempId }
+    : undefined);
+  await refreshPendingCount().catch(() => undefined);
+  return true;
+};
+
 /**
  * Adjust an offline start before replay, preserving its position and ownership.
  */
@@ -581,7 +630,7 @@ export const amendQueuedStart = async (
 ): Promise<boolean> => {
   const changed = await getOfflineQueue().amendPayloads((row) => {
     if (isElsewhere(row, owner ?? lastOwner)) return undefined;
-    if (row.workspaceId !== (workspaceId ?? undefined)) return undefined;
+    if (row.workspaceId !== (workspaceId ?? undefined) || row.submittedInput !== undefined) return undefined;
     const decoded = decodeOfflineMutation(row);
     if (decoded?.op !== "entries.start" || decoded.tempId !== tempId) return undefined;
     return { input: { ...decoded.input, start }, tempId };
@@ -592,20 +641,15 @@ export const amendQueuedStart = async (
 /** Drop the queued create and dependent operations for a deleted temp entry. */
 export const cancelQueuedForTemp = async (tempId: string): Promise<boolean> => {
   const offlineQueue = getOfflineQueue();
-  const rows = await offlineQueue.list();
   let removed = false;
-
-  for (const row of rows) {
-    // Never reach into another account's rows, even to cancel: the temp id
-    // being deleted belongs to an entry in THIS session's cache. An unowned
-    // row is fair game — it is one this session queued before the account
-    // resolved, or one waiting to be adopted.
-    if (isElsewhere(row, owner ?? lastOwner)) continue;
-    const decoded = decodeOfflineMutation(row);
-    if (decoded?.tempId !== tempId) continue;
-    await offlineQueue.remove(row.id);
-    removed = true;
-  }
+  await offlineQueue.amendRows((rows) => {
+    const matches = rows.filter((row) => !isElsewhere(row, owner ?? lastOwner) && decodeOfflineMutation(row)?.tempId === tempId);
+    if (matches.some((row) => row.submittedInput !== undefined || typeof (row.payload as { input?: { operationId?: unknown } })?.input?.operationId !== "string"))
+      throw new Error("This entry may already be saved. Sync it before deleting it.");
+    const ids = new Set(matches.map((row) => row.id));
+    removed = ids.size > 0;
+    return rows.filter((row) => !ids.has(row.id));
+  });
 
   if (removed) await refreshPendingCount();
   return removed;
@@ -656,6 +700,10 @@ export const flushOfflineQueue = async (
       // refused. Held until the server reports a level high enough.
       const tooOld = serverLevelHold(row, serverApiLevel);
       if (tooOld !== null) return { hold: tooOld };
+      // The freeze checkpoint awaited storage after the filter ran. Fence an
+      // account/server switch that completed during that checkpoint.
+      if (owner !== replayOwner || getAbsoluteApiOrigin() !== replayServer)
+        throw new OfflineQueueScopeNotReadyError();
       return runner(decoded, { createdAt: row.createdAt });
     },
     {
@@ -1065,6 +1113,7 @@ export const isTransientServerError = (error: unknown): boolean =>
  * conflict, auth) is never a network error — those must roll back.
  */
 export const isNetworkError = (error: unknown): boolean => {
+  if (durableQueuedWrite(error)) return true;
   if (hasServerCode(error)) return false;
   if (!isOnline()) return true;
   if (error instanceof TypeError) return true;

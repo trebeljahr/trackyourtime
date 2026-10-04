@@ -101,12 +101,17 @@ const reply = (status: number, body: unknown): Response =>
 
 const fakeFetch = async (url: string, init?: RequestInit): Promise<Response> => {
   const parsed = new URL(url);
-  const path = parsed.pathname.replace(/^\/api\/trpc\//, "");
+  let path = parsed.pathname.replace(/^\/api\/trpc\//, "");
   const raw =
     init?.method === "POST"
       ? String(init.body)
       : parsed.searchParams.get("input");
-  const input = raw === null ? undefined : (JSON.parse(raw) as Record<string, unknown>);
+  let input = raw === null ? undefined : (JSON.parse(raw) as Record<string, unknown>);
+  if (path === "entries.applyOperation") {
+    expect(input?.operationId).toEqual(expect.any(String));
+    path = input?.operation as string;
+    input = { ...(input?.input as Record<string, unknown>), workspaceId: input?.workspaceId };
+  }
   server.calls.push({ path, input });
 
   if (path === "workspaces.list") {
@@ -522,8 +527,9 @@ test("refused work survives a worker reload, supports repair/retry and scoped ex
   expect(held?.recovery?.message).toBe("Role changed");
   expect(JSON.parse(await exportHeldRow(held!.queueId)).data[0].payload.input.description).toBe("original");
   server.refuse = null;
-  await retryHeldRow(held!.queueId, { id: "e-1", description: "repaired" });
-  expect(server.calls.find((call) => call.path === "entries.update")?.input?.description).toBe("repaired");
+  await expect(retryHeldRow(held!.queueId, { id: "e-1", description: "repaired" })).rejects.toThrow("RECOVERY_ALREADY_SUBMITTED");
+  await retryHeldRow(held!.queueId);
+  expect(server.calls.find((call) => call.path === "entries.update")?.input?.description).toBe("original");
   expect(await getOfflineQueue().size()).toBe(0);
 });
 

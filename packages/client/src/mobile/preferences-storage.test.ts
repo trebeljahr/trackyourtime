@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ACTIVE_WORKSPACE_STORAGE_KEY,
+  webQueueExclusive,
   OFFLINE_QUEUE_OWNER_STORAGE_KEY,
   OFFLINE_QUEUE_STORAGE_KEY,
 } from "@starter/core";
@@ -326,4 +327,16 @@ describe("strict storage for durable offline drafts", () => {
     expect(await storage.getItem(QUEUE_KEY)).toBe("old draft");
     expect(window.localStorage.getItem(QUEUE_KEY)).toBeNull();
   });
+});
+
+
+it("two native store instances serialize the initial queue migration", async () => {
+  window.localStorage.setItem(QUEUE_KEY, "saved-before-upgrade");
+  const plugin = fakePlugin();
+  const options = { strict: true, loadPlugin: async () => plugin, migrateKeys: [QUEUE_KEY], migrationExclusive: webQueueExclusive(QUEUE_KEY) };
+  const a = preferencesStorage(options);
+  const b = preferencesStorage(options);
+  expect(await Promise.all([a.getItem(QUEUE_KEY), b.getItem(QUEUE_KEY)])).toEqual(["saved-before-upgrade", "saved-before-upgrade"]);
+  expect(plugin.set.mock.calls.filter(([{ key }]) => key === QUEUE_KEY)).toHaveLength(1);
+  expect(window.localStorage.getItem(QUEUE_KEY)).toBeNull();
 });

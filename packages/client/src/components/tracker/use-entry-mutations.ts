@@ -34,12 +34,10 @@ import {
   amendQueuedStart,
   cancelQueuedForTemp,
   createTempId,
+  retainDurableEntry,
   enqueueOffline,
-  isDocumentUnloading,
   isNetworkError,
-  isOnline,
   isTempId,
-  OfflineQueueScopeNotReadyError,
   type OfflineCreateInput,
   type OfflineIdInput,
   type OfflineStartInput,
@@ -478,37 +476,10 @@ export const useEntryMutations = (): EntryMutations => {
     async (
       error: unknown,
       context: MutationContext | undefined,
-      enqueue: (tempId: string | undefined, workspaceId: string | null) => Promise<void>,
       fallbackMessage: string
     ): Promise<void> => {
-      if (isNetworkError(error)) {
-        /*
-         * The document is being torn down *and the device was online*, so this
-         * "failure" is an aborted request whose bytes the server almost
-         * certainly already has. See `isDocumentUnloading` — queueing it would
-         * duplicate the entry rather than recover it, and the reload about to
-         * happen asks the server what is really there.
-         *
-         * `isOnline()` is half of the condition, not decoration. Offline,
-         * `isNetworkError()` returns true unconditionally, so an airplane-mode
-         * start or stop that happens to coincide with a reload or a tab close
-         * used to hit this guard and be dropped on the floor — silently, in
-         * the exact case the queue exists for. There are no bytes for the
-         * server to have received when there is no radio, so nothing can be
-         * duplicated by queueing it.
-         */
-        if (isDocumentUnloading() && isOnline()) return;
-        try {
-          await enqueue(context?.tempId, context?.workspaceId ?? null);
-          if (context) context.queued = true;
-        } catch (cause) {
-          rollback(context);
-          const message = cause instanceof OfflineQueueScopeNotReadyError
-            ? cause.message
-            : translate("tracker")("mutations.storageFailed");
-          if (context) context.errorMessage = message;
-          if (stillInWorkspace(context)) toast.error(message);
-        }
+      if (await retainDurableEntry(error, context?.tempId)) {
+        if (context) context.queued = true;
         return;
       }
       rollback(context);
@@ -546,6 +517,7 @@ export const useEntryMutations = (): EntryMutations => {
         if (context?.runningAtStop?.id !== tempId) continue;
         context.runningAtStop = entry;
         context.tempId = undefined;
+        Object.assign(mutation.state.variables as object, { id: entry.id, __durableTempId: undefined });
       }
     },
     [queryClient]
@@ -558,7 +530,9 @@ export const useEntryMutations = (): EntryMutations => {
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as StartInput;
       const context = await snapshot();
+      Object.assign(raw, { __durableScope: context.scope });
       context.tempId = createTempId();
+      Object.assign(raw, { __durableTempId: context.tempId, ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}) });
 
       const running = context.previousCurrent ?? null;
       if (running) replaceEntry(running.id, stopShape(running, input.start));
@@ -599,7 +573,7 @@ export const useEntryMutations = (): EntryMutations => {
         } catch (error) {
           if (isNetworkError(error)) {
             try {
-              await enqueueOffline("entries.update", input, undefined, context.workspaceId, context.scope);
+              if (!(await retainDurableEntry(error))) throw error;
               context.queued = true;
               entry = { ...entry, start };
             } catch {
@@ -653,23 +627,18 @@ export const useEntryMutations = (): EntryMutations => {
       // holding the moment the server answered.
       if (context?.tempId) idleWatcher.noteServerId(context.tempId, entry.id);
     },
-    onError: (error, raw, context) =>
-      handleError(
-        error,
-        context,
-        (tempId, workspaceId) =>
-          enqueueOffline(
-            "entries.start",
-            {
-              ...(raw as OfflineStartInput),
-              start: context?.pendingStart ?? (raw as OfflineStartInput).start,
-            },
-            tempId,
-            workspaceId,
-            context?.scope
-          ),
-        translate("tracker")("mutations.startFailed")
-      ),
+    onError: async (error, raw, context) => {
+      await handleError(error, context, translate("tracker")("mutations.startFailed"));
+      // The first start may already have committed. Keep its exact input and
+      // save an edit as a separate dependent operation, resolved after replay.
+      if (context?.queued && context.tempId && context.pendingStart && context.pendingStart !== (raw as StartInput).start) {
+        try {
+          await enqueueOffline("entries.update", { id: context.tempId, start: context.pendingStart, originId: ORIGIN_ID }, context.tempId, context.workspaceId, context.scope);
+        } catch {
+          toast.error(translate("tracker")("mutations.storageFailed"));
+        }
+      }
+    },
     onSettled: (_data, _error, _raw, context) => {
       if (context?.queued) return;
       refetchWhenQuiet();
@@ -683,6 +652,7 @@ export const useEntryMutations = (): EntryMutations => {
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as OfflineStopInput;
       const context = await snapshot();
+      Object.assign(raw, { __durableScope: context.scope });
       /*
        * What is running — from the query cache when it has an answer, and from
        * the timer store when it does not.
@@ -707,6 +677,11 @@ export const useEntryMutations = (): EntryMutations => {
           ? context.previousCurrent
           : timerStore.getState().running;
       context.runningAtStop = running;
+      Object.assign(raw, {
+        ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
+        ...(running && !isTempId(running.id) ? { id: running.id } : {}),
+        ...(running && isTempId(running.id) ? { __durableTempId: running.id } : {}),
+      });
       if (running) {
         replaceEntry(running.id, stopShape(running, input.end));
         // A timer started offline still carries its temp id; keep the link so
@@ -745,39 +720,10 @@ export const useEntryMutations = (): EntryMutations => {
         );
       }
     },
-    onError: (error, raw, context) =>
+    onError: (error, _raw, context) =>
       handleError(
         error,
         context,
-        (tempId, workspaceId) => {
-          /*
-           * Name the entry whenever we can.
-           *
-           * The `id` is omitted only for a timer that was itself started
-           * offline: the id it carries right now is a temp one the server has
-           * never seen, and the replayed start is what mints the real one —
-           * `hooks/replay-offline-mutation.ts` threads that id in here at
-           * replay time, keyed on the `tempId` carried alongside.
-           *
-           * For every other timer the real id is already known, and using it
-           * matters now that the queue survives an OS kill: an id-less stop
-           * means "end whatever is running", which days later is a different
-           * entry, possibly on a different device.
-           */
-          const runningId = context?.runningAtStop?.id ?? null;
-          const targeted = runningId !== null && !isTempId(runningId);
-          return enqueueOffline(
-            "entries.stop",
-            {
-              ...(targeted ? { id: runningId } : {}),
-              end: (raw as OfflineStopInput).end,
-              originId: ORIGIN_ID,
-            },
-            tempId,
-            workspaceId,
-            context?.scope
-          );
-        },
         translate("tracker")("mutations.stopFailed")
       ),
     onSettled: (_data, _error, _raw, context) => {
@@ -792,8 +738,10 @@ export const useEntryMutations = (): EntryMutations => {
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as CreateInput;
       const context = await snapshot(saveScopes.current.get(raw));
+      Object.assign(raw, { __durableScope: context.scope });
       if (!stillInWorkspace(context)) throw new EntryScopeChangedError(translate("tracker")("mutations.scopeChanged"));
       context.tempId = createTempId();
+      Object.assign(raw, { __durableTempId: context.tempId, ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}) });
       const optimistic = buildEntry({
         id: context.tempId,
         description: input.description,
@@ -832,9 +780,6 @@ export const useEntryMutations = (): EntryMutations => {
       await handleError(
         error,
         context,
-        (tempId, workspaceId) => enqueueOffline(
-          "entries.create", raw as OfflineCreateInput, tempId, workspaceId, context?.scope
-        ),
         translate("tracker")("mutations.addFailed")
       );
       saveFailures.current.set(raw, context?.queued
@@ -853,6 +798,7 @@ export const useEntryMutations = (): EntryMutations => {
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as UpdateInput;
       const context = await snapshot(saveScopes.current.get(raw));
+      Object.assign(raw, { __durableScope: context.scope });
       if (!stillInWorkspace(context)) throw new EntryScopeChangedError(translate("tracker")("mutations.scopeChanged"));
       const settings = utils.settings.get.getData();
 
@@ -951,9 +897,6 @@ export const useEntryMutations = (): EntryMutations => {
       await handleError(
         error,
         context,
-        (_tempId, workspaceId) => enqueueOffline(
-          "entries.update", raw as OfflineUpdateInput, undefined, workspaceId, context?.scope
-        ),
         translate("tracker")("mutations.saveFailed")
       );
       saveFailures.current.set(raw, context?.queued
@@ -972,23 +915,17 @@ export const useEntryMutations = (): EntryMutations => {
     onMutate: async (raw): Promise<MutationContext> => {
       const input = raw as OfflineIdInput;
       const context = await snapshot();
+      Object.assign(raw, { __durableScope: context.scope });
       dropEntry(input.id);
       if (context.previousCurrent?.id === input.id) {
         utils.entries.current.setData(undefined, null);
       }
       return context;
     },
-    onError: (error, raw, context) =>
+    onError: (error, _raw, context) =>
       handleError(
         error,
         context,
-        (_tempId, workspaceId) =>
-          enqueueOffline(
-            "entries.remove",
-            raw as OfflineIdInput,
-            undefined,
-            workspaceId
-          ),
         translate("tracker")("mutations.deleteFailed")
       ),
     onSettled: (_data, _error, _raw, context) => {

@@ -87,8 +87,9 @@ afterEach(() => {
 
 const switchWhileHanging = async (write: Promise<unknown>): Promise<void> => {
   await vi.waitFor(() => expect(failHanging).not.toBeNull());
-  expect(await switchWorkspace(B)).toBe(true);
+  const switching = switchWorkspace(B);
   failHanging?.();
+  expect(await switching).toBe(true);
   await write;
 };
 
@@ -111,7 +112,7 @@ test.each([
 ])("%s: the attempt and the queued row name the workspace the write began in", async (op, write) => {
   await switchWhileHanging(write());
 
-  const attempt = calls.find((call) => call.path === op);
+  const attempt = calls.find((call) => call.path === "entries.applyOperation" && call.input?.operation === op);
   expect(attempt?.input?.workspaceId).toBe(A);
   const rows = await getOfflineQueue().list();
   expect(rows.map((row) => [row.op, row.workspaceId])).toEqual([[op, A]]);

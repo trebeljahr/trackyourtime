@@ -14,7 +14,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
-import type { TimeEntry, WorkspaceSummary } from "@starter/core";
+import { DurableQueuedWriteError, type TimeEntry, type WorkspaceSummary } from "@starter/core";
 
 let online = true;
 vi.mock("@/mobile/network", () => ({
@@ -28,6 +28,7 @@ vi.mock("@/lib/offline", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/offline")>();
   return {
     ...actual,
+    retainDurableEntry: async (error: unknown) => error instanceof DurableQueuedWriteError,
     isDocumentUnloading: () => false,
     enqueueOffline: async (
       op: string,
@@ -257,9 +258,10 @@ describe("entry mutations across workspaces", () => {
     const opts = optionsFor("entries.start");
     const context = await opts.onMutate?.(startInput);
     await activeWorkspace.switchWorkspace(A.id, { queryClient: new QueryClient() });
-    await opts.onError?.(new TypeError("Load failed"), startInput, context);
+    await opts.onError?.(new DurableQueuedWriteError("saved-row"), startInput, context);
 
-    expect(enqueued).toEqual([{ op: "entries.start", workspaceId: B.id }]);
+    expect(startInput).toMatchObject({ __durableScope: { workspaceId: B.id } });
+    expect(enqueued).toEqual([]);
   });
 
   it("keeps a failed delete visible through the localized mutation error", async () => {

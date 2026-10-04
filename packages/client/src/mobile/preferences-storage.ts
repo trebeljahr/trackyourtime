@@ -20,6 +20,7 @@
 
 import {
   type KeyValueStorage,
+  type QueueExclusive,
   OFFLINE_QUEUE_OWNER_STORAGE_KEY,
   OFFLINE_QUEUE_STORAGE_KEY,
   webStorage,
@@ -162,6 +163,8 @@ const migrateFromLocalStorage = async (
 };
 
 export type PreferencesStorageOptions = {
+  /** Shared ownership while handing an older store over to Preferences. */
+  migrationExclusive?: QueueExclusive;
   /** Durable records must surface bridge/storage failures to their caller. */
   strict?: boolean;
   /** Keys to hand over from `localStorage` on first use. */
@@ -197,6 +200,7 @@ export const preferencesStorage = ({
   migrateKeys = [],
   strict = false,
   loadPlugin = loadPreferences,
+  migrationExclusive,
 }: PreferencesStorageOptions = {}): KeyValueStorage => {
   const fallback = webStorage(
     strict || typeof window === "undefined"
@@ -214,7 +218,8 @@ export const preferencesStorage = ({
         return null;
       }
       try {
-        await migrateFromLocalStorage(plugin, migrateKeys, strict);
+        if (migrationExclusive) await migrationExclusive(() => migrateFromLocalStorage(plugin, migrateKeys, strict));
+        else await migrateFromLocalStorage(plugin, migrateKeys, strict);
       } catch (error) {
         if (strict) throw error;
         // Best-effort callers may continue after a failed migration. The rows

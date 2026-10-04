@@ -1,7 +1,7 @@
 import { createTRPCReact } from "@trpc/react-query";
-import { httpBatchLink, httpBatchStreamLink, splitLink, type TRPCLink } from "@trpc/client";
+import { TRPCClientError, httpBatchLink, httpBatchStreamLink, splitLink, type TRPCLink } from "@trpc/client";
 import { observable } from "@trpc/server/observable";
-import { assertEntryClientSupported, CLIENT_TOO_OLD, versionHeaders, withWorkspaceId } from "@starter/core";
+import { durableRequestSignal, durableEntryEnvelope, isDurableEntryOp, assertEntryClientSupported, CLIENT_TOO_OLD, versionHeaders, withWorkspaceId } from "@starter/core";
 import type { AppRouter } from "@starter/server/trpc";
 import { clientId, isTokenShell } from "@/lib/shell";
 import { getNativeToken } from "@/lib/native-session";
@@ -14,6 +14,7 @@ import {
 import { APP_VERSION } from "@/lib/app-version";
 import { currentServerApiLevel, noteClientTooOld } from "@/lib/server-level";
 
+import { submitDurableEntry } from "@/lib/offline";
 import { fetchSyncSnapshot, trackSyncQuery } from "@/lib/sync-reconciliation";
 
 export const trpc = createTRPCReact<AppRouter>();
@@ -44,6 +45,29 @@ export const workspaceLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => 
     ? withWorkspaceId(op.input, getActiveWorkspaceId())
     : withWorkspaceId(op.input, PENDING_WORKSPACE);
   return next(input === op.input ? op : { ...op, input });
+};
+
+/** Save every supported entry write before the transport sees any bytes. */
+export const durableEntryLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => {
+  if (op.type !== "mutation" || !isDurableEntryOp(op.path)) return next(op);
+  const operation = op.path;
+  const input = op.input as Record<string, unknown>;
+  return observable((observer) => {
+    let cancelled = false;
+    void submitDurableEntry(operation, input, (frozen) => new Promise((resolve, reject) => {
+      // Do not cancel a submitted request on unmount. Its saved identity also
+      // survives process death and a reply lost after the server commits.
+      next({ ...op, path: "entries.applyOperation", input: durableEntryEnvelope(operation, frozen) }).subscribe({
+        next: resolve,
+        error: reject,
+      });
+    })).then((result) => {
+      if (!cancelled) { observer.next(result as never); observer.complete(); }
+    }, (error) => {
+      if (!cancelled) observer.error(TRPCClientError.from(error));
+    });
+    return () => { cancelled = true; };
+  });
 };
 
 /** Track query lifetime through decoding, since streamed fetch ends at headers. */
@@ -175,6 +199,8 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
      * `src/lib/trpc.test.ts` asserts rather than assumes.
      */
     fetch(url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
+      if (String(url).includes("entries.applyOperation"))
+        options = { ...options, signal: durableRequestSignal(options?.signal) };
       const query = !options?.method || options.method === "GET";
       return fetchSyncSnapshot(query, () => {
         if (!isTokenShell()) {
@@ -228,6 +254,7 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
   return trpc.createClient({
     links: [
       workspaceLink(),
+      durableEntryLink(),
       syncSnapshotLink(),
       versionRefusalLink(),
       splitLink({

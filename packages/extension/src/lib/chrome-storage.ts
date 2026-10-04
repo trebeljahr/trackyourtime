@@ -29,39 +29,45 @@ export const sessionStorageArea = (): chrome.storage.StorageArea | null =>
 export const localStorageArea = (): chrome.storage.StorageArea | null =>
   resolveArea("local");
 
-/**
- * Adapt one area. Errors are swallowed the same way core's `webStorage` does
- * them: a storage failure here (quota, a torn-down worker, a missing area)
- * must not take down the timer the user is looking at. Losing a queued
- * mutation is the lesser harm.
- */
+/** Strict stores must acknowledge persistence before a write reaches HTTP. */
 export const chromeStorage = (
   area: chrome.storage.StorageArea | null,
+  { strict = false }: { strict?: boolean } = {},
 ): KeyValueStorage => ({
   getItem: async (key) => {
-    if (!area) return null;
+    if (!area) {
+      if (strict) throw new Error("Persistent extension storage is unavailable");
+      return null;
+    }
     try {
       const record: Record<string, unknown> = await area.get(key);
       const value = record[key];
       return typeof value === "string" ? value : null;
-    } catch {
+    } catch (error) {
+      if (strict) throw error;
       return null;
     }
   },
   setItem: async (key, value) => {
-    if (!area) return;
+    if (!area) {
+      if (strict) throw new Error("Persistent extension storage is unavailable");
+      return;
+    }
     try {
       await area.set({ [key]: value });
-    } catch {
-      /* quota exceeded or the area is gone — drop silently */
+    } catch (error) {
+      if (strict) throw error;
     }
   },
   removeItem: async (key) => {
-    if (!area) return;
+    if (!area) {
+      if (strict) throw new Error("Persistent extension storage is unavailable");
+      return;
+    }
     try {
       await area.remove(key);
-    } catch {
-      /* ignore */
+    } catch (error) {
+      if (strict) throw error;
     }
   },
 });

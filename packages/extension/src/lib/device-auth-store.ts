@@ -57,7 +57,7 @@ export type PendingDeviceAuth = {
 export type DeviceSignInError = "denied" | "expired" | "failed";
 
 const storage = (): ReturnType<typeof chromeStorage> =>
-  chromeStorage(sessionStorageArea());
+  chromeStorage(sessionStorageArea(), { strict: true });
 
 const text = (value: unknown): string | null =>
   typeof value === "string" && value !== "" ? value : null;

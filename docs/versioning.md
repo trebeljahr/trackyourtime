@@ -422,8 +422,8 @@ cannot read is kept and shown, never read as a miss and never overwritten.
 The queue (`trackyourtime.offline-queue`, every client) is written as
 `{ "v": 2, "data": [rows] }` by `createOfflineQueue`, not through
 `decodeVersioned`, whose miss would be an empty queue. A bare array is read
-as version 1. Manual recovery writes version 2 while continuing to read v1
-envelopes and bare arrays. Version 1 readers lock v2 instead of dropping
+as version 1. Manual recovery introduced version 2; durable entry replay writes
+version 3 while continuing to read older envelopes and bare arrays. Version 1 readers lock v2 instead of dropping
 refused changes using their older replay policy. A higher `v` locks the queue:
 its rows are listed as held `unknown-op`, and nothing is written back. A value that does not parse is
 copied to `trackyourtime.offline-queue.corrupt.<ms>` before the queue is reset.
@@ -467,3 +467,35 @@ An upgrade is a deliberate change, released as migration-bearing:
 4. Run the auth integration tests (`two-factor-integration`,
    `session-lifetime-integration`, `organization-http-lockdown`,
    `account-deletion-integration`) against a copy of a real database.
+
+### Durable entry writes (API 12)
+
+Browser, native, extension and Raycast entry writes use `entries.applyOperation`.
+Its envelope names one of the six supported operations (`start`, `stop`,
+`create`, `update`, `remove`, `discard` under `entries`), a UUID `operationId`,
+the workspace, and the normalized input. No client falls back to a legacy
+procedure when this endpoint is missing: an older replica must refuse before
+it can write. MongoDB must be a replica set; a standalone server returns 412
+before writes and the request remains saved on the device.
+
+The local queue saves the operation identity and input before its first HTTP
+attempt, then preserves the exact `submittedInput` across retries. A response
+lost after commit can replay against another replica and receive the same
+receipt. Every request still checks authentication and workspace membership.
+The receipt survives entry deletion; account or workspace deletion removes it.
+
+Queue format v3 makes earlier readers hold the queue rather than replay its
+rows through an unsafe legacy path. Existing rows without an operation identity
+are also held: their original request may already have committed. They can be
+exported or explicitly discarded after checking the server. Automatic recovery
+never invents a new identity for them. A submitted request cannot be edited or
+silently cancelled as a temporary entry; sync it before editing or deleting the
+result. A held submitted request can retry its unchanged input.
+
+Browser and native queues require Web Locks for exclusive access to shared
+storage, including the complete send/checkpoint interval. Unsupported hosts fail
+before sending a write. The extension uses the same lock protocol and requires
+Chrome storage to acknowledge writes. Logging out preserves saved requests under
+their original account; token removal precedes fallible cache cleanup. Raycast uses
+a process-owned macOS file lock. Durable HTTP attempts abort after 30 seconds;
+a timeout retains the original identity and input for retry.

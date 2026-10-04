@@ -365,14 +365,15 @@ describe("a refused token", () => {
     expect(await getOfflineQueue().size()).toBe(1);
   });
 
-  test("forgets any other session whole, queue included", async () => {
+  test("forgets a password session while preserving its owned queued writes", async () => {
     await saveSession({ token: "pw", userId: U, email: null, source: "password" });
     await reload();
     server.mutationsFail = true;
-    await enqueueOffline("entries.start", startInput("dropped"), "tmp_1");
+    await enqueueOffline("entries.start", startInput("kept"), "tmp_1");
     await forgetRejectedSession();
     expect(await loadSession()).toBeNull();
-    expect(await getOfflineQueue().size()).toBe(0);
+    expect(await getOfflineQueue().size()).toBe(1);
+    expect((await getOfflineQueue().list())[0].owner).toBe(U);
   });
 });
 

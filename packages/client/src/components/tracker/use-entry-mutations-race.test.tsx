@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { DetailedEntry, TimeEntry } from "@starter/shared";
 import type { TRPCLink } from "@trpc/client";
+import { DurableQueuedWriteError, durableQueuedWrite } from "@starter/core";
 
 vi.mock("@/mobile/network", () => ({
   getNetworkOnline: () => true,
@@ -41,10 +42,12 @@ vi.mock("@/lib/active-workspace", async (importOriginal) => ({
 }));
 
 const enqueueOffline = vi.fn<typeof import("@/lib/offline").enqueueOffline>(async (): Promise<void> => undefined);
+const retained = vi.fn(async (error: unknown, _tempId?: string) => durableQueuedWrite(error) !== null);
 const amendQueuedStart = vi.fn(async (): Promise<boolean> => false);
 vi.mock("@/lib/offline", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/offline")>()),
   enqueueOffline,
+  retainDurableEntry: retained,
   amendQueuedStart,
   getOfflineQueueOwner: () => scopeOwner,
 }));
@@ -151,7 +154,7 @@ const fakeLink: TRPCLink<never> = () => ({ op }) =>
             observer.complete();
           },
           (error: unknown) => {
-            if (live) observer.error(error);
+            if (live) observer.error(error instanceof TypeError ? new DurableQueuedWriteError("saved-request", error) : error);
           }
         );
       return {
@@ -222,6 +225,8 @@ beforeEach(() => {
   heldCalls.clear();
   callOrder = [];
   callInputs.clear();
+  retained.mockReset();
+  retained.mockImplementation(async (error) => durableQueuedWrite(error) !== null);
   enqueueOffline.mockReset();
   enqueueOffline.mockResolvedValue(undefined);
   scopeWorkspace = null;
@@ -314,7 +319,7 @@ describe("entry mutations racing each other", () => {
     expect(callOrder).toEqual(["entries.start", "entries.update", "entries.stop"]);
   });
 
-  it("queues the adjusted start when the initial Start loses its connection", async () => {
+  it("retains the submitted start without minting another identity after connection loss", async () => {
     serverEntries = [];
     mount();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -327,7 +332,9 @@ describe("entry mutations racing each other", () => {
     act(() => { void mutations?.updateEntry({ id: tempId, start: earlier }); });
     await act(async () => start.reject(new TypeError("Failed to fetch")));
     await waitFor(() => expect(queryClient.isMutating()).toBe(0));
-    expect(enqueueOffline).toHaveBeenCalledWith("entries.start", expect.objectContaining({ start: earlier }), tempId, null, expect.objectContaining({ owner: null }));
+    expect(durableQueuedWrite(retained.mock.calls[0]?.[0])).not.toBeNull();
+    expect(retained.mock.calls[0]?.[1]).toBe(tempId);
+    expect(enqueueOffline).toHaveBeenCalledWith("entries.update", expect.objectContaining({ id: tempId, start: earlier }), tempId, null, expect.objectContaining({ owner: null }));
   });
 
   it("keeps a just-started timer on the list when an earlier stop settles", async () => {
@@ -520,16 +527,9 @@ describe("a stop pressed while the start is still in flight", () => {
     await act(async () => {
       stop.reject(new TypeError("Failed to fetch"));
     });
-    await waitFor(() => expect(enqueueOffline).toHaveBeenCalledTimes(1));
-
-    const [op, input, tempId] = enqueueOffline.mock.calls[0] as unknown as [
-      string,
-      { id?: string },
-      string | undefined,
-    ];
-    expect(op).toBe("entries.stop");
-    expect(input.id).toBe("e2");
-    expect(tempId).toBeUndefined();
+    await waitFor(() => expect(retained).toHaveBeenCalledTimes(1));
+    expect(callInputs.get("entries.stop")).toMatchObject({ id: "e2" });
+    expect(enqueueOffline).not.toHaveBeenCalled();
     expect(screen.queryByTestId("running")).toBeNull();
   });
 });
@@ -581,10 +581,10 @@ describe("draft mutation completion", () => {
       expect(enqueueOffline).not.toHaveBeenCalled();
     });
 
-    it(`${operation} waits for durable offline storage`, async () => {
+    it(`${operation} waits for the saved row metadata to settle`, async () => {
       const request = deferred<unknown>();
       const storage = deferred<void>();
-      enqueueOffline.mockReturnValueOnce(storage.promise);
+      retained.mockReturnValueOnce(storage.promise.then(() => true));
       held.set(path, request);
       mount();
       await screen.findByText("Before");
@@ -593,7 +593,7 @@ describe("draft mutation completion", () => {
       act(() => { result = begin(); void result.then(() => { settled = true; }); });
       await waitFor(() => expect(heldCalls.get(path)).toBe(1));
       await act(async () => request.reject(new TypeError("Failed to fetch")));
-      await waitFor(() => expect(enqueueOffline).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(retained).toHaveBeenCalledTimes(1));
       expect(settled).toBe(false);
       expect(screen.getByTestId("rows")).toHaveTextContent("Draft");
       await act(async () => { storage.resolve(); expect(await result).toEqual({ ok: true, saved: "offline", entry: expect.objectContaining({ description: "Draft" }) }); });
@@ -601,7 +601,6 @@ describe("draft mutation completion", () => {
 
     it(`${operation} returns failure and rolls back when storage fails`, async () => {
       const request = deferred<unknown>();
-      enqueueOffline.mockRejectedValueOnce(new Error("Storage quota exceeded"));
       held.set(path, request);
       mount();
       await screen.findByText("Before");
@@ -609,8 +608,8 @@ describe("draft mutation completion", () => {
       act(() => { result = begin(); });
       await waitFor(() => expect(heldCalls.get(path)).toBe(1));
       await act(async () => {
-        request.reject(new TypeError("Failed to fetch"));
-        expect(await result).toEqual({ ok: false, message: expect.stringContaining("storage space") });
+        request.reject(new Error("Storage quota exceeded"));
+        expect(await result).toEqual({ ok: false, message: expect.any(String) });
       });
       await waitFor(() => expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft"));
     });
@@ -618,15 +617,14 @@ describe("draft mutation completion", () => {
     it(`${operation} keeps the draft unsaved when its original identity is unresolved`, async () => {
       const request = deferred<unknown>();
       held.set(path, request);
-      enqueueOffline.mockRejectedValueOnce(new OfflineQueueScopeNotReadyError());
       mount();
       await screen.findByText("Before");
       let result!: ReturnType<typeof begin>;
       act(() => { result = begin(); });
       await waitFor(() => expect(heldCalls.get(path)).toBe(1));
       await act(async () => {
-        request.reject(new TypeError("Failed to fetch"));
-        expect(await result).toEqual({ ok: false, message: expect.stringContaining("account or workspace is still loading") });
+        request.reject(new OfflineQueueScopeNotReadyError());
+        expect(await result).toEqual({ ok: false, message: expect.any(String) });
       });
       await waitFor(() => expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft"));
     });
@@ -648,7 +646,9 @@ describe("draft mutation completion", () => {
       serverEntries = [other];
       queryClient.setQueryData([["entries", "list"], { input: TRACKER_LIST_INPUT, type: "infinite" }], { pages: [{ entries: [other] }], pageParams: [null] });
       await act(async () => { request.reject(new TypeError("Failed to fetch")); await result; });
-      expect(enqueueOffline).toHaveBeenCalledWith(path, expect.objectContaining({ workspaceId: "ws-a" }), (operation === "create" ? expect.any(String) : undefined), "ws-a", expect.objectContaining({ owner: "u-a" }));
+      expect(callInputs.get(path)).toMatchObject({ __durableScope: { workspaceId: "ws-a", owner: "u-a" } });
+      expect(retained).toHaveBeenCalledTimes(1);
+      expect(enqueueOffline).not.toHaveBeenCalled();
       await waitFor(() => expect(screen.getByTestId("rows")).toHaveTextContent("Other workspace"));
       await waitFor(() => expect(screen.getByTestId("rows")).not.toHaveTextContent("Draft"));
     });
@@ -677,7 +677,7 @@ describe("draft mutation completion", () => {
     const saved = await result;
     expect(saved).toMatchObject({ ok: true, saved: "offline", entry: { workspaceId: "ws-a", authorId: "u-a", description: "Draft", start: manual.start, end: manual.end, source: "web" } });
     if (!saved.ok || !saved.entry) throw new Error("missing created entry");
-    expect(saved.entry.id).toBe(enqueueOffline.mock.calls[0]?.[2]);
+    expect(saved.entry.id).toBe(retained.mock.calls[0]?.[1]);
     expect(saved.entry.id).toMatch(/^temp-/);
     expect(queryClient.getQueryData([["entries", "list"], { input: TRACKER_LIST_INPUT, type: "infinite" }])).toBeUndefined();
   });
@@ -692,12 +692,11 @@ describe("draft mutation completion", () => {
   it("does not resume idle work after the offline stop failed to persist", async () => {
     const stop = deferred<unknown>();
     held.set("entries.stop", stop);
-    enqueueOffline.mockRejectedValueOnce(new Error("Disk full"));
     mount();
     await screen.findByText("Before");
     act(() => mutations!.splitAtIdle({ end: "2026-10-01T09:00:00.000Z", resume: { description: "Resume", projectId: null, billable: false } }));
     await waitFor(() => expect(heldCalls.get("entries.stop")).toBe(1));
-    await act(async () => stop.reject(new TypeError("Failed to fetch")));
+    await act(async () => stop.reject(new Error("Disk full")));
     await settleAll();
     expect(heldCalls.get("entries.start")).toBeUndefined();
   });

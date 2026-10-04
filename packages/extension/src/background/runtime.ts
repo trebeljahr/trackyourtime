@@ -21,6 +21,9 @@ import {
   serverLevelHold,
   createId,
   createOfflineQueue,
+  durableEntryEnvelope,
+  durableQueuedWrite,
+  webQueueExclusive,
   replayOfflineMutation,
   type OfflineReplayMutators,
   type ReplayIdMap,
@@ -458,11 +461,28 @@ export async function switchWorkspace(workspaceId: string): Promise<boolean> {
  */
 export const getOfflineQueue = (): OfflineQueue => {
   queue ??= createOfflineQueue({
-    storage: chromeStorage(localStorageArea()),
+    storage: chromeStorage(localStorageArea(), { strict: true }),
     key: OFFLINE_QUEUE_STORAGE_KEY,
+    durableEntries: true,
+    exclusive: webQueueExclusive(OFFLINE_QUEUE_STORAGE_KEY),
   });
   return queue;
 };
+
+/** Persist the exact input before the first request, including a live write. */
+export async function submitEntry<T>(op: OfflineOp, input: unknown, tempId?: string): Promise<T> {
+  const current = await ensureReady();
+  const owner = getKnownUserId();
+  const workspaceId = (input as { workspaceId?: string }).workspaceId ?? getActiveWorkspaceId();
+  if (!current.session || !owner || !workspaceId)
+    throw new Error("Sign in and select a workspace before recording time");
+  const server = current.apiUrl;
+  return getOfflineQueue().submit(op, { input, ...(tempId ? { tempId } : {}) }, { owner, server, workspaceId }, (row) => {
+    if (getKnownUserId() !== owner || runtime?.apiUrl !== server)
+      throw new Error("The signed-in account or server changed before sending");
+    return current.api.mutate<T>("entries.applyOperation", durableEntryEnvelope(op, row.submittedInput));
+  });
+}
 
 export async function enqueueOffline<K extends OfflineOp>(
   op: K,
@@ -474,7 +494,14 @@ export async function enqueueOffline<K extends OfflineOp>(
    * attempt hung — and then the row must go where the attempt went.
    */
   workspaceId?: string | null,
+  savedError?: unknown,
 ): Promise<void> {
+  const saved = durableQueuedWrite(savedError);
+  if (saved) {
+    if (tempId) await getOfflineQueue().amendPayloads((row) => row.id === saved.rowId
+      ? { ...(row.payload as StoredOfflinePayload), tempId } : undefined);
+    return;
+  }
   const payload: StoredOfflinePayload = tempId ? { input, tempId } : { input };
   // Stamped with the server it was made against. Switching servers clears the
   // queue today, so this is defence in depth rather than the mechanism: a row
@@ -709,15 +736,15 @@ export async function clearOptimisticEntries(): Promise<void> {
  */
 export async function cancelQueuedForTemp(tempId: string): Promise<boolean> {
   const offline = getOfflineQueue();
-  const rows = await offline.list();
   let removed = false;
-
-  for (const row of rows) {
-    const decoded = decodeOfflineMutation(row);
-    if (decoded?.tempId !== tempId) continue;
-    await offline.remove(row.id);
-    removed = true;
-  }
+  await offline.amendRows((rows) => {
+    const matches = rows.filter((row) => !isForeignTo(row, getKnownUserId()) && decodeOfflineMutation(row)?.tempId === tempId);
+    if (matches.some((row) => row.submittedInput !== undefined || typeof (row.payload as { input?: { operationId?: unknown } })?.input?.operationId !== "string"))
+      throw new Error("This entry may already be saved. Sync it before deleting it.");
+    const ids = new Set(matches.map((row) => row.id));
+    removed = ids.size > 0;
+    return rows.filter((row) => !ids.has(row.id));
+  });
 
   return removed;
 }
@@ -1760,28 +1787,39 @@ export const refreshBadgeFromCache = async (): Promise<void> => {
   }
 };
 
+const clearStoredSession = async (): Promise<void> => {
+  // Attempt both removals even if one fails. Never report success when a
+  // token or pending authorization could revive after a worker restart.
+  const removals = await Promise.allSettled([clearSession(), clearPendingDeviceAuth()]);
+  try { await chrome.alarms.clear(DEVICE_AUTH_ALARM); } catch { /* No alarm API in some hosts. */ }
+  for (const result of removals) if (result.status === "rejected") throw result.reason;
+};
+
 /**
- * Drop the local token and everything derived from it.
+ * Drop the local token and account caches; preserve owner-stamped saved writes.
  *
  * Called both on an explicit sign-out and when the server rejects the token.
  * In both cases the token is worthless, and keeping it would only produce more
  * 401s on every subsequent poll.
  */
 export async function forgetSession(): Promise<void> {
-  // The queue is only meaningful under the token that authorized it. Replaying
-  // one account's queued start under the next account's token would write that
-  // work into the wrong account, and `flushQueue` runs on sign-in, on bootstrap
-  // and on every socket reconnect — so the rows must not outlive the token.
-  await getOfflineQueue().clear();
+  // A token refusal is not a verdict on saved work. Keep it owned by the
+  // departed account, and stop in-flight senders before waiting on the queue.
+  const departing = getKnownUserId();
+  const server = runtime?.apiUrl ?? DEFAULT_API_URL;
+  if (runtime) runtime.session = null;
+  knownUserId = null;
+  await clearStoredSession();
+  if (departing) await getOfflineQueue().adoptUnowned(departing, (row) => isQueuedOn(row, server, DEFAULT_API_URL));
   await forgetOptimisticRunning();
-  // For the same reason as the queue itself: the overlay only ever describes
+  // Unlike the saved requests, this overlay only ever describes
   // rows in the account being left, and a leftover row would paint over the
   // next account's entry window.
   await clearOptimisticEntries();
   // The watcher's ownership claim names an entry in the account being left.
   await resetIdleWatcher();
   // Captured activity, filing rules and dismissals are one person's, in one
-  // workspace — cleared for the same reason the queue is, and the scope with
+  // workspace — cleared with the account caches, and the scope with
   // them so nothing more is recorded until somebody signs in again. A storage
   // failure must not keep the token alive, so it is swallowed.
   await deleteAllActivity({ forgetScope: true }).catch(() => undefined);
@@ -1791,15 +1829,6 @@ export async function forgetSession(): Promise<void> {
   await clearWorkspaceChoice();
   workspaceChoice = emptyWorkspaceChoice();
 
-  // A device authorization still waiting would sign straight back in.
-  await clearPendingDeviceAuth();
-  try {
-    await chrome.alarms.clear(DEVICE_AUTH_ALARM);
-  } catch {
-    /* no alarm, or no alarms API in this context */
-  }
-
-  await clearSession();
   await reload();
   await renderBadge(null);
 }
@@ -1814,13 +1843,16 @@ export async function forgetRejectedSession(): Promise<void> {
     await forgetSession();
     return;
   }
+  // Fence queued senders before the asynchronous cache cleanup.
+  current.session = null;
+  knownUserId = null;
+  await clearStoredSession();
   // The token is dead: nothing to flush with and nothing to revoke.
   await forgetOptimisticRunning();
   await clearOptimisticEntries();
   await resetIdleWatcher();
   await clearWorkspaceChoice();
   workspaceChoice = emptyWorkspaceChoice();
-  await clearSession();
   await reload();
   await renderBadge(null);
 }
@@ -1833,11 +1865,9 @@ export const isUnauthorized = (error: unknown): boolean =>
   (error.httpStatus === 401 || error.code === "UNAUTHORIZED");
 
 /**
- * True when the request never reached the server, so the mutation is safe to
- * queue and replay later. `ApiError` is only ever thrown once an HTTP response
- * has come back, which makes "not an `ApiError`" a precise test for a
- * transport failure — no message sniffing, unlike the web client, which has to
- * classify tRPC's own error objects.
+ * A transport-shaped failure for read fallbacks. A failed connection cannot
+ * tell whether a write committed, so entry mutations use the saved durable
+ * request instead of creating a fresh queue row from this classification.
  */
 export const isTransportFailure = (error: unknown): boolean =>
   !(error instanceof ApiError);
@@ -1895,8 +1925,8 @@ export async function flushQueue(): Promise<number> {
   // Whose rows these may be. Nobody known means nothing is sent: a row
   // replayed under the wrong account files one person's time in another's
   // workspace. Rows from before the owner stamp are this account's — the
-  // queue is cleared on every explicit sign-out, so no other account can have
-  // left unstamped rows behind.
+  // queue is owner-stamped on every sign-out, so another account cannot claim
+  // rows left behind by the departed session.
   const me = getKnownUserId() ?? (await resolveSettings())?.userId ?? null;
   if (me === null) return pendingSyncCount();
   await offline.adoptUnowned(me, (row) =>
@@ -1919,10 +1949,11 @@ export async function flushQueue(): Promise<number> {
       let replayed: unknown;
       let verdict: void | FlushVerdict;
       try {
-        // The op string *is* the tRPC path, by design — so there is no dispatch
-        // table here to drift out of step with the queue contract.
+        // Every supported operation uses the dedicated durable envelope. An
+        // older replica must refuse this path before it performs any write.
         const send = async (input: unknown): Promise<unknown> => {
-          replayed = await current.api.mutate(decoded.op, input);
+          if (runtime !== current || getKnownUserId() !== me) throw new Error("Queue account changed before replay");
+          replayed = await current.api.mutate("entries.applyOperation", durableEntryEnvelope(decoded.op, input));
           return replayed;
         };
         const mutators: OfflineReplayMutators = {

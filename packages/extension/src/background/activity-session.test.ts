@@ -1,7 +1,7 @@
 /**
  * The two places activity capture meets the session: an accepted suggestion
  * leaving through the ordinary create path (offline queue included), and
- * sign-out taking every stored row with it.
+ * sign-out removing captured browsing activity.
  */
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
@@ -23,6 +23,8 @@ import {
 import { acceptSuggestion, resolveActivitySnapshot, setActivityDay } from "./entries";
 import { forgetSession, getOfflineQueue, reload } from "./runtime";
 import { saveSession } from "../lib/session";
+import { saveWorkspaceChoice } from "../lib/workspace-choice";
+import { DEFAULT_API_URL } from "../lib/config";
 
 const MIN = 60_000;
 const T0 = Date.parse("2026-09-14T09:00:00.000Z");
@@ -61,6 +63,7 @@ beforeEach(async () => {
     throw new TypeError("fetch failed");
   }));
   await saveSession({ token: "token-1", userId: "user-1", email: "a@example.com" });
+  await saveWorkspaceChoice({ server: DEFAULT_API_URL, userId: "user-1", workspaceId: "ws-1", workspaces: null, names: { "ws-1": "Synthetic" } });
   await reload();
 });
 

@@ -81,3 +81,47 @@ test("standalone Mongo refusal holds the saved request for deliberate retry", as
   const result = await classifyReplayOutcome(new ApiError("DURABLE_REPLAY_REQUIRES_REPLICA_SET", "PRECONDITION_FAILED", 412), { op: "entries.start" });
   assert.deepEqual(result, { kind: "hold", reason: "refused", message: "DURABLE_REPLAY_REQUIRES_REPLICA_SET", code: "PRECONDITION_FAILED" });
 });
+
+
+test("an edit made during a lost start reply resolves its target before freezing its own request", async () => {
+  const { replayOfflineMutation } = await import("../offline-replay.js");
+  const { scopedTempIdOf } = await import("../offline-ops.js");
+  const storage = memoryStorage();
+  const queue = createOfflineQueue({ storage, exclusive, durableEntries: true });
+  await assert.rejects(queue.submit("entries.start", { input, tempId: "temp-start" }, scope, async () => { throw new TypeError("lost"); }));
+  await queue.enqueue("entries.update", { input: { id: "temp-start", start: "2026-10-03T00:00:00.000Z", originId: "fixture" }, tempId: "temp-start" }, scope.owner, scope.server, scope.workspaceId);
+  let attempted: unknown;
+  const report = await queue.flush(async (row) => {
+    const decoded = decodeOfflineMutation(row)!;
+    return replayOfflineMutation({
+      "entries.start": async () => ({ id: "real-entry" }),
+      "entries.update": async (body) => { attempted = body; throw new TypeError("lost edit reply"); },
+      "entries.stop": async () => undefined, "entries.create": async () => undefined,
+      "entries.remove": async () => undefined, "entries.discard": async () => undefined,
+    }, { noteServerId: () => undefined }, decoded);
+  }, { chainOf: scopedTempIdOf });
+  assert.equal(report.flushed, 1);
+  const [remaining] = await queue.list();
+  assert.equal(remaining!.submittedInput!.id, "real-entry");
+  assert.deepEqual(remaining!.submittedInput, attempted);
+});
+
+test("a failed freeze checkpoint retains the already saved row without inviting a new submission", async () => {
+  const base = memoryStorage();
+  let writes = 0;
+  const storage = { ...base, setItem: async (key: string, value: string) => {
+    writes += 1;
+    if (writes === 2) throw new Error("checkpoint failed");
+    await base.setItem(key, value);
+  } };
+  const queue = createOfflineQueue({ storage, exclusive, durableEntries: true });
+  let sent = false;
+  let failure: unknown;
+  try { await queue.submit("entries.start", { input }, scope, async () => { sent = true; }); }
+  catch (error) { failure = error; }
+  const rows = await queue.list();
+  assert.equal(sent, false);
+  assert.equal(rows.length, 1);
+  assert.equal(durableQueuedWrite(failure)?.rowId, rows[0]!.id);
+  assert.ok((rows[0]!.payload as { input: { operationId: string } }).input.operationId);
+});

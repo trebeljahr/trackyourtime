@@ -383,6 +383,8 @@ export const classifyReplayOutcome = async <R extends ReplayRow>(
 
   const facts = (context.readFacts ?? readReplayErrorFacts)(error);
   if (facts === null) return { kind: "retry-later", reason: "server" };
+  if (facts.message === "DURABLE_REPLAY_REQUIRES_REPLICA_SET")
+    return { kind: "hold", reason: "refused", message: facts.message, code: facts.code ?? undefined };
   if (facts.code === "UNAUTHORIZED" || facts.httpStatus === 401) {
     return { kind: "retry-later", reason: "unauthorized" };
   }

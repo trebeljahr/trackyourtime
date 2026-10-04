@@ -59,7 +59,7 @@ describe("browser offline save durability", () => {
     const read = vi.spyOn(Storage.prototype, "getItem").mockImplementationOnce(() => { throw new Error("Storage denied"); });
     await expect(enqueueOffline("entries.create", input, "temp-second", "ws-a")).rejects.toThrow("Storage denied");
     read.mockRestore();
-    expect((await getOfflineQueue().list()).map((row) => row.payload)).toEqual([{ input, tempId: "temp-first" }]);
+    expect((await getOfflineQueue().list()).map((row) => row.payload)).toEqual([{ input: { ...input, operationId: expect.any(String) }, tempId: "temp-first" }]);
   });
 
   it("acknowledges persistence even when the pending-count refresh fails", async () => {

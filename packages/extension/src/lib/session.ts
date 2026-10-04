@@ -37,7 +37,7 @@ export type StoredSession = {
 export type SessionInput = Omit<StoredSession, "source"> & { source?: SessionSource };
 
 const storage = (): ReturnType<typeof chromeStorage> =>
-  chromeStorage(sessionStorageArea());
+  chromeStorage(sessionStorageArea(), { strict: true });
 
 const asStringOrNull = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;

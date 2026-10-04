@@ -52,13 +52,19 @@ export const freezeDurableEntry = (row: QueuedMutation): QueuedMutation => {
 };
 
 /** New protocol path: an old replica refuses before it can perform a write. */
-export const durableEntryEnvelope = (op: string, input: unknown) => {
+export function durableEntryEnvelope<K extends DurableEntryOp, I extends object>(op: K, input: I): {
+  operation: K; operationId: string; workspaceId?: string; input: Omit<I, "operationId" | "workspaceId">;
+};
+export function durableEntryEnvelope(op: string, input: unknown): {
+  operation: DurableEntryOp; operationId: string; workspaceId?: string; input: Record<string, unknown>;
+};
+export function durableEntryEnvelope(op: string, input: unknown) {
   if (!isDurableEntryOp(op) || typeof input !== "object" || input === null)
     throw new Error("Invalid durable entry operation");
   const { operationId, workspaceId, ...payload } = input as Record<string, unknown>;
   if (typeof operationId !== "string") throw new Error("Missing durable operation identity");
   return { operation: op, operationId, ...(typeof workspaceId === "string" ? { workspaceId } : {}), input: payload };
-};
+}
 
 export class DurableQueuedWriteError extends Error {
   constructor(readonly rowId: string, cause?: unknown) {

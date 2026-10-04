@@ -3,12 +3,13 @@ import { createOfflineQueue, memoryStorage, type TimeEntry } from "@starter/core
 
 const api = { mutate: vi.fn() };
 let running: TimeEntry | null = null;
-let queue = createOfflineQueue({ storage: memoryStorage() });
+let queue = createOfflineQueue({ storage: memoryStorage(), durableEntries: true });
 const remember = vi.fn(async (_entry: TimeEntry) => undefined);
 vi.mock("./badge", () => ({ renderBadge: vi.fn(async () => undefined) }));
 vi.mock("./idle-state", () => ({ noteLocalStart: vi.fn(), noteLocalStop: vi.fn() }));
 vi.mock("./runtime", () => ({
   ensureReady: async () => ({ session: { userId: "user" }, api, apiUrl: "https://api.test" }),
+  submitEntry: (op: string, input: unknown) => api.mutate(op, input),
   addressedWrite: () => ({ workspaceId: "ws", address: (input: object) => ({ ...input, workspaceId: "ws" }) }),
   flushQueue: async () => queue.size(),
   getCachedProjects: () => [],
@@ -37,7 +38,7 @@ const entry = (start: string): TimeEntry => ({
 const earlier = "2026-09-30T08:00:00.000Z";
 beforeEach(() => {
   running = null;
-  queue = createOfflineQueue({ storage: memoryStorage() });
+  queue = createOfflineQueue({ storage: memoryStorage(), durableEntries: true });
   api.mutate.mockReset();
   remember.mockClear();
 });
@@ -56,11 +57,13 @@ test("an immediate start-time edit waits for Start and reaches the newly created
 });
 
 test("offline start-time edits amend the durable start without sending a temporary id", async () => {
-  api.mutate.mockRejectedValueOnce(new TypeError("offline"));
+  // An older unsent operation makes Start queue before any HTTP attempt.
+  await queue.enqueue("entries.remove", { input: { id: "older", originId: "test" } }, "user", "https://api.test", "ws");
   await startTimer("Work", null);
+  await queue.amendRows((rows) => rows.filter((row) => row.op !== "entries.remove"));
   const tempId = running?.id;
   await updateRunning({ start: earlier });
-  expect(api.mutate).toHaveBeenCalledTimes(1);
+  expect(api.mutate).not.toHaveBeenCalled();
   expect(running?.start).toBe(earlier);
   expect(remember).toHaveBeenLastCalledWith(expect.objectContaining({ id: tempId, start: earlier }));
   const rows = await queue.list();

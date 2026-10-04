@@ -54,9 +54,11 @@ let listAnswer: () => Promise<WorkspaceSummary[]> = async () => [];
 const mutation = (op: string) => ({
   useMutation: () => ({
     mutateAsync: async (input: Record<string, unknown>) => {
-      const failure = failNext.get(`${op}:${String(input.description ?? "")}`);
+      const operation = op === "entries.applyOperation" ? String(input.operation) : op;
+      if (op === "entries.applyOperation") input = { ...(input.input as Record<string, unknown>), workspaceId: input.workspaceId, operationId: input.operationId };
+      const failure = failNext.get(`${operation}:${String(input.description ?? "")}`);
       if (failure !== undefined) throw failure;
-      sent.push({ op, input });
+      sent.push({ op: operation, input });
       return { id: `real-${sent.length}`, replaced: null };
     },
   }),
@@ -78,6 +80,7 @@ vi.mock("@/lib/trpc", () => {
         },
       },
       entries: {
+        applyOperation: mutation("entries.applyOperation"),
         start: mutation("entries.start"),
         stop: mutation("entries.stop"),
         create: mutation("entries.create"),

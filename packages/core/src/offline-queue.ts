@@ -596,10 +596,10 @@ export const createOfflineQueue = ({
       // depend on the running timer, so never leapfrog it on a guess.
       if (rows.some((earlier) => earlier.id !== row.id && earlier.owner === row.owner && earlier.server === row.server))
         throw new DurableQueuedWriteError(row.id);
-      const frozen = freezeDurableEntry(row);
-      rows[rows.length - 1] = frozen;
-      await write(rows);
       try {
+        const frozen = freezeDurableEntry(row);
+        rows[rows.length - 1] = frozen;
+        await write(rows);
         const result = await runner(frozen);
         await write(rows.filter((item) => item.id !== row.id));
         return result;
@@ -805,7 +805,7 @@ export const createOfflineQueue = ({
             mutations = mutations.map((next, nextIndex) => {
               if (
                 nextIndex <= index ||
-                next.op !== "entries.stop" ||
+                (next.op !== "entries.stop" && next.op !== "entries.update") ||
                 link === undefined ||
                 chainOf(next) !== link
               )

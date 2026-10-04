@@ -40,6 +40,7 @@ export default defineConfig({
     },
   },
   test: {
+    setupFiles: ["./src/test-queue-locks.ts"],
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },

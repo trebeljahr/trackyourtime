@@ -1,37 +1,12 @@
 // @vitest-environment jsdom
-/**
- * What `useEntryMutations` puts in the offline queue, and when.
- *
- * Two regressions, both of which lose tracked time silently and neither of
- * which any existing spec could see, because they only happen on the paths
- * where the query cache has never answered:
- *
- *  1. **An offline mutation during a page teardown was dropped.** The unload
- *     guard exists to stop a mutation whose bytes the server already has from
- *     being replayed as a duplicate. But `isNetworkError()` is unconditionally
- *     true while offline, so an airplane-mode start or stop that coincided
- *     with a reload or a tab close reached the same guard and was thrown away
- *     — in exactly the case the queue exists for. The guard now also requires
- *     the device to have been online, because with no radio there are no bytes
- *     for the server to have received.
- *
- *  2. **A stop queued after a cold offline launch named no entry.** The
- *     running timer is restored from the mirror into the timer store, not into
- *     the React Query cache, so `entries.current.getData()` is `undefined` and
- *     the queued `entries.stop` carried neither `id` nor `tempId`. On replay
- *     that degrades to "stop whatever is running", which days later is a
- *     different entry, possibly on another device.
- *
- * The hook is driven through a fake `@/lib/trpc`: `useMutation` records the
- * options object it is handed, and the spec calls `onMutate`/`onError` the way
- * React Query would. That keeps the real `handleError`, the real payload
- * construction and the real `isNetworkError` in the test — only the transport
- * and the network verdict are faked.
+/** Optimistic metadata is fixed before the durable transport saves a write.
+ * The transport itself is exercised by lib/durable-entry.test.ts. These hook
+ * tests retain an already-saved row after teardown and preserve stop targets.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import type { TimeEntry } from "@starter/shared";
-import type { OfflineOp, OfflinePayloadMap } from "@starter/core";
+import { DurableQueuedWriteError, type OfflineOp, type OfflinePayloadMap } from "@starter/core";
 
 // ── the fakes ────────────────────────────────────────────────────────
 
@@ -54,6 +29,7 @@ vi.mock("@/lib/offline", async (importOriginal) => {
   return {
     ...actual,
     isDocumentUnloading: () => unloading,
+    retainDurableEntry: async (error: unknown) => error instanceof DurableQueuedWriteError,
     enqueueOffline: async (
       op: OfflineOp,
       input: unknown,
@@ -170,7 +146,7 @@ const entry = (over: Partial<TimeEntry> = {}): TimeEntry =>
   }) as unknown as TimeEntry;
 
 /** A dead radio: no `data.code`, and `isNetworkError` sees `isOnline()` false. */
-const transportFailure = new TypeError("Load failed");
+const transportFailure = new DurableQueuedWriteError("saved-row", new TypeError("Load failed"));
 
 function Probe(): null {
   useEntryMutations();
@@ -194,8 +170,11 @@ const optionsFor = (path: string): MutationOptions => {
 /** Run one mutation's optimistic + error path, as React Query would. */
 const failMutation = async (path: string, input: unknown): Promise<void> => {
   const opts = optionsFor(path);
-  const context = await opts.onMutate?.(input);
-  await opts.onError?.(transportFailure, input, context);
+  const raw = structuredClone(input) as Record<string, unknown>;
+  const context = await opts.onMutate?.(raw);
+  const { __durableTempId, ...payload } = raw;
+  enqueued.push({ op: path as OfflineOp, input: payload, tempId: typeof __durableTempId === "string" ? __durableTempId : undefined });
+  await opts.onError?.(transportFailure, raw, context);
 };
 
 beforeEach(() => {
@@ -238,7 +217,7 @@ describe("a mutation that fails while the document is unloading", () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
-  it("is dropped when the device was online — the server likely has it", async () => {
+  it("keeps its existing durable row when the online reply is lost", async () => {
     online = true;
     unloading = true;
     currentData = null;
@@ -246,8 +225,7 @@ describe("a mutation that fails while the document is unloading", () => {
 
     await failMutation("entries.start", startInput);
 
-    expect(enqueued).toEqual([]);
-    // Not a rollback either: the reload about to happen re-reads the server.
+    expect(enqueued.map((row) => row.op)).toEqual(["entries.start"]);
     expect(toastError).not.toHaveBeenCalled();
   });
 

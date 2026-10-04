@@ -8,6 +8,7 @@
  * rather than erroring.
  */
 import {
+  durableQueuedWrite,
   createTempId,
   decodeOfflineMutation,
   isForeignTo,
@@ -26,13 +27,13 @@ import {
   addressedWrite,
   ensureReady,
   enqueueOffline,
+  submitEntry,
   flushQueue,
   getCachedProjects,
   getKnownUserId,
   getOfflineQueue,
   invalidateRecents,
   markEntriesStale,
-  isTransportFailure,
   ORIGIN_ID,
   rememberOptimisticRunning,
   resolveRunning,
@@ -143,7 +144,7 @@ async function startTimerNow(
   }
 
   try {
-    const entry = await current.api.mutate<TimeEntry>(
+    const entry = await submitEntry<TimeEntry>(
       "entries.start",
       write.address(input),
     );
@@ -158,11 +159,10 @@ async function startTimerNow(
     await renderBadge(entry);
     return entry;
   } catch (error) {
-    // A server rejection (validation, conflict, expired token) means the
-    // mutation was seen and refused — replaying it would only be refused
-    // again, so it goes back to the popup instead of into the queue.
-    if (!isTransportFailure(error)) throw error;
-    return queueStart(input, current.session.userId ?? "", write.workspaceId);
+    // Retain the persisted identity; a local setup/storage failure cannot
+    // become a fresh optimistic request.
+    if (!durableQueuedWrite(error)) throw error;
+    return queueStart(input, current.session.userId ?? "", write.workspaceId, error);
   }
 }
 
@@ -170,9 +170,10 @@ const queueStart = async (
   input: OfflineStartInput,
   authorId: string,
   workspaceId: string | null,
+  savedError?: unknown,
 ): Promise<TimeEntry> => {
   const tempId = createTempId();
-  await enqueueOffline("entries.start", input, tempId, workspaceId);
+  await enqueueOffline("entries.start", input, tempId, workspaceId, savedError);
   const entry = optimisticEntry(input, tempId, authorId);
   setCachedRunning(entry);
   // On disk as well as in memory: the queued row outlives this worker, so the
@@ -194,10 +195,10 @@ async function stopTimerNow(
   if (!current.session) throw notSignedIn();
   const running = await resolveRunning();
 
-  // No `id`, deliberately: on replay the server stops whatever the
-  // already-replayed start opened, which is the only entry that can still be
-  // running by then. Pinning an id would name an entry that may not exist.
+  // Name a known server entry now. A queued start's temp identity is kept in
+  // the queue envelope and resolved before the stop's first attempt.
   const input: OfflineStopInput = {
+    ...(running && !isTempId(running.id) ? { id: running.id } : {}),
     end: endIso ?? requestedAt ?? new Date().toISOString(),
     originId: ORIGIN_ID,
   };
@@ -215,14 +216,14 @@ async function stopTimerNow(
   }
 
   try {
-    await current.api.mutate<TimeEntry>("entries.stop", write.address(input));
+    await submitEntry<TimeEntry>("entries.stop", write.address(input));
     setCachedRunning(null);
     invalidateRecents();
     markEntriesStale();
     await renderBadge(null);
   } catch (error) {
-    if (!isTransportFailure(error)) throw error;
-    await queueStop(input, write.workspaceId, running);
+    if (!durableQueuedWrite(error)) throw error;
+    await queueStop(input, write.workspaceId, running, error);
   }
 }
 
@@ -230,8 +231,9 @@ const queueStop = async (
   input: OfflineStopInput,
   workspaceId: string | null,
   running: TimeEntry | null,
+  savedError?: unknown,
 ): Promise<void> => {
-  await enqueueOffline("entries.stop", input, undefined, workspaceId);
+  await enqueueOffline("entries.stop", input, running && isTempId(running.id) ? running.id : undefined, workspaceId, savedError);
   if (running !== null) {
     await upsertOptimisticEntry({
       ...running,
@@ -313,10 +315,10 @@ async function updateRunningNow(patch: RunningPatch): Promise<void> {
         if (
           isForeignTo(row, getKnownUserId()) ||
           !isQueuedOn(row, current.apiUrl, current.apiUrl) ||
-          row.workspaceId !== (write.workspaceId ?? undefined)
+          row.workspaceId !== (write.workspaceId ?? undefined) || row.submittedInput !== undefined
         ) return undefined;
         const decoded = decodeOfflineMutation(row);
-        if (decoded?.op !== "entries.start" || decoded.tempId !== running.id) return undefined;
+        if (decoded?.op !== "entries.start" || decoded.tempId !== running.id || !decoded.input.operationId) return undefined;
         return { input: { ...decoded.input, start: patch.start }, tempId: running.id };
       });
       if (changed > 0) {
@@ -350,7 +352,7 @@ async function updateRunningNow(patch: RunningPatch): Promise<void> {
   }
 
   try {
-    const entry = await current.api.mutate<TimeEntry>(
+    const entry = await submitEntry<TimeEntry>(
       "entries.update",
       write.address(input),
     );
@@ -359,8 +361,8 @@ async function updateRunningNow(patch: RunningPatch): Promise<void> {
     // most recent combination is labelled with.
     invalidateRecents();
   } catch (error) {
-    if (!isTransportFailure(error)) throw error;
-    await queueUpdate(input, optimistic, write.workspaceId);
+    if (!durableQueuedWrite(error)) throw error;
+    await queueUpdate(input, optimistic, write.workspaceId, error);
   }
 }
 
@@ -368,8 +370,9 @@ const queueUpdate = async (
   input: OfflineUpdateInput,
   optimistic: TimeEntry,
   workspaceId: string | null,
+  savedError?: unknown,
 ): Promise<void> => {
-  await enqueueOffline("entries.update", input, undefined, workspaceId);
+  await enqueueOffline("entries.update", input, undefined, workspaceId, savedError);
   setCachedRunning(optimistic);
   // On disk as well as in memory: the queued row outlives this worker, so the
   // edited entry it implies has to outlive it too, or a revived worker would

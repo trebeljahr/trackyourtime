@@ -84,7 +84,7 @@ describe("the client queue", () => {
       "entries.start",
       "entries.stop",
     ]);
-    expect(replayed[0].input).toEqual(startInput);
+    expect(replayed[0].input).toEqual({ ...startInput, operationId: expect.any(String) });
     expect(result).toEqual({ flushed: 2, skipped: 0, held: 0, remaining: 0 });
     expect(getPendingCount()).toBe(0);
   });

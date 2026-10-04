@@ -4,6 +4,7 @@ import * as React from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   classifyReplayOutcome,
+  durableEntryEnvelope,
   flushVerdictFor,
   type WorkspaceSummary,
   type FlushVerdict,
@@ -205,30 +206,19 @@ export const useOfflineQueue = (): OfflineQueueState => {
    * launch can flush the queue again. Rejecting is what lets `isNetworkError`
    * stop the flush and write the remainder back in order.
    */
-  const startMutation = trpc.entries.start.useMutation(OFFLINE_QUEUED_MUTATION);
-  const stopMutation = trpc.entries.stop.useMutation(OFFLINE_QUEUED_MUTATION);
-  const createMutation = trpc.entries.create.useMutation(OFFLINE_QUEUED_MUTATION);
-  const updateMutation = trpc.entries.update.useMutation(OFFLINE_QUEUED_MUTATION);
-  const removeMutation = trpc.entries.remove.useMutation(OFFLINE_QUEUED_MUTATION);
-  const discardMutation = trpc.entries.discard.useMutation(OFFLINE_QUEUED_MUTATION);
-
+  // A replay already owns its persisted row. Address the dedicated endpoint
+  // directly; a live call with a caller-supplied ID must still be saved first.
+  const applyMutation = trpc.entries.applyOperation.useMutation(OFFLINE_QUEUED_MUTATION);
   const mutators: OfflineReplayMutators = React.useMemo(
     () => ({
-      "entries.start": (input) => startMutation.mutateAsync(input),
-      "entries.stop": (input) => stopMutation.mutateAsync(input),
-      "entries.create": (input) => createMutation.mutateAsync(input),
-      "entries.update": (input) => updateMutation.mutateAsync(input),
-      "entries.remove": (input) => removeMutation.mutateAsync(input),
-      "entries.discard": (input) => discardMutation.mutateAsync(input),
+      "entries.start": (input) => applyMutation.mutateAsync(durableEntryEnvelope("entries.start", input)),
+      "entries.stop": (input) => applyMutation.mutateAsync(durableEntryEnvelope("entries.stop", input)),
+      "entries.create": (input) => applyMutation.mutateAsync(durableEntryEnvelope("entries.create", input)),
+      "entries.update": (input) => applyMutation.mutateAsync(durableEntryEnvelope("entries.update", input)),
+      "entries.remove": (input) => applyMutation.mutateAsync(durableEntryEnvelope("entries.remove", input)),
+      "entries.discard": (input) => applyMutation.mutateAsync(durableEntryEnvelope("entries.discard", input)),
     }),
-    [
-      startMutation,
-      stopMutation,
-      createMutation,
-      updateMutation,
-      removeMutation,
-      discardMutation,
-    ]
+    [applyMutation]
   );
 
   const dispatch = React.useCallback(

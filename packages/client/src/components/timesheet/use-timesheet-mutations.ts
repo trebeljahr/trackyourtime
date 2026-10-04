@@ -1,5 +1,7 @@
 "use client";
 
+import { entryMutationScope } from "@/lib/entry-mutation-result";
+
 import * as React from "react";
 import { deviceTimeZone } from "@starter/core";
 import {
@@ -20,8 +22,7 @@ import {
 import {
   cancelQueuedForTemp,
   createTempId,
-  enqueueOffline,
-  isNetworkError,
+  retainDurableEntry,
   isTempId,
   type OfflineCreateInput,
   type OfflineIdInput,
@@ -178,11 +179,10 @@ export const useTimesheetMutations = (
    */
   const run = React.useCallback(
     async (args: {
+      input: object;
       optimistic: (entries: DetailedEntry[]) => DetailedEntry[];
       /** `stillHere` is false once the user has switched workspace. */
       perform: (stillHere: () => boolean) => Promise<void>;
-      /** Stamps the queued row with the workspace the edit was made in. */
-      queue: (workspaceId: string | null) => Promise<void>;
       failure: string;
     }): Promise<void> => {
       /*
@@ -196,6 +196,7 @@ export const useTimesheetMutations = (
        * stamped with it too, not with wherever the device points when the
        * network error finally arrives.
        */
+      Object.assign(args.input, { __durableScope: entryMutationScope() });
       const workspaceId = getActiveWorkspaceId();
       const stillHere = (): boolean => getActiveWorkspaceId() === workspaceId;
       const previous = await snapshot();
@@ -206,10 +207,7 @@ export const useTimesheetMutations = (
         await args.perform(stillHere);
         invalidate();
       } catch (error) {
-        if (isNetworkError(error)) {
-          await args.queue(workspaceId);
-          return;
-        }
+        if (await retainDurableEntry(error)) return;
         if (stillHere()) restore(previous);
         toast.error(
           userErrorMessage(error, args.failure)
@@ -221,10 +219,8 @@ export const useTimesheetMutations = (
     [invalidate, patchList, restore, snapshot]
   );
 
-  // `networkMode: "always"` on each: `run()` above only reaches `queue()`
-  // because the call rejected. React Query's default would pause the mutation
-  // while offline instead, and a paused promise never rejects — the grid edit
-  // would sit there un-queued for the rest of the launch.
+  // The durable transport must run while offline too, so it can save the
+  // request before React Query reports its locally retained result.
   const createEntry = trpc.entries.create.useMutation(OFFLINE_QUEUED_MUTATION);
   const updateEntry = trpc.entries.update.useMutation(OFFLINE_QUEUED_MUTATION);
   const removeEntry = trpc.entries.remove.useMutation(OFFLINE_QUEUED_MUTATION);
@@ -258,9 +254,10 @@ export const useTimesheetMutations = (
       // edit made in the meantime whether it has an entry to write to.
       let serverId: string | null = null;
       const named = run({
+        input,
         optimistic: (entries) => [optimistic, ...entries],
         perform: async (stillHere) => {
-          const created = await createEntry.mutateAsync(input);
+          const created = await createEntry.mutateAsync(Object.assign(input, { __durableTempId: tempId }));
           serverId = created.id;
           if (!stillHere()) return;
           patchList((entries) =>
@@ -271,8 +268,6 @@ export const useTimesheetMutations = (
             )
           );
         },
-        queue: (workspaceId) =>
-          enqueueOffline("entries.create", input, tempId, workspaceId),
         failure: translate("calendar")("timesheet.failed.add"),
       }).then((): string | null => serverId);
 
@@ -294,6 +289,7 @@ export const useTimesheetMutations = (
         };
 
         void run({
+          input,
           optimistic: (entries) =>
             entries.map((entry) =>
               entry.id === serverId
@@ -312,8 +308,6 @@ export const useTimesheetMutations = (
           perform: async () => {
             await updateEntry.mutateAsync(input);
           },
-          queue: (workspaceId) =>
-            enqueueOffline("entries.update", input, undefined, workspaceId),
           failure: translate("calendar")("timesheet.failed.save"),
         });
       });
@@ -342,6 +336,7 @@ export const useTimesheetMutations = (
         const input: OfflineIdInput = { id: serverId, originId: ORIGIN_ID };
 
         void run({
+          input,
           optimistic: (entries) =>
             entries.filter((entry) => entry.id !== serverId),
           perform: async () => {
@@ -362,8 +357,6 @@ export const useTimesheetMutations = (
               });
             }
           },
-          queue: (workspaceId) =>
-            enqueueOffline("entries.remove", input, undefined, workspaceId),
           failure: translate("calendar")("timesheet.failed.remove"),
         });
       });

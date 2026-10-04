@@ -3,8 +3,9 @@
  * mutations that can change one.
  *
  * Shaped exactly like {@link ./timer}: one input object per mutation, the queue
- * drained before anything goes out live, and a fall to `enqueueOffline` only
- * when the request never reached the server. What is new here is the overlay.
+ * drained before new work. Live writes are saved before the first send;
+ * a failed attempt keeps the saved identity. Work queued before any send uses
+ * `enqueueOffline`. The overlay supplies immediate local feedback.
  * `rememberOptimisticRunning` models a single entry — the running one — because
  * that was the only entry this extension could change; a queued edit or delete
  * of a *past* row needs a store that can hold several, and one that survives
@@ -18,6 +19,7 @@
  * decision rather than a bug.
  */
 import {
+  durableQueuedWrite,
   createTempId,
   dayKeyInZone,
   deviceTimeZone,
@@ -54,6 +56,7 @@ import {
   addressedWrite,
   ensureReady,
   enqueueOffline,
+  submitEntry,
   entriesCacheIsFresh,
   flushQueue,
   getActiveWorkspaceId,
@@ -488,16 +491,16 @@ export async function createEntry(input: CreateEntryInput): Promise<void> {
   }
 
   try {
-    await current.api.mutate<TimeEntry>("entries.create", write.address(payload));
+    await submitEntry<TimeEntry>("entries.create", write.address(payload));
     markEntriesStale();
     // Recents are derived from the entry log, and a logged entry is now the
     // most recent thing that combination was used for.
     invalidateRecents();
   } catch (error) {
-    // A server refusal was seen and rejected; replaying it would only be
-    // rejected again, so it goes back to the popup instead of into the queue.
-    if (!isTransportFailure(error)) throw error;
-    await queueCreate(payload, current.session.userId ?? "", write.workspaceId);
+    // Only an already-persisted request can become an optimistic queued row.
+    // Local setup/storage failures must surface without inventing another write.
+    if (!durableQueuedWrite(error)) throw error;
+    await queueCreate(payload, current.session.userId ?? "", write.workspaceId, error);
   }
 }
 
@@ -505,9 +508,10 @@ const queueCreate = async (
   input: OfflineCreateInput,
   authorId: string,
   workspaceId: string | null,
+  savedError?: unknown,
 ): Promise<void> => {
   const tempId = createTempId();
-  await enqueueOffline("entries.create", input, tempId, workspaceId);
+  await enqueueOffline("entries.create", input, tempId, workspaceId, savedError);
   await upsertOptimisticEntry(optimisticEntry(input, tempId, authorId));
   markEntriesStale();
 };
@@ -614,12 +618,12 @@ export async function updateEntry(patch: EntryPatch): Promise<void> {
   }
 
   try {
-    await current.api.mutate<TimeEntry>("entries.update", write.address(input));
+    await submitEntry<TimeEntry>("entries.update", write.address(input));
     markEntriesStale();
     invalidateRecents();
   } catch (error) {
-    if (!isTransportFailure(error)) throw error;
-    await queueUpdate(input, existing, patch, write.workspaceId);
+    if (!durableQueuedWrite(error)) throw error;
+    await queueUpdate(input, existing, patch, write.workspaceId, error);
   }
 }
 
@@ -628,8 +632,9 @@ const queueUpdate = async (
   existing: TimeEntry | null,
   patch: EntryPatch,
   workspaceId: string | null,
+  savedError?: unknown,
 ): Promise<void> => {
-  await enqueueOffline("entries.update", input, undefined, workspaceId);
+  await enqueueOffline("entries.update", input, undefined, workspaceId, savedError);
   // Without the pre-edit row there is nothing to patch, so the queued mutation
   // stands alone and the list simply shows the server's version until it
   // replays. Queuing it is what matters; the overlay is a courtesy.
@@ -662,20 +667,21 @@ export async function removeEntry(id: string): Promise<void> {
   }
 
   try {
-    await current.api.mutate("entries.remove", write.address(input));
+    await submitEntry("entries.remove", write.address(input));
     markEntriesStale();
     invalidateRecents();
   } catch (error) {
-    if (!isTransportFailure(error)) throw error;
-    await queueRemove(input, write.workspaceId);
+    if (!durableQueuedWrite(error)) throw error;
+    await queueRemove(input, write.workspaceId, error);
   }
 }
 
 const queueRemove = async (
   input: OfflineIdInput,
   workspaceId: string | null,
+  savedError?: unknown,
 ): Promise<void> => {
-  await enqueueOffline("entries.remove", input, undefined, workspaceId);
+  await enqueueOffline("entries.remove", input, undefined, workspaceId, savedError);
   await deleteOptimisticEntry(input.id);
   markEntriesStale();
 };

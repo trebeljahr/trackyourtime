@@ -12,7 +12,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
-import type { WorkspaceSummary } from "@starter/core";
+import { DurableQueuedWriteError, type WorkspaceSummary } from "@starter/core";
 
 let online = true;
 vi.mock("@/mobile/network", () => ({
@@ -26,6 +26,7 @@ vi.mock("@/lib/offline", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/offline")>();
   return {
     ...actual,
+    retainDurableEntry: async (error: unknown) => error instanceof DurableQueuedWriteError,
     enqueueOffline: async (
       op: string,
       _input: unknown,
@@ -56,10 +57,12 @@ vi.mock("@/lib/trpc", () => {
   const asyncNoop = async (): Promise<void> => undefined;
   const mutation = {
     useMutation: () => ({
-      mutateAsync: () =>
-        new Promise((resolve, reject) => {
-          pendingCall = { resolve, reject };
-        }),
+      mutateAsync: (input: { __durableScope?: { workspaceId?: string } }) => {
+        enqueued.push({ op: "entries.create", workspaceId: input.__durableScope?.workspaceId });
+        return new Promise((resolve, reject) => {
+          pendingCall = { resolve, reject: (error) => reject(error instanceof TypeError ? new DurableQueuedWriteError("saved-row", error) : error) };
+        });
+      },
     }),
   };
   const utils = {

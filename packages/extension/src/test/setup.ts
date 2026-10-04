@@ -1,3 +1,7 @@
+import { locks } from "node:worker_threads";
+if (typeof navigator !== "undefined" && !navigator.locks)
+  Object.defineProperty(navigator, "locks", { configurable: true, value: locks });
+
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach } from "vitest";
