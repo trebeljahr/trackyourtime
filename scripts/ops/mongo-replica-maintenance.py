@@ -7,9 +7,11 @@ import argparse
 import base64
 import datetime as dt
 import fcntl
+import grp
 import importlib.util
 import json
 import os
+import pwd
 from pathlib import Path
 import subprocess
 import sys
@@ -25,6 +27,12 @@ SET = 'tracktime-rs'
 KEY = '/data/configdb/hatchkit-replica.key'
 WORK = Path('/var/lib/hatchkit-backups')
 EVIDENCE = WORK / 'track-mongo-conversion-proof.json'
+# Coolify v4.0.0-beta.469 writes the custom config here and bind-mounts it read-only.
+HOST_CONFIG = Path('/data/coolify/databases') / SERVICE / 'mongod.conf'
+CONTAINER_CONFIG = '/etc/mongo/mongod.conf'
+# Seconds. A 0.5-CPU rehearsal clone took 13-17 s to start on the busy host.
+READY_DEADLINE = 30
+REHEARSAL_READY_DEADLINE = 90
 BASE_CONFIG = 'storage:\n  dbPath: /data/db\nnet:\n  bindIpAll: true\n  port: 27017\n'
 STANDALONE_CONFIG = BASE_CONFIG + 'security:\n  authorization: enabled\n'
 CONFIG = BASE_CONFIG + f'security:\n  authorization: enabled\n  keyFile: {KEY}\nreplication:\n  replSetName: {SET}\n'
@@ -60,7 +68,9 @@ def credentials(container):
 
 def mongo(name, code, auth=None):
     prefix = '' if auth is None else 'const creds=' + json.dumps(auth) + '; const admin=db.getSiblingDB("admin"); if(!admin.auth(...creds)) quit(1);\n'
-    return docker('exec', '-i', name, 'mongosh', 'mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=1000', '--quiet', '--norc', '--file', '/dev/stdin', data=(prefix + code).encode())
+    # The image sets HOME=/data/db. A root mongosh writing /data/db/.mongodb during the
+    # entrypoint's config parse makes the mongodb-user parse fail with EACCES (exit 1).
+    return docker('exec', '-e', 'HOME=/tmp', '-i', name, 'mongosh', 'mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=1000', '--quiet', '--norc', '--file', '/dev/stdin', data=(prefix + code).encode())
 
 
 TOPOLOGY_JS = '''const a=db.getSiblingDB("admin"),h=a.runCommand({hello:1}),p=a.runCommand({getCmdLineOpts:1}).parsed;
@@ -114,16 +124,62 @@ def guard(stopped=False):
     return container, credentials(container), active
 
 
-def wait_primary(name, auth, replica=False):
-    for _ in range(100):
+def config_file(container):
+    """Stat the host config Coolify mounts; never reads its contents."""
+    mounts = [mount for mount in container['Mounts'] if mount['Destination'] == CONTAINER_CONFIG]
+    if not mounts:
+        return {'path': str(HOST_CONFIG), 'mounted': False}
+    if len(mounts) != 1 or mounts[0].get('Source') != str(HOST_CONFIG):
+        raise Refusal('Mongo config mount changed; repeat review')
+    try:
+        info = os.lstat(HOST_CONFIG)
+    except FileNotFoundError:
+        raise Refusal('Mounted Mongo config is missing on the host: ' + str(HOST_CONFIG))
+    mode = info.st_mode & 0o7777
+    try:
+        owner = pwd.getpwuid(info.st_uid).pw_name
+    except KeyError:
+        owner = str(info.st_uid)
+    try:
+        group = grp.getgrgid(info.st_gid).gr_name
+    except KeyError:
+        group = str(info.st_gid)
+    regular = (info.st_mode & 0o170000) == 0o100000
+    return {'path': str(HOST_CONFIG), 'mounted': True, 'regular': regular, 'mode': format(mode, '04o'),
+            'owner': owner + ':' + group, 'worldReadable': regular and bool(mode & 0o004)}
+
+
+def require_readable_config(status):
+    # The mongo entrypoint drops to the mongodb user; a 640 root:root file crash-loops with EACCES.
+    if not status['mounted']:
+        raise Refusal('Mongo config is not mounted from ' + status['path'] + '; apply the reviewed patch payload first')
+    if not status['worldReadable']:
+        raise Refusal('Host Mongo config ' + status['path'] + ' is ' + status['mode'] + ' ' + status['owner']
+                      + '; the mongodb user cannot read it (EACCES crash loop). Run config-mode --execute to add read access (content is non-secret)')
+
+
+def exited(name):
+    # Only a container nothing will restart is final; Coolify's restart policy may still recover.
+    try:
+        container = inspect(name)
+    except (Refusal, IndexError, ValueError):
+        return False
+    return container['State']['Status'] in ('exited', 'dead') and container['HostConfig']['RestartPolicy'].get('Name') in ('', 'no')
+
+
+def wait_primary(name, auth, replica=False, deadline=READY_DEADLINE):
+    end = time.monotonic() + deadline
+    while True:
         try:
             topology = json.loads(mongo(name, TOPOLOGY_JS, auth))
             if topology['primary'] and (not replica or topology['setName'] == SET):
                 return topology
         except Refusal:
-            pass
+            if exited(name):
+                raise Refusal('Mongo container exited during startup')
+        if time.monotonic() >= end:
+            raise Refusal('Mongo readiness/election deadline reached')
         time.sleep(0.2)
-    raise Refusal('Mongo readiness/election deadline reached')
 
 
 def keyfile(name, auth=None):
@@ -134,19 +190,20 @@ print(JSON.stringify({keyFileReady:true,mode:"0600",uid:999,gid:999}));'''.repla
     return json.loads(mongo(name, script, auth))
 
 
-def initiate(name, auth, host):
-    for attempt in range(100):
+def initiate(name, auth, host, deadline=READY_DEADLINE):
+    end = time.monotonic() + deadline
+    while True:
         try:
             mongo(name, TOPOLOGY_JS, auth)
             break
         except Refusal:
-            if attempt == 99:
+            if time.monotonic() >= end:
                 raise Refusal('Replica process startup deadline reached')
             time.sleep(0.2)
     payload = {'_id': SET, 'members': [{'_id': 0, 'host': host}]}
     mongo(name, 'const h=admin.runCommand({hello:1}); if(h.setName && h.setName!==__SET__) quit(1); if(!h.setName) {const r=admin.runCommand({replSetInitiate:__CONFIG__}); if(!r.ok) quit(1);}'.replace('__SET__', json.dumps(SET)).replace('__CONFIG__', json.dumps(payload)), auth)
     mongo(name, 'const r=admin.runCommand({replSetGetConfig:1}); const c=r.config; if(!r.ok||c._id!==__SET__||c.members.length!==1||c.members[0].host!==__HOST__||c.members[0].arbiterOnly) quit(1);'.replace('__SET__', json.dumps(SET)).replace('__HOST__', json.dumps(host)), auth)
-    return wait_primary(name, auth, True)
+    return wait_primary(name, auth, True, deadline)
 
 
 def transaction_probe(name, auth):
@@ -175,7 +232,7 @@ def rehearse(image, archive, auth, before):
             config.write_text(BASE_CONFIG.replace('  dbPath: /data/db\n', '  dbPath: /data/db\n  wiredTiger:\n    engineConfig:\n      cacheSizeGB: 0.25\n'))
             docker('cp', str(config), name + ':/data/configdb/rehearsal.conf')
             docker('start', name)
-            wait_primary(name, None)
+            wait_primary(name, None, deadline=REHEARSAL_READY_DEADLINE)
             with Path(archive).open('rb') as stream:
                 result = subprocess.run(['docker', 'exec', '-i', name, 'mongorestore', '--archive', '--gzip'], stdin=stream, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
                 if result.returncode:
@@ -187,7 +244,7 @@ def rehearse(image, archive, auth, before):
             config.write_text(CONFIG.replace('  dbPath: /data/db\n', '  dbPath: /data/db\n  wiredTiger:\n    engineConfig:\n      cacheSizeGB: 0.25\n'))
             docker('cp', str(config), name + ':/data/configdb/rehearsal.conf')
             docker('start', name)
-            initiate(name, auth, 'localhost:27017')
+            initiate(name, auth, 'localhost:27017', REHEARSAL_READY_DEADLINE)
             transaction_probe(name, auth)
             if fingerprint(name, auth) != before:
                 raise Refusal('Replica conversion changed restored data/users/indexes')
@@ -196,7 +253,7 @@ def rehearse(image, archive, auth, before):
             config.write_text(STANDALONE_CONFIG.replace('  dbPath: /data/db\n', '  dbPath: /data/db\n  wiredTiger:\n    engineConfig:\n      cacheSizeGB: 0.25\n'))
             docker('cp', str(config), name + ':/data/configdb/rehearsal.conf')
             docker('start', name)
-            topology = wait_primary(name, auth)
+            topology = wait_primary(name, auth, deadline=REHEARSAL_READY_DEADLINE)
             if topology['setName'] is not None or topology['authorization'] != 'enabled' or fingerprint(name, auth) != before:
                 raise Refusal('Standalone rollback failed data/authentication verification')
         return {'nativeRestore': True, 'replicaConversion': True, 'unchangedUriTransaction': True, 'standaloneRollback': True, 'elapsedSeconds': round(time.monotonic() - started, 2)}
@@ -265,7 +322,7 @@ def evidence():
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['audit', 'patch-payload', 'rollback-payload', 'backup-proof', 'keyfile', 'initiate', 'verify'], nargs='?', default='audit')
+    parser.add_argument('action', choices=['audit', 'patch-payload', 'rollback-payload', 'backup-proof', 'keyfile', 'initiate', 'verify', 'config-mode'], nargs='?', default='audit')
     parser.add_argument('--execute', action='store_true')
     args = parser.parse_args()
     if args.action in ('patch-payload', 'rollback-payload'):
@@ -275,9 +332,23 @@ def main():
     if mutating and not args.execute:
         raise Refusal('Maintenance requires --execute; default audit never changes state')
     container, auth, active = guard(mutating or args.action == 'verify')
+    if args.action == 'config-mode':
+        # Read-only report unless --execute; only adds read bits, never changes owner or content.
+        status = config_file(container)
+        if not status['mounted'] or not status['regular']:
+            raise Refusal('No regular mounted Mongo config file to fix')
+        if args.execute and not status['worldReadable']:
+            os.chmod(HOST_CONFIG, int(status['mode'], 8) | 0o044)
+            status = config_file(container)
+        print(json.dumps(status))
+        return
     if args.action == 'audit':
-        print(json.dumps({'service': SERVICE, 'image': container['Image'], 'activeClientContainers': active, 'topology': json.loads(mongo(SERVICE, TOPOLOGY_JS, auth)), 'fingerprint': fingerprint(SERVICE, auth)}))
-    elif args.action == 'backup-proof':
+        print(json.dumps({'service': SERVICE, 'image': container['Image'], 'activeClientContainers': active, 'configFile': config_file(container), 'topology': json.loads(mongo(SERVICE, TOPOLOGY_JS, auth)), 'fingerprint': fingerprint(SERVICE, auth)}))
+        return
+    if args.action == 'initiate':
+        # Checked before any database call: an unreadable config means mongod never starts.
+        require_readable_config(config_file(container))
+    if args.action == 'backup-proof':
         print(json.dumps(backup_proof()))
     else:
         saved = evidence()
