@@ -65,10 +65,13 @@ def mongo(name, code, auth=None):
 
 TOPOLOGY_JS = '''const a=db.getSiblingDB("admin"),h=a.runCommand({hello:1}),p=a.runCommand({getCmdLineOpts:1}).parsed;
 print(JSON.stringify({primary:Boolean(h.isWritablePrimary),setName:h.setName??null,version:db.version(),authorization:p.security?.authorization??null,keyFile:p.security?.keyFile??null,replSetName:p.replication?.replSetName??null}));'''
+# mongorestore may rebuild indexes in another order; compare them by name with
+# option keys sorted. The key pattern itself keeps its order, which is meaningful.
 FINGERPRINT_JS = '''const hash=require("node:crypto").createHash("sha256"); let namespaces=0;
+const canonical=i=>Object.fromEntries(Object.keys(i).sort().map(k=>[k,i[k]]));
 for(const name of db.getSiblingDB("admin").runCommand({listDatabases:1,nameOnly:true}).databases.map(x=>x.name).filter(x=>!["admin","local","config"].includes(x)).sort()) {
  const d=db.getSiblingDB(name), content=d.runCommand({dbHash:1}); if(!content.ok) quit(1);
- const collections=d.getCollectionInfos({type:"collection"}).map(x=>x.name).sort().map(n=>({name:n,count:d.getCollection(n).countDocuments({}),indexes:d.getCollection(n).getIndexes()}));
+ const collections=d.getCollectionInfos({type:"collection"}).map(x=>x.name).sort().map(n=>({name:n,count:d.getCollection(n).countDocuments({}),indexes:d.getCollection(n).getIndexes().map(canonical).sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0)}));
  namespaces+=collections.length; hash.update(JSON.stringify({name,collections,hash:content.md5}));
 }
 const a=db.getSiblingDB("admin"), users=a.runCommand({dbHash:1,collections:["system.users","system.roles"]}); if(!users.ok) quit(1);

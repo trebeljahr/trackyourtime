@@ -86,5 +86,23 @@ class NativeConversion(unittest.TestCase):
         finally:
             subprocess.run(['docker', 'rm', '-f', '-v', source], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def test_fingerprint_ignores_index_order_but_not_index_definition(self):
+        # Production restore rebuilt identical indexes in another order.
+        name = 'track-mongo-index-order-' + uuid.uuid4().hex[:12]
+        try:
+            m.docker('run', '--detach', '--pull=never', '--name', name, '--network', 'none', '--memory', '512m',
+                     os.environ['HATCHKIT_TEST_MONGO_IMAGE'], 'mongod', '--wiredTigerCacheSizeGB', '0.25')
+            m.wait_primary(name, None)
+            m.mongo(name, 'const c=db.getSiblingDB("test").entries; c.insertOne({_id:1,a:1,b:2});'
+                          'c.createIndex({a:1}); c.createIndex({b:1,a:-1}); c.createIndex({b:1},{unique:true});')
+            before = m.fingerprint(name)
+            m.mongo(name, 'const c=db.getSiblingDB("test").entries; c.dropIndexes();'
+                          'c.createIndex({b:1},{unique:true}); c.createIndex({b:1,a:-1}); c.createIndex({a:1});')
+            self.assertEqual(m.fingerprint(name), before)
+            m.mongo(name, 'const c=db.getSiblingDB("test").entries; c.dropIndex("b_1"); c.createIndex({b:1});')
+            self.assertNotEqual(m.fingerprint(name), before)
+        finally:
+            subprocess.run(['docker', 'rm', '-f', '-v', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 
 if __name__ == '__main__': unittest.main()
