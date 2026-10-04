@@ -34,6 +34,12 @@ const config = {
   toolsets: { appimage: "1.0.3" },
   appId: "com.ricoslabs.trackyourtime",
   productName: "Track Your Time",
+  // Chromium's own UI strings (context menus, spellcheck, native dialogs) in
+  // the app's two languages only; the other locales are ~47 MB of unused
+  // .lproj/.pak files. Both English names: macOS ships en.lproj, Windows and
+  // Linux en-US.pak (Chromium's fallback), and older electron-builder
+  // releases match names exactly.
+  electronLanguages: ["en", "en-US", "de"],
   directories: {
     output: "release",
     buildResources: "build",
