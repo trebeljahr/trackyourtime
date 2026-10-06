@@ -32,8 +32,7 @@
 # makes the distinction impossible to get wrong at `docker pull` time.
 #
 # Analytics build args are deliberately omitted, not passed empty: with
-# NEXT_PUBLIC_OPENPANEL_CLIENT_ID and NEXT_PUBLIC_PLAUSIBLE_DOMAIN unset the
-# client emits no third-party script tags at all, so a self-hosted instance
+# NEXT_PUBLIC_PLAUSIBLE_DOMAIN unset the client emits no third-party script tags at all, so a self-hosted instance
 # makes no outbound request the operator did not ask for.
 #
 # A `v*` tag runs THIS workflow, extension-release.yml (the Chrome Web Store
