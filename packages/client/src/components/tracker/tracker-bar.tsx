@@ -382,16 +382,19 @@ export function TrackerBar(): React.JSX.Element {
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/60 pt-2">
-          {/* On a phone the two pickers share one line — `flex-1 min-w-0` lets
-              them shrink out of their `min-w-48`/`min-w-40` defaults, which
-              otherwise total more than 351pt and force each onto a line of its
-              own. From `sm` up they take their fixed widths again. */}
+          {/* On a phone each picker starts at the width of its own name
+              (`flex-auto`, basis `auto`) and grows to fill what is left of its
+              line, so short names share a line and a long one wraps onto a
+              line of its own instead of all three being squeezed into equal
+              thirds and ellipsized. `min-w-0 max-w-full` still truncates a
+              name longer than the whole line. From `sm` up they take their
+              fixed widths again. */}
           <ProjectTaskPicker
             value={fields}
             onChange={applyFields}
             bare
             className="flex-1 basis-full sm:basis-auto sm:flex-none"
-            controlClassName="h-10 min-w-0 flex-1 sm:min-w-48 sm:flex-none"
+            controlClassName="h-10 min-w-0 max-w-full flex-auto sm:min-w-48 sm:flex-none"
             testIdPrefix="tracker"
           />
 
