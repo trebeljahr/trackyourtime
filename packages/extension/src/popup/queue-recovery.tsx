@@ -1,5 +1,7 @@
 import { useState, type JSX } from "react";
 import {
+  heldRowOffersRepair,
+  holdSendsAutomatically,
   repairRecoveryInput,
   recoveryLocalTime,
   type RecoveryFieldEdits,
@@ -85,17 +87,57 @@ export function QueueRecovery({
       />
     </label>
   );
+  const downloadButton = onExport ? (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() =>
+        void perform(async () => {
+          const json = await onExport(row.queueId);
+          if (json === null) throw new Error("export failed");
+          const url = URL.createObjectURL(
+            new Blob([json], { type: "application/json" }),
+          );
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.download = "trackyourtime-unsynced.json";
+          document.body.append(anchor);
+          anchor.click();
+          anchor.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        })
+      }
+    >
+      {t("workspace.recovery.download")}
+    </button>
+  ) : null;
+  const originalChange = (
+    <details>
+      <summary>{t("workspace.recovery.original")}</summary>
+      <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+        {JSON.stringify(row.recovery.originalPayload, null, 2)}
+      </pre>
+      {holdSendsAutomatically(row.hold) ? downloadButton : null}
+    </details>
+  );
+  // Waiting on the server alone: nothing to repair, and a retry cannot send
+  // it before the server's level rises. The row's Discard stays.
+  if (holdSendsAutomatically(row.hold))
+    return (
+      <div className="queue-recovery" data-testid="queue-recovery" data-mode="automatic">
+        <p className="panel__hint" data-testid="queue-recovery-automatic">
+          {t("workspace.recovery.automatic")}
+        </p>
+        {originalChange}
+        {validation ? <p role="alert">{validation}</p> : null}
+      </div>
+    );
   return (
-    <div data-testid="queue-recovery">
+    <div className="queue-recovery" data-testid="queue-recovery" data-mode="manual">
       <p>
         {row.recovery.code} {row.recovery.message}
       </p>
-      <details>
-        <summary>{t("workspace.recovery.original")}</summary>
-        <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-          {JSON.stringify(row.recovery.originalPayload, null, 2)}
-        </pre>
-      </details>
+      {originalChange}
       <p className="panel__hint">{t("workspace.recovery.hint")}</p>
       {editing ? (
         <div>
@@ -190,7 +232,7 @@ export function QueueRecovery({
           </details>
         </div>
       ) : null}
-      {row.op !== null && row.hold !== "unknown-op" && onRetry ? (
+      {heldRowOffersRepair(row) && onRetry ? (
         <>
           <button
             type="button"
@@ -213,30 +255,7 @@ export function QueueRecovery({
           </button>
         </>
       ) : null}
-      {onExport ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() =>
-            void perform(async () => {
-              const json = await onExport(row.queueId);
-              if (json === null) throw new Error("export failed");
-              const url = URL.createObjectURL(
-                new Blob([json], { type: "application/json" }),
-              );
-              const anchor = document.createElement("a");
-              anchor.href = url;
-              anchor.download = "trackyourtime-unsynced.json";
-              document.body.append(anchor);
-              anchor.click();
-              anchor.remove();
-              setTimeout(() => URL.revokeObjectURL(url), 10_000);
-            })
-          }
-        >
-          {t("workspace.recovery.download")}
-        </button>
-      ) : null}
+      {downloadButton}
       {validation ? <p role="alert">{validation}</p> : null}
     </div>
   );

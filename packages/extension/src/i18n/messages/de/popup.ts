@@ -27,6 +27,7 @@ export const popup: Translation<typeof source> = {
       edit: "Felder korrigieren",
       retry: "Diese Kette erneut senden",
       download: "Kopie herunterladen",
+      automatic: "Wird nach dem Server-Update automatisch gesendet",
       hint: "Deine Arbeit ist hier gespeichert. Prüfe den Grund und korrigiere Felder oder Zeiten vor dem erneuten Senden. Ein Stopp braucht seine ursprüngliche Eintrags-ID. Start und Stopp bleiben zusammen. Du kannst eine Kopie herunterladen oder die Kette verwerfen.",
       failed: "Die Änderung konnte nicht wiederhergestellt werden. Prüfe Felder, Eintrags-ID, Anmeldung und Zugriff auf den Arbeitsbereich. Deine Arbeit bleibt gespeichert.",
     },

@@ -11,7 +11,13 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { useEffect, useState } from "react";
-import { repairRecoveryInput, type RecoveryFieldEdits, type RecoveryTarget } from "../vendor/index.js";
+import {
+  heldRowOffersRepair,
+  holdSendsAutomatically,
+  repairRecoveryInput,
+  type RecoveryFieldEdits,
+  type RecoveryTarget,
+} from "../vendor/index.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -227,11 +233,16 @@ export function OfflineRecovery({ onChanged }: { onChanged: () => void }): React
         <List.Item
           key={row.queueId}
           title={row.description || row.op || "Queued change"}
-          subtitle={row.recovery?.message || row.hold || ""}
+          subtitle={
+            // Waiting on the server alone: nothing to repair, it sends by itself.
+            holdSendsAutomatically(row.hold)
+              ? "Sends automatically after the server update"
+              : row.recovery?.message || row.hold || ""
+          }
           accessories={[{ text: row.workspaceName ?? "" }]}
           actions={
             <ActionPanel>
-              {row.recovery && row.op !== null && row.hold !== "unknown-op" ? (
+              {row.recovery && heldRowOffersRepair(row) ? (
                 <Action.Push
                   title="Review and Repair…"
                   icon={Icon.Pencil}

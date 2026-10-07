@@ -14,7 +14,7 @@ export { applyOverlay, decodeStoredOverlay, emptyOverlay, encodeStoredOverlay, i
 export type { OfflineOverlay } from "./core/offline-overlay.js";
 export { createOfflineQueue, isForeignTo, isQueuedOn, isReplayableBy, isReplayableIn } from "./core/offline-queue.js";
 export type { FlushResult, HoldReason, OfflineQueue, QueuedMutation } from "./core/offline-queue.js";
-export { discardRecoveryRow, exportRecoveryRows, ownsRecoveryRow, recoveryChain, recoveryStopRange, recoveryStopTargets, repairRecoveryInput, retryRecoveryRow } from "./core/offline-recovery.js";
+export { discardRecoveryRow, exportRecoveryRows, heldRowOffersRepair, holdSendsAutomatically, ownsRecoveryRow, recoveryChain, recoveryStopRange, recoveryStopTargets, repairRecoveryInput, retryRecoveryRow } from "./core/offline-recovery.js";
 export type { RecoveryFieldEdits, RecoveryTarget } from "./core/offline-recovery.js";
 export { classifyReplayOutcome, flushVerdictFor, replayOfflineMutation, serverLevelHold } from "./core/offline-replay.js";
 export type { OfflineReplayMutators, ReplayIdMap } from "./core/offline-replay.js";

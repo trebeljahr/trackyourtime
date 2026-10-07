@@ -33,6 +33,8 @@ export const popup = {
       edit: "Repair fields",
       retry: "Retry this chain",
       download: "Download a copy",
+      /** A `server-too-old` row: nothing to repair, it sends by itself. */
+      automatic: "Sends automatically after the server update",
       hint: "Your work is saved here. Review the reason and correct fields or times before retrying. A stop needs its original entry ID. Start/stop chains stay together. You can download a copy or discard the chain.",
       failed: "Could not recover this change. Check the fields, entry ID, sign-in and workspace access. Your work is still saved.",
     },

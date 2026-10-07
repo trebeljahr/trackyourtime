@@ -321,7 +321,7 @@ export const settings = {
         chooseTarget: "Choose the original entry",
         untitled: "Untitled entry",
 
-        original: "Original change", input: "Input fields (JSON)", edit: "Repair fields", retry: "Retry this chain", download: "Download a copy",
+        original: "Original change", input: "Input fields (JSON)", edit: "Repair fields", retry: "Retry this chain", download: "Download a copy", automatic: "Sends automatically after the server update",
         hint: "Correct the description, dates or unavailable selections before retrying. A stop needs the original entry ID; it never closes today's timer by guess. The whole start/stop chain retries together. Original content stays saved until sync or discard.",
         failed: "Could not recover this change. Check the fields, entry ID, sign-in and workspace access. Your saved work is still here.",
       },

@@ -23,6 +23,8 @@ import {
 import {
   discardRecoveryRow,
   exportRecoveryRows,
+  heldRowOffersRepair,
+  holdSendsAutomatically,
   retryRecoveryRow,
   type RecoveryScope,
 } from "../offline-recovery.js";
@@ -625,4 +627,15 @@ test("orphan-stop candidates exclude colleagues, other workspaces and today's ne
     recoveryStopTargets([original], row, scope({ owner: "bob" })),
     [],
   );
+});
+
+test("a server-too-old hold sends by itself and offers no repair", () => {
+  assert.equal(holdSendsAutomatically("server-too-old"), true);
+  for (const hold of ["refused", "stale-stop", "unknown-procedure", "unknown-op", "other-account", null, undefined])
+    assert.equal(holdSendsAutomatically(hold), false, String(hold));
+  assert.equal(heldRowOffersRepair({ op: "entries.start", hold: "server-too-old" }), false);
+  assert.equal(heldRowOffersRepair({ op: "entries.start", hold: "unknown-op" }), false);
+  assert.equal(heldRowOffersRepair({ op: null, hold: "refused" }), false);
+  for (const hold of ["refused", "stale-stop", "unknown-procedure"])
+    assert.equal(heldRowOffersRepair({ op: "entries.start", hold }), true, hold);
 });

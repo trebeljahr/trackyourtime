@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import {
+  heldRowOffersRepair,
+  holdSendsAutomatically,
   repairRecoveryInput,
   recoveryLocalTime,
   type RecoveryFieldEdits,
@@ -96,17 +98,69 @@ function OwnQueueRecovery({
       />
     </label>
   );
+  const automatic = holdSendsAutomatically(row.hold);
+  const downloadButton = (
+    <Button
+      variant="outline"
+      disabled={busy}
+      data-testid="queue-recovery-export"
+      onClick={() =>
+        void perform(async () => {
+          const json = await exportQueuedRecovery([row.queueId]);
+          const file = new File([json], "trackyourtime-unsynced.json", {
+            type: "application/json",
+          });
+          if (navigator.canShare?.({ files: [file] }))
+            await navigator.share({ files: [file] });
+          else downloadBlob(file.name, file);
+        })
+      }
+    >
+      {t("foreignQueue.recovery.download")}
+    </Button>
+  );
+  const originalChange = (
+    <details>
+      <summary>{t("foreignQueue.recovery.original")}</summary>
+      <pre className="overflow-auto whitespace-pre-wrap text-xs">
+        {JSON.stringify(row.recovery.originalPayload, null, 2)}
+      </pre>
+      {automatic ? downloadButton : null}
+    </details>
+  );
+  // Waiting on the server alone: nothing to repair, and a retry cannot send
+  // it before the server's level rises. The group's Discard stays.
+  if (automatic)
+    return (
+      <div
+        className="w-full space-y-1"
+        data-testid="queue-recovery"
+        data-mode="automatic"
+      >
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid="queue-recovery-automatic"
+        >
+          {t("foreignQueue.recovery.automatic")}
+        </p>
+        {originalChange}
+        {validation ? (
+          <p role="alert" className="text-sm text-destructive">
+            {validation}
+          </p>
+        ) : null}
+      </div>
+    );
   return (
-    <div className="w-full space-y-2" data-testid="queue-recovery">
+    <div
+      className="w-full space-y-2"
+      data-testid="queue-recovery"
+      data-mode="manual"
+    >
       <p className="text-sm">
         {row.recovery.code} {row.recovery.message}
       </p>
-      <details>
-        <summary>{t("foreignQueue.recovery.original")}</summary>
-        <pre className="overflow-auto whitespace-pre-wrap text-xs">
-          {JSON.stringify(row.recovery.originalPayload, null, 2)}
-        </pre>
-      </details>
+      {originalChange}
       <p className="text-xs text-muted-foreground">
         {t("foreignQueue.recovery.hint")}
       </p>
@@ -221,7 +275,7 @@ function OwnQueueRecovery({
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        {row.op !== null && row.hold !== "unknown-op" ? (
+        {heldRowOffersRepair(row) ? (
           <>
             <Button
               variant="outline"
@@ -244,24 +298,7 @@ function OwnQueueRecovery({
             </Button>
           </>
         ) : null}
-        <Button
-          variant="outline"
-          disabled={busy}
-          data-testid="queue-recovery-export"
-          onClick={() =>
-            void perform(async () => {
-              const json = await exportQueuedRecovery([row.queueId]);
-              const file = new File([json], "trackyourtime-unsynced.json", {
-                type: "application/json",
-              });
-              if (navigator.canShare?.({ files: [file] }))
-                await navigator.share({ files: [file] });
-              else downloadBlob(file.name, file);
-            })
-          }
-        >
-          {t("foreignQueue.recovery.download")}
-        </Button>
+        {downloadButton}
       </div>
     </div>
   );

@@ -1069,11 +1069,31 @@ button.tag:hover .tag__x {
   font-size: 12px;
 }
 
+/* The label and Discard share the first line; the recovery block takes a line
+   of its own below them. Three columns side by side left the label a few
+   pixels wide at 380px, one word per line. */
 .held-queue__row {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   align-items: baseline;
   justify-content: space-between;
+}
+
+.held-queue__row > span {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.held-queue__row > .queue-recovery {
+  order: 1;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.queue-recovery > p {
+  margin: 0 0 4px;
 }
 
 /* ── overflow menu ─────────────────────────────────────────────────── */

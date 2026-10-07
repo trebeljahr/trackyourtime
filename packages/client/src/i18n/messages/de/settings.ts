@@ -309,7 +309,7 @@ export const settings: Translation<typeof source> = {
         chooseTarget: "Ursprünglichen Eintrag wählen",
         untitled: "Eintrag ohne Titel",
 
-        original: "Ursprüngliche Änderung", input: "Eingabefelder (JSON)", edit: "Felder korrigieren", retry: "Diese Kette erneut senden", download: "Kopie herunterladen",
+        original: "Ursprüngliche Änderung", input: "Eingabefelder (JSON)", edit: "Felder korrigieren", retry: "Diese Kette erneut senden", download: "Kopie herunterladen", automatic: "Wird nach dem Server-Update automatisch gesendet",
         hint: "Korrigiere die Beschreibung, Daten oder nicht verfügbare Auswahl vor dem erneuten Senden. Ein Stopp braucht die ursprüngliche Eintrags-ID; er beendet den heutigen Timer nie auf Verdacht. Start und Stopp werden gemeinsam erneut gesendet. Der ursprüngliche Inhalt bleibt bis zur Synchronisierung oder zum Verwerfen gespeichert.",
         failed: "Diese Änderung konnte nicht wiederhergestellt werden. Prüfe die Felder, Eintrags-ID, Anmeldung und den Zugriff auf den Arbeitsbereich. Deine gespeicherte Arbeit bleibt erhalten.",
       },

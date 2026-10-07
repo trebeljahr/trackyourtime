@@ -7,7 +7,7 @@ import {
   type QueuedMutationSummary,
 } from "@starter/core";
 import { extensionT } from "../i18n";
-import type { ServerCompatibility } from "../lib/messaging";
+import type { HeldSyncRow, ServerCompatibility } from "../lib/messaging";
 import { describeError } from "./errors";
 import { VersionBanner } from "./version-banner";
 import { HeldQueue } from "./workspace-bar";
@@ -95,5 +95,29 @@ describe("HeldQueue", () => {
     expect(renderToStaticMarkup(<HeldQueue rows={[row]} onDiscard={async () => true} t={de} />)).toContain(
       "Dein Server ist älter als diese App.",
     );
+  });
+
+  test("keeps a deliberate Discard on a row waiting for the server, without repair", () => {
+    const row: HeldSyncRow = {
+      queueId: "q2",
+      op: "entries.start",
+      description: "Computer Demos",
+      workspaceId: "ws-a",
+      workspaceName: "Acme",
+      at: "2026-09-14T09:00:00.000Z",
+      server: null,
+      hold: "server-too-old",
+      recovery: { input: {}, originalPayload: {} },
+    };
+    const html = renderToStaticMarkup(
+      <HeldQueue rows={[row]} onDiscard={async () => true} onRetry={async () => true} t={en} />,
+    );
+    expect(html).toContain('data-testid="held-queue-discard"');
+    expect(html).toContain("Sends automatically after the server update");
+    expect(html).not.toContain("Repair fields");
+    expect(html).not.toContain("Retry this chain");
+    expect(
+      renderToStaticMarkup(<HeldQueue rows={[row]} onDiscard={async () => true} t={de} />),
+    ).toContain("Wird nach dem Server-Update automatisch gesendet");
   });
 });

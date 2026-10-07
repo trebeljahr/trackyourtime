@@ -114,3 +114,27 @@ test("unknown future operations remain export-only", async () => {
   expect(host.textContent).not.toContain("Repair fields");
   expect(host.textContent).not.toContain("Retry this chain");
 });
+
+test("a row waiting for a server update is compact: no repair, no retry", async () => {
+  const exported = vi.fn(async () => "{}");
+  await act(async () =>
+    root.render(
+      <QueueRecovery
+        row={{ ...row, op: "entries.start", hold: "server-too-old", recovery: { input, originalPayload: { input } } }}
+        onRetry={async () => true}
+        onExport={exported}
+        t={t}
+      />,
+    ),
+  );
+  expect(host.textContent).toContain("Sends automatically after the server update");
+  expect(host.textContent).toContain("Original change");
+  expect(host.textContent).not.toContain("Repair fields");
+  expect(host.textContent).not.toContain("Retry this chain");
+  expect(host.textContent).not.toContain("Your work is saved here");
+  // The copy sits inside the collapsed original change.
+  const download = Array.from(host.querySelectorAll("details button")).find(
+    (button) => button.textContent === "Download a copy",
+  );
+  expect(download).not.toBeUndefined();
+});

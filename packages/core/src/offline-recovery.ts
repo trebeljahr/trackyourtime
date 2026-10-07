@@ -10,7 +10,52 @@ import {
   QUEUE_FORMAT_VERSION,
   type OfflineQueue,
   type QueuedMutation,
+  type HoldReason,
 } from "./offline-queue.js";
+
+/**
+ * What a person can do about a held row, per reason. A new reason must pick
+ * one — the `Record` makes forgetting a type error.
+ *
+ * - `automatic`: nothing on the row is wrong. It sends by itself once the
+ *   server catches up, so the screens show a short "sends after the update"
+ *   line instead of repair fields, and no retry, which cannot succeed sooner.
+ * - `manual`: the person reviews it — repair fields, retry, a copy, discard.
+ *
+ * Discard stays available for both: a hold is never deleted silently.
+ */
+export const HOLD_RECOVERY: Readonly<
+  Record<HoldReason, "automatic" | "manual">
+> = {
+  "server-too-old": "automatic",
+  "unknown-procedure": "manual",
+  "unknown-op": "manual",
+  refused: "manual",
+  "stale-stop": "manual",
+};
+
+/**
+ * True when `hold` waits on the server alone. Takes any string, because the
+ * clients widen the reason with groups of their own ("other-account").
+ */
+export const holdSendsAutomatically = (
+  hold: string | null | undefined,
+): boolean =>
+  typeof hold === "string" &&
+  Object.hasOwn(HOLD_RECOVERY, hold) &&
+  HOLD_RECOVERY[hold as HoldReason] === "automatic";
+
+/**
+ * Whether a held row offers repair fields and "retry this chain": a row this
+ * build can read, held for a reason the person can act on.
+ */
+export const heldRowOffersRepair = (row: {
+  op: string | null;
+  hold?: string | null;
+}): boolean =>
+  row.op !== null &&
+  row.hold !== "unknown-op" &&
+  !holdSendsAutomatically(row.hold);
 
 export type RecoveryScope = {
   owner: string | null;

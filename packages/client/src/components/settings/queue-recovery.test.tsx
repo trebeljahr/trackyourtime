@@ -210,3 +210,29 @@ test("an orphan stop needs an explicit entry selected by name", async () => {
     }),
   );
 });
+
+test("a row waiting for a server update shows one line, the original change and a copy — no repair, no retry", () => {
+  render(
+    <QueueRecovery
+      row={{
+        ...row,
+        op: "entries.start",
+        hold: "server-too-old",
+        recovery: {
+          input: { description: "Computer Demos" },
+          originalPayload: { input: { description: "Computer Demos" } },
+        },
+      }}
+    />,
+  );
+  expect(
+    screen.getByText("Sends automatically after the server update"),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/Original change/)).toBeInTheDocument();
+  expect(screen.queryByText("Repair fields")).toBeNull();
+  expect(screen.queryByTestId("queue-recovery-retry")).toBeNull();
+  expect(screen.queryByText(/Your work is saved here/)).toBeNull();
+  expect(
+    screen.getByTestId("queue-recovery-export").closest("details"),
+  ).not.toBeNull();
+});
