@@ -72,7 +72,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       # `pnpm run build` compiles shared -> core -> server -> client, which
       # leaves packages/extension, packages/raycast and electron/ untypechecked
@@ -130,7 +130,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       # start-server.sh's own Mongo readiness loop is inside an
       # `if [ -z "${CI:-}" ]` guard, so under CI nothing else waits for Mongo;
@@ -166,7 +166,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       # A replica set, as in the e2e job: entry writes need transactions.
       - run: bash scripts/mongo-replica-set-container.sh mongo-desktop 27019
