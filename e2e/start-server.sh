@@ -32,8 +32,14 @@ ensure_container() {
 if [ -z "${CI:-}" ]; then
   echo "[e2e] Starting local test infrastructure..."
 
-  # MongoDB on port 27018
-  ensure_container starter-e2e-mongo -p 27018:27017 --tmpfs /data/db mongo:7
+  # MongoDB on port 27018, as a single-node replica set: the app's entry writes
+  # need transactions. A new container name, because a standalone
+  # `starter-e2e-mongo` from before this would otherwise be reused.
+  # The old standalone one is stopped (not removed) so it frees the port.
+  if docker ps --format '{{.Names}}' | grep -qx starter-e2e-mongo; then
+    docker stop starter-e2e-mongo >/dev/null
+  fi
+  bash scripts/mongo-replica-set-container.sh starter-e2e-mongo-rs 27018 --tmpfs /data/db
 
   # Redis on port 6380
   ensure_container starter-e2e-redis -p 6380:6379 --tmpfs /data redis:7-alpine

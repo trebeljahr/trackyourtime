@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
-import { signUpViaUI } from "./helpers";
+import { isEntryWrite, signUpViaUI } from "./helpers";
 import { cleanDatabase, closeDbConnection } from "./db-utils";
 
 const PASSWORD = "SecurePassword123!";
@@ -392,7 +392,7 @@ test.describe("Timer", () => {
     const start = page.getByTestId("tracker-start");
     await expect(start).toBeVisible();
     const started = page.waitForResponse(
-      (response) => response.url().includes("entries.update") && response.ok(),
+      (response) => isEntryWrite(response, "entries.update") && response.ok(),
     );
     await start.fill("00:00");
     await start.press("Enter");

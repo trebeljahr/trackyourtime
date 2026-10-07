@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
-import { signUpViaUI } from "./helpers";
+import { isEntryWrite, signUpViaUI } from "./helpers";
 import { cleanDatabase, closeDbConnection, getDb } from "./db-utils";
 
 const PASSWORD = "SecurePassword123!";
@@ -57,7 +57,7 @@ async function pickComboboxOption(
  */
 async function startAndSettle(page: Page): Promise<void> {
   const started = page.waitForResponse(
-    (response) => response.url().includes("entries.start") && response.ok(),
+    (response) => isEntryWrite(response, "entries.start") && response.ok(),
   );
   await page.getByTestId("tracker-toggle").click();
   await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
@@ -306,7 +306,7 @@ test.describe("Projects catalog", () => {
     // aborted and the entry stays open, with nothing on screen to say so.
     const stopped = page.waitForResponse(
       (response) =>
-        response.url().includes("entries.stop") && response.status() === 200,
+        isEntryWrite(response, "entries.stop") && response.status() === 200,
     );
     await page.getByTestId("tracker-toggle").click();
     await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
@@ -398,7 +398,7 @@ test.describe("Projects catalog", () => {
     await startAndSettle(page);
     const stopped = page.waitForResponse(
       (response) =>
-        response.url().includes("entries.stop") && response.status() === 200,
+        isEntryWrite(response, "entries.stop") && response.status() === 200,
     );
     await page.getByTestId("tracker-toggle").click();
     await stopped;

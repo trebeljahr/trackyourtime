@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Locator, type Page, type Response } from "@playwright/test";
 
 // next.config.ts sets `trailingSlash: true`, so every route resolves to a URL
 // ending in "/". A plain string in waitForURL/toHaveURL is an exact match and
@@ -8,6 +8,19 @@ export const TRACK_URL = /\/app\/track\/?$/;
 // visitor to `/login/?next=<page>` (lib/safe-next.ts), and that redirect can
 // also race the sign-out button's own navigation to the bare `/login`.
 export const LOGIN_URL = /\/login\/?(\?.*)?$/;
+
+/**
+ * Whether a response answers the entry write `procedure` (`entries.start`,
+ * `entries.update`, …). The web app sends those six writes durably, as
+ * `entries.applyOperation` with the procedure named in the body
+ * (`durableEntryLink` in lib/trpc.ts), so matching the URL alone never sees them.
+ */
+export function isEntryWrite(response: Response, procedure: string): boolean {
+  const url = response.url();
+  if (url.includes(procedure)) return true;
+  if (!url.includes("entries.applyOperation")) return false;
+  return (response.request().postData() ?? "").includes(`"operation":"${procedure}"`);
+}
 
 export async function signUpViaUI(
   page: Page,

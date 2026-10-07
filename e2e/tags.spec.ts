@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
-import { logManualEntry, signUpViaUI } from "./helpers";
+import { isEntryWrite, logManualEntry, signUpViaUI } from "./helpers";
 import { cleanDatabase, closeDbConnection } from "./db-utils";
 
 const PASSWORD = "SecurePassword123!";
@@ -300,7 +300,7 @@ test.describe("Tags", () => {
     // write itself before asserting anything the server has to know about.
     const applied = page.waitForResponse(
       (response) =>
-        response.url().includes("entries.update") && response.status() === 200,
+        isEntryWrite(response, "entries.update") && response.status() === 200,
     );
     await row.getByTestId("entry-tags").click();
     await page.getByTestId(`entry-tags-option-${tagId}`).click();

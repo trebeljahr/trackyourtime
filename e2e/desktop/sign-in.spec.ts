@@ -160,9 +160,11 @@ test("revoked from the web: the socket closes and the app lands on /login with t
   await socketOpen(since);
 
   // One unsent change: the start fails as a network error (the request is
-  // cancelled before it leaves), so the offline queue keeps it.
+  // cancelled before it leaves), so the offline queue keeps it. The app sends
+  // it durably, as entries.applyOperation; the legacy path is blocked too.
   await app!.evaluate(({ session }, api) => {
-    session.defaultSession.webRequest.onBeforeRequest({ urls: [`${api}/api/trpc/entries.start*`] }, (_details, callback) =>
+    const urls = [`${api}/api/trpc/entries.start*`, `${api}/api/trpc/entries.applyOperation*`];
+    session.defaultSession.webRequest.onBeforeRequest({ urls }, (_details, callback) =>
       callback({ cancel: true }),
     );
   }, API_ORIGIN);

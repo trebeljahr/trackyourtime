@@ -114,20 +114,8 @@ jobs:
     permissions:
       contents: read
     services:
-      mongo-e2e:
-        image: mongo:7
-        ports:
-          - 27018:27017
-        # start-server.sh's own Mongo readiness loop is inside an
-        # `if [ -z "${CI:-}" ]` guard, so under CI nothing waits for Mongo —
-        # without this the server can start before the database accepts
-        # connections, which surfaces as an unexplained failure on somebody's
-        # first contribution.
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+      # Mongo is not a service here: entry writes need a replica set, and a
+      # service container cannot take `--replSet`. The step below starts one.
       redis-e2e:
         image: redis:7-alpine
         ports:
@@ -144,6 +132,10 @@ jobs:
           node-version-file: .nvmrc
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
+      # start-server.sh's own Mongo readiness loop is inside an
+      # `if [ -z "${CI:-}" ]` guard, so under CI nothing else waits for Mongo;
+      # the script returns only once the member is a writable primary.
+      - run: bash scripts/mongo-replica-set-container.sh mongo-e2e 27018
       - run: pnpm run build
 
       - run: npx playwright install --with-deps chromium
@@ -160,8 +152,8 @@ jobs:
 
   # Also runs on both events, and reads no secret. The Electron harness
   # (e2e/desktop/): its global setup builds the desktop export and the bundled
-  # main/preload, starts its own production-mode API against the mongo service
-  # below, and every spec launches electron/dist/main.js over app://-. Linux
+  # main/preload, starts its own production-mode API against the replica set
+  # started below, and every spec launches electron/dist/main.js over app://-. Linux
   # has no display, hence xvfb-run. Not in build-server's or build-client's
   # `needs:`, so a desktop-only failure does not hold up a web deploy.
   desktop:
@@ -169,16 +161,6 @@ jobs:
     needs: [verify]
     permissions:
       contents: read
-    services:
-      mongo-desktop:
-        image: mongo:7
-        ports:
-          - 27019:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -186,6 +168,8 @@ jobs:
           node-version-file: .nvmrc
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
+      # A replica set, as in the e2e job: entry writes need transactions.
+      - run: bash scripts/mongo-replica-set-container.sh mongo-desktop 27019
       # shared and core are what the API and the client import from dist/.
       - run: pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build
       # Electron 42 has no install script; the binary arrives only when asked.

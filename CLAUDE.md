@@ -3371,6 +3371,14 @@ The order in `app.ts` is load-bearing. Do not rearrange:
 - **Server unit tests:** `node:test` module + `assert/strict`. Files in `packages/server/src/tests/*.test.ts`.
 - **Client unit tests:** Vitest + @testing-library/react. Files colocated as `*.test.tsx`.
 - **E2E tests:** Playwright. Files in `e2e/*.spec.ts`. Helpers in `e2e/helpers.ts`.
+- **E2E Mongo must be a replica set.** The web and desktop apps send every
+  entry write as `entries.applyOperation`, which a standalone mongod refuses
+  with 412 `DURABLE_REPLAY_REQUIRES_REPLICA_SET` — every new entry then stays
+  `temp-…`. CI, `e2e/start-server.sh` and the desktop harness all start a
+  single-node set (`scripts/mongo-replica-set-container.sh`); a `MONGODB_URI`
+  you pass in must point at one too. Wait for an entry write with
+  `isEntryWrite(response, "entries.start")`, never a URL match on the legacy
+  path, which the app no longer calls.
 - Use `data-testid` attributes for E2E selectors, not CSS classes or text content.
 
 ## Commit Messages

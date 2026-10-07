@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
-import { signUpViaUI } from "./helpers";
+import { isEntryWrite, signUpViaUI } from "./helpers";
 import { cleanDatabase, closeDbConnection } from "./db-utils";
 
 const PASSWORD = "SecurePassword123!";
@@ -57,7 +57,7 @@ async function createProject(page: Page, name: string): Promise<void> {
  */
 async function startFromBar(page: Page): Promise<void> {
   const started = page.waitForResponse(
-    (response) => response.url().includes("entries.start") && response.ok(),
+    (response) => isEntryWrite(response, "entries.start") && response.ok(),
   );
   await page.getByTestId("tracker-toggle").click();
   await started;
@@ -104,7 +104,7 @@ test.describe("Command palette", () => {
       page.locator('[data-testid^="command-palette-item-start-project-"]'),
     ).toBeVisible();
     const started = page.waitForResponse(
-      (response) => response.url().includes("entries.start") && response.ok(),
+      (response) => isEntryWrite(response, "entries.start") && response.ok(),
     );
     await input.press("Enter");
     await started;
@@ -209,7 +209,7 @@ test.describe("Tracker description autocomplete", () => {
       page.getByTestId("tracker-description-suggestion").first(),
     ).toContainText("Design review");
     const started = page.waitForResponse(
-      (response) => response.url().includes("entries.start") && response.ok(),
+      (response) => isEntryWrite(response, "entries.start") && response.ok(),
     );
     await description.press("Enter");
     await started;
@@ -267,7 +267,7 @@ test.describe("Tracker description autocomplete", () => {
 
     await description.fill("Draft two");
     const saved = page.waitForResponse(
-      (response) => response.url().includes("entries.update") && response.ok(),
+      (response) => isEntryWrite(response, "entries.update") && response.ok(),
     );
     await page.getByTestId("tracker-elapsed").click();
     await saved;

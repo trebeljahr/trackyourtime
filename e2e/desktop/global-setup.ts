@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { MongoClient } from "mongodb";
 
 import { API_ORIGIN, API_PORT, EXPORT_DIR, MAIN_JS, REPO_ROOT } from "./support";
 
@@ -94,12 +95,27 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   if (!mongoUri) {
     const port = await freePort();
     dbPath = mkdtempSync(join(tmpdir(), "tyt-desktop-e2e-db-"));
-    mongod = spawn("mongod", ["--port", String(port), "--bind_ip", "127.0.0.1", "--dbpath", dbPath, "--quiet"], {
+    // A single-node replica set: the app sends entry writes durably
+    // (entries.applyOperation), and a standalone mongod refuses those with 412.
+    mongod = spawn("mongod", ["--port", String(port), "--bind_ip", "127.0.0.1", "--dbpath", dbPath, "--replSet", "desktop-e2e", "--quiet"], {
       stdio: "ignore",
     });
     mongod.on("error", (err) => console.error("[desktop-e2e] mongod failed to start:", err.message));
     mongoUri = `mongodb://127.0.0.1:${port}/trackyourtime-desktop-e2e`;
     await waitFor(() => portInUse(port), `mongod on ${port}`, 30_000);
+    const admin = new MongoClient(`mongodb://127.0.0.1:${port}/?directConnection=true`);
+    try {
+      await admin.db("admin").command({
+        replSetInitiate: { _id: "desktop-e2e", members: [{ _id: 0, host: `127.0.0.1:${port}` }] },
+      });
+      await waitFor(
+        async () => Boolean((await admin.db("admin").command({ hello: 1 })).isWritablePrimary),
+        "replica-set primary",
+        30_000,
+      );
+    } finally {
+      await admin.close();
+    }
   }
 
   // 4. The APIs, production-shaped, trusting the app's origin. Every request

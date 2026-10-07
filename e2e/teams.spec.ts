@@ -9,7 +9,7 @@ import {
   type Page,
 } from "@playwright/test";
 
-import { TRACK_URL, logManualEntry, signUpViaUI } from "./helpers";
+import { isEntryWrite, TRACK_URL, logManualEntry, signUpViaUI } from "./helpers";
 import { cleanDatabase, closeDbConnection } from "./db-utils";
 
 /*
@@ -275,7 +275,7 @@ test.describe("Teams", () => {
       // stop that settles after the next start has been clicked refetches the
       // list from before that start and briefly drops its optimistic row.
       await Promise.all([
-        member.waitForResponse((response) => response.url().includes("entries.stop")),
+        member.waitForResponse((response) => isEntryWrite(response, "entries.stop")),
         member.getByTestId("tracker-toggle").click(),
       ]);
       await expect(member.getByTestId("tracker-toggle")).toHaveAttribute("data-state", "idle");
