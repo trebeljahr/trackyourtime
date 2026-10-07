@@ -21,6 +21,11 @@ export const REQUIRES_API_LEVEL = {
   "entries.bulkEdit": 10,
   "members.rates": 11,
   "timesheets.approvals": 11,
+  /**
+   * `entries.applyOperation`: an entry write with a durable operation id and a
+   * transactional receipt, so a replayed row is applied exactly once.
+   */
+  "entries.applyOperation": 12,
   /** Editing a runaway timer's start together with its real end time. */
   "entries.resolveRunaway.start": 8,
   "entries.client": 7,
