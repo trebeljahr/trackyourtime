@@ -857,7 +857,8 @@ or `TRUST_STORE_APPS=true`, which adds both of those, the desktop app's
 `packages/shared/src/store-clients.ts` — the self-host compose file defaults it
 on, so the store clients can sign in to a fresh self-hosted server with no
 manual step. For the extension the trust covers every request, not only
-sign-in: it has no host permissions, so all of its traffic is CORS. Off unless set, so the hosted deploy's list stays what Coolify
+sign-in: its host access covers only the hosted API (and loopback in a
+development build), so its traffic to any other server is CORS. Off unless set, so the hosted deploy's list stays what Coolify
 says. `STORE_EXTENSION_ID` is recomputed from `STORE_EXTENSION_KEY` in
 `tests/env.test.ts`; rotate both or neither.
 
@@ -1091,7 +1092,8 @@ A client that runs **in a browser** must have its **origin in
 is checked: better-auth force-validates `Origin` whenever a request carries
 `Sec-Fetch-*` headers, which every real browser fetch does (curl does not —
 which makes curl a misleading way to test this). For the extension it is more
-than sign-in: it has no host permissions, so every request it makes — tRPC,
+than sign-in: its host access covers only the hosted API (and loopback in a
+development build), so every request it makes to any other server — tRPC,
 REST, auth — is an ordinary CORS request, and an untrusted origin is refused
 by the browser on all of them. An unpacked extension's id
 comes from the absolute path it was loaded from; `pnpm run dev` derives it and
@@ -2803,12 +2805,17 @@ pnpm run extension:id [dev|prod]  # the chrome-extension:// origin to trust
 ```
 
 Each target carries its own name and its own `externally_connectable`, so both
-Chromium builds can be installed at once. **Neither has `host_permissions`,
-`optional_host_permissions` or `cookies`**: the permissions are exactly
-`storage`, `alarms` and `idle`, plus the optional `tabs` for activity capture.
-That is a Web Store review decision, and `manifest.test.ts` asserts the keys
-are absent and the list is exact — a permission added "just for one fetch" is
-an install warning on every store user's machine. `chrome.tabs.create` (the
+Chromium builds can be installed at once. The permissions are exactly
+`storage`, `alarms`, `idle` and `cookies`, plus the optional `tabs` for
+activity capture. `host_permissions` is the build's own API and nothing else:
+`https://api.trackyourtime.dev/*` for production and Firefox, loopback plus the
+hosted API for development, plus the error-reporting origin when a DSN is
+baked in. There is no `optional_host_permissions` and never `<all_urls>`.
+`cookies` and that host access exist for one thing — reading the API host's
+session cookie to offer the web account (see "Web app ↔ extension bridge").
+That is a Web Store review decision, and `manifest.test.ts` asserts the exact
+lists — a permission added "just for one fetch" is an install warning on every
+store user's machine. `chrome.tabs.create` (the
 device-flow page, "Open Track Your Time") needs no permission.
 
 `externally_connectable.matches` comes from `extensionBridgeMatchPatterns(target)`
@@ -2852,8 +2859,9 @@ each rule below fails quietly if it is broken.
   top-level document. The content script decodes bridge requests only; the
   background validates its add-on id, document URL, frame, private-browsing
   status, configured server and account. Popup commands reject content-script
-  senders. No cookie or session token crosses page messages. The page silently
-  approves a device authorization using its own session. Self-hosters retain
+  senders. No cookie or session token crosses page messages. After the popup
+  confirmation, the page approves the device authorization with its own
+  session. Self-hosters retain
   password/device sign-in and the server picker. Site access can be revoked in
   Firefox; automatic connection then requires restoring it and reloading the page.
 - **The socket needs https.** A `moz-extension://` document is a secure
@@ -2922,10 +2930,15 @@ only `https://trackyourtime.dev`, so it does not link to a local web app).
 
 ### Web app ↔ extension bridge
 
-The extension used to read the web app's session cookie and act as that
-session. With no `cookies` or host permission it cannot, so the web app and the
-extension keep sign-in in step through Chrome's `externally_connectable`
-messaging instead. The protocol is `@starter/shared/extension-bridge` (envelope
+The extension never acts as the web app's session. It reads the API host's
+session cookie only to **offer** that account (`background/browser-account.ts`,
+gated by `canReadBrowserAccount` to the hosted API, or loopback in
+development), and the person confirms it in the popup before anything is
+signed in. The web token is never persisted or adopted. Where cookie access is
+unavailable — another server, or Chrome withholding the site permission — the
+web app offers the account through `externally_connectable` (Firefox: the
+content relay) instead. `packages/extension/README.md` → "Confirming a web
+account" is the user-facing description. The protocol is `@starter/shared/extension-bridge` (envelope
 `{ channel, v, kind }`, the decoders, the allowlists), tested in
 `packages/server/src/tests/extension-bridge.test.ts`. The web half is
 `components/extension-bridge.tsx` over `lib/extension-bridge.ts`,
@@ -2933,25 +2946,25 @@ messaging instead. The protocol is `@starter/shared/extension-bridge` (envelope
 half is `background/bridge.ts`, `background/device-sign-in.ts`,
 `lib/device-auth-store.ts` and `lib/sign-out-marker.ts`.
 
-What it does. The page sends `sync` (its API origin, its user id, its session's
-`createdAt`) on mount, on every change of signed-in user, and on focus or
-visibility at most every `EXTENSION_BRIDGE_SYNC_MIN_INTERVAL_MS`. The extension
-answers with what the page should do:
+What it does (bridge version 2). The page sends `sync` (its API origin, its
+user id, its session's `createdAt`) on mount, on every change of signed-in
+user, and on focus or visibility. The extension never links on its own:
 
-- **Web signed in, extension signed out:** the extension starts a device
-  authorization for `trackyourtime-extension` and replies `approve-device` with
-  the user code. The page approves it with its own cookie session (the same
-  claim-then-approve as `/app/device`, never rendered), then sends
-  `device-approved`; that message wakes the worker, which exchanges the device
-  code once for its **own** bearer token. A 2FA account links this way too.
-- **Web signed out:** a `web`-sourced extension session is revoked and
-  forgotten; the queue, activity data and workspace choice stay.
-- **Web switched account:** a `web`-sourced session is revoked, and the
-  extension links to the new account as above.
-- **Extension signed out in the popup:** it writes a sign-out marker to
-  `chrome.storage.local`, and the page's next `sync` gets `sign-out-web` back.
-  The web tab signs out on its next mount, focus or visibility change, not
-  instantly — the extension has no content script and cannot reach a page.
+- **Web signed in, extension signed out:** the account becomes an offer, shown
+  in the popup with its email and photo. Only the popup's confirmation
+  (`confirmWebAccount` in `background/bridge.ts`) starts a device authorization
+  for `trackyourtime-extension` with purpose `web-confirmed`, bound to that
+  user. The worker approves it with the web session from the cookie; where it
+  has none, the page's next `sync` gets `approve-device` and approves it with
+  its own session. The worker exchanges the code once for its **own** bearer
+  token. A 2FA account links this way too.
+- **Web signed out or switched account:** the offer changes and an unfinished
+  confirmation for the previous user is cancelled. An existing extension
+  session stays signed in.
+- **Extension signed out in the popup:** revokes only the extension's session.
+  The web app is never asked to sign out, and signing in again needs another
+  confirmation. Version 1's sign-out marker and link block
+  (`lib/sign-out-marker.ts`) are only ever cleared now, never written.
 
 Rules that fail quietly if broken:
 
@@ -2962,8 +2975,8 @@ Rules that fail quietly if broken:
 - **Web only, after mount, after the session resolved.** Never under
   `isAppShell()` (Capacitor and Electron have no `chrome.runtime`, and the
   prerendered HTML must not differ). A pending or failed session lookup is
-  never sent as `userId: null`, or an offline page would sign the extension
-  out. The target ids are `NEXT_PUBLIC_EXTENSION_IDS` (comma-separated, each
+  never sent as `userId: null`, or an offline page would withdraw a valid
+  offer. The target ids are `NEXT_PUBLIC_EXTENSION_IDS` (comma-separated, each
   `^[a-p]{32}$`), defaulting to `STORE_EXTENSION_ID`; `pnpm run dev` sets the
   derived dev id plus the store id. A missing extension is a rejected
   `sendMessage` or a 5 s timeout, and costs nothing.
@@ -2984,42 +2997,30 @@ Rules that fail quietly if broken:
   message never changes the server**, the workspace, the queue or a setting.
   **Frames never talk to the extension**, on either end: any site can frame
   the web app, a cross-site frame gets no SameSite=Lax cookie, and its honest
-  "nobody is signed in" would sign a linked extension out. The page also
+  "nobody is signed in" would withdraw the offer. The page also
   checks `isTopLevelDocument`, and `serve.mjs` sends `frame-ancestors 'none'`
   and `X-Frame-Options: DENY`.
   A self-hosted web app is not in `externally_connectable`, so Chrome gives
   its page no `chrome.runtime` for our id and nothing happens; those users
   sign in with a password or "Sign in with the web app".
-- **An explicit session is never displaced.** `SessionSource` is
+- **No web event displaces an extension session.** `SessionSource` is
   `"web" | "password" | "device"`, stored in the session record (a record
-  without it reads as `"password"`). A password or device-flow session ignores
-  web sign-in, web sign-out and web account switches (`explicit-session`),
-  exactly as a password session ignored the web cookie before.
+  without it reads as `"password"`); a confirmed web account is `"web"`. Web
+  sign-in, sign-out and account switches change only the offer, whatever the
+  source (`explicit-session` for password and device sessions).
 - **Every extension sign-out revokes the extension's own row.** A borrowed
   cookie was the web app's session and was left alone; a device-flow session is
   a separate row, and leaving it would park a 30-day session in Settings →
   Devices.
-- **The marker only signs out the same person on the same server, once.** It
-  is `{ userId, apiOrigin, at }`; `sign-out-web` is answered only when the web
-  user matches, the API origin matches, `at` is later than the web session's
-  `createdAt`, and the marker is younger than `EXTENSION_SIGN_OUT_MARKER_TTL_MS`.
-  The `createdAt` check is what lets someone sign back in on the web after
-  signing out in the extension; the page re-checks it before calling
-  `signOut()`. A web sign-out deletes the marker. Before, the extension deleted
-  the cookie whoever it belonged to; this is narrower on purpose.
-- **An explicit sign-out is never undone by an older web session.** Beside the
-  marker, every popup sign-out writes a link block `{ apiOrigin, at }`
-  (`trackyourtime.web-link-not-before`), even when the user id is unknown. A
-  web session whose `createdAt` is at or before `at` is answered
-  `explicit-sign-out` and never linked, whoever it belongs to. It has no TTL;
-  only a sign-in of any kind clears it.
+- **Version 1 automatic links are refused.** Pending authorizations from
+  automatic login are rejected on upgrade, so they cannot bypass the
+  confirmation, and v1 messages are answered `unsupported` both ways.
 - **A 401 on a `web` session keeps the queue** (`forgetRejectedSession`). That
   session is a row of its own, so the web app's "Sign out other devices" or a
-  password change revokes it, and the bridge relinks at once; dropping the
-  owner-stamped rows there would lose tracked time. Any other session's 401
-  still goes through `forgetSession()`. The popup's own "Sign out other
-  devices" signs out the web app in this browser, and with it a linked
-  extension; its confirm text says so.
+  password change revokes it, and the person confirms the offer again;
+  dropping the owner-stamped rows there would lose tracked time. Any other
+  session's 401 still goes through `forgetSession()`. The popup's own "Sign
+  out other devices" can sign out the web app but never this extension.
 - **A reused web-link code is handed over again without a poll.** The page
   approves it (an already approved code counts) and its `device-approved`
   makes the exchange; a poll just before would put that exchange inside
@@ -3037,9 +3038,9 @@ Rules that fail quietly if broken:
   `EXTENSION_BRIDGE_DEVICE_RETRY_MS` of back-off after a failure, which caps
   what a misbehaving page can make the extension ask the server for.
 - **The token stays in `chrome.storage.session`**, so a browser restart signs
-  the extension out until a web tab loads and relinks it. That is the price of
-  the storage rule in `lib/session.ts`; the signed-out popup's "Open Track Your
-  Time" button is the mitigation. Do not move the token to `storage.local` to
+  the extension out until the person confirms the offered account again. That
+  is the price of the storage rule in `lib/session.ts`; the cookie-based offer
+  needs no web tab, which is the mitigation. Do not move the token to `storage.local` to
   "fix" it without deciding that rule again.
 - **The bridge has its own version.** `EXTENSION_BRIDGE_VERSION` is separate
   from `API_LEVEL`; an unknown `v` is answered `unsupported`, never guessed at,
