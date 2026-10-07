@@ -14,7 +14,7 @@
     "dev:prod": "vite build --watch --mode production",
     "hmr": "node scripts/hmr.mjs",
     "hmr:local": "node scripts/hmr.mjs --local",
-    "test:hmr": "node --test scripts/hmr-options.test.mjs"
+    "test:hmr": "node --test scripts/hmr-options.test.mjs scripts/hmr-port.test.mjs"
   },
   "dependencies": {
     "@starter/core": "workspace:*",

@@ -49,8 +49,13 @@ Shared subpath exports still use compiled output and need rebuilding when change
 
 HMR and standalone builds use separate output folders. Run only one HMR server
 per checkout.
-The server must remain running while using the HMR extension. Restarting it can
-choose a new port: reload the extension once after a restart. HMR follows this
+The server must remain running while using the HMR extension. While it is
+stopped, the loaded extension logs a refused `ws://localhost:<port>/?token=…`
+WebSocket and `TypeError: Failed to fetch` on Chrome's Errors page: that is
+Vite's client looking for its server, not the app. The port is remembered in
+`packages/extension/.cache/hmr-port` and reused on restart, so the extension
+reconnects on its own; reload it only when that port was taken and the server
+printed a new one. Clear the Errors page afterwards — Chrome keeps old entries. HMR follows this
 checkout; separate worktree changes appear after integration into this checkout.
 
 HMR uses a separate config and CRXJS's development-only loader. Production and
