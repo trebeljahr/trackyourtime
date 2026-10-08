@@ -1367,8 +1367,27 @@ builds the `-unsigned` version.
    `MAS_CSC_KEY_PASSWORD`.
 3. Create a **Mac App Store Connect** provisioning profile for the App ID, then
    set `MAS_PROVISIONING_PROFILE_BASE64` and `APPLE_TEAM_ID`.
-4. Dispatch the workflow, download `desktop-mas-signed`, and upload the pkg with
-   Transporter. Review and release happen in App Store Connect.
+4. Dispatch the workflow (`gh workflow run desktop-release.yml --ref main`),
+   then upload its `desktop-mas-signed` pkg:
+
+   ```bash
+   APPLE_API_KEY=~/Downloads/AuthKey_28G47BVTY7.p8 APPLE_API_KEY_ID=28G47BVTY7 \
+     APPLE_API_ISSUER=fe992c77-dd56-4ec2-9552-9ffb12bed05f pnpm desktop:mas-upload
+   ```
+
+   It takes the newest successful run (`--run <id>` or `--pkg <file>` for
+   another), checks the installer signature, the bundle id, the version against
+   package.json, a fresh CFBundleVersion, ITSAppUsesNonExemptEncryption,
+   ElectronTeamID and the compiled icon, runs `altool --validate-app`, then
+   `altool --upload-app`. `--dry-run` stops after the validation. Choosing the
+   build for the macOS version, review and release happen in App Store Connect.
+
+The pkg's CFBundleVersion is `DESKTOP_BUILD_NUMBER` (run number × 100 +
+attempt, set by the workflow's mas leg), because App Store Connect refuses a
+build number it has seen for a version. Its icon is `build/AppIcon.icon`, an
+Icon Composer document that electron-builder compiles with Xcode 26's actool
+into `Assets.car` (CFBundleIconName) beside a fallback icns; the v0.2.2 pkg
+predates that, carried only an icns, and is refused by `desktop:mas-upload`.
 
 What is different under the sandbox: the app group is
 `<APPLE_TEAM_ID>.com.ricoslabs.trackyourtime`, and the entitlements are

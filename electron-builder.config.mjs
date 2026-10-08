@@ -93,7 +93,11 @@ const config = {
   // build-desktop.mjs only allows together with the certificate.
   mac: {
     target: ["dmg", "zip"],
-    icon: "build/icon.icns",
+    // An Icon Composer document (scripts/icons-brand.mjs). electron-builder
+    // compiles it with Xcode 26's actool into Contents/Resources/Assets.car
+    // (CFBundleIconName) plus a fallback icns, so it needs Xcode 26 on the
+    // packaging Mac. App Store Connect takes the Mac listing's icon from it.
+    icon: "build/AppIcon.icon",
     category: "public.app-category.productivity",
     // Only with a real identity. An unsigned build is ad-hoc signed, and an
     // ad-hoc signature has no Team ID; the hardened runtime's library
@@ -139,6 +143,12 @@ const config = {
     entitlements: "build/generated/entitlements.mas.plist",
     entitlementsInherit: "build/entitlements.mas.inherit.plist",
     provisioningProfile: env("MAS_PROVISIONING_PROFILE") ?? null,
+    // CFBundleVersion. App Store Connect refuses an upload whose build number
+    // it has seen for that version, so a store build cannot reuse the
+    // marketing version as electron-builder would by default.
+    // desktop-release.yml sets it as mobile-release.yml sets the iOS one
+    // (run number × 100 + attempt); unset, it stays the version.
+    ...(env("DESKTOP_BUILD_NUMBER") ? { bundleVersion: env("DESKTOP_BUILD_NUMBER") } : {}),
     artifactName: names.mas,
     // No `extendInfo` here: app-builder-lib 26.8.1 builds Info.plist from
     // `mac.extendInfo` only and silently drops a `mas` one. The keys the store

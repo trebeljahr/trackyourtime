@@ -302,6 +302,19 @@ if (shouldPackage) {
     step("Generating desktop icons (build/icon.png → icns/ico)");
     run("pnpm", ["icons:desktop"]);
   }
+  // The macOS icon is an Icon Composer document that only Xcode 26's actool
+  // compiles (electron-builder.config.mjs, mac.icon). Say so here, rather than
+  // in electron-builder's error after the export has been packed.
+  if (process.platform === "darwin") {
+    if (!existsSync(resolve(repoRoot, "build/AppIcon.icon/icon.json"))) {
+      fail("No build/AppIcon.icon. Run: pnpm icons:brand");
+    }
+    const actool = spawnSync("xcrun", ["actool", "--version"], { encoding: "utf8" });
+    const actoolVersion = /<key>short-bundle-version<\/key>\s*<string>(\d+)/.exec(actool.stdout ?? "")?.[1];
+    if (!actoolVersion || Number(actoolVersion) < 26) {
+      fail(`The macOS icon needs Xcode 26 or later (actool ${actoolVersion ?? "not found"}). Install it and run xcode-select -s.`);
+    }
+  }
 
   // The Mac App Store entitlements name the team, so they are written per
   // build. Written for every package (electron-builder reads them only for
@@ -373,7 +386,23 @@ if (shouldPackage) {
           fail(`${relative(repoRoot, appPath)} has no ElectronTeamID ${team}; the sandboxed app could not open its IPC channels.`);
         }
       }
-      console.log(`    ${relative(repoRoot, appPath)}: CFBundleShortVersionString ${bundleVersion}`);
+      // The compiled icon: macOS 26 and App Store Connect read the asset
+      // catalog, older macOS the icns beside it. Both must be in the bundle.
+      const iconName = plistValue(appPath, "CFBundleIconName");
+      const iconFile = plistValue(appPath, "CFBundleIconFile");
+      const resources = join(appPath, "Contents/Resources");
+      if (!iconName || !existsSync(join(resources, "Assets.car"))) {
+        fail(`${relative(repoRoot, appPath)} has no compiled app icon (CFBundleIconName ${iconName}, Assets.car missing?).`);
+      }
+      const catalog = spawnSync("xcrun", ["assetutil", "--info", join(resources, "Assets.car")], { encoding: "utf8" });
+      if (!(catalog.stdout ?? "").includes(`"Name" : "${iconName}"`)) {
+        fail(`${relative(repoRoot, appPath)}: Assets.car holds no image set named ${iconName}.`);
+      }
+      if (!iconFile || !existsSync(join(resources, iconFile.endsWith(".icns") ? iconFile : `${iconFile}.icns`))) {
+        fail(`${relative(repoRoot, appPath)} names CFBundleIconFile ${iconFile}, which is not in Contents/Resources.`);
+      }
+      const build = plistValue(appPath, "CFBundleVersion");
+      console.log(`    ${relative(repoRoot, appPath)}: CFBundleShortVersionString ${bundleVersion}, CFBundleVersion ${build}, icon ${iconName} (Assets.car + ${iconFile})`);
     }
   }
 }

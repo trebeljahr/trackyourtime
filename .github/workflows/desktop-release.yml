@@ -223,6 +223,16 @@ jobs:
             echo "MAS_PROVISIONING_PROFILE=$RUNNER_TEMP/embedded.provisionprofile" >> "$GITHUB_ENV"
           fi
 
+      # The Mac App Store pkg's CFBundleVersion (electron-builder.config.mjs,
+      # mas.bundleVersion). App Store Connect refuses a build number it has
+      # seen for a version, so it grows per run and per re-run, the way
+      # mobile-release.yml numbers the iOS build. `pnpm desktop:mas-upload`
+      # sends the result to App Store Connect.
+      - name: Number the Mac App Store build
+        if: matrix.channel == 'mas'
+        shell: bash
+        run: echo "DESKTOP_BUILD_NUMBER=$((GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))" >> "$GITHUB_ENV"
+
       # Decides signed / unsigned / store / skip before anything slow runs, with
       # the same function build-desktop.mjs calls. A partial set fails here.
       #

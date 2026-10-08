@@ -294,3 +294,37 @@ await emit(
     .png({ compressionLevel: 9 })
     .toBuffer(),
 );
+
+/*
+ * The macOS app icon, as an Icon Composer document (build/AppIcon.icon).
+ *
+ * electron-builder compiles a `.icon` with Xcode 26's actool into the bundle's
+ * Assets.car (CFBundleIconName) plus a fallback icns. That is what macOS 26
+ * draws with its own glass and shape, and what App Store Connect reads the Mac
+ * listing's icon from. A plain icns from build/icon.png is drawn inside a grey
+ * squircle on macOS 26 and tops out at the 512px it was rendered at.
+ *
+ * The document is the indigo fill plus one layer: the tile's mark without its
+ * rounded ground, on the 1024 canvas Icon Composer lays layers out on. The
+ * system supplies the shape, so the layer must not carry one.
+ */
+const hexToSrgb = (hex) =>
+  [1, 3, 5].map((at) => (parseInt(hex.slice(at, at + 2), 16) / 255).toFixed(5)).join(",");
+const iconLayer = tile
+  .toString("utf8")
+  .replace(/<rect[^>]*\/>\s*/, "")
+  .replace(/ role="img" aria-label="[^"]*"/, "")
+  .replace('width="64" height="64"', 'width="1024" height="1024"');
+const iconDocument = {
+  fill: { solid: `srgb:${hexToSrgb(BRAND_INDIGO)},1.00000` },
+  groups: [
+    {
+      layers: [{ "image-name": "mark.svg", name: "mark" }],
+      shadow: { kind: "neutral", opacity: 0.5 },
+      translucency: { enabled: true, value: 0.5 },
+    },
+  ],
+  "supported-platforms": { squares: "shared" },
+};
+await emit("build/AppIcon.icon/Assets/mark.svg", Buffer.from(iconLayer));
+await emit("build/AppIcon.icon/icon.json", Buffer.from(`${JSON.stringify(iconDocument, null, 2)}\n`));

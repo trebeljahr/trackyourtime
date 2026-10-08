@@ -196,11 +196,16 @@ pnpm icons:desktop                    # regenerate icns/ico from build/icon.png
 node scripts/build-desktop.mjs --channel mac --package --mac dmg zip --arm64  # a release leg, locally
 node scripts/desktop-release-draft.mjs --artifacts <dir> --out <dir>         # what a tag attaches to the draft
 pnpm desktop:rollout v1.4.0 25        # offer a published release to 25 % of installs; 0 halts, 100 finishes
+pnpm desktop:mas-upload [--dry-run]   # validate + upload the newest signed Mac App Store pkg (docs/deploy.md)
 ```
 
 `build/icon.png` is generated — run `pnpm icons:brand` to re-derive it (and
 every other shipped bitmap) from `packages/client/public/brand/mark-tile.svg`,
-then `pnpm icons:desktop` to fan it out to icns/ico. Do not hand-edit it.
+then `pnpm icons:desktop` to fan it out to icns/ico. Do not hand-edit it. The macOS
+icon is not that icns: `mac.icon` is `build/AppIcon.icon`, an Icon Composer
+document `icons:brand` also writes, compiled by electron-builder with Xcode 26's
+actool into `Assets.car` — so packaging a Mac build needs Xcode 26, and
+`build-desktop.mjs` fails a mac/mas app without the compiled icon.
 
 The plan and its measured corrections are `docs/desktop-app-plan.md`. What is
 built, and the rules that fail quietly if broken:
