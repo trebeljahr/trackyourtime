@@ -134,8 +134,9 @@ services:
       # ── Data stores ──────────────────────────────────────────────────
       # Override either to point at a managed database instead; the local
       # mongo/redis services then simply go unused (comment them out below
-      # along with the depends_on entries).
-      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/trackyourtime}
+      # along with the depends_on entries). A managed database must be a
+      # replica set (or mongos): every time-entry write is a transaction.
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/trackyourtime?replicaSet=rs0}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
 
       # Accept sign-ins from the store-installed clients with no extra step:
@@ -264,14 +265,27 @@ services:
   # would mean a password that has to stay in sync with MONGODB_URI for no
   # gain over that. If you would rather run a managed database, set
   # MONGODB_URI (with its own credentials) and drop this service.
+  #
+  # A single-node replica set, not a standalone: the server writes each
+  # time-entry change in one transaction with its replay receipt, which a
+  # standalone refuses (HTTP 412 DURABLE_REPLAY_REQUIRES_REPLICA_SET). The
+  # healthcheck initiates the set on first start and is a no-op after that,
+  # so an existing standalone volume converts in place on its next start;
+  # the data files stay as they are.
   mongo:
     image: mongo:7.0
     restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - mongo-data:/data/db
       - mongo-config:/data/configdb
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }) } quit(db.hello().isWritablePrimary ? 0 : 1)"
       interval: 10s
       timeout: 5s
       retries: 10

@@ -100,7 +100,7 @@ One domain and five containers, all on your server:
 | `caddy` | `caddy:2.11-alpine` | TLS. The only container with published ports. Sends `/api/*` and `/ws` to the server, and everything else to the web app. |
 | `server` | `ghcr.io/trebeljahr/trackyourtime-server` | The API (tRPC and REST), authentication and the live-sync WebSocket. |
 | `client` | `ghcr.io/trebeljahr/trackyourtime-client-selfhost` | The web app: a static export served by a second, small Caddy. |
-| `mongo` | `mongo:7.0` | All of your data, including accounts and sessions. |
+| `mongo` | `mongo:7.0` | All of your data, including accounts and sessions. It runs as a single-node replica set, because every time-entry write is a transaction. |
 | `redis` | `redis:7.4-alpine` | Present but unused. See [Optional integrations](#optional-integrations). |
 
 The whole feature set works with nothing else configured. That covers time
@@ -483,7 +483,7 @@ commented out:
 | `TRUST_STORE_APPS` | Only to refuse the phone apps and the store extension. It is `true` by default. See [The other clients](#the-other-clients). |
 | `TRUST_EXTENSION_ORIGINS` | Only to accept or refuse the Firefox extension on its own. Unset follows `TRUST_STORE_APPS`. See [The other clients](#the-other-clients). |
 | `TRUSTED_ORIGINS` | Only for an extension you built yourself, or a web app that copies data in directly. See [The other clients](#the-other-clients). |
-| `MONGODB_URI`, `REDIS_URL` | Only to use a managed database instead of the containers. |
+| `MONGODB_URI`, `REDIS_URL` | Only to use a managed database instead of the containers. A managed MongoDB must be a replica set or `mongos`: a standalone refuses time-entry writes with `DURABLE_REPLAY_REQUIRES_REPLICA_SET`. |
 
 The app must run at the **root** of the domain. Hosting it under
 `https://example.com/trackyourtime/` breaks live sync: the browser derives the
