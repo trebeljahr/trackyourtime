@@ -40,8 +40,22 @@ listed here ships inside a build, at a path that code or a store already names:
 | --- | --- | --- |
 | `iphone-6.9-{1-track,2-reports,3-more,4-invoice}.png` | 1320×2868 | ASC 6.9″ slot (uploaded, COMPLETE) |
 | `ipad-13-{1-track,2-reports,3-more,4-invoice}.png` | 2064×2752 | ASC 13″ slot (uploaded, COMPLETE) |
+| `iphone-duo-outer-{1-track,2-reports,3-more,4-invoice}.png` | 1398×2034 | ASC iPhone Duo slot (`APP_IPHONE_DUO`), outer display |
+| `iphone-duo-inner-{1-track,2-reports,3-more,4-invoice}.png` | 2007×2853 | iPhone Duo inner display, the slot's other accepted size |
+| `mac-{1-track,2-reports,3-calendar,4-invoice}.png` | 2880×1800 | ASC Mac slot (`APP_DESKTOP`), the real Electron shell |
 
-All eight are in App Store Connect app **6814737131**.
+`scripts/marketing/capture-store.mjs` regenerates every set above at its exact
+size, opaque, against a local server seeded by `seed-demo.mjs`:
+
+```bash
+node scripts/marketing/capture-store.mjs http://localhost:<web-port> <demo-email> <demo-password> [out-dir] [--only mac,iphone-duo-outer]
+```
+
+The Mac set drives `electron/dist/main.js` headless against the dev server
+(`pnpm build:desktop --electron-only` first) and hides the Activity nav item,
+which the sandboxed Mac App Store build does not offer.
+
+The 6.9″, 13″ and Mac sets are in App Store Connect app **6814737131** (Mac uploaded 2026-10-08).
 
 ### `docs/marketing/google-play/` — uploaded
 

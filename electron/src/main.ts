@@ -246,7 +246,9 @@ function start(): void {
 
 function loadDev(win: BrowserWindow, url: string): void {
   void win.loadURL(url);
-  win.webContents.openDevTools({ mode: "detach" });
+  // A detached DevTools window is a window of its own, shown and focused:
+  // a headless run (headless.ts) must never open one.
+  if (!headless) win.webContents.openDevTools({ mode: "detach" });
 
   // Recover from transient dev-server outages during HMR restarts.
   const RECOVERABLE_ERRORS = new Set([-7, -21, -101, -102, -104, -105, -106]);
