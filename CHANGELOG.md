@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+This release added team workspaces, invoice payments and timesheet approvals.
+Time entries are now saved on the device before they are sent, and the phone
+and Mac apps were prepared for the App Store.
+
+### Added
+
+- People can create team workspaces beside their personal one. A personal
+  workspace cannot be left, handed over or shared.
+- Invoices record payments and credits, show what is still owed and can send
+  reminders. Overdue invoices have their own filter.
+- Workspaces can turn on timesheet approval: members submit a period, an
+  owner or admin approves it, and approved periods are locked.
+- Each member can have their own billing rate.
+- Reports can be saved as named views. Entries can be searched and edited in
+  bulk, with a limit per edit.
+- A timesheet cell opens the single time blocks behind it for editing.
+- New accounts see a short first-run guide, and the signed-in app links to the
+  documentation.
+- The Mac App Store build carries a compiled app icon and a new build number
+  for each upload.
+
+### Changed
+
+- The web app, extension and Raycast save every time-entry change on the
+  device before they send it, and retry it after a restart or a failed
+  connection. The server records each change once.
+- Pages load faster: query batches stream, workspace checks are reused within
+  a request and CORS preflights are cached.
+- Desktop builds ship only the English and German Chromium language files.
+- The self-host `mongo` service runs as a single-node replica set, which
+  time-entry writes now require. It converts an existing volume on its first
+  start.
+
+### Fixed
+
+- On iOS, taking a photo for a profile picture or invoice logo no longer
+  closes the app. The app also declares its data use in a privacy manifest.
+- Deleting an entry asks for confirmation, and a second delete of the same
+  entry does nothing.
+- Manual overnight entries keep their duration.
+- Entries keep their currency in the tracker and in reports.
+- Android offers saved website passwords on the login screen.
+
+### Migrations
+
+- Migration 2 marks each workspace as personal or team. It is additive:
+  0.2.2 can still read the database after it runs.
+
 ## [0.2.2] - 2026-10-02
 
 This patch restored the self-host client image build on both architectures.

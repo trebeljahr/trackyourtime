@@ -105,20 +105,20 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
       "Optional start time on entries.resolveRunaway when setting the real end time.",
     ],
   },
-  { level: 9, release: "0.2.2", added: ["Invoice payment ledger, full credit/correction, reminders and overdue filter."] },
+  { level: 9, release: "0.3.0", added: ["Invoice payment ledger, full credit/correction, reminders and overdue filter."] },
   {
     level: 10,
-    release: "0.2.2",
+    release: "0.3.0",
     added: ["entries.bulkEdit: bounded, revision-checked entry edits with per-entry outcomes."],
   },
-  { level: 11, release: "0.2.2", added: [
+  { level: 11, release: "0.3.0", added: [
     "Member rate editing and author-specific billing defaults.",
     "Optional transactional timesheet submission, review and period locks; approval eligibility for invoices.",
   ] },
-  { level: 12, release: "0.2.2", added: ["entries.applyOperation with transactional receipts and a database capability handshake."] },
+  { level: 12, release: "0.3.0", added: ["entries.applyOperation with transactional receipts and a database capability handshake."] },
   {
     level: 13,
-    release: "0.2.2",
+    release: "0.3.0",
     added: [
       "`workspaces.create`: a new team workspace (name, currency, week start) owned by the caller.",
       "`kind` (`personal` | `team`) on `workspaces.list` rows; a personal workspace cannot be left, transferred or invited into.",
