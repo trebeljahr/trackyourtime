@@ -45,7 +45,7 @@ jobs:
       tag: ${{ steps.find.outputs.tag }}
       has-suite: ${{ steps.find.outputs.has-suite }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Every tag, to find the newest release.
           fetch-depth: 0
@@ -75,11 +75,11 @@ jobs:
       TAG: ${{ needs.previous.outputs.tag }}
       COMPAT_PROJECT: compat-old-server-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The compose file the release shipped with, so the old server runs
       # with its own environment. Checked out beside, never over, this one.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.previous.outputs.tag }}
           path: previous-release
@@ -126,9 +126,9 @@ jobs:
       TAG: ${{ needs.previous.outputs.tag }}
       COMPAT_PROJECT: compat-new-server-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.previous.outputs.tag }}
           path: previous-release
