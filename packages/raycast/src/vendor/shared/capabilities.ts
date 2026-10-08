@@ -28,6 +28,11 @@ export const REQUIRES_API_LEVEL = {
    * transactional receipt, so a replayed row is applied exactly once.
    */
   "entries.applyOperation": 12,
+  /**
+   * `workspaces.create` and `kind` on `workspaces.list` rows. An older server
+   * cannot create a team workspace, and every workspace there reads as team.
+   */
+  "workspaces.create": 13,
   /** Editing a runaway timer's start together with its real end time. */
   "entries.resolveRunaway.start": 8,
   "entries.client": 7,

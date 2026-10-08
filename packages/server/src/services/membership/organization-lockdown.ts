@@ -82,4 +82,19 @@ export const organizationPluginOptions = {
   // The lifetime `invitations.ts` stamps on the rows it writes, stated here
   // too so the plugin's own reading of those rows agrees.
   invitationExpiresIn: INVITATION_TTL_SECONDS,
+  // `kind` ("personal" | "team") lives on the organization row itself rather
+  // than in `WorkspaceSettings`: it is written by the same insert that creates
+  // the workspace, so no workspace ever exists without one, and the
+  // membership store — which already reads this row for the name — reads it
+  // with no second collection. Optional, because rows written before it
+  // existed are marked by migration 2; an absent value reads as "team"
+  // (`asWorkspaceKind`). Accepting it as input is safe only because every
+  // `/organization/*` endpoint is closed to HTTP above.
+  schema: {
+    organization: {
+      additionalFields: {
+        kind: { type: "string", required: false },
+      },
+    },
+  },
 } as const;

@@ -32,6 +32,14 @@ const refusalCopy = (refusal: MembershipRefusal): string => {
       return t("errors.inviteLimitReached");
     case "invoice-permission-required":
       return t("errors.invoicePermissionRequired");
+    case "personal-workspace-cannot-leave":
+      return t("errors.personalWorkspaceCannotLeave");
+    case "personal-workspace-cannot-transfer":
+      return t("errors.personalWorkspaceCannotTransfer");
+    case "personal-workspace-cannot-invite":
+      return t("errors.personalWorkspaceCannotInvite");
+    case "workspace-limit-reached":
+      return t("errors.workspaceLimitReached");
     default: {
       const unhandled: never = refusal;
       return String(unhandled);

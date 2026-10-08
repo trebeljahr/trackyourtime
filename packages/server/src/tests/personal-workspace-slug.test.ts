@@ -82,3 +82,35 @@ describe("createPersonalWorkspace", () => {
     );
   });
 });
+
+describe("the workspace kind on the organization row", () => {
+  it("is written by the same createOrganization call and read back by the adapter", async () => {
+    const { organizationPluginOptions } = await import(
+      "../services/membership/organization-lockdown.js"
+    );
+    const kinded = betterAuth({
+      database: memoryAdapter(db as never),
+      secret: "personal-workspace-slug-secret-0123456789abcdef",
+      baseURL: "http://localhost:3000",
+      logger: { disabled: true },
+      emailAndPassword: { enabled: true },
+      plugins: [organization(organizationPluginOptions)],
+    });
+    const context = await kinded.$context;
+    const user = await context.internalAdapter.createUser({
+      email: "pia@example.com",
+      name: "Pia",
+      emailVerified: true,
+    });
+    const owner = { id: String(user.id), email: "pia@example.com", name: "Pia" };
+
+    const workspaceId = await createPersonalWorkspace(kinded.api as never, owner);
+    assert.ok(workspaceId);
+    assert.equal(db.organization[0]?.kind, "personal");
+    const [row] = (await context.adapter.findMany({
+      model: "organization",
+      where: [{ field: "id", value: workspaceId }],
+    })) as Array<Record<string, unknown>>;
+    assert.equal(row?.kind, "personal");
+  });
+});

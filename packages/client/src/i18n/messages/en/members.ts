@@ -58,6 +58,7 @@ export const members = {
     blockedLastOwner:
       "Transfer ownership first. You are the only owner, and the other members need one.",
     blockedOnlyMember: "You are the only member, so there is nobody to leave the workspace to.",
+    blockedPersonal: "This is your personal workspace. It stays yours, so you cannot leave it.",
   },
   invite: {
     title: "Invite someone",
@@ -88,6 +89,22 @@ export const members = {
     removed: "{name} was removed from the workspace.",
     transferred: "{name} is now the owner.",
   },
+  personal: {
+    title: "Your personal workspace",
+    description:
+      "Only you can see the time in this workspace. To track time with other people, create a team workspace and invite them there.",
+    create: "New team workspace",
+  },
+  newWorkspace: {
+    title: "New team workspace",
+    description: "A shared workspace for a team or a client. You become its owner and can invite people.",
+    name: "Name",
+    currency: "Currency",
+    weekStart: "Week starts on",
+    hint: "Your personal workspace stays as it is. You can switch between workspaces at any time.",
+    create: "Create workspace",
+    creating: "Creating…",
+  },
   errors: {
     ownerRequired: "Only an owner can do this.",
     adminRequired: "Only an owner or an admin can do this.",
@@ -100,6 +117,11 @@ export const members = {
     invitationNotPending: "This invitation can no longer be accepted.",
     inviteLimitReached: "Too many invitations are waiting. Cancel some, or try again later.",
     invoicePermissionRequired: "Invoices need an owner or admin who can see everyone's time and money.",
+    personalWorkspaceCannotLeave: "Your personal workspace is yours for good. You cannot leave it.",
+    personalWorkspaceCannotTransfer: "Your personal workspace cannot be handed to somebody else.",
+    personalWorkspaceCannotInvite:
+      "Nobody can be invited into a personal workspace. Create a team workspace to work with others.",
+    workspaceLimitReached: "You own the maximum number of workspaces. Leave or hand one over first.",
     notFound: "This member or invitation no longer exists. The list is refreshed.",
   },
   workspaceTab: {

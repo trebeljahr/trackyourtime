@@ -170,6 +170,11 @@ describe("member rules", () => {
     );
     expect(leaveBlockFor("admin", teamRows("admin"))).toBeNull();
     expect(leaveBlockFor("member", teamRows("member"))).toBeNull();
+    expect(leaveBlockFor("member", teamRows("member"), "team")).toBeNull();
+    // A personal workspace is never left, whoever else is (legacy) in it.
+    expect(leaveBlockFor("owner", teamRows("owner"), "personal")).toBe(
+      "personal-workspace-cannot-leave",
+    );
   });
 
   it("offers member reporting to people who manage or see a shared workspace", () => {

@@ -11,12 +11,20 @@ import type {
 import { ConfirmDialog } from "@/components/catalog/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { ListSkeleton } from "@/components/ui/content-skeletons";
 import { toast } from "@/components/ui/sonner";
 import { InviteForm } from "@/components/members/invite-form";
 import { LeaveWorkspace } from "@/components/members/leave-workspace";
 import { leaveBlockFor } from "@/components/members/member-rules";
 import { membershipErrorMessage } from "@/components/members/membership-errors";
+import { NewWorkspaceDialog } from "@/components/members/new-workspace-dialog";
 import {
   MembersTable,
   type VisibilityPatch,
@@ -62,7 +70,10 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
   const utils = trpc.useUtils();
   const { workspace, isLoading: workspaceLoading } = useActiveWorkspace();
   const permissions = workspace?.permissions ?? null;
-  const manages = permissions?.inviteMembers === true;
+  // A personal workspace takes no invitations (the server refuses them), so
+  // nobody is shown a form whose only outcome is an error.
+  const personal = workspace?.kind === "personal";
+  const manages = permissions?.inviteMembers === true && !personal;
 
   const membersQuery = trpc.members.list.useQuery(undefined, {
     enabled: workspace !== null,
@@ -76,6 +87,7 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
   const [busyMemberId, setBusyMemberId] = React.useState<string | null>(null);
   const [busyInvitationId, setBusyInvitationId] = React.useState<string | null>(null);
   const [confirm, setConfirm] = React.useState<Pending>(null);
+  const [creating, setCreating] = React.useState(false);
 
   /**
    * After any change: the member rows, the viewer's own permissions (a
@@ -234,9 +246,31 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
         </>
       ) : null}
 
+      {personal ? (
+        <Card data-testid="personal-workspace-card">
+          <CardHeader>
+            <CardTitle className="text-base">{t("personal.title")}</CardTitle>
+            <CardDescription>{t("personal.description")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCreating(true)}
+              data-testid="personal-workspace-create"
+            >
+              {t("personal.create")}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+      {creating ? (
+        <NewWorkspaceDialog open onOpenChange={setCreating} navigate={navigate} />
+      ) : null}
+
       <LeaveWorkspace
         workspaceName={workspace.name}
-        block={leaveBlockFor(workspace.role, rows)}
+        block={leaveBlockFor(workspace.role, rows, workspace.kind)}
         onLeave={() => leave.mutateAsync(undefined)}
         navigate={navigate}
       />

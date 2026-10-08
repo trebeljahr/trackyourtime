@@ -136,6 +136,13 @@ describe("membershipErrorMessage", () => {
     ["invitation-email-mismatch", "This invitation is for a different email address."],
     ["invitation-not-pending", "This invitation can no longer be accepted."],
     ["invite-limit-reached", "Too many invitations are waiting. Cancel some, or try again later."],
+    ["personal-workspace-cannot-leave", "Your personal workspace is yours for good. You cannot leave it."],
+    ["personal-workspace-cannot-transfer", "Your personal workspace cannot be handed to somebody else."],
+    [
+      "personal-workspace-cannot-invite",
+      "Nobody can be invited into a personal workspace. Create a team workspace to work with others.",
+    ],
+    ["workspace-limit-reached", "You own the maximum number of workspaces. Leave or hand one over first."],
   ])("maps %s", (code, copy) => {
     expect(membershipErrorMessage(forbidden(code))).toBe(copy);
   });

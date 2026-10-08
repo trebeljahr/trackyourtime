@@ -1,6 +1,14 @@
 // The workspaces a person is in, and which one their session defaults to.
-import { permissionsFor, type WorkspaceSummary } from "@starter/shared";
-import { membershipNotFound } from "./errors.js";
+import {
+  asWorkspaceKind,
+  permissionsFor,
+  WORKSPACE_NAME_MAX,
+  type SyncEvent,
+  type WorkspaceKind,
+  type WorkspaceSummary,
+} from "@starter/shared";
+import { membershipNotFound, membershipRefused } from "./errors.js";
+import { initialFlags } from "./lifecycle.js";
 import { asRole } from "./records.js";
 import { asDate, asId, type MembershipRowStore, type StoredRow } from "./store.js";
 
@@ -40,9 +48,12 @@ export async function listWorkspaces(
     store.find("workspaceMembers", { workspaceId: { $in: ids } }),
   ]);
   const nameOf = new Map<string, string>();
+  const kindOf = new Map<string, WorkspaceKind>();
   for (const org of orgs) {
     const id = asId(org.id);
-    if (id) nameOf.set(id, typeof org.name === "string" ? org.name : "");
+    if (!id) continue;
+    nameOf.set(id, typeof org.name === "string" ? org.name : "");
+    kindOf.set(id, asWorkspaceKind(org.kind));
   }
   const countOf = new Map<string, number>();
   for (const row of everyone) {
@@ -56,6 +67,7 @@ export async function listWorkspaces(
     return {
       id: workspaceId,
       name: nameOf.get(workspaceId) ?? "",
+      kind: kindOf.get(workspaceId) ?? "team",
       role,
       memberCount: countOf.get(workspaceId) ?? 1,
       isDefault: workspaceId === fallback,
@@ -103,4 +115,109 @@ export async function workspaceName(
 ): Promise<string> {
   const [org] = await store.find("authOrganizations", { id: workspaceId });
   return typeof org?.name === "string" ? org.name : "";
+}
+
+/**
+ * Whether a workspace is somebody's personal one. Read from the organization
+ * row, where the kind is written in the same insert that creates the
+ * workspace; a row without one (or none at all) is a team workspace.
+ */
+export async function workspaceKind(
+  store: Pick<MembershipRowStore, "find">,
+  workspaceId: string,
+): Promise<WorkspaceKind> {
+  const [org] = await store.find("authOrganizations", { id: workspaceId });
+  return asWorkspaceKind(org?.kind);
+}
+
+/**
+ * How many workspaces one person may own at once, personal included. Generous
+ * for any real team setup; it exists so a script cannot mint organizations
+ * without bound.
+ */
+export const MAX_OWNED_WORKSPACES = 25;
+
+const SLUG_MAX = 48;
+
+/** A slug from the name with a random tail, since slugs are global. */
+export function teamWorkspaceSlug(name: string, tail: string): string {
+  const base = name
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const head = (base || "workspace").slice(0, SLUG_MAX - tail.length - 1).replace(/-+$/, "");
+  return `${head || "workspace"}-${tail}`;
+}
+
+export type WorkspaceCreationDeps = {
+  store: MembershipRowStore;
+  now: () => Date;
+  /** Random hex for the slug tail. */
+  slugTail: () => string;
+  /** Seed the new workspace's currency and week start. Idempotent. */
+  seedSettings: (
+    workspaceId: string,
+    settings: { currency: string; weekStartsOn: 0 | 1 },
+  ) => Promise<void>;
+  publishUser: (userId: string, event: SyncEvent) => void;
+};
+
+/**
+ * Create a TEAM workspace owned by the caller.
+ *
+ * The write order is the lifecycle's: the organization (with its kind), then
+ * better-auth's `member`, then the settings, and the `WorkspaceMember` mirror
+ * LAST, because the mirror is what grants access. A crash before it leaves an
+ * organization nobody can reach — no access, nothing listed — which is the
+ * safe disagreement; the person simply creates again.
+ *
+ * The session is not moved: a client joins the new workspace with a full page
+ * load, which addresses it explicitly from then on.
+ */
+export async function createTeamWorkspace(
+  deps: WorkspaceCreationDeps,
+  user: { id: string; name?: string | null; email?: string | null },
+  input: { name: string; currency: string; weekStartsOn: 0 | 1 },
+): Promise<{ workspaceId: string }> {
+  const owned = (await deps.store.find("workspaceMembers", { userId: user.id })).filter(
+    (row) => row.role === "owner",
+  );
+  if (owned.length >= MAX_OWNED_WORKSPACES) throw membershipRefused("workspace-limit-reached");
+
+  const now = deps.now();
+  const name = input.name.trim().slice(0, WORKSPACE_NAME_MAX);
+  const org = await deps.store.insertOne("authOrganizations", {
+    name,
+    slug: teamWorkspaceSlug(name, deps.slugTail()),
+    kind: "team",
+    createdAt: now,
+  });
+  const workspaceId = asId(org.id);
+  if (!workspaceId) throw new Error("membership: created organization has no id");
+
+  await deps.store.insertOne("authMembers", {
+    organizationId: workspaceId,
+    userId: user.id,
+    role: "owner",
+    createdAt: now,
+  });
+  await deps.seedSettings(workspaceId, {
+    currency: input.currency,
+    weekStartsOn: input.weekStartsOn,
+  });
+  await deps.store.insertOne("workspaceMembers", {
+    workspaceId,
+    userId: user.id,
+    role: "owner",
+    name: ((user.name ?? "").trim() || (user.email ?? "")).slice(0, 200),
+    hourlyRate: null,
+    ...initialFlags("owner"),
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  deps.publishUser(user.id, { kind: "membership.changed", workspaceId, reason: "joined" });
+  return { workspaceId };
 }

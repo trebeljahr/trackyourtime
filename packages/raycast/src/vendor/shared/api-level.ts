@@ -24,7 +24,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 12;
+export const API_LEVEL = 13;
 
 export type ApiLevelChange = {
   level: number;
@@ -118,6 +118,14 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     "Optional transactional timesheet submission, review and period locks; approval eligibility for invoices.",
   ] },
   { level: 12, release: "0.2.2", added: ["entries.applyOperation with transactional receipts and a database capability handshake."] },
+  {
+    level: 13,
+    release: "0.2.2",
+    added: [
+      "`workspaces.create`: a new team workspace (name, currency, week start) owned by the caller.",
+      "`kind` (`personal` | `team`) on `workspaces.list` rows; a personal workspace cannot be left, transferred or invited into.",
+    ],
+  },
 ];
 
 /**

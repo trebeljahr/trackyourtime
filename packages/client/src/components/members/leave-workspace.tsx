@@ -60,7 +60,9 @@ export function LeaveWorkspace({
   };
 
   const reason =
-    block === "transfer-ownership-first"
+    block === "personal-workspace-cannot-leave"
+      ? t("leave.blockedPersonal")
+      : block === "transfer-ownership-first"
       ? t("leave.blockedLastOwner")
       : block === "workspace-has-no-other-members"
         ? t("leave.blockedOnlyMember")

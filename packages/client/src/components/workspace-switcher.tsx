@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Building2, Check, ChevronsUpDown } from "lucide-react";
+import { Building2, Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { WorkspaceSummary } from "@starter/core";
 
+import { NewWorkspaceDialog } from "@/components/members/new-workspace-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,6 +23,7 @@ import {
   switchWorkspace,
   type ActiveWorkspaceSnapshot,
 } from "@/lib/active-workspace";
+import { useServerSupports } from "@/lib/server-level";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -58,8 +60,17 @@ export function WorkspaceSwitcher(): React.JSX.Element | null {
   const setActive = trpc.workspaces.setActive.useMutation();
   const { activeId, workspaces } = useActiveWorkspace();
   const [open, setOpen] = React.useState(false);
+  const [creating, setCreating] = React.useState(false);
+  const supportsCreate = useServerSupports("workspaces.create");
 
-  if (workspaces === null || workspaces.length <= 1) return null;
+  if (workspaces === null || workspaces.length === 0) return null;
+  // A server at API level 13 can create team workspaces, so the switcher is
+  // the way to one even for a person in a single workspace. `kind` on the
+  // rows is the same fact read from the list itself, which stays right while
+  // the level cache is still unknown (and therefore optimistic).
+  const canCreate =
+    supportsCreate && workspaces.some((workspace) => workspace.kind !== undefined);
+  if (workspaces.length === 1 && !canCreate) return null;
 
   const active = workspaces.find((workspace) => workspace.id === activeId) ?? null;
 
@@ -123,9 +134,15 @@ export function WorkspaceSwitcher(): React.JSX.Element | null {
                         {workspace.name}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {t(`workspace.roles.${workspace.role}`)}
-                        {" · "}
-                        {t("workspace.members", { count: workspace.memberCount })}
+                        {workspace.kind === "personal" ? (
+                          t("workspace.personal")
+                        ) : (
+                          <>
+                            {t(`workspace.roles.${workspace.role}`)}
+                            {" · "}
+                            {t("workspace.members", { count: workspace.memberCount })}
+                          </>
+                        )}
                       </span>
                     </span>
                     {current ? (
@@ -139,8 +156,24 @@ export function WorkspaceSwitcher(): React.JSX.Element | null {
               );
             })}
           </ul>
+          {canCreate ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start gap-2"
+              onClick={() => {
+                setOpen(false);
+                setCreating(true);
+              }}
+              data-testid="workspace-create"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              {t("workspace.create")}
+            </Button>
+          ) : null}
         </DialogContent>
       </Dialog>
+      {creating ? <NewWorkspaceDialog open onOpenChange={setCreating} /> : null}
     </>
   );
 }

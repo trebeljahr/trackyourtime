@@ -1,6 +1,7 @@
 import type {
   WorkspaceMemberRow,
   WorkspacePermissions,
+  WorkspaceKind,
   WorkspaceRole,
   WorkspaceSummary,
 } from "@starter/shared";
@@ -69,12 +70,17 @@ export const controlsForRow = (
 };
 
 /** Why `members.leave` would be refused, or `null` when it would not. */
-export type LeaveBlock = "transfer-ownership-first" | "workspace-has-no-other-members";
+export type LeaveBlock =
+  | "personal-workspace-cannot-leave"
+  | "transfer-ownership-first"
+  | "workspace-has-no-other-members";
 
 export const leaveBlockFor = (
   viewerRole: WorkspaceRole,
   rows: readonly WorkspaceMemberRow[],
+  kind?: WorkspaceKind,
 ): LeaveBlock | null => {
+  if (kind === "personal") return "personal-workspace-cannot-leave";
   const others = rows.filter((row) => !row.isSelf).length;
   if (others === 0) return "workspace-has-no-other-members";
   if (viewerRole === "owner" && ownerCountOf(rows) <= 1) return "transfer-ownership-first";

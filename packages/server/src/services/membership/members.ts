@@ -20,7 +20,7 @@ import type {
   WorkspaceRole,
 } from "@starter/shared";
 import { TRPCError } from "@trpc/server";
-import { assertAllowed, membershipNotFound } from "./errors.js";
+import { assertAllowed, membershipNotFound, membershipRefused } from "./errors.js";
 import {
   removeMembership,
   setRole,
@@ -37,6 +37,7 @@ import {
 } from "./permissions.js";
 import { ROLE_RANK, asRole } from "./records.js";
 import { asDate, asId, type MembershipRowStore, type StoredRow } from "./store.js";
+import { workspaceKind } from "./workspaces.js";
 
 /** Everything a membership action does besides writing rows. */
 export type MembershipEffects = {
@@ -306,6 +307,11 @@ export async function leaveWorkspace(
     activeWorkspaceId: string | null;
   },
 ): Promise<{ nextWorkspaceId: string }> {
+  // A personal workspace is the one place the person's own time always has;
+  // leaving it would strand that time and the "no project" default with it.
+  if ((await workspaceKind(deps.store, actor.workspaceId)) === "personal") {
+    throw membershipRefused("personal-workspace-cannot-leave");
+  }
   const mirror = await mirrorRows(deps.store, actor.workspaceId);
   const others = mirror.filter((row) => asId(row.userId) !== actor.userId).length;
   assertAllowed(refuseLeave(actor, others, ownersIn(mirror)));
@@ -345,6 +351,9 @@ export async function transferOwnership(
   input: { memberId: string },
 ): Promise<{ ok: true }> {
   const target = await findMember(deps.store, actor.workspaceId, input.memberId);
+  if ((await workspaceKind(deps.store, actor.workspaceId)) === "personal") {
+    throw membershipRefused("personal-workspace-cannot-transfer");
+  }
   assertAllowed(refuseTransfer(actor, target));
 
   await transferOwnershipRecords(deps.store, {

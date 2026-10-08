@@ -15,10 +15,15 @@ import type { WorkspaceSummary } from "@starter/core";
  */
 
 const setActive = vi.fn(async (input: { workspaceId: string }) => input);
+const createWorkspace = vi.fn(async (_input: unknown) => ({ workspaceId: "ws-new" }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     workspaces: {
       setActive: { useMutation: () => ({ mutateAsync: setActive }) },
+      create: { useMutation: () => ({ mutateAsync: createWorkspace }) },
+    },
+    settings: {
+      get: { useQuery: () => ({ data: { currency: "EUR", weekStartsOn: 1 } }) },
     },
   },
 }));
@@ -73,6 +78,28 @@ describe("WorkspaceSwitcher", () => {
     await activeWorkspace.applyWorkspaceList([A], "u1");
     const { container } = renderSwitcher();
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("offers a new team workspace to a person whose only workspace is personal", async () => {
+    await activeWorkspace.applyWorkspaceList([{ ...A, kind: "personal" }], "u1");
+    renderSwitcher();
+    fireEvent.click(await screen.findByTestId("workspace-switcher"));
+    const [option] = await screen.findAllByTestId("workspace-option");
+    expect(option).toHaveTextContent("Personal · only you");
+
+    fireEvent.click(screen.getByTestId("workspace-create"));
+    expect(await screen.findByTestId("new-workspace-dialog")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByTestId("workspace-switcher-dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("offers no creation against a server without workspace kinds", async () => {
+    await activeWorkspace.applyWorkspaceList([A, B], "u1");
+    renderSwitcher();
+    fireEvent.click(await screen.findByTestId("workspace-switcher"));
+    await screen.findAllByTestId("workspace-option");
+    expect(screen.queryByTestId("workspace-create")).not.toBeInTheDocument();
   });
 
   it("renders nothing before any list is known", () => {

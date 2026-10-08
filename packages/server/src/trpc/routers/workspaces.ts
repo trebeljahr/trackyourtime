@@ -7,11 +7,14 @@
 // workspace the caller is not a member of with the same NOT_FOUND an unknown
 // id gets.
 import {
+  createWorkspaceSchema,
   setActiveWorkspaceSchema,
   type WorkspaceSummary,
 } from "@starter/shared";
+import { workspaceCreationDeps } from "../../services/membership/production.js";
 import { productionMembershipStore } from "../../services/membership/stores.js";
 import {
+  createTeamWorkspace,
   listWorkspaces,
   setActiveWorkspace,
 } from "../../services/membership/workspaces.js";
@@ -35,5 +38,16 @@ export const workspacesRouter = router({
           sessionId: ctx.sessionId,
           workspaceId: input.workspaceId,
         }),
+    ),
+
+  /**
+   * A new team workspace, owned by the caller. Not a `workspaceProcedure`:
+   * it is addressed to no existing workspace.
+   */
+  create: protectedProcedure
+    .input(createWorkspaceSchema)
+    .mutation(
+      async ({ ctx, input }): Promise<{ workspaceId: string }> =>
+        createTeamWorkspace(await workspaceCreationDeps(), ctx.user, input),
     ),
 });

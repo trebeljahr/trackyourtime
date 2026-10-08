@@ -49,6 +49,7 @@ const calls = {
   transferOwnership: vi.fn(async (_input: unknown) => ({ ok: true })),
   leave: vi.fn(async (_input: unknown) => ({ nextWorkspaceId: "ws-personal" })),
   create: vi.fn(async (_input: unknown) => ({})),
+  createWorkspace: vi.fn(async (_input: unknown) => ({ workspaceId: "ws-team" })),
   cancel: vi.fn(async (_input: unknown) => ({ ok: true })),
 };
 
@@ -75,6 +76,10 @@ vi.mock("@/lib/trpc", () => ({
           refetch: vi.fn(),
         }),
       },
+      create: mutation((input) => calls.createWorkspace(input)),
+    },
+    settings: {
+      get: { useQuery: () => ({ data: { currency: "CHF", weekStartsOn: 0 } }) },
     },
     members: {
       list: {
@@ -162,6 +167,66 @@ describe("MembersScreen as a plain member", () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/app/track/"));
     expect(window.localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)).toBe("ws-personal");
     expect(calls.leave).toHaveBeenCalledWith(undefined);
+  });
+});
+
+describe("MembersScreen in a personal workspace", () => {
+  const personal = (): void => {
+    state.workspaces = [workspaceFor("owner", { kind: "personal", memberCount: 1 })];
+    state.members = [memberRow({ memberId: "me", role: "owner", isSelf: true })];
+    state.invitations = [];
+  };
+
+  it("offers no invitations, cannot be left, and points at a team workspace", () => {
+    personal();
+    render(<MembersScreen navigate={vi.fn()} />);
+    expect(screen.queryByTestId("invite-card")).not.toBeInTheDocument();
+    for (const [, options] of invitationsListQuery.mock.calls) {
+      expect(options).toEqual(expect.objectContaining({ enabled: false }));
+    }
+    expect(screen.getByTestId("personal-workspace-card")).toBeInTheDocument();
+    expect(screen.getByTestId("leave-workspace-button")).toBeDisabled();
+    expect(screen.getByTestId("leave-workspace")).toHaveTextContent("This is your personal workspace");
+  });
+
+  it("creates a team workspace with the current settings and reloads into it", async () => {
+    personal();
+    const navigate = vi.fn();
+    render(<MembersScreen navigate={navigate} />);
+
+    fireEvent.click(screen.getByTestId("personal-workspace-create"));
+    await screen.findByTestId("new-workspace-dialog");
+    expect(screen.getByTestId("new-workspace-submit")).toBeDisabled();
+    expect(screen.getByTestId("new-workspace-currency")).toHaveValue("CHF");
+    expect(screen.getByTestId("new-workspace-week-start")).toHaveValue("0");
+
+    fireEvent.change(screen.getByTestId("new-workspace-name"), { target: { value: "  Ole & Rico " } });
+    fireEvent.change(screen.getByTestId("new-workspace-currency"), { target: { value: "EUR" } });
+    fireEvent.click(screen.getByTestId("new-workspace-submit"));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/app/track/"));
+    expect(calls.createWorkspace).toHaveBeenCalledWith({
+      name: "Ole & Rico",
+      currency: "EUR",
+      weekStartsOn: 0,
+    });
+    expect(window.localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)).toBe("ws-team");
+  });
+
+  it("shows the refusal and stays put when creation is refused", async () => {
+    personal();
+    calls.createWorkspace.mockRejectedValueOnce(
+      Object.assign(new Error("workspace-limit-reached"), { data: { code: "FORBIDDEN" } }),
+    );
+    const navigate = vi.fn();
+    render(<MembersScreen navigate={navigate} />);
+    fireEvent.click(screen.getByTestId("personal-workspace-create"));
+    fireEvent.change(await screen.findByTestId("new-workspace-name"), { target: { value: "One more" } });
+    fireEvent.click(screen.getByTestId("new-workspace-submit"));
+    expect(await screen.findByTestId("new-workspace-error")).toHaveTextContent(
+      "You own the maximum number of workspaces",
+    );
+    expect(navigate).not.toHaveBeenCalled();
   });
 });
 

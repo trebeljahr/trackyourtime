@@ -1,9 +1,10 @@
 // Every migration this build knows, in order. Append only: never edit, reorder
 // or remove a released migration — databases out there have its id recorded.
 import { baseline } from "./001-baseline.js";
+import { personalWorkspaces } from "./002-personal-workspaces.js";
 import type { Migration } from "./types.js";
 
-export const MIGRATIONS: readonly Migration[] = [baseline];
+export const MIGRATIONS: readonly Migration[] = [baseline, personalWorkspaces];
 
 /**
  * The newest schema this build understands: the id of its last migration.

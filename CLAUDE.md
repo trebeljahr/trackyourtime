@@ -1366,6 +1366,19 @@ Six rules, each of which fails quietly if broken:
   `workspaceProcedure` must take an object input that allows it
   (`workspace-resolution.test.ts` walks the router).
 
+**Every workspace has a kind, `personal` or `team`**, stored as `kind` on
+better-auth's `organization` row (an `additionalFields` entry in
+`organizationPluginOptions`), so it is written by the same insert that creates
+the workspace. The signup hook and `ensurePersonalWorkspace`'s repair create
+`personal`; `workspaces.create` creates `team`; migration 2 marked existing
+rows (each person's solo signup workspace personal, everything else team).
+Read it with `asWorkspaceKind`, which makes anything but `"personal"` a team:
+the lock is the narrow exception, so a missing value never makes a shared
+workspace private. A personal workspace refuses leave, transfer, invitations
+and accepting an older invitation (`personal-workspace-cannot-*`). A person
+whose signup workspace was already shared when the migration ran has no
+personal workspace yet; the "Me" phases must create one, not assume it.
+
 Invitations are rows in better-auth's `invitation` collection with the
 plugin's field names, so account deletion's invitation cleanup covers them. A
 re-invite of a pending address refreshes and re-sends the same row; a workspace

@@ -8,7 +8,7 @@
 // first migration, so inviting people into it later never reissues workspace
 // ids.
 import { randomBytes } from "node:crypto";
-import type { WorkspaceRole } from "@starter/shared";
+import type { WorkspaceKind, WorkspaceRole } from "@starter/shared";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 
 /** Everything this module needs from a user, so it is trivially testable. */
@@ -21,7 +21,7 @@ export type WorkspaceOwner = {
 /** Minimal surface of `auth.api` used here — keeps the `any` contained. */
 type OrgApi = {
   createOrganization: (args: {
-    body: { name: string; slug: string; userId: string };
+    body: { name: string; slug: string; userId: string; kind: WorkspaceKind };
   }) => Promise<{ id?: unknown } | null>;
 };
 
@@ -140,6 +140,9 @@ export async function createPersonalWorkspace(
             name: personalWorkspaceName(user),
             slug: attempt === 0 ? personalWorkspaceSlug(user) : retrySlug(user),
             userId: user.id,
+            // Born personal, in the same insert: there is no moment at which
+            // this workspace exists and could be shared.
+            kind: "personal",
           },
         });
         break;

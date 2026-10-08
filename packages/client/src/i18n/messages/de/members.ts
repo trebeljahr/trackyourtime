@@ -54,6 +54,8 @@ export const members: Translation<typeof source> = {
       "Übertrage zuerst die Inhaberschaft. Du bist der einzige Inhaber, und die anderen Mitglieder brauchen einen.",
     blockedOnlyMember:
       "Du bist das einzige Mitglied, es gibt also niemanden, dem du den Arbeitsbereich überlassen kannst.",
+    blockedPersonal:
+      "Das ist dein persönlicher Arbeitsbereich. Er bleibt deiner, deshalb kannst du ihn nicht verlassen.",
   },
   invite: {
     title: "Jemanden einladen",
@@ -89,6 +91,23 @@ export const members: Translation<typeof source> = {
     removed: "{name} wurde aus dem Arbeitsbereich entfernt.",
     transferred: "{name} ist jetzt Inhaber.",
   },
+  personal: {
+    title: "Dein persönlicher Arbeitsbereich",
+    description:
+      "Die Zeit in diesem Arbeitsbereich siehst nur du. Um mit anderen Zeit zu erfassen, erstelle einen Team-Arbeitsbereich und lade sie dorthin ein.",
+    create: "Neuer Team-Arbeitsbereich",
+  },
+  newWorkspace: {
+    title: "Neuer Team-Arbeitsbereich",
+    description:
+      "Ein gemeinsamer Arbeitsbereich für ein Team oder einen Kunden. Du wirst Inhaber und kannst Leute einladen.",
+    name: "Name",
+    currency: "Währung",
+    weekStart: "Woche beginnt am",
+    hint: "Dein persönlicher Arbeitsbereich bleibt, wie er ist. Du kannst jederzeit zwischen Arbeitsbereichen wechseln.",
+    create: "Arbeitsbereich erstellen",
+    creating: "Wird erstellt …",
+  },
   errors: {
     ownerRequired: "Das kann nur ein Inhaber.",
     adminRequired: "Das kann nur ein Inhaber oder Admin.",
@@ -104,6 +123,14 @@ export const members: Translation<typeof source> = {
       "Zu viele Einladungen warten auf eine Antwort. Ziehe einige zurück oder versuch es später.",
     invoicePermissionRequired:
       "Rechnungen brauchen einen Inhaber oder Admin, der die Zeit und die Beträge aller sehen kann.",
+    personalWorkspaceCannotLeave:
+      "Dein persönlicher Arbeitsbereich gehört dauerhaft dir. Du kannst ihn nicht verlassen.",
+    personalWorkspaceCannotTransfer:
+      "Deinen persönlichen Arbeitsbereich kannst du nicht an jemand anderen übergeben.",
+    personalWorkspaceCannotInvite:
+      "In einen persönlichen Arbeitsbereich kann niemand eingeladen werden. Erstelle einen Team-Arbeitsbereich, um mit anderen zu arbeiten.",
+    workspaceLimitReached:
+      "Du besitzt bereits die Höchstzahl an Arbeitsbereichen. Verlasse zuerst einen oder übergib ihn.",
     notFound: "Dieses Mitglied oder diese Einladung gibt es nicht mehr. Die Liste wird neu geladen.",
   },
   workspaceTab: {

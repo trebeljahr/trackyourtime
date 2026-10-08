@@ -1,5 +1,5 @@
 {
-  "apiLevel": 12,
+  "apiLevel": 13,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -5659,6 +5659,40 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "workspaces.create": {
+      "input": {
+        "properties": {
+          "currency": {
+            "pattern": "^[A-Za-z]{3}$",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "weekStartsOn": {
+            "anyOf": [
+              {
+                "const": 0,
+                "type": "number"
+              },
+              {
+                "const": 1,
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "currency",
+          "weekStartsOn"
         ],
         "type": "object"
       },

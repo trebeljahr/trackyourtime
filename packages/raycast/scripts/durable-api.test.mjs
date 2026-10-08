@@ -11,6 +11,14 @@ import ts from "typescript";
 // Exercise the shipped API boundary, queue and overlay. Only the Raycast host
 // identity/store and transport are replaced; the store receives synthetic data.
 const root = await mkdtemp(join(tmpdir(), "raycast-durable-api-"));
+// The server answers at this build's own level, so a row stamped by this
+// build is never held as `server-too-old` — whatever the level is today.
+const API_LEVEL = Number(
+  /export const API_LEVEL = (\d+);/.exec(
+    readFileSync(new URL("../src/vendor/shared/api-level.ts", import.meta.url), "utf8"),
+  )?.[1],
+);
+assert.ok(Number.isInteger(API_LEVEL), "the vendored API_LEVEL is readable");
 const values = new Map();
 globalThis.__raycastProof = { values, root };
 const mocks = new Map([
@@ -30,7 +38,7 @@ const mocks = new Map([
   [new URL("../src/lib/preferences.ts", import.meta.url).href, `export const apiUrl=()=> 'http://synthetic.invalid';`],
   [
     new URL("../src/lib/server-level.ts", import.meta.url).href,
-    `export const knownServerApiLevel=async()=>12;
+    `export const knownServerApiLevel=async()=>${API_LEVEL};
     export const refreshServerLevel=async()=>null; export const noteClientTooOld=async()=>{};`,
   ],
 ]);

@@ -23,6 +23,8 @@ export const shell = {
     switched: "Switched to {name}",
     lost: "You no longer have access to {name}",
     runningIn: "Running in {name}",
+    personal: "Personal · only you",
+    create: "New team workspace",
   },
   theme: {
     change: "Change theme",

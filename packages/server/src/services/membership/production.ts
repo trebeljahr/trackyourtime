@@ -12,7 +12,12 @@ import {
 import { env } from "../../config/env.js";
 import { getRedis } from "../../db/redis.js";
 import { ensurePersonalWorkspace } from "../../auth/workspace.js";
-import { UserPreferencesModel } from "../../models/Settings.js";
+import { randomBytes } from "node:crypto";
+import {
+  DEFAULT_WORKSPACE_SETTINGS,
+  UserPreferencesModel,
+  WorkspaceSettingsModel,
+} from "../../models/Settings.js";
 import { publishSync, publishToUser } from "../../ws/sync.js";
 import {
   isEmailDeliveryConfigured,
@@ -30,6 +35,7 @@ import {
 import { createInviteBudget } from "./invite-rate-limit.js";
 import type { MembershipDeps } from "./members.js";
 import { productionMembershipStore } from "./stores.js";
+import type { WorkspaceCreationDeps } from "./workspaces.js";
 
 /**
  * The link an invitee opens, against this deployment's web app. The only
@@ -124,6 +130,31 @@ export async function invitationDeps(): Promise<InvitationDeps> {
     log: (message) => console.log(message),
     consumeInviteBudget: (inviterId) => inviteBudget(inviterId),
     publishWorkspace,
+    publishUser,
+  };
+}
+
+/**
+ * Seed a new workspace's settings with the currency and week start chosen at
+ * creation. `$setOnInsert`, so a retry never overwrites a later edit.
+ */
+async function seedWorkspaceSettings(
+  workspaceId: string,
+  settings: { currency: string; weekStartsOn: 0 | 1 },
+): Promise<void> {
+  await WorkspaceSettingsModel.updateOne(
+    { workspaceId },
+    { $setOnInsert: { workspaceId, ...DEFAULT_WORKSPACE_SETTINGS, ...settings } },
+    { upsert: true },
+  );
+}
+
+export async function workspaceCreationDeps(): Promise<WorkspaceCreationDeps> {
+  return {
+    store: await productionMembershipStore(),
+    now: () => new Date(),
+    slugTail: () => randomBytes(4).toString("hex"),
+    seedSettings: seedWorkspaceSettings,
     publishUser,
   };
 }

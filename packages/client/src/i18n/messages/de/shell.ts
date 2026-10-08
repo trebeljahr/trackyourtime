@@ -20,6 +20,8 @@ export const shell: Translation<typeof source> = {
     switched: "Zu {name} gewechselt",
     lost: "Du hast keinen Zugriff mehr auf {name}",
     runningIn: "Läuft in {name}",
+    personal: "Persönlich · nur du",
+    create: "Neuer Team-Arbeitsbereich",
   },
   theme: {
     change: "Design ändern",

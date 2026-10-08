@@ -40,6 +40,7 @@ import {
   type MembershipActor,
 } from "./permissions.js";
 import { asDate, asId, type MembershipRowStore, type StoredRow } from "./store.js";
+import { workspaceKind } from "./workspaces.js";
 
 /**
  * How long an invitation stays acceptable. The same number is handed to the
@@ -174,6 +175,10 @@ export async function createInvitation(
   input: { email: string; role: WorkspaceRole },
 ): Promise<InviteResult> {
   assertAllowed(refuseInvite(actor, input.role));
+  // Never shared: somebody to work with gets a team workspace instead.
+  if ((await workspaceKind(deps.store, actor.workspaceId)) === "personal") {
+    throw membershipRefused("personal-workspace-cannot-invite");
+  }
   const role = invitableRole(input.role);
   const email = normalizeEmail(input.email);
   const { workspaceId } = actor;
@@ -368,6 +373,11 @@ export async function acceptInvitation(
   // Accepted but no longer a member means they were removed (or left) since:
   // the old link must not walk them back in.
   if (status !== "pending") throw membershipRefused("invitation-not-pending");
+  // An invitation sent before the workspace was marked personal must not
+  // open it now.
+  if ((await workspaceKind(deps.store, workspaceId)) === "personal") {
+    throw membershipRefused("personal-workspace-cannot-invite");
+  }
 
   await addMember(deps.store, {
     workspaceId,

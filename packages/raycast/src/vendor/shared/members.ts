@@ -52,9 +52,33 @@ export type WorkspacePermissions = {
   viewOthersMoney: boolean;
 };
 
+/**
+ * What a workspace is for.
+ *
+ * `personal` is the one every person gets at signup: theirs alone, never
+ * shared — it cannot be left, handed over, deleted or invited into.
+ * `team` is every other workspace, created to be shared.
+ */
+export const WORKSPACE_KINDS = ["personal", "team"] as const;
+export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
+
+/**
+ * A stored kind, read defensively. Anything but the exact string "personal"
+ * is a team workspace: the personal lock is the narrow exception, so a
+ * missing or unknown value never makes a shared workspace private.
+ */
+export function asWorkspaceKind(value: unknown): WorkspaceKind {
+  return value === "personal" ? "personal" : "team";
+}
+
 export type WorkspaceSummary = {
   id: string;
   name: string;
+  /**
+   * Absent from a server older than API level 13, which has no notion of a
+   * personal workspace; a client then treats every workspace as before.
+   */
+  kind?: WorkspaceKind;
   role: WorkspaceRole;
   memberCount: number;
   /** The workspace a request that names none resolves to. */
@@ -135,6 +159,10 @@ export const MEMBERSHIP_REFUSALS = [
   "invitation-not-pending",
   "invite-limit-reached",
   "invoice-permission-required",
+  "personal-workspace-cannot-leave",
+  "personal-workspace-cannot-transfer",
+  "personal-workspace-cannot-invite",
+  "workspace-limit-reached",
 ] as const;
 export type MembershipRefusal = (typeof MEMBERSHIP_REFUSALS)[number];
 
@@ -234,3 +262,25 @@ export const workspaceScopeSchema = z
 
 export const setActiveWorkspaceSchema = z.object({ workspaceId: recordId });
 export type SetActiveWorkspaceInput = z.infer<typeof setActiveWorkspaceSchema>;
+
+/** Longest workspace name accepted, the same cap a member name gets. */
+export const WORKSPACE_NAME_MAX = 80;
+
+/**
+ * `workspaces.create`: a new TEAM workspace, owned by the caller. A personal
+ * workspace is never created this way — everybody already has theirs.
+ */
+export const createWorkspaceSchema = z.object({
+  name: z.preprocess(
+    (value) => (typeof value === "string" ? value.trim() : value),
+    z.string().min(1).max(WORKSPACE_NAME_MAX),
+  ),
+  // The same rule as `currencyCodeSchema` in ./schemas.ts, written out so
+  // this file keeps importing nothing but zod (Raycast vendors it for types).
+  currency: z
+    .string()
+    .regex(/^[A-Za-z]{3}$/, "Currency must be a 3-letter ISO 4217 code")
+    .transform((value) => value.toUpperCase()),
+  weekStartsOn: z.union([z.literal(0), z.literal(1)]),
+});
+export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
