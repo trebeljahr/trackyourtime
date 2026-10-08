@@ -87,7 +87,7 @@ jobs:
             docker-compose.selfhost.yml
           sparse-checkout-cone-mode: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -158,7 +158,7 @@ jobs:
 
       # The tag's own pnpm pin and Node version: it is built the way that
       # release was built.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: previous-release/package.json
       - uses: actions/setup-node@v4
