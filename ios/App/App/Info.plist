@@ -24,10 +24,17 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- The profile picture and invoice logo pickers are <input type="file"
+	     accept="image/…">, and WKWebView offers "Take Photo" beside the photo
+	     library for those. Without this key iOS terminates the app when that
+	     option is chosen. The photo library needs no key: WKWebView picks
+	     through PHPicker, which runs out of process. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo to use as your profile picture or invoice logo.</string>
 	<!-- ATS. The SPM template ships no ATS keys, and iOS blocks cleartext by
 	     default, so an http://localhost:<port> dev API is unreachable from the
 	     Simulator without this. Scoped to localhost on purpose: production is
-	     https://tracktime.trebeljahr.com and must stay subject to ATS. -->
+	     https://api.trackyourtime.dev and must stay subject to ATS. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>
