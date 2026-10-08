@@ -94,7 +94,7 @@ services:
   # replica would not error, it would silently deliver live updates to only
   # the half of a user's devices that happened to land on the same process.
   server:
-    image: ghcr.io/trebeljahr/trackyourtime-server:${TRACKYOURTIME_VERSION:-v0.2.2}
+    image: ghcr.io/trebeljahr/trackyourtime-server:${TRACKYOURTIME_VERSION:-v0.3.0}
     # Published images only, and no `build:` section — deliberately. Compose
     # ignores a failed pull for any service it knows how to build and quietly
     # builds it instead, whatever `pull_policy` says. A mistyped tag, a release
@@ -239,7 +239,7 @@ services:
   # Pulling `-client` here would give you a login screen that posts to a
   # domain you do not own.
   client:
-    image: ghcr.io/trebeljahr/trackyourtime-client-selfhost:${TRACKYOURTIME_VERSION:-v0.2.2}
+    image: ghcr.io/trebeljahr/trackyourtime-client-selfhost:${TRACKYOURTIME_VERSION:-v0.3.0}
     # Pulled, never built here, for the same reason as `server` above — and
     # this is the image that makes the reason concrete: `next build` is the
     # memory-hungry step. The empty API URL is the whole point of this image;

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-08
+
 This release added team workspaces, invoice payments and timesheet approvals.
 Time entries are now saved on the device before they are sent, and the phone
 and Mac apps were prepared for the App Store.
@@ -643,7 +645,8 @@ tag.
   and admins who may see both. An invoice id answers "not found" to anyone
   else.
 
-[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/trebeljahr/trackyourtime/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.3.0
 [0.2.2]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.2.2
 [0.2.1]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.2.1
 [0.2.0]: https://github.com/trebeljahr/trackyourtime/releases/tag/v0.2.0

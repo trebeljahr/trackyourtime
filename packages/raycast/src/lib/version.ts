@@ -8,6 +8,6 @@
  * define. `scripts/lib/version-sync.test.mjs` fails the moment this and the
  * root version disagree, so a release bump cannot forget it.
  */
-export const APP_VERSION = "0.2.2";
+export const APP_VERSION = "0.3.0";
 /** Stamped into the standalone Store export by export-store.mjs. */
 export const BUILD_ID = "development";
