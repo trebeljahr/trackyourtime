@@ -327,3 +327,36 @@ test("sync state frames report delivery health without becoming mutation events"
   await until(() => events === 1, "the mutation frame");
   assert.deepEqual(health, [true, false]);
 });
+
+/**
+ * A host that knows it is offline is not dialled.
+ *
+ * Chrome logs every failed handshake on the extension's error page, and no
+ * handler can silence it, so dialling a network the browser already reports
+ * as down only produces `ERR_INTERNET_DISCONNECTED` noise. The backoff keeps
+ * running, so the socket comes up on the first retry after the network does.
+ */
+test("isOnline() false skips the dial and the backoff connects once it is true", async () => {
+  const server = await harness();
+  after(() => server.close());
+
+  let online = false;
+  const client = createSyncClient({
+    url: server.url,
+    token: "tok",
+    onEvent: () => {},
+    isOnline: () => online,
+    minBackoffMs: 10,
+    maxBackoffMs: 20,
+  });
+  after(() => client.close());
+
+  client.connect();
+  await idle(80);
+  assert.equal(server.connections(), 0);
+  assert.equal(client.status(), "closed");
+
+  online = true;
+  await until(() => client.status() === "open", "the socket to open once online");
+  assert.equal(server.connections(), 1);
+});

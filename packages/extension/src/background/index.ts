@@ -623,8 +623,14 @@ const handle = async (message: unknown): Promise<BackgroundResponse> => {
       // the dead token in storage and the popup rendering as signed in — every
       // further press failing the same way. Dropping it here returns the
       // signed-out snapshot, which puts the sign-in form back.
-      await forgetRejectedSession();
-      return { ok: true, state: remember(await buildState()) };
+      // This path awaits too, and a rejection here would escape the
+      // listener's `.then` as an unhandled "Failed to fetch".
+      try {
+        await forgetRejectedSession();
+        return { ok: true, state: remember(await buildState()) };
+      } catch (followUp) {
+        return toErrorResponse(followUp);
+      }
     }
     return toErrorResponse(error);
   }

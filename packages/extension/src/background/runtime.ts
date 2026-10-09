@@ -1162,6 +1162,9 @@ const connectSync = (current: Runtime): void => {
     url,
     token: current.session.token,
     clientVersion: APP_VERSION,
+    // Skip the dial while the browser knows it is offline; the badge alarm's
+    // nudge and the client's backoff dial again once it is back.
+    isOnline: () => globalThis.navigator?.onLine !== false,
     onStatus: setSyncStatus,
     onEvent: (event, originId, eventWorkspaceId) => {
       // Our own write, already applied locally — re-applying a stale copy of

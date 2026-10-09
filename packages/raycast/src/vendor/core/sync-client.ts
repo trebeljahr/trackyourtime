@@ -58,6 +58,16 @@ export type SyncClientOptions = {
   clientVersion?: string;
   /** Injectable for Node tests and non-DOM hosts. */
   WebSocketImpl?: typeof WebSocket;
+  /**
+   * Asked before every dial. `false` means the host KNOWS there is no network
+   * (the browser extension passes `navigator.onLine`, whose `false` is
+   * reliable even where its `true` is not), so the dial is skipped and only
+   * the backoff is scheduled. Chrome logs every failed WebSocket handshake as
+   * an error that no handler can silence, so dialling a dead network just
+   * fills the extension's error page with `ERR_INTERNET_DISCONNECTED`.
+   * Omitted means "always try", which is every other host.
+   */
+  isOnline?: () => boolean;
   minBackoffMs?: number;
   maxBackoffMs?: number;
 };
@@ -111,6 +121,15 @@ export const withVersionQuery = (url: string, clientVersion: string | undefined)
   return parsed.toString();
 };
 
+/** A throwing probe must not stop the client from ever dialling again. */
+const safeIsOnline = (probe: () => boolean): boolean => {
+  try {
+    return probe();
+  } catch {
+    return true;
+  }
+};
+
 /**
  * WebSocket subscription to the signed-in user's sync room.
  *
@@ -127,6 +146,7 @@ export const createSyncClient = ({
   onSessionRevoked,
   clientVersion,
   WebSocketImpl,
+  isOnline,
   minBackoffMs = 1000,
   maxBackoffMs = 30_000,
 }: SyncClientOptions): SyncClient => {
@@ -197,6 +217,11 @@ export const createSyncClient = ({
       return;
     }
     if (socket) return;
+    if (isOnline && !safeIsOnline(isOnline)) {
+      setStatus("closed");
+      scheduleReconnect();
+      return;
+    }
 
     setStatus("connecting");
     let created: WebSocket;
