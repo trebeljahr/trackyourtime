@@ -23,13 +23,18 @@ import { cleanDatabase, closeDbConnection } from "./db-utils";
  *
  * The server runs with no SMTP configured, which is exactly the self-hosted
  * case the copyable invitation link exists for.
+ *
+ * Every signup workspace is personal and refuses invitations, so the owner
+ * first creates a team workspace and does all the shared work there. Both
+ * people therefore always have a personal workspace to fall back to.
  */
 
 const PASSWORD = "SecurePassword123!";
 
 const OWNER_NAME = "Olga Owner";
 const MEMBER_NAME = "Mia Member";
-const SHARED_WORKSPACE = `${OWNER_NAME}'s workspace`;
+const OWNER_PERSONAL_WORKSPACE = `${OWNER_NAME}'s workspace`;
+const SHARED_WORKSPACE = "Olga's studio";
 const MEMBER_PERSONAL_WORKSPACE = `${MEMBER_NAME}'s workspace`;
 
 const PROJECT_NAME = "Shared retainer";
@@ -161,11 +166,37 @@ async function openEntriesReport(page: Page): Promise<void> {
   await expect(page.getByTestId("detailed-table")).toBeVisible();
 }
 
+/** Create a team workspace from the switcher; it reloads into the tracker. */
+async function createTeamWorkspace(page: Page, name: string): Promise<void> {
+  const switcher = page.getByTestId("workspace-switcher");
+  await expect(switcher).toBeVisible();
+  await switcher.click();
+  await page.getByTestId("workspace-create").click();
+  const dialog = page.getByTestId("new-workspace-dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByTestId("new-workspace-name").fill(name);
+  await dialog.getByTestId("new-workspace-submit").click();
+  await page.waitForURL(TRACK_URL, { timeout: 15_000 });
+  await expect(page.getByTestId("track-page")).toBeVisible();
+  await expect(switcher).toContainText(name);
+}
+
 // ── the story ────────────────────────────────────────────────────────
 
 test.describe("Teams", () => {
   test("owner invites by email and gets a copyable link with no SMTP", async () => {
     await signUpViaUI(owner, { name: OWNER_NAME, email: OWNER_EMAIL, password: PASSWORD });
+
+    // The signup workspace is personal: no invitations there.
+    await openMembers(owner);
+    await expect(owner.getByTestId("members-description")).toContainText(
+      OWNER_PERSONAL_WORKSPACE,
+    );
+    await expect(owner.getByTestId("personal-workspace-card")).toBeVisible();
+    await expect(owner.getByTestId("invite-card")).toHaveCount(0);
+
+    await owner.goto("/app/track");
+    await createTeamWorkspace(owner, SHARED_WORKSPACE);
 
     // A billable project with a rate, so money has something to hide.
     await owner.goto("/app/projects");
@@ -496,10 +527,17 @@ test.describe("Teams", () => {
 
     // A fresh load of the member's device: the stored active workspace is
     // gone, so it lands in the personal one, with the held row still counted.
+    // The switcher stays, as the way to a new team workspace, with one option.
     await member.goto("/app/track");
     await expect(member.getByTestId("track-page")).toBeVisible();
     await expect(entryRow(member, MEMBER_PERSONAL_TIMER)).toHaveCount(1, { timeout: 15_000 });
-    await expect(member.getByTestId("workspace-switcher")).toHaveCount(0);
+    await expect(member.getByTestId("workspace-switcher")).toContainText(
+      MEMBER_PERSONAL_WORKSPACE,
+    );
+    await member.getByTestId("workspace-switcher").click();
+    await expect(member.getByTestId("workspace-option")).toHaveCount(1);
+    await member.keyboard.press("Escape");
+    await expect(member.getByTestId("workspace-switcher-dialog")).toHaveCount(0);
     await expect(entryRow(member, MEMBER_ENTRY)).toHaveCount(0);
     await expect(entryRow(member, MEMBER_OFFLINE_ENTRY)).toHaveCount(0);
     await expect(member.getByTestId("offline-foreign")).toHaveAttribute("data-foreign", "1");
@@ -596,13 +634,20 @@ test.describe("Teams", () => {
     await leave.getByTestId("confirm-accept").click();
     await owner.waitForURL(TRACK_URL, { timeout: 15_000 });
 
-    // This was the former owner's only workspace: they land in a fresh one.
-    // It carries the same generated name ("<name>'s workspace"), so it is
-    // told apart by what is in it, not by what it is called.
+    // The former owner lands back in their personal workspace, which never
+    // held the shared work.
     await expect(owner.getByTestId("track-page")).toBeVisible();
+    await expect(owner.getByTestId("workspace-switcher")).toContainText(OWNER_PERSONAL_WORKSPACE);
     await expect(owner.getByTestId("entries-empty")).toBeVisible({ timeout: 15_000 });
-    await expect(owner.getByTestId("workspace-switcher")).toHaveCount(0);
+    await owner.getByTestId("workspace-switcher").click();
+    await expect(owner.getByTestId("workspace-option")).toHaveCount(1);
+    await owner.keyboard.press("Escape");
+    await expect(owner.getByTestId("workspace-switcher-dialog")).toHaveCount(0);
     await openMembers(owner);
+    await expect(owner.getByTestId("members-description")).toContainText(
+      OWNER_PERSONAL_WORKSPACE,
+    );
+    await expect(owner.getByTestId("personal-workspace-card")).toBeVisible();
     await expect(owner.locator('[data-testid^="member-row-"]')).toHaveCount(1);
     await expect((await memberRow(owner, OWNER_EMAIL))[0]).toHaveAttribute("data-role", "owner");
     await owner.goto(`/app/reports${RANGE_QUERY}&view=entries`);
