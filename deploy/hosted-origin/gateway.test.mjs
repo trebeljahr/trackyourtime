@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const config = fileURLToPath(new URL('./Caddyfile', import.meta.url));
 const serve = fileURLToPath(new URL('../../packages/client/serve.mjs', import.meta.url));
+const serveRules = fileURLToPath(new URL('../../packages/client/static-site-rules.mjs', import.meta.url));
 const listen = async server => {
   // Explicit high port, fail on conflicts rather than touching other processes.
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -93,6 +94,7 @@ test('local gateway preserves the hosted HTTP, auth, static and socket contracts
     await writeFile(join(root, 'out', 'version.json'), '{"apiUrl":"","commit":"fixture"}');
     await writeFile(join(root, 'out', '_next', 'static', 'fixture.js'), 'fixture');
     await cp(serve, join(root, 'serve.mjs'));
+    await cp(serveRules, join(root, 'static-site-rules.mjs'));
     web = spawn(process.execPath, [join(root, 'serve.mjs')], { env: { ...env, PORT: String(webPort), HOST: '127.0.0.1' }, stdio: 'ignore' });
     await ready(env.WEB_UPSTREAM, web, () => 'Static fixture failed');
     const validation = spawnSync('caddy', ['validate', '--config', config, '--adapter', 'caddyfile'], { env, encoding: 'utf8' });
