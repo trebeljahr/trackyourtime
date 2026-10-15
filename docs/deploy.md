@@ -1,11 +1,17 @@
 # Deploying Track Your Time
 
-Two Coolify apps on **two hosts of one zone**:
+Two hosts of one zone:
 
-| Coolify app | Routed at | Compose file | Serves |
+| What | Routed at | Defined in | Serves |
 |---|---|---|---|
-| `trackyourtime-client` | `https://trackyourtime.dev` | `docker-compose.client.yml` | the Next web app |
-| `trackyourtime-server` | `https://api.trackyourtime.dev` | `docker-compose.server.yml` | the Express API, tRPC and the `/api/ws` socket |
+| Cloudflare Worker `trackyourtime-client` | `https://trackyourtime.dev` | `wrangler.jsonc` | the static web app and the docs |
+| Coolify app `trackyourtime-server` | `https://api.trackyourtime.dev` | `docker-compose.server.yml` | the Express API, tRPC and the `/api/ws` socket |
+
+The web app moved from the Coolify app `trackyourtime-client`
+(`docker-compose.client.yml`) to the Worker on 2026-10-15
+([Web app on Cloudflare](#web-app-on-cloudflare)). The sections below that
+describe two Coolify apps are its history, and the Coolify client app keeps
+running, unrouted, until it is retired.
 
 ## Why a new domain — the history, because both halves still matter
 
@@ -110,6 +116,136 @@ client that reconnects forever while every HTTP request succeeds.
 
 `packages/server/src/ws/handler.ts` accepts `/ws` as well, so a client built
 before this change still connects wherever `/ws` is still routed.
+
+## Web app on Cloudflare
+
+Since 2026-10-15, `https://trackyourtime.dev` is served by
+`trackyourtime-client`, an **assets-only Cloudflare Worker**: the static
+export, with no script (`wrangler.jsonc`). The API stays on Coolify at
+`api.trackyourtime.dev` and never passes through the Worker. The desktop,
+phone, extension and Raycast clients are unaffected; they talk to the API
+host.
+
+What sits where on the `trackyourtime.dev` zone:
+
+| What | Value | Why |
+|---|---|---|
+| Workers route | `trackyourtime.dev/*` → `trackyourtime-client` | serves the site |
+| Workers route | `trackyourtime.dev/.well-known/acme-challenge/*` → no Worker | the origin's Traefik renews its certificate over HTTP-01; this keeps the challenge reaching it |
+| Single Redirect rule | `http://trackyourtime.dev/…` → `https://…` (301), except `/.well-known/` | a Worker answers plain HTTP; Traefik used to redirect |
+| DNS | the proxied A/AAAA records, unchanged | a route only runs on a proxied record |
+
+No custom domain and no DNS change: the route takes the host from the
+Coolify app, and deleting it hands the host back. `api.trackyourtime.dev`
+has no route at all.
+
+**Nothing here is a Worker invocation.** Requests to static assets, and
+requests on a route with no Worker, do not count toward the 100,000
+requests a day of Workers Free (measured on the hatchkit canary,
+2026-10-12). `main`, `run_worker_first` or `cache` in `wrangler.jsonc` would
+turn every page and asset request into a billed invocation; keep them out.
+
+### What an upload holds
+
+`build-client` in `build-and-deploy.yml`:
+
+1. Builds the export with the same `NEXT_PUBLIC_*` values the image took, and
+   checks the API origin reached the bundle.
+2. Builds the docs into `out/docs/` (`scripts/docs/build-into-client.mjs`).
+3. Writes `out/version.json` (`scripts/write-version-json.mjs`).
+4. Writes `out/_redirects` and `out/_headers` (`scripts/cloudflare-static.mjs`)
+   from `packages/client/static-site-rules.mjs`, the module `serve.mjs`
+   applies per request: the 13 legacy `/track` → `/app/track/` redirects
+   (308, query kept), and `X-Frame-Options: DENY`,
+   `Content-Security-Policy: frame-ancestors 'none'` and
+   `X-Content-Type-Options: nosniff` on every response, 404s included.
+5. Carries the hashed files of the two releases before it
+   (`scripts/static-carry.mjs`), and writes `out/release-assets.json`.
+6. Checks the Workers Free limits: 20,000 files and 25 MiB per file per
+   version, 100 header rules, 100 dynamic redirects.
+7. `wrangler versions upload --tag <sha>`. The version serves nothing yet.
+
+The deploy job activates it **after the server passed its gate**
+(`scripts/worker-deploy.mjs activate --sha <sha> --rollback`): one Cloudflare
+deployment sends 100 % of requests to that version, then the same gate as the
+server's checks `/version.json` (this commit, this API), `/api/health`,
+`get-session` and the CORS preflight. On a failed gate the version that
+served before is deployed again and gated, and the job fails. The server keeps
+its new build, since an old web app on a new server is the direction
+compatibility covers.
+
+Why upload and activation are two steps: in one step (`wrangler deploy`),
+the canary served the new HTML seven seconds before its new chunks. Uploaded
+first, the chunks are in place before any HTML names them.
+
+### Old chunks are carried, not kept
+
+A Worker version serves only the files uploaded with it. A tab opened before
+a deploy holds HTML naming the previous build's chunks and loads them lazily,
+so without a copy each is a 404. `release-assets.json` lists a release's own
+hashed files under `/_next/static/` and `/docs/assets/` (path, sha256, size)
+and the releases it carried. The next build reads it from the live site,
+downloads what it lacks, checks each file's sha256, and fails when one path
+would hold two contents or the carry passes 100 MiB. The first upload was
+seeded from the Coolify client image of `42e12946` (`--seed-dir`).
+`lib/chunk-reload.ts` and the `/version.json` reload offer remain the second
+line.
+
+### Caching
+
+Cloudflare's default for every file: `public, max-age=0, must-revalidate`
+with an ETag, so a returning browser revalidates and gets 304s from the edge.
+No `immutable` rule on `/_next/static/*`, even though the names are hashed:
+`_headers` applies to a 404 as well, and the canary showed a missing chunk's
+404 cached with the year-long header. `/version.json` and
+`/release-assets.json` are `no-cache`.
+
+### 404 and trailing slashes
+
+`not_found_handling: "404-page"` serves the nearest `404.html` up the path:
+`out/docs/404.html` under `/docs/`, `out/404.html` elsewhere, both with
+status 404. `html_handling: "auto-trailing-slash"` matches
+`trailingSlash: true`: `/login/` serves `login/index.html`, `/login` redirects
+to `/login/` (307; `serve.mjs` resolved it in place).
+
+### Rolling the web app back
+
+- To an earlier commit built after the move:
+  `gh workflow run hosted-rollback.yml -f sha=<commit> -f which=client`.
+  It deploys the Worker version tagged with that sha and gates it.
+- In a hurry: Cloudflare dashboard → Workers → `trackyourtime-client` →
+  Deployments → roll back to an earlier version. It takes seconds and is
+  complete, since a version keeps its own files.
+- Away from the Worker, while the Coolify client app still runs: delete the
+  `trackyourtime.dev/*` route. The Coolify app answered again within about
+  8 s on the canary. It serves the commit it last deployed (`42e12946`).
+
+### One-time setup (done 2026-10-15)
+
+1. The Worker and its first version: a local export of the cut-over commit,
+   seeded with the Coolify image's chunks, `wrangler deploy`.
+2. CI's token: an account token named `hatchkit-trackyourtime-client-worker`
+   with one policy, "Individual Workers Editor" on this Worker only. It can
+   upload and deploy versions of `trackyourtime-client` and nothing else: no
+   routes, DNS or other Workers. GitHub secrets `CLOUDFLARE_API_TOKEN` and
+   `CLOUDFLARE_ACCOUNT_ID`. Without both, `build-client` builds and skips the
+   upload, and the deploy job skips the client with a notice.
+3. The redirect rule, then the ACME route, then the `trackyourtime.dev/*`
+   route, last. Before the last one nothing changes for a visitor.
+
+### Checking it locally
+
+```bash
+NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev pnpm build:web
+node scripts/write-version-json.mjs packages/client/out/version.json
+node scripts/cloudflare-static.mjs write packages/client/out
+node scripts/cloudflare-static.mjs check packages/client/out
+npx wrangler@4.145.0 dev --port <free high port> --ip 127.0.0.1
+```
+
+`wrangler dev` serves the same `_redirects`, `_headers` and 404 handling as
+the edge. API calls from it go to the production API, which does not trust
+the local origin, so sign-in fails there; that is expected.
 
 ## One-time setup in Coolify
 
@@ -282,7 +418,7 @@ before this change still connects wherever `/ws` is still routed.
 
 ```bash
 curl -sS https://api.trackyourtime.dev/api/health   # the server app
-curl -sSI https://trackyourtime.dev/                # the client app
+curl -sS https://trackyourtime.dev/version.json     # the web app on the Worker
 ```
 
 The first covers the whole server chain: the certificate on the `api.` host,
@@ -304,41 +440,44 @@ Reading the failures:
 
 ## Rollback
 
-Every push to main deploys through `scripts/coolify-deploy.mjs`, run by the
-`deploy` job of `.github/workflows/build-and-deploy.yml`. The pure parts
+Every push to main deploys the server through `scripts/coolify-deploy.mjs`,
+run by the `deploy` job of `.github/workflows/build-and-deploy.yml`, and then
+the web app through `scripts/worker-deploy.mjs`
+([Web app on Cloudflare](#web-app-on-cloudflare)). What follows is the server
+half; the script still knows a Coolify client app (`--which client|both`),
+which nothing deploys since the Worker took over. The pure parts
 (what counts as healthy, what can be rolled back, the sequence) are in
 `scripts/lib/coolify-deploy.mjs` and tested in
 `scripts/lib/coolify-deploy.test.mjs` against a fake GHCR and a fake Coolify
 webhook; the entry script adds the network and git.
 
-What one deploy does, in order:
+What one server deploy does, in order:
 
-1. **Reads the rollback target.** The commit each app is serving now —
-   `/api/health` (`commit`, or `version` on an older image) and
-   `/version.json` (`commit`) — and whether GHCR still holds its `:<sha>`
-   image. Once `:live` moves, nothing else names the previous build. It also
-   checks that this commit's images exist, and stops with nothing changed
-   when they do not.
+1. **Reads the rollback target.** The commit the server is serving now —
+   `/api/health` (`commit`, or `version` on an older image) — and whether
+   GHCR still holds its `:<sha>` image. Once `:live` moves, nothing else
+   names the previous build. It also checks that this commit's image exists,
+   and stops with nothing changed when it does not.
 2. **Promotes and deploys.** Points
-   `ghcr.io/trebeljahr/trackyourtime-{server,client}:live` at this commit's
-   `:<sha>` images (the manifest bytes copied verbatim, then read back), then
-   sends each app's signed webhook: the server's, then the client's. Coolify
-   answers for every app on the repo; only an entry for the app's own uuid
-   with status `success` counts as queued.
-3. **Waits for the commit.** Polls `/api/health` and `/version.json` every
-   15 s for up to ten minutes until both report the new sha. A Coolify
-   deploy is queued, not done, when the webhook answers.
+   `ghcr.io/trebeljahr/trackyourtime-server:live` at this commit's `:<sha>`
+   image (the manifest bytes copied verbatim, then read back), then sends the
+   app's signed webhook. Coolify answers for every app on the repo; only an
+   entry for the app's own uuid with status `success` counts as queued.
+3. **Waits for the commit.** Polls `/api/health` every 15 s for up to ten
+   minutes until it reports the new sha. A Coolify deploy is queued, not
+   done, when the webhook answers.
 4. **Runs the gate.** `/api/health` says `status: ok` and `db: true`;
-   `/version.json` names the API the client was built against
-   (`apiUrl`, which is baked in at image build time); `GET
+   the live `/version.json` names the API the client was built against
+   (`apiUrl`, which is baked in at build time); `GET
    /api/auth/get-session` answers 200, which proves the auth handler is
    mounted and reads its database; and the CORS preflight from the web origin
    is allowed, since the two apps are separate origins and nothing else in CI
    exercises that pairing. The gate is retried a few times, ten seconds
    apart, for a database still connecting — and no more.
 5. **Rolls back when 2, 3 or 4 fails.** `:live` is pointed back at the
-   commits from step 1, both apps are redeployed, and the same poll and gate
-   run against the restored commit. The job then **fails** either way, with
+   commit from step 1, the server is redeployed, and the same poll and gate
+   run against the restored commit. The web app's step does not run, so it
+   stays on the version that served before. The job then **fails** either way, with
    one `::error::` that names the failed check (`api-db`, `web-api-url`,
    `auth-session`, `cors`, `api-commit`, `promote-or-deploy`, …), the new sha
    and the restored sha. A rollback is never a green run: the commit on main
@@ -368,18 +507,19 @@ So before rolling the server back, the job compares the migration registry
 previous commit's, with `git show` — the checkout uses `fetch-depth: 0` for
 this. When the new commit carries a migration the previous build cannot
 read, or either registry cannot be read (a sha not in the checkout counts as
-"unknown", and unknown is not safe), **only the client is rolled back**; the
-server stays on the new build, and the error says why. That is the decision:
-a client on the previous build against a server one commit ahead is the
+"unknown", and unknown is not safe), **the server is not rolled back**: it
+stays on the new build, and the error says why. That is the decision: a
+client on the previous build against a server one commit ahead is the
 combination the version handshake already supports, while a server that
 refuses to boot is an outage. Going back past such a migration needs the
 `mongodump` from before it, which is a person's decision, never the job's.
 
 ### Rolling back by hand
 
-`.github/workflows/hosted-rollback.yml` points `:live` at the images of an
-earlier commit, deploys through the same signed webhooks and runs the same
-poll and gate:
+`.github/workflows/hosted-rollback.yml` points the server's `:live` at the
+image of an earlier commit and deploys it through the same signed webhook,
+and activates the web app's Worker version tagged with that commit; each
+half runs the same gate as on a push:
 
 ```bash
 gh workflow run hosted-rollback.yml -f sha=<commit> -f which=both
@@ -397,18 +537,18 @@ non-zero on a cancelled run as on a failed one; check the Actions queue and
 run `gh workflow run` again if the rollback was cancelled, since nothing
 re-dispatches it.
 
-- `sha` must be a commit on main: only those have images, because only
-  `build-and-deploy.yml` pushes `:<sha>` tags. The run resolves an
-  abbreviated sha and refuses anything not reachable from main.
-- `which` is `both`, `client` or `server`. A one-app run gates the pair that
-  is then live, expecting the given commit from the app it moved and no
+- `sha` must be a commit on main: only those have images and Worker
+  versions, because only `build-and-deploy.yml` builds them. For the web app
+  it must also postdate the move to the Worker (2026-10-15). The run resolves
+  an abbreviated sha and refuses anything not reachable from main.
+- `which` is `both`, `client` or `server`. Each half gates the pair that is
+  then live, expecting the given commit from the half it moved and no
   particular commit from the other.
 - The run reads the migration registries before it touches anything, and
   refuses to move the server to a commit that cannot read the database the
   current one has migrated. Use `which=client`, or restore the dump from
   before that migration and run again with `force_server` checked.
-- When the gate fails, the run fails and `:live` stays on the images of
-  `sha`. The build served before the run is usually the one being escaped,
+- When the gate fails, the run fails and the app stays on `sha`. The build served before the run is usually the one being escaped,
   so putting it back would redeploy it; the error names the failed check,
   and the next step is another run with a different sha or a fix forward.
   `restore_on_failure=true` puts the previous commits back instead, exactly
@@ -423,9 +563,9 @@ new push to main; the newer push waits, and GitHub keeps only the newest
 waiting run — of either workflow, which is why a queued manual rollback has
 to be watched (above).
 
-Without any Coolify secret the scripts print a `::notice::` and deploy
-nothing; with some of them set and others missing, they fail, because half a
-deploy is worse than none.
+Without any Coolify secret, or without both Cloudflare secrets, the scripts
+print a `::notice::` and deploy nothing; with some of them set and others
+missing, they fail, because half a deploy is worse than none.
 
 ## Email: Listmonk over Amazon SES
 
@@ -568,8 +708,9 @@ both set on the server app. Register
   in this repo, so there is no committed file to edit — Coolify is where the
   value lives.
 - `.github/workflows/build-and-deploy.yml` — `NEXT_PUBLIC_API_URL` and
-  `NEXT_PUBLIC_WS_URL` are baked into the browser bundle at image build time.
-  Runtime env cannot change them; rebuilding the image is the only way. Both
+  `NEXT_PUBLIC_WS_URL` are baked into the browser bundle at build time
+  (`build-client`). Nothing at runtime can change them; a new build is the
+  only way. Both
   are **origins**, with no `/api` on the end — the client appends the path.
 - `packages/extension/manifest.config.ts` — the extension's DEFAULT production
   server. The manifest has no `host_permissions`; its `externally_connectable`
@@ -693,25 +834,30 @@ one. What a wrong count costs is the meter's usefulness — which is why nothing
 raises when it is wrong, and why it has to be re-counted whenever a hop is
 added or removed in front of the server.
 
-## The client image serves a static export
+## The web app is a static export
 
 `packages/client/next.config.ts` sets `output: "export"`, because the desktop
 and mobile shells load the same bundle from `file://` and from the Capacitor
-container. So there is no `.next/standalone` and no `server.js`: the image is
-the exported `out/` tree plus `packages/client/serve.mjs`, a static file
-server. The E2E suite runs that same file (`e2e/serve-static.mjs` delegates to
-it), so the deployed server and the tested one cannot drift apart.
+container. So there is no `.next/standalone` and no `server.js`: the hosted
+site is the exported `out/` tree on the Worker
+([Web app on Cloudflare](#web-app-on-cloudflare)). The Coolify client image was
+that tree plus `packages/client/serve.mjs`, a static file server the E2E suite
+still runs (`e2e/serve-static.mjs` delegates to it). The redirects and headers
+`serve.mjs` applies per request live in `packages/client/static-site-rules.mjs`,
+which also renders the Worker's `_redirects` and `_headers`, so the tested
+host and the deployed one cannot drift apart.
 
 `docker-compose.yml` is the legacy single-app layout, kept for reference.
 
-## The docs are part of the client image
+## The docs are part of the web app upload
 
 The Docusaurus site in `docs-site/` is served at
-**`https://trackyourtime.dev/docs/`** by the same `trackyourtime-client` app.
-`packages/client/Dockerfile` runs `node scripts/docs/build-into-client.mjs`
-after the client build, which builds the docs with `baseUrl: "/docs/"` and
-copies them to `out/docs/`; `serve.mjs` serves them like any other file. There
-is no DNS record, Coolify app or proxy label for the docs.
+**`https://trackyourtime.dev/docs/`** by the same `trackyourtime-client`
+Worker. `build-client` runs `node scripts/docs/build-into-client.mjs` after
+the client build (as `packages/client/Dockerfile` did), which builds the docs
+with `baseUrl: "/docs/"` and copies them to `out/docs/`; the Worker serves
+them like any other file, and `out/docs/404.html` for a missing docs page.
+There is no DNS record, route or app for the docs.
 
 Why this shape and not the two obvious others:
 
@@ -724,9 +870,9 @@ Why this shape and not the two obvious others:
   `caddy_0` sites for the same host, and `handle_path=/docs*` strips the prefix
   a `baseUrl: "/docs/"` build needs.
 
-The costs are small and deliberate: a docs-only change rebuilds and redeploys
-the client image (which never restarts the server or drops a socket), and the
-image build stage installs the docs site's dependencies. The copy step fails
+The costs are small and deliberate: a docs-only change rebuilds and uploads
+the web app (and redeploys the server, as every push to main does), and the
+build installs the docs site's dependencies. The copy step fails
 the build if any page carries `noindex`, a canonical link or sitemap entry
 outside `https://trackyourtime.dev/docs/`, or a robots.txt under `/docs/`. The
 domain's one robots.txt (from `packages/client/src/app/robots.ts`) lists

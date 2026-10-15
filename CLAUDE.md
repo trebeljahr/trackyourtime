@@ -2510,18 +2510,47 @@ union that will grow. Rules that fail quietly if broken:
   before the envelope reads `{ v, data }` as empty, so a client rollback past
   this change strands the queue until the next enqueue overwrites it.
 
-### Deployment (two Coolify apps, two hosts)
+### Deployment (web app on a Cloudflare Worker, API on Coolify)
 
-Production is two apps on **two hosts of one zone**: `trackyourtime-client` on
-`https://trackyourtime.dev` and `trackyourtime-server` on
-`https://api.trackyourtime.dev`, from `docker-compose.client.yml` and
-`docker-compose.server.yml`. The service name inside each file (`client` /
-`server`) is load-bearing — Coolify keys `docker_compose_domains` by it, and a
-mismatch yields 503 for the site with a 200 from Coolify's own API.
+Production is **two hosts of one zone**. `https://trackyourtime.dev` is
+`trackyourtime-client`, an assets-only Cloudflare Worker (`wrangler.jsonc`,
+since 2026-10-15) attached by the zone route `trackyourtime.dev/*`;
+`https://api.trackyourtime.dev` is the Coolify app `trackyourtime-server`
+from `docker-compose.server.yml`. The Coolify client app
+(`docker-compose.client.yml`) still runs unrouted for a soak and is retired by
+hand (vault `trackyourtime-human-tasks.md`). docs/deploy.md → Web app on
+Cloudflare. Rules that fail quietly if broken:
+
+- **No `main`, `run_worker_first`, `cache` or `routes` in `wrangler.jsonc`.**
+  The first three turn every page and asset request into a billed Worker
+  invocation (asset requests are free; the account shares 100,000 a day). The
+  routes live on the zone, made by hand: with no `routes` key Wrangler leaves
+  them alone, and CI's per-Worker token needs no zone access. The route
+  `trackyourtime.dev/.well-known/acme-challenge/*` has no Worker so the
+  origin's HTTP-01 renewal keeps working, and a Single Redirect rule (not the
+  zone-wide Always Use HTTPS, which would redirect the challenge) sends HTTP
+  to HTTPS, since a Worker answers plain HTTP.
+- **Upload and activate are two steps.** `build-client` runs `wrangler
+  versions upload --tag <sha>`; the deploy job activates it only after the
+  server's gate (`scripts/worker-deploy.mjs`), then gates it and redeploys
+  the previous version on failure. `wrangler deploy` in one step served new
+  HTML seconds before its chunks.
+- **Every upload carries the two previous releases' hashed files**
+  (`scripts/static-carry.mjs` reads the live `/release-assets.json`): a Worker
+  version serves only its own files, and an open tab lazy-loads the old ones.
+- **`_redirects` and `_headers` are generated** by
+  `scripts/cloudflare-static.mjs` from `packages/client/static-site-rules.mjs`,
+  the module `serve.mjs` applies per request. Add a legacy redirect or a
+  header there, never in only one host. No `immutable` on `/_next/static/*`:
+  `_headers` also applies to a 404, which a browser would then keep for a year.
+
+The service name inside each compose file (`client` / `server`) is
+load-bearing — Coolify keys `docker_compose_domains` by it, and a mismatch
+yields 503 for the site with a 200 from Coolify's own API.
 `docker-compose.yml` is the legacy single-app layout, kept for reference.
 
-Two apps rather than one so a client deploy cannot restart the server and drop
-every connected device's socket.
+The two halves deploy separately so a client deploy cannot restart the server
+and drop every connected device's socket.
 
 **Why the domain moved.** The previous layout put both apps on
 `tracktime.trebeljahr.com` and split them by path (`/api` to the server),
@@ -2560,46 +2589,48 @@ and Raycast; it buys cosmetics only.
 Four places must agree on the DEFAULT API origin (every store client can be
 pointed elsewhere at runtime): the server's `BETTER_AUTH_URL`
 (set in Coolify's env fields — `packages/server/.env.production` is NOT tracked
-in this repo, a global gitignore rule excludes it), the client image's
-`NEXT_PUBLIC_API_URL` build arg in `.github/workflows/build-and-deploy.yml`
-(Next inlines it at image build time, so a wrong value builds green and points
+in this repo, a global gitignore rule excludes it), `NEXT_PUBLIC_API_URL` in
+`build-client` in `.github/workflows/build-and-deploy.yml`
+(Next inlines it at build time, so a wrong value builds green and points
 at a dead API), `packages/extension/manifest.config.ts`, and
 `packages/raycast/src/lib/preferences.ts`. See `docs/deploy.md`.
 
-The client image serves the static export: `output: "export"` leaves no
-`.next/standalone`, so the image is `out/` plus `packages/client/serve.mjs`.
-The E2E suite runs that same file, so the deployed and tested servers cannot
-drift apart.
+The web app is the static export: `output: "export"` leaves no
+`.next/standalone`, so the Worker serves `out/`. The E2E suite serves it with
+`packages/client/serve.mjs`, which shares `static-site-rules.mjs` with the
+Worker's generated files.
 
 **A failed hosted deploy rolls itself back, and the run still fails.**
-`scripts/coolify-deploy.mjs` (logic in `scripts/lib/coolify-deploy.mjs`,
-tested against a fake GHCR and Coolify) reads the commit each app serves
-before promoting, points `ghcr.io/…-{server,client}:live` at the new sha with
-the job's GITHUB_TOKEN, queues each app through its own signed Coolify
-webhook, polls both apps for the commit, gates on `/api/health` (`status`,
+The server half is `scripts/coolify-deploy.mjs --which server` (logic in
+`scripts/lib/coolify-deploy.mjs`, tested against a fake GHCR and Coolify); the
+web app half is `scripts/worker-deploy.mjs` (above). The server half reads the
+commit it serves before promoting, points `ghcr.io/…-server:live` at the new
+sha with the job's GITHUB_TOKEN, queues the app through its own signed Coolify
+webhook, polls it for the commit, gates on `/api/health` (`status`,
 `db`), `/version.json` (`apiUrl`), `GET /api/auth/get-session` and the CORS
 preflight, and points `:live` back at the previous commits when any of it
 fails. CI holds NO Coolify API token (it cannot be scoped below the whole
 team, and `write` is root on the host): the per-app webhook secrets and
 `:live` come from `hatchkit secrets isolate`. The server is NOT rolled back past a migration
 whose `minReaderSchema` the previous build cannot read (registries compared
-with `git show`, so the deploy checkout needs `fetch-depth: 0`); only the
-client is, and the error says so. No target or a failed rollback fails loudly
+with `git show`, so the deploy checkout needs `fetch-depth: 0`), and the error
+says so. No target or a failed rollback fails loudly
 and never retries. `hosted-rollback.yml` is the manual form of the same
 script. Both jobs share the `hosted-deploy` concurrency group and are never
 cancelled in progress — a run stopped between promoting and restoring leaves
 `:live` on a build nobody verified. docs/deploy.md → Rollback.
 
-**An open tab outlives a deploy, and its chunks do not.** Each image replaces
-every hashed chunk, so a tab opened before a deploy 404s the first time it
-lazy-loads a route. Two web-only answers, both started after mount in
+**An open tab outlives a deploy, and its chunks might not.** The Worker
+carries two releases back; a self-hosted image replaces every hashed chunk, so
+a tab opened before an upgrade 404s the first time it lazy-loads a route. Two
+web-only answers, both started after mount in
 `components/deploy-recovery.tsx` and skipped in `next dev` and every shell:
 
 - `/version.json` (`scripts/write-version-json.mjs`: `commit`, `version`,
-  `apiUrl`) is served `no-cache` by `serve.mjs` and the self-host Caddyfile.
-  On focus or visibility, at most every five minutes, the tab compares its
-  `commit` with `NEXT_PUBLIC_BUILD_COMMIT` (both Dockerfiles set it from
-  `COMMIT_SHA`; empty disables the check) and shows a Reload toast. The reload
+  `apiUrl`) is served `no-cache` by the Worker's `_headers`, `serve.mjs` and
+  the self-host Caddyfile. On focus or visibility, at most every five minutes,
+  the tab compares its `commit` with `NEXT_PUBLIC_BUILD_COMMIT` (`build-client`
+  and both Dockerfiles set it from `COMMIT_SHA`; empty disables the check) and shows a Reload toast. The reload
   is never automatic, and waits for writes in flight (`reloadWhenIdle`), since
   `lib/offline.ts` does not queue a write that fails during unload.
 - A failed chunk or dynamic import (`lib/chunk-reload.ts`, from window events
@@ -2607,8 +2638,9 @@ lazy-loads a route. Two web-only answers, both started after mount in
   guarded in `sessionStorage`; after that the error screen's button is the way
   out. Keep that guard: without it a broken server is a reload loop.
 
-**The docs site is served from the client image, at
-`https://trackyourtime.dev/docs/`.** `packages/client/Dockerfile` runs
+**The docs site is part of the web app upload, at
+`https://trackyourtime.dev/docs/`.** `build-client` (like
+`packages/client/Dockerfile` before it) runs
 `scripts/docs/build-into-client.mjs` after the client build: it builds
 `docs-site` (`url` `https://trackyourtime.dev`, `baseUrl` `/docs/`,
 `trailingSlash: true` like the web app) and copies it to `out/docs/`.
@@ -2620,7 +2652,7 @@ reasons above. Four rules that fail quietly if broken:
 
 - **Never add the docs to `@starter/client`'s own `build` script.** `out/` is
   also written by Playwright, and the phones and the desktop app
-  use `out-mobile` / `out-desktop`; only the web image should carry the docs.
+  use `out-mobile` / `out-desktop`; only the hosted web upload carries the docs.
 - **The docs address is a literal, and indexing is always on.** The config
   used to read `DOCS_SITE_URL` and fall back to a placeholder that set
   `noIndex` — a forgotten variable would ship an unindexable site that looks
@@ -2635,8 +2667,8 @@ reasons above. Four rules that fail quietly if broken:
 - **Marketing pages link the docs absolutely** (`DOCS_URL` in
   `lib/site-links.ts`), with plain `<a>`: the self-host image renders the same
   pages on another domain, where no `/docs/` exists, and `/docs/` is not a Next
-  route for `<Link>` to navigate to. `serve.mjs` answers unknown `/docs/*`
-  paths with the docs' own 404 page and caches `/docs/assets/` (hashed) forever.
+  route for `<Link>` to navigate to. Unknown `/docs/*` paths get the docs'
+  own 404 page (the Worker's `404-page` handling, and `serve.mjs`).
   Every docs page also has a Markdown copy beside it (`/docs/mcp.md`,
   `/docs/index.md`), which the root `llms.txt` links.
 
