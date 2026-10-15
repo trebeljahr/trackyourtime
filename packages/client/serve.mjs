@@ -22,6 +22,10 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The redirects and headers the hosted Cloudflare Worker gets from out/_redirects
+// and out/_headers, applied here per request (static-site-rules.mjs).
+import { legacyAppRedirect, NO_FRAMING, NO_SNIFFING } from "./static-site-rules.mjs";
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "out");
 const PORT = Number(process.env.PORT ?? process.env.E2E_CLIENT_PORT ?? 6477);
@@ -89,45 +93,6 @@ function resolveFile(urlPath) {
 }
 
 /**
- * The signed-in screens lived at the root (`/track`, `/settings`, …) until
- * they moved under `/app/`. Links to the old addresses outlive the move:
- * bookmarks and saved logins, reminder and device-flow emails already sent,
- * and extension and Raycast builds already installed. Each is answered with a
- * permanent redirect to the same path under `/app/`, query string kept.
- *
- * Here and not in the app: the export has no middleware, and a client-side
- * redirect page per old route would put these names back into the route tree.
- */
-const LEGACY_APP_SEGMENTS = new Set([
-  "calendar",
-  "clients",
-  "device",
-  "invoices",
-  "members",
-  "profile",
-  "projects",
-  "reports",
-  "settings",
-  "tags",
-  "tasks",
-  "timesheet",
-  "track",
-]);
-
-/** `/app/<path>` for a pre-move app address, or null for anything else. */
-function legacyAppRedirect(url) {
-  const [path, query] = splitOnce(url, "?");
-  const segment = path.split("/")[1] ?? "";
-  if (!LEGACY_APP_SEGMENTS.has(segment)) return null;
-  return `/app${path}${query === null ? "" : `?${query}`}`;
-}
-
-function splitOnce(value, separator) {
-  const at = value.indexOf(separator);
-  return at === -1 ? [value, null] : [value.slice(0, at), value.slice(at + 1)];
-}
-
-/**
  * Cache headers by what the file is, not by how old it is.
  *
  * Everything under `/_next/static` carries a content hash in its name, so it
@@ -147,18 +112,6 @@ function cacheControl(urlPath, file) {
   if (extname(file) === ".html") return "no-cache";
   return "public, max-age=3600";
 }
-
-/**
- * No page of the app may be framed by another site. Beyond clickjacking, a
- * cross-site frame gets no session cookie (SameSite=Lax), so the app inside it
- * believes nobody is signed in — and the extension bridge would pass that on
- * to the browser extension as a sign-out. The bridge also refuses frames on
- * both ends; this header is the defence in depth.
- */
-const NO_FRAMING = {
-  "content-security-policy": "frame-ancestors 'none'",
-  "x-frame-options": "DENY",
-};
 
 const server = createServer((req, res) => {
   if (draining && (req.url ?? "/").split("?")[0] === "/") {
@@ -211,9 +164,7 @@ const server = createServer((req, res) => {
     "content-type": MIME[extname(file)] ?? "application/octet-stream",
     "cache-control": cacheControl(urlPath, file),
     "content-length": statSync(file).size,
-    // The export is same-origin static assets only; nothing here should be
-    // framed or sniffed into another type.
-    "x-content-type-options": "nosniff",
+    ...NO_SNIFFING,
     ...NO_FRAMING,
   });
 

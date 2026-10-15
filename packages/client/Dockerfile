@@ -114,6 +114,7 @@ ENV PORT=6477
 # the tested server cannot drift apart.
 COPY --from=build /app/packages/client/out ./out
 COPY --from=build /app/packages/client/serve.mjs ./serve.mjs
+COPY --from=build /app/packages/client/static-site-rules.mjs ./static-site-rules.mjs
 
 USER node
 EXPOSE 6477

@@ -1,21 +1,27 @@
 name: hosted-rollback
 
-# Put the hosted apps (trackyourtime.dev and api.trackyourtime.dev) on the
-# images of an earlier commit, by hand, with the same promote, signed deploy
-# and gate as build-and-deploy.yml: `:live` is pointed at the commit's images
-# with this run's GITHUB_TOKEN, and each app is queued through its own signed
-# Coolify webhook. No Coolify API token. docs/deploy.md → Rollback says when
-# to use it.
+# Put the hosted apps on an earlier commit, by hand, with the same deploys and
+# gates as build-and-deploy.yml:
+#
+# - the server (api.trackyourtime.dev): `:live` is pointed at the commit's
+#   image with this run's GITHUB_TOKEN and the Coolify app is queued through
+#   its own signed webhook. No Coolify API token.
+# - the web app (trackyourtime.dev): the Cloudflare Worker version uploaded
+#   for the commit gets all traffic again (scripts/worker-deploy.mjs). A
+#   version keeps its own files, so this is complete and takes seconds.
+#
+# docs/deploy.md → Rollback says when to use it.
 #
 #   gh workflow run hosted-rollback.yml -f sha=<commit> -f which=both
 #
-# Only commits that build-and-deploy.yml built on main have images
-# (ghcr.io/trebeljahr/trackyourtime-{server,client}:<sha>), so the commit must
-# be on main. When the gate fails, the run fails and `:live` stays on the
-# images of `sha`: the build served before this run is usually the one being
-# escaped, and putting it back would redeploy it. `restore_on_failure` puts it
-# back instead, exactly as after a failed push deploy — for a rollback that is
-# a trial rather than an escape.
+# Only commits that build-and-deploy.yml built on main have a server image
+# (ghcr.io/trebeljahr/trackyourtime-server:<sha>) and a Worker version tagged
+# with the sha, so the commit must be on main — and, for the web app, built
+# after the move to the Worker (2026-10-15). When the gate fails, the run
+# fails and the app stays on `sha`: the build served before this run is
+# usually the one being escaped, and putting it back would redeploy it.
+# `restore_on_failure` puts it back instead, exactly as after a failed push
+# deploy — for a rollback that is a trial rather than an escape.
 #
 # Both workflows share one concurrency group, and GitHub keeps one waiting run
 # per group: a rollback queued behind a running push deploy is cancelled by a
@@ -51,8 +57,8 @@ on:
         type: boolean
         default: false
 
-# `packages: write` moves `:live` in this repository's own GHCR packages and
-# nothing else.
+# `packages: write` moves the server's `:live` in this repository's own GHCR
+# packages and nothing else.
 permissions:
   contents: read
   packages: write
@@ -98,30 +104,41 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Deploying $sha: $(git log -1 --format='%s (%cs)' "$sha")"
 
-      # The script prints a ::notice:: and does nothing when no Coolify secret
-      # is set, and fails when only some are.
-      - name: Deploy, gate and roll back on failure
+      # Each script prints a ::notice:: and does nothing when its secrets are
+      # not set, and fails when only some are. Server first, as on a push.
+      - name: Deploy the server, gate and roll back on failure
+        if: inputs.which != 'client'
         env:
           COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
           COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
           COOLIFY_SERVER_DEPLOY_SECRET: ${{ secrets.COOLIFY_SERVER_DEPLOY_SECRET }}
           COOLIFY_SERVER_DEPLOY_REPOSITORY: ${{ secrets.COOLIFY_SERVER_DEPLOY_REPOSITORY }}
           COOLIFY_SERVER_DEPLOY_BRANCH: ${{ secrets.COOLIFY_SERVER_DEPLOY_BRANCH }}
-          COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
-          COOLIFY_CLIENT_DEPLOY_SECRET: ${{ secrets.COOLIFY_CLIENT_DEPLOY_SECRET }}
-          COOLIFY_CLIENT_DEPLOY_REPOSITORY: ${{ secrets.COOLIFY_CLIENT_DEPLOY_REPOSITORY }}
-          COOLIFY_CLIENT_DEPLOY_BRANCH: ${{ secrets.COOLIFY_CLIENT_DEPLOY_BRANCH }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_OWNER_REPO: trebeljahr/trackyourtime
           WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
           API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
           SHA: ${{ steps.resolve.outputs.sha }}
-          WHICH: ${{ inputs.which }}
           FORCE_SERVER: ${{ inputs.force_server }}
           RESTORE_ON_FAILURE: ${{ inputs.restore_on_failure }}
         run: |
           set -euo pipefail
-          args=(deploy --sha "$SHA" --which "$WHICH" --guard-server-downgrade)
+          args=(deploy --sha "$SHA" --which server --guard-server-downgrade)
           if [ "$FORCE_SERVER" = "true" ]; then args+=(--force-server); fi
           if [ "$RESTORE_ON_FAILURE" = "true" ]; then args+=(--rollback); fi
           node scripts/coolify-deploy.mjs "${args[@]}"
+
+      - name: Activate the web app, gate and roll back on failure
+        if: inputs.which != 'server'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
+          API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+          RESTORE_ON_FAILURE: ${{ inputs.restore_on_failure }}
+        run: |
+          set -euo pipefail
+          args=(activate --sha "$SHA")
+          if [ "$RESTORE_ON_FAILURE" = "true" ]; then args+=(--rollback); fi
+          node scripts/worker-deploy.mjs "${args[@]}"

@@ -6,8 +6,8 @@ on:
   # Pull requests reach `dco`, `verify` and `e2e` — the jobs that only read
   # the checkout and run the test suites. They must NEVER reach build-server,
   # build-client or deploy: this file pushes image tags to ghcr.io, moves
-  # `:live` and signs Coolify deploy webhooks, and none of that is a thing a
-  # PR gets to do.
+  # `:live`, signs Coolify deploy webhooks and uploads and activates
+  # Cloudflare Worker versions, and none of that is a thing a PR gets to do.
   #
   # That boundary is enforced per job, not by the `needs:` chain. build-server,
   # build-client and deploy each carry their own
@@ -220,96 +220,157 @@ jobs:
             ghcr.io/${{ env.IMAGE_OWNER_REPO }}-server:${{ github.sha }}
 
   # PUSH ONLY, for the same reason as build-server. Keep the `if:`.
+  #
+  # The web app is an assets-only Cloudflare Worker (wrangler.jsonc), not a
+  # container: this job builds the static export and UPLOADS it as a new
+  # Worker version tagged with the commit. An uploaded version serves nothing;
+  # the deploy job activates it after the server passed its gate. docs/deploy.md
+  # → Web app on Cloudflare.
+  #
+  # CLOUDFLARE_API_TOKEN is the Worker's own token ("Individual Workers
+  # Editor" on trackyourtime-client and nothing else). It cannot touch the
+  # zone's routes, DNS or another Worker. With neither Cloudflare secret set
+  # (a fork) the upload is skipped with a notice.
   build-client:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: [verify, e2e]
+    # No package write: nothing here goes to GHCR any more.
+    permissions:
+      contents: read
+    env:
+      # NEXT_PUBLIC_* are inlined into the browser bundle at BUILD time.
+      #
+      # NEXT_PUBLIC_API_URL is the API's ORIGIN, not a base path: the client
+      # appends `/api/trpc` and `/api/auth` itself, and `resolveSyncUrl`
+      # appends `/api/ws`. The server still mounts every route at `/api`, so
+      # the real tRPC endpoint is `https://api.trackyourtime.dev/api/trpc` —
+      # the doubled-looking segment is deliberate, not a stray path in this
+      # value.
+      #
+      # The API is a SEPARATE ORIGIN from the web app, so the browser client
+      # is cross-origin: FRONTEND_URL / TRUSTED_ORIGINS on the server are what
+      # make sign-in and cookies work, not decoration.
+      #
+      # Literal rather than only `vars.*`: these were repo VARIABLES with
+      # nothing set, so every client image was once built with an empty API
+      # URL. A repo variable still wins when set, for a staging or preview
+      # host. The analytics values are optional GitHub Actions repo VARIABLES
+      # (not secrets):
+      #   gh variable set NEXT_PUBLIC_PLAUSIBLE_DOMAIN ...
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+      NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL || 'wss://api.trackyourtime.dev' }}
+      NEXT_PUBLIC_PLAUSIBLE_DOMAIN: ${{ vars.NEXT_PUBLIC_PLAUSIBLE_DOMAIN }}
+      NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL: ${{ vars.NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL }}
+      NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+      # The bundle's own copy of the commit, compared against /version.json by
+      # an open tab to notice a newer deploy (lib/deploy-version.ts).
+      COMMIT_SHA: ${{ github.sha }}
+      NEXT_PUBLIC_BUILD_COMMIT: ${{ github.sha }}
+      WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
       # Error reporting is opt-in per build (an empty NEXT_PUBLIC_SENTRY_DSN
-      # leaves the SDK out of the bundle), so an image that reports nothing
+      # leaves the SDK out of the bundle), so a build that reports nothing
       # says so here rather than looking like one that does.
       # docs/deploy.md → Error reporting.
       - name: Error reporting
-        env:
-          NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
         run: |
           if [ -z "${NEXT_PUBLIC_SENTRY_DSN:-}" ]; then
             echo "::notice::NEXT_PUBLIC_SENTRY_DSN is not set — this build reports no errors. See docs/deploy.md → Error reporting."
           else
             echo "Error reporting is on: NEXT_PUBLIC_SENTRY_DSN is set."
           fi
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: packages/client/Dockerfile
-          push: true
-          # NEXT_PUBLIC_* are inlined into the browser bundle at image
-          # BUILD time — setting them as runtime env on the deployed
-          # container does nothing.
-          #
-          # NEXT_PUBLIC_API_URL is the API's ORIGIN, not a base path: the
-          # client appends `/api/trpc` and `/api/auth` itself, and
-          # `resolveSyncUrl` appends `/api/ws`. The server still mounts every
-          # route at `/api`, so the real tRPC endpoint is
-          # `https://api.trackyourtime.dev/api/trpc` — the doubled-looking
-          # segment is deliberate, not a stray path in this value.
-          #
-          # The API is a SEPARATE ORIGIN from the web app, so the browser
-          # client is cross-origin: FRONTEND_URL / TRUSTED_ORIGINS on the
-          # server are what make sign-in and cookies work, not decoration.
-          #
-          # Literal rather than only `vars.*`: these were repo VARIABLES with
-          # nothing set, so every client image was being built with an empty
-          # API URL. A repo variable still wins when set, for a staging or
-          # preview host. The analytics values are optional GitHub Actions
-          # repo VARIABLES (not secrets):
-          #   gh variable set NEXT_PUBLIC_PLAUSIBLE_DOMAIN ...
-          build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
-            NEXT_PUBLIC_WS_URL=${{ vars.NEXT_PUBLIC_WS_URL || 'wss://api.trackyourtime.dev' }}
-            NEXT_PUBLIC_PLAUSIBLE_DOMAIN=${{ vars.NEXT_PUBLIC_PLAUSIBLE_DOMAIN }}
-            NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL=${{ vars.NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL }}
-            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
-            COMMIT_SHA=${{ github.sha }}
-          tags: |
-            ghcr.io/${{ env.IMAGE_OWNER_REPO }}-client:main
-            ghcr.io/${{ env.IMAGE_OWNER_REPO }}-client:${{ github.sha }}
+      - name: Build the web export
+        run: |
+          pnpm --filter @starter/shared run build
+          pnpm --filter @starter/invoice-pdf run build
+          pnpm --filter @starter/core run build
+          pnpm --filter @starter/client run build
+      # Prove the API origin reached the bundle. NEXT_PUBLIC_* is inlined at
+      # build time, so a missing value builds a site that loads perfectly and
+      # talks to the wrong API — or to nothing. That shipped twice: every image
+      # before 2026-09-08 was built with an EMPTY api url, and the domain
+      # migration then went out against a stale one. Neither was caught by a
+      # test, because both artefacts were fine in every way a test looked.
+      - name: The API origin is in the bundle
+        run: |
+          test -n "$NEXT_PUBLIC_API_URL" || { echo "::error::NEXT_PUBLIC_API_URL is empty"; exit 1; }
+          grep -rqF "$NEXT_PUBLIC_API_URL" packages/client/out/_next/static \
+            || { echo "::error::NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL never made it into the bundle"; exit 1; }
+      # The docs, at https://trackyourtime.dev/docs/, copied into out/docs/.
+      # Not part of the client's own `build` script, which also feeds the
+      # Electron, Capacitor and E2E builds. Fails on noindex, a foreign
+      # canonical link or a broken docs link.
+      - run: node scripts/docs/build-into-client.mjs
+      # Which commit and release this is, and which API it was built against:
+      # the deploy job polls it, and open tabs compare it with their bundle.
+      - run: node scripts/write-version-json.mjs packages/client/out/version.json
+      # What serve.mjs did per request, as files: the legacy /track →
+      # /app/track/ redirects and the no-framing headers.
+      - run: node scripts/cloudflare-static.mjs write packages/client/out
+      # The hashed files of the two releases before this one, read from the
+      # live site's /release-assets.json, so a tab opened before this deploy
+      # still finds its lazy chunks. A Worker version serves only its own files.
+      - run: node scripts/static-carry.mjs --out packages/client/out --sha "$COMMIT_SHA" --from "$WEB_URL"
+      # Workers Free: 20,000 files and 25 MiB per file, 100 header rules,
+      # 100 dynamic redirects.
+      - run: node scripts/cloudflare-static.mjs check packages/client/out
+      # Upload, do not activate: `versions upload` makes a version that serves
+      # nothing until the deploy job sends traffic to it, so its chunks are in
+      # place before any HTML names them.
+      - name: Upload the Worker version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::notice::No Cloudflare secrets are set — the web app was built but not uploaded."
+            exit 0
+          fi
+          npx --yes wrangler@4.145.0 versions upload \
+            --tag "$COMMIT_SHA" \
+            --message "$(git log -1 --format='%h %s' | cut -c1-100)"
 
-  # Deploy job — the topology is TWO Coolify apps on TWO hosts of one zone:
-  # the client on trackyourtime.dev and the server on api.trackyourtime.dev.
-  # Each app owns its own host, so neither has to share a routing rule with
-  # the other.
+  # Deploy job. The server is a Coolify app on api.trackyourtime.dev; the web
+  # app is the Cloudflare Worker on trackyourtime.dev that build-client
+  # uploaded a version to. Server first, then the client, each with its own
+  # gate:
   #
-  # Deploying them separately is the point of the split: the server holds
-  # the WebSocket sync connections, and a client-only change must not
-  # restart it and drop every connected device's socket.
+  # - The server deploy restarts the process that holds every device's sync
+  #   socket, and the client switch is one atomic Cloudflare deployment that
+  #   takes seconds, so the client waits for a verified server.
+  # - A client that fails its gate is put back on the Worker version that
+  #   served before, and the server keeps its new build: an old web app on a
+  #   new server is the direction compatibility already covers. The run still
+  #   fails and says which half is live.
   #
   # PUSH ONLY, and the `if:` below is the only thing enforcing that. On a
-  # fork every COOLIFY_* secret resolves to an empty string and the script
-  # prints a ::notice:: that nothing was deployed — that is not a PR safety
-  # net, it is how a fork without Coolify behaves.
+  # fork every secret resolves to an empty string and each script prints a
+  # ::notice:: that nothing was deployed — that is not a PR safety net, it is
+  # how a fork without Coolify or Cloudflare behaves.
   deploy:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: [build-server, build-client]
     # Shared with hosted-rollback.yml, and never cancelled: a deploy stopped
-    # between promoting the new images and restoring the old ones leaves the
-    # apps' `:live` tag on a build nobody verified. A second deploy waits for
-    # the first.
+    # between promoting the new image and restoring the old one leaves the
+    # server's `:live` tag on a build nobody verified. A second deploy waits
+    # for the first.
     concurrency:
       group: hosted-deploy
       cancel-in-progress: false
-    # A deploy that never lands polls for ten minutes, and its rollback polls
-    # for ten more.
+    # A server deploy that never lands polls for ten minutes and its rollback
+    # for ten more; the client's activation and rollback take a few more.
     timeout-minutes: 45
-    # `packages: write` is what moves `:live` (below), with this job's own
-    # GITHUB_TOKEN: it can write this repository's packages and nothing else.
+    # `packages: write` is what moves the server's `:live` (below), with this
+    # job's own GITHUB_TOKEN: it can write this repository's packages and
+    # nothing else.
     permissions:
       contents: read
       packages: write
@@ -323,7 +384,7 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # Promote this commit's images to `:live`, deploy each app through its
+      # Promote this commit's server image to `:live`, deploy it through its
       # own signed Coolify webhook, gate, and roll back when the gate fails —
       # scripts/coolify-deploy.mjs, shared with hosted-rollback.yml and tested
       # in scripts/lib/coolify-deploy.test.mjs. hatchkit generalised it into
@@ -337,70 +398,85 @@ jobs:
       # root on the host, so a token in this repository was a key to every
       # other project on it. Instead:
       #
-      # - The image is chosen in GHCR. Both apps are Coolify Docker Image
-      #   apps pulling `ghcr.io/trebeljahr/trackyourtime-{server,client}:live`,
-      #   and Coolify pulls the image again on every deploy, so pointing
-      #   `:live` at this commit's immutable `:<sha>` image is the pin. (The
-      #   stopped `*-legacy-compose` apps read SERVER_IMAGE / CLIENT_IMAGE
-      #   and pull with `pull_policy: always` for the same reason: on
-      #   2026-09-08 Docker kept a cached moving tag and Coolify started the
-      #   PREVIOUS build while everything reported the new one.)
-      # - Each app has its own webhook secret (COOLIFY_<APP>_DEPLOY_SECRET).
+      # - The image is chosen in GHCR. The server is a Coolify Docker Image
+      #   app pulling `ghcr.io/trebeljahr/trackyourtime-server:live`, and
+      #   Coolify pulls the image again on every deploy, so pointing `:live`
+      #   at this commit's immutable `:<sha>` image is the pin. (The stopped
+      #   `*-legacy-compose` apps read SERVER_IMAGE / CLIENT_IMAGE and pull
+      #   with `pull_policy: always` for the same reason: on 2026-09-08 Docker
+      #   kept a cached moving tag and Coolify started the PREVIOUS build
+      #   while everything reported the new one.)
+      # - The app has its own webhook secret (COOLIFY_SERVER_DEPLOY_SECRET).
       #   A `push` payload signed with it queues a deploy of that one app —
       #   it can read nothing and reach no other app. The payload names
-      #   `.hatchkit/deploy-webhook`, the apps' only watch path, so an
+      #   `.hatchkit/deploy-webhook`, the app's only watch path, so an
       #   ordinary push that reaches Coolify through its GitHub App never
       #   deploys a build that does not exist yet.
       #
       # `hatchkit secrets isolate trackyourtime` sets the secrets, watch paths
-      # and `:live`; docs/deploy.md → One-time setup.
+      # and `:live`; docs/deploy.md → One-time setup. The COOLIFY_CLIENT_*
+      # secrets belong to the Coolify client app the Worker replaced, which
+      # nothing deploys any more.
       #
-      # The rollback target is the commit each app was SERVING before this
-      # run (`/api/health`, `/version.json`), provided GHCR still has its
-      # `:<sha>` image. Once `:live` moves, nothing else names it.
+      # The rollback target is the commit the server was SERVING before this
+      # run (`/api/health`), provided GHCR still has its `:<sha>` image. Once
+      # `:live` moves, nothing else names it.
       #
-      # The gate, after both apps report this commit: /api/health says
-      # `status: ok` and `db: true`, /version.json names the expected API,
-      # GET /api/auth/get-session answers 200, and the CORS preflight from the
-      # web origin is allowed. Until the gate existed the final assertion was
-      # an HTTP 200 from a POST, and a deploy that kept the old container, an
-      # image built with an empty API URL and a container crash-looping behind
-      # the proxy all left this workflow green.
+      # The gate, after the server reports this commit: /api/health says
+      # `status: ok` and `db: true`, the live /version.json names the expected
+      # API, GET /api/auth/get-session answers 200, and the CORS preflight from
+      # the web origin is allowed. Until the gate existed the final assertion
+      # was an HTTP 200 from a POST, and a deploy that kept the old container,
+      # an image built with an empty API URL and a container crash-looping
+      # behind the proxy all left this workflow green.
       #
       # When the poll or the gate fails, `:live` is pointed back at the
-      # previous commits, both apps are redeployed and gated, and the job
-      # still FAILS, naming the failed check, this sha and the restored one.
-      # No target (a first deploy, an app that was not answering, an image
-      # pruned from GHCR) or a rollback that fails its own gate fails loudly
-      # and does not try again.
+      # previous commit, the server is redeployed and gated, and the job still
+      # FAILS, naming the failed check, this sha and the restored one. The
+      # client step below does not run, so the web app stays on the version
+      # that served before. No target (a first deploy, a server that was not
+      # answering, an image pruned from GHCR) or a rollback that fails its own
+      # gate fails loudly and does not try again.
       #
       # Migrations are forward-only. A migration whose minReaderSchema is above
       # the previous build's SCHEMA_VERSION makes that build refuse to start
       # (docs/versioning.md → Migrations), and nobody can tell from outside
       # whether the new server got far enough to run it. So when this commit's
       # registry holds such a migration — or either registry cannot be read —
-      # the SERVER is not rolled back: only the client is, and the error says
-      # why. Going back past that migration needs the database dump, which is
-      # a person's decision (docs/deploy.md → Rollback).
+      # the server is not rolled back, and the error says why. Going back past
+      # that migration needs the database dump, which is a person's decision
+      # (docs/deploy.md → Rollback).
       #
       # With no Coolify secret set the script prints a ::notice:: and deploys
       # nothing; with some set and others missing it fails.
-      - name: Deploy, gate and roll back on failure
+      - name: Deploy the server, gate and roll back on failure
         env:
           COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
           COOLIFY_SERVER_RESOURCE_UUID: ${{ secrets.COOLIFY_SERVER_RESOURCE_UUID }}
           COOLIFY_SERVER_DEPLOY_SECRET: ${{ secrets.COOLIFY_SERVER_DEPLOY_SECRET }}
           COOLIFY_SERVER_DEPLOY_REPOSITORY: ${{ secrets.COOLIFY_SERVER_DEPLOY_REPOSITORY }}
           COOLIFY_SERVER_DEPLOY_BRANCH: ${{ secrets.COOLIFY_SERVER_DEPLOY_BRANCH }}
-          COOLIFY_CLIENT_RESOURCE_UUID: ${{ secrets.COOLIFY_CLIENT_RESOURCE_UUID }}
-          COOLIFY_CLIENT_DEPLOY_SECRET: ${{ secrets.COOLIFY_CLIENT_DEPLOY_SECRET }}
-          COOLIFY_CLIENT_DEPLOY_REPOSITORY: ${{ secrets.COOLIFY_CLIENT_DEPLOY_REPOSITORY }}
-          COOLIFY_CLIENT_DEPLOY_BRANCH: ${{ secrets.COOLIFY_CLIENT_DEPLOY_BRANCH }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
           API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
           SHA: ${{ github.sha }}
-        run: node scripts/coolify-deploy.mjs deploy --sha "$SHA" --which both --rollback
+        run: node scripts/coolify-deploy.mjs deploy --sha "$SHA" --which server --rollback
+
+      # Send all traffic on trackyourtime.dev to the Worker version
+      # build-client uploaded for this commit, then gate: /version.json names
+      # this commit and the expected API, and the API answers the web origin.
+      # On a failed gate the version that served before is deployed again and
+      # gated, and the job fails. scripts/worker-deploy.mjs, tested in
+      # scripts/lib/worker-deploy.test.mjs; docs/deploy.md → Web app on
+      # Cloudflare.
+      - name: Activate the web app, gate and roll back on failure
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
+          API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+          SHA: ${{ github.sha }}
+        run: node scripts/worker-deploy.mjs activate --sha "$SHA" --rollback
 
   # DCO gate — pull requests only. Track Your Time takes Developer Certificate of
   # Origin 1.1 sign-off rather than a CLA, so the check is mechanical: every
