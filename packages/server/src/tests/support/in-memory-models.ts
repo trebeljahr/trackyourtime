@@ -158,6 +158,9 @@ class MemoryQuery<T> implements PromiseLike<T> {
   select(): this {
     return this;
   }
+  hint(): this {
+    return this;
+  }
   populate(): this {
     return this;
   }

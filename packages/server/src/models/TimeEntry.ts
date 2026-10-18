@@ -185,6 +185,14 @@ timeEntrySchema.index({ workspaceId: 1, clientId: 1, start: -1 });
  * that restricts a member without `canViewOthersTime` to their own rows. */
 timeEntrySchema.index({ workspaceId: 1, authorId: 1, start: -1, _id: -1 });
 
+/**
+ * "Which entries are still open at this instant" — the lower bound of every
+ * report's range scan (`earliestOverlappingStart` in trpc/routers/reports.ts).
+ * Led by `end`, that is a handful of keys for a recent range; the start index
+ * alone would walk the workspace's whole history to answer it.
+ */
+timeEntrySchema.index({ workspaceId: 1, end: 1, start: 1 });
+
 /** "Entries carrying any of these tags" — a multikey index over the array. */
 timeEntrySchema.index({ workspaceId: 1, tagIds: 1 });
 

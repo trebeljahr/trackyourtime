@@ -267,6 +267,108 @@ export const pushAuthorConditions = (
 };
 
 /**
+ * How many entries ending after `from` the end index counts before the
+ * question goes to the start index instead. Past it the range is an old one,
+ * where few entries start before `from`.
+ */
+const OPEN_AT_FROM_LIMIT = 10_000;
+
+/** "Which entries are open at this instant" (models/TimeEntry.ts). */
+const OPEN_INDEX = { workspaceId: 1, end: 1, start: 1 } as const;
+/** The `start` index every report page walks (models/TimeEntry.ts). */
+const PAGE_INDEX = { workspaceId: 1, start: -1, _id: -1 } as const;
+
+/**
+ * The earliest `start` an entry overlapping a range that begins at `from` can
+ * have — the lower bound of a report's scan over the `start` index.
+ *
+ * Overlap says only `start < to`, so without a lower bound every report walks
+ * the workspace's whole history before `to` and fetches each entry to test its
+ * `end`: 100k keys and 100k documents for a one-week report that returns 64.
+ * An overlapping entry either starts at or after `from`, or it started before
+ * `from` and was still open at `from` (running, or ended after it). This asks
+ * for the earliest start among the entries open at `from`, so no overlapping
+ * entry starts before the answer — the bound is exact, whatever the entries
+ * look like.
+ *
+ * It is asked, not derived from a maximum entry length, because there is
+ * none: the runaway guard can be off, `ask` leaves a timer running until
+ * someone answers, and a manual entry or a JSON import can be any length.
+ *
+ * Two ways to ask, each cheap where the other is not, after one key says
+ * whether anything starts before `from` at all. For a recent range few
+ * entries end after `from`, and the end index answers from those alone. When
+ * `OPEN_AT_FROM_LIMIT` or more do, the range is old, and the start index is
+ * walked from the oldest entry instead, stopping at the first one still open
+ * at `from`. That walk never reads more than the unbounded scan did, so an old
+ * range costs at most the capped count more than before. A forgotten timer
+ * running for months makes the bound months old, which costs that workspace
+ * what every report cost before.
+ *
+ * Hinted, because each question has one right index and the planner would
+ * otherwise race both whenever its cached plan is cold. `null` — no bound, the
+ * scan as it always was — when a question cannot be answered (an index that
+ * did not build, say): a probe may make a report slower, never wrong, never
+ * failed.
+ *
+ * Workspace-wide rather than author-scoped on purpose: the answer is one date
+ * that only ever widens the scan, so it cannot change which rows a caller
+ * sees, and every filter of every report can share it. Like the page reads
+ * that follow it, it is not a snapshot.
+ *
+ * Exported for the unit tests, which pass a small `limit` to drive both ways.
+ */
+export const earliestOverlappingStart = async (
+  workspaceId: string,
+  from: Date,
+  limit: number = OPEN_AT_FROM_LIMIT,
+): Promise<Date | null> => {
+  const startOnly = { _id: 0, start: 1 } as const;
+  try {
+    // An "all time" range starts before the first entry: nothing to count.
+    const first = await TimeEntry.findOne({ workspaceId }, startOnly)
+      .sort({ start: 1 })
+      .hint(PAGE_INDEX)
+      .lean<{ start: Date } | null>();
+    if (!first || first.start >= from) return from;
+    const endingAfter = await TimeEntry.countDocuments(
+      { workspaceId, end: { $gt: from } },
+      { limit, hint: OPEN_INDEX },
+    );
+    if (endingAfter < limit) {
+      const [ended, running] = await Promise.all([
+        TimeEntry.findOne({ workspaceId, end: { $gt: from }, start: { $lt: from } }, startOnly)
+          .sort({ start: 1 })
+          .hint(OPEN_INDEX)
+          .lean<{ start: Date } | null>(),
+        TimeEntry.findOne({ workspaceId, end: null, start: { $lt: from } }, startOnly)
+          .sort({ start: 1 })
+          .hint(OPEN_INDEX)
+          .lean<{ start: Date } | null>(),
+      ]);
+      return [ended?.start, running?.start].reduce<Date>(
+        (earliest, start) => (start && start < earliest ? start : earliest),
+        from,
+      );
+    }
+    const oldest = await TimeEntry.findOne(
+      {
+        workspaceId,
+        start: { $lt: from },
+        $or: [{ end: null }, { end: { $gt: from } }],
+      },
+      startOnly,
+    )
+      .sort({ start: 1 })
+      .hint(PAGE_INDEX)
+      .lean<{ start: Date } | null>();
+    return oldest ? oldest.start : from;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Build the `$match` conditions for a report. Mirrors `entries.list`:
  * overlap semantics (the entry starts before the window ends and either is
  * still running or ended after the window began) and `clientIds` resolved to
@@ -341,6 +443,11 @@ const buildMatchConditions = async (
       description: new RegExp(escapeRegExp(filters.search.trim()), "i"),
     });
   }
+
+  // Last, so a filter that matches nothing returns above without the probe.
+  // It changes no result: every overlapping entry starts at or after it.
+  const earliest = await earliestOverlappingStart(workspaceId, range.from);
+  if (earliest) conditions.push({ start: { $gte: earliest } });
 
   return conditions;
 };

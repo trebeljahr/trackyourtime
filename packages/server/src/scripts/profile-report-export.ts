@@ -27,11 +27,15 @@ const ENTRY_COUNT = 100_000;
 const WORKSPACE = "fixture";
 const OWNER = "fixture-owner";
 const RANGE = { from: "2000-01-01", to: "2030-12-31", timeZone: "Europe/Berlin" };
+const WEEK = { from: "2026-09-28", to: "2026-10-04", timeZone: RANGE.timeZone };
+const MONTH_2017 = { from: "2017-06-01", to: "2017-06-30", timeZone: RANGE.timeZone };
 
 /**
  * Cases this build knows. `trpc-*` exist on every build since the exports;
  * `report-*` are the on-screen reports over the same 100k entries, measured
- * with the JSON body tRPC's HTTP adapter would send.
+ * with the JSON body tRPC's HTTP adapter would send. The `-week` cases and
+ * `report-weekly` cover the newest week, `report-summary-2017` a month in the
+ * middle of the history, and the rest every entry.
  */
 const CASES = [
   "trpc-csv",
@@ -43,6 +47,9 @@ const CASES = [
   "report-summary-day",
   "report-detailed-page",
   "report-weekly",
+  "report-summary-week",
+  "report-detailed-week",
+  "report-summary-2017",
   "stream-summary-pdf",
 ] as const;
 type Case = (typeof CASES)[number];
@@ -169,7 +176,13 @@ async function measure(which: Case, uri: string, dbName: string): Promise<void> 
           ? await caller.summary({ ...RANGE, groupBy: "day" })
           : which === "report-detailed-page"
             ? await caller.detailed({ ...RANGE, limit: 50 })
-            : await caller.weekly({ ...RANGE, weekStart: "2026-09-28" });
+            : which === "report-summary-week"
+              ? await caller.summary({ ...WEEK, groupBy: "project" })
+              : which === "report-detailed-week"
+                ? await caller.detailed({ ...WEEK, limit: 50 })
+                : which === "report-summary-2017"
+                  ? await caller.summary({ ...MONTH_2017, groupBy: "project" })
+                  : await caller.weekly({ ...RANGE, weekStart: "2026-09-28" });
     const body = Buffer.from(JSON.stringify({ result: { data: result } }), "utf8");
     bytes = body.length;
     digest = createHash("sha256").update(body).digest("hex").slice(0, 16);

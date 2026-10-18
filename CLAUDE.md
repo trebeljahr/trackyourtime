@@ -2787,6 +2787,15 @@ Rules that fail quietly if broken:
   `Infinity`. Member labels are read after the fold, from the authors it met.
   `report-fold.test.ts` checks paged == one page for every grouping and
   visibility.
+- **The range scan's lower bound is asked, never assumed.**
+  `buildMatchConditions` adds `start >= earliestOverlappingStart(...)`: the
+  earliest start among entries still open at `from`, read from
+  `{ workspaceId, end, start }` (capped at `OPEN_AT_FROM_LIMIT`, past which
+  the start index is walked oldest first). Never replace it with
+  `from - <max length>`. No maximum exists (the runaway guard can be off,
+  `ask` keeps a timer running, manual and JSON-imported entries are
+  uncapped), so that shortcut drops real entries from every report without
+  an error. `report-range-bound.test.ts` checks it against random histories.
 
 ### Calendar grid on a phone, a tablet and a touch screen
 
