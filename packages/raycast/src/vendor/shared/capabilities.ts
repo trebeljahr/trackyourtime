@@ -33,6 +33,12 @@ export const REQUIRES_API_LEVEL = {
    * cannot create a team workspace, and every workspace there reads as team.
    */
   "workspaces.create": 13,
+  /**
+   * `POST /api/reports/export`, the streamed CSV/PDF download. An older server
+   * has only `reports.exportCsv` / `exportPdf`, which build the whole file in
+   * memory; the web app falls back to those there.
+   */
+  "reports.exportStream": 14,
   /** Editing a runaway timer's start together with its real end time. */
   "entries.resolveRunaway.start": 8,
   "entries.client": 7,
