@@ -9,7 +9,7 @@ import {
   TRACKER_LIST_INPUT,
   type EntryMutations,
 } from "@/components/tracker/use-entry-mutations";
-import { notifyDesktop } from "@/lib/desktop-shell";
+import { notifyDesktopOnce } from "@/lib/desktop-shell";
 import { formatDurationShortFor } from "@/i18n/format";
 import { getActiveLocale } from "@/i18n/locale-store";
 import { translate } from "@/i18n/translate";
@@ -113,10 +113,12 @@ export const useRunawayGuard = (mutations: EntryMutations): void => {
 
       // Only the flag that is still a question about a running timer; `cap`
       // and `stop` already acted, and their prompt can wait for the window.
+      // Once per mark, not per hook: `shown` starts empty in every guard the
+      // window mounts, and a hidden window has usually posted this already.
       if (mark.action === "flagged") {
         const tr = translate("tracker");
         const description = entry.description.trim();
-        notifyDesktop({
+        notifyDesktopOnce(`${toastId(entry.id)}@${mark.detectedAt}`, {
           kind: "runaway",
           tag: toastId(entry.id),
           title: tr("desktopNotice.runawayTitle", {

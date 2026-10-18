@@ -468,6 +468,10 @@ export function installDesktop(options: {
     reveal();
   });
 
+  // A tag replaces an earlier notice; it does not say whether this is the same
+  // event again (idle posts every idle period under one tag), so skipping a
+  // repeat is the renderer's job (`notifyDesktopOnce`). Headless records every
+  // request, replacements included, which is what makes a repeat visible.
   handle(DESKTOP_IPC.desktopNotify, (_event, payload: unknown): boolean => {
     const notice = parseNotice(payload);
     if (notice === null || windowInFront()) return false;

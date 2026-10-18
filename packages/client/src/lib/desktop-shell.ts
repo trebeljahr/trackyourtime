@@ -28,6 +28,61 @@ export function notifyDesktop(notice: DesktopNotice): void {
   void shell.notify(notice).catch(() => undefined);
 }
 
+/** `sessionStorage` key holding the events {@link notifyDesktopOnce} has posted. */
+export const DESKTOP_NOTICES_POSTED_STORAGE_KEY = "trackyourtime.desktop-notices-posted";
+
+/** How many posted events are remembered; an older one is long answered. */
+const POSTED_NOTICES_LIMIT = 50;
+
+/** Covers the hand-over between guards when `sessionStorage` is unavailable. */
+const postedThisDocument = new Set<string>();
+
+const sessionStore = (): Storage | null => {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+};
+
+/** True the first time `key` is seen in this window's session. */
+const claimNotice = (key: string): boolean => {
+  if (postedThisDocument.has(key)) return false;
+  postedThisDocument.add(key);
+  const store = sessionStore();
+  if (store === null) return true;
+  try {
+    const raw: unknown = JSON.parse(store.getItem(DESKTOP_NOTICES_POSTED_STORAGE_KEY) ?? "[]");
+    const posted = Array.isArray(raw) ? raw.filter((it): it is string => typeof it === "string") : [];
+    if (posted.includes(key)) return false;
+    store.setItem(DESKTOP_NOTICES_POSTED_STORAGE_KEY, JSON.stringify([...posted, key].slice(-POSTED_NOTICES_LIMIT)));
+  } catch {
+    /* the in-memory set still covers a hand-over between guards */
+  }
+  return true;
+};
+
+/**
+ * {@link notifyDesktop} for an event the person must hear about once: a
+ * second call with the same `key` in this window's session posts nothing.
+ *
+ * The hook that raises a prompt cannot remember this itself. The tracker bar
+ * mounts the guards on /app/track and `DesktopAttentionGuards` mounts them on
+ * every other screen, so each navigation across that line starts a fresh
+ * hook, and a reload starts a fresh document; neither is a new event.
+ * `sessionStorage` outlives both, and a relaunch clears it.
+ *
+ * Main cannot do this for the renderer. A notice's `tag` names what it
+ * replaces, not which event it announces: the idle guard posts every idle
+ * period under one tag, often with the same text. And main's replacement
+ * still shows a fresh banner, so a repeat posted is a repeat seen.
+ */
+export function notifyDesktopOnce(key: string, notice: DesktopNotice): void {
+  if (desktopShell() === null) return;
+  if (!claimNotice(key)) return;
+  notifyDesktop(notice);
+}
+
 /** `KeyboardEvent.code` → Electron's key name, for keys a shortcut may use. */
 const CODE_TO_KEY: Record<string, string> = {
   Space: "Space",

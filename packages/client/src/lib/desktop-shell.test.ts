@@ -110,6 +110,56 @@ describe("desktopShell and notifyDesktop", () => {
   });
 });
 
+describe("notifyDesktopOnce", () => {
+  const notice = { kind: "runaway", title: "t", body: "b", tag: "runaway:1" } as const;
+  const inDesktop = (): ReturnType<typeof vi.fn> => {
+    const notify = vi.fn(() => Promise.resolve(true));
+    (window as { electronAPI?: unknown }).electronAPI = { isDesktop: true, desktop: { notify } };
+    return notify;
+  };
+
+  afterEach(() => {
+    window.sessionStorage.clear();
+    vi.resetModules();
+  });
+
+  it("posts an event once, however many guards ask", async () => {
+    const notify = inDesktop();
+    const { notifyDesktopOnce: once } = await import("@/lib/desktop-shell");
+    once("runaway:1@a", notice);
+    once("runaway:1@a", notice);
+    expect(notify).toHaveBeenCalledTimes(1);
+    once("runaway:1@b", notice);
+    expect(notify).toHaveBeenCalledTimes(2);
+  });
+
+  it("remembers across a reload of the window", async () => {
+    const notify = inDesktop();
+    (await import("@/lib/desktop-shell")).notifyDesktopOnce("runaway:1@a", notice);
+    vi.resetModules();
+    (await import("@/lib/desktop-shell")).notifyDesktopOnce("runaway:1@a", notice);
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it("still dedupes within the document when sessionStorage throws", async () => {
+    const notify = inDesktop();
+    const spy = vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+    const { notifyDesktopOnce: once } = await import("@/lib/desktop-shell");
+    once("runaway:1@a", notice);
+    once("runaway:1@a", notice);
+    expect(notify).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it("records nothing outside the desktop app", async () => {
+    const { notifyDesktopOnce: once } = await import("@/lib/desktop-shell");
+    once("runaway:1@a", notice);
+    expect(window.sessionStorage.length).toBe(0);
+  });
+});
+
 describe("focusTrackerDescription", () => {
   it("waits for the field to mount", async () => {
     vi.useFakeTimers();
