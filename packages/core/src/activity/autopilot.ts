@@ -121,7 +121,7 @@ export function filingKeyOf(
 }
 
 /** Whether a filing names anything: a description or a project. */
-export function isFileable(fields: ProposedEntryFields): boolean {
+export function isFileable(fields: Pick<ProposedEntryFields, "description" | "projectId">): boolean {
   return (fields.description ?? "").trim() !== "" || (fields.projectId ?? null) !== null;
 }
 
