@@ -2514,11 +2514,11 @@ union that will grow. Rules that fail quietly if broken:
 
 Production is **two hosts of one zone**. `https://trackyourtime.dev` is
 `trackyourtime-client`, an assets-only Cloudflare Worker (`wrangler.jsonc`,
-since 2026-10-15) attached by the zone route `trackyourtime.dev/*`;
+since 2026-10-18) attached by the zone route `trackyourtime.dev/*`;
 `https://api.trackyourtime.dev` is the Coolify app `trackyourtime-server`
 from `docker-compose.server.yml`. The Coolify client app
 (`docker-compose.client.yml`) still runs unrouted for a soak and is retired by
-hand (vault `trackyourtime-human-tasks.md`). docs/deploy.md → Web app on
+hand (vault `projects/trackyourtime/tracktime-human-tasks.md`). docs/deploy.md → Web app on
 Cloudflare. Rules that fail quietly if broken:
 
 - **No `main`, `run_worker_first`, `cache` or `routes` in `wrangler.jsonc`.**

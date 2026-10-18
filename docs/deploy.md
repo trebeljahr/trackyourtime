@@ -8,7 +8,7 @@ Two hosts of one zone:
 | Coolify app `trackyourtime-server` | `https://api.trackyourtime.dev` | `docker-compose.server.yml` | the Express API, tRPC and the `/api/ws` socket |
 
 The web app moved from the Coolify app `trackyourtime-client`
-(`docker-compose.client.yml`) to the Worker on 2026-10-15
+(`docker-compose.client.yml`) to the Worker on 2026-10-18
 ([Web app on Cloudflare](#web-app-on-cloudflare)). The sections below that
 describe two Coolify apps are its history, and the Coolify client app keeps
 running, unrouted, until it is retired.
@@ -119,7 +119,7 @@ before this change still connects wherever `/ws` is still routed.
 
 ## Web app on Cloudflare
 
-Since 2026-10-15, `https://trackyourtime.dev` is served by
+Since 2026-10-18, `https://trackyourtime.dev` is served by
 `trackyourtime-client`, an **assets-only Cloudflare Worker**: the static
 export, with no script (`wrangler.jsonc`). The API stays on Coolify at
 `api.trackyourtime.dev` and never passes through the Worker. The desktop,
@@ -132,7 +132,7 @@ What sits where on the `trackyourtime.dev` zone:
 |---|---|---|
 | Workers route | `trackyourtime.dev/*` → `trackyourtime-client` | serves the site |
 | Workers route | `trackyourtime.dev/.well-known/acme-challenge/*` → no Worker | the origin's Traefik renews its certificate over HTTP-01; this keeps the challenge reaching it |
-| Single Redirect rule | `http://trackyourtime.dev/…` → `https://…` (301), except `/.well-known/` | a Worker answers plain HTTP; Traefik used to redirect |
+| Single Redirect rule "hatchkit: HTTP to HTTPS for Worker-served hosts" | `(not ssl and http.host in {"trackyourtime.dev"} and not starts_with(http.request.uri.path, "/.well-known/"))` → 301 to `concat("https://", http.host, http.request.uri.path)`, query kept | a Worker answers plain HTTP; Traefik used to redirect. `not ssl`, because this zone refuses `http.request.scheme`. hatchkit finds the rule by its name |
 | DNS | the proxied A/AAAA records, unchanged | a route only runs on a proxied record |
 
 No custom domain and no DNS change: the route takes the host from the
@@ -220,7 +220,7 @@ to `/login/` (307; `serve.mjs` resolved it in place).
   `trackyourtime.dev/*` route. The Coolify app answered again within about
   8 s on the canary. It serves the commit it last deployed (`42e12946`).
 
-### One-time setup (done 2026-10-15)
+### One-time setup (done 2026-10-18)
 
 1. The Worker and its first version: a local export of the cut-over commit,
    seeded with the Coolify image's chunks, `wrangler deploy`.
@@ -228,10 +228,13 @@ to `/login/` (307; `serve.mjs` resolved it in place).
    with one policy, "Individual Workers Editor" on this Worker only. It can
    upload and deploy versions of `trackyourtime-client` and nothing else: no
    routes, DNS or other Workers. GitHub secrets `CLOUDFLARE_API_TOKEN` and
-   `CLOUDFLARE_ACCOUNT_ID`. Without both, `build-client` builds and skips the
+   `CLOUDFLARE_ACCOUNT_ID`, set by hatchkit's own minting code; rotate with
+   `hatchkit cloudflare token --worker trackyourtime-client`. Without both, `build-client` builds and skips the
    upload, and the deploy job skips the client with a notice.
 3. The redirect rule, then the ACME route, then the `trackyourtime.dev/*`
-   route, last. Before the last one nothing changes for a visitor.
+   route, last, in the dashboard. Before the last one nothing changed for a
+   visitor. `.hatchkit.json` says `clientHost: "cloudflare"`, so `hatchkit
+   sync` plans no client app and reconciles these routes.
 
 ### Checking it locally
 
@@ -539,7 +542,7 @@ re-dispatches it.
 
 - `sha` must be a commit on main: only those have images and Worker
   versions, because only `build-and-deploy.yml` builds them. For the web app
-  it must also postdate the move to the Worker (2026-10-15). The run resolves
+  it must also postdate the move to the Worker (2026-10-18). The run resolves
   an abbreviated sha and refuses anything not reachable from main.
 - `which` is `both`, `client` or `server`. Each half gates the pair that is
   then live, expecting the given commit from the half it moved and no

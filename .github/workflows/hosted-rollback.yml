@@ -17,7 +17,7 @@ name: hosted-rollback
 # Only commits that build-and-deploy.yml built on main have a server image
 # (ghcr.io/trebeljahr/trackyourtime-server:<sha>) and a Worker version tagged
 # with the sha, so the commit must be on main — and, for the web app, built
-# after the move to the Worker (2026-10-15). When the gate fails, the run
+# after the move to the Worker (2026-10-18). When the gate fails, the run
 # fails and the app stays on `sha`: the build served before this run is
 # usually the one being escaped, and putting it back would redeploy it.
 # `restore_on_failure` puts it back instead, exactly as after a failed push
