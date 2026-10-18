@@ -24,7 +24,7 @@ import { notFoundHandler, errorHandler } from "./middleware/error-handler.js";
 import { env, getTrustedOrigins, trustsExtensionOrigins } from "./config/env.js";
 import { extensionOriginTrusted } from "./auth/extension-origins.js";
 
-import { isDraining, readiness } from "./readiness.js";
+import { isDraining, isProxyDraining, isTraefikProbe, readiness } from "./readiness.js";
 import { syncTransport } from "./ws/runtime.js";
 export { setDraining } from "./readiness.js";
 
@@ -126,6 +126,22 @@ export function createApp() {
   // not match the deployment breaks it silently in one direction or the other.
   // See TRUST_PROXY_HOPS in config/env.ts and docs/deploy.md.
   app.set("trust proxy", env.TRUST_PROXY_HOPS);
+
+  // Traefik's drain probe — ahead of everything, so a request that arrives
+  // every few seconds skips CORS, logging and the database. It reports only
+  // whether this container is draining; readiness is the health check Docker
+  // runs. Traefik sends it straight to this container with an
+  // X-Hatchkit-Drain header; a visitor's request is forwarded by Traefik,
+  // which always adds X-Forwarded-For, so a visitor can't pose as it.
+  app.use((req, res, next) => {
+    if (!isTraefikProbe(req.headers)) return next();
+    const draining = isProxyDraining();
+    res
+      .status(draining ? 503 : 200)
+      .set("cache-control", "no-store")
+      .type("text/plain")
+      .send(draining ? "draining\n" : "serving\n");
+  });
 
   // ── 0. CORS — must be before all route handlers so preflight works ─
   // Per request (a delegate), not one fixed set of options: an extension

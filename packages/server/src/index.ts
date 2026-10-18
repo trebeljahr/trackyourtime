@@ -97,7 +97,7 @@ async function shutdown(signal: string): Promise<void> {
   // entire drain window before HTTP, auth, and databases are closed.
   const jobsStopped = stopScheduler();
   const webhooksStopped = stopWebhookSweeper();
-  // Give Coolify's health probe time to remove this replica from Caddy.
+  // Give the health probes time to remove this replica from Traefik.
   await new Promise((resolve) => setTimeout(resolve, 20_000));
 
   // Close all WebSocket connections
