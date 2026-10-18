@@ -53,6 +53,7 @@
     ]
   },
   "coolifyRuntime": "image",
+  "clientHost": "cloudflare",
   "containerPorts": {
     "client": 6477,
     "server": 5159
