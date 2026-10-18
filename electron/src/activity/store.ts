@@ -1,7 +1,8 @@
 /*
  * Where captured activity lives: `userData/activity/`, on this computer only.
  *
- *   state.json                 settings, scope, rules, dismissals (atomic)
+ *   state.json                 settings, scope, rules, dismissals and the
+ *                              timer Autopilot owns (atomic)
  *   open.json                  the open segment; absent when none is open
  *   segments/YYYY-MM-DD.jsonl  closed segments, one JSON line each, filed
  *                              under the UTC day of their start
@@ -37,6 +38,7 @@ import path from "node:path";
 
 import type { ActivityInterval, ActivityRule } from "../../../packages/core/src/activity/index.ts";
 import type { DesktopActivitySettings } from "../../../packages/shared/src/desktop-bridge.ts";
+import type { OwnedTimer } from "./autopilot.ts";
 import type { OpenSegment, StoredSegment } from "./model.ts";
 import { DEFAULT_ACTIVITY_SETTINGS, parseActivitySettings } from "./settings.ts";
 
@@ -77,6 +79,10 @@ export interface ActivityStore {
   dismissals: (scope: string) => ActivityInterval[];
   addDismissal: (scope: string, span: ActivityInterval) => void;
 
+  /** The running timer Autopilot opened, so a restart still knows it is Autopilot's. */
+  autopilotOwned: () => OwnedTimer | null;
+  saveAutopilotOwned: (owned: OwnedTimer | null) => void;
+
   readOpen: () => OpenSegment | null;
   writeOpen: (open: OpenSegment | null) => void;
 
@@ -104,6 +110,8 @@ interface StateFile {
   scope: string | null;
   rules: StoredRule[];
   dismissals: StoredDismissal[];
+  /** Absent in a file from before Autopilot. */
+  autopilotOwned?: OwnedTimer | null;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -166,6 +174,19 @@ function parseDismissal(value: unknown): StoredDismissal | null {
   const { scope, start, end } = value;
   if (typeof scope !== "string" || !finite(start) || !finite(end) || end <= start) return null;
   return { scope, start, end };
+}
+
+export function parseOwnedTimer(value: unknown): OwnedTimer | null {
+  if (!isRecord(value)) return null;
+  const { scope, start, filingKey, app, via, logId } = value;
+  if (typeof scope !== "string" || scope === "" || !finite(start)) return null;
+  if (typeof filingKey !== "string" || filingKey === "" || typeof logId !== "string" || logId === "") return null;
+  if (via !== "rule" && via !== "learned") return null;
+  const parsedApp =
+    isRecord(app) && typeof app.key === "string" && app.key !== ""
+      ? { key: app.key, name: typeof app.name === "string" && app.name !== "" ? app.name : app.key }
+      : null;
+  return { scope, start, filingKey, app: parsedApp, via, logId };
 }
 
 function defaultState(): StateFile {
@@ -241,6 +262,7 @@ export function createActivityStore(userData: string, clock: () => number = Date
         dismissals: Array.isArray(parsed.dismissals)
           ? parsed.dismissals.map(parseDismissal).filter((d): d is StoredDismissal => d !== null)
           : [],
+        autopilotOwned: parseOwnedTimer(parsed.autopilotOwned),
       };
     } else {
       // Unreadable: kept aside for whoever wants to look, then defaults.
@@ -364,6 +386,13 @@ export function createActivityStore(userData: string, clock: () => number = Date
       saveStateFile();
     },
 
+    autopilotOwned: () => state.autopilotOwned ?? null,
+    saveAutopilotOwned: (owned) => {
+      if (locked()) return;
+      state = { ...state, autopilotOwned: owned };
+      saveStateFile();
+    },
+
     readOpen: () => {
       if (locked()) return null;
       try {
@@ -401,6 +430,7 @@ export function createActivityStore(userData: string, clock: () => number = Date
         ...state,
         rules: state.rules.filter((rule) => rule.scope.startsWith(keepPrefix)),
         dismissals: state.dismissals.filter((d) => d.scope.startsWith(keepPrefix)),
+        autopilotOwned: state.autopilotOwned?.scope.startsWith(keepPrefix) === true ? state.autopilotOwned : null,
       };
       saveStateFile();
     },
@@ -409,7 +439,7 @@ export function createActivityStore(userData: string, clock: () => number = Date
       rmSync(segmentsDir, { recursive: true, force: true });
       rmSync(openPath, { force: true });
       cache = null;
-      state = { ...state, rules: [], dismissals: [] };
+      state = { ...state, rules: [], dismissals: [], autopilotOwned: null };
       saveStateFile();
     },
     prune: (now, retentionDays) => {

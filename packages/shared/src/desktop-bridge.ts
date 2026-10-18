@@ -129,7 +129,7 @@ export type DesktopCommand =
   /** A notification was clicked: go where that prompt is. */
   | { kind: "open-prompt"; prompt: DesktopNoticeKind };
 
-export type DesktopNoticeKind = "idle" | "runaway";
+export type DesktopNoticeKind = "idle" | "runaway" | "autopilot";
 
 /** A system notification for a prompt the hidden window would otherwise swallow. */
 export interface DesktopNotice {
@@ -297,6 +297,10 @@ export interface DesktopActivitySettings {
   /** Application key globs that are never recorded. */
   excludedApps: string[];
   retentionDays: number;
+  /** Autopilot starts, switches and stops timers from what is recorded. Off until turned on. */
+  autopilot: boolean;
+  /** Minutes on one piece of work, with no timer running, before Autopilot starts it. */
+  autopilotStartMinutes: number;
 }
 
 export interface DesktopActivityApp {
@@ -350,6 +354,17 @@ export interface DesktopActivitySnapshot {
   recentApps: DesktopActivityApp[];
   /** The current scope's rules. */
   rules: DesktopActivityRule[];
+  /** What Autopilot is doing; `active: false` and empty while it is off. */
+  autopilot: DesktopAutopilotState;
+}
+
+/** What a suggestion or Autopilot would file work under. */
+export interface DesktopActivityProposal {
+  description?: string;
+  projectId?: string | null;
+  taskId?: string | null;
+  tagIds?: string[];
+  billable?: boolean;
 }
 
 export interface DesktopActivitySuggestion {
@@ -359,18 +374,145 @@ export interface DesktopActivitySuggestion {
   /** Up to three titles of the dominant app; empty unless titles are stored. */
   titles: string[];
   ruleId?: string;
-  proposed: {
-    description?: string;
-    projectId?: string | null;
-    taskId?: string | null;
-    tagIds?: string[];
-    billable?: boolean;
-  };
+  proposed: DesktopActivityProposal;
 }
 
 export type DesktopActivityAcceptCheck =
   | { ok: true; start: number; end: number }
   | { ok: false; reason: "already-tracked" | "no-scope" | "bad-range" };
+
+/**
+ * What Autopilot files an app's work under. A structural copy of core's
+ * `AutopilotFiling`; `electron/src/activity/wire.ts` keeps the two equal.
+ */
+export interface DesktopAutopilotFiling {
+  /** Equal keys are the same work (description, project and task). */
+  key: string;
+  fields: DesktopActivityProposal;
+  /** A rule the person wrote, or learned from what they tracked. */
+  via: "rule" | "learned";
+  ruleId?: string;
+}
+
+/** What Autopilot is looking at right now. */
+export interface DesktopAutopilotWatch {
+  app: DesktopActivityApp;
+  /** When the watched stretch of work began. */
+  since: number;
+  /** Time on it so far. */
+  creditedMs: number;
+  /** Null when Autopilot cannot tell what this app is for. */
+  filing: DesktopAutopilotFiling | null;
+  /** Not started until the next break: undone, stopped by hand, or "not work". */
+  held: boolean;
+}
+
+export type DesktopAutopilotAction = "start" | "switch" | "stop";
+
+/** One thing Autopilot did, newest first in the state. */
+export interface DesktopAutopilotLogEntry {
+  id: string;
+  kind: DesktopAutopilotAction;
+  /** The instant the entry was started, switched or stopped AT (retroactive). */
+  at: number;
+  /** When Autopilot did it. */
+  decidedAt: number;
+  app: DesktopActivityApp | null;
+  /** What was started or switched to; null for a stop. */
+  filing: DesktopAutopilotFiling | null;
+  /** Taken back with Undo. */
+  undone: boolean;
+}
+
+export interface DesktopAutopilotState {
+  /** Switched on, and capture is recording for an account. */
+  active: boolean;
+  /** The running entry Autopilot opened, while it is still exactly that entry. */
+  owned: {
+    start: number;
+    filingKey: string;
+    app: DesktopActivityApp | null;
+    via: "rule" | "learned";
+    /** The log entry that started it, for Undo. */
+    logId: string;
+  } | null;
+  watch: DesktopAutopilotWatch | null;
+  /** The last day of actions, newest first, at most 30. */
+  log: DesktopAutopilotLogEntry[];
+  /** Apps Autopilot has learned a filing for from this person's entries. */
+  learnedApps: number;
+}
+
+/** The running entry, as the renderer describes it to Autopilot. */
+export interface DesktopAutopilotRunning {
+  start: number;
+  description: string;
+  projectId: string | null;
+  taskId: string | null;
+}
+
+/** One of this person's entries, for learning what each app is used for. */
+export interface DesktopAutopilotHistoryEntry {
+  start: number;
+  end: number;
+  description: string;
+  projectId: string | null;
+  taskId: string | null;
+  tagIds: string[];
+  billable: boolean;
+}
+
+/**
+ * What the renderer should do now. A `token` names the decision; the renderer
+ * reports back with it once the write was made (or failed), and only then
+ * does Autopilot count the timer as its own.
+ */
+export type DesktopAutopilotPlan =
+  | { kind: "none" }
+  | {
+      kind: "start" | "switch";
+      token: string;
+      at: number;
+      filing: DesktopAutopilotFiling;
+      app: DesktopActivityApp;
+      creditedMs: number;
+    }
+  | { kind: "stop"; token: string; at: number; app: DesktopActivityApp | null };
+
+/**
+ * Autopilot (on top of Stage 8 capture). Main decides from what it recorded;
+ * the renderer makes the write through the same mutations as the tracker, so
+ * an Autopilot start is an ordinary start — optimistic, queued offline,
+ * `source: "desktop"`.
+ */
+export interface DesktopAutopilot {
+  /** This person's recent entries, to learn which app is used for what. */
+  learn: (history: DesktopAutopilotHistoryEntry[]) => Promise<void>;
+  /** `tracked` is everything tracked WITHOUT the running entry. */
+  plan: (input: {
+    running: DesktopAutopilotRunning | null;
+    tracked: DesktopActivityInterval[];
+  }) => Promise<DesktopAutopilotPlan>;
+  /**
+   * The write for a plan was made (`ok`) or refused. `written` is what was
+   * actually filed — a project the catalog no longer has is dropped first.
+   */
+  applied: (result: {
+    token: string;
+    ok: boolean;
+    written?: { description: string; projectId: string | null; taskId: string | null };
+  }) => Promise<void>;
+  /**
+   * Not now: hold a filing or an app until the next break, optionally treat a
+   * span as accounted for (an undone start), and mark a log entry undone.
+   */
+  hold: (input: {
+    filingKey?: string;
+    appKey?: string;
+    dismiss?: DesktopActivityInterval;
+    logId?: string;
+  }) => Promise<void>;
+}
 
 /**
  * Desktop activity capture (Stage 8). Raw segments never cross this bridge:
@@ -404,6 +546,8 @@ export interface DesktopActivity {
   /** Replaces a rule with the same pattern. */
   addRule: (rule: Omit<DesktopActivityRule, "id">) => Promise<DesktopActivityRule[]>;
   removeRule: (id: string) => Promise<DesktopActivityRule[]>;
+  /** Optional so a preload from before Autopilot is still a valid bridge. */
+  autopilot?: DesktopAutopilot;
 }
 
 /**
@@ -471,6 +615,10 @@ export const DESKTOP_IPC = {
   activityDismiss: "activity:dismiss",
   activityRuleAdd: "activity:rule-add",
   activityRuleRemove: "activity:rule-remove",
+  activityAutopilotLearn: "activity:autopilot-learn",
+  activityAutopilotPlan: "activity:autopilot-plan",
+  activityAutopilotApplied: "activity:autopilot-applied",
+  activityAutopilotHold: "activity:autopilot-hold",
   /** main → renderer push, not an invoke. */
   idleState: "idle:state",
   /** main → renderer push. */

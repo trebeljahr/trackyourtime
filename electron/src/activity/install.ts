@@ -26,6 +26,10 @@ import { activityCaptureSupport, type DistributionChannel } from "../distributio
 import type { IdleSample } from "../idle.ts";
 import { handle } from "../ipc.ts";
 import {
+  parseAutopilotApplied,
+  parseAutopilotHistory,
+  parseAutopilotHold,
+  parseAutopilotPlanInput,
   parseCheckAcceptInput,
   parseInterval,
   parseRuleId,
@@ -149,6 +153,22 @@ export function installActivity(options: {
   handle(DESKTOP_IPC.activityRuleRemove, (_event, id: unknown) => {
     const parsed = parseRuleId(id);
     return parsed === null ? currentRules() : activity.removeRule(parsed);
+  });
+  handle(DESKTOP_IPC.activityAutopilotLearn, async (_event, history: unknown) => {
+    const parsed = parseAutopilotHistory(history);
+    if (parsed !== null) await activity.autopilotLearn(parsed);
+  });
+  handle(DESKTOP_IPC.activityAutopilotPlan, (_event, input: unknown) => {
+    const parsed = parseAutopilotPlanInput(input);
+    return parsed === null ? { kind: "none" } : activity.autopilotPlan(parsed);
+  });
+  handle(DESKTOP_IPC.activityAutopilotApplied, async (_event, result: unknown) => {
+    const parsed = parseAutopilotApplied(result);
+    if (parsed !== null) await activity.autopilotApplied(parsed);
+  });
+  handle(DESKTOP_IPC.activityAutopilotHold, async (_event, input: unknown) => {
+    const parsed = parseAutopilotHold(input);
+    if (parsed !== null) await activity.autopilotHold(parsed);
   });
 
   // ── timers and idle (never headless) ────────────────────────────────

@@ -26,8 +26,12 @@ import type {
   DesktopActivitySnapshot,
   DesktopActivitySuggestion,
   DesktopActivitySupport,
+  DesktopAutopilotHistoryEntry,
+  DesktopAutopilotPlan,
+  DesktopAutopilotRunning,
 } from "../../../packages/shared/src/desktop-bridge.ts";
 import type { ActivityCaptureSupport } from "../distribution.ts";
+import { AUTOPILOT_WINDOW_MS, createAutopilotController } from "./autopilot.ts";
 import {
   initialCaptureState,
   shouldCapture,
@@ -87,6 +91,24 @@ export interface ActivityService {
   addRule: (rule: Omit<DesktopActivityRule, "id">) => Promise<DesktopActivityRule[]>;
   removeRule: (id: string) => Promise<DesktopActivityRule[]>;
 
+  // ── Autopilot ──
+  autopilotLearn: (history: DesktopAutopilotHistoryEntry[]) => Promise<void>;
+  autopilotPlan: (input: {
+    running: DesktopAutopilotRunning | null;
+    tracked: DesktopActivityInterval[];
+  }) => Promise<DesktopAutopilotPlan>;
+  autopilotApplied: (result: {
+    token: string;
+    ok: boolean;
+    written?: { description: string; projectId: string | null; taskId: string | null };
+  }) => Promise<void>;
+  autopilotHold: (input: {
+    filingKey?: string;
+    appKey?: string;
+    dismiss?: DesktopActivityInterval;
+    logId?: string;
+  }) => Promise<void>;
+
   // ── driven by install.ts ──
   heartbeat: () => Promise<void>;
   presence: (state: PresenceState, idleSeconds: number) => Promise<void>;
@@ -116,6 +138,10 @@ export function createActivityService(options: ActivityServiceOptions): Activity
   let disposed = false;
 
   let state: CaptureState = initialCaptureState(store.settings(), store.scope(), store.readOpen());
+  const autopilot = createAutopilotController({
+    initialOwned: store.autopilotOwned(),
+    saveOwned: (owned) => store.saveAutopilotOwned(owned),
+  });
 
   // ── serial queue ────────────────────────────────────────────────────
   let queue: Promise<unknown> = Promise.resolve();
@@ -176,10 +202,13 @@ export function createActivityService(options: ActivityServiceOptions): Activity
         return;
       case "sweep-scopes":
         store.sweepScopes(effect.keepPrefix);
+        // Holds, what was learned and the log belong to the previous scope.
+        autopilot.reset();
         return;
       case "wipe":
         store.wipe();
         accepted = [];
+        autopilot.reset();
         return;
       case "prune":
         store.prune(now(), state.settings.retentionDays);
@@ -234,6 +263,14 @@ export function createActivityService(options: ActivityServiceOptions): Activity
   // ── snapshot ────────────────────────────────────────────────────────
   const scopeSegments = (scope: string) => withOpenSegment(store.allSegments(scope), state.open, scope, now());
 
+  /** Autopilot can act: switched on, and capture is on for an account on a supported channel. */
+  const autopilotActive = (): boolean =>
+    state.settings.autopilot &&
+    state.settings.enabled &&
+    state.scope !== null &&
+    store.status === "ok" &&
+    support().supported;
+
   const buildSnapshot = (): DesktopActivitySnapshot => {
     const scope = state.scope;
     const segments = scope === null ? [] : scopeSegments(scope);
@@ -251,6 +288,7 @@ export function createActivityService(options: ActivityServiceOptions): Activity
       storedSegments: scope === null ? 0 : store.allSegments(scope).length,
       recentApps: recentApps(segments),
       rules: scope === null ? [] : store.rules(scope),
+      autopilot: autopilot.state(scope, autopilotActive(), now()),
     };
   };
 
@@ -359,6 +397,58 @@ export function createActivityService(options: ActivityServiceOptions): Activity
         store.deleteRule(scope, id);
         changed();
         return store.rules(scope);
+      }),
+
+    autopilotLearn: (history) =>
+      serial(() => {
+        const scope = state.scope;
+        if (scope === null || store.status !== "ok") return;
+        const before = JSON.stringify(autopilot.state(scope, autopilotActive(), now()));
+        autopilot.learn(scope, history, scopeSegments(scope));
+        if (JSON.stringify(autopilot.state(scope, autopilotActive(), now())) !== before) changed();
+      }),
+
+    autopilotPlan: (input) =>
+      serial((): DesktopAutopilotPlan => {
+        const scope = state.scope;
+        if (scope === null || store.status !== "ok") return { kind: "none" };
+        const at = now();
+        accepted = liveAccepted(accepted, at);
+        const all = scopeSegments(scope);
+        const before = JSON.stringify(autopilot.state(scope, autopilotActive(), at));
+        const plan = autopilot.plan({
+          scope,
+          now: at,
+          settings: state.settings,
+          active: autopilotActive(),
+          segments: all.filter((segment) => segment.end > at - AUTOPILOT_WINDOW_MS),
+          names: namesOf(all),
+          rules: store.rules(scope),
+          holes: [
+            ...input.tracked,
+            ...store.dismissals(scope),
+            ...accepted.map(({ start, end }) => ({ start, end })),
+          ],
+          running: input.running,
+        });
+        if (JSON.stringify(autopilot.state(scope, autopilotActive(), at)) !== before) changed();
+        return plan;
+      }),
+
+    autopilotApplied: (result) =>
+      serial(() => {
+        if (autopilot.applied(result, now())) changed();
+      }),
+
+    autopilotHold: (input) =>
+      serial(() => {
+        const scope = state.scope;
+        if (scope === null || store.status !== "ok") return;
+        autopilot.hold(scope, input, now());
+        // An undone start: that time is accounted for, so it is neither
+        // started again nor offered as a suggestion.
+        if (input.dismiss !== undefined) store.addDismissal(scope, input.dismiss);
+        changed();
       }),
 
     heartbeat: () => serial(() => apply({ kind: "heartbeat" })),

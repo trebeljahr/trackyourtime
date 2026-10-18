@@ -2,9 +2,14 @@
  * The capture switches. Device preferences, in `userData/activity/state.json`:
  * whether this computer records which app is in front is a decision about
  * this computer, so they outlive a sign-out. Capture is OFF until somebody
- * turns it on — nothing in this directory ever turns it on by itself.
+ * turns it on — nothing in this directory ever turns it on by itself — and
+ * so is Autopilot, which also needs capture on to do anything.
  */
 
+import {
+  AUTOPILOT_START_MINUTE_CHOICES,
+  DEFAULT_AUTOPILOT_START_MINUTES,
+} from "../../../packages/core/src/activity/index.ts";
 import type { DesktopActivitySettings } from "../../../packages/shared/src/desktop-bridge.ts";
 import { toActivityPattern } from "./keys.ts";
 
@@ -19,7 +24,16 @@ export const DEFAULT_ACTIVITY_SETTINGS: DesktopActivitySettings = {
   storeTitles: false,
   excludedApps: [],
   retentionDays: DEFAULT_RETENTION_DAYS,
+  autopilot: false,
+  autopilotStartMinutes: DEFAULT_AUTOPILOT_START_MINUTES,
 };
+
+/** One of the offered thresholds; anything else is the default. */
+export function cleanAutopilotStartMinutes(value: unknown): number {
+  return typeof value === "number" && (AUTOPILOT_START_MINUTE_CHOICES as readonly number[]).includes(value)
+    ? value
+    : DEFAULT_AUTOPILOT_START_MINUTES;
+}
 
 export function clampRetentionDays(value: number): number {
   return Number.isFinite(value)
@@ -49,6 +63,9 @@ export function parseActivitySettings(value: unknown): DesktopActivitySettings {
     excludedApps: Array.isArray(record.excludedApps) ? cleanAppList(record.excludedApps) : [],
     retentionDays:
       typeof record.retentionDays === "number" ? clampRetentionDays(record.retentionDays) : DEFAULT_RETENTION_DAYS,
+    // Absent in a state.json from before Autopilot: off, like capture itself.
+    autopilot: record.autopilot === true,
+    autopilotStartMinutes: cleanAutopilotStartMinutes(record.autopilotStartMinutes),
   };
 }
 

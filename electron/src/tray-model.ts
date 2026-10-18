@@ -217,7 +217,7 @@ export function trayIconFile(platform: string, variant: TrayIconVariant): string
 /** A notice from the renderer, checked; null when malformed. */
 export function parseNotice(value: unknown): DesktopNotice | null {
   if (!isRecord(value)) return null;
-  if (value.kind !== "idle" && value.kind !== "runaway") return null;
+  if (value.kind !== "idle" && value.kind !== "runaway" && value.kind !== "autopilot") return null;
   const title = text(value.title).trim();
   if (title === "") return null;
   return { kind: value.kind, title, body: text(value.body), tag: text(value.tag, value.kind).slice(0, 100) };

@@ -12,9 +12,11 @@ import type {
   DesktopActivityInterval,
   DesktopActivityRule,
   DesktopActivitySettings,
+  DesktopAutopilotHistoryEntry,
+  DesktopAutopilotRunning,
 } from "../../../packages/shared/src/desktop-bridge.ts";
 import { toActivityPattern } from "./keys.ts";
-import { clampRetentionDays, cleanAppList } from "./settings.ts";
+import { clampRetentionDays, cleanAppList, cleanAutopilotStartMinutes } from "./settings.ts";
 
 export const MAX_RANGE_MS = 8 * 86_400_000;
 export const MAX_TRACKED_INTERVALS = 5000;
@@ -39,6 +41,8 @@ export function parseSettingsPatch(value: unknown): Partial<DesktopActivitySetti
   if (typeof value.storeTitles === "boolean") patch.storeTitles = value.storeTitles;
   if (Array.isArray(value.excludedApps)) patch.excludedApps = cleanAppList(value.excludedApps);
   if (finite(value.retentionDays)) patch.retentionDays = clampRetentionDays(value.retentionDays);
+  if (typeof value.autopilot === "boolean") patch.autopilot = value.autopilot;
+  if (finite(value.autopilotStartMinutes)) patch.autopilotStartMinutes = cleanAutopilotStartMinutes(value.autopilotStartMinutes);
   return patch;
 }
 
@@ -112,4 +116,102 @@ export function parseRuleInput(value: unknown): Omit<DesktopActivityRule, "id"> 
 
 export function parseRuleId(value: unknown): string | null {
   return isId(value) ? value : null;
+}
+
+/** How many entries one `learn` may carry: two weeks of a very busy person. */
+export const MAX_HISTORY_ENTRIES = 3000;
+/** A token is a UUID; a log id too. */
+export const MAX_TOKEN_LENGTH = 64;
+/** A filing key is JSON of a description and two ids. */
+export const MAX_FILING_KEY_LENGTH = MAX_DESCRIPTION_LENGTH * 2 + MAX_ID_LENGTH * 2 + 16;
+
+const isNullableId = (value: unknown): value is string | null => value === null || isId(value);
+
+const isDescription = (value: unknown): value is string =>
+  typeof value === "string" && value.length <= MAX_DESCRIPTION_LENGTH;
+
+function parseRunning(value: unknown): DesktopAutopilotRunning | null | undefined {
+  if (value === null) return null;
+  if (!isRecord(value) || !finite(value.start) || !isDescription(value.description)) return undefined;
+  if (!isNullableId(value.projectId) || !isNullableId(value.taskId)) return undefined;
+  return { start: value.start, description: value.description, projectId: value.projectId, taskId: value.taskId };
+}
+
+export function parseAutopilotPlanInput(
+  value: unknown,
+): { running: DesktopAutopilotRunning | null; tracked: DesktopActivityInterval[] } | null {
+  if (!isRecord(value)) return null;
+  const running = parseRunning(value.running);
+  if (running === undefined) return null;
+  const tracked = parseTracked(value.tracked);
+  return tracked === null ? null : { running, tracked };
+}
+
+export function parseAutopilotHistory(value: unknown): DesktopAutopilotHistoryEntry[] | null {
+  if (!Array.isArray(value) || value.length > MAX_HISTORY_ENTRIES) return null;
+  const out: DesktopAutopilotHistoryEntry[] = [];
+  for (const item of value) {
+    const span = parseInterval(item);
+    if (span === null || !isRecord(item) || !isDescription(item.description)) return null;
+    if (!isNullableId(item.projectId) || !isNullableId(item.taskId) || typeof item.billable !== "boolean") return null;
+    if (!Array.isArray(item.tagIds) || item.tagIds.length > MAX_TAG_IDS || !item.tagIds.every(isId)) return null;
+    out.push({
+      ...span,
+      description: item.description,
+      projectId: item.projectId,
+      taskId: item.taskId,
+      tagIds: [...(item.tagIds as string[])],
+      billable: item.billable,
+    });
+  }
+  return out;
+}
+
+const isToken = (value: unknown): value is string =>
+  typeof value === "string" && value.length >= 1 && value.length <= MAX_TOKEN_LENGTH;
+
+export function parseAutopilotApplied(value: unknown): {
+  token: string;
+  ok: boolean;
+  written?: { description: string; projectId: string | null; taskId: string | null };
+} | null {
+  if (!isRecord(value) || !isToken(value.token) || typeof value.ok !== "boolean") return null;
+  if (value.written === undefined) return { token: value.token, ok: value.ok };
+  const written = value.written;
+  if (!isRecord(written) || !isDescription(written.description)) return null;
+  if (!isNullableId(written.projectId) || !isNullableId(written.taskId)) return null;
+  return {
+    token: value.token,
+    ok: value.ok,
+    written: { description: written.description, projectId: written.projectId, taskId: written.taskId },
+  };
+}
+
+export function parseAutopilotHold(
+  value: unknown,
+): { filingKey?: string; appKey?: string; dismiss?: DesktopActivityInterval; logId?: string } | null {
+  if (!isRecord(value)) return null;
+  const out: { filingKey?: string; appKey?: string; dismiss?: DesktopActivityInterval; logId?: string } = {};
+  if (value.filingKey !== undefined) {
+    if (typeof value.filingKey !== "string" || value.filingKey === "" || value.filingKey.length > MAX_FILING_KEY_LENGTH) {
+      return null;
+    }
+    out.filingKey = value.filingKey;
+  }
+  if (value.appKey !== undefined) {
+    if (typeof value.appKey !== "string" || value.appKey.length > MAX_PATTERN_LENGTH) return null;
+    const key = toActivityPattern(value.appKey);
+    if (key === "") return null;
+    out.appKey = key;
+  }
+  if (value.dismiss !== undefined) {
+    const span = parseInterval(value.dismiss);
+    if (span === null || span.end - span.start > MAX_RANGE_MS) return null;
+    out.dismiss = span;
+  }
+  if (value.logId !== undefined) {
+    if (!isToken(value.logId)) return null;
+    out.logId = value.logId;
+  }
+  return out;
 }

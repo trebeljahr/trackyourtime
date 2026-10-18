@@ -157,7 +157,7 @@ describe("toActivityKey", () => {
   });
 
   it("lists this app and the lock screens as never recorded", () => {
-    for (const key of ["com.trebeljahr.trackyourtime", "com.apple.loginwindow", "lockapp.exe", "logonui.exe"]) {
+    for (const key of ["com.ricoslabs.trackyourtime", "com.trebeljahr.trackyourtime", "com.apple.loginwindow", "lockapp.exe", "logonui.exe"]) {
       assert.ok(BUILT_IN_NEVER_RECORD.includes(key), key);
       assert.equal(toActivityKey(key), key);
     }

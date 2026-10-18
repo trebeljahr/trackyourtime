@@ -36,6 +36,8 @@ export function toActivityPattern(raw: string): string {
  * each OS, which are the machine standing in for nobody.
  */
 export const BUILT_IN_NEVER_RECORD: readonly string[] = [
+  "com.ricoslabs.trackyourtime",
+  // The bundle id before 2026-09-22, for a copy built before the move.
   "com.trebeljahr.trackyourtime",
   "track-your-time.exe",
   "trackyourtime",

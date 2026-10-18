@@ -95,6 +95,12 @@ const bridge: DesktopBridge = {
     dismiss: (span) => ipcRenderer.invoke(DESKTOP_IPC.activityDismiss, span),
     addRule: (rule) => ipcRenderer.invoke(DESKTOP_IPC.activityRuleAdd, rule),
     removeRule: (id) => ipcRenderer.invoke(DESKTOP_IPC.activityRuleRemove, id),
+    autopilot: {
+      learn: (history) => ipcRenderer.invoke(DESKTOP_IPC.activityAutopilotLearn, history),
+      plan: (input) => ipcRenderer.invoke(DESKTOP_IPC.activityAutopilotPlan, input),
+      applied: (result) => ipcRenderer.invoke(DESKTOP_IPC.activityAutopilotApplied, result),
+      hold: (input) => ipcRenderer.invoke(DESKTOP_IPC.activityAutopilotHold, input),
+    },
   },
 
   /*
