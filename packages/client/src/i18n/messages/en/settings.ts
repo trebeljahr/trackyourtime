@@ -1155,7 +1155,7 @@ export const settings = {
     activity: {
       title: "Activity capture",
       description:
-        "Records which app is in front, on this computer only, and suggests entries for the time you did not track. Nothing is sent until you add an entry.",
+        "Records which app is in front, on this computer only, and suggests entries for the time you did not track. Nothing is sent until you, or Autopilot, add an entry.",
       enabled: {
         title: "Record which app is in front",
         description: "Off until you turn it on. No system permission is needed: the app reads only which app is in front.",
@@ -1211,7 +1211,7 @@ export const settings = {
       autopilot: {
         title: "Autopilot",
         description:
-          "Starts a timer when you have worked in an app for a few minutes, from the moment you began, and switches or stops the timers it started. It never changes a timer you started. Only work it can name is started: from your rules, or from what you tracked in that app before.",
+          "Starts a timer when you have worked in one app for a few minutes, from the moment you began. It only starts work it can name, from your rules or your earlier entries. It never changes a timer you started.",
         needsCapture: "Turn on activity capture to use Autopilot.",
         startAfter: {
           title: "Start after",

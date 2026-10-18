@@ -485,6 +485,41 @@ the device until an entry is added. What fails quietly if broken:
   origin, so a renderer change is not in it: run
   `DESKTOP_E2E_REBUILD=1 pnpm test:e2e:desktop` after touching client code.
 
+**Autopilot** (on top of that capture; core `activity/autopilot.ts`, main
+`electron/src/activity/autopilot.ts`, renderer `components/activity/autopilot-*`
+and `day-timeline*`). With capture on and `settings.autopilot` on — both off by
+default — it starts a timer after `autopilotStartMinutes` in one filed app,
+dated to the first minute of that work; switches an Autopilot timer after 10
+minutes on another filing; and stops one after 20 present minutes off its work.
+User docs: `docs-site/docs/desktop.md` → Autopilot. What fails quietly if broken:
+
+- **It only starts what it can name.** `createFilingResolver`: the app's rule,
+  else `learnFilings` over the person's own entries (one filing holding 60 % and
+  15 minutes of the app's tracked time). No filing, no start — the strip asks
+  instead. Never start a nameless entry to "be helpful".
+- **It never touches a timer it did not open.** Main counts the running entry
+  as Autopilot's only after `applied` with the plan's token, and only while its
+  start (±1 s) and `filingKeyOf` its description/project/task are what was
+  written (`written`, after `withKnownCatalog`). An edit makes it the person's.
+- **A change Autopilot did not make is a hold.** A running entry that stops or
+  changes between plans holds its filing until a 10-minute break
+  (`hadBreakSince`); so do Undo and "not work" (`app:<key>`). The settle window
+  (`SETTLE_MS`) keeps a renderer that has not shown its own write yet from
+  reading as a stop by hand — without it every start would hold itself.
+- **`tracked` excludes the running entry** (`trackedWithoutRunning`): by id,
+  as any open row, and as the queued start of a temp id. Autopilot reads the
+  activity INSIDE its own timer to switch or stop it; a hole there blinds it.
+- **Absence is the idle guard's.** Nothing happens without activity in the
+  last 3 minutes, and drift is measured from the end of the last break, so a
+  stop never takes back time the idle prompt was answered about.
+- **The write is an ordinary one**: `startTimer` / `splitAtIdle` / `stopTimer`
+  from `useEntryMutations`, so offline it queues like any start. The driver
+  re-reads the running entry after the plan and drops a plan that no longer
+  fits; main's pending token simply expires.
+- **Only filings cross to the server.** App names and titles never leave main
+  except as the plan's display name; the entry carries the rule's or the
+  earlier entry's fields. Undo dismisses the span, so it is not suggested again.
+
 **Simulator and emulator runs never take focus either.** `IOS_HEADLESS=1 pnpm
 dev:ios` drives simctl only (without it Simulator.app is opened with `open -g`),
 and `ANDROID_HEADLESS=1 pnpm dev:android` boots the emulator with `-no-window`.

@@ -124,6 +124,38 @@ stretch as an entry, **Edit and add** lets you change it first, and
 description for an app. New suggestions where that app is the busiest start
 with them. Rules stay on this computer.
 
+### Autopilot
+
+Autopilot starts your timer when you forget to. Turn it on in **Settings →
+Desktop → Autopilot**, or on the **Activity** page. It needs activity capture.
+
+- When you work in one app for 5 minutes with no timer running, Autopilot
+  starts a timer. The timer starts at the minute you began, not when
+  Autopilot noticed. You can set 3, 5, 10 or 15 minutes.
+- Autopilot only starts work it can name. An app is named by your **Always
+  file … under** rule, or by what you tracked while that app was in front
+  during the last two weeks. An app you used for different projects, such as
+  a browser, is not started. Its time stays a suggestion.
+- For an app it cannot name, the bar under the timer asks what you are
+  working on. **Track as …** saves a rule and starts the timer from when you
+  began. **Not work** leaves that app alone until your next break.
+- When you change to another app that is named differently for 10 minutes,
+  Autopilot stops its timer and starts the next one at the minute you
+  changed. When you stay at the computer but stop the timer's work for 20
+  minutes, Autopilot stops the timer at the end of that work.
+- Autopilot never changes a timer that you started or edited.
+- Every start shows a message with **Undo** and **Change**. When the window is
+  hidden, the system shows a notification. **Undo** deletes the entry. After
+  an undo, or after you stop or replace a timer yourself, Autopilot waits for
+  a break of 10 minutes before it starts that work again.
+- The **Activity** page shows what Autopilot is looking at, what it did today,
+  and the day as a strip of tracked and untracked time.
+
+Entries that Autopilot starts are ordinary entries. They are sent to your
+server like any other timer, and hold only the description, project, task,
+tags and billable flag from your rule or your earlier entry. App names and
+window titles stay on your computer.
+
 How each system reads the app in front:
 
 | System | How | Not available |

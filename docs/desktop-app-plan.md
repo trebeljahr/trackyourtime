@@ -1043,6 +1043,34 @@ Windows helper on x64 and arm64, under CLM and under AV/EDR; `xprop` on a real
 X11 session and Wayland detection on a real one; the store, Snap and Flatpak
 builds showing the unavailable state.
 
+
+### Autopilot (2026-10-19)
+
+Stage 8 recorded and suggested; nothing happened until somebody opened the
+Activity page. Autopilot acts on the same capture: it starts the timer the
+person forgot, dated to when the work began, and says so.
+
+- **Acts, then offers the way back, rather than asking first.** A prompt
+  before every start is the thing it replaces. Every action is a toast with
+  Undo and Change (a system notification while the window is hidden), a log on
+  the Activity page, and one line under the timer. Undo deletes the entry and
+  holds that work until a break.
+- **Only nameable work.** macOS gives app names only (titles need Screen
+  Recording), so "what you are working on" is the app's rule, else what the
+  person tracked while that app was in front (`learnFilings`: one filing with
+  60 % and 15 minutes). A browser used for five projects learns nothing and is
+  never auto-started; the strip asks instead, and the answer is a rule.
+- **The person's timer is theirs.** Switch and stop apply only to a timer
+  Autopilot opened and nobody edited, tracked by token and start in main and
+  persisted so a restart keeps it. A stop or a new start by hand holds that
+  filing until a 10-minute break.
+- **Decided in main, written by the renderer.** Raw activity stays in main as
+  before; the renderer makes the write with `useEntryMutations`, so a start is
+  optimistic and queued offline like any other, with `source: "desktop"`. No
+  server change, no `API_LEVEL` bump.
+- **Absence stays with the idle guard.** Autopilot needs activity in the last
+  3 minutes to do anything, and measures drift from the end of the last break.
+
 ## Where it stands
 
 **Electron exists, has never been packaged, and would not work if it were.**

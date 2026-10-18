@@ -30,7 +30,7 @@ const custom = vi.fn();
 vi.mock("@/components/ui/sonner", () => ({
   toast: { custom: (...args: unknown[]) => custom(...args), dismiss: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
-const notify = vi.fn(async () => true);
+const notify = vi.fn(async (_notice: unknown) => true);
 vi.mock("@/lib/desktop-shell", () => ({
   notifyDesktop: (notice: unknown) => void notify(notice),
   focusTrackerDescription: vi.fn(),

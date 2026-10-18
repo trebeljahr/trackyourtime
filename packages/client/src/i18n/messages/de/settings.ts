@@ -1127,7 +1127,7 @@ export const settings: Translation<typeof source> = {
     activity: {
       title: "Aktivitätserfassung",
       description:
-        "Zeichnet auf, welche App im Vordergrund ist, nur auf diesem Computer, und schlägt Einträge für Zeit vor, die du nicht erfasst hast. Nichts wird gesendet, bis du einen Eintrag hinzufügst.",
+        "Zeichnet auf, welche App im Vordergrund ist, nur auf diesem Computer, und schlägt Einträge für Zeit vor, die du nicht erfasst hast. Nichts wird gesendet, bis du oder Autopilot einen Eintrag hinzufügen.",
       enabled: {
         title: "Aufzeichnen, welche App im Vordergrund ist",
         description: "Aus, bis du es einschaltest. Es ist keine Systemberechtigung nötig: Die App liest nur, welche App im Vordergrund ist.",
@@ -1183,7 +1183,7 @@ export const settings: Translation<typeof source> = {
       autopilot: {
         title: "Autopilot",
         description:
-          "Startet einen Timer, wenn du ein paar Minuten in einer App gearbeitet hast, ab dem Moment, in dem du angefangen hast, und wechselt oder stoppt die Timer, die er selbst gestartet hat. Einen Timer, den du gestartet hast, ändert er nie. Er startet nur Arbeit, die er benennen kann: nach deinen Regeln oder nach dem, was du in dieser App schon erfasst hast.",
+          "Startet einen Timer, wenn du ein paar Minuten in einer App gearbeitet hast, ab dem Moment, in dem du angefangen hast. Er startet nur Arbeit, die er benennen kann: nach deinen Regeln oder deinen früheren Einträgen. Einen Timer, den du gestartet hast, ändert er nie.",
         needsCapture: "Schalte die Aktivitätserfassung ein, um Autopilot zu nutzen.",
         startAfter: {
           title: "Starten nach",
