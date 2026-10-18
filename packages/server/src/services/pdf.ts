@@ -35,7 +35,14 @@
  * holds one page of content at a time rather than the whole document. The
  * price is that a page cannot be revisited after it is written, which is why
  * the footer says "Page 7" and not "Page 7 of 213" — the total is not knowable
- * without buffering every page first.
+ * without buffering every page first. It is also why the detailed report takes
+ * its headline figures as an argument ({@link DetailedPdfTotals}): they sit on
+ * page 1, above rows that are still in the database when page 1 is written.
+ *
+ * Every renderer writes into an {@link ExportSink}. The streamed download
+ * (`services/report-export/route.ts`) passes the HTTP response, so the file
+ * leaves as it is drawn; the `render*` functions pass a buffer and return the
+ * whole file, for the tRPC procedures and the tests.
  */
 import PDFDocument from "pdfkit";
 import {
@@ -44,6 +51,7 @@ import {
   formatClockInZone,
   formatDuration,
   resolveTimeZone,
+  currencyAmountsAccumulator,
   sumCurrencyAmounts,
   type CurrencyAmount,
   type DetailedEntry,
@@ -56,6 +64,7 @@ import {
 import { sanitizePdfText } from "@starter/invoice-pdf/text";
 import { serverT, type ServerTranslator } from "../i18n/index.js";
 import { pdfFormat, type PdfFormat } from "./pdf-format.js";
+import { bufferSink, type ExportSink } from "./report-export/sink.js";
 
 // Moved to `@starter/invoice-pdf` (the invoice renderer and the public page
 // share it); re-exported here so the report renderer's callers still find it.
@@ -492,42 +501,52 @@ function createTable(sheet: Sheet, definition: PdfColumn[]): Table {
 // ── document plumbing ────────────────────────────────────────────────
 
 /**
- * Drain a PDFKit document into a single Buffer.
+ * Draw a document into `sink`, page by page.
  *
- * pdfkit is a Node stream, so this is the one place that has to bridge
- * callback-land back into a promise. `doc.end()` must be called by the
- * builder BEFORE awaiting, otherwise the "end" event never fires and the
- * promise hangs forever — which is why `end()` lives here rather than in each
- * renderer.
+ * pdfkit is a Node stream, so this is the one place that bridges its events
+ * back into a promise. `doc.end()` must be called before awaiting "end", or
+ * the event never fires and the promise hangs forever — which is why `end()`
+ * lives here rather than in each renderer.
  *
- * The "data" listener is attached before `build` runs so pages drain as they
- * are produced rather than piling up in the stream's internal buffer.
+ * The "data" listener hands every chunk to the sink as pdfkit finishes a page.
+ * A `build` that awaits `sink.ready()` between batches of rows therefore holds
+ * one page of output at a time, however long the report is.
  */
+async function writeDocument(
+  meta: PdfReportMeta,
+  layout: PageLayout,
+  build: (sheet: Sheet) => void | Promise<void>,
+  sink: ExportSink,
+): Promise<void> {
+  const doc = new PDFDocument(pageOptions(layout));
+  doc.info.Title = sanitizePdfText(meta.title);
+  doc.info.Creator = "Track Your Time";
+
+  const ended = new Promise<void>((resolve, reject) => {
+    doc.on("end", () => resolve());
+    doc.on("error", (error: Error) => reject(error));
+  });
+  // A rejection the build makes first must not leave this one unhandled.
+  ended.catch(() => undefined);
+  doc.on("data", (chunk: Buffer) => sink.write(chunk));
+
+  const sheet = createSheet(doc, meta, layout);
+  drawFooter(sheet);
+  drawTitleBlock(sheet);
+  await build(sheet);
+  doc.end();
+  await ended;
+}
+
+/** {@link writeDocument} into memory, returning the whole file. */
 async function bufferDocument(
   meta: PdfReportMeta,
   layout: PageLayout,
   build: (sheet: Sheet) => void,
 ): Promise<Buffer> {
-  const doc = new PDFDocument(pageOptions(layout));
-  doc.info.Title = sanitizePdfText(meta.title);
-  doc.info.Creator = "Track Your Time";
-  const chunks: Buffer[] = [];
-
-  return new Promise<Buffer>((resolve, reject) => {
-    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", (error: Error) => reject(error));
-
-    try {
-      const sheet = createSheet(doc, meta, layout);
-      drawFooter(sheet);
-      drawTitleBlock(sheet);
-      build(sheet);
-      doc.end();
-    } catch (error) {
-      reject(error instanceof Error ? error : new Error(String(error)));
-    }
-  });
+  const sink = bufferSink();
+  await writeDocument(meta, layout, build, sink);
+  return sink.buffer();
 }
 
 /** One row per currency; continuation lines carry no duration. */
@@ -697,6 +716,48 @@ function entryClockRange(
 }
 
 /**
+ * The detailed report's headline figures, which page 1 states before the
+ * first row is drawn.
+ *
+ * `count` and `totalSec` are over exactly the entries the table will show,
+ * `totalSec` measured with `entryDurationSec` at the same `nowMs` the rows
+ * use. `money` is false when the report or any one row withholds money, and
+ * `amounts` is then empty. `currency` is the report's own currency label,
+ * used when no amount names one.
+ */
+export type DetailedPdfTotals = {
+  count: number;
+  totalSec: number;
+  money: boolean;
+  amounts: CurrencyAmount[];
+  currency: string;
+};
+
+/** {@link DetailedPdfTotals} of a report that is already in memory. */
+export function detailedPdfTotals(
+  result: DetailedReportResult,
+  nowMs: number,
+): DetailedPdfTotals {
+  // See `renderSummaryPdf`: withheld money removes the columns, not the
+  // values. The total is summed only when every row may carry money.
+  const money =
+    result.moneyVisible !== false &&
+    result.entries.every((entry) => entry.amount !== null);
+  return {
+    count: result.entries.length,
+    totalSec: result.entries.reduce(
+      (total, entry) => total + entryDurationSec(entry, nowMs),
+      0,
+    ),
+    money,
+    amounts: money ? (sumCurrencyAmounts(result.entries) ?? []) : [],
+    currency:
+      result.totalAmounts?.map((bucket) => bucket.currency).join(" / ") ||
+      result.currency,
+  };
+}
+
+/**
  * Render a flat, paginated entry log.
  *
  * The totals row is summed from the entries actually rendered rather than read
@@ -709,27 +770,46 @@ export async function renderDetailedPdf(
   result: DetailedReportResult,
   meta: PdfReportMeta,
 ): Promise<Buffer> {
-  const timeZone = resolveTimeZone(meta.timeZone);
-  const currency = sanitizePdfText(result.totalAmounts?.map((bucket) => bucket.currency).join(" / ") || result.currency || meta.currency);
   const nowMs = Date.now();
-
-  const totalSec = result.entries.reduce(
-    (total, entry) => total + entryDurationSec(entry, nowMs),
-    0,
+  const sink = bufferSink();
+  await writeDetailedPdf(
+    detailedPdfTotals(result, nowMs),
+    meta,
+    [result.entries],
+    nowMs,
+    sink,
   );
-  // See `renderSummaryPdf`: withheld money removes the columns, not the
-  // values. The total is summed only when every row may carry money.
-  const money = result.moneyVisible !== false && result.entries.every((entry) => entry.amount !== null);
-  const amounts = money ? sumCurrencyAmounts(result.entries) ?? [] : [];
+  return sink.buffer();
+}
+
+/**
+ * Render a flat entry log from batches of rows, into `sink`.
+ *
+ * The rows arrive while the document is being written, so nothing about them
+ * is retained beyond the batch in hand. The headline figures come in as
+ * `totals`, computed before page 1 by the caller. The totals ROW at the end is
+ * still summed from the rows actually drawn, under the same rule as
+ * {@link renderDetailedPdf}: the table must add up. The two can only differ
+ * when entries changed while the export ran.
+ */
+export async function writeDetailedPdf(
+  totals: DetailedPdfTotals,
+  meta: PdfReportMeta,
+  batches: Iterable<readonly DetailedEntry[]> | AsyncIterable<readonly DetailedEntry[]>,
+  nowMs: number,
+  sink: ExportSink,
+): Promise<void> {
+  const timeZone = resolveTimeZone(meta.timeZone);
+  const currency = sanitizePdfText(totals.currency || meta.currency);
+  const { money, amounts } = totals;
   const mixed = amounts.length > 1;
-  const totalAmount = amounts[0]?.amount ?? 0;
   const amountCurrency = amounts[0]?.currency ?? currency;
 
-  return bufferDocument({ ...meta, currency: amounts.map((bucket) => bucket.currency).join(" / ") || currency }, "portrait", (sheet) => {
+  await writeDocument({ ...meta, currency: amounts.map((bucket) => bucket.currency).join(" / ") || currency }, "portrait", async (sheet) => {
     const { t, format } = sheet;
     drawStats(sheet, [
-      { label: t("stats.entries"), value: format.count(result.entries.length) },
-      { label: t("stats.totalTracked"), value: formatDuration(totalSec, "hms") },
+      { label: t("stats.entries"), value: format.count(totals.count) },
+      { label: t("stats.totalTracked"), value: formatDuration(totals.totalSec, "hms") },
       ...(money
         ? amounts.map((bucket) => ({ label: t("stats.amount", { currency: bucket.currency }), value: format.amount(bucket.amount) }))
         : []),
@@ -756,15 +836,20 @@ export async function renderDetailedPdf(
         : []),
     ]);
 
-    if (result.entries.length === 0) {
-      table.empty(t("empty.range"));
-    } else {
-      for (const entry of result.entries) {
+    let drawn = 0;
+    let drawnSec = 0;
+    const drawnAmounts = currencyAmountsAccumulator();
+    for await (const batch of batches) {
+      for (const entry of batch) {
+        const seconds = entryDurationSec(entry, nowMs);
+        drawn += 1;
+        drawnSec += seconds;
+        if (money) drawnAmounts.add(entry);
         const project = entry.projectName ?? t("noProject");
         table.row({
           date: format.date(dayKeyInZone(Date.parse(entry.start), timeZone)),
           time: entryClockRange(t, entry, timeZone),
-          duration: formatDuration(entryDurationSec(entry, nowMs), "hms"),
+          duration: formatDuration(seconds, "hms"),
           description: entry.description || t("noDescription"),
           project:
             entry.taskName === null ? project : `${project} / ${entry.taskName}`,
@@ -772,16 +857,19 @@ export async function renderDetailedPdf(
           ...(money ? { amount: mixed ? `${format.amount(entry.amount ?? 0)} ${sanitizePdfText(entry.currency)}` : format.amount(entry.amount ?? 0) } : {}),
         });
       }
+      await sink.ready();
     }
+    if (drawn === 0) table.empty(t("empty.range"));
 
-    const totals = {
+    const footAmounts = money ? (drawnAmounts.result() ?? []) : [];
+    const totalsRow = {
       date: t("total"),
-      duration: formatDuration(totalSec, "hms"),
-      ...(money ? { amount: format.amount(totalAmount) } : {}),
+      duration: formatDuration(drawnSec, "hms"),
+      ...(money ? { amount: format.amount(footAmounts[0]?.amount ?? 0) } : {}),
     };
-    if (money && mixed) currencyRows(table, totals, amounts, format, true);
-    else table.total(totals);
-  });
+    if (money && mixed) currencyRows(table, totalsRow, footAmounts, format, true);
+    else table.total(totalsRow);
+  }, sink);
 }
 
 /**

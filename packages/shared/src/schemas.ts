@@ -660,6 +660,20 @@ export const exportPdfSchema = reportFiltersSchema.extend({
   locale: localeSchema.optional(),
 });
 
+/**
+ * The streamed report download, `POST /api/reports/export` — the same request
+ * as {@link exportPdfSchema} plus the file format. Not a tRPC procedure: the
+ * file is written to the response as it is produced, which a JSON transport
+ * cannot carry, so a 100k-entry export never sits in the server's memory.
+ * `locale` is read by the PDF only; the CSV's headers are the importer's
+ * contract and are never localised.
+ */
+export const reportExportFormatSchema = z.enum(["csv", "pdf"]);
+
+export const reportExportSchema = exportPdfSchema.extend({
+  format: reportExportFormatSchema,
+});
+
 // ── invoicing ────────────────────────────────────────────────────────
 
 /** Line granularity: one line per project, or one per task. */
@@ -1005,6 +1019,8 @@ export type DetailedReportSchemaInput = z.infer<typeof detailedReportSchema>;
 export type WeeklyReportSchemaInput = z.infer<typeof weeklyReportSchema>;
 export type ExportCsvInput = z.infer<typeof exportCsvSchema>;
 export type ExportPdfInput = z.infer<typeof exportPdfSchema>;
+export type ReportExportFormat = z.infer<typeof reportExportFormatSchema>;
+export type ReportExportInput = z.infer<typeof reportExportSchema>;
 export type TagListInput = z.infer<typeof tagListSchema>;
 export type CreateTagInput = z.infer<typeof createTagSchema>;
 export type UpdateTagInput = z.infer<typeof updateTagSchema>;

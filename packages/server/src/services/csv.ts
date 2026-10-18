@@ -48,21 +48,27 @@ const escapeField = (value: CsvValue | undefined): string => {
 };
 
 /**
+ * The start of a file: the BOM and the header line, CRLF-terminated. With
+ * {@link csvLine} per row this writes exactly what {@link toCsv} returns, one
+ * line at a time — the streamed export is built from these two.
+ */
+export function csvHead(columns: CsvColumn[]): string {
+  return `${UTF8_BOM}${columns.map((column) => escapeField(column.header)).join(",")}${LINE_END}`;
+}
+
+/** One row, CRLF-terminated. Keys missing from the row render as empty fields. */
+export function csvLine(row: CsvRow, columns: CsvColumn[]): string {
+  return `${columns.map((column) => escapeField(row[column.key])).join(",")}${LINE_END}`;
+}
+
+/**
  * Serialize `rows` as RFC 4180 CSV using `columns` for order and headers.
  * Keys missing from a row render as empty fields.
  */
 export function toCsv(rows: CsvRow[], columns: CsvColumn[]): string {
-  const lines: string[] = [
-    columns.map((column) => escapeField(column.header)).join(","),
-  ];
-
-  for (const row of rows) {
-    lines.push(
-      columns.map((column) => escapeField(row[column.key])).join(","),
-    );
-  }
-
-  return `${UTF8_BOM}${lines.join(LINE_END)}${LINE_END}`;
+  let csv = csvHead(columns);
+  for (const row of rows) csv += csvLine(row, columns);
+  return csv;
 }
 
 /**

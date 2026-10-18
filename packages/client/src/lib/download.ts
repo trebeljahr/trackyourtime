@@ -25,7 +25,7 @@ export function downloadBlob(filename: string, blob: Blob): void {
 }
 
 /**
- * Decode base64 payload bytes into a Blob and download it.
+ * Decode base64 payload bytes into a Blob.
  *
  * Binary crosses tRPC base64-encoded because the transport is JSON (see
  * `PdfExportResult` in @starter/shared). `atob` yields a binary STRING, so
@@ -33,15 +33,20 @@ export function downloadBlob(filename: string, blob: Blob): void {
  * passing that string straight to `new Blob([...])` would encode it as UTF-8
  * and silently corrupt every byte above 0x7f, which is most of a PDF.
  */
-export function downloadBase64(
-  filename: string,
-  base64: string,
-  mimeType: string,
-): void {
+export function base64Blob(base64: string, mimeType: string): Blob {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) {
     bytes[index] = binary.charCodeAt(index);
   }
-  downloadBlob(filename, new Blob([bytes], { type: mimeType }));
+  return new Blob([bytes], { type: mimeType });
+}
+
+/** Decode base64 payload bytes into a Blob and download it. */
+export function downloadBase64(
+  filename: string,
+  base64: string,
+  mimeType: string,
+): void {
+  downloadBlob(filename, base64Blob(base64, mimeType));
 }

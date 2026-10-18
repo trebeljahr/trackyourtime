@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 13;
+export const API_LEVEL = 14;
 
 export type ApiLevelChange = {
   level: number;
@@ -122,6 +122,13 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     added: [
       "`workspaces.create`: a new team workspace (name, currency, week start) owned by the caller.",
       "`kind` (`personal` | `team`) on `workspaces.list` rows; a personal workspace cannot be left, transferred or invited into.",
+    ],
+  },
+  {
+    level: 14,
+    release: "0.4.0",
+    added: [
+      "`POST /api/reports/export`: report CSV and PDF files streamed as they are produced, with the input of `reports.exportPdf` plus `format`.",
     ],
   },
 ];

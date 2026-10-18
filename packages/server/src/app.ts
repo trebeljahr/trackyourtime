@@ -18,6 +18,7 @@ import { createContext } from "./trpc/context.js";
 import { registerNewsletterRoutes } from "./services/newsletter/routes.js";
 import { registerApiV1Routes } from "./api/v1/index.js";
 import { registerAvatarRoutes } from "./services/avatar/route.js";
+import { registerReportExportRoutes } from "./services/report-export/route.js";
 import { isDatabaseReady } from "./db/connection.js";
 import { notFoundHandler, errorHandler } from "./middleware/error-handler.js";
 import { env, getTrustedOrigins, trustsExtensionOrigins } from "./config/env.js";
@@ -46,6 +47,9 @@ const AVATAR_BODY_LIMIT = `${Math.ceil((MAX_AVATAR_BYTES * 1.5) / 1000)}kb`;
 // tRPC batch paths/query strings), methods or headers can need new preflights.
 const CORS_PREFLIGHT_MAX_AGE_SECONDS = 600;
 
+/** Response headers a cross-origin caller may read (see `corsOptions`). */
+const EXPOSED_HEADERS = ["set-auth-token", "Server-Timing", "Content-Disposition"];
+
 /**
  * CORS for every route. Exported so a test can drive the exact options.
  *
@@ -63,9 +67,10 @@ export function corsOptions(trustedOrigins: string[]): cors.CorsOptions {
     /**
      * The bearer plugin hands a non-cookie client its session token on
      * `set-auth-token`. A cross-origin caller (the browser extension) can
-     * only read that header if it is explicitly exposed.
+     * only read that header if it is explicitly exposed. `Content-Disposition`
+     * carries the streamed report export's filename to the web app.
      */
-    exposedHeaders: ["set-auth-token", "Server-Timing"],
+    exposedHeaders: EXPOSED_HEADERS,
   };
 }
 
@@ -87,7 +92,7 @@ export function extensionCorsOptions(origin: string): cors.CorsOptions {
     origin,
     credentials: false,
     maxAge: CORS_PREFLIGHT_MAX_AGE_SECONDS,
-    exposedHeaders: ["set-auth-token", "Server-Timing"],
+    exposedHeaders: EXPOSED_HEADERS,
   };
 }
 
@@ -203,6 +208,11 @@ export function createApp() {
   //  - AFTER express.json() (3), because these handlers read `req.body`, and
   //    BEFORE the 404/500 handlers (7), which would otherwise answer first.
   registerApiV1Routes(app);
+
+  // ── 5d. Streamed report downloads — session-authenticated like tRPC,
+  // through tRPC's own middleware (see the route). After express.json(), whose
+  // parsed body it reads, and before the 404/500 handlers.
+  registerReportExportRoutes(app);
 
   // ── 6. Health endpoint ─────────────────────────────────────────────
   app.get("/api/health", async (req, res) => {

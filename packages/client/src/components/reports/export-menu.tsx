@@ -5,8 +5,8 @@ import { Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import type {
   CsvExportResult,
   ExportCsvInput,
-  ExportPdfInput,
   PdfExportResult,
+  ReportExportFormat,
   ReportFilters,
   ReportGroupBy,
 } from "@starter/shared";
@@ -25,7 +25,12 @@ import { shippedLocale } from "@/i18n/config";
 import { useLocale } from "@/i18n/locale-store";
 import { translate } from "@/i18n/translate";
 import { useT } from "@/i18n/use-t";
-import { downloadBase64, downloadBlob } from "@/lib/download";
+import { base64Blob, downloadBlob } from "@/lib/download";
+import {
+  exportReportFile,
+  type ExportedFile,
+  type ReportExportRequest,
+} from "@/lib/report-export";
 import { trpc } from "@/lib/trpc";
 import { userErrorMessage } from "@/lib/error-message";
 
@@ -100,53 +105,47 @@ const exportedMessage = (filename: string): string =>
 const failedMessage = (error: unknown): string =>
   userErrorMessage(error, translate("reports")("exportMenu.failed"));
 
+const UTF8_BOM = "\uFEFF";
+
 /**
- * Fetch the server-rendered CSV and hand it to the browser.
- *
- * Takes the fetcher rather than reaching for `trpc.useUtils()` itself so the
- * whole path — request shape, filename, failure handling — is testable without
- * a tRPC provider. Never throws: every outcome becomes a toast.
+ * `reports.exportCsv`'s answer as a file. The server's CSV already starts
+ * with a BOM (which keeps Excel from mangling non-ASCII project names); one is
+ * added only when it is missing, so the file never carries two.
  */
-export async function exportCsvReport(
-  fetchCsv: (input: ExportCsvInput) => Promise<CsvExportResult>,
-  input: ExportCsvInput,
-): Promise<void> {
-  if (!canDownloadFiles()) {
-    toast.error(unsupportedMessage("CSV"));
-    return;
-  }
-  try {
-    const result = await fetchCsv(input);
-    // The BOM keeps Excel from mangling non-ASCII project names.
-    downloadBlob(
-      result.filename,
-      new Blob([`\uFEFF${result.csv}`], { type: "text/csv;charset=utf-8;" }),
-    );
-    toast.success(exportedMessage(result.filename));
-  } catch (error) {
-    toast.error(failedMessage(error));
-  }
+export function csvResultFile(result: CsvExportResult): ExportedFile {
+  const text = result.csv.startsWith(UTF8_BOM) ? result.csv : `${UTF8_BOM}${result.csv}`;
+  return {
+    filename: result.filename,
+    blob: new Blob([text], { type: "text/csv;charset=utf-8;" }),
+  };
+}
+
+/** `reports.exportPdf`'s base64 answer as a file. */
+export function pdfResultFile(result: PdfExportResult): ExportedFile {
+  return { filename: result.filename, blob: base64Blob(result.base64, result.mimeType) };
 }
 
 /**
- * Fetch the server-rendered PDF and hand it to the browser.
+ * Fetch a server-rendered export and hand it to the browser.
  *
- * The bytes arrive base64-encoded because the tRPC transport is JSON; the
- * decoding lives in `@/lib/download` so the invoice PDF can reuse it. Never
- * throws: every outcome becomes a toast.
+ * Takes the fetcher rather than reaching for `trpc.useUtils()` itself so the
+ * whole path — request, filename, failure handling — is testable without a
+ * tRPC provider. Never throws: every outcome becomes a toast.
  */
-export async function exportPdfReport(
-  fetchPdf: (input: ExportPdfInput) => Promise<PdfExportResult>,
-  input: ExportPdfInput,
+export async function exportReport(
+  format: ReportExportFormat,
+  fetchFile: (input: ReportExportRequest) => Promise<ExportedFile>,
+  input: ReportExportRequest,
 ): Promise<void> {
+  const label = format === "csv" ? "CSV" : "PDF";
   if (!canDownloadFiles()) {
-    toast.error(unsupportedMessage("PDF"));
+    toast.error(unsupportedMessage(label));
     return;
   }
   try {
-    const result = await fetchPdf(input);
-    downloadBase64(result.filename, result.base64, result.mimeType);
-    toast.success(exportedMessage(result.filename));
+    const file = await fetchFile(input);
+    downloadBlob(file.filename, file.blob);
+    toast.success(exportedMessage(file.filename));
   } catch (error) {
     toast.error(failedMessage(error));
   }
@@ -154,7 +153,8 @@ export async function exportPdfReport(
 
 /**
  * CSV + PDF export, shared by both report views. Both files are
- * rendered server-side (`reports.exportCsv` / `reports.exportPdf`) so they
+ * rendered server-side (`POST /api/reports/export`, or `reports.exportCsv` /
+ * `reports.exportPdf` on an older server) so they
  * always cover the whole filtered range, not just the page currently on
  * screen — and so the PDF is a real document rather than whatever the
  * browser's print dialog made of the live DOM.
@@ -183,10 +183,16 @@ export function ExportMenu(props: ExportMenuProps): React.JSX.Element {
     })();
   }, []);
 
+  // Streamed from `POST /api/reports/export` where the server has it; the
+  // tRPC procedures are the fallback for an older server (lib/report-export.ts).
   const handleCsv = React.useCallback((): void => {
     run(() =>
-      exportCsvReport(
-        (payload) => utils.reports.exportCsv.fetch(payload),
+      exportReport(
+        "csv",
+        (payload) =>
+          exportReportFile("csv", payload, async () =>
+            csvResultFile(await utils.reports.exportCsv.fetch(payload)),
+          ),
         input,
       ),
     );
@@ -194,8 +200,12 @@ export function ExportMenu(props: ExportMenuProps): React.JSX.Element {
 
   const handlePdf = React.useCallback((): void => {
     run(() =>
-      exportPdfReport(
-        (payload) => utils.reports.exportPdf.fetch(payload),
+      exportReport(
+        "pdf",
+        (payload) =>
+          exportReportFile("pdf", payload, async () =>
+            pdfResultFile(await utils.reports.exportPdf.fetch(payload)),
+          ),
         { ...input, locale: shippedLocale(locale) },
       ),
     );

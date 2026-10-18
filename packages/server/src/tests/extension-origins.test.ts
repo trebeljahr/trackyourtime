@@ -131,7 +131,7 @@ describe("CORS for an extension origin", () => {
     assert.equal(options.origin, FIREFOX);
     assert.equal(options.credentials, false);
     // The bearer plugin's token header still has to be readable.
-    assert.deepEqual(options.exposedHeaders, ["set-auth-token", "Server-Timing"]);
+    assert.deepEqual(options.exposedHeaders, ["set-auth-token", "Server-Timing", "Content-Disposition"]);
   });
 
   it("falls back to the static, credentialed options for every other origin", () => {

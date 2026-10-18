@@ -30,6 +30,9 @@ import {
 import { TRPCError } from "@trpc/server";
 import mongoose, { Types, type PipelineStage } from "mongoose";
 import {
+  canSeeEntry,
+  canSeeMoneyFor,
+  currencyAmountsAccumulator,
   detailedReportSchema,
   entryAmount,
   entryDurationSec,
@@ -57,6 +60,7 @@ import {
   type PdfExportResult,
   type DetailedEntry,
   type DetailedReportResult,
+  type ReportExportInput,
   type ReportFilters,
   type ReportGroupBy,
   type SummaryGroup,
@@ -87,14 +91,23 @@ import {
 // pattern built from caller input reaches Mongo as a live regex, so an
 // unescaped `(a+)+$` lets the caller choose how much CPU the query costs.
 import { escapeRegExp } from "../../services/entries/errors.js";
-import { csvFilename, toCsv, type CsvColumn, type CsvRow } from "../../services/csv.js";
 import {
-  renderDetailedPdf,
+  csvFilename,
+  csvHead,
+  csvLine,
+  toCsv,
+  type CsvColumn,
+  type CsvRow,
+} from "../../services/csv.js";
+import {
   renderSummaryPdf,
   renderWeeklyPdf,
   reportPdfTitle,
+  writeDetailedPdf,
+  type DetailedPdfTotals,
   type PdfReportMeta,
 } from "../../services/pdf.js";
+import { bufferSink, type ExportSink } from "../../services/report-export/sink.js";
 import { preferredLocale } from "../../services/user-locale.js";
 import { workspaceProcedure, router } from "../trpc.js";
 
@@ -439,6 +452,44 @@ type MeasuredEntry = {
   dayKey: DayKey;
 };
 
+type ClippedEntry = {
+  /** Seconds inside the range — always a positive integer. */
+  seconds: number;
+  clipStart: number;
+  clipEnd: number;
+};
+
+/**
+ * The part of an entry inside the range, or null when nothing of it is.
+ *
+ * The one copy of the clip rule. Every figure a report states — a group, a
+ * range total, an export's headline — is measured through it, so none of
+ * them can disagree about what an entry contributes.
+ */
+const clipToRange = (
+  entry: { start: Date; end: Date | null; durationSec: number },
+  range: Range,
+  nowMs: number,
+): ClippedEntry | null => {
+  const startMs = entry.start.getTime();
+  const rawEndMs = entry.end === null ? nowMs : entry.end.getTime();
+
+  const clipStart = Math.max(startMs, range.fromMs);
+  const clipEnd = Math.min(rawEndMs, range.toMs);
+  if (!(clipEnd > clipStart)) return null;
+
+  const untouched =
+    entry.end !== null &&
+    entry.durationSec > 0 &&
+    startMs >= range.fromMs &&
+    rawEndMs <= range.toMs;
+
+  const seconds = untouched
+    ? Math.round(entry.durationSec)
+    : Math.max(0, Math.round((clipEnd - clipStart) / 1000));
+  return seconds > 0 ? { seconds, clipStart, clipEnd } : null;
+};
+
 /**
  * Clip an entry to the range, measure it, and split it across local days.
  *
@@ -454,23 +505,9 @@ const measureEntry = (
   nowMs: number,
   calendar: Calendar,
 ): MeasuredEntry | null => {
-  const startMs = doc.start.getTime();
-  const rawEndMs = doc.end === null ? nowMs : doc.end.getTime();
-
-  const clipStart = Math.max(startMs, range.fromMs);
-  const clipEnd = Math.min(rawEndMs, range.toMs);
-  if (!(clipEnd > clipStart)) return null;
-
-  const untouched =
-    doc.end !== null &&
-    doc.durationSec > 0 &&
-    startMs >= range.fromMs &&
-    rawEndMs <= range.toMs;
-
-  const seconds = untouched
-    ? Math.round(doc.durationSec)
-    : Math.max(0, Math.round((clipEnd - clipStart) / 1000));
-  if (seconds <= 0) return null;
+  const clipped = clipToRange(doc, range, nowMs);
+  if (!clipped) return null;
+  const { seconds, clipStart, clipEnd } = clipped;
 
   const slices = splitIntervalByZonedDay(clipStart, clipEnd, calendar.timeZone);
 
@@ -785,7 +822,7 @@ export const sortGroups = (
     })
     .sort((a, b) => b.seconds - a.seconds || a.key.localeCompare(b.key));
 
-// ── report bodies (shared by the queries and by exportCsv) ───────────
+// ── report bodies (shared by the queries and by the exports) ─────────
 
 const emptySummary = (
   currency: string,
@@ -1055,8 +1092,9 @@ export const buildDetailed = async (
   filters: ReportFilters,
   page: { cursor?: string; limit?: number },
   /**
-   * Range totals cost a full scan of the filtered set. The CSV export walks
-   * every page, so it asks for them once and skips them on subsequent pages.
+   * Range totals cost a full scan of the filtered set, so a caller walking
+   * every page can skip them. (The exports no longer do: they read their own
+   * pages, see `detailedExportPages`.)
    */
   withTotals = true,
 ): Promise<DetailedReportResult> => {
@@ -1092,21 +1130,9 @@ export const buildDetailed = async (
   let totalSec = 0;
   const amounts: CurrencyAmount[] = [];
   for (const entry of allMatching) {
-    const startMs = entry.start.getTime();
-    const rawEndMs = entry.end === null ? nowMs : entry.end.getTime();
-    const clipStart = Math.max(startMs, range.fromMs);
-    const clipEnd = Math.min(rawEndMs, range.toMs);
-    if (!(clipEnd > clipStart)) continue;
-
-    const untouched =
-      entry.end !== null &&
-      entry.durationSec > 0 &&
-      startMs >= range.fromMs &&
-      rawEndMs <= range.toMs;
-    const seconds = untouched
-      ? Math.round(entry.durationSec)
-      : Math.max(0, Math.round((clipEnd - clipStart) / 1000));
-    if (seconds <= 0) continue;
+    const clipped = clipToRange(entry, range, nowMs);
+    if (!clipped) continue;
+    const { seconds } = clipped;
 
     totalSec += seconds;
     const amount = entryAmount(
@@ -1348,8 +1374,9 @@ export const detailedCsvColumns = (moneyVisible: boolean): CsvColumn[] =>
 export const detailedCsvRows = (
   result: DetailedReportResult,
   timeZone: string,
+  /** The instant a running entry is measured to; one per export. */
+  nowMs: number = Date.now(),
 ): CsvRow[] => {
-  const nowMs = Date.now();
   return result.entries.map((entry) => {
     const seconds = entryDurationSec(entry, nowMs);
     const money: CsvRow = result.moneyVisible
@@ -1417,6 +1444,332 @@ const pdfFilename = (report: string, range: Range, timeZone: string): string =>
   `${exportFilename(report, range, timeZone).replace(/\.csv$/, "")}.pdf`;
 
 type CsvExport = CsvExportResult & { mimeType: "text/csv" };
+
+// ── exports, a page at a time ────────────────────────────────────────
+
+/** At most this many matching entries go into one export file. */
+const MAX_EXPORT_ROWS = EXPORT_PAGE_SIZE * MAX_EXPORT_PAGES;
+
+/**
+ * Entries per query of the totals pass. It reads six fields and joins
+ * nothing, so its pages can be ten times the joined ones for the same memory.
+ */
+const EXPORT_TOTALS_PAGE_SIZE = 5_000;
+
+/**
+ * Walk the matching entries newest first, `pageSize` at a time, stopping at
+ * {@link MAX_EXPORT_ROWS}. Keyset, not a server cursor: nothing stays open on
+ * the database while a slow client reads, and a page that is never asked for
+ * costs nothing.
+ *
+ * Order and cap are those of the paginated `detailed` report the export used
+ * to concatenate — `start` then `_id`, both descending — so both passes of an
+ * export see the same entries in the same order.
+ */
+async function* keysetPages<T extends { _id: unknown; start: Date }>(
+  conditions: Record<string, unknown>[],
+  fetchPage: (conditions: Record<string, unknown>[], limit: number) => Promise<T[]>,
+  pageSize: number,
+): AsyncGenerator<T[]> {
+  let after: { start: Date; id: unknown } | null = null;
+  let remaining = MAX_EXPORT_ROWS;
+  while (remaining > 0) {
+    const limit = Math.min(pageSize, remaining);
+    const docs = await fetchPage(
+      after
+        ? [
+            ...conditions,
+            {
+              $or: [
+                { start: { $lt: after.start } },
+                { start: after.start, _id: { $lt: after.id } },
+              ],
+            },
+          ]
+        : conditions,
+      limit,
+    );
+    if (docs.length === 0) return;
+    yield docs;
+    remaining -= docs.length;
+    if (docs.length < limit) return;
+    const last = docs[docs.length - 1]!;
+    after = { start: last.start, id: last._id };
+  }
+}
+
+/**
+ * The detailed report's rows for an export, a page of {@link DetailedEntry}
+ * at a time, measured at `nowMs` and projected for the caller exactly as the
+ * `detailed` report projects them. Nothing is kept between pages.
+ */
+async function* detailedExportPages(
+  scope: ReportScope,
+  filters: ReportFilters,
+  nowMs: number,
+): AsyncGenerator<DetailedEntry[]> {
+  const { workspaceId } = scope;
+  const settings = await getOrCreateWorkspaceSettings(workspaceId);
+  const range = parseRange(filters);
+  const conditions = await buildMatchConditions(scope, filters, range);
+  if (conditions === null) return;
+  const calendar: Calendar = {
+    timeZone: resolveTimeZone(filters.timeZone),
+    weekStartsOn: settings.weekStartsOn,
+  };
+
+  const pages = keysetPages(
+    conditions,
+    (pageConditions, limit) =>
+      runJoinedQuery(workspaceId, pageConditions, [{ $limit: limit }]),
+    EXPORT_PAGE_SIZE,
+  );
+  for await (const docs of pages) {
+    const entries = docs
+      .map((doc) => measureEntry(doc, range, nowMs, calendar))
+      .filter((measured): measured is MeasuredEntry => measured !== null)
+      .map((measured) => toDetailedEntry(measured, workspaceId));
+    const projected = projectDetailedReport(
+      {
+        entries,
+        totalSec: 0,
+        totalAmount: 0,
+        totalAmounts: [],
+        currency: settings.currency,
+        moneyVisible: true,
+      },
+      scope.visibility,
+    ).entries;
+    if (projected.length > 0) yield projected;
+  }
+}
+
+/**
+ * The detailed PDF's headline figures, computed before its first page.
+ *
+ * A pass of its own over the same entries, in the same order and under the
+ * same cap as {@link detailedExportPages}, reading six fields and joining
+ * nothing. It folds them with the functions the rows are drawn with — the
+ * clip rule, `entryDurationSec`, `entryAmount` and the currency sum — rather
+ * than re-deriving them in a `$group`: a headline that rounds a cent
+ * differently from the table under it is the bug the renderer's own comment
+ * warns about, and the fold makes the two identical by construction.
+ */
+const detailedExportTotals = async (
+  scope: ReportScope,
+  filters: ReportFilters,
+  nowMs: number,
+): Promise<DetailedPdfTotals> => {
+  const { workspaceId, visibility } = scope;
+  const settings = await getOrCreateWorkspaceSettings(workspaceId);
+  const range = parseRange(filters);
+  const moneyVisible = reportMoneyVisible(visibility);
+  const conditions = await buildMatchConditions(scope, filters, range);
+
+  let count = 0;
+  let totalSec = 0;
+  let moneyWithheld = !moneyVisible;
+  const amounts = currencyAmountsAccumulator();
+
+  const pages = conditions === null
+    ? []
+    : keysetPages(
+        conditions,
+        (pageConditions, limit) =>
+          TimeEntry.find({ $and: pageConditions })
+            .sort({ start: -1, _id: -1 })
+            .limit(limit)
+            .select("start end durationSec billable hourlyRate currency authorId")
+            .lean(),
+        EXPORT_TOTALS_PAGE_SIZE,
+      );
+  for await (const docs of pages) {
+    for (const doc of docs) {
+      const clipped = clipToRange(doc, range, nowMs);
+      if (!clipped || !canSeeEntry(visibility, doc.authorId)) continue;
+      count += 1;
+      totalSec += entryDurationSec(
+        {
+          start: doc.start.toISOString(),
+          end: doc.end ? doc.end.toISOString() : null,
+          durationSec: doc.durationSec,
+        },
+        nowMs,
+      );
+      if (moneyWithheld) continue;
+      if (!canSeeMoneyFor(visibility, doc.authorId)) {
+        moneyWithheld = true;
+        continue;
+      }
+      amounts.add({
+        currency: doc.currency,
+        amount: entryAmount(clipped.seconds, doc.billable ? doc.hourlyRate : null),
+      });
+    }
+  }
+
+  return {
+    count,
+    totalSec,
+    money: !moneyWithheld,
+    amounts: moneyWithheld ? [] : (amounts.result() ?? []),
+    currency: settings.currency,
+  };
+};
+
+/**
+ * Pull the first page before anything is written, so a query that fails
+ * fails while the response can still say so — not after the headers left.
+ */
+const primed = async <T>(pages: AsyncGenerator<T>): Promise<AsyncIterable<T>> => {
+  const first = await pages.next();
+  return (async function* () {
+    if (first.done) return;
+    yield first.value;
+    yield* pages;
+  })();
+};
+
+/**
+ * A report export, ready to write.
+ *
+ * Everything that can refuse — the input, the range, the first query, the
+ * detailed PDF's totals pass — has already run when this resolves, so the
+ * HTTP route can still answer an error with a status. `write` then produces
+ * the file into a sink, a page of entries at a time for the detailed report;
+ * a failure there can only cut the file short.
+ */
+export type ReportExportPlan = {
+  filename: string;
+  /** The HTTP `Content-Type`. */
+  contentType: "text/csv; charset=utf-8" | "application/pdf";
+  write: (sink: ExportSink) => Promise<void>;
+};
+
+/**
+ * Plan one export: the `reports.exportCsv` / `exportPdf` procedures and the
+ * streamed `POST /api/reports/export` all come through here, so the three
+ * cannot produce different files for the same request.
+ *
+ * Mirrors the CSV and PDF branch for branch — same range parsing, same zone
+ * resolution, same full-range walk for the detailed report. The two formats
+ * answer the same question, so any divergence would be a bug.
+ */
+export const planReportExport = async (
+  scope: ReportScope,
+  input: ReportExportInput,
+  /** The exporter, whose explicit language a PDF falls back to. */
+  userId: string,
+  nowMs: number = Date.now(),
+): Promise<ReportExportPlan> => {
+  // Decided once, from the scope, for every branch — the header set of a
+  // file must not depend on which report happened to be asked for.
+  const moneyVisible = reportMoneyVisible(scope.visibility);
+  const range = parseRange(input);
+  const exportZone = resolveTimeZone(input.timeZone);
+  const whole = (bytes: string | Buffer) => async (sink: ExportSink): Promise<void> => {
+    sink.write(bytes);
+    await sink.ready();
+  };
+
+  if (input.format === "csv") {
+    const csv = (report: string, write: ReportExportPlan["write"]): ReportExportPlan => ({
+      filename: exportFilename(report, range, exportZone),
+      contentType: "text/csv; charset=utf-8",
+      write,
+    });
+
+    if (input.report === "summary") {
+      const result = await buildSummary(scope, input, input.groupBy ?? "project");
+      return csv(
+        "summary",
+        whole(toCsv(summaryCsvRows(result), summaryCsvColumns(result.moneyVisible))),
+      );
+    }
+
+    if (input.report === "weekly") {
+      const weekStart = input.weekStart ?? dayKeyInZone(range.fromMs, exportZone);
+      const result = await buildWeekly(scope, input, weekStart);
+      return csv("weekly", whole(toCsv(weeklyCsvRows(result), weeklyCsvColumns(result))));
+    }
+
+    // Detailed: the whole range, not just the page the UI is showing — a
+    // page of rows at a time, each written before the next is read.
+    const columns = detailedCsvColumns(moneyVisible);
+    const pages = await primed(detailedExportPages(scope, input, nowMs));
+    return csv("detailed", async (sink) => {
+      sink.write(csvHead(columns));
+      for await (const entries of pages) {
+        let chunk = "";
+        const rows = detailedCsvRows(
+          { entries, totalSec: 0, totalAmount: null, currency: "", moneyVisible },
+          exportZone,
+          nowMs,
+        );
+        for (const row of rows) chunk += csvLine(row, columns);
+        sink.write(chunk);
+        await sink.ready();
+      }
+    });
+  }
+
+  // The exporting device's language, else the exporter's explicit
+  // preference, else English. The CSV above takes none: its headers are the
+  // importer's contract.
+  const locale = input.locale ?? (await preferredLocale([userId]));
+  const meta = (title: string, currency: string): PdfReportMeta => ({
+    title,
+    locale,
+    from: dayKeyInZone(range.fromMs, exportZone),
+    to: dayKeyInZone(range.toMs - 1, exportZone),
+    timeZone: exportZone,
+    currency,
+    generatedAt: new Date(nowMs).toISOString(),
+    moneyVisible,
+  });
+  const pdf = (report: string, write: ReportExportPlan["write"]): ReportExportPlan => ({
+    filename: pdfFilename(report, range, exportZone),
+    contentType: "application/pdf",
+    write,
+  });
+
+  if (input.report === "summary") {
+    const groupBy = input.groupBy ?? "project";
+    const result = await buildSummary(scope, input, groupBy);
+    const bytes = await renderSummaryPdf(
+      result,
+      meta(reportPdfTitle(locale, { kind: "summary", groupBy }), result.currency),
+      groupBy,
+    );
+    return pdf("summary", whole(bytes));
+  }
+
+  if (input.report === "weekly") {
+    const weekStart = input.weekStart ?? dayKeyInZone(range.fromMs, exportZone);
+    const result = await buildWeekly(scope, input, weekStart);
+    const settings = await getOrCreateWorkspaceSettings(scope.workspaceId);
+    const bytes = await renderWeeklyPdf(
+      result,
+      meta(reportPdfTitle(locale, { kind: "weekly" }), settings.currency),
+    );
+    return pdf("weekly", whole(bytes));
+  }
+
+  // Detailed: the headline figures sit on page 1, above every row, so they
+  // are folded in a pass of their own before the document starts; then the
+  // rows are drawn a page at a time.
+  const totals = await detailedExportTotals(scope, input, nowMs);
+  const pages = await primed(detailedExportPages(scope, input, nowMs));
+  const detailedMeta = meta(reportPdfTitle(locale, { kind: "detailed" }), totals.currency);
+  return pdf("detailed", (sink) => writeDetailedPdf(totals, detailedMeta, pages, nowMs, sink));
+};
+
+/** Run a plan into memory — for the tRPC procedures, which return the file. */
+const exportBytes = async (plan: ReportExportPlan): Promise<Buffer> => {
+  const sink = bufferSink();
+  await plan.write(sink);
+  return sink.buffer();
+};
 
 // ── router ───────────────────────────────────────────────────────────
 
@@ -1525,73 +1878,25 @@ export const reportsRouter = router({
       return buildWeekly(reportScope(ctx), input, input.weekStart);
     }),
 
-  /** Runs the matching report and serializes it for download. */
+  /**
+   * Runs the matching report and serializes it for download.
+   *
+   * The whole file comes back in one JSON answer, so it sits in memory three
+   * times over on its way out. Servers at API level 14 stream the same bytes
+   * from `POST /api/reports/export` (services/report-export/route.ts), which
+   * the web app uses; this stays for clients and servers that predate it.
+   */
   exportCsv: workspaceProcedure
     .input(exportCsvSchema)
     .query(async ({ ctx, input }): Promise<CsvExport> => {
-      const scope = reportScope(ctx);
-      // Decided once, from the scope, for every branch — the header set of a
-      // file must not depend on which report happened to be asked for.
-      const moneyVisible = reportMoneyVisible(scope.visibility);
-      const range = parseRange(input);
-      const exportZone = resolveTimeZone(input.timeZone);
-
-      if (input.report === "summary") {
-        const result = await buildSummary(
-          scope,
-          input,
-          input.groupBy ?? "project",
-        );
-        return {
-          filename: exportFilename("summary", range, exportZone),
-          csv: toCsv(
-            summaryCsvRows(result),
-            summaryCsvColumns(result.moneyVisible),
-          ),
-          mimeType: "text/csv",
-        };
-      }
-
-      if (input.report === "weekly") {
-        const weekStart =
-          input.weekStart ?? dayKeyInZone(range.fromMs, exportZone);
-        const result = await buildWeekly(scope, input, weekStart);
-        return {
-          filename: exportFilename("weekly", range, exportZone),
-          csv: toCsv(weeklyCsvRows(result), weeklyCsvColumns(result)),
-          mimeType: "text/csv",
-        };
-      }
-
-      // Detailed: paginate through the whole range so the export is complete,
-      // not just the page the UI happens to be showing.
-      const entries: DetailedEntry[] = [];
-      let currency = "";
-      let cursor: string | undefined;
-      let guard = 0;
-
-      do {
-        const pageResult: DetailedReportResult = await buildDetailed(
-          scope,
-          input,
-          { limit: EXPORT_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-          false,
-        );
-        entries.push(...pageResult.entries);
-        currency = pageResult.currency;
-        cursor = pageResult.nextCursor;
-        guard += 1;
-      } while (cursor && guard < MAX_EXPORT_PAGES);
-
+      const plan = await planReportExport(
+        reportScope(ctx),
+        { ...input, format: "csv" },
+        ctx.user.id,
+      );
       return {
-        filename: exportFilename("detailed", range, exportZone),
-        csv: toCsv(
-          detailedCsvRows(
-            { entries, totalSec: 0, totalAmount: null, currency, moneyVisible },
-            exportZone,
-          ),
-          detailedCsvColumns(moneyVisible),
-        ),
+        filename: plan.filename,
+        csv: (await exportBytes(plan)).toString("utf8"),
         mimeType: "text/csv",
       };
     }),
@@ -1599,95 +1904,22 @@ export const reportsRouter = router({
   /**
    * The same three reports, rendered to PDF on the server.
    *
-   * Mirrors `exportCsv` deliberately, branch for branch — same range parsing,
-   * same zone resolution, same full-range pagination for the detailed report.
-   * The two exports answer the same question in two file formats, so any
-   * divergence between them would be a bug, not a feature.
-   *
    * Bytes come back base64-encoded because tRPC's transport is JSON; see
-   * `PdfExportResult` in @starter/shared for why that beats a second binary
-   * HTTP route.
+   * `PdfExportResult` in @starter/shared. Like `exportCsv`, the fallback for
+   * a client that cannot use the streamed route.
    */
   exportPdf: workspaceProcedure
     .input(exportPdfSchema)
     .query(async ({ ctx, input }): Promise<PdfExportResult> => {
-      const scope = reportScope(ctx);
-      const moneyVisible = reportMoneyVisible(scope.visibility);
-      const range = parseRange(input);
-      const exportZone = resolveTimeZone(input.timeZone);
-      const generatedAt = new Date().toISOString();
-      // The exporting device's language, else the exporter's explicit
-      // preference, else English. The CSV sibling above takes none: its
-      // headers are the importer's contract.
-      const locale = input.locale ?? (await preferredLocale([ctx.user.id]));
-
-      const meta = (title: string, currency: string): PdfReportMeta => ({
-        title,
-        locale,
-        from: dayKeyInZone(range.fromMs, exportZone),
-        to: dayKeyInZone(range.toMs - 1, exportZone),
-        timeZone: exportZone,
-        currency,
-        generatedAt,
-        moneyVisible,
-      });
-
-      const encode = (report: string, bytes: Buffer): PdfExportResult => ({
-        filename: pdfFilename(report, range, exportZone),
-        base64: bytes.toString("base64"),
-        mimeType: "application/pdf",
-      });
-
-      if (input.report === "summary") {
-        const groupBy = input.groupBy ?? "project";
-        const result = await buildSummary(scope, input, groupBy);
-        const bytes = await renderSummaryPdf(
-          result,
-          meta(
-            reportPdfTitle(locale, { kind: "summary", groupBy }),
-            result.currency,
-          ),
-          groupBy,
-        );
-        return encode("summary", bytes);
-      }
-
-      if (input.report === "weekly") {
-        const weekStart =
-          input.weekStart ?? dayKeyInZone(range.fromMs, exportZone);
-        const result = await buildWeekly(scope, input, weekStart);
-        const settings = await getOrCreateWorkspaceSettings(scope.workspaceId);
-        const bytes = await renderWeeklyPdf(
-          result,
-          meta(reportPdfTitle(locale, { kind: "weekly" }), settings.currency),
-        );
-        return encode("weekly", bytes);
-      }
-
-      // Detailed: paginate through the whole range so the export is complete,
-      // not just the page the UI happens to be showing.
-      const entries: DetailedEntry[] = [];
-      let currency = "";
-      let cursor: string | undefined;
-      let guard = 0;
-
-      do {
-        const pageResult: DetailedReportResult = await buildDetailed(
-          scope,
-          input,
-          { limit: EXPORT_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-          false,
-        );
-        entries.push(...pageResult.entries);
-        currency = pageResult.currency;
-        cursor = pageResult.nextCursor;
-        guard += 1;
-      } while (cursor && guard < MAX_EXPORT_PAGES);
-
-      const bytes = await renderDetailedPdf(
-        { entries, totalSec: 0, totalAmount: null, currency, moneyVisible },
-        meta(reportPdfTitle(locale, { kind: "detailed" }), currency),
+      const plan = await planReportExport(
+        reportScope(ctx),
+        { ...input, format: "pdf" },
+        ctx.user.id,
       );
-      return encode("detailed", bytes);
+      return {
+        filename: plan.filename,
+        base64: (await exportBytes(plan)).toString("base64"),
+        mimeType: "application/pdf",
+      };
     }),
 });

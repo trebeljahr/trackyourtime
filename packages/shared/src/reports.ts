@@ -185,10 +185,11 @@ export type CsvExportResult = {
  * would be silently mangled by the serializer. The client decodes it back to
  * a `Blob` and hands that to the browser as a download.
  *
- * Encoding it rather than exposing a separate binary HTTP route is what keeps
- * ONE procedure working from every shell: the browser, Electron and Capacitor
- * all talk to the same API over HTTPS with the same auth, and none of them
- * needs a second authenticated fetch path or a signed download URL.
+ * This is the fallback now. The whole file, then its base64, then the JSON
+ * envelope all sit in the server's memory at once, which for a 100k-entry
+ * report is hundreds of megabytes. A server at API level 14 streams the same
+ * bytes from `POST /api/reports/export` (`reportExportSchema`) and the web
+ * app uses that; this shape stays for servers that predate it.
  */
 export type PdfExportResult = {
   filename: string;

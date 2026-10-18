@@ -40,6 +40,20 @@ function readSessionId(session: unknown): string | null {
 }
 
 export async function createContext({ req, res, info }: CreateExpressContextOptions) {
+  return createRequestContext(req, res, info.type);
+}
+
+/**
+ * {@link createContext} for a request that tRPC's adapter did not parse — the
+ * streamed report export (services/report-export/route.ts) runs the same
+ * procedure middleware through `createCaller`, so it authenticates exactly as
+ * a query does.
+ */
+export async function createRequestContext(
+  req: CreateExpressContextOptions["req"],
+  res: CreateExpressContextOptions["res"],
+  requestType: string,
+) {
   const auth = getAuth();
   const stopAuthTiming = startServerTiming(res, "auth");
   const session = await auth.api.getSession({
@@ -78,7 +92,7 @@ export async function createContext({ req, res, info }: CreateExpressContextOpti
       sessionId: readSessionId(session),
       resolveRequestWorkspace: createRequestWorkspaceResolver(
         { user: session.user, activeWorkspaceId: readActiveWorkspaceId(session) },
-        info.type,
+        requestType,
       ),
     };
   }

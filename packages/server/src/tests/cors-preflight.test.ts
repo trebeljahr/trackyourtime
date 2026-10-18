@@ -60,7 +60,7 @@ describe("application CORS preflight caching", () => {
         assert.match(response.headers.get("vary") ?? "", /Access-Control-Request-Headers/);
       }
       const actual = await fetch(`${base}/api/health`, { headers: { origin } });
-      assert.equal(actual.headers.get("access-control-expose-headers"), "set-auth-token,Server-Timing");
+      assert.equal(actual.headers.get("access-control-expose-headers"), "set-auth-token,Server-Timing,Content-Disposition");
       assert.equal(actual.headers.get("access-control-max-age"), null);
     });
   }

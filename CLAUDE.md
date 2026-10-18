@@ -2735,6 +2735,40 @@ broken:
   "entries without a project". A time group narrows the range through
   `bucketRange`, clipped to the range on screen.
 
+### Report exports stream
+
+Reports → Export downloads from `POST /api/reports/export`
+(`services/report-export/route.ts`): the CSV or PDF is written to the response
+a page of 500 entries at a time, so a 100k-entry detailed export holds a page,
+not the report (measured peak RSS above baseline: CSV 590 → 52 MiB, PDF
+434 → 127 MiB; `packages/server/src/scripts/profile-report-export.ts`). `reports.exportCsv` / `exportPdf`
+stay as the fallback for servers below API level 14 (`reports.exportStream`),
+and both they and the route go through `planReportExport` in
+`trpc/routers/reports.ts`, so the three cannot produce different files.
+Rules that fail quietly if broken:
+
+- **The route authorizes through tRPC, not beside it.** `createRequestContext`
+  builds the context and an unmounted `workspaceProcedure` runs through
+  `createCaller`: version floor, session, workspace and visibility exactly as
+  a query. Never mount that router — it is not part of the contract.
+- **Everything that can refuse runs before the headers** (the plan resolves
+  after the input, the range, the first page and the PDF's totals). Then a
+  refusal is a status and `{ error: { code, message, versionRefusal } }`; after
+  the headers, a failure destroys the socket so `fetch` rejects rather than
+  saving a short file. The web app falls back to tRPC only on a 404 WITHOUT a
+  `code` — an older server's generic 404, never the route's own NOT_FOUND.
+- **The detailed PDF's headline is a pass of its own** (`detailedExportTotals`):
+  same match, order and cap, six fields, folded with the functions the rows
+  are drawn with (clip rule, `entryDurationSec`, `entryAmount`,
+  `currencyAmountsAccumulator`). Never a `$group`: a cent rounded differently
+  from the table under it is the bug. The totals ROW is still summed from the
+  rows drawn.
+- **`ExportSink.write` never throws** — pdfkit calls it from its own events,
+  some on a later tick. Backpressure is `await sink.ready()` between pages;
+  a writer that skips it buffers the whole file in the response again.
+- **`Content-Disposition` is in the CORS `exposedHeaders`**; without it the
+  web app cannot read the filename cross-origin and names the file itself.
+
 ### Calendar grid on a phone, a tablet and a touch screen
 
 The day and week grid (`components/calendar/time-grid.tsx`) is one pointer
