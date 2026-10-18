@@ -92,6 +92,9 @@ export const activity: Translation<typeof source> = {
       notNow: "Jetzt nicht",
       held: "Autopilot wartet bis zu deiner nächsten Pause, bevor er {app} wieder erfasst.",
       undo: "Rückgängig",
+      paused: "Autopilot ist bis {time} pausiert.",
+      pausedShort: "Pausiert bis {time}",
+      resume: "Fortsetzen",
     },
     panel: {
       title: "Autopilot",
@@ -109,6 +112,9 @@ export const activity: Translation<typeof source> = {
       unknown: "Autopilot weiß noch nicht, wofür du {app} nutzt.",
       held: "Wartet auf deine nächste Pause.",
       quiet: "Gerade gibt es nichts zu starten.",
+      paused: "Pausiert bis {time}. Bis dahin startet, wechselt und stoppt Autopilot nichts.",
+      pause: "Eine Stunde pausieren",
+      resume: "Fortsetzen",
       learned:
         "{count, plural, =0 {Noch keine App aus deinen Einträgen gelernt.} one {Kennt # App aus deinen Einträgen.} other {Kennt # Apps aus deinen Einträgen.}}",
       logHeading: "Was Autopilot gemacht hat",

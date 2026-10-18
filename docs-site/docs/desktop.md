@@ -148,6 +148,14 @@ Desktop → Autopilot**, or on the **Activity** page. It needs activity capture.
   hidden, the system shows a notification. **Undo** deletes the entry. After
   an undo, or after you stop or replace a timer yourself, Autopilot waits for
   a break of 10 minutes before it starts that work again.
+- A timer that Autopilot started has a ✦ before its time in the menu bar, in
+  the tray tooltip and at the top of the menu.
+- **Pause Autopilot for an hour** is in the menu bar or tray menu and on the
+  **Activity** page. For one hour Autopilot starts, switches and stops no
+  timer. A running timer continues.
+- **Resume Autopilot** ends the pause early. It is in the same menu, on the
+  **Activity** page and in the bar under the timer. A pause continues after
+  you restart the app. It ends when you sign out or turn Autopilot off.
 - The **Activity** page shows what Autopilot is looking at, what it did today,
   and the day as a strip of tracked and untracked time.
 

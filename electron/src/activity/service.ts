@@ -31,7 +31,7 @@ import type {
   DesktopAutopilotRunning,
 } from "../../../packages/shared/src/desktop-bridge.ts";
 import type { ActivityCaptureSupport } from "../distribution.ts";
-import { AUTOPILOT_WINDOW_MS, createAutopilotController } from "./autopilot.ts";
+import { AUTOPILOT_PAUSE_MS, AUTOPILOT_WINDOW_MS, accountOfScope, createAutopilotController } from "./autopilot.ts";
 import {
   initialCaptureState,
   shouldCapture,
@@ -108,6 +108,8 @@ export interface ActivityService {
     dismiss?: DesktopActivityInterval;
     logId?: string;
   }) => Promise<void>;
+  /** Pause for {@link AUTOPILOT_PAUSE_MS} while Autopilot is active, or resume. */
+  autopilotPause: (input: { paused: boolean }) => Promise<void>;
 
   // ── driven by install.ts ──
   heartbeat: () => Promise<void>;
@@ -141,6 +143,8 @@ export function createActivityService(options: ActivityServiceOptions): Activity
   const autopilot = createAutopilotController({
     initialOwned: store.autopilotOwned(),
     saveOwned: (owned) => store.saveAutopilotOwned(owned),
+    initialPause: store.autopilotPause(),
+    savePause: (pause) => store.saveAutopilotPause(pause),
   });
 
   // ── serial queue ────────────────────────────────────────────────────
@@ -203,12 +207,15 @@ export function createActivityService(options: ActivityServiceOptions): Activity
       case "sweep-scopes":
         store.sweepScopes(effect.keepPrefix);
         // Holds, what was learned and the log belong to the previous scope.
-        autopilot.reset();
+        // A pause belongs to the person, so their other workspace keeps it.
+        autopilot.reset(effect.keepPrefix);
         return;
       case "wipe":
         store.wipe();
         accepted = [];
-        autopilot.reset();
+        // "Delete all activity now" keeps the scope, and with it the pause;
+        // a sign-out (`forget`) has already cleared the scope, so it ends.
+        autopilot.reset(state.scope === null ? null : accountOfScope(state.scope));
         return;
       case "prune":
         store.prune(now(), state.settings.retentionDays);
@@ -325,7 +332,11 @@ export function createActivityService(options: ActivityServiceOptions): Activity
         // titles an OS cannot give (macOS, for now). Turning off always works.
         if (!channelSupport().supported) next.enabled = false;
         if (!titlesAvailable) next.storeTitles = false;
+        const autopilotWasOn = state.settings.autopilot;
         apply({ kind: "settings", settings: next });
+        // Switched off: a pause has nothing left to hold back, and switching
+        // it on again later means "start now".
+        if (autopilotWasOn && !state.settings.autopilot && state.scope !== null) autopilot.pause(state.scope, null);
         return buildSnapshot();
       }),
 
@@ -448,6 +459,20 @@ export function createActivityService(options: ActivityServiceOptions): Activity
         // An undone start: that time is accounted for, so it is neither
         // started again nor offered as a suggestion.
         if (input.dismiss !== undefined) store.addDismissal(scope, input.dismiss);
+        changed();
+      }),
+
+    autopilotPause: (input) =>
+      serial(() => {
+        const scope = state.scope;
+        if (scope === null || store.status !== "ok") return;
+        if (input.paused) {
+          // Nothing to pause while it is off; the tray offers it only while on.
+          if (!autopilotActive()) return;
+          autopilot.pause(scope, now() + AUTOPILOT_PAUSE_MS);
+        } else {
+          autopilot.pause(scope, null);
+        }
         changed();
       }),
 

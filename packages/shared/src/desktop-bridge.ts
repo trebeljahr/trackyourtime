@@ -70,8 +70,18 @@ export interface DesktopTimerState {
   recents: DesktopRecent[];
   /** Mutations this account queued that no server has seen yet. */
   unsent: number;
+  /**
+   * Autopilot, while it is switched on: the tray offers to pause or resume
+   * it. Absent or null while it is off, which leaves the item out.
+   */
+  autopilot?: DesktopTrayAutopilot | null;
   /** Every string the main process shows, already translated. */
   labels: DesktopTrayLabels;
+}
+
+export interface DesktopTrayAutopilot {
+  /** Epoch ms the pause ends at, or null when Autopilot is not paused. */
+  pausedUntil: number | null;
 }
 
 export interface DesktopRunningTimer {
@@ -81,6 +91,8 @@ export interface DesktopRunningTimer {
   projectName: string | null;
   /** `#rrggbb`, or null for no project. */
   projectColor: string | null;
+  /** Autopilot opened this timer and it is still exactly that entry; the tray marks it. */
+  autopilot?: boolean;
 }
 
 export interface DesktopRecent {
@@ -114,6 +126,12 @@ export interface DesktopTrayLabels {
   runningBadge: string;
   /** The tray item shown once an update is downloaded (Stage 7). */
   restartToUpdate: string;
+  /** "Pause Autopilot for an hour", offered while Autopilot is on and running. */
+  autopilotPause: string;
+  /** "Resume Autopilot", offered while it is paused. */
+  autopilotResume: string;
+  /** "Autopilot paused until 14:30", or "" when it is not paused. */
+  autopilotPaused: string;
 }
 
 /** What the tray, a global shortcut or a notification asks the renderer to do. */
@@ -441,6 +459,11 @@ export interface DesktopAutopilotState {
   log: DesktopAutopilotLogEntry[];
   /** Apps Autopilot has learned a filing for from this person's entries. */
   learnedApps: number;
+  /**
+   * Epoch ms a pause ends at, or null. While paused Autopilot starts,
+   * switches and stops nothing; its own timer keeps running and stays its own.
+   */
+  pausedUntil: number | null;
 }
 
 /** The running entry, as the renderer describes it to Autopilot. */
@@ -512,6 +535,12 @@ export interface DesktopAutopilot {
     dismiss?: DesktopActivityInterval;
     logId?: string;
   }) => Promise<void>;
+  /**
+   * Pause for an hour (`paused: true`), or resume now. The length is the main
+   * process's (`AUTOPILOT_PAUSE_MS`), so the tray item and the screens agree.
+   * A pause survives a restart and ends on sign-out.
+   */
+  pause: (input: { paused: boolean }) => Promise<void>;
 }
 
 /**
@@ -619,6 +648,7 @@ export const DESKTOP_IPC = {
   activityAutopilotPlan: "activity:autopilot-plan",
   activityAutopilotApplied: "activity:autopilot-applied",
   activityAutopilotHold: "activity:autopilot-hold",
+  activityAutopilotPause: "activity:autopilot-pause",
   /** main → renderer push, not an invoke. */
   idleState: "idle:state",
   /** main → renderer push. */

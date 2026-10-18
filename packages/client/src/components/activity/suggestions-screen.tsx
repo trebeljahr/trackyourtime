@@ -318,6 +318,14 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
     [activity],
   );
 
+  const pauseAutopilot = React.useCallback(
+    async (paused: boolean): Promise<void> => {
+      await activity.autopilot?.pause({ paused }).catch(() => undefined);
+      nudgeAutopilot();
+    },
+    [activity],
+  );
+
   const undoLogged = React.useCallback(
     async (entry: DesktopAutopilotLogEntry): Promise<void> => {
       const autopilot = activity.autopilot;
@@ -417,6 +425,7 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
           clock={clockOf}
           span={spanOf}
           onToggle={(on) => void toggleAutopilot(on)}
+          onPause={(paused) => void pauseAutopilot(paused)}
           onUndo={(entry) => void undoLogged(entry)}
           busy={busy}
         />

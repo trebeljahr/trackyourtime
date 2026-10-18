@@ -13,9 +13,13 @@
  *   of {@link HOLD_BREAK_MS} — so a stopped timer does not come straight back.
  * - **What was learned** from the person's own entries, per scope.
  * - **What it did**, as a short log for the screen.
+ * - **A pause** of {@link AUTOPILOT_PAUSE_MS} the person asked for (the tray,
+ *   the strip, the Activity screen). It belongs to the account, so a
+ *   workspace switch keeps it and a sign-out ends it, and it is persisted so a
+ *   restart keeps it until it runs out.
  *
  * No Electron and no file access: the service hands everything in and persists
- * `owned` through the store, so all of it runs under node:test.
+ * `owned` and the pause through the store, so all of it runs under node:test.
  */
 
 import { randomUUID } from "node:crypto";
@@ -61,6 +65,8 @@ export const LOG_MAX = 30;
 export const LOG_TTL_MS = 24 * 60 * MINUTE_MS;
 /** How much activity a decision reads back. */
 export const AUTOPILOT_WINDOW_MS = DEFAULT_AUTOPILOT_OPTIONS.lookbackMs + HOLD_BREAK_MS;
+/** "Pause Autopilot for an hour": the one length every surface offers. */
+export const AUTOPILOT_PAUSE_MS = 60 * MINUTE_MS;
 
 /** The Autopilot-owned timer, as persisted (state.json) so a restart keeps it. */
 export interface OwnedTimer {
@@ -71,6 +77,15 @@ export interface OwnedTimer {
   via: "rule" | "learned";
   logId: string;
 }
+
+/** A pause, as persisted (state.json). `account` is the scope prefix `<userId>:`. */
+export interface AutopilotPause {
+  account: string;
+  until: number;
+}
+
+/** `<userId>:` of a `<userId>:<workspaceId>` scope. */
+export const accountOfScope = (scope: string): string => scope.slice(0, scope.indexOf(":") + 1);
 
 export interface PlanContext {
   scope: string;
@@ -118,9 +133,16 @@ export interface AutopilotController {
     now: number,
   ) => boolean;
   hold: (scope: string, input: { filingKey?: string; appKey?: string; logId?: string }, now: number) => void;
+  /** Pause the scope's account until `until`, or resume (`null`). */
+  pause: (scope: string, until: number | null) => void;
+  /** When the scope's pause ends, or null when it is not paused at `now`. */
+  pausedUntil: (scope: string | null, now: number) => number | null;
   state: (scope: string | null, active: boolean, now: number) => DesktopAutopilotState;
-  /** Forget everything: sign-out, wipe, another scope. */
-  reset: () => void;
+  /**
+   * Forget everything: sign-out, wipe, another scope. A pause of the account
+   * `keepPauseFor` names (`<userId>:`) is kept; with none, it ends too.
+   */
+  reset: (keepPauseFor?: string | null) => void;
 }
 
 const runningKeyOf = (running: DesktopAutopilotRunning | null): RunningKey | null =>
@@ -147,10 +169,14 @@ export function createAutopilotController(options: {
   /** The persisted owned timer, read at boot. */
   initialOwned: OwnedTimer | null;
   saveOwned: (owned: OwnedTimer | null) => void;
+  /** The persisted pause, read at boot. Absent: none. */
+  initialPause?: AutopilotPause | null;
+  savePause?: (pause: AutopilotPause | null) => void;
   newId?: () => string;
 }): AutopilotController {
   const newId = options.newId ?? randomUUID;
   let owned: OwnedTimer | null = options.initialOwned;
+  let paused: AutopilotPause | null = options.initialPause ?? null;
   /** What the running entry was at the last plan, to notice it change by hand. */
   let lastRunning: { scope: string; key: RunningKey | null } | null = null;
   /** The last write reported made, until the renderer's running entry shows it. */
@@ -165,6 +191,17 @@ export function createAutopilotController(options: {
     if (owned === next) return;
     owned = next;
     options.saveOwned(next);
+  };
+
+  const setPaused = (next: AutopilotPause | null): void => {
+    if (paused === next) return;
+    paused = next;
+    options.savePause?.(next);
+  };
+
+  const pausedUntil = (scope: string | null, now: number): number | null => {
+    if (paused === null || scope === null || accountOfScope(scope) !== paused.account) return null;
+    return paused.until > now ? paused.until : null;
   };
 
   const addHold = (scope: string, key: string, now: number): void => {
@@ -233,6 +270,14 @@ export function createAutopilotController(options: {
         current !== null &&
         sameRunning(current, { start: owned.start, filingKey: owned.filingKey });
       if (owned !== null && owned.scope === scope && !ownedNow) setOwned(null);
+
+      // Paused: the bookkeeping above still runs, so a timer stopped or
+      // edited by hand meanwhile is the person's afterwards; nothing is decided.
+      if (paused !== null && paused.until <= now) setPaused(null);
+      if (pausedUntil(scope, now) !== null) {
+        watch = null;
+        return { kind: "none" };
+      }
 
       const decision = decideAutopilot({
         now,
@@ -332,6 +377,13 @@ export function createAutopilotController(options: {
       }
     },
 
+    pause: (scope, until) => {
+      setPaused(until === null ? null : { account: accountOfScope(scope), until });
+      if (until !== null) watch = null;
+    },
+
+    pausedUntil,
+
     state: (scope, active, now) => {
       const mine = scope === null ? [] : log.filter((action) => action.scope === scope && now - action.decidedAt < LOG_TTL_MS);
       return {
@@ -343,11 +395,13 @@ export function createAutopilotController(options: {
         watch: active && watch !== null && watch.scope === scope ? watch.value : null,
         log: mine.map(({ scope: _scope, ...action }) => action),
         learnedApps: scope === null ? 0 : (learned.get(scope)?.size ?? 0),
+        pausedUntil: active ? pausedUntil(scope, now) : null,
       };
     },
 
-    reset: () => {
+    reset: (keepPauseFor = null) => {
       setOwned(null);
+      if (paused !== null && paused.account !== keepPauseFor) setPaused(null);
       lastRunning = null;
       settling = null;
       holds.clear();

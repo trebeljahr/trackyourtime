@@ -138,6 +138,7 @@ terms; it is the reference when in doubt.
 | rule (file a site under a project) | Regel | „{site} immer ablegen unter“ |
 | Autopilot (starts timers from activity) | Autopilot | der Autopilot, „er“; a name, never translated |
 | break (time away from work) | Pause | „bis zu deiner nächsten Pause“ |
+| pause / resume Autopilot (for an hour) | pausieren / fortsetzen | „Autopilot eine Stunde pausieren“, „pausiert bis {time}“; always the verb, since the noun „Pause“ is the break above |
 
 ### Decisions worth arguing about
 

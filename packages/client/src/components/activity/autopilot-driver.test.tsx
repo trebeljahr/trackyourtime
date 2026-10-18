@@ -62,7 +62,7 @@ const snapshot = (active: boolean): DesktopActivitySnapshot =>
   ({
     settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14, autopilot: active, autopilotStartMinutes: 5 },
     support: { supported: true },
-    autopilot: { active, owned: null, watch: null, log: [], learnedApps: 0 },
+    autopilot: { active, owned: null, watch: null, log: [], learnedApps: 0, pausedUntil: null },
   }) as unknown as DesktopActivitySnapshot;
 
 let plans: DesktopAutopilotPlan[] = [];

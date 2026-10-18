@@ -36,7 +36,17 @@ export const FALLBACK_TRAY_LABELS: DesktopTrayLabels = {
   quitUnsentButton: "Quit",
   runningBadge: "Timer running",
   restartToUpdate: "Restart to update",
+  autopilotPause: "Pause Autopilot for an hour",
+  autopilotResume: "Resume Autopilot",
+  autopilotPaused: "",
 };
+
+/**
+ * Put before a timer Autopilot opened, wherever the tray names it: the macOS
+ * title, the tooltip and the menu's heading. A glyph rather than a word, so
+ * the menu bar stays short and no catalog has to agree on it.
+ */
+export const AUTOPILOT_MARK = "✦";
 
 export const MAX_TRAY_RECENTS = 5;
 const MAX_TEXT = 200;
@@ -77,8 +87,14 @@ export function parseTimerState(value: unknown): DesktopTimerState | null {
         startedAt,
         projectName: nullableText(value.running.projectName),
         projectColor: color !== null && /^#[0-9a-f]{6}$/i.test(color) ? color : null,
+        ...(value.running.autopilot === true ? { autopilot: true } : {}),
       };
     }
+  }
+  let autopilot: DesktopTimerState["autopilot"] = null;
+  if (isRecord(value.autopilot)) {
+    const until = value.autopilot.pausedUntil;
+    autopilot = { pausedUntil: typeof until === "number" && Number.isFinite(until) ? until : null };
   }
   const recents: DesktopRecent[] = [];
   if (Array.isArray(value.recents)) {
@@ -94,6 +110,7 @@ export function parseTimerState(value: unknown): DesktopTimerState | null {
     running: value.signedIn ? running : null,
     recents: value.signedIn ? recents : [],
     unsent,
+    autopilot: value.signedIn ? autopilot : null,
     labels: parseTrayLabels(value.labels),
   };
 }
@@ -122,6 +139,17 @@ export function runningLabel(state: DesktopTimerState): string {
   return running.projectName ?? state.labels.noDescription;
 }
 
+/** `✦ ` before anything that names a timer Autopilot opened, nothing otherwise. */
+function autopilotPrefix(state: DesktopTimerState): string {
+  return state.running?.autopilot === true ? `${AUTOPILOT_MARK} ` : "";
+}
+
+/** Whether Autopilot is paused at `nowMs`; a pause that has run out reads as none. */
+export function autopilotPausedAt(state: DesktopTimerState | null, nowMs: number): boolean {
+  const until = state?.autopilot?.pausedUntil ?? null;
+  return until !== null && until > nowMs;
+}
+
 export type TrayMenuItem =
   | { type: "item"; id: string; label: string; enabled: boolean }
   | { type: "heading"; label: string }
@@ -129,16 +157,21 @@ export type TrayMenuItem =
 
 /**
  * Running entry with Stop, up to five recents to continue, "Start timer…",
- * the unsent count when non-zero, Open, Settings, Quit. Signed out (or before
- * any state arrived): Open and Quit.
+ * Autopilot's pause or resume while it is on, the unsent count when non-zero,
+ * Open, Settings, Quit. Signed out (or before any state arrived): Open and
+ * Quit.
  *
  * With a downloaded update, "Restart to update" sits above Quit in either
  * menu: the person picks the moment, the app never restarts by itself.
  *
  * Item ids are what `tray.ts` hands back on a click: `stop`, `start`,
- * `continue:<key>`, `open`, `settings`, `restart-to-update`, `quit`.
+ * `continue:<key>`, `autopilot-pause`, `autopilot-resume`, `open`,
+ * `settings`, `restart-to-update`, `quit`.
  */
-export function trayMenuModel(state: DesktopTimerState | null, options: { updateReady?: boolean } = {}): TrayMenuItem[] {
+export function trayMenuModel(
+  state: DesktopTimerState | null,
+  options: { updateReady?: boolean; nowMs?: number } = {},
+): TrayMenuItem[] {
   const labels = state?.labels ?? FALLBACK_TRAY_LABELS;
   const restart: TrayMenuItem[] = options.updateReady
     ? [{ type: "item", id: "restart-to-update", label: labels.restartToUpdate, enabled: true }]
@@ -153,7 +186,7 @@ export function trayMenuModel(state: DesktopTimerState | null, options: { update
   }
   const items: TrayMenuItem[] = [];
   if (state.running !== null) {
-    items.push({ type: "heading", label: runningLabel(state) });
+    items.push({ type: "heading", label: `${autopilotPrefix(state)}${runningLabel(state)}` });
     items.push({ type: "item", id: "stop", label: labels.stop, enabled: true });
     items.push({ type: "separator" });
   }
@@ -171,6 +204,15 @@ export function trayMenuModel(state: DesktopTimerState | null, options: { update
     items.push({ type: "separator" });
   }
   items.push({ type: "item", id: "start", label: labels.startTimer, enabled: true });
+  if (state.autopilot != null) {
+    items.push({ type: "separator" });
+    if (autopilotPausedAt(state, options.nowMs ?? Date.now())) {
+      if (labels.autopilotPaused !== "") items.push({ type: "heading", label: labels.autopilotPaused });
+      items.push({ type: "item", id: "autopilot-resume", label: labels.autopilotResume, enabled: true });
+    } else {
+      items.push({ type: "item", id: "autopilot-pause", label: labels.autopilotPause, enabled: true });
+    }
+  }
   if (state.unsent > 0 && labels.unsent !== "") {
     items.push({ type: "separator" });
     items.push({ type: "heading", label: labels.unsent });
@@ -186,18 +228,19 @@ export function trayMenuModel(state: DesktopTimerState | null, options: { update
 
 /**
  * The text beside the macOS menu bar icon: the clock while running, nothing
- * when idle (Raycast's defaults). `Tray.setTitle` exists only on macOS.
+ * when idle (Raycast's defaults), and {@link AUTOPILOT_MARK} before the clock
+ * of a timer Autopilot opened. `Tray.setTitle` exists only on macOS.
  */
 export function trayTitle(state: DesktopTimerState | null, nowMs: number, platform: string): string {
   if (platform !== "darwin" || state?.running == null) return "";
-  return trayClock(elapsedSecAt(state.running.startedAt, nowMs));
+  return `${autopilotPrefix(state)}${trayClock(elapsedSecAt(state.running.startedAt, nowMs))}`;
 }
 
-/** Windows and Linux carry the clock in the tooltip instead. */
+/** Windows and Linux carry the clock (and the Autopilot mark) in the tooltip instead. */
 export function trayTooltip(state: DesktopTimerState | null, nowMs: number): string {
   const labels = state?.labels ?? FALLBACK_TRAY_LABELS;
   if (state?.running == null) return labels.idleTooltip;
-  return `${trayClock(elapsedSecAt(state.running.startedAt, nowMs))} · ${runningLabel(state)}`;
+  return `${autopilotPrefix(state)}${trayClock(elapsedSecAt(state.running.startedAt, nowMs))} · ${runningLabel(state)}`;
 }
 
 export type TrayIconVariant = "idle" | "running";

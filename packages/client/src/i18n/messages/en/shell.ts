@@ -337,6 +337,9 @@ export const shell = {
       unsent: "{count, plural, one {# change not sent yet} other {# changes not sent yet}}",
       runningBadge: "Timer running",
       restartToUpdate: "Restart to update",
+      autopilotPause: "Pause Autopilot for an hour",
+      autopilotResume: "Resume Autopilot",
+      autopilotPaused: "Autopilot paused until {time}",
     },
     quitUnsent: {
       title: "{count, plural, one {# change is not sent yet} other {# changes are not sent yet}}",

@@ -317,6 +317,9 @@ export const shell: Translation<typeof source> = {
       unsent: "{count, plural, one {# Änderung noch nicht gesendet} other {# Änderungen noch nicht gesendet}}",
       runningBadge: "Timer läuft",
       restartToUpdate: "Neu starten und aktualisieren",
+      autopilotPause: "Autopilot eine Stunde pausieren",
+      autopilotResume: "Autopilot fortsetzen",
+      autopilotPaused: "Autopilot pausiert bis {time}",
     },
     quitUnsent: {
       title: "{count, plural, one {# Änderung ist noch nicht gesendet} other {# Änderungen sind noch nicht gesendet}}",

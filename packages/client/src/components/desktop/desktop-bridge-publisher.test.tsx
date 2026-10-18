@@ -3,7 +3,7 @@ import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
 import { createTimerStore } from "@starter/core";
-import type { DesktopCommand, DesktopTimerState, RecentEntry } from "@starter/shared";
+import type { DesktopActivitySnapshot, DesktopCommand, DesktopTimerState, RecentEntry } from "@starter/shared";
 
 const mutations = { startQuickStart: vi.fn(), stopTimer: vi.fn() };
 const push = vi.fn();
@@ -36,6 +36,7 @@ vi.mock("@/lib/trpc", () => ({
         },
       },
     }),
+    settings: { get: { useQuery: () => ({ data: undefined }) } },
     projects: {
       list: {
         useQuery: (input: unknown, options: unknown) => {
@@ -81,10 +82,30 @@ type Bridge = {
   published: DesktopTimerState[];
   send: (command: DesktopCommand) => Promise<void>;
   showWindow: ReturnType<typeof vi.fn>;
+  /** Push an activity snapshot, as main does on every change. */
+  pushActivity: (snapshot: DesktopActivitySnapshot) => Promise<void>;
 };
 
-function installBridge(): Bridge {
+const OWNED_START = "2026-09-17T10:00:00.000Z";
+
+const activitySnapshot = (autopilot: Partial<DesktopActivitySnapshot["autopilot"]> = {}): DesktopActivitySnapshot =>
+  ({
+    settings: { retentionDays: 14 },
+    support: { supported: true },
+    autopilot: {
+      active: true,
+      owned: null,
+      watch: null,
+      log: [],
+      learnedApps: 0,
+      pausedUntil: null,
+      ...autopilot,
+    },
+  }) as DesktopActivitySnapshot;
+
+function installBridge(initialActivity: DesktopActivitySnapshot | null = null): Bridge {
   let listener: ((command: DesktopCommand) => void) | null = null;
+  let activityListener: ((snapshot: DesktopActivitySnapshot) => void) | null = null;
   const bridge: Bridge = {
     published: [],
     send: async (command) => {
@@ -95,10 +116,29 @@ function installBridge(): Bridge {
       });
     },
     showWindow: vi.fn(() => Promise.resolve()),
+    pushActivity: async (snapshot) => {
+      await act(async () => {
+        activityListener?.(snapshot);
+        await Promise.resolve();
+      });
+    },
   };
   (window as { electronAPI?: unknown }).electronAPI = {
     isDesktop: true,
     platform: "darwin",
+    ...(initialActivity === null
+      ? {}
+      : {
+          activity: {
+            snapshot: () => Promise.resolve(initialActivity),
+            onChanged: (next: (snapshot: DesktopActivitySnapshot) => void) => {
+              activityListener = next;
+              return () => {
+                activityListener = null;
+              };
+            },
+          },
+        }),
     desktop: {
       publishTimerState: (state: DesktopTimerState) => {
         bridge.published.push(state);
@@ -142,6 +182,42 @@ describe("buildDesktopTimerState", () => {
     expect(state.labels.unsent).toBe("2 changes not sent yet");
     expect(state.labels.quitUnsentTitle).toBe("2 changes are not sent yet");
     expect(state.running).toBeNull();
+    expect(state.autopilot).toBeNull();
+    expect(state.labels.autopilotPaused).toBe("");
+  });
+
+  const owned = { start: Date.parse(OWNED_START), filingKey: "k", app: null, via: "rule" as const, logId: "l1" };
+  const runningEntry = { id: "e1", description: "Write", start: OWNED_START, end: null, projectId: null } as never;
+
+  it("marks the timer Autopilot opened, and only that one", () => {
+    const build = (autopilot: Parameters<typeof buildDesktopTimerState>[0]["autopilot"], running = runningEntry) =>
+      buildDesktopTimerState({ running, projects: [], recents: [], unsent: 0, t: translate("shell"), autopilot });
+    expect(build({ active: true, owned, pausedUntil: null }).running?.autopilot).toBe(true);
+    expect(build({ active: true, owned, pausedUntil: null }).autopilot).toEqual({ pausedUntil: null });
+    const other = { ...(runningEntry as object), start: "2026-09-17T11:00:00.000Z" } as never;
+    expect(build({ active: true, owned, pausedUntil: null }, other).running).not.toHaveProperty("autopilot");
+    // Off: no mark and no tray item, whatever main last said it owned.
+    const off = build({ active: false, owned, pausedUntil: null });
+    expect(off.running).not.toHaveProperty("autopilot");
+    expect(off.autopilot).toBeNull();
+    expect(build(null).autopilot).toBeNull();
+  });
+
+  it("hands over the pause with its translated labels", () => {
+    const until = Date.parse("2026-09-17T11:30:00.000Z");
+    const state = buildDesktopTimerState({
+      running: null,
+      projects: [],
+      recents: [],
+      unsent: 0,
+      t: translate("shell"),
+      autopilot: { active: true, owned: null, pausedUntil: until },
+      clock: (iso) => `<${iso}>`,
+    });
+    expect(state.autopilot).toEqual({ pausedUntil: until });
+    expect(state.labels.autopilotPause).toBe("Pause Autopilot for an hour");
+    expect(state.labels.autopilotResume).toBe("Resume Autopilot");
+    expect(state.labels.autopilotPaused).toBe("Autopilot paused until <2026-09-17T11:30:00.000Z>");
   });
 });
 
@@ -195,6 +271,32 @@ describe("DesktopBridgePublisher", () => {
     });
     view.unmount();
     expect(bridge.published.at(-1)?.signedIn).toBe(false);
+  });
+
+  it("publishes what main says about Autopilot, and again when its pause changes", async () => {
+    const owned = { start: Date.parse(OWNED_START), filingKey: "k", app: null, via: "rule" as const, logId: "l1" };
+    const bridge = installBridge(activitySnapshot({ owned }));
+    act(() => {
+      timerStore.getState().setRunning({ id: "e1", description: "Write", start: OWNED_START, end: null } as never);
+    });
+    render(<DesktopBridgePublisher onOpenPalette={() => undefined} />);
+    await act(async () => undefined);
+    expect(bridge.published.at(-1)?.running?.autopilot).toBe(true);
+    expect(bridge.published.at(-1)?.autopilot).toEqual({ pausedUntil: null });
+
+    // A push that changes nothing the tray draws publishes nothing.
+    const count = bridge.published.length;
+    await bridge.pushActivity(activitySnapshot({ owned, learnedApps: 3 }));
+    expect(bridge.published.length).toBe(count);
+
+    const until = Date.now() + 60 * 60_000;
+    await bridge.pushActivity(activitySnapshot({ owned, pausedUntil: until }));
+    expect(bridge.published.at(-1)?.autopilot).toEqual({ pausedUntil: until });
+    expect(bridge.published.at(-1)?.labels.autopilotPaused).toMatch(/^Autopilot paused until /);
+
+    await bridge.pushActivity(activitySnapshot({ active: false, owned: null }));
+    expect(bridge.published.at(-1)?.autopilot).toBeNull();
+    expect(bridge.published.at(-1)?.running).not.toHaveProperty("autopilot");
   });
 
   it("toggle stops a running timer", async () => {

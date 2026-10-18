@@ -29,6 +29,7 @@ import {
   parseAutopilotApplied,
   parseAutopilotHistory,
   parseAutopilotHold,
+  parseAutopilotPause,
   parseAutopilotPlanInput,
   parseCheckAcceptInput,
   parseInterval,
@@ -52,6 +53,8 @@ const PRUNE_EVERY_MS = 24 * 60 * 60_000;
 export interface ActivityController {
   /** Headless only. */
   testHook: ActivityTestHook | null;
+  /** The tray's "Pause Autopilot for an hour" and "Resume Autopilot". */
+  pauseAutopilot: (paused: boolean) => void;
   /** On quit: persist the open segment, stop the source and the timers. */
   dispose: () => void;
 }
@@ -170,6 +173,10 @@ export function installActivity(options: {
     const parsed = parseAutopilotHold(input);
     if (parsed !== null) await activity.autopilotHold(parsed);
   });
+  handle(DESKTOP_IPC.activityAutopilotPause, async (_event, input: unknown) => {
+    const parsed = parseAutopilotPause(input);
+    if (parsed !== null) await activity.autopilotPause(parsed);
+  });
 
   // ── timers and idle (never headless) ────────────────────────────────
   const timers: ReturnType<typeof setInterval>[] = [];
@@ -194,6 +201,9 @@ export function installActivity(options: {
 
   return {
     testHook,
+    pauseAutopilot: (paused) => {
+      void activity.autopilotPause({ paused });
+    },
     dispose: () => {
       for (const timer of timers) clearInterval(timer);
       if (pushTimer !== null) clearTimeout(pushTimer);

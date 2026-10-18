@@ -215,3 +215,8 @@ export function parseAutopilotHold(
   }
   return out;
 }
+
+export function parseAutopilotPause(value: unknown): { paused: boolean } | null {
+  if (!isRecord(value) || typeof value.paused !== "boolean") return null;
+  return { paused: value.paused };
+}

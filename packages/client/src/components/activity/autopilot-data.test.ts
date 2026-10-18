@@ -114,6 +114,7 @@ const state = (over: Partial<DesktopAutopilotState> = {}): DesktopAutopilotState
   watch: null,
   log: [],
   learnedApps: 0,
+  pausedUntil: null,
   ...over,
 });
 
@@ -142,7 +143,19 @@ describe("autopilotStripView", () => {
       filingKey: "k",
       app: "Figma",
       logId: "l1",
+      pausedUntil: null,
     });
+  });
+
+  it("says Autopilot is paused, beside its own timer or on its own, never beside the person's", () => {
+    const until = T0 + HOUR;
+    expect(autopilotStripView(state({ owned }), { start: iso(T0) }, 5, until)).toMatchObject({
+      kind: "owned",
+      pausedUntil: until,
+    });
+    expect(autopilotStripView(state({ watch: watch() }), null, 5, until)).toEqual({ kind: "paused", until });
+    expect(autopilotStripView(state({ owned }), { start: iso(T0 + HOUR) }, 5, until)).toBeNull();
+    expect(autopilotStripView(state({ active: false }), null, 5, until)).toBeNull();
   });
 
   it("shows how close a nameable start is", () => {

@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 
 import type { DesktopTimerState } from "../../packages/shared/src/desktop-bridge.ts";
 import {
+  AUTOPILOT_MARK,
   FALLBACK_TRAY_LABELS,
+  autopilotPausedAt,
   parseNotice,
   parseTimerState,
   trayClock,
@@ -88,6 +90,45 @@ describe("trayMenuModel", () => {
     assert.equal(item?.type === "item" ? item.label : null, "Neu starten");
   });
 
+  it("offers to pause Autopilot while it is on, and to resume it while paused", () => {
+    const outline = (state: DesktopTimerState, nowMs: number): string[] =>
+      trayMenuModel(state, { nowMs }).map((item) =>
+        item.type === "item" ? item.id : item.type === "heading" ? `# ${item.label}` : "---",
+      );
+    const off = outline({ ...running, unsent: 0 }, at(0));
+    assert.equal(off.some((id) => id.startsWith("autopilot-")), false, "no item while Autopilot is off");
+
+    const on = { ...running, unsent: 0, autopilot: { pausedUntil: null } };
+    assert.deepEqual(outline(on, at(0)).slice(7, 10), ["start", "---", "autopilot-pause"]);
+
+    const paused: DesktopTimerState = {
+      ...on,
+      autopilot: { pausedUntil: at(3600) },
+      labels: { ...on.labels, autopilotPaused: "Autopilot paused until 11:00", autopilotResume: "Fortsetzen" },
+    };
+    assert.deepEqual(outline(paused, at(60)).slice(7, 11), [
+      "start",
+      "---",
+      "# Autopilot paused until 11:00",
+      "autopilot-resume",
+    ]);
+    const resume = trayMenuModel(paused, { nowMs: at(60) }).find(
+      (item) => item.type === "item" && item.id === "autopilot-resume",
+    );
+    assert.equal(resume?.type === "item" ? resume.label : null, "Fortsetzen", "labels come from the payload");
+    // A pause that has run out is no pause, whatever the payload last said.
+    assert.equal(outline(paused, at(3600)).includes("autopilot-pause"), true);
+    assert.equal(outline(paused, at(3600)).includes("# Autopilot paused until 11:00"), false);
+  });
+
+  it("marks a timer Autopilot opened in the menu heading", () => {
+    const owned = { ...running, running: { ...running.running!, autopilot: true } };
+    const heading = trayMenuModel(owned)[0];
+    assert.equal(heading?.type === "heading" ? heading.label : null, `${AUTOPILOT_MARK} Write the plan`);
+    const plain = trayMenuModel(running)[0];
+    assert.equal(plain?.type === "heading" ? plain.label : null, "Write the plan");
+  });
+
   it("idle with nothing queued: no Stop and no unsent line", () => {
     const ids = trayMenuModel({ ...running, running: null, unsent: 0 }).map((item) =>
       item.type === "item" ? item.id : item.type,
@@ -102,6 +143,14 @@ describe("title, tooltip and icon", () => {
     assert.equal(trayTitle(running, at(125), "darwin"), "2:05");
     assert.equal(trayTitle(running, at(125), "win32"), "");
     assert.equal(trayTitle({ ...running, running: null }, at(125), "darwin"), "");
+  });
+
+  it("marks a timer Autopilot opened, in the macOS title and every tooltip", () => {
+    const owned = { ...running, running: { ...running.running!, autopilot: true } };
+    assert.equal(trayTitle(owned, at(125), "darwin"), "✦ 2:05");
+    assert.equal(trayTitle(owned, at(125), "linux"), "");
+    assert.equal(trayTooltip(owned, at(3700)), "✦ 1:01 · Write the plan");
+    assert.equal(trayTooltip({ ...owned, running: null }, at(1)), "Track Your Time");
   });
 
   it("puts the clock and the entry in the tooltip", () => {
@@ -144,10 +193,32 @@ describe("parseTimerState", () => {
     assert.equal(colour?.running?.projectColor, null);
   });
 
-  it("signed out carries no timer or recents", () => {
-    const parsed = parseTimerState({ ...running, signedIn: false });
+  it("signed out carries no timer, recents or Autopilot", () => {
+    const parsed = parseTimerState({ ...running, signedIn: false, autopilot: { pausedUntil: 5 } });
     assert.equal(parsed?.running, null);
     assert.deepEqual(parsed?.recents, []);
+    assert.equal(parsed?.autopilot, null);
+  });
+
+  it("reads the Autopilot mark and pause, and nothing else in their place", () => {
+    const parsed = parseTimerState({
+      ...running,
+      running: { ...running.running, autopilot: true },
+      autopilot: { pausedUntil: at(60) },
+    });
+    assert.equal(parsed?.running?.autopilot, true);
+    assert.deepEqual(parsed?.autopilot, { pausedUntil: at(60) });
+    const odd = parseTimerState({
+      ...running,
+      running: { ...running.running, autopilot: "yes" },
+      autopilot: { pausedUntil: "soon" },
+    });
+    assert.equal(odd?.running?.autopilot, undefined);
+    assert.deepEqual(odd?.autopilot, { pausedUntil: null });
+    assert.equal(parseTimerState({ ...running, autopilot: true })?.autopilot, null);
+    assert.equal(autopilotPausedAt(odd, at(0)), false);
+    assert.equal(autopilotPausedAt(parsed, at(59)), true);
+    assert.equal(autopilotPausedAt(parsed, at(60)), false);
   });
 });
 

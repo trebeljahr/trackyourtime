@@ -9,7 +9,7 @@ import { ActivityRuleDialog } from "@/components/activity/activity-rule-dialog";
 import { undoAutopilotStart } from "@/components/activity/autopilot-actions";
 import { autopilotStripView, type AutopilotStripView } from "@/components/activity/autopilot-strip-view";
 import { filingLabel } from "@/components/activity/autopilot-driver";
-import { useDesktopActivitySnapshot } from "@/components/activity/use-desktop-activity";
+import { useActivePause, useDesktopActivitySnapshot } from "@/components/activity/use-desktop-activity";
 import type { EntryMutations } from "@/components/tracker/use-entry-mutations";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
@@ -40,8 +40,11 @@ export function AutopilotStrip({
   const [teaching, setTeaching] = React.useState<{ key: string; name: string } | null>(null);
   const [busy, setBusy] = React.useState(false);
 
+  const pausedUntil = useActivePause(snapshot?.autopilot?.pausedUntil);
   const view =
-    snapshot === null ? null : autopilotStripView(snapshot.autopilot, running, snapshot.settings.autopilotStartMinutes);
+    snapshot === null
+      ? null
+      : autopilotStripView(snapshot.autopilot, running, snapshot.settings.autopilotStartMinutes, pausedUntil);
 
   const projectName = (id: string | null | undefined): string | null =>
     id === null || id === undefined ? null : (projects.data?.find((project) => project.id === id)?.name ?? null);
@@ -50,6 +53,13 @@ export function AutopilotStrip({
     const autopilot = desktopActivity()?.autopilot;
     if (autopilot === undefined) return;
     await autopilot.hold(input).catch(() => undefined);
+    nudgeAutopilot();
+  };
+
+  const resume = async (): Promise<void> => {
+    const autopilot = desktopActivity()?.autopilot;
+    if (autopilot === undefined) return;
+    await autopilot.pause({ paused: false }).catch(() => undefined);
     nudgeAutopilot();
   };
 
@@ -111,6 +121,19 @@ export function AutopilotStrip({
   if (view === null) return teaching === null ? null : dialog;
 
   const span = (ms: number): string => format.durationShort(Math.round(ms / 1000));
+  const clockAt = (ms: number): string => format.clock(new Date(ms).toISOString());
+  const resumeButton = (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      className="h-7 px-2"
+      onClick={() => void resume()}
+      data-testid="autopilot-strip-resume"
+    >
+      {t("autopilot.strip.resume")}
+    </Button>
+  );
   const threshold = format.durationShort((snapshot?.settings.autopilotStartMinutes ?? 5) * 60);
 
   return (
@@ -127,8 +150,14 @@ export function AutopilotStrip({
         <>
           <span className="min-w-0 truncate">
             {view.app === null
-              ? t("autopilot.strip.ownedNoApp", { time: format.clock(new Date(view.at).toISOString()) })
-              : t("autopilot.strip.owned", { time: format.clock(new Date(view.at).toISOString()), app: view.app })}
+              ? t("autopilot.strip.ownedNoApp", { time: clockAt(view.at) })
+              : t("autopilot.strip.owned", { time: clockAt(view.at), app: view.app })}
+            {view.pausedUntil !== null ? (
+              <span data-testid="autopilot-strip-paused">
+                {" · "}
+                {t("autopilot.strip.pausedShort", { time: clockAt(view.pausedUntil) })}
+              </span>
+            ) : null}
           </span>
           <Button
             type="button"
@@ -141,6 +170,16 @@ export function AutopilotStrip({
           >
             {t("autopilot.strip.undo")}
           </Button>
+          {view.pausedUntil !== null ? resumeButton : null}
+        </>
+      ) : null}
+
+      {view.kind === "paused" ? (
+        <>
+          <span className="min-w-0 truncate" data-testid="autopilot-strip-paused">
+            {t("autopilot.strip.paused", { time: clockAt(view.until) })}
+          </span>
+          {resumeButton}
         </>
       ) : null}
 

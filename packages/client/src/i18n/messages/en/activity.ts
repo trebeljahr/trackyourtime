@@ -92,6 +92,9 @@ export const activity = {
       notNow: "Not now",
       held: "Autopilot waits for your next break before it tracks {app} again.",
       undo: "Undo",
+      paused: "Autopilot is paused until {time}.",
+      pausedShort: "Paused until {time}",
+      resume: "Resume",
     },
     panel: {
       title: "Autopilot",
@@ -109,6 +112,9 @@ export const activity = {
       unknown: "Autopilot does not know what {app} is for yet.",
       held: "Waiting for your next break.",
       quiet: "Nothing to start right now.",
+      paused: "Paused until {time}. Until then Autopilot starts, switches and stops nothing.",
+      pause: "Pause for an hour",
+      resume: "Resume",
       learned:
         "{count, plural, =0 {No apps learned from your entries yet.} one {Knows # app from your entries.} other {Knows # apps from your entries.}}",
       logHeading: "What Autopilot did",

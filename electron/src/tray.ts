@@ -68,7 +68,7 @@ export function createElectronTray(options: {
   return {
     update: (state, nowMs, updateReady) => {
       if (tray.isDestroyed()) return;
-      const model = trayMenuModel(state, { updateReady });
+      const model = trayMenuModel(state, { updateReady, nowMs });
       const menuKey = JSON.stringify(model);
       if (menuKey !== lastMenu) {
         lastMenu = menuKey;

@@ -11,6 +11,8 @@ import type {
   TimeEntry,
 } from "@starter/shared";
 
+import { isAutopilotTimer } from "@/components/activity/autopilot-data";
+import { useDesktopAutopilotBrief, type DesktopAutopilotBrief } from "@/components/activity/use-desktop-activity";
 import { DesktopAttentionGuards } from "@/components/desktop/desktop-attention-guards";
 import { useEntryMutations } from "@/components/tracker/use-entry-mutations";
 import { RECENT_INPUT } from "@/hooks/use-favorites";
@@ -19,6 +21,7 @@ import { timerStore } from "@/hooks/use-sync";
 import { useT } from "@/i18n/use-t";
 import type { Translator } from "@/i18n/translator";
 import { desktopShell, focusTrackerDescription } from "@/lib/desktop-shell";
+import { useFormatSettings } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useOfflineQueueState } from "@/providers/offline-queue-provider";
 
@@ -42,15 +45,23 @@ const recentLabel = (recent: RecentEntry): { label: string; hint: string | null 
   return { label, hint };
 };
 
-/** Everything the main process draws, from what the renderer already holds. */
+/**
+ * Everything the main process draws, from what the renderer already holds.
+ * `autopilot` is main's own Autopilot state, handed back so the tray can mark
+ * the timer it opened and offer its pause; `clock` formats the pause's end.
+ */
 export function buildDesktopTimerState(input: {
   running: TimeEntry | null;
   projects: readonly { id: string; name: string; color: string }[] | undefined;
   recents: readonly RecentEntry[] | undefined;
   unsent: number;
   t: Translator<"shell">;
+  autopilot?: DesktopAutopilotBrief | null;
+  clock?: (iso: string) => string;
 }): DesktopTimerState {
   const { running, t } = input;
+  const autopilot = input.autopilot?.active === true ? input.autopilot : null;
+  const pausedUntil = autopilot?.pausedUntil ?? null;
   const project = running?.projectId ? input.projects?.find((candidate) => candidate.id === running.projectId) : undefined;
   const recents: DesktopRecent[] = (input.recents ?? []).slice(0, TRAY_RECENTS).map((recent) => ({
     key: recent.key,
@@ -66,9 +77,11 @@ export function buildDesktopTimerState(input: {
             startedAt: running.start,
             projectName: project?.name ?? null,
             projectColor: project?.color ?? null,
+            ...(isAutopilotTimer(autopilot, running) ? { autopilot: true } : {}),
           },
     recents,
     unsent: input.unsent,
+    autopilot: autopilot === null ? null : { pausedUntil },
     labels: {
       stop: t("desktop.tray.stop"),
       startTimer: t("desktop.tray.startTimer"),
@@ -84,6 +97,12 @@ export function buildDesktopTimerState(input: {
       quitUnsentButton: t("desktop.quitUnsent.button"),
       runningBadge: t("desktop.tray.runningBadge"),
       restartToUpdate: t("desktop.tray.restartToUpdate"),
+      autopilotPause: t("desktop.tray.autopilotPause"),
+      autopilotResume: t("desktop.tray.autopilotResume"),
+      autopilotPaused:
+        pausedUntil === null || input.clock === undefined
+          ? ""
+          : t("desktop.tray.autopilotPaused", { time: input.clock(new Date(pausedUntil).toISOString()) }),
     },
   };
 }
@@ -96,8 +115,9 @@ export function buildDesktopTimerState(input: {
  * the same optimistic, queued row as a stop from the bar.
  *
  * Mounted once, in `AppShell`, beside the offline queue. On the web it does
- * nothing at all: every query is disabled, every effect returns before
- * touching a bridge that is not there, and it renders nothing. In the desktop
+ * nothing at all: every query of its own is disabled (the workspace settings
+ * it formats with are the shell's, already cached), every effect returns
+ * before touching a bridge that is not there, and it renders nothing. In the desktop
  * app it also keeps the idle and runaway guards running off /app/track
  * (`DesktopAttentionGuards`), since a hidden window can sit on any screen.
  */
@@ -113,6 +133,8 @@ export function DesktopBridgePublisher({
   const utils = trpc.useUtils();
   const mutations = useEntryMutations();
   const { pending } = useOfflineQueueState();
+  const autopilot = useDesktopAutopilotBrief();
+  const { clock } = useFormatSettings();
 
   // The running entry without the once-a-second tick `useRunningEntry` adds:
   // the tray computes its own clock from `startedAt`.
@@ -128,8 +150,10 @@ export function DesktopBridgePublisher({
         recents: recents.data,
         unsent: pending,
         t,
+        autopilot,
+        clock,
       }),
-    [running, projects.data, recents.data, pending, t],
+    [running, projects.data, recents.data, pending, t, autopilot, clock],
   );
 
   // Published on change only; `JSON.stringify` because the object is rebuilt

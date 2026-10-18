@@ -519,6 +519,17 @@ User docs: `docs-site/docs/desktop.md` → Autopilot. What fails quietly if brok
 - **Only filings cross to the server.** App names and titles never leave main
   except as the plan's display name; the entry carries the rule's or the
   earlier entry's fields. Undo dismisses the span, so it is not suggested again.
+- **A pause is main's, and it belongs to the account.** The controller keeps
+  `{ account: "<userId>:", until }` (`AUTOPILOT_PAUSE_MS`, persisted in
+  `state.json`): a workspace switch and "Delete all activity" keep it,
+  `forget` (sign-out) and switching Autopilot off end it. Paused, `plan` still
+  does its ownership bookkeeping, so a timer stopped or edited meanwhile is the
+  person's, and decides nothing. The tray item calls main directly
+  (`pauseAutopilot` into `installDesktop`); its labels and the ✦ on an
+  Autopilot-owned timer come from the renderer like every tray string
+  (`DesktopTimerState.autopilot`, `running.autopilot`). Main pushes nothing
+  when a pause runs out, so every surface compares `pausedUntil` with the
+  clock (`autopilotPausedAt`, `useActivePause`, a tray redraw at the end).
 
 **Simulator and emulator runs never take focus either.** `IOS_HEADLESS=1 pnpm
 dev:ios` drives simctl only (without it Simulator.app is opened with `open -g`),

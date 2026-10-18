@@ -38,7 +38,7 @@ import path from "node:path";
 
 import type { ActivityInterval, ActivityRule } from "../../../packages/core/src/activity/index.ts";
 import type { DesktopActivitySettings } from "../../../packages/shared/src/desktop-bridge.ts";
-import type { OwnedTimer } from "./autopilot.ts";
+import type { AutopilotPause, OwnedTimer } from "./autopilot.ts";
 import type { OpenSegment, StoredSegment } from "./model.ts";
 import { DEFAULT_ACTIVITY_SETTINGS, parseActivitySettings } from "./settings.ts";
 
@@ -82,6 +82,9 @@ export interface ActivityStore {
   /** The running timer Autopilot opened, so a restart still knows it is Autopilot's. */
   autopilotOwned: () => OwnedTimer | null;
   saveAutopilotOwned: (owned: OwnedTimer | null) => void;
+  /** "Pause Autopilot for an hour", so a restart inside that hour stays paused. */
+  autopilotPause: () => AutopilotPause | null;
+  saveAutopilotPause: (pause: AutopilotPause | null) => void;
 
   readOpen: () => OpenSegment | null;
   writeOpen: (open: OpenSegment | null) => void;
@@ -112,6 +115,8 @@ interface StateFile {
   dismissals: StoredDismissal[];
   /** Absent in a file from before Autopilot. */
   autopilotOwned?: OwnedTimer | null;
+  /** Absent in a file from before the pause. */
+  autopilotPause?: AutopilotPause | null;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -189,6 +194,14 @@ export function parseOwnedTimer(value: unknown): OwnedTimer | null {
   return { scope, start, filingKey, app: parsedApp, via, logId };
 }
 
+export function parseAutopilotPause(value: unknown): AutopilotPause | null {
+  if (!isRecord(value)) return null;
+  const { account, until } = value;
+  // `<userId>:`, exactly as `accountPrefixOf` writes it.
+  if (typeof account !== "string" || !/^[^:]+:$/.test(account) || !finite(until)) return null;
+  return { account, until };
+}
+
 function defaultState(): StateFile {
   return { v: ACTIVITY_FORMAT_VERSION, settings: { ...DEFAULT_ACTIVITY_SETTINGS }, scope: null, rules: [], dismissals: [] };
 }
@@ -263,6 +276,7 @@ export function createActivityStore(userData: string, clock: () => number = Date
           ? parsed.dismissals.map(parseDismissal).filter((d): d is StoredDismissal => d !== null)
           : [],
         autopilotOwned: parseOwnedTimer(parsed.autopilotOwned),
+        autopilotPause: parseAutopilotPause(parsed.autopilotPause),
       };
     } else {
       // Unreadable: kept aside for whoever wants to look, then defaults.
@@ -392,6 +406,12 @@ export function createActivityStore(userData: string, clock: () => number = Date
       state = { ...state, autopilotOwned: owned };
       saveStateFile();
     },
+    autopilotPause: () => state.autopilotPause ?? null,
+    saveAutopilotPause: (pause) => {
+      if (locked()) return;
+      state = { ...state, autopilotPause: pause };
+      saveStateFile();
+    },
 
     readOpen: () => {
       if (locked()) return null;
@@ -431,6 +451,7 @@ export function createActivityStore(userData: string, clock: () => number = Date
         rules: state.rules.filter((rule) => rule.scope.startsWith(keepPrefix)),
         dismissals: state.dismissals.filter((d) => d.scope.startsWith(keepPrefix)),
         autopilotOwned: state.autopilotOwned?.scope.startsWith(keepPrefix) === true ? state.autopilotOwned : null,
+        autopilotPause: state.autopilotPause?.account === keepPrefix ? state.autopilotPause : null,
       };
       saveStateFile();
     },

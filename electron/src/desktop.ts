@@ -7,7 +7,9 @@
  *
  * The renderer owns the timer (the socket, the offline queue, the locale);
  * this process draws what it publishes and sends commands back. Nothing here
- * starts or stops a timer by itself.
+ * starts or stops a timer by itself. The one tray item that does not go back
+ * to the renderer is Autopilot's pause, whose state lives in this process
+ * (activity/autopilot.ts) and is handed straight to it.
  *
  * **Headless** (tests, agents): no tray icon, no global shortcut registered
  * with the OS, no notification posted, no dialog, no badge and no login item.
@@ -78,7 +80,7 @@ const LABELS_FILE = "tray-labels.json";
 export interface DesktopTestHook {
   state: () => DesktopTimerState | null;
   settings: () => DesktopSettings;
-  trayMenu: () => TrayMenuItem[] | null;
+  trayMenu: (nowMs?: number) => TrayMenuItem[] | null;
   trayTitle: (nowMs?: number) => string;
   trayTooltip: (nowMs?: number) => string;
   clickTray: (id: string) => void;
@@ -124,6 +126,8 @@ export function installDesktop(options: {
   mainWindow: () => BrowserWindow | null;
   /** Show and focus the window (a no-op headless). */
   reveal: () => void;
+  /** "Pause Autopilot for an hour" (true) and "Resume Autopilot" (false). */
+  pauseAutopilot?: (paused: boolean) => void;
 }): DesktopController {
   const { headless, platform, userData } = options;
 
@@ -131,6 +135,8 @@ export function installDesktop(options: {
   let state: DesktopTimerState | null = null;
   let tray: TrayView | null = null;
   let tick: ReturnType<typeof setInterval> | null = null;
+  /** Redraws the tray the moment an Autopilot pause runs out, when nothing else would. */
+  let pauseEnd: ReturnType<typeof setTimeout> | null = null;
   let suspendTimer: ReturnType<typeof setTimeout> | null = null;
   let quitNoticeShown = false;
   let shuttingDown = false;
@@ -295,6 +301,23 @@ export function installDesktop(options: {
       clearInterval(tick);
       tick = null;
     }
+    if (pauseEnd !== null) {
+      clearTimeout(pauseEnd);
+      pauseEnd = null;
+    }
+    // The menu swaps Resume back to Pause by itself once the hour is up, but
+    // only when it is redrawn, and an idle tray is not redrawn every second.
+    const until = state?.autopilot?.pausedUntil ?? null;
+    const left = until === null ? 0 : until - Date.now();
+    if (tray !== null && tick === null && left > 0) {
+      pauseEnd = setTimeout(
+        () => {
+          pauseEnd = null;
+          redraw();
+        },
+        Math.min(left + 50, 2 ** 31 - 1),
+      );
+    }
   };
 
   let overlayIcon: Electron.NativeImage | null = null;
@@ -319,6 +342,8 @@ export function installDesktop(options: {
       reveal();
       send({ kind: "compose" });
     } else if (id.startsWith("continue:")) send({ kind: "continue", key: id.slice("continue:".length) });
+    else if (id === "autopilot-pause") options.pauseAutopilot?.(true);
+    else if (id === "autopilot-resume") options.pauseAutopilot?.(false);
     else if (id === "open") reveal();
     else if (id === "settings") {
       reveal();
@@ -487,6 +512,7 @@ export function installDesktop(options: {
     tray?.destroy();
     tray = null;
     if (tick !== null) clearInterval(tick);
+    if (pauseEnd !== null) clearTimeout(pauseEnd);
   });
 
   // ── start ────────────────────────────────────────────────────────────
@@ -497,7 +523,8 @@ export function installDesktop(options: {
     const hook: DesktopTestHook = {
       state: () => state,
       settings: () => settings,
-      trayMenu: () => (settings.showInTray ? trayMenuModel(drawnState(), { updateReady: updateReady() }) : null),
+      trayMenu: (nowMs = Date.now()) =>
+        settings.showInTray ? trayMenuModel(drawnState(), { updateReady: updateReady(), nowMs }) : null,
       trayTitle: (nowMs = Date.now()) => trayTitle(drawnState(), nowMs, platform),
       trayTooltip: (nowMs = Date.now()) => trayTooltip(drawnState(), nowMs),
       clickTray: onTrayItem,

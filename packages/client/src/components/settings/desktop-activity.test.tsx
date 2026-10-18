@@ -29,7 +29,7 @@ const baseSnapshot = (over: Partial<DesktopActivitySnapshot> = {}): DesktopActiv
   storedSegments: 0,
   recentApps: [],
   rules: [],
-  autopilot: { active: false, owned: null, watch: null, log: [], learnedApps: 0 },
+  autopilot: { active: false, owned: null, watch: null, log: [], learnedApps: 0, pausedUntil: null },
   ...over,
 });
 

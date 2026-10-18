@@ -100,6 +100,7 @@ const bridge: DesktopBridge = {
       plan: (input) => ipcRenderer.invoke(DESKTOP_IPC.activityAutopilotPlan, input),
       applied: (result) => ipcRenderer.invoke(DESKTOP_IPC.activityAutopilotApplied, result),
       hold: (input) => ipcRenderer.invoke(DESKTOP_IPC.activityAutopilotHold, input),
+      pause: (input) => ipcRenderer.invoke(DESKTOP_IPC.activityAutopilotPause, input),
     },
   },
 

@@ -91,7 +91,7 @@ const snapshot: DesktopActivitySnapshot = {
   storedSegments: 3,
   recentApps: [{ key: "com.example.editor", name: "Editor" }],
   rules: [],
-  autopilot: { active: false, owned: null, watch: null, log: [], learnedApps: 0 },
+  autopilot: { active: false, owned: null, watch: null, log: [], learnedApps: 0, pausedUntil: null },
 };
 
 const bridge = (list: DesktopActivitySuggestion[]) => {

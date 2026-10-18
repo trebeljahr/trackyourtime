@@ -6,15 +6,16 @@ import { Sparkles } from "lucide-react";
 import type { DesktopActivitySnapshot, DesktopAutopilotLogEntry } from "@starter/shared";
 
 import { filingLabel } from "@/components/activity/autopilot-driver";
+import { useActivePause } from "@/components/activity/use-desktop-activity";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useT } from "@/i18n/use-t";
 import { cn } from "@/lib/utils";
 
 /**
- * The top of /app/activity in the desktop app: whether Autopilot is on, what
- * it is looking at, and everything it did in the last day — each start with
- * its Undo while that timer is still its own.
+ * The top of /app/activity in the desktop app: whether Autopilot is on (and
+ * paused), what it is looking at, and everything it did in the last day —
+ * each start with its Undo while that timer is still its own.
  */
 export function AutopilotPanel({
   snapshot,
@@ -22,6 +23,7 @@ export function AutopilotPanel({
   clock,
   span,
   onToggle,
+  onPause,
   onUndo,
   busy,
 }: {
@@ -30,10 +32,13 @@ export function AutopilotPanel({
   clock: (ms: number) => string;
   span: (ms: number) => string;
   onToggle: (on: boolean) => void;
+  /** Pause for an hour (true), or resume now (false). */
+  onPause: (paused: boolean) => void;
   onUndo: (entry: DesktopAutopilotLogEntry) => void;
   busy: boolean;
 }): React.JSX.Element | null {
   const t = useT("activity");
+  const pausedUntil = useActivePause(snapshot.autopilot?.pausedUntil);
   if (!snapshot.support.supported || snapshot.autopilot === undefined) return null;
   const { settings } = snapshot;
   const state = snapshot.autopilot;
@@ -73,11 +78,13 @@ export function AutopilotPanel({
   const watch = state.watch;
   const owned = state.owned;
   const threshold = span(settings.autopilotStartMinutes * 60_000);
-  const status = ((): string => {
+  const status = ((): string | null => {
     if (owned !== null) {
       const started = state.log.find((entry) => entry.id === owned.logId);
       return t("autopilot.panel.tracking", { label: filingLabel(started?.filing?.fields ?? {}, projectName, t) });
     }
+    // The paused line below says why nothing happens.
+    if (pausedUntil !== null) return null;
     if (watch === null) return t("autopilot.panel.quiet");
     if (watch.held) return t("autopilot.panel.held");
     if (watch.filing === null) return t("autopilot.panel.unknown", { app: watch.app.name });
@@ -107,11 +114,28 @@ export function AutopilotPanel({
               {t("autopilot.panel.watching", { app: watch.app.name, span: span(watch.creditedMs) })}
             </p>
           ) : null}
-          <p className="text-sm" data-testid="autopilot-status">
-            {status}
-          </p>
+          {status !== null ? (
+            <p className="text-sm" data-testid="autopilot-status">
+              {status}
+            </p>
+          ) : null}
+          {pausedUntil !== null ? (
+            <p className="text-sm" data-testid="autopilot-paused">
+              {t("autopilot.panel.paused", { time: clock(pausedUntil) })}
+            </p>
+          ) : null}
           <p className="text-xs text-muted-foreground">{t("autopilot.panel.learned", { count: state.learnedApps })}</p>
         </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="shrink-0"
+          onClick={() => onPause(pausedUntil === null)}
+          data-testid={pausedUntil === null ? "autopilot-pause" : "autopilot-resume"}
+        >
+          {pausedUntil === null ? t("autopilot.panel.pause") : t("autopilot.panel.resume")}
+        </Button>
         <label className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           {on ? t("autopilot.panel.on") : t("autopilot.panel.off")}
           <Switch

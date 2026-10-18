@@ -6,10 +6,17 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { filingKeyOf } from "../../../packages/core/src/activity/index.ts";
 import type { DesktopAutopilotPlan, DesktopAutopilotRunning } from "../../../packages/shared/src/desktop-bridge.ts";
-import { HOLD_BREAK_MS, SETTLE_MS } from "./autopilot.ts";
-import { parseAutopilotApplied, parseAutopilotHistory, parseAutopilotHold, parseAutopilotPlanInput } from "./ipc-parse.ts";
+import { AUTOPILOT_PAUSE_MS, HOLD_BREAK_MS, SETTLE_MS } from "./autopilot.ts";
+import {
+  parseAutopilotApplied,
+  parseAutopilotHistory,
+  parseAutopilotHold,
+  parseAutopilotPause,
+  parseAutopilotPlanInput,
+} from "./ipc-parse.ts";
 import { createActivityService, type ActivityService } from "./service.ts";
 import { createFakeFrontmostSource, type FakeFrontmostSource } from "./source-fake.ts";
+import { parseAutopilotPause as parseStoredPause } from "./store.ts";
 import { createActivityTestHook, type ActivityTestHook } from "./test-hook.ts";
 
 const MIN = 60_000;
@@ -72,12 +79,14 @@ async function setUp(): Promise<void> {
   await service.addRule({ pattern: CODE.key, description: API.description, projectId: API.projectId });
 }
 
+// An intersection, not `Extract`: the start and switch plans share one member
+// whose `kind` is `"start" | "switch"`, which `Extract<…, { kind: "start" }>` drops.
 const assertKind = <K extends DesktopAutopilotPlan["kind"]>(
   value: DesktopAutopilotPlan,
   kind: K,
-): Extract<DesktopAutopilotPlan, { kind: K }> => {
+): DesktopAutopilotPlan & { kind: K } => {
   assert.equal(value.kind, kind);
-  return value as Extract<DesktopAutopilotPlan, { kind: K }>;
+  return value as DesktopAutopilotPlan & { kind: K };
 };
 
 beforeEach(() => {
@@ -255,6 +264,99 @@ describe("autopilot", () => {
   });
 });
 
+describe("autopilot pause", () => {
+  const pausedUntil = async (): Promise<number | null> => (await service.snapshot()).autopilot.pausedUntil;
+
+  it("holds every decision back for an hour, then Autopilot carries on", async () => {
+    await setUp();
+    await stay(FIGMA, T0, T0 + 3 * MIN);
+    await plan();
+    assert.notEqual((await service.snapshot()).autopilot.watch, null);
+
+    await service.autopilotPause({ paused: true });
+    const until = T0 + 3 * MIN + AUTOPILOT_PAUSE_MS;
+    assert.equal(await pausedUntil(), until);
+    assert.equal((await service.snapshot()).autopilot.watch, null, "nothing is being watched while paused");
+
+    await stay(FIGMA, T0 + 3 * MIN + 30_000, T0 + 30 * MIN);
+    assert.deepEqual(await plan(), { kind: "none" });
+    assert.equal((await service.snapshot()).autopilot.watch, null);
+
+    // The hour is up: the pause reads as none, and the work in front starts.
+    await stay(FIGMA, T0 + 30 * MIN + 30_000, until + MIN);
+    assert.equal(await pausedUntil(), null);
+    assertKind(await plan(), "start");
+  });
+
+  it("leaves Autopilot's own timer running and its own, and still notices a stop by hand", async () => {
+    await setUp();
+    await stay(FIGMA, T0, T0 + 6 * MIN);
+    const start = assertKind(await plan(), "start");
+    await service.autopilotApplied({ token: start.token, ok: true, written: WEBSITE });
+    await plan({ running: running(T0, WEBSITE) });
+    await service.autopilotPause({ paused: true });
+
+    // Code for long enough to switch: paused, it does not.
+    await stay(CODE, T0 + 6 * MIN + 30_000, T0 + 20 * MIN);
+    assert.deepEqual(await plan({ running: running(T0, WEBSITE) }), { kind: "none" });
+    assert.equal((await service.snapshot()).autopilot.owned?.start, T0);
+
+    // Stopped by hand while paused: no longer Autopilot's.
+    assert.deepEqual(await plan({ running: null, tracked: [{ start: T0, end: T0 + 20 * MIN }] }), { kind: "none" });
+    assert.equal((await service.snapshot()).autopilot.owned, null);
+  });
+
+  it("Resume ends it at once", async () => {
+    await setUp();
+    await stay(FIGMA, T0, T0 + 6 * MIN);
+    await service.autopilotPause({ paused: true });
+    assert.deepEqual(await plan(), { kind: "none" });
+    await service.autopilotPause({ paused: false });
+    assert.equal(await pausedUntil(), null);
+    assertKind(await plan(), "start");
+  });
+
+  it("is not offered while Autopilot is off", async () => {
+    await service.setScope({ userId: "u1", workspaceId: "w1" });
+    await service.updateSettings({ enabled: true });
+    await service.autopilotPause({ paused: true });
+    await service.updateSettings({ autopilot: true });
+    assert.equal(await pausedUntil(), null);
+  });
+
+  it("survives a restart, a workspace switch and Delete all activity", async () => {
+    await setUp();
+    await service.autopilotPause({ paused: true });
+    const until = clock + AUTOPILOT_PAUSE_MS;
+    service.dispose();
+    boot();
+    assert.equal(await pausedUntil(), until);
+    await service.setScope({ userId: "u1", workspaceId: "w2" });
+    assert.equal(await pausedUntil(), until, "the pause is the person's, not the workspace's");
+    await service.wipe();
+    assert.equal(await pausedUntil(), until);
+  });
+
+  it("ends on sign-out, on another account, and when Autopilot is switched off", async () => {
+    await setUp();
+    await service.autopilotPause({ paused: true });
+    await service.forget();
+    await service.setScope({ userId: "u1", workspaceId: "w1" });
+    assert.equal(await pausedUntil(), null, "a sign-out ends it for good, not only while signed out");
+
+    await service.autopilotPause({ paused: true });
+    await service.setScope({ userId: "u2", workspaceId: "w9" });
+    await service.setScope({ userId: "u1", workspaceId: "w1" });
+    assert.equal(await pausedUntil(), null);
+
+    await service.autopilotPause({ paused: true });
+    assert.notEqual(await pausedUntil(), null);
+    await service.updateSettings({ autopilot: false });
+    await service.updateSettings({ autopilot: true });
+    assert.equal(await pausedUntil(), null, "switching it back on means now");
+  });
+});
+
 describe("autopilot ipc parsing", () => {
   it("narrows plan input", () => {
     assert.deepEqual(parseAutopilotPlanInput({ running: null, tracked: [] }), { running: null, tracked: [] });
@@ -274,5 +376,17 @@ describe("autopilot ipc parsing", () => {
     assert.equal(parseAutopilotApplied({ token: "a", ok: true, written: { description: 1 } }), null);
     assert.deepEqual(parseAutopilotHold({ appKey: " Com.Example.App " }), { appKey: "com.example.app" });
     assert.equal(parseAutopilotHold({ dismiss: { start: 2, end: 1 } }), null);
+  });
+
+  it("narrows a pause, from IPC and from state.json", () => {
+    assert.deepEqual(parseAutopilotPause({ paused: true }), { paused: true });
+    assert.deepEqual(parseAutopilotPause({ paused: false }), { paused: false });
+    assert.equal(parseAutopilotPause({ paused: "yes" }), null);
+    assert.deepEqual(parseAutopilotPause({ paused: true, until: 1 }), { paused: true }, "main picks the length");
+    assert.equal(parseAutopilotPause(null), null);
+    assert.deepEqual(parseStoredPause({ account: "u1:", until: 5 }), { account: "u1:", until: 5 });
+    assert.equal(parseStoredPause({ account: "u1:w1", until: 5 }), null);
+    assert.equal(parseStoredPause({ account: "u1:", until: "later" }), null);
+    assert.equal(parseStoredPause(undefined), null);
   });
 });

@@ -206,6 +206,9 @@ function start(): void {
       isPackaged: app.isPackaged,
       mainWindow: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null),
       reveal: showMain,
+      // Installed just below; the tray only offers this once a renderer has
+      // published an Autopilot that is on, which is long after.
+      pauseAutopilot: (paused) => activity?.pauseAutopilot(paused),
     });
     /*
      * Activity capture (Stage 8). Off until the person turns it on; headless
