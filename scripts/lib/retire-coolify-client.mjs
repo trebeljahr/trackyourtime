@@ -87,8 +87,12 @@ export const audit = async (deps, options = {}) => {
   // The site must already be the Worker's, or deleting the app is an outage.
   const zone = await deps.cloudflare.getZoneByName(SITE_HOST);
   let acmeRoute = null;
-  if (!zone) refusals.push(`the Cloudflare zone ${SITE_HOST} was not found`);
-  else {
+  if (!zone) {
+    refusals.push(
+      `hatchkit's Cloudflare provisioner token cannot see the zone ${SITE_HOST}; add it to the token's Zone Resources (Zone Read, Workers Routes Edit) in the dashboard (token hatchkit-workers-provisioner)`,
+    );
+  }
+  if (zone) {
     const routes = await deps.cloudflare.listWorkerRoutes(zone.id);
     const site = routes.find((route) => route.pattern === SITE_ROUTE);
     if (!site) refusals.push(`there is no route ${SITE_ROUTE}: Coolify still serves the site`);
