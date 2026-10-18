@@ -10,8 +10,9 @@ Two hosts of one zone:
 The web app moved from the Coolify app `trackyourtime-client`
 (`docker-compose.client.yml`) to the Worker on 2026-10-18
 ([Web app on Cloudflare](#web-app-on-cloudflare)). The sections below that
-describe two Coolify apps are its history, and the Coolify client app keeps
-running, unrouted, until it is retired.
+describe two Coolify apps are its history. The Coolify client apps
+(`tracktime-client` and the stopped `tracktime-client-legacy-compose`) were
+deleted on 2026-10-18.
 
 ## Why a new domain — the history, because both halves still matter
 
@@ -216,15 +217,16 @@ to `/login/` (307; `serve.mjs` resolved it in place).
 - In a hurry: Cloudflare dashboard → Workers → `trackyourtime-client` →
   Deployments → roll back to an earlier version. It takes seconds and is
   complete, since a version keeps its own files.
-- Away from the Worker, while the Coolify client app still runs: delete the
-  `trackyourtime.dev/*` route. The Coolify app answered again within about
-  8 s on the canary. It serves the commit it last deployed (`42e12946`).
+- There is no Coolify client app to fall back to any more (deleted
+  2026-10-18). Leaving the Worker would mean building and deploying a client
+  image again; the Worker's own versions are the way back.
 
-### Retiring the Coolify client app (after the soak)
+### Retiring the Coolify client app
 
-The Coolify app `trackyourtime-client` keeps running, unrouted, as the quick
-way back until it is retired. One guarded script does the retirement, in an
-interactive terminal on the owner's machine:
+The Coolify client apps were deleted on 2026-10-18 by this script, run with
+`--skip-soak`; the GHCR package and the `COOLIFY_CLIENT_*` secrets were still
+left after that run. It is idempotent, so running it again deletes only what
+is left. Run it in an interactive terminal on the owner's machine:
 
 ```bash
 node scripts/ops/retire-coolify-client.mjs --dry-run   # checks and the plan only
