@@ -220,6 +220,26 @@ to `/login/` (307; `serve.mjs` resolved it in place).
   `trackyourtime.dev/*` route. The Coolify app answered again within about
   8 s on the canary. It serves the commit it last deployed (`42e12946`).
 
+### Retiring the Coolify client app (after the soak)
+
+The Coolify app `trackyourtime-client` keeps running, unrouted, as the quick
+way back until it is retired. One guarded script does the retirement:
+
+```bash
+HATCHKIT_KEYCHAIN_ACCESS=allow node scripts/ops/retire-coolify-client.mjs            # audit, read-only
+HATCHKIT_KEYCHAIN_ACCESS=allow node scripts/ops/retire-coolify-client.mjs --execute  # retire
+```
+
+It deletes the app (volumes kept) and its backup sources, then the route
+`trackyourtime.dev/.well-known/acme-challenge/*`, then the four
+`COOLIFY_CLIENT_*` secrets. It refuses with nothing changed before
+2026-10-25 (`--early` overrides that one check), while the
+`trackyourtime.dev/*` route is missing or `/version.json` does not name a
+commit on `main`, and when the app routes anything but the apex. A run that
+stops half way can be run again. Owner-only: it borrows hatchkit's Coolify
+and Cloudflare credentials from the keychain. Logic and tests:
+`scripts/lib/retire-coolify-client.mjs`.
+
 ### One-time setup (done 2026-10-18)
 
 1. The Worker and its first version: a local export of the cut-over commit,
