@@ -1,7 +1,7 @@
 /**
  * Host globs, for filing rules and exclusion lists alike.
  */
-import type { ActivityRule } from "./types.js";
+import type { ActivityRule, ProposedEntryFields } from "./types.js";
 
 const escapeRegExp = (text: string): string =>
   text.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
@@ -75,4 +75,15 @@ export function matchRule(
     if (rule !== undefined) return rule;
   }
   return null;
+}
+
+/** What a rule files a block with, in the shape an entry create takes. */
+export function ruleProposal(rule: ActivityRule): ProposedEntryFields {
+  const proposed: ProposedEntryFields = {};
+  if (rule.description !== undefined) proposed.description = rule.description;
+  if (rule.projectId !== undefined) proposed.projectId = rule.projectId;
+  if (rule.taskId !== undefined) proposed.taskId = rule.taskId;
+  if (rule.tagIds !== undefined) proposed.tagIds = [...rule.tagIds];
+  if (rule.billable !== undefined) proposed.billable = rule.billable;
+  return proposed;
 }

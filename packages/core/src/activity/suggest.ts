@@ -1,7 +1,7 @@
 /**
  * Turning captured activity into entries worth confirming.
  */
-import { matchRule } from "./rules.js";
+import { matchRule, ruleProposal } from "./rules.js";
 import {
   mergeSegments,
   subtractIntervals,
@@ -15,7 +15,6 @@ import type {
   ActivitySegment,
   ActivitySuggestion,
   BuildSuggestionsOptions,
-  ProposedEntryFields,
 } from "./types.js";
 
 export const DEFAULT_SUGGESTION_GAP_MINUTES = 10;
@@ -25,16 +24,6 @@ export const DEFAULT_SUGGESTION_MAX_KEYS = 5;
 const MINUTE_MS = 60_000;
 
 type Piece = ActivityInterval & { key: string };
-
-const proposedFrom = (rule: ActivityRule): ProposedEntryFields => {
-  const proposed: ProposedEntryFields = {};
-  if (rule.description !== undefined) proposed.description = rule.description;
-  if (rule.projectId !== undefined) proposed.projectId = rule.projectId;
-  if (rule.taskId !== undefined) proposed.taskId = rule.taskId;
-  if (rule.tagIds !== undefined) proposed.tagIds = [...rule.tagIds];
-  if (rule.billable !== undefined) proposed.billable = rule.billable;
-  return proposed;
-};
 
 const compareKeys = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -135,7 +124,7 @@ export function buildSuggestions(
       end,
       topKeys,
       ...(rule !== null ? { ruleId: rule.id } : {}),
-      proposed: rule !== null ? proposedFrom(rule) : {},
+      proposed: rule !== null ? ruleProposal(rule) : {},
     });
   }
 
