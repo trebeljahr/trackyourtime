@@ -1,4 +1,4 @@
-// Synthetic-only profiler for the report exports. Requires an explicitly
+// Synthetic-only profiler for the reports and their exports. Requires an explicitly
 // supplied loopback Mongo URI; creates a disposable database, never reads
 // existing application records, and drops the database when it is done.
 //
@@ -28,13 +28,22 @@ const WORKSPACE = "fixture";
 const OWNER = "fixture-owner";
 const RANGE = { from: "2000-01-01", to: "2030-12-31", timeZone: "Europe/Berlin" };
 
-/** Cases this build knows. `trpc-*` exist on every build since the exports. */
+/**
+ * Cases this build knows. `trpc-*` exist on every build since the exports;
+ * `report-*` are the on-screen reports over the same 100k entries, measured
+ * with the JSON body tRPC's HTTP adapter would send.
+ */
 const CASES = [
   "trpc-csv",
   "trpc-pdf",
   "stream-csv",
   "stream-pdf",
   "stream-pdf-slow",
+  "report-summary",
+  "report-summary-day",
+  "report-detailed-page",
+  "report-weekly",
+  "stream-summary-pdf",
 ] as const;
 type Case = (typeof CASES)[number];
 
@@ -152,7 +161,20 @@ async function measure(which: Case, uri: string, dbName: string): Promise<void> 
   let bytes = 0;
   let digest = "";
   const input = { ...RANGE, report: "detailed" as const };
-  if (which === "trpc-csv" || which === "trpc-pdf") {
+  if (which.startsWith("report-")) {
+    const result =
+      which === "report-summary"
+        ? await caller.summary({ ...RANGE, groupBy: "project" })
+        : which === "report-summary-day"
+          ? await caller.summary({ ...RANGE, groupBy: "day" })
+          : which === "report-detailed-page"
+            ? await caller.detailed({ ...RANGE, limit: 50 })
+            : await caller.weekly({ ...RANGE, weekStart: "2026-09-28" });
+    const body = Buffer.from(JSON.stringify({ result: { data: result } }), "utf8");
+    bytes = body.length;
+    digest = createHash("sha256").update(body).digest("hex").slice(0, 16);
+    if (process.env.PROFILE_OUT) writeFileSync(`${process.env.PROFILE_OUT}/${which}.json`, body);
+  } else if (which === "trpc-csv" || which === "trpc-pdf") {
     const result = which === "trpc-csv"
       ? await caller.exportCsv(input)
       : await caller.exportPdf({ ...input, locale: "en" });
@@ -175,7 +197,9 @@ async function measure(which: Case, uri: string, dbName: string): Promise<void> 
     const scope = { workspaceId: WORKSPACE, visibility: { userId: OWNER, canViewOthersTime: true, canViewOthersMoney: true } };
     const plan = await planReportExport(
       scope,
-      { ...input, format: which === "stream-csv" ? "csv" : "pdf", locale: "en" },
+      which === "stream-summary-pdf"
+        ? { ...RANGE, report: "summary", groupBy: "project", format: "pdf", locale: "en" }
+        : { ...input, format: which === "stream-csv" ? "csv" : "pdf", locale: "en" },
       OWNER,
     );
     const kept: Buffer[] = [];

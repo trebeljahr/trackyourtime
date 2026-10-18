@@ -40,9 +40,8 @@ import {
   exportPdfSchema,
   formatDuration,
   summaryReportSchema,
-  sumCurrencyAmounts,
   singleCurrencyMoney,
-  type CurrencyAmount,
+  type CurrencyAmountsAccumulator,
   trackedSpanSchema,
   addDaysToKey,
   dayKeyInZone,
@@ -128,6 +127,20 @@ const DEFAULT_DETAILED_LIMIT = 50;
 const EXPORT_PAGE_SIZE = 500;
 /** 200 × 500 = 100k entries — far past any real export, but bounded. */
 const MAX_EXPORT_PAGES = 200;
+/** At most this many matching entries go into one export file. */
+const MAX_EXPORT_ROWS = EXPORT_PAGE_SIZE * MAX_EXPORT_PAGES;
+/**
+ * Joined entries per query when a report folds its whole range (the summary,
+ * the weekly grid). Each carries its project, client and task documents, so a
+ * page is a few megabytes whatever the range holds.
+ */
+const REPORT_PAGE_SIZE = 1_000;
+/**
+ * Entries per query of a totals pass. It reads six fields and joins
+ * nothing, so its pages can be several times the joined ones for the same
+ * memory.
+ */
+const TOTALS_PAGE_SIZE = 5_000;
 const DAYS_PER_WEEK = 7;
 /** Ten years of daily buckets — a guard against a nonsense range DoSing us. */
 const MAX_TIMELINE_DAYS = 3_700;
@@ -437,6 +450,89 @@ const runJoinedQuery = async (
   return TimeEntry.aggregate<JoinedEntry>(pipeline);
 };
 
+/**
+ * Walk the matching entries newest first, `pageSize` at a time, stopping
+ * after `maxRows` — an export's cap; a report on screen has none. Keyset, not
+ * a server cursor: nothing stays open on the database while a slow client
+ * reads, and a page that is never asked for costs nothing.
+ *
+ * The order is `start` then `_id`, both descending: the order one query of
+ * the whole range always returned. So a report folding these pages meets its
+ * entries in exactly the sequence it used to meet them in one array — which
+ * is what keeps an order-sensitive figure (a cent sum, the first label a
+ * weekly row is given) the same — and both passes of an export see the same
+ * entries in the same order. Like any read that yields, an entry whose
+ * `start` is edited mid-walk can be met twice or not at all; the next report
+ * is right again.
+ */
+async function* keysetPages<T extends { _id: unknown; start: Date }>(
+  conditions: Record<string, unknown>[],
+  fetchPage: (conditions: Record<string, unknown>[], limit: number) => Promise<T[]>,
+  pageSize: number,
+  maxRows: number,
+): AsyncGenerator<T[]> {
+  let after: { start: Date; id: unknown } | null = null;
+  let remaining = maxRows;
+  while (remaining > 0) {
+    const limit = Math.min(pageSize, remaining);
+    const docs = await fetchPage(
+      after
+        ? [
+            ...conditions,
+            {
+              $or: [
+                { start: { $lt: after.start } },
+                { start: after.start, _id: { $lt: after.id } },
+              ],
+            },
+          ]
+        : conditions,
+      limit,
+    );
+    if (docs.length === 0) return;
+    yield docs;
+    remaining -= docs.length;
+    if (docs.length < limit) return;
+    const last = docs[docs.length - 1]!;
+    after = { start: last.start, id: last._id };
+  }
+}
+
+/** The joined entries of a report, a page at a time. */
+const joinedPages = (
+  workspaceId: string,
+  conditions: Record<string, unknown>[],
+  pageSize: number,
+  maxRows: number,
+): AsyncGenerator<JoinedEntry[]> =>
+  keysetPages(
+    conditions,
+    (pageConditions, limit) =>
+      runJoinedQuery(workspaceId, pageConditions, [{ $limit: limit }]),
+    pageSize,
+    maxRows,
+  );
+
+/**
+ * The fields a range total reads, and the author, a page at a time and
+ * joining nothing.
+ */
+const totalsPages = (
+  conditions: Record<string, unknown>[],
+  maxRows: number,
+) =>
+  keysetPages(
+    conditions,
+    (pageConditions, limit) =>
+      TimeEntry.find({ $and: pageConditions })
+        .sort({ start: -1, _id: -1 })
+        .limit(limit)
+        .select("start end durationSec billable hourlyRate currency authorId")
+        .lean(),
+    TOTALS_PAGE_SIZE,
+    maxRows,
+  );
+
 // ── per-entry measurement ────────────────────────────────────────────
 
 type MeasuredEntry = {
@@ -706,7 +802,6 @@ const groupIdentity = (
   groupBy: Exclude<ReportGroupBy, "tag">,
   workspaceId: string,
   calendar: Calendar,
-  memberLabels: ReadonlyMap<string, string>,
 ): GroupIdentity => {
   const { doc } = measured;
   const project = inWorkspace(doc.project, workspaceId);
@@ -715,11 +810,9 @@ const groupIdentity = (
 
   switch (groupBy) {
     case "member":
-      return {
-        key: doc.authorId,
-        label: memberLabels.get(doc.authorId) ?? FORMER_MEMBER_LABEL,
-        color: null,
-      };
+      // Named after the fold, once every author is known — see
+      // `buildSummary`. Until then the label is a placeholder nothing reads.
+      return { key: doc.authorId, label: FORMER_MEMBER_LABEL, color: null };
 
     case "project":
       return project
@@ -771,7 +864,7 @@ const groupIdentity = (
 export type GroupAccumulator = GroupIdentity & {
   seconds: number;
   billableSec: number;
-  amounts: CurrencyAmount[];
+  amounts: CurrencyAmountsAccumulator;
 };
 
 /** What one measured entry contributes to whichever groups it lands in. */
@@ -800,11 +893,11 @@ export const accumulateGroups = (
       ...identity,
       seconds: 0,
       billableSec: 0,
-      amounts: [],
+      amounts: currencyAmountsAccumulator(),
     };
     group.seconds += contribution.seconds;
     group.billableSec += contribution.billableSec;
-    if (contribution.amount !== 0) group.amounts.push({ amount: contribution.amount, currency: contribution.currency });
+    group.amounts.add({ amount: contribution.amount, currency: contribution.currency });
     groups.set(identity.key, group);
   }
 };
@@ -815,7 +908,7 @@ export const sortGroups = (
 ): SummaryGroup[] =>
   [...groups]
     .map(({ key, label, color, seconds, billableSec, amounts }) => {
-      const buckets = sumCurrencyAmounts(amounts);
+      const buckets = amounts.result();
       const scalar = singleCurrencyMoney(buckets, "");
       return { key, label, color, seconds, billableSec, amount: scalar.amount,
         currency: scalar.currency, amounts: buckets };
@@ -935,18 +1028,6 @@ export const buildSummary = async (
       moneyVisible,
     );
 
-  const docs = await runJoinedQuery(workspaceId, conditions);
-
-  // Names for a member grouping come from the authors of the MATCHED rows,
-  // never from the workspace's member list: a caller who may see only their
-  // own time learns their own name and nothing else.
-  const memberLabels =
-    groupBy === "member"
-      ? await loadMemberLabels(workspaceId, [
-          ...new Set(docs.map((doc) => doc.authorId)),
-        ])
-      : new Map<string, string>();
-
   // Tag labels come from ONE query, not from a join per entry: the tag list is
   // small, bounded by the workspace's own catalog, and every entry in the report
   // draws its labels from the same table. Archived tags are included on
@@ -976,54 +1057,71 @@ export const buildSummary = async (
   const groups = new Map<string, GroupAccumulator>();
   let totalSec = 0;
   let billableSec = 0;
-  const amounts: CurrencyAmount[] = [];
+  const amounts = currencyAmountsAccumulator();
+  // Every matched row's author, in the order the rows came — the member
+  // grouping is named from these once the fold is done.
+  const authorIds = new Set<string>();
 
-  for (const doc of docs) {
-    const measured = measureEntry(doc, range, nowMs, calendar);
-    if (!measured) continue;
+  // A page of joined entries at a time, never the whole range: what is kept
+  // between pages is bounded by the groups and the days, not by the entries.
+  for await (const docs of joinedPages(
+    workspaceId,
+    conditions,
+    REPORT_PAGE_SIZE,
+    Infinity,
+  )) {
+    for (const doc of docs) {
+      if (groupBy === "member") authorIds.add(doc.authorId);
+      const measured = measureEntry(doc, range, nowMs, calendar);
+      if (!measured) continue;
 
-    // ONCE per entry, whatever the grouping — these are the true totals and
-    // must not inherit the tag fan-out's deliberate over-count.
-    totalSec += measured.seconds;
-    billableSec += measured.billableSec;
-    if (measured.amount !== 0) amounts.push({ amount: measured.amount, currency: doc.currency });
+      // ONCE per entry, whatever the grouping — these are the true totals and
+      // must not inherit the tag fan-out's deliberate over-count.
+      totalSec += measured.seconds;
+      billableSec += measured.billableSec;
+      amounts.add({ amount: measured.amount, currency: doc.currency });
 
-    const identities =
-      groupBy === "tag"
-        ? tagGroupIdentities(measured.doc.tagIds, tagIndex)
-        : [
-            groupIdentity(
-              measured,
-              groupBy,
-              workspaceId,
-              calendar,
-              memberLabels,
-            ),
-          ];
+      const identities =
+        groupBy === "tag"
+          ? tagGroupIdentities(measured.doc.tagIds, tagIndex)
+          : [groupIdentity(measured, groupBy, workspaceId, calendar)];
 
-    accumulateGroups(groups, identities, {
-      seconds: measured.seconds,
-      billableSec: measured.billableSec,
-      amount: measured.amount,
-      currency: doc.currency,
-    });
+      accumulateGroups(groups, identities, {
+        seconds: measured.seconds,
+        billableSec: measured.billableSec,
+        amount: measured.amount,
+        currency: doc.currency,
+      });
 
-    for (const slice of measured.slices) {
-      // A slice can fall outside the timeline only if the clip math and the
-      // day enumeration disagree; skip rather than invent a bucket.
-      const point = timeline.get(slice.date);
-      if (!point) continue;
-      point.seconds += slice.seconds;
-      if (doc.billable) point.billableSec += slice.seconds;
+      for (const slice of measured.slices) {
+        // A slice can fall outside the timeline only if the clip math and the
+        // day enumeration disagree; skip rather than invent a bucket.
+        const point = timeline.get(slice.date);
+        if (!point) continue;
+        point.seconds += slice.seconds;
+        if (doc.billable) point.billableSec += slice.seconds;
 
-      const shares = sharesByDay.get(slice.date);
-      if (!shares) continue;
-      for (const identity of identities) {
-        shares.set(
-          identity.key,
-          (shares.get(identity.key) ?? 0) + slice.seconds,
-        );
+        const shares = sharesByDay.get(slice.date);
+        if (!shares) continue;
+        for (const identity of identities) {
+          shares.set(
+            identity.key,
+            (shares.get(identity.key) ?? 0) + slice.seconds,
+          );
+        }
       }
+    }
+  }
+
+  // Names for a member grouping come from the authors of the MATCHED rows,
+  // never from the workspace's member list: a caller who may see only their
+  // own time learns their own name and nothing else. Read after the fold,
+  // because only then is every author known; a group's key is its author id,
+  // so naming it changes nothing else.
+  if (groupBy === "member") {
+    const memberLabels = await loadMemberLabels(workspaceId, [...authorIds]);
+    for (const group of groups.values()) {
+      group.label = memberLabels.get(group.key) ?? FORMER_MEMBER_LABEL;
     }
   }
 
@@ -1038,7 +1136,7 @@ export const buildSummary = async (
 
   const sortedGroups: SummaryGroup[] = sortGroups(groups.values());
 
-  const totalAmounts = sumCurrencyAmounts(amounts);
+  const totalAmounts = amounts.result();
   const scalar = singleCurrencyMoney(totalAmounts, settings.currency);
   const result: SummaryReportResult = {
     totalSec,
@@ -1092,9 +1190,10 @@ export const buildDetailed = async (
   filters: ReportFilters,
   page: { cursor?: string; limit?: number },
   /**
-   * Range totals cost a full scan of the filtered set, so a caller walking
-   * every page can skip them. (The exports no longer do: they read their own
-   * pages, see `detailedExportPages`.)
+   * Range totals cost a pass over the whole filtered set (six fields a page
+   * at a time, see `totalsPages`), so a caller walking every page can skip
+   * them. (The exports no longer do: they read their own pages, see
+   * `detailedExportPages`.)
    */
   withTotals = true,
 ): Promise<DetailedReportResult> => {
@@ -1120,26 +1219,24 @@ export const buildDetailed = async (
   }
 
   // Range totals cover the WHOLE filtered set, not the current page — a
-  // paginated total would be a lie on every page but the last.
-  const allMatching = withTotals
-    ? await TimeEntry.find({ $and: conditions })
-        .select("start end durationSec billable hourlyRate currency")
-        .lean()
-    : [];
-
+  // paginated total would be a lie on every page but the last. Folded a
+  // page at a time, so a long range costs passes, not memory.
   let totalSec = 0;
-  const amounts: CurrencyAmount[] = [];
-  for (const entry of allMatching) {
-    const clipped = clipToRange(entry, range, nowMs);
-    if (!clipped) continue;
-    const { seconds } = clipped;
+  const amounts = currencyAmountsAccumulator();
+  if (withTotals) {
+    for await (const entries of totalsPages(conditions, Infinity)) {
+      for (const entry of entries) {
+        const clipped = clipToRange(entry, range, nowMs);
+        if (!clipped) continue;
+        const { seconds } = clipped;
 
-    totalSec += seconds;
-    const amount = entryAmount(
-      seconds,
-      entry.billable ? entry.hourlyRate : null,
-    );
-    if (amount !== 0) amounts.push({ amount, currency: entry.currency });
+        totalSec += seconds;
+        amounts.add({
+          amount: entryAmount(seconds, entry.billable ? entry.hourlyRate : null),
+          currency: entry.currency,
+        });
+      }
+    }
   }
 
   const pageConditions = [...conditions];
@@ -1175,7 +1272,7 @@ export const buildDetailed = async (
       ? encodeCursor(lastDoc.start, String(lastDoc._id))
       : undefined;
 
-  const totalAmounts = sumCurrencyAmounts(amounts);
+  const totalAmounts = amounts.result();
   const scalar = singleCurrencyMoney(totalAmounts, settings.currency);
   return projectDetailedReport(
     {
@@ -1238,41 +1335,48 @@ export const buildWeekly = async (
     return { days, rows: [], dayTotals, totalSec: 0, moneyVisible };
   }
 
-  const docs = await runJoinedQuery(workspaceId, conditions);
-
   const rows = new Map<string, WeeklyReportRow>();
   let totalSec = 0;
 
-  for (const doc of docs) {
-    const measured = measureEntry(doc, range, nowMs, calendar);
-    if (!measured) continue;
+  // A page of joined entries at a time, like the summary: a week of a busy
+  // workspace is still a lot of entries, and only the rows outlive a page.
+  for await (const docs of joinedPages(
+    workspaceId,
+    conditions,
+    REPORT_PAGE_SIZE,
+    Infinity,
+  )) {
+    for (const doc of docs) {
+      const measured = measureEntry(doc, range, nowMs, calendar);
+      if (!measured) continue;
 
-    const project = inWorkspace(doc.project, workspaceId);
-    const task = inWorkspace(doc.task, workspaceId);
-    const projectId = project ? String(project._id) : null;
-    const taskId = task ? String(task._id) : null;
-    const rowKey = `${projectId ?? ""}::${taskId ?? ""}`;
-    const projectLabel = project?.name ?? NO_PROJECT.label;
+      const project = inWorkspace(doc.project, workspaceId);
+      const task = inWorkspace(doc.task, workspaceId);
+      const projectId = project ? String(project._id) : null;
+      const taskId = task ? String(task._id) : null;
+      const rowKey = `${projectId ?? ""}::${taskId ?? ""}`;
+      const projectLabel = project?.name ?? NO_PROJECT.label;
 
-    const row = rows.get(rowKey) ?? {
-      projectId,
-      taskId,
-      label: task ? `${projectLabel} – ${task.name}` : projectLabel,
-      color: project?.color ?? null,
-      daySeconds: days.map(() => 0),
-      totalSec: 0,
-    };
+      const row = rows.get(rowKey) ?? {
+        projectId,
+        taskId,
+        label: task ? `${projectLabel} – ${task.name}` : projectLabel,
+        color: project?.color ?? null,
+        daySeconds: days.map(() => 0),
+        totalSec: 0,
+      };
 
-    for (const slice of measured.slices) {
-      const index = dayIndex.get(slice.date);
-      if (index === undefined) continue;
-      row.daySeconds[index] = (row.daySeconds[index] ?? 0) + slice.seconds;
-      dayTotals[index] = (dayTotals[index] ?? 0) + slice.seconds;
-      row.totalSec += slice.seconds;
-      totalSec += slice.seconds;
+      for (const slice of measured.slices) {
+        const index = dayIndex.get(slice.date);
+        if (index === undefined) continue;
+        row.daySeconds[index] = (row.daySeconds[index] ?? 0) + slice.seconds;
+        dayTotals[index] = (dayTotals[index] ?? 0) + slice.seconds;
+        row.totalSec += slice.seconds;
+        totalSec += slice.seconds;
+      }
+
+      rows.set(rowKey, row);
     }
-
-    rows.set(rowKey, row);
   }
 
   const sortedRows = [...rows.values()]
@@ -1447,57 +1551,6 @@ type CsvExport = CsvExportResult & { mimeType: "text/csv" };
 
 // ── exports, a page at a time ────────────────────────────────────────
 
-/** At most this many matching entries go into one export file. */
-const MAX_EXPORT_ROWS = EXPORT_PAGE_SIZE * MAX_EXPORT_PAGES;
-
-/**
- * Entries per query of the totals pass. It reads six fields and joins
- * nothing, so its pages can be ten times the joined ones for the same memory.
- */
-const EXPORT_TOTALS_PAGE_SIZE = 5_000;
-
-/**
- * Walk the matching entries newest first, `pageSize` at a time, stopping at
- * {@link MAX_EXPORT_ROWS}. Keyset, not a server cursor: nothing stays open on
- * the database while a slow client reads, and a page that is never asked for
- * costs nothing.
- *
- * Order and cap are those of the paginated `detailed` report the export used
- * to concatenate — `start` then `_id`, both descending — so both passes of an
- * export see the same entries in the same order.
- */
-async function* keysetPages<T extends { _id: unknown; start: Date }>(
-  conditions: Record<string, unknown>[],
-  fetchPage: (conditions: Record<string, unknown>[], limit: number) => Promise<T[]>,
-  pageSize: number,
-): AsyncGenerator<T[]> {
-  let after: { start: Date; id: unknown } | null = null;
-  let remaining = MAX_EXPORT_ROWS;
-  while (remaining > 0) {
-    const limit = Math.min(pageSize, remaining);
-    const docs = await fetchPage(
-      after
-        ? [
-            ...conditions,
-            {
-              $or: [
-                { start: { $lt: after.start } },
-                { start: after.start, _id: { $lt: after.id } },
-              ],
-            },
-          ]
-        : conditions,
-      limit,
-    );
-    if (docs.length === 0) return;
-    yield docs;
-    remaining -= docs.length;
-    if (docs.length < limit) return;
-    const last = docs[docs.length - 1]!;
-    after = { start: last.start, id: last._id };
-  }
-}
-
 /**
  * The detailed report's rows for an export, a page of {@link DetailedEntry}
  * at a time, measured at `nowMs` and projected for the caller exactly as the
@@ -1518,12 +1571,7 @@ async function* detailedExportPages(
     weekStartsOn: settings.weekStartsOn,
   };
 
-  const pages = keysetPages(
-    conditions,
-    (pageConditions, limit) =>
-      runJoinedQuery(workspaceId, pageConditions, [{ $limit: limit }]),
-    EXPORT_PAGE_SIZE,
-  );
+  const pages = joinedPages(workspaceId, conditions, EXPORT_PAGE_SIZE, MAX_EXPORT_ROWS);
   for await (const docs of pages) {
     const entries = docs
       .map((doc) => measureEntry(doc, range, nowMs, calendar))
@@ -1571,18 +1619,7 @@ const detailedExportTotals = async (
   let moneyWithheld = !moneyVisible;
   const amounts = currencyAmountsAccumulator();
 
-  const pages = conditions === null
-    ? []
-    : keysetPages(
-        conditions,
-        (pageConditions, limit) =>
-          TimeEntry.find({ $and: pageConditions })
-            .sort({ start: -1, _id: -1 })
-            .limit(limit)
-            .select("start end durationSec billable hourlyRate currency authorId")
-            .lean(),
-        EXPORT_TOTALS_PAGE_SIZE,
-      );
+  const pages = conditions === null ? [] : totalsPages(conditions, MAX_EXPORT_ROWS);
   for await (const docs of pages) {
     for (const doc of docs) {
       const clipped = clipToRange(doc, range, nowMs);

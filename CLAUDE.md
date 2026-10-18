@@ -2768,6 +2768,14 @@ Rules that fail quietly if broken:
   a writer that skips it buffers the whole file in the response again.
 - **`Content-Disposition` is in the CORS `exposedHeaders`**; without it the
   web app cannot read the filename cross-origin and names the file itself.
+- **The summary, the weekly grid and the detailed report's range totals fold
+  keyset pages too** (`joinedPages`, `totalsPages`), never one array of the
+  range. Pages come in `start`, `_id` descending order, the order the single
+  query used, so cent sums and a weekly row's first-seen label are unchanged.
+  Only the exports cap rows (`MAX_EXPORT_ROWS`); a report on screen passes
+  `Infinity`. Member labels are read after the fold, from the authors it met.
+  `report-fold.test.ts` checks paged == one page for every grouping and
+  visibility.
 
 ### Calendar grid on a phone, a tablet and a touch screen
 
