@@ -1,33 +1,43 @@
 /**
- * Retire the Coolify client app after the web app moved to its Cloudflare
+ * Retire the Coolify side of the web app after its move to the Cloudflare
  * Worker (2026-10-18, docs/deploy.md → Web app on Cloudflare). The logic of
  * scripts/ops/retire-coolify-client.mjs; every provider call is injected, so
- * retire-coolify-client.test.mjs drives it against fakes.
+ * retire-coolify-client.test.mjs drives it against fakes. Shaped like the
+ * other projects' retirement scripts (vault:
+ * projects/hatchkit/coolify-retirement-index.md).
  *
- * What goes, in this order, each step idempotent:
+ * What goes, each step idempotent, nothing else ever:
  *
- *   1. The Coolify app `trackyourtime-client`, its volumes kept, then the
- *      backup sources that read it. This ends the quick way back (delete
- *      the `trackyourtime.dev/*` route and Coolify answers again).
- *   2. The no-Worker route `trackyourtime.dev/.well-known/acme-challenge/*`.
- *      It let Traefik renew the apex certificate, which only that app held.
- *   3. The repo secrets COOLIFY_CLIENT_*, which nothing reads since the
- *      cutover.
+ *   1. The no-Worker route `trackyourtime.dev/.well-known/acme-challenge/*`.
+ *      It only let Traefik renew the apex certificate, which only the client
+ *      app held.
+ *   2. The Coolify client apps: `trackyourtime-client` (Docker Image app) and
+ *      a stopped legacy Compose client app, each only while it is named as a
+ *      client, routes nothing but the apex, and pulls the client image or
+ *      builds this repo. Volumes are kept and reported. Then the backup
+ *      sources that read them.
+ *   3. The GHCR package `trackyourtime-client` (the Coolify image; GitHub can
+ *      restore a deleted package for 30 days). Never `-client-selfhost`, which
+ *      self-hosters pull, and never `-server`.
+ *   4. The repo secrets COOLIFY_CLIENT_*. The COOLIFY_SERVER_* ones stay.
  *
- * Nothing runs unless every check passes first: the soak is over, the site
- * is the Worker's (the route exists and `/version.json` names a commit on
- * main that is not the Coolify app's last one), and the app found by name
- * routes only the apex host. Anything unexpected is a refusal with nothing
- * changed. The GHCR package and the repo files are left alone; the plan says
- * what is left to do by hand.
+ * The Coolify project stays: it holds the API server and its database. DNS
+ * stays: the route needs the proxied records.
+ *
+ * Nothing is deleted unless every check passes first: the soak is over, the
+ * `trackyourtime.dev/*` route points at the Worker, and the site answers from
+ * the Worker (it serves `/release-assets.json`, which the Coolify image never
+ * did) at the commit on origin/main.
  */
 
 export const SITE_HOST = "trackyourtime.dev";
+export const SITE = `https://${SITE_HOST}`;
 export const WORKER = "trackyourtime-client";
-export const COOLIFY_APP = "trackyourtime-client";
 export const SITE_ROUTE = `${SITE_HOST}/*`;
 export const ACME_ROUTE = `${SITE_HOST}/.well-known/acme-challenge/*`;
 export const REPO = "trebeljahr/trackyourtime";
+export const IMAGE = "ghcr.io/trebeljahr/trackyourtime-client";
+export const PACKAGE = "trackyourtime-client";
 export const CLIENT_SECRETS = Object.freeze([
   "COOLIFY_CLIENT_RESOURCE_UUID",
   "COOLIFY_CLIENT_DEPLOY_SECRET",
@@ -38,6 +48,9 @@ export const CLIENT_SECRETS = Object.freeze([
 export const COOLIFY_LAST_COMMIT = "42e1294634dbb3ac3de2406bb0b53d30f7d54222";
 /** Seven days after the cutover on 2026-10-18. */
 export const SOAK_ENDS = "2026-10-25";
+
+/** Client app names: the image app and the stopped legacy Compose app. */
+const CLIENT_APP_NAME = /^(trackyourtime|tracktime)-client(-legacy-compose)?$/;
 
 /** Hosts an app routes, from its `fqdn` (comma-separated URLs) and compose domains. */
 export const appHosts = (app) => {
@@ -56,152 +69,185 @@ export const appHosts = (app) => {
   return [...hosts];
 };
 
+/** Why an app named like a client app must not be deleted, or null. */
+export const clientAppProblem = (app) => {
+  const foreign = appHosts(app).filter((host) => host !== SITE_HOST);
+  if (foreign.length > 0) return `it also routes ${foreign.join(", ")}`;
+  const image = String(app.dockerRegistryImageName ?? "");
+  const pullsClientImage = image === IMAGE || image.startsWith(`${IMAGE}:`);
+  const buildsRepo = String(app.gitRepository ?? "").replace(/\.git$/, "").endsWith(REPO);
+  if (!pullsClientImage && !buildsRepo) return `it neither pulls ${IMAGE} nor builds ${REPO}`;
+  return null;
+};
+
 /**
  * @typedef {object} RetireDeps
- * @property {{ listApplications(): Promise<{ uuid: string, name: string }[]>, getApplication(uuid: string): Promise<{ uuid: string, name: string, fqdn: string | null, dockerComposeDomains?: { domain: string }[] }>, deleteApplicationKeepingVolumes(uuid: string): Promise<"deleted" | "not-found"> }} coolify
- * @property {{ getZoneByName(name: string): Promise<{ id: string } | null>, listWorkerRoutes(zoneId: string): Promise<{ id: string, pattern: string, script?: string | null }[]>, deleteWorkerRoute(zoneId: string, id: string): Promise<"deleted" | "not-found"> }} cloudflare
- * @property {{ listSecrets(repo: string): Promise<{ name: string }[] | null>, deleteSecret(repo: string, name: string): Promise<"done" | "not-found"> }} github
+ * @property {{ listApplications(): Promise<{ uuid: string, name: string }[]>, getApplication(uuid: string): Promise<object>, listApplicationStorages(uuid: string): Promise<{ persistent: { name: string }[], fileCount: number }>, deleteApplicationKeepingVolumes(uuid: string): Promise<string> }} coolify
+ * @property {{ getZoneByName(name: string): Promise<{ id: string } | null>, listWorkerRoutes(zoneId: string): Promise<{ id: string, pattern: string, script?: string | null }[]>, deleteWorkerRoute(zoneId: string, id: string): Promise<string> }} cloudflare
+ * @property {{ listSecrets(): Promise<string[] | null>, deleteSecret(name: string): Promise<string>, packageExists(): Promise<boolean>, deletePackage(): Promise<void> }} github
  * @property {(url: string) => Promise<{ status: number, json(): Promise<unknown> }>} fetch
- * @property {(sha: string) => boolean} onMain   is `sha` reachable from origin/main
+ * @property {() => string} mainSha        origin/main's commit, freshly fetched
  * @property {(uuids: string[]) => Promise<string[]>} reconcileBackups  lines to print
+ * @property {() => Promise<boolean>} confirm   the one "Type DELETE" question
  * @property {() => Date} now
+ * @property {(ms: number) => Promise<void>} sleep
  * @property {(line: string) => void} log
  */
 
+/** The site, as the Worker serves it: `/version.json`'s commit, and whether `/release-assets.json` answers. */
+const siteState = async (deps) => {
+  let commit = null;
+  try {
+    const version = await deps.fetch(`${SITE}/version.json?retire=${Date.now()}`);
+    if (version.status === 200) commit = (await version.json())?.commit ?? null;
+  } catch {
+    // reported by the caller
+  }
+  let worker = false;
+  try {
+    const manifest = await deps.fetch(`${SITE}/release-assets.json?retire=${Date.now()}`);
+    worker = manifest.status === 200 && (await manifest.json())?.schema === 1;
+  } catch {
+    // reported by the caller
+  }
+  return { commit, worker };
+};
+
 /**
- * Everything the retirement would do and every reason it must not, read
- * without changing anything.
+ * Every check and the plan, read without changing anything.
  *
  * @param {RetireDeps} deps
- * @param {{ early?: boolean }} [options]
+ * @param {{ skipSoak?: boolean, dryRun?: boolean }} options
  */
-export const audit = async (deps, options = {}) => {
+export const audit = async (deps, options) => {
   const refusals = [];
   const notes = [];
 
   const today = deps.now().toISOString().slice(0, 10);
-  if (today < SOAK_ENDS && !options.early) {
-    refusals.push(`the soak runs until ${SOAK_ENDS} (today is ${today}); --early overrides this one check`);
-  }
+  if (today < SOAK_ENDS && !options.skipSoak && !options.dryRun) {
+    refusals.push(`the soak runs until ${SOAK_ENDS} (today is ${today}); --skip-soak retires earlier`);
+  } else if (today < SOAK_ENDS) notes.push(`the soak runs until ${SOAK_ENDS}`);
 
   // The site must already be the Worker's, or deleting the app is an outage.
   const zone = await deps.cloudflare.getZoneByName(SITE_HOST);
   let acmeRoute = null;
-  if (!zone) {
-    refusals.push(
-      `hatchkit's Cloudflare provisioner token cannot see the zone ${SITE_HOST}; add it to the token's Zone Resources (Zone Read, Workers Routes Edit) in the dashboard (token hatchkit-workers-provisioner)`,
-    );
-  }
-  if (zone) {
+  if (!zone) refusals.push(`hatchkit's Cloudflare provisioner token cannot see the zone ${SITE_HOST}`);
+  else {
     const routes = await deps.cloudflare.listWorkerRoutes(zone.id);
     const site = routes.find((route) => route.pattern === SITE_ROUTE);
     if (!site) refusals.push(`there is no route ${SITE_ROUTE}: Coolify still serves the site`);
     else if (site.script !== WORKER) refusals.push(`${SITE_ROUTE} sends to ${site.script || "no Worker"}, not ${WORKER}`);
     acmeRoute = routes.find((route) => route.pattern === ACME_ROUTE) ?? null;
-    if (acmeRoute && acmeRoute.script) refusals.push(`${ACME_ROUTE} sends to ${acmeRoute.script}; it was made with no Worker`);
-    if (!acmeRoute) notes.push(`${ACME_ROUTE} is already gone`);
+    if (acmeRoute?.script) refusals.push(`${ACME_ROUTE} sends to ${acmeRoute.script}; it was made with no Worker`);
+    if (!acmeRoute) notes.push(`${ACME_ROUTE}: already gone`);
   }
 
-  let served = null;
-  try {
-    const response = await deps.fetch(`https://${SITE_HOST}/version.json?cb=${Date.now()}`);
-    if (response.status === 200) served = await response.json();
-  } catch {
-    // reported below
-  }
-  const commit = served && typeof served === "object" ? served.commit : null;
-  if (typeof commit !== "string" || !/^[0-9a-f]{40}$/.test(commit)) {
-    refusals.push(`https://${SITE_HOST}/version.json gave no commit`);
-  } else if (commit === COOLIFY_LAST_COMMIT) {
-    refusals.push(`the site serves ${commit}, the Coolify app's last build: the Worker is not what answers`);
-  } else if (!deps.onMain(commit)) {
-    refusals.push(`the site serves ${commit}, which is not on origin/main`);
+  const mainSha = deps.mainSha();
+  const live = await siteState(deps);
+  if (live.commit === COOLIFY_LAST_COMMIT || !live.worker) {
+    refusals.push(`${SITE} is not served by the Worker (commit ${String(live.commit).slice(0, 12)}, release-assets.json ${live.worker ? "present" : "missing"})`);
+  } else if (live.commit !== mainSha) {
+    refusals.push(`${SITE} serves ${String(live.commit).slice(0, 12)}, origin/main is ${mainSha.slice(0, 12)}; let the deploy finish first`);
   }
 
-  // The app, by its exact name, and only if it routes nothing but the apex.
-  const apps = await deps.coolify.listApplications();
-  const named = apps.filter((app) => app.name === COOLIFY_APP);
-  let app = null;
-  if (named.length > 1) refusals.push(`${named.length} Coolify apps are named ${COOLIFY_APP}; resolve by hand`);
-  else if (named.length === 1) {
-    app = await deps.coolify.getApplication(named[0].uuid);
-    const hosts = appHosts(app);
-    const foreign = hosts.filter((host) => host !== SITE_HOST);
-    if (foreign.length > 0) refusals.push(`${COOLIFY_APP} (${app.uuid}) also routes ${foreign.join(", ")}; it is not only the web client`);
-  } else notes.push(`no Coolify app is named ${COOLIFY_APP}; it is already gone`);
-  const others = apps.filter((other) => other.name !== COOLIFY_APP && /trackyourtime.*client|tracktime.*client/i.test(other.name));
-  for (const other of others) notes.push(`not touched, review by hand: Coolify app ${other.name} (${other.uuid})`);
+  // The client apps, by name, and only those that pass every guard.
+  const apps = [];
+  for (const listed of (await deps.coolify.listApplications()).filter((app) => CLIENT_APP_NAME.test(app.name))) {
+    const app = await deps.coolify.getApplication(listed.uuid);
+    const problem = clientAppProblem(app);
+    if (problem) {
+      refusals.push(`Coolify app ${listed.name} (${listed.uuid}) looks like the client by name, but ${problem}; resolve by hand`);
+      continue;
+    }
+    const storages = await deps.coolify.listApplicationStorages(listed.uuid);
+    apps.push({ uuid: listed.uuid, name: listed.name, status: app.status ?? "?", volumes: storages.persistent.map((volume) => volume.name), fileCount: storages.fileCount });
+  }
+  if (apps.length === 0) notes.push("no Coolify client app left");
 
-  const listed = await deps.github.listSecrets(REPO);
+  const packageExists = await deps.github.packageExists();
+  if (!packageExists) notes.push(`GHCR package ${IMAGE}: already gone`);
+
+  const listed = await deps.github.listSecrets();
   if (listed === null) refusals.push(`the secrets of ${REPO} could not be listed (gh auth?)`);
-  const secrets = (listed ?? []).map((secret) => secret.name).filter((name) => CLIENT_SECRETS.includes(name));
+  const secrets = (listed ?? []).filter((name) => CLIENT_SECRETS.includes(name));
 
-  return { refusals, notes, zoneId: zone?.id ?? null, acmeRoute, app, secrets, servedCommit: commit };
+  return { refusals, notes, zoneId: zone?.id ?? null, acmeRoute, apps, packageExists, secrets, live, mainSha };
 };
 
-/** The plan as lines, for the audit and for the record of a run. */
+/** The plan as lines. */
 export const describe = (state) => [
-  state.app ? `delete Coolify app ${state.app.name} (${state.app.uuid}), volumes kept, then its backup sources` : "Coolify app: nothing to delete",
-  state.acmeRoute ? `delete route ${state.acmeRoute.pattern} (${state.acmeRoute.id})` : "ACME route: nothing to delete",
-  state.secrets.length > 0 ? `delete secrets ${state.secrets.join(", ")} on ${REPO}` : "COOLIFY_CLIENT_* secrets: nothing to delete",
-];
+  state.acmeRoute ? `delete route ${state.acmeRoute.pattern} (${state.acmeRoute.id}, no Worker)` : null,
+  ...state.apps.map(
+    (app) => `delete Coolify app ${app.name} (${app.uuid}, status ${app.status}), keeping volumes [${app.volumes.join(", ")}] and ${app.fileCount} file mount(s), then its backup sources`,
+  ),
+  state.packageExists ? `delete GHCR package ${IMAGE} (GitHub can restore it for 30 days)` : null,
+  state.secrets.length > 0 ? `delete secrets ${state.secrets.join(", ")} on ${REPO}` : null,
+].filter(Boolean);
 
 /**
- * Audit, and when nothing refuses, retire. With `execute` false it only
- * audits. Never retries a failed step: the error says which step and what
- * is already done.
+ * Check, show the plan, ask once, delete, verify. `dryRun` stops after the
+ * plan. Never retries a failed step: the error says which one and what is
+ * already done, and a second run picks up what is left.
  *
  * @param {RetireDeps} deps
- * @param {{ execute: boolean, early?: boolean }} options
+ * @param {{ dryRun: boolean, skipSoak?: boolean }} options
  * @returns {Promise<{ ok: boolean, done: string[], refusals: string[] }>}
  */
 export const retire = async (deps, options) => {
   const state = await audit(deps, options);
-  deps.log(`site serves ${state.servedCommit ?? "<unknown>"}`);
+  deps.log(`site: ${SITE} serves ${String(state.live.commit).slice(0, 12)} (Worker: ${state.live.worker}); origin/main is ${state.mainSha.slice(0, 12)}`);
   for (const note of state.notes) deps.log(`note: ${note}`);
-  for (const line of describe(state)) deps.log(`plan: ${line}`);
+  const plan = describe(state);
+  for (const line of plan) deps.log(`plan: ${line}`);
   if (state.refusals.length > 0) return { ok: false, done: [], refusals: state.refusals };
-  if (!options.execute) return { ok: true, done: [], refusals: [] };
+  if (plan.length === 0) {
+    deps.log("Nothing left to retire.");
+    return { ok: true, done: [], refusals: [] };
+  }
+  if (options.dryRun) return { ok: true, done: [], refusals: [] };
+  if (!(await deps.confirm())) return { ok: false, done: [], refusals: ["not confirmed"] };
 
   const done = [];
   const step = async (label, action) => {
     try {
-      await action();
+      const detail = await action();
       done.push(label);
-      deps.log(`done: ${label}`);
+      deps.log(`done: ${label}${detail ? ` (${detail})` : ""}`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       throw new Error(`${label} failed (${message}); already done: ${done.join("; ") || "nothing"}`);
     }
   };
 
-  if (state.app) {
-    const app = state.app;
-    await step(`Coolify app ${app.name} deleted`, async () => {
-      const result = await deps.coolify.deleteApplicationKeepingVolumes(app.uuid);
-      deps.log(`  ${app.name}: ${result}`);
-      for (const line of await deps.reconcileBackups([app.uuid])) deps.log(`  ${line}`);
-    });
-  }
   if (state.acmeRoute && state.zoneId) {
     const { zoneId, acmeRoute } = state;
-    await step(`route ${acmeRoute.pattern} deleted`, async () => {
-      deps.log(`  ${await deps.cloudflare.deleteWorkerRoute(zoneId, acmeRoute.id)}`);
-    });
+    await step(`route ${acmeRoute.pattern} deleted`, () => deps.cloudflare.deleteWorkerRoute(zoneId, acmeRoute.id));
   }
-  for (const name of state.secrets) {
-    await step(`secret ${name} deleted`, async () => {
-      deps.log(`  ${await deps.github.deleteSecret(REPO, name)}`);
-    });
+  for (const app of state.apps) {
+    await step(`Coolify app ${app.name} deleted`, () => deps.coolify.deleteApplicationKeepingVolumes(app.uuid));
   }
+  if (state.apps.length > 0) {
+    // Coolify deletes in the background; the backup sources go once it has.
+    const uuids = state.apps.map((app) => app.uuid);
+    for (let attempt = 0; ; attempt += 1) {
+      const left = (await deps.coolify.listApplications()).filter((app) => uuids.includes(app.uuid));
+      if (left.length === 0) break;
+      if (attempt >= 30) throw new Error(`${left.map((app) => app.name).join(", ")} still listed in Coolify after 60 s; already done: ${done.join("; ")}`);
+      await deps.sleep(2_000);
+    }
+    for (const line of await deps.reconcileBackups(uuids)) deps.log(`  ${line}`);
+    for (const app of state.apps) for (const volume of app.volumes) deps.log(`kept volume ${volume}; remove it on the server if nothing needs it`);
+  }
+  if (state.packageExists) await step(`GHCR package ${IMAGE} deleted`, () => deps.github.deletePackage());
+  for (const name of state.secrets) await step(`secret ${name} deleted`, () => deps.github.deleteSecret(name));
 
-  // The site has to look exactly as before: the Worker never depended on any
-  // of it.
-  const response = await deps.fetch(`https://${SITE_HOST}/version.json?cb=${Date.now()}`);
-  const after = response.status === 200 ? await response.json() : null;
-  if (!after || after.commit !== state.servedCommit) {
-    return { ok: false, done, refusals: [`after the retirement /version.json answered ${response.status} ${JSON.stringify(after)}; check the site now`] };
+  // Verify: everything listed is gone, and the site still answers as before.
+  const after = await audit(deps, { ...options, skipSoak: true });
+  const leftovers = describe(after);
+  if (leftovers.length > 0) return { ok: false, done, refusals: leftovers.map((line) => `still there after the run: ${line}`) };
+  if (after.live.commit !== state.live.commit || !after.live.worker) {
+    return { ok: false, done, refusals: [`${SITE} now serves ${after.live.commit} (Worker: ${after.live.worker}); check the site`] };
   }
-  deps.log(`site still serves ${after.commit}`);
+  deps.log(`verified: nothing left, and ${SITE} still serves ${String(after.live.commit).slice(0, 12)} from the Worker`);
   return { ok: true, done, refusals: [] };
 };

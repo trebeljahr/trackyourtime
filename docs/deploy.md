@@ -223,21 +223,27 @@ to `/login/` (307; `serve.mjs` resolved it in place).
 ### Retiring the Coolify client app (after the soak)
 
 The Coolify app `trackyourtime-client` keeps running, unrouted, as the quick
-way back until it is retired. One guarded script does the retirement:
+way back until it is retired. One guarded script does the retirement, in an
+interactive terminal on the owner's machine:
 
 ```bash
-HATCHKIT_KEYCHAIN_ACCESS=allow node scripts/ops/retire-coolify-client.mjs            # audit, read-only
-HATCHKIT_KEYCHAIN_ACCESS=allow node scripts/ops/retire-coolify-client.mjs --execute  # retire
+node scripts/ops/retire-coolify-client.mjs --dry-run   # checks and the plan only
+node scripts/ops/retire-coolify-client.mjs             # checks, plan, "Type DELETE", delete, verify
 ```
 
-It deletes the app (volumes kept) and its backup sources, then the route
-`trackyourtime.dev/.well-known/acme-challenge/*`, then the four
-`COOLIFY_CLIENT_*` secrets. It refuses with nothing changed before
-2026-10-25 (`--early` overrides that one check), while the
-`trackyourtime.dev/*` route is missing or `/version.json` does not name a
-commit on `main`, and when the app routes anything but the apex. A run that
-stops half way can be run again. Owner-only: it borrows hatchkit's Coolify
-and Cloudflare credentials from the keychain. Logic and tests:
+It deletes the route `trackyourtime.dev/.well-known/acme-challenge/*`, the
+Coolify client apps (the Docker Image app and the stopped legacy Compose
+app, volumes kept) and their backup sources, the GHCR package
+`trackyourtime-client` (GitHub can restore it for 30 days; deleting needs
+`gh auth refresh -s delete:packages`), and the four `COOLIFY_CLIENT_*`
+secrets. Never the API server, its database, the Coolify project, DNS, the
+`-client-selfhost` image or the `COOLIFY_SERVER_*` secrets. It refuses with
+nothing changed before 2026-10-25 (`--skip-soak` overrides that one check),
+while the `trackyourtime.dev/*` route does not point at the Worker, while the
+site does not serve `/release-assets.json` at the commit on `main`, and for a
+client-named app that routes more than the apex or is not this project's. A
+run that stops half way can be run again. It reads hatchkit's Coolify and
+Cloudflare tokens from the keychain. Logic and tests:
 `scripts/lib/retire-coolify-client.mjs`.
 
 ### One-time setup (done 2026-10-18)
