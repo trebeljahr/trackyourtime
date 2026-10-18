@@ -136,6 +136,8 @@ terms; it is the reference when in doubt.
 | activity capture (extension) | Aktivitätserfassung | „Aktivität wird erfasst“ for the running state |
 | suggestion, accept, dismiss (activity) | Vorschlag, übernehmen, ausblenden | „ausblenden“ as in `common`; a dismissed suggestion is „ausgeblendet“, never „verworfen“ |
 | rule (file a site under a project) | Regel | „{site} immer ablegen unter“ |
+| Autopilot (starts timers from activity) | Autopilot | der Autopilot, „er“; a name, never translated |
+| break (time away from work) | Pause | „bis zu deiner nächsten Pause“ |
 
 ### Decisions worth arguing about
 

@@ -91,30 +91,31 @@ export const trackedIntervalsFrom = (input: {
 type Utils = ReturnType<typeof trpc.useUtils>;
 
 /** The tracker's cached list, for when the fetch never got an answer. */
-const cachedEntries = (utils: Utils): EntryLike[] =>
+const cachedEntries = (utils: Utils): DetailedEntry[] =>
   utils.entries.list
     .getInfiniteData(TRACKER_LIST_INPUT)
     ?.pages.flatMap((page) => page.entries) ?? [];
 
 /**
- * `entries.list` for `range` (and a day before it), paged. A transport
- * failure falls back to the tracker's cache; any other error is a real
- * answer and is thrown.
+ * `entries.list` between two instants, paged. A transport failure falls back
+ * to the tracker's cache; any other error is a real answer and is thrown.
+ * `staleTime` 0 (the default) always asks; Autopilot, which reads every few
+ * seconds over an hour-aligned window, lets React Query answer from cache.
  */
-export const fetchRangeEntries = async (
+export const fetchEntriesBetween = async (
   utils: Utils,
   range: DesktopActivityInterval,
-): Promise<EntryLike[]> => {
-  const from = new Date(range.start - LOOKBACK_MS).toISOString();
+  options: { staleTime?: number; maxPages?: number } = {},
+): Promise<DetailedEntry[]> => {
+  const from = new Date(range.start).toISOString();
   const to = new Date(range.end).toISOString();
-  const rows: EntryLike[] = [];
+  const rows: DetailedEntry[] = [];
   try {
     let cursor: string | undefined;
-    for (let page = 0; page < TRACKED_MAX_PAGES; page += 1) {
+    for (let page = 0; page < (options.maxPages ?? TRACKED_MAX_PAGES); page += 1) {
       const result = await utils.entries.list.fetch(
         { from, to, limit: TRACKED_PAGE_LIMIT, ...(cursor === undefined ? {} : { cursor }) },
-        // Always a fresh answer: this decides what is still untracked.
-        { staleTime: 0 },
+        { staleTime: options.staleTime ?? 0 },
       );
       rows.push(...result.entries);
       cursor = result.nextCursor;
@@ -126,3 +127,10 @@ export const fetchRangeEntries = async (
     return cachedEntries(utils);
   }
 };
+
+/**
+ * `entries.list` for `range` (and a day before it), always a fresh answer:
+ * this decides what is still untracked.
+ */
+export const fetchRangeEntries = (utils: Utils, range: DesktopActivityInterval): Promise<EntryLike[]> =>
+  fetchEntriesBetween(utils, { start: range.start - LOOKBACK_MS, end: range.end });

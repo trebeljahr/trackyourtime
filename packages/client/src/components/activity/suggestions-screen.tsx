@@ -9,9 +9,11 @@ import {
   addDaysToKey,
   dayKeyInZone,
   zonedDayStartMs,
+  zonedWallClockToMs,
   type DesktopActivity,
   type DesktopActivitySnapshot,
   type DesktopActivitySuggestion,
+  type DesktopAutopilotLogEntry,
 } from "@starter/shared";
 
 import {
@@ -21,21 +23,28 @@ import {
   type KnownCatalog,
 } from "@/components/activity/accept-suggestion";
 import { ActivityRuleDialog } from "@/components/activity/activity-rule-dialog";
+import { undoAutopilotStart } from "@/components/activity/autopilot-actions";
+import { AutopilotPanel } from "@/components/activity/autopilot-panel";
+import { DayTimeline, type TimelineEntry, type TimelineGap } from "@/components/activity/day-timeline";
+import { timelineWindow } from "@/components/activity/day-timeline-window";
 import { SuggestionCard } from "@/components/activity/suggestion-card";
 import { useActivitySuggestions } from "@/components/activity/use-activity-suggestions";
 import { useDesktopActivitySnapshot } from "@/components/activity/use-desktop-activity";
 import { EmptyState } from "@/components/empty-state";
 import { TAG_LIST_INPUT } from "@/components/tags/use-tags";
+import { isOwnEntry, useViewerId } from "@/components/tracker/own-entries";
 import { ManualEntryDialog, type ManualEntrySeed } from "@/components/tracker/manual-entry-dialog";
 import { useEntryMutations, type ManualEntryArgs } from "@/components/tracker/use-entry-mutations";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsElectron } from "@/hooks/use-shell";
 import { useFormat } from "@/i18n/use-format";
+import { useFormatSettings } from "@/lib/format";
 import type { Translator } from "@/i18n/translator";
 import { useT } from "@/i18n/use-t";
 import type { EntryMutationResult } from "@/lib/entry-mutation-result";
 import { getActiveWorkspaceId } from "@/lib/active-workspace";
+import { nudgeAutopilot } from "@/lib/autopilot-nudge";
 import { desktopActivity } from "@/lib/desktop-activity";
 import { trpc } from "@/lib/trpc";
 
@@ -183,6 +192,13 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
     [shownDay, zone],
   );
   const { suggestions, loaded, failed, refresh, trackedBetween } = useActivitySuggestions(activity, range);
+  const fmt = useFormatSettings();
+  const utils = trpc.useUtils();
+  const viewerId = useViewerId();
+  const dayEntries = trpc.entries.list.useQuery(
+    { from: new Date(range.start).toISOString(), to: new Date(range.end).toISOString(), limit: 200 },
+    { staleTime: 30_000 },
+  );
 
   const projects = trpc.projects.list.useQuery({});
   const tasks = trpc.tasks.list.useQuery({});
@@ -291,6 +307,85 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
     [activity, refresh],
   );
 
+  const clockOf = React.useCallback((ms: number): string => fmt.clock(new Date(ms).toISOString()), [fmt]);
+  const spanOf = React.useCallback((ms: number): string => fmt.durationShort(Math.round(ms / 1000)), [fmt]);
+
+  const toggleAutopilot = React.useCallback(
+    async (on: boolean): Promise<void> => {
+      await activity.updateSettings({ autopilot: on }).catch(() => undefined);
+      nudgeAutopilot();
+    },
+    [activity],
+  );
+
+  const undoLogged = React.useCallback(
+    async (entry: DesktopAutopilotLogEntry): Promise<void> => {
+      const autopilot = activity.autopilot;
+      const owned = snapshot?.autopilot?.owned ?? null;
+      if (autopilot === undefined || owned === null || owned.logId !== entry.id) return;
+      setBusy(true);
+      try {
+        await undoAutopilotStart({
+          utils,
+          mutations,
+          activity,
+          autopilot,
+          at: entry.at,
+          filingKey: owned.filingKey,
+          logId: entry.id,
+        });
+        toast.info(t("autopilot.toast.undone"));
+      } catch {
+        toast.error(t("autopilot.toast.undoFailed"));
+      } finally {
+        setBusy(false);
+        await refresh({ fresh: true });
+      }
+    },
+    [activity, mutations, refresh, snapshot, t, utils],
+  );
+
+  // The day as a strip: own entries, Autopilot's marked, and the suggestions.
+  // Reads the clock during render on purpose, like `today` above: the strip
+  // must reach "now" on the day it is showing.
+  // eslint-disable-next-line react-hooks/purity
+  const renderedAt = Date.now();
+  const autopilotStarts = (snapshot?.autopilot?.log ?? []).filter(
+    (logged) => logged.kind !== "stop" && !logged.undone,
+  );
+  const timelineEntries: TimelineEntry[] = (dayEntries.data?.entries ?? [])
+    .filter((entry) => isOwnEntry(entry, viewerId))
+    .map((entry) => {
+      const start = Date.parse(entry.start);
+      const end = entry.end === null ? renderedAt : Date.parse(entry.end);
+      return {
+        id: entry.id,
+        start,
+        end,
+        label: entry.description.trim() !== "" ? entry.description : (entry.projectName ?? t("autopilot.noDescription")),
+        color: entry.projectColor ?? null,
+        autopilot: autopilotStarts.some((logged) => Math.abs(logged.at - start) < 1_000),
+      };
+    })
+    .filter((entry) => Number.isFinite(entry.start) && entry.end > entry.start);
+  const timelineGaps: TimelineGap[] = (suggestions ?? []).map(({ start, end }) => ({ start, end }));
+  const isToday = shownDay === today;
+  const frame = timelineWindow({
+    day: range,
+    spans: [...timelineEntries, ...timelineGaps],
+    now: isToday ? renderedAt : null,
+    hourStart: (hour) => {
+      if (hour >= 24) return range.end;
+      const [year, month, dayOfMonth] = shownDay.split("-").map(Number);
+      return zonedWallClockToMs({ year: year ?? 1970, month: month ?? 1, day: dayOfMonth ?? 1, hour }, zone);
+    },
+  });
+  const pickGap = (gap: TimelineGap): void => {
+    document
+      .querySelector(`[data-testid="activity-suggestion"][data-start="${gap.start}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   const status = snapshot === null ? null : statusOf(snapshot);
   const appName = (pattern: string): string =>
     snapshot?.recentApps.find((app) => app.key === pattern)?.name ?? pattern;
@@ -315,6 +410,18 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
 
   return (
     <div className="space-y-6" data-testid="activity-screen">
+      {snapshot !== null ? (
+        <AutopilotPanel
+          snapshot={snapshot}
+          projectName={projectName}
+          clock={clockOf}
+          span={spanOf}
+          onToggle={(on) => void toggleAutopilot(on)}
+          onUndo={(entry) => void undoLogged(entry)}
+          busy={busy}
+        />
+      ) : null}
+
       {status !== null ? (
         <div
           className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm"
@@ -363,6 +470,18 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
           </Button>
         ) : null}
       </div>
+
+      {loaded ? (
+        <DayTimeline
+          window={frame}
+          entries={timelineEntries}
+          gaps={timelineGaps}
+          now={isToday ? renderedAt : null}
+          dayLabel={format.date(range.start + 12 * 60 * 60 * 1000, "dayLabel")}
+          clock={clockOf}
+          onPickGap={pickGap}
+        />
+      ) : null}
 
       {failed ? (
         <p className="text-sm text-destructive" data-testid="activity-refresh-failed">

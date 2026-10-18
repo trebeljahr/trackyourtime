@@ -27,6 +27,7 @@ import { ProjectTaskPicker } from "@/components/entry-fields/project-task-picker
 import { TagPicker } from "@/components/tags/tag-picker";
 import { BillableGlyph } from "@/components/tracker/billable-glyph";
 import { DescriptionCombobox } from "@/components/tracker/description-combobox";
+import { AutopilotStrip } from "@/components/activity/autopilot-strip";
 import { ManualEntryDialog } from "@/components/tracker/manual-entry-dialog";
 import { QuickStartMenu } from "@/components/tracker/quick-start-menu";
 import { TimeField } from "@/components/tracker/time-field";
@@ -422,6 +423,9 @@ export function TrackerBar(): React.JSX.Element {
           </Button>
         </div>
       </div>
+
+      {/* Desktop app only, and only while Autopilot has something to say. */}
+      <AutopilotStrip running={running} mutations={mutations} />
 
       {pending > 0 || foreign > 0 || held > 0 || !online || clockSkewed || runningElsewhere ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">

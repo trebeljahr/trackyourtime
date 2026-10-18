@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { X } from "lucide-react";
+import { AUTOPILOT_START_MINUTE_CHOICES } from "@starter/core";
 import type {
   DesktopActivitySettings,
   DesktopActivitySnapshot,
@@ -14,6 +15,7 @@ import { SettingRow } from "@/components/settings/setting-row";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useIsElectron } from "@/hooks/use-shell";
 import { useT } from "@/i18n/use-t";
@@ -170,6 +172,55 @@ export function DesktopActivityCard(): React.JSX.Element | null {
             data-testid="desktop-activity-enabled"
           />
         </SettingRow>
+
+        <SettingRow
+          title={t("desktop.activity.autopilot.title")}
+          description={
+            <>
+              {t("desktop.activity.autopilot.description")}
+              {!on ? (
+                <span className="mt-2 block text-muted-foreground">{t("desktop.activity.autopilot.needsCapture")}</span>
+              ) : null}
+            </>
+          }
+          testId="setting-desktop-activity-autopilot"
+        >
+          <Switch
+            checked={settings.autopilot && on}
+            disabled={!on}
+            onCheckedChange={(autopilot) => void update({ autopilot })}
+            aria-label={t("desktop.activity.autopilot.title")}
+            data-testid="desktop-activity-autopilot"
+          />
+        </SettingRow>
+
+        {settings.autopilot && on ? (
+          <SettingRow
+            title={t("desktop.activity.autopilot.startAfter.title")}
+            description={t("desktop.activity.autopilot.startAfter.description")}
+            testId="setting-desktop-activity-autopilot-start"
+          >
+            <Select
+              value={String(settings.autopilotStartMinutes)}
+              onValueChange={(value) => void update({ autopilotStartMinutes: Number(value) })}
+            >
+              <SelectTrigger
+                className="w-28"
+                aria-label={t("desktop.activity.autopilot.startAfter.title")}
+                data-testid="desktop-activity-autopilot-start"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AUTOPILOT_START_MINUTE_CHOICES.map((minutes) => (
+                  <SelectItem key={minutes} value={String(minutes)}>
+                    {t("desktop.activity.autopilot.startAfter.option", { minutes: String(minutes) })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingRow>
+        ) : null}
 
         <SettingRow
           title={t("desktop.activity.titles.title")}

@@ -20,7 +20,7 @@ vi.mock("@/lib/shell", async () => (await import("@/lib/shell-mock")).mockShellM
 const { DesktopActivityCard, captureSwitchable } = await import("./desktop-activity");
 
 const baseSnapshot = (over: Partial<DesktopActivitySnapshot> = {}): DesktopActivitySnapshot => ({
-  settings: { enabled: false, storeTitles: false, excludedApps: [], retentionDays: 14 },
+  settings: { enabled: false, storeTitles: false, excludedApps: [], retentionDays: 14, autopilot: false, autopilotStartMinutes: 5 },
   support: { supported: true },
   titlesAvailable: true,
   scoped: true,
@@ -29,6 +29,7 @@ const baseSnapshot = (over: Partial<DesktopActivitySnapshot> = {}): DesktopActiv
   storedSegments: 0,
   recentApps: [],
   rules: [],
+  autopilot: { active: false, owned: null, watch: null, log: [], learnedApps: 0 },
   ...over,
 });
 
@@ -120,7 +121,7 @@ describe("DesktopActivityCard", () => {
 
   it("offers no window titles on macOS", async () => {
     installBridge(
-      baseSnapshot({ titlesAvailable: false, settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14 } }),
+      baseSnapshot({ titlesAvailable: false, settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14, autopilot: false, autopilotStartMinutes: 5 } }),
       "darwin",
     );
     await renderCard();
@@ -151,15 +152,15 @@ describe("DesktopActivityCard", () => {
   });
 
   it("follows main's pushes into the status line", async () => {
-    const bridge = installBridge(baseSnapshot({ settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14 }, recording: true }));
+    const bridge = installBridge(baseSnapshot({ settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14, autopilot: false, autopilotStartMinutes: 5 }, recording: true }));
     await renderCard();
     const status = screen.getByTestId("desktop-activity-status");
     expect(status.textContent).toBe("Recording.");
-    bridge.push(baseSnapshot({ settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14 }, paused: "idle" }));
+    bridge.push(baseSnapshot({ settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14, autopilot: false, autopilotStartMinutes: 5 }, paused: "idle" }));
     expect(status.textContent).toBe("Paused: no input for a while.");
-    bridge.push(baseSnapshot({ settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14 }, paused: "locked" }));
+    bridge.push(baseSnapshot({ settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14, autopilot: false, autopilotStartMinutes: 5 }, paused: "locked" }));
     expect(status.textContent).toBe("Paused while the screen is locked.");
-    bridge.push(baseSnapshot({ settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14 }, scoped: false }));
+    bridge.push(baseSnapshot({ settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14, autopilot: false, autopilotStartMinutes: 5 }, scoped: false }));
     expect(status.textContent).toBe("Starts once your account and workspace have loaded.");
   });
 

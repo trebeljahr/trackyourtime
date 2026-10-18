@@ -1208,6 +1208,17 @@ export const settings = {
           "This removes recorded activity, rules and dismissed suggestions from this computer. Entries you already added are not touched. This cannot be undone.",
         done: "All recorded activity was deleted from this computer.",
       },
+      autopilot: {
+        title: "Autopilot",
+        description:
+          "Starts a timer when you have worked in an app for a few minutes, from the moment you began, and switches or stops the timers it started. It never changes a timer you started. Only work it can name is started: from your rules, or from what you tracked in that app before.",
+        needsCapture: "Turn on activity capture to use Autopilot.",
+        startAfter: {
+          title: "Start after",
+          description: "How long you work in one app, with no timer running, before Autopilot starts it.",
+          option: "{minutes} min",
+        },
+      },
       failed: "The change could not be saved. Try again.",
     },
     /** Stage 7: the updater's status. The app never restarts for an update by itself. */

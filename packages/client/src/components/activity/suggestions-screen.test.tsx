@@ -59,6 +59,7 @@ vi.mock("@/lib/trpc", () => {
       tasks: { list: query([]) },
       tags: { list: query([]) },
       settings: { get: query(undefined) },
+      entries: { list: query({ entries: [] }) },
     },
   };
 });
@@ -81,7 +82,7 @@ const suggestion = (over: Partial<DesktopActivitySuggestion> = {}): DesktopActiv
 });
 
 const snapshot: DesktopActivitySnapshot = {
-  settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14 },
+  settings: { enabled: true, storeTitles: false, excludedApps: [], retentionDays: 14, autopilot: false, autopilotStartMinutes: 5 },
   support: { supported: true },
   titlesAvailable: false,
   scoped: true,
@@ -90,6 +91,7 @@ const snapshot: DesktopActivitySnapshot = {
   storedSegments: 3,
   recentApps: [{ key: "com.example.editor", name: "Editor" }],
   rules: [],
+  autopilot: { active: false, owned: null, watch: null, log: [], learnedApps: 0 },
 };
 
 const bridge = (list: DesktopActivitySuggestion[]) => {

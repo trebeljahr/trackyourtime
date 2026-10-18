@@ -242,8 +242,13 @@ export function DesktopBridgePublisher({
           return;
 
         case "open-prompt":
-          // Both prompts are raised by guards the tracker bar mounts, and
-          // their toasts stay up across navigation.
+          // What Autopilot did is listed, with its Undo, on the activity screen.
+          if (command.prompt === "autopilot") {
+            if (pathname !== "/app/activity" && pathname !== "/app/activity/") router.push("/app/activity");
+            return;
+          }
+          // Both other prompts are raised by guards the tracker bar mounts,
+          // and their toasts stay up across navigation.
           if (pathname !== "/app/track" && pathname !== "/app/track/") router.push("/app/track");
           return;
       }

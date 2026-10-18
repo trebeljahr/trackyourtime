@@ -1180,6 +1180,17 @@ export const settings: Translation<typeof source> = {
           "Das entfernt aufgezeichnete Aktivität, Regeln und ausgeblendete Vorschläge von diesem Computer. Einträge, die du schon hinzugefügt hast, bleiben unverändert. Das lässt sich nicht rückgängig machen.",
         done: "Alle aufgezeichnete Aktivität wurde von diesem Computer gelöscht.",
       },
+      autopilot: {
+        title: "Autopilot",
+        description:
+          "Startet einen Timer, wenn du ein paar Minuten in einer App gearbeitet hast, ab dem Moment, in dem du angefangen hast, und wechselt oder stoppt die Timer, die er selbst gestartet hat. Einen Timer, den du gestartet hast, ändert er nie. Er startet nur Arbeit, die er benennen kann: nach deinen Regeln oder nach dem, was du in dieser App schon erfasst hast.",
+        needsCapture: "Schalte die Aktivitätserfassung ein, um Autopilot zu nutzen.",
+        startAfter: {
+          title: "Starten nach",
+          description: "Wie lange du ohne laufenden Timer in einer App arbeitest, bevor Autopilot ihn startet.",
+          option: "{minutes} min",
+        },
+      },
       failed: "Die Änderung konnte nicht gespeichert werden. Versuch es noch einmal.",
     },
     updates: {

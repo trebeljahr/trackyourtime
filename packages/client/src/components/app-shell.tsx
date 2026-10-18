@@ -43,6 +43,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DesktopAutopilotDriver } from "@/components/activity/autopilot-driver";
 import { DesktopActivityScope } from "@/components/desktop/desktop-activity-scope";
 import { DesktopBridgePublisher } from "@/components/desktop/desktop-bridge-publisher";
 import { ThemeSync } from "@/components/theme-sync";
@@ -609,6 +610,8 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
         <DesktopBridgePublisher onOpenPalette={openPalette} />
         {/* Whose activity the desktop app records. Inert on the web. */}
         <DesktopActivityScope />
+        {/* Autopilot: starts, switches and stops timers from that activity. Inert on the web. */}
+        <DesktopAutopilotDriver />
       </div>
     </TooltipProvider>
   );
