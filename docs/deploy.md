@@ -223,10 +223,12 @@ to `/login/` (307; `serve.mjs` resolved it in place).
 
 ### Retiring the Coolify client app
 
-The Coolify client apps were deleted on 2026-10-18 by this script, run with
-`--skip-soak`; the GHCR package and the `COOLIFY_CLIENT_*` secrets were still
-left after that run. It is idempotent, so running it again deletes only what
-is left. Run it in an interactive terminal on the owner's machine:
+Done on 2026-10-18 with this script, run with `--skip-soak`: the ACME
+route, both Coolify client apps, the GHCR package and the `COOLIFY_CLIENT_*`
+secrets are gone. Its backup-source step could not reach the backup host, so
+a stale source for the two app uuids may remain (vault manual notes). The
+script is idempotent; a second run finds nothing left. How it is run, in an
+interactive terminal on the owner's machine:
 
 ```bash
 node scripts/ops/retire-coolify-client.mjs --dry-run   # checks and the plan only

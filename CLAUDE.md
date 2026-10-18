@@ -2516,10 +2516,10 @@ Production is **two hosts of one zone**. `https://trackyourtime.dev` is
 `trackyourtime-client`, an assets-only Cloudflare Worker (`wrangler.jsonc`,
 since 2026-10-18) attached by the zone route `trackyourtime.dev/*`;
 `https://api.trackyourtime.dev` is the Coolify app `trackyourtime-server`
-from `docker-compose.server.yml`. The Coolify client apps were deleted on
-2026-10-18 (`scripts/ops/retire-coolify-client.mjs`; what is left is in the
-vault's `projects/trackyourtime/tracktime-human-tasks.md`), so the Worker's
-own versions are the only way back. docs/deploy.md → Web app on Cloudflare. Rules that fail quietly if broken:
+from `docker-compose.server.yml`. The Coolify client apps, their GHCR package
+and the `COOLIFY_CLIENT_*` secrets were deleted on 2026-10-18
+(`scripts/ops/retire-coolify-client.mjs`), so the Worker's own versions are
+the only way back. docs/deploy.md → Web app on Cloudflare. Rules that fail quietly if broken:
 
 - **No `main`, `run_worker_first`, `cache` or `routes` in `wrangler.jsonc`.**
   The first three turn every page and asset request into a billed Worker
