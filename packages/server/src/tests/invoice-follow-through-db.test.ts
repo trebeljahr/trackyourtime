@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, afterEach, before, describe, it } from "node:test";
-import { supportsBusinessTransactions } from "../services/business-transaction.js";
 import { Invoice } from "../models/Invoice.js";
 import {
   changeFollowThrough,
@@ -27,6 +26,7 @@ import {
   connectTestDatabase,
   dropTestDatabase,
   skipWithoutDatabase,
+  testDatabaseTransactions,
 } from "./support/test-database.js";
 const owner = () => invoicesRouter.createCaller(contextFor(OWNER));
 const draft = async () => {
@@ -159,7 +159,7 @@ describe(
       );
       fail.mock.restore();
       const visible = await owner().list({});
-      const transactions = await supportsBusinessTransactions();
+      const transactions = await testDatabaseTransactions();
       assert.equal(
         Boolean(visible.invoices.find((row) => row.id === invoice.id)?.deletionPending),
         !transactions,

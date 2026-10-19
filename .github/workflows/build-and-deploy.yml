@@ -52,6 +52,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     services:
+      # A STANDALONE mongod, for the standalone step below only. The unit
+      # suite itself runs against the replica set the steps start: a service
+      # container cannot take `--replSet`.
       mongo-unit:
         image: mongo:7
         ports:
@@ -87,10 +90,33 @@ jobs:
       # backlog from growing back.
       - run: pnpm run lint
       - run: pnpm run build
+      # Approval locks, durable entry replay (`entries.applyOperation`, which
+      # every web and desktop entry write takes) and invoice deletion commit in
+      # transactions, which a standalone mongod refuses. Their cases skip on
+      # one, so the unit suite runs against a single-node replica set.
+      - run: bash scripts/mongo-replica-set-container.sh mongo-unit-rs 27020
       - run: pnpm run test:unit
         env:
-          # The scheduler's lease and the runaway-reminder job are tested
-          # against a real database; those files skip without this.
+          # The scheduler's lease, the runaway-reminder job and the cases above
+          # are tested against a real database; those files skip without this.
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27020
+          # Turns those skips into failures: a lost URI or a standalone server
+          # must fail the run, not pass it with the riskiest cases unrun.
+          REQUIRE_TRANSACTIONS: "1"
+      # The same files keep a standalone fallback (refusing durable replay
+      # with 412, gating approvals, leaving an interrupted invoice deletion
+      # visibly pending), which a replica set never reaches. Every file that
+      # branches on the topology asks `testDatabaseTransactions`, so this
+      # list finds them; their replica-set-only cases skip here, having run above.
+      - name: Server tests against a standalone mongod
+        working-directory: packages/server
+        # The assignment fails the step when grep finds nothing; a bare
+        # `node --test` would run its default glob instead.
+        run: |
+          files=$(grep -l testDatabaseTransactions src/tests/*.test.ts)
+          # shellcheck disable=SC2086 # one path per word, split on purpose
+          node --import tsx --test $files
+        env:
           TEST_MONGODB_URI: mongodb://127.0.0.1:27017
       - run: pnpm run test:client
       # The client image builds the docs into out/docs/ (packages/client/Dockerfile),

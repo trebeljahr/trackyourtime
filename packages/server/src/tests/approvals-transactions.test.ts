@@ -16,7 +16,7 @@ import { Invoice } from "../models/Invoice.js";
 import { ImportBatch } from "../models/ImportBatch.js";
 import { BusinessProfileModel } from "../models/BusinessProfile.js";
 import { actOnTimesheet, approvalEntries, configureApprovals, invoiceApprovalEligibility, ownApprovalWeek, reviewQueue, submitTimesheet, type ApprovalActor } from "../services/approvals/service.js";
-import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction, deferAfterCommit } from "../services/business-transaction.js";
+import { fenceWorkspace, withBusinessTransaction, deferAfterCommit } from "../services/business-transaction.js";
 import { bulkEditEntries, executeBulkEdit, mongoBulkEntryStore } from "../services/entries/bulk.js";
 import { createEntry, updateEntry } from "../services/entries/crud.js";
 import { continueEntryDetailed, personReach, startTimerDetailed, stopTimer } from "../services/entries/timer.js";
@@ -26,7 +26,7 @@ import { cascadeDeleteClient, cascadeDeleteProject, cascadeDeleteTask } from "..
 import { invoicesRouter } from "../trpc/routers/invoices.js";
 import { dataRouter } from "../trpc/routers/data.js";
 import type { Context } from "../trpc/context.js";
-import { clearTestDatabase, connectTestDatabase, dropTestDatabase, skipWithoutDatabase } from "./support/test-database.js";
+import { clearTestDatabase, connectTestDatabase, dropTestDatabase, skipWithoutDatabase, testDatabaseTransactions } from "./support/test-database.js";
 
 const WS = "approval-workspace";
 const AUTHOR = "approval-author";
@@ -58,7 +58,7 @@ async function enabled(): Promise<void> {
 describe("timesheet transaction safety", { skip: skipWithoutDatabase }, () => {
   before(async () => {
     await connectTestDatabase("approvals", [TimeEntry, TimesheetApproval, TimesheetPolicy, WorkspaceWriteFence, WorkspaceMember, WorkspaceSettingsModel, UserPreferencesModel, Project, Client, Task, Tag, Favorite, Invoice, ImportBatch, BusinessProfileModel] as never);
-    transactions = await supportsBusinessTransactions();
+    transactions = await testDatabaseTransactions();
   });
   beforeEach(async () => {
     await clearTestDatabase();

@@ -7,10 +7,9 @@ import { allModels } from "../models/registry.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { entriesRouter } from "../trpc/routers/entries.js";
 import { withEntryOperation } from "../services/entries/operation.js";
-import { supportsBusinessTransactions } from "../services/business-transaction.js";
 import { startTimerDetailed, personReach } from "../services/entries/timer.js";
 import type { Context } from "../trpc/context.js";
-import { clearTestDatabase, connectTestDatabase, dropTestDatabase, skipWithoutDatabase } from "./support/test-database.js";
+import { clearTestDatabase, connectTestDatabase, dropTestDatabase, skipWithoutDatabase, testDatabaseTransactions } from "./support/test-database.js";
 
 const workspaceId = "receipt-workspace", userId = "receipt-author";
 const actor = { workspaceId, userId, role: "owner" as const,
@@ -25,7 +24,7 @@ let transactions = false;
 describe("durable entry operations", { skip: skipWithoutDatabase }, () => {
   before(async () => {
     await connectTestDatabase("entry-operation", allModels() as never);
-    transactions = await supportsBusinessTransactions();
+    transactions = await testDatabaseTransactions();
   });
   beforeEach(async () => {
     await clearTestDatabase();

@@ -105,7 +105,10 @@ with active approvals.
 
 The database tests use isolated throwaway databases through `TEST_MONGODB_URI`.
 Run `approvals-transactions.test.ts` against both standalone MongoDB and a replica
-set; transactional cases explicitly skip on standalone. Replica-set tests cover
+set; transactional cases explicitly skip on standalone, unless
+`REQUIRE_TRANSACTIONS=1` makes a standalone server fail the run. CI's `verify`
+job does both: the unit suite against a replica set with that flag, then the
+topology-branching files against a standalone service. Replica-set tests cover
 paused writers, competing submissions, invoice/reopen races, rollback, whole
 empty-period locks, author/workspace isolation, and calendar changes. They must
 run against real MongoDB, not stubbed query middleware. Run the rate, membership,

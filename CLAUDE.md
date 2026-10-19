@@ -1788,7 +1788,12 @@ TEST_MONGODB_URI=mongodb://127.0.0.1:<port> pnpm --filter @starter/server test
 
 The database-backed unit tests (`scheduler-lease`, `runaway-reminder`) skip
 without `TEST_MONGODB_URI`, and each connects to a throwaway database of its
-own (`tests/support/test-database.ts`). CI sets it.
+own (`tests/support/test-database.ts`). CI sets it, to a single-node replica
+set (`scripts/mongo-replica-set-container.sh`), with `REQUIRE_TRANSACTIONS=1`:
+the transaction cases (approvals, durable entry replay, invoice deletion) skip
+on a standalone mongod, and that flag turns the skip — or a missing URI — into
+a failure. Those files branch on `testDatabaseTransactions()`; the `verify` job
+runs them once more against a standalone service for the fallback paths.
 
 Scheduler rules:
 
