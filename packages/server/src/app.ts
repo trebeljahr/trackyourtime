@@ -19,6 +19,7 @@ import { registerNewsletterRoutes } from "./services/newsletter/routes.js";
 import { registerApiV1Routes } from "./api/v1/index.js";
 import { registerAvatarRoutes } from "./services/avatar/route.js";
 import { registerReportExportRoutes } from "./services/report-export/route.js";
+import { registerApiRootRoute } from "./api-root.js";
 import { isDatabaseReady } from "./db/connection.js";
 import { notFoundHandler, errorHandler } from "./middleware/error-handler.js";
 import { env, getTrustedOrigins, trustsExtensionOrigins } from "./config/env.js";
@@ -306,6 +307,12 @@ export function createApp() {
   // <img> in any client can load them without a credential. After helmet,
   // whose Cross-Origin-Resource-Policy it overrides for exactly this route.
   registerAvatarRoutes(app);
+
+  // ── 6c. A readable page at `/` — exactly `/`, GET and HEAD only. A host
+  // that answers its root with a JSON 404 is what URL filters file under
+  // "insufficient-content" and corporate firewalls block (see api-root.ts).
+  // After cors() and helmet() so it carries their headers like any response.
+  registerApiRootRoute(app, env.FRONTEND_URL);
 
   // ── 7. Error handlers (must be last) ───────────────────────────────
   app.use(notFoundHandler);

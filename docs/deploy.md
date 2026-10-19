@@ -118,6 +118,66 @@ client that reconnects forever while every HTTP request succeeds.
 `packages/server/src/ws/handler.ts` accepts `/ws` as well, so a client built
 before this change still connects wherever `/ws` is still routed.
 
+## The API root page
+
+`GET https://api.trackyourtime.dev/` answers a short HTML page
+(`packages/server/src/api-root.ts`): what the host is, and links to the web
+app, the API reference, the live OpenAPI document and the source. It is there
+for URL filters more than for people.
+
+On 2026-10-19 a Palo Alto firewall on the maintainer's network (TLS
+intercepted by a "Forward Trust CA") answered every request to the API host
+with "Web Page Blocked … Category: insufficient-content", while
+`trackyourtime.dev` loaded. The web app's shell rendered and every tRPC call
+failed, because the firewall answered the CORS preflight with its own 503
+page. Anybody behind a filter like that cannot use the hosted app at all, and
+nothing in the app says why.
+
+The root used to answer the 404 handler's `{"error":"Not found"}`. That is
+what Palo Alto's `insufficient-content` describes: sites that "have no
+content" or "provide API access not intended for end-user display". Its
+recommended action for the category is Block, so a firewall configured by the
+book refuses the host. Palo Alto also lists the category among those it
+"strictly maintains", for which category change requests are not supported.
+A request alone therefore cannot move the host. The host has to serve content
+that suggests another category, and the next analysis files it again.
+
+Rules for the page:
+
+- **Exactly `/`, GET and HEAD.** An OPTIONS preflight on `/` is still answered
+  by `cors()`, every other path still reaches the 404 handler, and nothing
+  under `/api` changes. `tests/api-root.test.ts` pins all three.
+- **Traefik's drain probe still answers first.** It is the first middleware in
+  `createApp` and ignores the path, so a probe of `/` gets `serving` or
+  `draining` as before. The test sends one.
+- **Static.** The HTML is built once from `FRONTEND_URL` when the app starts:
+  no script, no analytics, no request data, `Cache-Control: public,
+  max-age=3600`. Helmet's headers apply as on every response; its default
+  `style-src` allows the one inline `<style>`.
+- **Self-hosted servers serve it too.** The web app link is their own
+  `FRONTEND_URL`; the docs links stay on trackyourtime.dev, because a
+  self-hosted server serves no docs. Behind the self-host Caddyfile, `/`
+  belongs to the web app and the page is never reached.
+
+### Getting the API host filed again
+
+Done by hand by the owner, and only after the page is deployed: the analysis
+has to see the page, not the old 404.
+
+1. Open Palo Alto's Test A Site, <https://urlfiltering.paloaltonetworks.com/>,
+   and look up `api.trackyourtime.dev`.
+2. If it still reads `insufficient-content` and the result offers a change
+   request, suggest `computer-and-internet-info`, with a comment that the host
+   is the API of trackyourtime.dev and now serves a description page. Signing
+   in skips the CAPTCHA and the email field.
+3. If no change request is offered (the category is excluded in Palo Alto's
+   docs), look the host up again after a few days, once it has been analysed
+   again.
+4. Optional, for other vendors' filters: FortiGuard's lookup,
+   <https://fortiguard.com/webfilter>, and Zscaler's Site Review,
+   <https://sitereview.zscaler.com/>. Both take the URL, a suggested category
+   and a contact email.
+
 ## Web app on Cloudflare
 
 Since 2026-10-18, `https://trackyourtime.dev` is served by
