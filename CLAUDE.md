@@ -2805,6 +2805,16 @@ Rules that fail quietly if broken:
   condition carries a plain `start <= cursor` beside the tie-break `$or`: the
   `$or` alone is not an index bound, so page k re-read (limit + 1)·k
   documents. `tracker-query-index.test.ts` pins one page's worth per page.
+- **Reports join the catalog in JS, once per id** (`createCatalogJoin`),
+  never with a `$lookup` per entry. The page query is `$match`, `$sort` and
+  `$limit` only. The join repeats what the lookups did: `$convert` to an
+  ObjectId (a malformed id is "none"), a field left absent when nothing
+  matches, and the entry's own `clientId` when the field exists (null
+  included), else its project's (`entryClientExpression`). Three lookups per
+  entry made a 100k all-time walk 10 to 25 times slower than reading the
+  entries. `report-catalog-join.test.ts` runs the old pipeline as the oracle
+  on a real database. In-memory report fixtures hold real catalog rows, not
+  pre-joined fields, because the join reads the catalog models.
 
 ### Calendar grid on a phone, a tablet and a touch screen
 

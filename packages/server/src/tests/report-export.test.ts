@@ -77,13 +77,6 @@ const scopeOf = (person: Person): ReportScope => ({
   visibility: VISIBILITY[person],
 });
 
-const joinedProject = {
-  _id: PROJECT_ID,
-  workspaceId: WORKSPACE,
-  name: "Rebrand",
-  color: "#336699",
-};
-
 /**
  * Enough rows to cross the export's 500-entry pages twice, by all three
  * people, with the cases that make a total disagree when one path forgets
@@ -105,6 +98,8 @@ const addExportRows = (): void => {
       authorId: author,
       description: n % 97 === 0 ? `=SUM(A1), "quoted" ${n}` : `Row ${n}`,
       projectId: n % 5 === 0 ? null : String(PROJECT_ID),
+      // The project's client is not this report's subject: name none.
+      clientId: null,
       taskId: null,
       tagIds: [],
       billable: n % 4 !== 0,
@@ -120,9 +115,6 @@ const addExportRows = (): void => {
       importId: null,
       createdAt: start,
       updatedAt: start,
-      project: n % 5 === 0 ? null : joinedProject,
-      client: null,
-      task: null,
     });
   }
   const extra = (row: Row): void => {
@@ -139,9 +131,6 @@ const addExportRows = (): void => {
       runaway: null,
       invoiceId: null,
       importId: null,
-      project: null,
-      client: null,
-      task: null,
       ...row,
       createdAt: row.start,
       updatedAt: row.start,

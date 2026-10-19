@@ -111,7 +111,10 @@ const PROJECTS: readonly (Row | null)[] = [
   catalog("a1", 2, "Website", { clientId: String(CLIENT_B._id) }),
   catalog("a1", 3, "Internal", { clientId: null }),
   null,
-  catalog("a1", 4, "Somebody else's project", { workspaceId: "ws_other" }),
+  catalog("a1", 4, "Somebody else's project", {
+    workspaceId: "ws_other",
+    clientId: String(FOREIGN_CLIENT._id),
+  }),
 ];
 const TASKS: readonly (Row | null)[] = [
   catalog("b1", 1, "Design review"),
@@ -146,9 +149,6 @@ const entry = (row: Row): void => {
     runaway: null,
     invoiceId: null,
     importId: null,
-    project: null,
-    client: null,
-    task: null,
     ...row,
     createdAt: row.start,
     updatedAt: row.start,
@@ -166,17 +166,10 @@ const addFoldRows = (count: number, idPrefix = "e1", onlyAuthor?: Person): void 
     const author = onlyAuthor ?? (n % 13 === 0 ? FORMER : [OWNER, ADMIN, MEMBER][n % 3]!);
     const start = new Date(base - Math.floor(n / 2) * 240_000);
     const seconds = n % 97 === 0 ? 3 * 3600 + 17 : 600 + (n % 11) * 420;
+    // Joined by the report from the catalog rows below: a project's client
+    // comes from the project, and a row without one may name a client itself.
     const project = PROJECTS[n % PROJECTS.length] ?? null;
-    const client =
-      project === PROJECTS[0]
-        ? CLIENT_A
-        : project === PROJECTS[1]
-          ? CLIENT_B
-          : project === PROJECTS[4]
-            ? FOREIGN_CLIENT
-            : project === null && n % 2 === 1
-              ? CLIENT_B
-              : null;
+    const ownClient = project === null && n % 2 === 1 ? { clientId: String(CLIENT_B._id) } : {};
     const task = TASKS[n % TASKS.length] ?? null;
     entry({
       _id: oid(idPrefix, n),
@@ -193,9 +186,7 @@ const addFoldRows = (count: number, idPrefix = "e1", onlyAuthor?: Person): void 
       durationSec: n % 53 === 0 ? 0 : n % 29 === 0 ? seconds + 1 : seconds,
       hourlyRate: n % 17 === 0 ? null : 80 + (n % 3) * 7.5 + (n % 7) * 0.33,
       currency: n % 41 === 0 ? "usd" : n % 59 === 0 ? "CHF" : n % 2 === 1 ? "EUR" : "eur",
-      project,
-      client,
-      task,
+      ...ownClient,
     });
   }
 };
@@ -239,6 +230,9 @@ const addEdgeRows = (): void => {
 
 beforeEach(() => {
   resetStore(store);
+  store.clients.rows.push(CLIENT_A, CLIENT_B, FOREIGN_CLIENT);
+  store.projects.rows.push(...PROJECTS.filter((project): project is Row => project !== null));
+  store.tasks.rows.push(...TASKS.filter((task): task is Row => task !== null));
   store.tags.rows.push(
     { _id: oid("d1", 1), workspaceId: WORKSPACE, name: "deep work", color: "#111111", archived: false },
     { _id: oid("d1", 2), workspaceId: WORKSPACE, name: "admin", color: "#222222", archived: false },

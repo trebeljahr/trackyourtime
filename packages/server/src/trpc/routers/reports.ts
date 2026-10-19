@@ -1,7 +1,4 @@
-import {
-  clientEntryFilter,
-  entryClientExpression,
-} from "../../services/entries/refs.js";
+import { clientEntryFilter } from "../../services/entries/refs.js";
 // IMPLEMENTED BY: reports agent
 //
 // Reporting is the headline feature, so the numbers have to be exactly right.
@@ -28,7 +25,7 @@ import {
 //    and `moneyVisible: false` says so. Projected where honest, refused where
 //    not; an amount is never recomputed at read time to fill the gap.
 import { TRPCError } from "@trpc/server";
-import mongoose, { Types, type PipelineStage } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import {
   canSeeEntry,
   canSeeMoneyFor,
@@ -453,85 +450,104 @@ const buildMatchConditions = async (
 };
 
 /**
- * `projectId` / `taskId` / `clientId` are stored as strings, so each join
- * converts to an ObjectId first (`onError: null` keeps a malformed id from
- * blowing up the whole pipeline) before the lookup.
+ * `$convert: { to: "objectId", onError: null, onNull: null }`, in JS: the hex
+ * of an id stored as a 24-digit hex string or as an ObjectId, else `null`.
+ * `projectId` / `taskId` / `clientId` are stored as strings, and a malformed
+ * one must read as "none", never fail the report.
  */
-const lookupStages = (): PipelineStage[] => [
-  {
-    $addFields: {
-      projectOid: {
-        $convert: {
-          input: "$projectId",
-          to: "objectId",
-          onError: null,
-          onNull: null,
-        },
-      },
-      taskOid: {
-        $convert: {
-          input: "$taskId",
-          to: "objectId",
-          onError: null,
-          onNull: null,
-        },
-      },
-    },
-  },
-  {
-    $lookup: {
-      from: Project.collection.name,
-      localField: "projectOid",
-      foreignField: "_id",
-      as: "projectDocs",
-    },
-  },
-  {
-    $lookup: {
-      from: Task.collection.name,
-      localField: "taskOid",
-      foreignField: "_id",
-      as: "taskDocs",
-    },
-  },
-  {
-    $addFields: {
-      project: { $arrayElemAt: ["$projectDocs", 0] },
-      task: { $arrayElemAt: ["$taskDocs", 0] },
-    },
-  },
-  {
-    $addFields: {
-      clientOid: {
-        $convert: {
-          input: entryClientExpression,
-          to: "objectId",
-          onError: null,
-          onNull: null,
-        },
-      },
-    },
-  },
-  {
-    $lookup: {
-      from: Client.collection.name,
-      localField: "clientOid",
-      foreignField: "_id",
-      as: "clientDocs",
-    },
-  },
-  { $addFields: { client: { $arrayElemAt: ["$clientDocs", 0] } } },
-  {
-    $project: {
-      projectDocs: 0,
-      taskDocs: 0,
-      clientDocs: 0,
-      projectOid: 0,
-      taskOid: 0,
-      clientOid: 0,
-    },
-  },
-];
+const objectIdHex = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    return /^[0-9a-f]{24}$/i.test(value) ? value.toLowerCase() : null;
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { _bsontype?: unknown })._bsontype === "ObjectId"
+  ) {
+    return (value as Types.ObjectId).toHexString();
+  }
+  return null;
+};
+
+type EntryRow = TimeEntryDocLike & { _id: unknown };
+
+/** Joins a page of entries to their catalog; one per report. */
+export type CatalogJoin = (docs: EntryRow[]) => Promise<JoinedEntry[]>;
+
+/**
+ * Join entries to their project, task and client.
+ *
+ * It answers what the `$lookup` stages it replaced answered for each entry:
+ * the project and the task by id, then the client the entry names or, when
+ * the entry has no `clientId` field at all, its project's
+ * (`entryClientExpression`); a reference that matches nothing leaves the field
+ * absent, as `$arrayElemAt` of an empty array did. But it asks the database
+ * once per id a report has not met yet, where the lookups ran three
+ * sub-queries per entry — on 100k entries the walk spent ten to twenty times
+ * longer in them than reading the entries. One join per report, so a catalog
+ * edited between two reports is read again. `report-catalog-join.test.ts`
+ * holds it to the old pipeline on a real database.
+ *
+ * Exported for that test.
+ */
+export const createCatalogJoin = (): CatalogJoin => {
+  const projects = new Map<string, ProjectDocLike | null>();
+  const tasks = new Map<string, TaskDocLike | null>();
+  const clients = new Map<string, ClientDocLike | null>();
+
+  const fill = async <T extends { _id?: unknown }>(
+    cache: Map<string, T | null>,
+    hexes: readonly (string | null)[],
+    read: (ids: Types.ObjectId[]) => Promise<T[]>,
+  ): Promise<void> => {
+    const missing = [...new Set(hexes)].filter(
+      (hex): hex is string => hex !== null && !cache.has(hex),
+    );
+    if (missing.length === 0) return;
+    const found = await read(missing.map((hex) => new Types.ObjectId(hex)));
+    for (const hex of missing) cache.set(hex, null);
+    for (const doc of found) {
+      const hex = objectIdHex(doc._id);
+      if (hex !== null) cache.set(hex, doc);
+    }
+  };
+  const pick = <T>(cache: Map<string, T | null>, hex: string | null): T | null =>
+    hex === null ? null : (cache.get(hex) ?? null);
+
+  return async (docs) => {
+    const projectHexes = docs.map((doc) => objectIdHex(doc.projectId));
+    const taskHexes = docs.map((doc) => objectIdHex(doc.taskId));
+    await Promise.all([
+      fill(projects, projectHexes, (ids) =>
+        Project.find({ _id: { $in: ids } }).lean<ProjectDocLike[]>(),
+      ),
+      fill(tasks, taskHexes, (ids) =>
+        Task.find({ _id: { $in: ids } }).lean<TaskDocLike[]>(),
+      ),
+    ]);
+    const clientHexes = docs.map((doc, i) =>
+      objectIdHex(
+        "clientId" in doc
+          ? doc.clientId
+          : pick(projects, projectHexes[i] ?? null)?.clientId,
+      ),
+    );
+    await fill(clients, clientHexes, (ids) =>
+      Client.find({ _id: { $in: ids } }).lean<ClientDocLike[]>(),
+    );
+
+    return docs.map((doc, i) => {
+      const joined: JoinedEntry = { ...doc };
+      const project = pick(projects, projectHexes[i] ?? null);
+      const task = pick(tasks, taskHexes[i] ?? null);
+      const client = pick(clients, clientHexes[i] ?? null);
+      if (project) joined.project = project;
+      if (task) joined.task = task;
+      if (client) joined.client = client;
+      return joined;
+    });
+  };
+};
 
 /**
  * The joins above match on `_id` alone, so re-assert ownership in JS: a
@@ -544,17 +560,16 @@ const inWorkspace = <T extends { workspaceId: string }>(
 ): T | null => (doc && doc.workspaceId === workspaceId ? doc : null);
 
 const runJoinedQuery = async (
-  workspaceId: string,
   conditions: Record<string, unknown>[],
-  extraStages: PipelineStage[] = [],
+  limit: number,
+  join: CatalogJoin = createCatalogJoin(),
 ): Promise<JoinedEntry[]> => {
-  const pipeline: PipelineStage[] = [
+  const docs = await TimeEntry.aggregate<EntryRow>([
     { $match: { $and: conditions } },
     { $sort: { start: -1, _id: -1 } },
-    ...extraStages,
-    ...lookupStages(),
-  ];
-  return TimeEntry.aggregate<JoinedEntry>(pipeline);
+    { $limit: limit },
+  ]);
+  return join(docs);
 };
 
 /**
@@ -607,18 +622,18 @@ async function* keysetPages<T extends { _id: unknown; start: Date }>(
 
 /** The joined entries of a report, a page at a time. */
 const joinedPages = (
-  workspaceId: string,
   conditions: Record<string, unknown>[],
   pageSize: number,
   maxRows: number,
-): AsyncGenerator<JoinedEntry[]> =>
-  keysetPages(
+): AsyncGenerator<JoinedEntry[]> => {
+  const join = createCatalogJoin();
+  return keysetPages(
     conditions,
-    (pageConditions, limit) =>
-      runJoinedQuery(workspaceId, pageConditions, [{ $limit: limit }]),
+    (pageConditions, limit) => runJoinedQuery(pageConditions, limit, join),
     pageSize,
     maxRows,
   );
+};
 
 /**
  * The fields a range total reads, and the author, a page at a time and
@@ -1172,7 +1187,6 @@ export const buildSummary = async (
   // A page of joined entries at a time, never the whole range: what is kept
   // between pages is bounded by the groups and the days, not by the entries.
   for await (const docs of joinedPages(
-    workspaceId,
     conditions,
     REPORT_PAGE_SIZE,
     Infinity,
@@ -1358,9 +1372,7 @@ export const buildDetailed = async (
     });
   }
 
-  const docs = await runJoinedQuery(workspaceId, pageConditions, [
-    { $limit: limit + 1 },
-  ]);
+  const docs = await runJoinedQuery(pageConditions, limit + 1);
 
   const window = docs.slice(0, limit);
   const entries = window
@@ -1448,7 +1460,6 @@ export const buildWeekly = async (
   // A page of joined entries at a time, like the summary: a week of a busy
   // workspace is still a lot of entries, and only the rows outlive a page.
   for await (const docs of joinedPages(
-    workspaceId,
     conditions,
     REPORT_PAGE_SIZE,
     Infinity,
@@ -1678,7 +1689,7 @@ async function* detailedExportPages(
     weekStartsOn: settings.weekStartsOn,
   };
 
-  const pages = joinedPages(workspaceId, conditions, EXPORT_PAGE_SIZE, MAX_EXPORT_ROWS);
+  const pages = joinedPages(conditions, EXPORT_PAGE_SIZE, MAX_EXPORT_ROWS);
   for await (const docs of pages) {
     const entries = docs
       .map((doc) => measureEntry(doc, range, nowMs, calendar))
