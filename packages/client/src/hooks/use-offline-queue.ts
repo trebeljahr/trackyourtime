@@ -45,6 +45,7 @@ import {
   type ReplayIdMap,
 } from "@/hooks/replay-offline-mutation";
 import { idleWatcher } from "@/lib/idle-watcher";
+import { noteResolvedTempId } from "@/lib/resolved-temp-ids";
 import {
   getServerNetworkOnline,
   subscribeNetwork,
@@ -227,8 +228,16 @@ export const useOfflineQueue = (): OfflineQueueState => {
     async (
       mutation: OfflineMutation,
       context: { createdAt: string; resolved: ReplayIdMap }
-    ): Promise<void | FlushVerdict> =>
-      replayOfflineMutation(mutators, idleWatcher, mutation, context),
+    ): Promise<void | FlushVerdict> => {
+      const verdict = await replayOfflineMutation(mutators, idleWatcher, mutation, context);
+      // A start queued offline has its server id only now. Recorded before
+      // the refetch that puts it on screen, so the tracker bar keeps what was
+      // typed into it meanwhile.
+      if (verdict && "resolvedTempId" in verdict) {
+        noteResolvedTempId(verdict.resolvedTempId, verdict.serverId);
+      }
+      return verdict;
+    },
     [mutators]
   );
 

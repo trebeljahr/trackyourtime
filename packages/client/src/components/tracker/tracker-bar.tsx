@@ -40,6 +40,7 @@ import { useRunningEntry } from "@/hooks/use-sync";
 import { formatDurationFor } from "@/i18n/format";
 import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
+import { isSameEntry } from "@/lib/resolved-temp-ids";
 import { isCapacitor } from "@/lib/shell";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -95,17 +96,21 @@ export function TrackerBar(): React.JSX.Element {
   // Adopt the running entry's fields whenever the timer identity changes —
   // including a start or stop that happened on another device. Render-time
   // sync (rather than an effect) keeps the inputs correct on the very first
-  // paint after a cross-device change.
+  // paint after a cross-device change. A start's temp id turning into its
+  // server id is the same timer, not a new one: adopting its fields again
+  // would overwrite whatever was typed here while the start was in flight.
   const runningId = running?.id ?? null;
   const [lastRunningId, setLastRunningId] = React.useState<string | null>(null);
   if (lastRunningId !== runningId) {
     setLastRunningId(runningId);
-    setDescription(running?.description ?? "");
-    setClientId(running?.clientId);
-    setProjectId(running?.projectId ?? null);
-    setTaskId(running?.taskId ?? null);
-    setBillable(running?.billable ?? false);
-    setTagIds(running?.tagIds ?? []);
+    if (!isSameEntry(lastRunningId, runningId)) {
+      setDescription(running?.description ?? "");
+      setClientId(running?.clientId);
+      setProjectId(running?.projectId ?? null);
+      setTaskId(running?.taskId ?? null);
+      setBillable(running?.billable ?? false);
+      setTagIds(running?.tagIds ?? []);
+    }
   }
 
   // Mounted here rather than in the app shell so the detector lives exactly as

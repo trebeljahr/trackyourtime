@@ -28,6 +28,7 @@ import {
   type OptimisticEntryArgs,
 } from "@/lib/entry-shape";
 import { idleWatcher } from "@/lib/idle-watcher";
+import { noteResolvedTempId } from "@/lib/resolved-temp-ids";
 import { OFFLINE_QUEUED_MUTATION } from "@/lib/query-client";
 import { trpc } from "@/lib/trpc";
 import {
@@ -557,6 +558,9 @@ export const useEntryMutations = (): EntryMutations => {
       return context;
     },
     onSuccess: async (entry, _raw, context) => {
+      // Before anything can put the server's entry on screen, so the tracker
+      // bar reads the rename as the same timer rather than a new one.
+      if (context?.tempId) noteResolvedTempId(context.tempId, entry.id);
       announceReplacedTimer(entry);
       // Keep the timer scope occupied until edits made during Start have been
       // saved. A Stop pressed meanwhile must follow both writes.

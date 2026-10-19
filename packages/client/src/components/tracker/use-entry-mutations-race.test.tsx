@@ -67,6 +67,7 @@ const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query
 const { trpc } = await import("@/lib/trpc");
 const { timerStore } = await import("@/hooks/use-sync");
 const { OfflineQueueScopeNotReadyError } = await import("@/lib/offline");
+const { isSameEntry } = await import("@/lib/resolved-temp-ids");
 const { TRACKER_LIST_INPUT, useEntryMutations } = await import(
   "@/components/tracker/use-entry-mutations"
 );
@@ -531,6 +532,26 @@ describe("a stop pressed while the start is still in flight", () => {
     expect(callInputs.get("entries.stop")).toMatchObject({ id: "e2" });
     expect(enqueueOffline).not.toHaveBeenCalled();
     expect(screen.queryByTestId("running")).toBeNull();
+  });
+
+  it("records the server id a start's temp entry became", async () => {
+    serverEntries = [];
+    mount();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    const start = deferred<unknown>();
+    held.set("entries.start", start);
+    act(() => mutations?.startTimer({ description: "New", projectId: null, billable: false }));
+    await waitFor(() => expect(heldCalls.get("entries.start")).toBe(1));
+    const tempId = screen.getByTestId("current").textContent!;
+    expect(isSameEntry(tempId, "real-id")).toBe(false);
+
+    const created = entry({ id: "real-id", description: "New", start: new Date().toISOString() });
+    serverEntries = [created];
+    await act(async () => start.resolve(created));
+    await waitFor(() => expect(screen.getByTestId("current").textContent).toBe("real-id"));
+    // The tracker bar reads this to keep what was typed into it meanwhile.
+    expect(isSameEntry(tempId, "real-id")).toBe(true);
+    await settleAll();
   });
 });
 
