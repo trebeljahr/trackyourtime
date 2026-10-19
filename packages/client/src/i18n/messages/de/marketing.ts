@@ -232,15 +232,17 @@ export const marketing: Translation<typeof source> = {
     extension: {
       title: "Die Browsererweiterung",
       storage:
-        "Die Erweiterung speichert dein Sitzungstoken und noch nicht gesendete Änderungen im Erweiterungsspeicher von Chrome auf deinem Computer.",
+        "Die Erweiterung speichert dein Sitzungstoken, die Serveradresse, deine Einstellungen und noch nicht gesendete Änderungen im Erweiterungsspeicher des Browsers auf deinem Computer.",
       cookies:
-        "Die Erweiterung hat keine Berechtigung <strong>cookies</strong> und liest keine Cookies. Bist du auf trackyourtime.dev angemeldet, teilt die Seite das der Erweiterung über die Erweiterungsnachrichten von Chrome mit. Die Erweiterung bekommt dann vom Server eine eigene Sitzung. Du kannst sie unter Einstellungen → Geräte abmelden.",
+        "Mit der Berechtigung <strong>cookies</strong> und dem Zugriff auf api.trackyourtime.dev liest die Erweiterung dein Sitzungscookie von Track Your Time für diese Adresse. Damit bietet dir das Popup das Konto an, mit dem du auf trackyourtime.dev angemeldet bist. Die Erweiterung meldet sich erst an, wenn du dieses Konto im Popup bestätigst. Sie bekommt dann eine eigene Sitzung und speichert das Cookie nie. Andere Cookies nutzt sie nicht, und Cookies anderer Websites liest sie nicht. Du kannst die Erweiterung unter Einstellungen → Geräte abmelden.",
+      pages:
+        "Nur trackyourtime.dev kann der Erweiterung Nachrichten senden, und nur zur Anmeldung. Diese Nachrichten enthalten kein Passwort und kein Token. In Chrome führt die Erweiterung in keiner Webseite Code aus. In Firefox gibt ein kleines Content-Script die Nachrichten weiter. Es läuft nur auf trackyourtime.dev und liest keine Seiteninhalte.",
       idle: "Die Berechtigung <strong>idle</strong> meldet der Erweiterung, dass der Computer inaktiv oder gesperrt ist. Die Erweiterung nutzt das nur, um zu fragen, was mit der inaktiven Zeit passieren soll. Den Inaktivitätsstatus sendet sie nirgendwohin.",
       server:
         "Die Erweiterung sendet deine Daten an api.trackyourtime.dev. Im Popup kannst du stattdessen deinen eigenen Server wählen, und deine Daten gehen dann dorthin. Für diesen Server gilt diese Erklärung nicht.",
-      tabs: "Die optionale Berechtigung <strong>tabs</strong> dient der Aktivitätserfassung. Chrome fragt nur danach, wenn du Einstellungen → Aktivität einschaltest. Mit ihr liest die Erweiterung die Adresse und den Titel des aktiven Tabs. Den Inhalt einer Seite liest die Erweiterung nie, und in den Seiten, die du besuchst, führt sie keinen Code aus.",
+      tabs: "Die optionale Berechtigung <strong>tabs</strong> dient der Aktivitätserfassung. Dein Browser fragt nur danach, wenn du Einstellungen → Aktivität einschaltest. Mit ihr liest die Erweiterung die Adresse und den Titel des aktiven Tabs. Den Inhalt einer Seite liest die Erweiterung nie.",
       activity:
-        "Ist die Aktivitätserfassung an, speichert die Erweiterung den Namen der Website im aktiven Tab in der IndexedDB des Browsers auf deinem Computer. Den Seitentitel speichert sie nur, wenn du auch Seitentitel einschaltest. Sie löscht die Aktivität nach 14 Tagen oder nach dem Zeitraum, den du einstellst. Inkognito-Tabs und Websites, die du ausschließt, erfasst sie nie.",
+        "Ist die Aktivitätserfassung an, speichert die Erweiterung den Namen der Website im aktiven Tab in der IndexedDB des Browsers auf deinem Computer. Den Seitentitel speichert sie nur, wenn du auch Seitentitel einschaltest. Sie löscht die Aktivität nach 14 Tagen oder nach dem Zeitraum, den du einstellst. Tabs in privaten oder Inkognito-Fenstern und Websites, die du ausschließt, erfasst sie nie.",
       activityLocal:
         "Deine Aktivität sendet die Erweiterung nirgendwohin. Nur ein Eintrag, den du übernimmst, erreicht den Server, und dieser Eintrag enthält keine Daten über Websites.",
       errorReports:

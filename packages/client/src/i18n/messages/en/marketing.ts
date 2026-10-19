@@ -235,15 +235,17 @@ export const marketing = {
     extension: {
       title: "The browser extension",
       storage:
-        "The extension stores your session token and any unsent changes in Chrome’s extension storage on your computer.",
+        "The extension stores your session token, the server address, your settings and any unsent changes in the browser’s extension storage on your computer.",
       cookies:
-        "The extension has no <strong>cookies</strong> permission and reads no cookies. When you are signed in at trackyourtime.dev, that page tells the extension through Chrome’s extension messaging. The extension then gets a session of its own from the server. You can sign it out in Settings → Devices.",
+        "The <strong>cookies</strong> permission and access to api.trackyourtime.dev let the extension read your Track Your Time session cookie on that host. With it, the popup offers the account you are signed in with at trackyourtime.dev. The extension signs in only after you confirm that account in the popup. It then gets a session of its own and never stores the cookie. It uses no other cookie and reads no cookies from other sites. You can sign the extension out in Settings → Devices.",
+      pages:
+        "Only trackyourtime.dev can send messages to the extension, and only about sign-in. These messages carry no password and no token. In Chrome, the extension runs no code in any web page. In Firefox, a small content script passes the messages on. It runs only on trackyourtime.dev and reads no page content.",
       idle: "The <strong>idle</strong> permission tells the extension that the computer is idle or locked. The extension uses it only to ask what to do with idle time. It does not send idle state anywhere.",
       server:
         "The extension sends your data to api.trackyourtime.dev. You can pick your own server in the popup instead, and your data then goes there. This policy does not cover that server.",
-      tabs: "The optional <strong>tabs</strong> permission is for activity capture. Chrome asks for it only when you turn on Settings → Activity. It lets the extension read the address and title of the active tab. The extension never reads what is on a page, and it runs no code inside the pages you visit.",
+      tabs: "The optional <strong>tabs</strong> permission is for activity capture. Your browser asks for it only when you turn on Settings → Activity. It lets the extension read the address and title of the active tab. The extension never reads what is on a page.",
       activity:
-        "With activity capture on, the extension stores the site name of the active tab in the browser’s IndexedDB on your computer. It stores the page title only if you also switch on page titles. It deletes activity after 14 days, or after the period you set. It never records incognito tabs or the sites you exclude.",
+        "With activity capture on, the extension stores the site name of the active tab in the browser’s IndexedDB on your computer. It stores the page title only if you also switch on page titles. It deletes activity after 14 days, or after the period you set. It never records tabs in private or incognito windows, or the sites you exclude.",
       activityLocal:
         "The extension sends your activity nowhere. Only an entry you accept reaches the server, and that entry carries no site data.",
       errorReports:

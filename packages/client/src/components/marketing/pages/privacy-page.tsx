@@ -17,7 +17,7 @@ export const privacyMetadata = (locale: Locale): Metadata => {
 };
 
 /** Bump when the policy changes in substance. Store listings link to this page. */
-const LAST_UPDATED = Date.UTC(2026, 9, 2);
+const LAST_UPDATED = Date.UTC(2026, 9, 19);
 
 /**
  * The date in the page's language, identical on every build machine.
@@ -107,6 +107,7 @@ export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement 
         <ul>
           <li>{t("privacy.extension.storage")}</li>
           <li>{t.rich("privacy.extension.cookies", { strong })}</li>
+          <li>{t("privacy.extension.pages")}</li>
           <li>{t.rich("privacy.extension.idle", { strong })}</li>
           <li>{t("privacy.extension.server")}</li>
           <li>{t.rich("privacy.extension.tabs", { strong })}</li>
