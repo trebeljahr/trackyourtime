@@ -136,6 +136,17 @@ export async function listEntries(
     { workspaceId },
     // Overlap: the entry starts before the window ends and either is
     // still running or ended after the window began.
+    //
+    // No lower bound on `start`, unlike the reports, and on purpose.
+    // `earliestOverlappingStart` (trpc/routers/reports.ts) would run once
+    // per PAGE here, and it costs about what it saves: a page that fills
+    // stops after `limit + 1` rows anyway, and an underfilled one is
+    // answered through the `$or` from the `{ workspaceId, end, start }`
+    // index, reading only the entries that end after `from`. Measured on
+    // 100k entries (scripts/profile-entry-list.ts), a week three years back
+    // went from 17,689 keys and 264 documents to 277,509 and 247,506 with
+    // the probe. What still walks the history is the last page of an old
+    // range, and only a bound computed once per listing could change that.
     { start: { $lt: to } },
     { $or: [{ end: null }, { end: { $gt: from } }] },
   ];
@@ -181,12 +192,20 @@ export async function listEntries(
   if (input.cursor) {
     const cursor = await decodeEntryCursor(workspaceId, input.cursor);
     if (!cursor) return { entries: [] };
-    conditions.push({
-      $or: [
-        { start: { $lt: cursor.start } },
-        { start: cursor.start, _id: { $lt: cursor.id } },
-      ],
-    });
+    // The plain `start <= cursor` is what the index scan seeks to. The `$or`
+    // alone is applied after the fetch, so page k used to read every entry
+    // from `to` down to its cursor again: 51·k documents for page k of the
+    // tracker's all-time scroll. Both conditions together still match exactly
+    // the rows the `$or` does.
+    conditions.push(
+      { start: { $lte: cursor.start } },
+      {
+        $or: [
+          { start: { $lt: cursor.start } },
+          { start: cursor.start, _id: { $lt: cursor.id } },
+        ],
+      },
+    );
   }
 
   const limit = input.limit ?? DEFAULT_LIST_LIMIT;

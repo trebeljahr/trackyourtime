@@ -87,7 +87,9 @@ describe("tracker ordered indexes", { skip: skipWithoutDatabase }, () => {
         const explain = await TimeEntry.aggregate(pipeline).explain("executionStats");
         const source = explain.stages[0].$cursor;
         assert.ok(!stages(source.queryPlanner.winningPlan).includes("SORT"));
-        assert.ok(source.executionStats.totalDocsExamined <= 110);
+        // One page's worth plus cursor ties, on every page: the second page
+        // must seek to its cursor rather than re-read the first (101).
+        assert.ok(source.executionStats.totalDocsExamined <= 60);
         for (const entry of result.entries) {
           assert.ok(!ids.has(entry.id), "cursor must not repeat tied entries");
           ids.add(entry.id);

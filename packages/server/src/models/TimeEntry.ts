@@ -189,7 +189,10 @@ timeEntrySchema.index({ workspaceId: 1, authorId: 1, start: -1, _id: -1 });
  * "Which entries are still open at this instant" — the lower bound of every
  * report's range scan (`earliestOverlappingStart` in trpc/routers/reports.ts).
  * Led by `end`, that is a handful of keys for a recent range; the start index
- * alone would walk the workspace's whole history to answer it.
+ * alone would walk the workspace's whole history to answer it. `entries.list`
+ * leans on it too, with no probe: the planner answers a page that does not
+ * fill through its `end` `$or` from this index, instead of walking the start
+ * index down to the first entry ever tracked.
  */
 timeEntrySchema.index({ workspaceId: 1, end: 1, start: 1 });
 

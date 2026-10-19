@@ -2796,6 +2796,15 @@ Rules that fail quietly if broken:
   `ask` keeps a timer running, manual and JSON-imported entries are
   uncapped), so that shortcut drops real entries from every report without
   an error. `report-range-bound.test.ts` checks it against random histories.
+- **`entries.list` does not take that bound, and must not.** It would run once
+  per page, and costs about what it saves: a full page stops after
+  `limit + 1` rows, and the planner answers a short one from
+  `{ workspaceId, end, start }` through the `end` `$or`. Measured on 100k
+  entries (`scripts/profile-entry-list.ts`), a week three years back went from
+  17,689 keys / 264 documents to 277,509 / 247,506 with the probe. Its cursor
+  condition carries a plain `start <= cursor` beside the tie-break `$or`: the
+  `$or` alone is not an index bound, so page k re-read (limit + 1)·k
+  documents. `tracker-query-index.test.ts` pins one page's worth per page.
 
 ### Calendar grid on a phone, a tablet and a touch screen
 
