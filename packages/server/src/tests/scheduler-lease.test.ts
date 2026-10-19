@@ -36,6 +36,22 @@ const at = (ms: number): Date => new Date(T0.getTime() + ms);
 
 const silent = { log: () => {}, error: () => {} };
 
+/**
+ * A promise and the function that resolves it. The slow-run tests wait on one
+ * for "the run has begun" instead of polling a fixed window: a claim is a few
+ * database round trips, and on a loaded machine those outlast any window.
+ */
+function signal(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+/** Fail, not hang, when a run that should start never does. */
+const SLOW_RUN_TEST = { timeout: 30_000 };
+
 /** N schedulers, each with its own registry holding the same job name. */
 function processes(
   count: number,
@@ -127,27 +143,27 @@ describe("scheduler lease", { skip: skipWithoutDatabase }, () => {
     assert.equal(await ScheduledJob.countDocuments({ name: "test-job" }), 1);
   });
 
-  it("does not start a second run beside a slow one", async () => {
-    let release: () => void = () => {};
-    const slowRunDone = new Promise<void>((resolve) => {
-      release = resolve;
-    });
+  it("does not start a second run beside a slow one", SLOW_RUN_TEST, async () => {
+    const slowRunDone = signal();
+    const started = signal();
+    const release = slowRunDone.resolve;
     let runs = 0;
     const [slow, other] = processes(
       2,
       (process) => async () => {
         runs += 1;
-        if (process === 0) await slowRunDone;
+        if (process === 0) {
+          started.resolve();
+          await slowRunDone.promise;
+        }
       },
       MINUTE,
       10 * MINUTE,
     );
 
     const slowTick = slow.tick(at(0));
-    // Wait for process 0 to hold the lease.
-    for (let i = 0; i < 100 && runs === 0; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    // Process 0 holds the lease once its run has begun.
+    await started.promise;
     assert.equal(runs, 1);
 
     // Two intervals later the job is due, but the lease is still held.
@@ -188,18 +204,20 @@ describe("scheduler lease", { skip: skipWithoutDatabase }, () => {
     assert.equal(row?.lockedBy, "survivor");
   });
 
-  it("keeps a slow live run leased when another process reaches the next interval", async () => {
-    let started = false, runs = 0;
-    let finish!: () => void;
-    const running = new Promise<void>((resolve) => { finish = resolve; });
+  it("keeps a slow live run leased when another process reaches the next interval", SLOW_RUN_TEST, async () => {
+    let runs = 0;
+    const running = signal();
+    const started = signal();
+    const finish = running.resolve;
+    // The lease is shorter than the run, so only renewal keeps it held.
     const [first, second] = processes(2, (process) => async () => {
       runs += 1;
-      if (process === 0) { started = true; await running; }
-    }, 1000, 300);
+      if (process === 0) { started.resolve(); await running.promise; }
+    }, 1000, 600);
     const tick = first.tick();
     try {
-      for (let attempt = 0; !started && attempt < 100; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
-      assert.equal(started, true);
+      await started.promise;
+      // Past the next interval, measured from after the claim.
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await second.tick();
       assert.equal(runs, 1);
