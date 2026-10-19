@@ -72,8 +72,12 @@ const webhookDeliverySchema = new Schema<IWebhookDelivery>(
 
 /** What the sweeper asks for: everything due, oldest first. */
 webhookDeliverySchema.index({ status: 1, nextAttemptAt: 1 });
-/** The delivery log for one subscription, newest first. */
-webhookDeliverySchema.index({ subscriptionId: 1, createdAt: -1 });
+/**
+ * The delivery log for one subscription, newest first. Ends in `_id`, the
+ * log's tie-break, so a page seeks to its cursor (`keysetAfter`) instead of
+ * sorting every delivery below it.
+ */
+webhookDeliverySchema.index({ subscriptionId: 1, createdAt: -1, _id: -1 });
 /**
  * Expiry. Declared on the schema rather than swept by hand: a log that grows
  * with every event in the workspace is the collection that quietly becomes

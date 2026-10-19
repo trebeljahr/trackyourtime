@@ -23,6 +23,7 @@ import {
   type TimeEntryDocLike,
 } from "../../models/TimeEntry.js";
 import { authorScopeFilter } from "../../models/WorkspaceMember.js";
+import { keysetAfter } from "../../db/keyset.js";
 import { loadCatalogLookup } from "../../trpc/routers/catalog-lookup.js";
 import {
   collapseDescriptions,
@@ -192,20 +193,10 @@ export async function listEntries(
   if (input.cursor) {
     const cursor = await decodeEntryCursor(workspaceId, input.cursor);
     if (!cursor) return { entries: [] };
-    // The plain `start <= cursor` is what the index scan seeks to. The `$or`
-    // alone is applied after the fetch, so page k used to read every entry
-    // from `to` down to its cursor again: 51·k documents for page k of the
-    // tracker's all-time scroll. Both conditions together still match exactly
-    // the rows the `$or` does.
-    conditions.push(
-      { start: { $lte: cursor.start } },
-      {
-        $or: [
-          { start: { $lt: cursor.start } },
-          { start: cursor.start, _id: { $lt: cursor.id } },
-        ],
-      },
-    );
+    // Without the plain bound `keysetAfter` adds, page k of the tracker's
+    // all-time scroll read every entry from `to` down to its cursor again:
+    // 51·k documents.
+    conditions.push(...keysetAfter("start", cursor.start, cursor.id));
   }
 
   const limit = input.limit ?? DEFAULT_LIST_LIMIT;

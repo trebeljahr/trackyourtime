@@ -54,6 +54,7 @@ import {
   type TaxBreakdownRow,
 } from "@starter/shared";
 import mongoose, { Types } from "mongoose";
+import { keysetAfter } from "../../db/keyset.js";
 import { getBusinessLogo, getBusinessProfile } from "../../models/BusinessProfile.js";
 import { Client } from "../../models/Client.js";
 import { Invoice, renderableInvoice, toClientInvoice, type IInvoice } from "../../models/Invoice.js";
@@ -1097,28 +1098,25 @@ export const invoicesRouter = router({
         const cursor = decodeCursor(input.cursor);
         // An unreadable cursor is the end of the list, not a 500.
         if (!cursor) return { invoices: [] };
-        conditions.push({
-          $or: [
-            { createdAt: { $lt: cursor.createdAt } },
-            { createdAt: cursor.createdAt, _id: { $lt: cursor.id } },
-          ],
-        });
+        conditions.push(...keysetAfter("createdAt", cursor.createdAt, cursor.id));
       }
 
       const page: InvoiceWire[] = [];
       let scan: Record<string, unknown>[] = [...conditions];
+      // Only the overdue filter can drop a row, so only it reads ahead.
+      const batch = input.overdue ? 200 : limit + 1;
       while (page.length <= limit) {
         const docs = await Invoice.find({ $and: scan }).select(WITHOUT_ISSUED_XML_BYTES)
-          .sort({ createdAt: -1, _id: -1 }).limit(200).lean();
+          .sort({ createdAt: -1, _id: -1 }).limit(batch).lean();
         if (!docs.length) break;
         for (const doc of docs) {
           const invoice = toClientInvoice(doc);
           if (!input.overdue || (invoice.balance?.overdueDays ?? 0) > 0) page.push(invoice);
           if (page.length > limit) break;
         }
-        if (docs.length < 200 || page.length > limit) break;
+        if (docs.length < batch || page.length > limit) break;
         const last = docs[docs.length - 1]!;
-        scan = [...conditions, { $or: [{ createdAt: { $lt: last.createdAt } }, { createdAt: last.createdAt, _id: { $lt: last._id } }] }];
+        scan = [...conditions, ...keysetAfter("createdAt", last.createdAt, last._id)];
       }
       const visible = page.slice(0, limit);
       const last = visible[visible.length - 1];

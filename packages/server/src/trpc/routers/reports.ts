@@ -68,6 +68,7 @@ import {
   type WeeklyReportResult,
   type WeeklyReportRow,
 } from "@starter/shared";
+import { keysetAfter } from "../../db/keyset.js";
 import { Client, type ClientDocLike } from "../../models/Client.js";
 import { Project, type ProjectDocLike } from "../../models/Project.js";
 import { Tag } from "../../models/Tag.js";
@@ -598,17 +599,7 @@ async function* keysetPages<T extends { _id: unknown; start: Date }>(
   while (remaining > 0) {
     const limit = Math.min(pageSize, remaining);
     const docs = await fetchPage(
-      after
-        ? [
-            ...conditions,
-            {
-              $or: [
-                { start: { $lt: after.start } },
-                { start: after.start, _id: { $lt: after.id } },
-              ],
-            },
-          ]
-        : conditions,
+      after ? [...conditions, ...keysetAfter("start", after.start, after.id)] : conditions,
       limit,
     );
     if (docs.length === 0) return;
@@ -1365,12 +1356,7 @@ export const buildDetailed = async (
   if (page.cursor) {
     const cursor = decodeCursor(page.cursor);
     if (!cursor) throw badRequest("Invalid cursor");
-    pageConditions.push({
-      $or: [
-        { start: { $lt: cursor.start } },
-        { start: cursor.start, _id: { $lt: cursor.id } },
-      ],
-    });
+    pageConditions.push(...keysetAfter("start", cursor.start, cursor.id));
   }
 
   const docs = await runJoinedQuery(pageConditions, limit + 1);

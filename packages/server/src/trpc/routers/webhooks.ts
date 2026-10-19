@@ -58,6 +58,7 @@ import {
   WebhookSubscription,
   toClientWebhookSubscription,
 } from "../../models/WebhookSubscription.js";
+import { keysetAfter } from "../../db/keyset.js";
 import { assertDeliverableUrl } from "../../services/webhooks/ssrf.js";
 import { decodeCursor, encodeCursor } from "../../services/cursor.js";
 import { publishSync } from "../../ws/sync.js";
@@ -309,18 +310,16 @@ export const webhooksRouter = router({
           // now be hidden after a permission loss, while a previously skipped
           // event may be visible after a grant. Filter every status using the
           // current request's membership, before counts and cursors are made.
-          $and: [visibleDeliveryFilter(ctx.membership.role, ctx.visibility)],
-          ...(decoded
-            ? {
-                $or: [
-                  { createdAt: { $lt: new Date(decoded.sortKey) } },
-                  {
-                    createdAt: new Date(decoded.sortKey),
-                    _id: { $lt: new mongoose.Types.ObjectId(decoded.id) },
-                  },
-                ],
-              }
-            : {}),
+          $and: [
+            visibleDeliveryFilter(ctx.membership.role, ctx.visibility),
+            ...(decoded
+              ? keysetAfter(
+                  "createdAt",
+                  new Date(decoded.sortKey),
+                  new mongoose.Types.ObjectId(decoded.id),
+                )
+              : []),
+          ],
         })
           .sort({ createdAt: -1, _id: -1 })
           .limit(limit + 1)

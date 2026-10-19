@@ -2815,6 +2815,15 @@ Rules that fail quietly if broken:
   entries. `report-catalog-join.test.ts` runs the old pipeline as the oracle
   on a real database. In-memory report fixtures hold real catalog rows, not
   pre-joined fields, because the join reads the catalog models.
+- **Every newest-first keyset cursor is `keysetAfter` (`db/keyset.ts`), over
+  an index that ends in `_id: -1`** — the entry list, the report fold pages,
+  the detailed report, `invoices.list` and the webhook delivery log. The plain
+  `<=` is the seek; the planner bounds a scan by the `$or` only when it plans
+  that `$or` as a union, and a second `$or` in the query gives it another
+  choice. The trailing `_id` keeps the sort from being a blocking one, which
+  reads every row below the cursor however the scan is bounded: without it, 60
+  pages of 3,000 invoices read 91,578 and 20 pages of a delivery log 178,313
+  (`scripts/profile-keyset-cursors.ts`).
 
 ### Calendar grid on a phone, a tablet and a touch screen
 

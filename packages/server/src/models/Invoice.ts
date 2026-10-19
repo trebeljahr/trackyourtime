@@ -255,11 +255,17 @@ const invoiceSchema = new Schema<IInvoice>(
   { timestamps: true },
 );
 
-/** The invoice list is "newest first, for this owner". */
-invoiceSchema.index({ workspaceId: 1, createdAt: -1 });
+/**
+ * The invoice list is "newest first, for this owner", with and without a
+ * status or client filter. Each ends in `_id`, the list's tie-break, or the
+ * sort is a blocking one that reads every invoice below the cursor on every
+ * page (`keysetAfter`). Built additively at boot; the indexes without `_id`
+ * stay on older databases, safe for rolled-back readers.
+ */
+invoiceSchema.index({ workspaceId: 1, createdAt: -1, _id: -1 });
 invoiceSchema.index({ "followThrough.reminders.enabled": 1, _id: 1 });
-invoiceSchema.index({ workspaceId: 1, status: 1, createdAt: -1 });
-invoiceSchema.index({ workspaceId: 1, clientId: 1, createdAt: -1 });
+invoiceSchema.index({ workspaceId: 1, status: 1, createdAt: -1, _id: -1 });
+invoiceSchema.index({ workspaceId: 1, clientId: 1, createdAt: -1, _id: -1 });
 
 /**
  * Invoice numbers are the thing accountants match payments against, so two
