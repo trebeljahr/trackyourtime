@@ -193,7 +193,8 @@ export const marketing: Translation<typeof source> = {
     summary: {
       title: "Kurz gesagt",
       stores: "Track Your Time speichert dein Konto und die Zeit, die du erfasst, damit es sie dir wieder anzeigen kann.",
-      noAnalytics: "Es gibt keine Analyse-Tools, keine Werbung und keinen Verkauf von Daten.",
+      noAnalytics:
+        "Es gibt keine Werbung und keinen Verkauf von Daten. Die Website misst nur, wie schnell ihre Seiten laden, mit Cloudflare Web Analytics.",
       noTracking: "Der Dienst erfährt nie, welche Websites du besuchst oder was du in anderen Apps tust.",
       control: "Du kannst jederzeit alle deine Daten exportieren und verlangen, dass alles gelöscht wird.",
     },
@@ -223,11 +224,11 @@ export const marketing: Translation<typeof source> = {
     processors: {
       title: "Wer die Daten sonst verarbeitet",
       cloudflare:
-        "<strong>Cloudflare</strong> beantwortet DNS-Anfragen für trackyourtime.dev und leitet jede Anfrage an den Server weiter. Cloudflare sieht deine IP-Adresse und die Anfrage.",
+        "<strong>Cloudflare</strong> beantwortet DNS-Anfragen für trackyourtime.dev und leitet jede Anfrage an den Server weiter. Cloudflare sieht deine IP-Adresse und die Anfrage. Außerdem fügt Cloudflare den Seiten der Website sein Web-Analytics-Skript hinzu, das von static.cloudflareinsights.com geladen wird. Das Skript meldet die Seite, den Referrer und wie lange die Seite zum Laden gebraucht hat. Es setzt keine Cookies und behält keine Kennung von einem Seitenaufruf zum nächsten. Cloudflare verwirft die IP-Adresse, die mit der Meldung ankommt. Wenn du dich über ein Cloudflare-Rechenzentrum in der EU, im EWR, im Vereinigten Königreich oder in der Schweiz verbindest, fügt Cloudflare das Skript nicht ein.",
       ses: "<strong>Amazon Web Services (SES)</strong> stellt E-Mails zu: Links zum Zurücksetzen des Passworts und, wenn du ihn abonnierst, den Newsletter. SES erhält deine E-Mail-Adresse und die Nachricht.",
       host: "<strong>Der Server-Anbieter</strong> vermietet den virtuellen Server, auf dem Track Your Time und seine Datenbank laufen. Deine Daten liegen auf diesem Server.",
       nobodyElse:
-        "Kein anderes Unternehmen erhält deine Daten. Track Your Time nutzt keine Werbe- oder Analysedienste.",
+        "Kein anderes Unternehmen erhält deine Daten. Track Your Time nutzt keine Werbedienste und außer Cloudflare Web Analytics keine Analysedienste.",
     },
     extension: {
       title: "Die Browsererweiterung",

@@ -196,7 +196,8 @@ export const marketing = {
     summary: {
       title: "The short version",
       stores: "Track Your Time stores your account and the time you track, so that it can show them back to you.",
-      noAnalytics: "It runs no analytics, shows no ads, and sells no data.",
+      noAnalytics:
+        "It shows no ads and sells no data. The website measures only how fast its pages load, with Cloudflare Web Analytics.",
       noTracking: "The service never learns which websites you visit or what you do in other apps.",
       control: "You can export all of your data at any time, and ask for all of it to be deleted.",
     },
@@ -226,11 +227,11 @@ export const marketing = {
     processors: {
       title: "Who else processes it",
       cloudflare:
-        "<strong>Cloudflare</strong> answers DNS for trackyourtime.dev and passes every request to the server. It sees your IP address and the request.",
+        "<strong>Cloudflare</strong> answers DNS for trackyourtime.dev and passes every request to the server. It sees your IP address and the request. Cloudflare also adds its Web Analytics script to the website’s pages, loaded from static.cloudflareinsights.com. The script reports the page, the referrer and how long the page took to load. It sets no cookies and keeps no ID from one page view to the next. Cloudflare discards the IP address that comes with the report. It does not add the script for visitors who connect through a Cloudflare data center in the EU, the EEA, the United Kingdom or Switzerland.",
       ses: "<strong>Amazon Web Services (SES)</strong> delivers email: password resets and, if you subscribe, the newsletter. It receives your email address and the message.",
       host: "<strong>The server host</strong> rents out the virtual server that runs Track Your Time and its database. Your data is stored on that server.",
       nobodyElse:
-        "No other company receives your data. Track Your Time does not use advertising or analytics services.",
+        "No other company receives your data. Track Your Time uses no advertising service, and no analytics service other than Cloudflare Web Analytics.",
     },
     extension: {
       title: "The browser extension",
