@@ -12,9 +12,13 @@
   chosen Track Your Time server, all linked to the account, none for tracking,
   all for app functionality: name and email (sign-up), the account's user id,
   a profile picture if one is added, and the user's own content (time entries,
-  clients, projects, invoices, business details). No crash data: the release
-  workflows build without NEXT_PUBLIC_SENTRY_DSN. Add NSPrivacyCollectedDataTypeCrashData
-  here, and in App Store Connect → App Privacy, the day that variable is set.
+  clients, projects, invoices, business details).
+
+  Crash data: the release workflows build with NEXT_PUBLIC_SENTRY_DSN (set
+  2026-10-19), so the app sends error reports to Track Your Time's own
+  GlitchTip. A report carries no user id, cookie or request body
+  (packages/client/src/lib/error-reporting/scrub.ts), so it is not linked to
+  the account. App Store Connect → App Privacy must declare the same.
 -->
 <plist version="1.0">
 <dict>
@@ -88,6 +92,18 @@
 			<string>NSPrivacyCollectedDataTypeOtherUserContent</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCrashData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
 			<false/>
 			<key>NSPrivacyCollectedDataTypePurposes</key>
