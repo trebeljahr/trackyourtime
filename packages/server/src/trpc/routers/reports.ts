@@ -743,7 +743,8 @@ const measureEntry = (
     billableSec: doc.billable ? seconds : 0,
     amount: entryAmount(seconds, doc.billable ? doc.hourlyRate : null),
     slices,
-    dayKey: dayKeyInZone(clipStart, calendar.timeZone),
+    // The first slice starts at `clipStart`, so it already names that day.
+    dayKey: slices[0]?.date ?? dayKeyInZone(clipStart, calendar.timeZone),
   };
 };
 

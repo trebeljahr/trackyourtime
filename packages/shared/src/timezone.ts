@@ -148,11 +148,26 @@ export const zonedWallClockToMs = (
   return naiveUtc - zoneOffsetMs(firstGuess, timeZone);
 };
 
+/**
+ * Day starts already resolved, keyed by zone and day. `zonedDayStartMs` is a
+ * pure function of the two and costs two `Intl` reads, while a report over a
+ * long range asks for the same few thousand days once per entry. Emptied at a
+ * bound, so a server reading many zones keeps at most this many.
+ */
+const dayStarts = new Map<string, number>();
+const DAY_START_CACHE_LIMIT = 20_000;
+
 /** The instant at which that calendar day begins in `timeZone`. */
 export const zonedDayStartMs = (key: DayKey, timeZone: string): number => {
+  const cacheKey = `${timeZone} ${key}`;
+  const cached = dayStarts.get(cacheKey);
+  if (cached !== undefined) return cached;
   const parts = keyParts(key);
   if (!parts) return Number.NaN;
-  return zonedWallClockToMs({ year: parts.y, month: parts.m, day: parts.d }, timeZone);
+  const start = zonedWallClockToMs({ year: parts.y, month: parts.m, day: parts.d }, timeZone);
+  if (dayStarts.size >= DAY_START_CACHE_LIMIT) dayStarts.clear();
+  dayStarts.set(cacheKey, start);
+  return start;
 };
 
 /** The wall-clock reading an instant shows on a clock in `timeZone`. */
