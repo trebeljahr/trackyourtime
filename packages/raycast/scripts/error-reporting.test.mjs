@@ -45,6 +45,10 @@ test("unparseable frames and non-error values expose no arbitrary object data", 
   assert.deepEqual(safeFrames("Error\n    at secret (/tmp/private.txt:1:2)"), []);
   assert.equal(scrubErrorText("Bearer secret contact a@b.test"), "Bearer [redacted] contact [email]");
   assert.equal(scrubErrorText('failed /trpc?input={"description":"secret"}'), "failed /trpc");
+  const path =
+    "/app/node_modules/.pnpm/better-sqlite3@12.11.1/node_modules/better-sqlite3/build/Release/better_sqlite3.node";
+  assert.equal(scrubErrorText(`The module '${path}' was compiled`), `The module '${path}' was compiled`);
+  assert.equal(scrubErrorText("mailto:me@example.com"), "mailto:[email]");
   const calls = [];
   createReporter("https://key@example.test/2", "release", "build", async (_url, options) => {
     calls.push(JSON.parse(options.body));

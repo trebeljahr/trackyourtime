@@ -24,7 +24,7 @@ export function scrubErrorText(value: string): string {
       url.split(/[?#]/, 1)[0].replace(/^([a-z][\w+.-]*:\/\/)[^/@]*@/i, "$1"),
     )
     .replace(/[?#][^\s"'<>]*/g, "")
-    .replace(/[^\s@<>"'(),;:]+@[^\s@<>"'(),;:]+\.[a-z]{2,}/gi, "[email]")
+    .replace(/[^\s@<>"'(),;:/]+@[^\s@<>"'(),;:/]+\.[a-z]{2,}/gi, "[email]")
     .slice(0, 300);
 }
 

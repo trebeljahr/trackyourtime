@@ -32,6 +32,13 @@ describe("scrubText", () => {
     expect(scrubText("Authorization: Bearer abc.DEF-123_=")).toBe("Authorization: Bearer [redacted]");
   });
 
+  it("keeps package paths that only look like addresses", () => {
+    const path =
+      "/app/node_modules/.pnpm/better-sqlite3@12.11.1/node_modules/better-sqlite3/build/Release/better_sqlite3.node";
+    expect(scrubText(`The module '${path}' was compiled`)).toBe(`The module '${path}' was compiled`);
+    expect(scrubText("mailto:me@example.com")).toBe("mailto:[email]");
+  });
+
   it("strips query strings from URLs and paths inside a message", () => {
     expect(
       scrubText('fetch failed: https://api.trackyourtime.dev/api/trpc/entries.list?batch=1&input={"a":1} (500)'),
