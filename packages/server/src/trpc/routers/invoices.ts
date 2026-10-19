@@ -1,5 +1,5 @@
 import { businessProcedure } from "../trpc.js";
-import { revisionFilter } from "../../services/invoice-follow-through.js";
+import { overdueCandidateFilter, revisionFilter } from "../../services/invoice-follow-through.js";
 import { invoiceFollowThroughProcedures } from "./invoice-follow-through.js";
 import { clientEntryFilter } from "../../services/entries/refs.js";
 // IMPLEMENTED BY: invoicing agent
@@ -1093,6 +1093,7 @@ export const invoicesRouter = router({
       const conditions: Record<string, unknown>[] = [{ workspaceId }];
       if (input.status) conditions.push({ status: input.status });
       if (input.clientId) conditions.push({ clientId: input.clientId });
+      if (input.overdue) conditions.push(overdueCandidateFilter(new Date()));
 
       if (input.cursor) {
         const cursor = decodeCursor(input.cursor);
@@ -1103,8 +1104,12 @@ export const invoicesRouter = router({
 
       const page: InvoiceWire[] = [];
       let scan: Record<string, unknown>[] = [...conditions];
-      // Only the overdue filter can drop a row, so only it reads ahead.
-      const batch = input.overdue ? 200 : limit + 1;
+      // A batch is one page and its look-ahead row. Only the overdue filter
+      // can drop a row here — a ledger paid in full is a candidate the
+      // database cannot rule out — and each batch it comes back short, the
+      // next one doubles, so a workspace of settled ledgers costs a few
+      // queries rather than one per page.
+      let batch = limit + 1;
       while (page.length <= limit) {
         const docs = await Invoice.find({ $and: scan }).select(WITHOUT_ISSUED_XML_BYTES)
           .sort({ createdAt: -1, _id: -1 }).limit(batch).lean();
@@ -1117,6 +1122,7 @@ export const invoicesRouter = router({
         if (docs.length < batch || page.length > limit) break;
         const last = docs[docs.length - 1]!;
         scan = [...conditions, ...keysetAfter("createdAt", last.createdAt, last._id)];
+        batch = Math.min(batch * 2, 200);
       }
       const visible = page.slice(0, limit);
       const last = visible[visible.length - 1];

@@ -2823,7 +2823,18 @@ Rules that fail quietly if broken:
   choice. The trailing `_id` keeps the sort from being a blocking one, which
   reads every row below the cursor however the scan is bounded: without it, 60
   pages of 3,000 invoices read 91,578 and 20 pages of a delivery log 178,313
-  (`scripts/profile-keyset-cursors.ts`).
+  (`scripts/profile-keyset-cursors.ts`). Migration 3 drops the plain indexes
+  these replaced (`SUPERSEDED_INDEXES`), building each replacement first,
+  because migrations run before the boot index build. It drops nothing with a
+  rule of its own (unique, partial, sparse, collation, TTL). A later index
+  that supersedes another needs a migration of its own; never widen this one.
+- **The overdue invoice list is narrowed in the database by
+  `overdueCandidateFilter`**, which excludes only rows `invoiceBalance` can
+  never call overdue: drafts, credited invoices, paid ones with no ledger, and
+  ones due a day or more from now. A ledger paid in full stays a candidate,
+  decided in JS, and each short batch doubles. Change the overdue rule and the
+  filter together; `invoice-overdue-filter.test.ts` checks the superset over
+  every combination at three instants.
 
 ### Calendar grid on a phone, a tablet and a touch screen
 

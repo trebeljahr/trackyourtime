@@ -24,6 +24,42 @@ import {
 
 export const invoiceRefusal = (message: string): TRPCError =>
   new TRPCError({ code: "PRECONDITION_FAILED", message });
+
+/**
+ * The invoices that cannot be overdue at `now`, excluded in the database so
+ * the overdue list does not fetch and project every invoice ever written.
+ *
+ * Only a superset of the overdue invoices remains: `invoiceBalance` still
+ * decides, row by row. A row is excluded only when that rule provably gives
+ * it no overdue days:
+ * - a draft (`status !== "draft"` is required);
+ * - a credited invoice (a truthy `credit` makes the outstanding balance 0);
+ * - a paid invoice with no ledger: no `payments` and no `legacySettledMinor`
+ *   is `legacySettled`, paid in full. That is every invoice marked paid by
+ *   hand, since a status change is refused once payments exist;
+ * - one due no earlier than a day from now. Overdue needs today, in the
+ *   invoice's zone, to be past the due date's UTC day, and no zone is a day
+ *   ahead of UTC.
+ * A ledger that sums to the total is not excluded: deciding that would be a
+ * second copy of the ledger arithmetic, free to drift from the first.
+ *
+ * `$nor` keeps a row whose field holds something unexpected: a missing
+ * status, a `null` ledger or credit, a due date that is not a date.
+ */
+export function overdueCandidateFilter(now: Date): Record<string, unknown> {
+  return {
+    $nor: [
+      { status: "draft" },
+      { "followThrough.credit": { $type: "object" } },
+      {
+        status: "paid",
+        "followThrough.payments": { $exists: false },
+        "followThrough.legacySettledMinor": { $exists: false },
+      },
+      { dueDate: { $gte: new Date(now.getTime() + 86_400_000) } },
+    ],
+  };
+}
 export function revisionFilter(
   doc: Pick<IInvoice, "followThroughRevision">,
 ): Record<string, unknown> {

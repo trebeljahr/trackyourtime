@@ -8,9 +8,10 @@
 // Usage (from packages/server):
 //   node --import tsx src/scripts/profile-keyset-cursors.ts mongodb://127.0.0.1:<port>/ [cases…]
 //
-// Each case reports the keys and documents its collection examined (the
-// database profiler, summed over every query the case sent, getMores
-// included), the pages and rows it returned and a digest of them. Ids are
+// Each case reports the keys and documents its collection examined and the
+// documents it sent back to the server (the database profiler, summed over
+// every query the case sent, getMores included), the pages it returned and a
+// digest of them. Ids are
 // deterministic, so two builds' digests compare directly. PROFILE_OPS=1 also
 // prints every profiled query with its plan summary, and PROFILE_DB keeps one
 // seeded database across invocations (it is neither reseeded nor dropped).
@@ -282,9 +283,10 @@ try {
     }
     const keysExamined = ops.reduce((sum, op) => sum + Number(op.keysExamined ?? 0), 0);
     const docsExamined = ops.reduce((sum, op) => sum + Number(op.docsExamined ?? 0), 0);
+    const returned = ops.reduce((sum, op) => sum + Number(op.nreturned ?? 0), 0);
     const sorted = ops.filter((op) => op.hasSortStage === true).length;
     const digest = createHash("sha256").update(JSON.stringify(rows)).digest("hex").slice(0, 16);
-    console.log(JSON.stringify({ case: which.label, pages, queries: ops.length, sorted, keysExamined, docsExamined, digest }));
+    console.log(JSON.stringify({ case: which.label, pages, queries: ops.length, sorted, keysExamined, docsExamined, returned, digest }));
   }
 } finally {
   assert.ok(mongoose.connection.db!.databaseName.startsWith("trackyourtime-profile-"));
