@@ -342,7 +342,7 @@ export const marketing = {
       extensionSignIn: {
         term: "The Chrome extension asks me to sign in, but I am signed in to the web app",
         detail:
-          "Open the web app at trackyourtime.dev in the same Chrome profile, then open the popup again. The page tells the extension that you are signed in, and the extension signs in within a few seconds. This works only in that profile, and only when the extension uses trackyourtime.dev.",
+          "Open the popup. It shows a Sign in from web as button with the email address of your trackyourtime.dev account. Choose it, and the extension signs in. It never signs in without that click. If the button is missing, open the web app at trackyourtime.dev in the same Chrome profile, then open the popup again. This works only in that profile, and only when the extension uses trackyourtime.dev.",
       },
       raycastConnect: {
         term: "How do I connect the Raycast extension?",
@@ -429,7 +429,7 @@ export const marketing = {
     },
     permissions: {
       title: "What the extension can access",
-      login: "A login of its own, set up for you when you are logged in at trackyourtime.dev.",
+      login: "Your Track Your Time session cookie, only to offer the account you are logged in with. After you confirm it, the extension gets a login of its own.",
       idle: "Whether your computer is idle, so it can ask what to do with the time you were away.",
       storage: "Storage on your computer, for changes made while you were offline.",
       server: "The Track Your Time server you sign in to.",

@@ -339,7 +339,7 @@ export const marketing: Translation<typeof source> = {
       extensionSignIn: {
         term: "Die Chrome-Erweiterung will eine Anmeldung, dabei bin ich in der Web-App angemeldet",
         detail:
-          "Öffne die Web-App auf trackyourtime.dev im selben Chrome-Profil und öffne dann das Pop-up erneut. Die Seite teilt der Erweiterung mit, dass du angemeldet bist, und die Erweiterung meldet sich innerhalb weniger Sekunden an. Das klappt nur in diesem Profil und nur, wenn die Erweiterung trackyourtime.dev nutzt.",
+          "Öffne das Pop-up. Es zeigt die Schaltfläche „Über Web-App anmelden als“ mit der E-Mail-Adresse deines Kontos auf trackyourtime.dev. Wähle sie, und die Erweiterung meldet sich an. Ohne diesen Klick meldet sie sich nie an. Fehlt die Schaltfläche, öffne die Web-App auf trackyourtime.dev im selben Chrome-Profil und öffne dann das Pop-up erneut. Das klappt nur in diesem Profil und nur, wenn die Erweiterung trackyourtime.dev nutzt.",
       },
       raycastConnect: {
         term: "Wie verbinde ich die Raycast-Erweiterung?",
@@ -426,7 +426,7 @@ export const marketing: Translation<typeof source> = {
     },
     permissions: {
       title: "Worauf die Erweiterung zugreifen kann",
-      login: "Eine eigene Anmeldung, die für dich eingerichtet wird, wenn du auf trackyourtime.dev angemeldet bist.",
+      login: "Dein Sitzungscookie von Track Your Time, nur um dir das Konto anzubieten, mit dem du angemeldet bist. Bestätigst du es, bekommt die Erweiterung eine eigene Anmeldung.",
       idle: "Ob dein Computer inaktiv ist, damit sie fragen kann, was mit der Zeit passieren soll, in der du weg warst.",
       storage: "Speicher auf deinem Computer, für Änderungen, die du offline gemacht hast.",
       server: "Der Track-Your-Time-Server, bei dem du angemeldet bist.",
