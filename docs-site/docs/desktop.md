@@ -11,10 +11,10 @@ system tray, and gives it a keyboard shortcut that works in every app. It is
 the web app in its own window, so every screen is there. It keeps tracking
 without a connection and sends your changes when the connection comes back.
 
-**No version is released yet.** There is nothing to download today, and none
-of the stores lists the app. You can build it from source, as described
-[below](#build-it-from-source). This page describes the channels as they will
-work once a release is published.
+Version 0.2.2 is on
+[GitHub Releases](https://github.com/trebeljahr/trackyourtime/releases/latest)
+for macOS, Windows and Linux. No store lists the app yet. You can also build it
+from source, as described [below](#build-it-from-source).
 
 ## Where to get it
 
@@ -30,8 +30,10 @@ work once a release is published.
 | Snap Store | The store | snapd updates it |
 | Flathub | Flathub | Flatpak updates it |
 
-None of these is available yet. Settings → Desktop → Updates shows which kind
-of version you have and why it does or does not update itself.
+Today only the GitHub Releases rows are available: the dmg, the Windows
+installer, the AppImage and the deb and rpm packages. The Homebrew tap and the
+stores do not have the app yet. Settings → Desktop → Updates shows which kind of version you
+have and why it does or does not update itself.
 
 ## Updates
 

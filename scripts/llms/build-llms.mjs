@@ -92,7 +92,7 @@ const WEB_PAGES = [
   {
     title: "Desktop app",
     url: `${WEB_URL}/download/`,
-    description: "The desktop app for macOS, Windows and Linux: the timer in the menu bar or system tray, a shortcut that works in any app, and tracking that continues offline. No version is released yet.",
+    description: "The desktop app for macOS, Windows and Linux: the timer in the menu bar or system tray, a shortcut that works in any app, and tracking that continues offline.",
   },
 ];
 

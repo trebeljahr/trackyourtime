@@ -31,7 +31,7 @@ What to expect:
 
 Pick a team-first tracker if:
 
-- Several people track time, and someone reviews or approves it.
+- Several people track time, and approval runs through managers or teams rather than one group of admins.
 - You need roles, absences or expenses today.
 - A long production history matters more to you than a small install.
 
@@ -63,29 +63,29 @@ Track Your Time is a timer-first tracker for people who bill clients by the hour
 
 What it does:
 
-- The timer runs in the web app, a Chrome extension and iPhone and Android apps. A Raycast extension adds a Mac menu bar clock and a hotkey.
+- The timer runs in the web app, a [desktop app](./desktop.md) for macOS, Windows and Linux, a Chrome extension and iPhone and Android apps. A Raycast extension adds a Mac menu bar clock and a hotkey.
 - Each of these keeps tracking without a connection. The queued changes go to the server when the connection returns.
 - A timer you stop on one device stops on every other open device at once.
-- Every client connects to the hosted service or to your own server. The Chrome extension, the Raycast extension and the phone apps take the server address in their settings, with no rebuild.
+- Every client connects to the hosted service or to your own server. The desktop app, the Chrome extension, the Raycast extension and the phone apps take the server address in their settings, with no rebuild.
 - Recent entries, pinned favorites and description autocomplete fill in the client, project and tags you used before. A maximum timer length stops a forgotten timer or emails you about it.
-- The Chrome extension can record which websites had your attention and suggest entries for time you did not track. It is off by default, and nothing leaves the computer until you accept a suggestion.
-- Each project has an hourly rate and an optional budget in hours or money. Reports show totals by client, project, task, tag, member, day, week or month, or list every entry. Both views export to CSV and PDF.
+- The Chrome extension and the desktop app can record which websites or apps had your attention and suggest entries for time you did not track. Both are off by default. The activity itself stays on the computer, and the server sees only the entries made from it.
+- Each project can have an hourly rate and a budget in hours or money, and each member can have an hourly rate of their own. A new entry takes the project's rate first, then the member's, then the workspace default. Reports show totals by client, project, task, tag, member, day, week or month, or list every entry. Both views export to CSV and PDF.
 - An invoice collects a client's unbilled billable hours and downloads as a PDF, a ZUGFeRD PDF or an XRechnung file. An hour on an invoice can't be billed a second time.
 - Workspaces have members, invitations and three roles. Each member sees only their own time until an owner or admin lets them see colleagues' time or money.
+- Timesheet approval is optional. A member submits a week, and an owner or admin who may see colleagues' time approves or rejects it. An approved week is locked against edits. Approval needs MongoDB running as a replica set, and the repository includes an opt-in compose override for a single-node one.
 - You can export a whole workspace as JSON or CSV, and move it between the hosted service and your own server from Settings. A CSV from another tool imports with a preview, and you can undo the import.
 - A [REST API](./api/overview.md) with an OpenAPI document, signed [webhooks](./api/webhooks.md) and an [MCP server](./mcp.md) connect it to other tools and to AI assistants.
 - The web app, the extensions and the phone apps are in English and German. The Raycast extension is in English.
+- Each tagged release publishes the server and web app images for amd64 and arm64, so an install pulls them and builds nothing.
 - The licence is AGPL-3.0-or-later. Every install has every feature, the hosted service included, and there is no paid tier.
 
 What it cannot do yet:
 
-- Rates belong to projects and the workspace, not to people. Everyone in a workspace bills a project at the same rate.
-- There is no timesheet approval, no expense tracking and no absence tracking.
+- There is no expense tracking and no absence tracking.
 - Clients cannot log in or open a shared report. You send them a PDF.
 - Budgets show progress, but nothing notifies you when a project goes over. There are no milestones or deadlines.
-- There is no tagged release yet, so there are no published Docker images. Until the first release, you build the images yourself, which needs about 4 GB of RAM.
 - Anyone who can reach your domain can create an account. The application has no setting to close sign-up, and the self-hosting guide lists workarounds at the proxy.
-- The Chrome extension is in the [Chrome Web Store](https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). Edge, Brave, Opera, Vivaldi and Arc install it from there. The Raycast extension and the phone apps are not in any store yet. There is no Firefox extension and no desktop app.
+- The Chrome extension is in the [Chrome Web Store](https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). Edge, Brave, Opera, Vivaldi and Arc install it from there. The Firefox build is in review at Firefox Add-ons and not public yet. The desktop app downloads from [GitHub Releases](https://github.com/trebeljahr/trackyourtime/releases/latest), and no store lists it. The Raycast extension and the phone apps are not in any store yet.
 
 Pick Track Your Time if:
 
