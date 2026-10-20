@@ -21,6 +21,7 @@ import { EinvoicePanel } from "./einvoice-panel";
 import { InvoiceEditForm } from "./invoice-edit-form";
 import { InvoiceFollowThrough } from "./invoice-follow-through";
 import { InvoiceLines } from "./invoice-lines";
+import { claimInvoiceSupportCard, InvoiceSupportCard } from "./invoice-support-card";
 import {
   canDeleteInvoice,
   formatDate,
@@ -74,6 +75,7 @@ export function InvoiceDetail({
   const locale = useLocale();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
+  const [supportCard, setSupportCard] = React.useState(false);
   // Editing is a mode of THIS draft: another selection, or a status change
   // landing from elsewhere, leaves it.
   const [editing, setEditing] = React.useState(false);
@@ -99,7 +101,7 @@ export function InvoiceDetail({
   const handleDownload = async (): Promise<void> => {
     setDownloading(true);
     try {
-      await downloadPdf(invoice);
+      if ((await downloadPdf(invoice)) && claimInvoiceSupportCard()) setSupportCard(true);
     } finally {
       setDownloading(false);
     }
@@ -337,6 +339,8 @@ export function InvoiceDetail({
           </Button>
         ) : null}
       </div>
+
+      {supportCard ? <InvoiceSupportCard onClose={() => setSupportCard(false)} /> : null}
 
       <ConfirmDialog
         open={confirmDelete}

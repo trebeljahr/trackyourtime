@@ -60,8 +60,8 @@ export type InvoiceMutations = {
   updateInvoice: (vars: UpdateInvoiceVars) => Promise<UpdateInvoiceOutcome>;
   setStatus: (id: string, status: InvoiceStatus) => void;
   removeInvoice: (id: string) => Promise<boolean>;
-  /** Fetches the server-rendered PDF and hands it to the browser. */
-  downloadPdf: (invoice: Pick<InvoiceRow, "id" | "number">) => Promise<void>;
+  /** Fetches the server-rendered PDF and hands it to the browser; true once it did. */
+  downloadPdf: (invoice: Pick<InvoiceRow, "id" | "number">) => Promise<boolean>;
   /** PDF/A-3 with the EN 16931 XML embedded. */
   downloadZugferd: (invoice: Pick<InvoiceRow, "id" | "number">) => Promise<EinvoiceDownloadOutcome>;
   /** The XRechnung XML alone. */
@@ -169,7 +169,7 @@ export function useInvoiceMutations(): InvoiceMutations {
   });
 
   const downloadPdf = React.useCallback(
-    async (invoice: Pick<InvoiceRow, "id" | "number">): Promise<void> => {
+    async (invoice: Pick<InvoiceRow, "id" | "number">): Promise<boolean> => {
       setDownloading(true);
       try {
         // The PDF is rendered server-side and crosses the wire base64-encoded,
@@ -177,6 +177,7 @@ export function useInvoiceMutations(): InvoiceMutations {
         // decode — passing the binary string to `new Blob` would UTF-8 it.
         const result = await utils.invoices.exportPdf.fetch({ id: invoice.id });
         downloadBase64(result.filename, result.base64, result.mimeType);
+        return true;
       } catch (error) {
         toast.error(
           errorMessage(
@@ -184,6 +185,7 @@ export function useInvoiceMutations(): InvoiceMutations {
             translate("reports")("invoices.toast.pdfFailed", { number: invoice.number }),
           ),
         );
+        return false;
       } finally {
         setDownloading(false);
       }

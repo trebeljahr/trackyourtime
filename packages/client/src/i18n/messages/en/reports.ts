@@ -397,6 +397,12 @@ export const reports = {
         "{count, plural, one {The # entry on it becomes billable again, and the number is given up. Only drafts can be deleted — once an invoice is sent it is a record.} other {The # entries on it become billable again, and the number is given up. Only drafts can be deleted — once an invoice is sent it is a record.}}",
     },
 
+    /** After the first invoice PDF, web only; shown once. `<donate>` links to the donate page. */
+    supportCard: {
+      body: "Track Your Time has no paid plan. If it saves you a subscription, you can <donate>buy me some cookies</donate>.",
+      close: "Close",
+    },
+
     toast: {
       created: "Invoice {number} created.",
       /** `{status}` is the translated status name. */

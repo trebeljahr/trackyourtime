@@ -6,8 +6,9 @@
  * parameter out of the address bar, so a bookmark or a shared link does not
  * carry it on.
  *
- * Nothing reads the value yet. It is for a later inline ask, which stays quiet
- * for 90 days after it — the same quiet period as ricos.site's own ask.
+ * The invoice support card reads it and stays hidden for someone who has
+ * already given. A later inline ask on the public pages is to stay quiet for
+ * 90 days after it — the same quiet period as ricos.site's own ask.
  */
 
 export const DONATION_SUPPORTED_AT_KEY = "donation-supported-at";

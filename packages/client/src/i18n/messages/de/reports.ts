@@ -361,6 +361,11 @@ export const reports: Translation<typeof source> = {
         "{count, plural, one {Der # Eintrag darauf wird wieder abrechenbar, und die Nummer verfällt. Nur Entwürfe lassen sich löschen – eine versendete Rechnung ist ein Beleg.} other {Die # Einträge darauf werden wieder abrechenbar, und die Nummer verfällt. Nur Entwürfe lassen sich löschen – eine versendete Rechnung ist ein Beleg.}}",
     },
 
+    supportCard: {
+      body: "Track Your Time hat keinen Bezahltarif. Wenn es dir ein Abo erspart, kannst du mir <donate>ein paar Kekse spendieren</donate>.",
+      close: "Schließen",
+    },
+
     toast: {
       created: "Rechnung {number} erstellt.",
       statusChanged: "Status von Rechnung {number}: {status}.",
