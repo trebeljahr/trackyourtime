@@ -887,6 +887,8 @@ export const maxDurationSettingsSchema = z.object({
       `Maximum duration must be 0 (off) or between ${MIN_MAX_DURATION_HOURS} and ${MAX_MAX_DURATION_HOURS} hours`,
     ),
   behavior: runawayBehaviorSchema,
+  /** Optional: settings exported before the reminder email was an option have none. */
+  emailReminder: z.boolean().optional(),
 });
 
 export const updateSettingsSchema = z.object({

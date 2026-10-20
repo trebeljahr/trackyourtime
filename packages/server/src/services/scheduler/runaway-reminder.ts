@@ -10,7 +10,9 @@
 //
 // The email is the part the lazy path cannot do. Three rules:
 //
-//  - Enforcement never depends on email. Notifications off, no transport, no
+//  - The email is opt-in. It goes out only to a person who turned on "Email
+//    me about a forgotten timer" (`maxDuration.emailReminder`); absent is off.
+//  - Enforcement never depends on email. Reminder off, no transport, no
 //    address on file: the cap and the stop still happen.
 //  - One email per entry. `reminderSentAt` is claimed with an atomic write
 //    BEFORE sending, so two processes (or a job run racing a slow previous
@@ -21,7 +23,6 @@
 import mongoose from "mongoose";
 import { env } from "../../config/env.js";
 import { getOrCreateUserPreferences } from "../../models/Settings.js";
-import { Profile } from "../../models/Profile.js";
 import { TimeEntry } from "../../models/TimeEntry.js";
 import {
   buildRunawayReminderEmail,
@@ -46,7 +47,6 @@ export type RunawayReminderDeps = {
   sendEmail: typeof sendEmail;
   isEmailDeliveryConfigured: () => boolean;
   findUserEmail: (userId: string) => Promise<string | null>;
-  notificationsEnabled: (userId: string) => Promise<boolean>;
   trackUrl: string | null;
   log: (message: string) => void;
 };
@@ -60,7 +60,7 @@ export type RunawayReminderSummary = {
   emailed: number;
   /** Reminders logged because no transport is configured. */
   logged: number;
-  /** Reminders owed but not sent because the person turned emails off. */
+  /** Reminders owed but not sent because the person has not turned them on. */
   suppressed: number;
   /** People whose run threw. */
   failed: number;
@@ -82,17 +82,6 @@ async function findUserEmail(userId: string): Promise<string | null> {
   return typeof user?.email === "string" && user.email ? user.email : null;
 }
 
-/**
- * Profile.preferences.notifications, which defaults to on. No profile at all
- * means the person never changed it.
- */
-async function notificationsEnabled(userId: string): Promise<boolean> {
-  const profile = await Profile.findOne({ userId })
-    .select({ "preferences.notifications": 1 })
-    .lean<{ preferences?: { notifications?: boolean } } | null>();
-  return profile?.preferences?.notifications !== false;
-}
-
 const trackUrlFromEnv = (): string | null =>
   env.FRONTEND_URL ? `${env.FRONTEND_URL.replace(/\/+$/, "")}/app/track` : null;
 
@@ -101,7 +90,6 @@ const defaultDeps = (): RunawayReminderDeps => ({
   sendEmail,
   isEmailDeliveryConfigured,
   findUserEmail,
-  notificationsEnabled,
   trackUrl: trackUrlFromEnv(),
   log: (message) => console.log(message),
 });
@@ -178,7 +166,7 @@ async function remindOne(
   const due = runawayReminderDue(running, preferences.maxDuration, now.getTime());
   if (due.kind === "none") return;
 
-  if (!(await deps.notificationsEnabled(authorId))) {
+  if (preferences.maxDuration.emailReminder !== true) {
     summary.suppressed += 1;
     return;
   }

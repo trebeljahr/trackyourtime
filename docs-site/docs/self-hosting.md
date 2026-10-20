@@ -1051,17 +1051,17 @@ and workspace invitations (without email, the Members screen shows the link
 to copy). One thing about time tracking: a single reminder for a timer left
 running too long. Reports, invoices and exports download in the browser.
 
-The reminder goes out once per timer. It is sent when the runaway guard flags
-a timer (behaviour "Ask me"), or when a timer passes 8 hours with the guard
-off. A background job checks every 5 minutes. With no SMTP configured, the
-server logs the reminder instead of sending it. Each person can turn the
-reminder off with **Email notifications** in Settings, Account. The job also
+The reminder is off until a person turns on **Email me about a forgotten
+timer** in Settings, Limits. It then goes out once per timer. It is sent when
+the runaway guard flags a timer (behaviour "Ask me"), or when a timer passes
+8 hours with the guard off. A background job checks every 5 minutes. With no
+SMTP configured, the server logs the reminder instead of sending it. The job also
 applies "Cap it" and "Stop it" with no app open. `SCHEDULER_ENABLED=false`
 turns the job off; the guard then applies only when an app next asks for the
 running timer.
 
 So Track Your Time runs without email. You need email only to reset a password
-without shell access to the server, and to receive timer reminders.
+without shell access to the server, and for people who turn on timer reminders.
 
 ### Account links and branding
 

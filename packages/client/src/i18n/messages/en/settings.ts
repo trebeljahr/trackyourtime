@@ -158,6 +158,11 @@ export const settings = {
     behavior: {
       title: "When one runs that long",
     },
+    emailReminder: {
+      title: "Email me about a forgotten timer",
+      description:
+        "One email per timer: when “Ask me” is waiting for your answer, or when a timer passes 8 hours while “Guard against runaway timers” is off.",
+    },
     behaviors: {
       ask: {
         label: "Ask me",
@@ -202,9 +207,10 @@ export const settings = {
         failed: "Could not save your profile picture",
       },
     },
+    /** Shown only for a server too old to have the switch under Limits. */
     notifications: {
-      title: "Email notifications",
-      description: "Product and account emails. Timer reminders are separate.",
+      title: "Email me about a forgotten timer",
+      description: "One email per timer that runs too long. This server sends it unless you turn it off.",
     },
     signOut: {
       description: "Ends this session on this device only.",

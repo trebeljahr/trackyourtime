@@ -51,7 +51,7 @@ export const email: Translation<typeof source> = {
       "Damit ist deine maximale Eintragsdauer von {limit} überschritten. Stoppe ihn, lass ihn weiterlaufen oder korrigiere sein Ende.",
     open: "Timer öffnen",
     footer:
-      "Du bekommst diese E-Mail einmal pro Timer. Wenn du diese E-Mails nicht mehr möchtest, schalte unter Einstellungen → Konto die E-Mail-Benachrichtigungen aus.",
-    settingsLink: "E-Mail-Benachrichtigungen öffnen",
+      "Du bekommst diese E-Mail einmal pro Timer, weil du unter Einstellungen → Limits „Per E-Mail an vergessene Timer erinnern“ eingeschaltet hast. Schalte es dort aus, wenn du diese E-Mails nicht mehr möchtest.",
+    settingsLink: "Einstellung öffnen",
   },
 };

@@ -565,6 +565,14 @@ export type MaxDurationSettings = {
    */
   maxHours: number;
   behavior: RunawayBehavior;
+  /**
+   * Email the person once about a timer the guard flagged, or one past 8 hours
+   * with the guard off. Off unless the person turns it on: a reminder is
+   * something they set, never something they have to find and switch off.
+   * Absent on documents written before the option existed, and absent reads
+   * as off, so nobody who never chose it starts getting mail.
+   */
+  emailReminder?: boolean;
 };
 
 /**

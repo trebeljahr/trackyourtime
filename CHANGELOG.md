@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The forgotten-timer email is off unless you turn it on. The switch is
+  **Email me about a forgotten timer** in Settings, Limits. Accounts that never
+  turned it on get no reminder emails. The **Email notifications** switch in
+  Settings, Account is gone; it only ever controlled this email.
+
 ## [0.3.0] - 2026-10-08
 
 This release added team workspaces, invoice payments and timesheet approvals.

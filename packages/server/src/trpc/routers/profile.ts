@@ -10,7 +10,7 @@ export const profileRouter = router({
     if (!profile) {
       profile = await Profile.create({
         userId: ctx.user.id,
-        preferences: { theme: "system", notifications: true },
+        preferences: { theme: "system", notifications: false },
       });
     }
     return {

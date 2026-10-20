@@ -24,7 +24,11 @@ const profileSchema = new Schema<IProfile>(
         enum: ["light", "dark", "system"],
         default: "system",
       },
-      notifications: { type: Boolean, default: true },
+      // Nothing reads this any more: the forgotten-timer email has its own
+      // switch, `maxDuration.emailReminder` on UserPreferences. Kept for the
+      // older clients that still show and write it, and off by default so it
+      // never claims a choice the person did not make.
+      notifications: { type: Boolean, default: false },
     },
   },
   { timestamps: true },

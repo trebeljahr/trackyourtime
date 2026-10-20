@@ -93,7 +93,7 @@ export const marketing: Translation<typeof source> = {
       repeat:
         "Die meiste Arbeit von heute hast du gestern schon gemacht. Starte sie erneut aus den zuletzt verwendeten Einträgen, oder hefte die Arbeit, die du jeden Tag machst, als Favorit an. Tipp die ersten Buchstaben einer Beschreibung, und Track Your Time schlägt Kunde, Projekt und Schlagwörter vom letzten Mal vor.",
       guard:
-        "Timer über Nacht laufen lassen? Leg eine Höchstdauer fest. Ein Timer, der sie überschreitet, wird gestoppt oder wartet auf deine Antwort, mit einer Erinnerung per E-Mail. Gehst du vom Computer weg, fragt Track Your Time, was mit der Zeit passieren soll.",
+        "Timer über Nacht laufen lassen? Leg eine Höchstdauer fest. Ein Timer, der sie überschreitet, wird gestoppt oder wartet auf deine Antwort. Wenn du willst, erinnert dich eine E-Mail daran. Gehst du vom Computer weg, fragt Track Your Time, was mit der Zeit passieren soll.",
       suggestions:
         "Den Timer ganz vergessen? Schalte in der Chrome-Erweiterung die Aktivitätserfassung ein. Sie merkt sich, welche Website du vor dir hattest, und schlägt Einträge für die Lücken in deinem Tag vor. Nichts verlässt deinen Computer, bevor du einen Vorschlag annimmst.",
     },

@@ -27,6 +27,7 @@ import { WorkspaceTab } from "@/components/settings/workspace-tab";
 import { useLocale } from "@/i18n/locale-store";
 import { useT } from "@/i18n/use-t";
 import { useHighlightTarget } from "@/components/einvoice/use-deep-link-focus";
+import { useServerSupports } from "@/lib/server-level";
 
 const TABS = [
   "general",
@@ -47,6 +48,16 @@ const DESKTOP_TAB = "desktop";
 
 const isTab = (value: string): boolean => TAB_VALUES.has(value) || (value === DESKTOP_TAB && isElectron());
 
+/**
+ * The settings a link may point at with `?highlight=`, and the tab each is on.
+ * The forgotten-timer email links to its switch; `notifications` is the
+ * switch older emails and older servers use.
+ */
+const HIGHLIGHT_TABS: Readonly<Record<string, string>> = {
+  "forgotten-timer-email": "limits",
+  notifications: "account",
+};
+
 export default function SettingsPage() {
   // One controller for the whole screen: General, Billing, Idle and Limits
   // all write through the same optimistic `settings.update` path.
@@ -55,7 +66,21 @@ export default function SettingsPage() {
   const [tab, setTab] = React.useState("general");
   const [highlight, setHighlight] = React.useState<string | null>(null);
   const pageRef = React.useRef<HTMLDivElement>(null);
-  useHighlightTarget(pageRef, tab === "account", highlight, "setting");
+  // Emails sent before the forgotten-timer switch moved to Limits link to the
+  // old one under Account, which a current server no longer shows.
+  // Kept in a ref by an effect declared before the one that reads the URL, so
+  // that one still runs once.
+  const forgottenTimerEmail = useServerSupports("settings.forgottenTimerEmail");
+  const emailSwitchOnLimits = React.useRef(forgottenTimerEmail);
+  React.useEffect(() => {
+    emailSwitchOnLimits.current = forgottenTimerEmail;
+  }, [forgottenTimerEmail]);
+  useHighlightTarget(
+    pageRef,
+    highlight !== null && tab === HIGHLIGHT_TABS[highlight],
+    highlight,
+    "setting",
+  );
   const electron = useIsElectron();
   const tabs: readonly string[] = electron ? [...TABS, DESKTOP_TAB] : TABS;
 
@@ -64,14 +89,19 @@ export default function SettingsPage() {
   // `location` in an effect rather than with `useSearchParams`, which forces
   // the whole page into a Suspense boundary under the static export.
   React.useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("tab");
+    let requested = new URLSearchParams(window.location.search).get("tab");
+    let requestedHighlight = new URLSearchParams(window.location.search).get("highlight");
+    if (requestedHighlight === "notifications" && emailSwitchOnLimits.current) {
+      requested = "limits";
+      requestedHighlight = "forgotten-timer-email";
+    }
     // After mount by necessity: `useSearchParams` would force this page into
     // a Suspense boundary under the static export, and the prerendered HTML
     // has no query string to read (see the note above).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (requested && isTab(requested)) setTab(requested);
-    const requestedHighlight = new URLSearchParams(window.location.search).get("highlight");
-    if (requested === "account" && requestedHighlight === "notifications") setHighlight(requestedHighlight);
+    if (requested && requestedHighlight && HIGHLIGHT_TABS[requestedHighlight] === requested) {
+      setHighlight(requestedHighlight);
+    }
     // The desktop tray's Settings item, while this page is already open.
     const onRequest = (event: Event): void => {
       const detail = (event as CustomEvent<unknown>).detail;

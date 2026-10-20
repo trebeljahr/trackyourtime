@@ -1817,9 +1817,12 @@ Scheduler rules:
   `runaway: null`. Never add a second enforcement path.
 - **One reminder email per entry, keyed on `TimeEntry.reminderSentAt`,**
   claimed atomically BEFORE sending and given back if the send throws. Sent for
-  an unanswered `ask` flag, or past 8h with the guard off. The notifications
-  toggle (`Profile.preferences.notifications`) suppresses the email only,
-  never the cap or stop. With no transport the reminder is logged and still
+  an unanswered `ask` flag, or past 8h with the guard off, and only to a person
+  who turned on `maxDuration.emailReminder` (Settings → Limits). Absent is off,
+  so no migration backfills it and nobody who never chose it gets mail. It
+  gates the email only, never the cap or stop. `Profile.preferences.notifications`
+  is no longer read; the web app shows that switch only for a server below API
+  level 15. With no transport the reminder is logged and still
   claimed, so the log gets one line per timer, not one per poll.
   `reminderSentAt` has no default and is never required, so old rows validate.
 

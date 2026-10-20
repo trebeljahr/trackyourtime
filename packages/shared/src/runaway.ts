@@ -52,6 +52,7 @@ export const RUNAWAY_BEHAVIORS: readonly RunawayBehavior[] = [
 export const DEFAULT_MAX_DURATION_SETTINGS: MaxDurationSettings = {
   maxHours: 12,
   behavior: "ask",
+  emailReminder: false,
 };
 
 /** Bounds shared by the zod schema, the Mongoose schema and the UI field. */

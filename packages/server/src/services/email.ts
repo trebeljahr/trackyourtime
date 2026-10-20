@@ -298,7 +298,7 @@ export function buildRunawayReminderEmail(
         });
   const footer = t("runawayReminder.footer");
   const settingsUrl = input.trackUrl
-    ? new URL("/app/settings?tab=account&highlight=notifications", input.trackUrl).toString()
+    ? new URL("/app/settings?tab=limits&highlight=forgotten-timer-email", input.trackUrl).toString()
     : null;
   const open = t("runawayReminder.open");
 

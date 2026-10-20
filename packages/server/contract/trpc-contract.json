@@ -1,5 +1,5 @@
 {
-  "apiLevel": 14,
+  "apiLevel": 15,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -4962,6 +4962,9 @@
                   "stop"
                 ],
                 "type": "string"
+              },
+              "emailReminder": {
+                "type": "boolean"
               },
               "maxHours": {
                 "maximum": 9007199254740991,

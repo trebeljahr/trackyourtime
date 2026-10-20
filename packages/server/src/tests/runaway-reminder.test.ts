@@ -62,8 +62,25 @@ function fakes(overrides: Partial<RunawayReminderDeps> = {}): {
 let broadcasts: { roomId: string; kind: string; entryId: string }[] = [];
 const realBroadcast = roomManager.broadcast.bind(roomManager);
 
+/**
+ * The reminder email is opt-in, so every case here turns it on unless it says
+ * otherwise: most of them are about what happens once a person asked for it.
+ */
 async function givenSettings(maxDuration: MaxDurationSettings): Promise<void> {
-  await UserPreferencesModel.create({ userId: ALICE, maxDuration });
+  await UserPreferencesModel.create({
+    userId: ALICE,
+    maxDuration: { emailReminder: true, ...maxDuration },
+  });
+}
+
+/** A preferences document from before the option existed: no `emailReminder`. */
+async function givenLegacySettings(maxDuration: MaxDurationSettings): Promise<void> {
+  await UserPreferencesModel.collection.insertOne({
+    userId: ALICE,
+    timeFormat: "24h",
+    durationFormat: "hms",
+    maxDuration,
+  });
 }
 
 async function givenRunning(startedHoursAgo: number): Promise<string> {
@@ -278,9 +295,8 @@ describe("runaway-reminder job", { skip: skipWithoutDatabase }, () => {
     assert.match(sent[0]?.text ?? "", /If you forgot to stop it/);
   });
 
-  it("notifications off: no email, but cap still applies", async () => {
-    await Profile.create({ userId: ALICE, preferences: { notifications: false } });
-    await givenSettings({ maxHours: 8, behavior: "cap" });
+  it("reminder off: no email, but cap still applies", async () => {
+    await givenSettings({ maxHours: 8, behavior: "cap", emailReminder: false });
     const capped = await givenRunning(10);
     const { deps, sent } = fakes();
 
@@ -290,9 +306,8 @@ describe("runaway-reminder job", { skip: skipWithoutDatabase }, () => {
     assert.equal(sent.length, 0);
   });
 
-  it("notifications off: ask flags but does not email", async () => {
-    await Profile.create({ userId: ALICE, preferences: { notifications: false } });
-    await givenSettings({ maxHours: 8, behavior: "ask" });
+  it("reminder off: ask flags but does not email", async () => {
+    await givenSettings({ maxHours: 8, behavior: "ask", emailReminder: false });
     const id = await givenRunning(9);
     const { deps, sent } = fakes();
 
@@ -301,6 +316,39 @@ describe("runaway-reminder job", { skip: skipWithoutDatabase }, () => {
     const entry = await read(id);
     assert.equal(entry?.runaway?.action, "flagged");
     assert.equal(entry?.reminderSentAt ?? null, null);
+    assert.equal(sent.length, 0);
+    assert.equal(summary.suppressed, 1);
+  });
+
+  it("a new account gets no email until it turns the reminder on", async () => {
+    // No preferences document at all: the job seeds the defaults (12 h, ask).
+    const id = await givenRunning(13);
+    const { deps, sent } = fakes();
+
+    const summary = await runRunawayReminders(NOW, deps);
+    assert.equal((await read(id))?.runaway?.action, "flagged");
+    assert.equal(sent.length, 0);
+    assert.equal(summary.suppressed, 1);
+
+    await UserPreferencesModel.updateOne(
+      { userId: ALICE },
+      { $set: { "maxDuration.emailReminder": true } },
+    );
+    await runRunawayReminders(minutes(5), deps);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]?.to, "alice@example.com");
+  });
+
+  it("an account from before the option existed stays at off", async () => {
+    // Even with the old Email notifications switch on: it never meant this.
+    await Profile.create({ userId: ALICE, preferences: { notifications: true } });
+    await givenLegacySettings({ maxHours: 0, behavior: "ask" });
+    const id = await givenRunning(9);
+    const { deps, sent } = fakes();
+
+    const summary = await runRunawayReminders(NOW, deps);
+
+    assert.equal((await read(id))?.reminderSentAt ?? null, null);
     assert.equal(sent.length, 0);
     assert.equal(summary.suppressed, 1);
   });

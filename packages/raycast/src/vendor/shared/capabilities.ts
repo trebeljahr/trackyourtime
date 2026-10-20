@@ -39,6 +39,13 @@ export const REQUIRES_API_LEVEL = {
    * memory; the web app falls back to those there.
    */
   "reports.exportStream": 14,
+  /**
+   * `maxDuration.emailReminder`, the forgotten-timer email the person turns on
+   * under Limits. An older server strips the field and still sends the email
+   * unless `Profile.preferences.notifications` is off, so there the web app
+   * keeps offering that switch instead.
+   */
+  "settings.forgottenTimerEmail": 15,
   /** Editing a runaway timer's start together with its real end time. */
   "entries.resolveRunaway.start": 8,
   "entries.client": 7,

@@ -149,6 +149,11 @@ export const settings: Translation<typeof source> = {
     behavior: {
       title: "Wenn ein Timer so lange läuft",
     },
+    emailReminder: {
+      title: "Per E-Mail an vergessene Timer erinnern",
+      description:
+        "Eine E-Mail pro Timer: wenn „Nachfragen“ auf deine Antwort wartet oder wenn ein Timer länger als 8 Stunden läuft, während „Vergessene Timer abfangen“ aus ist.",
+    },
     behaviors: {
       ask: {
         label: "Nachfragen",
@@ -194,8 +199,8 @@ export const settings: Translation<typeof source> = {
       },
     },
     notifications: {
-      title: "E-Mail-Benachrichtigungen",
-      description: "E-Mails zum Produkt und zu deinem Konto. Timer-Erinnerungen sind davon getrennt.",
+      title: "Per E-Mail an vergessene Timer erinnern",
+      description: "Eine E-Mail pro Timer, der zu lange läuft. Dieser Server schickt sie, solange du sie nicht ausschaltest.",
     },
     signOut: {
       description: "Beendet nur diese Sitzung auf diesem Gerät.",

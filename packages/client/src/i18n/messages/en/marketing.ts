@@ -95,7 +95,7 @@ export const marketing = {
       repeat:
         "Most of today’s work is work you did yesterday. Start it again from your recent entries, or pin the jobs you do every day. Type the first letters of a description, and Track Your Time offers the client, project and tags you used with it last time.",
       guard:
-        "Left a timer running overnight? Set a maximum length, and a timer that runs past it is stopped, or waits for your answer with an email reminder. Step away from your computer, and Track Your Time asks what to do with the time you were away.",
+        "Left a timer running overnight? Set a maximum length, and a timer that runs past it is stopped, or waits for your answer. Turn on an email reminder if you want one. Step away from your computer, and Track Your Time asks what to do with the time you were away.",
       suggestions:
         "Forgot the timer completely? Turn on activity capture in the Chrome extension. It notes which website had your attention and suggests entries for the gaps in your day. Nothing leaves your computer until you accept one.",
     },

@@ -30,8 +30,9 @@ import { translate } from "@/i18n/translate";
 import { accountHasPassword, signOut } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { userErrorMessage } from "@/lib/error-message";
+import { useServerSupports } from "@/lib/server-level";
 
-/** Identity, credentials, two-factor, email notifications, subscription status, sign-out and deletion. */
+/** Identity, credentials, two-factor, subscription status, sign-out and deletion. */
 export function AccountSettings({
   onShowExport,
 }: {
@@ -44,6 +45,9 @@ export function AccountSettings({
   const { user } = useAuth();
   const utils = trpc.useUtils();
   const profileQuery = trpc.profile.get.useQuery();
+  // The forgotten-timer email has its own switch under Limits, off unless
+  // turned on. Only a server too old for that switch still reads this one.
+  const legacyEmailSwitch = !useServerSupports("settings.forgottenTimerEmail");
   const billingStatus = trpc.billing.status.useQuery();
   const [signingOut, setSigningOut] = React.useState(false);
   const authConfig = trpc.health.check.useQuery(undefined, {
@@ -156,22 +160,25 @@ export function AccountSettings({
 
           <TwoFactorRow hasPassword={hasPassword} />
 
-          <SettingRow
-            title={t("account.notifications.title")}
-            description={t("account.notifications.description")}
-            testId="setting-notifications"
-            settingKey="notifications"
-            className={DEEP_LINK_HIGHLIGHT_CLASS}
-          >
-            <Switch
-              checked={profileQuery.data?.preferences.notifications ?? true}
-              onCheckedChange={(notifications) =>
-                updateProfile.mutate({ preferences: { notifications } })
-              }
-              aria-label={t("account.notifications.title")}
-              data-testid="notifications-toggle"
-            />
-          </SettingRow>
+          {legacyEmailSwitch ? (
+            <SettingRow
+              title={t("account.notifications.title")}
+              description={t("account.notifications.description")}
+              testId="setting-notifications"
+              settingKey="notifications"
+              className={DEEP_LINK_HIGHLIGHT_CLASS}
+            >
+              <Switch
+                // Such a server treats a missing value as on.
+                checked={profileQuery.data?.preferences.notifications ?? true}
+                onCheckedChange={(notifications) =>
+                  updateProfile.mutate({ preferences: { notifications } })
+                }
+                aria-label={t("account.notifications.title")}
+                data-testid="notifications-toggle"
+              />
+            </SettingRow>
+          ) : null}
 
           <SettingRow
             title={tc("actions.signOut")}

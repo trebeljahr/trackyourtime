@@ -120,7 +120,7 @@ Everything is scoped to a workspace. A person can belong to several, and a works
 - **No client portal or shared reports.** A client cannot sign in or open a link to follow a project. Send them a report or an invoice as a PDF.
 - **Two-factor codes cannot be entered in the password form of the phone apps, the desktop app or the extension.** The second step needs a cookie those clients cannot send. Each of them signs in through a browser instead: "Sign in with your browser" in the phone and desktop apps, "Sign in with the web app" in the extension, and Raycast's own sign-in. You approve the sign-in in a browser, which also covers Google accounts.
 - **Time off, PTO, holidays, absence.** No model and no screen, so nothing computes capacity or utilization.
-- **Email notifications** to you are one reminder per runaway timer. No web push and no digests.
+- **Email notifications** to you are one reminder per runaway timer, and only if you turn it on under Settings, Limits. No web push and no digests.
 
 ## Self-hosting
 

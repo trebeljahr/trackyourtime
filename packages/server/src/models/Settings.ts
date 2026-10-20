@@ -170,6 +170,12 @@ const maxDurationSchema = new Schema<MaxDurationSettings>(
       required: true,
       default: DEFAULT_MAX_DURATION.behavior,
     },
+    // NOT `required`: every sub-document written before the option existed
+    // has no such field, and the reads below take its absence as off.
+    emailReminder: {
+      type: Boolean,
+      default: DEFAULT_MAX_DURATION.emailReminder,
+    },
   },
   { _id: false },
 );
@@ -292,6 +298,10 @@ export async function getOrCreateUserPreferences(
         maxHours: existing.maxDuration?.maxHours ?? DEFAULT_MAX_DURATION.maxHours,
         behavior:
           existing.maxDuration?.behavior ?? DEFAULT_MAX_DURATION.behavior,
+        // Absent until the person sets it, and absent is off: nobody who
+        // never chose the reminder email gets one.
+        emailReminder:
+          existing.maxDuration?.emailReminder ?? DEFAULT_MAX_DURATION.emailReminder,
       },
     };
   }

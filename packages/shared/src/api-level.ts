@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 14;
+export const API_LEVEL = 15;
 
 export type ApiLevelChange = {
   level: number;
@@ -129,6 +129,13 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     release: "0.4.0",
     added: [
       "`POST /api/reports/export`: report CSV and PDF files streamed as they are produced, with the input of `reports.exportPdf` plus `format`.",
+    ],
+  },
+  {
+    level: 15,
+    release: "0.4.0",
+    added: [
+      "`maxDuration.emailReminder` on `settings.get` and `settings.update`: the forgotten-timer email, off unless the person turns it on. `Profile.preferences.notifications` no longer controls it.",
     ],
   },
 ];

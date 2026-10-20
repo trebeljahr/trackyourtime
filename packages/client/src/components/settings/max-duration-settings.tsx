@@ -21,7 +21,9 @@ import { NumberField } from "@/components/settings/number-field";
 import { OptionGroup } from "@/components/settings/option-group";
 import { SaveIndicator, SettingRow } from "@/components/settings/setting-row";
 import type { WorkspaceSettingsController } from "@/components/settings/use-workspace-settings";
+import { DEEP_LINK_HIGHLIGHT_CLASS } from "@/components/einvoice/use-deep-link-focus";
 import { useT } from "@/i18n/use-t";
+import { useServerSupports } from "@/lib/server-level";
 
 export type MaxDurationSettingsPanelProps = {
   controller: WorkspaceSettingsController;
@@ -43,6 +45,7 @@ export function MaxDurationSettingsPanel({
   const enabled = maxDuration.maxHours > 0;
   const t = useT("settings");
   const tc = useT("common");
+  const offersEmailReminder = useServerSupports("settings.forgottenTimerEmail");
 
   // Labels live in the settings catalog rather than @starter/shared's English
   // `runawayBehaviorLabel`, which Raycast keeps using.
@@ -124,6 +127,28 @@ export function MaxDurationSettingsPanel({
             }
           />
         </SettingRow>
+
+        {/* Its own switch, and never tied to the guard: with the guard off it
+            is the only thing that notices a timer left running for 8 hours.
+            Off unless the person turns it on. The reminder email links here. */}
+        {offersEmailReminder ? (
+          <SettingRow
+            title={t("maxDuration.emailReminder.title")}
+            description={t("maxDuration.emailReminder.description")}
+            testId="setting-max-duration-email-reminder"
+            settingKey="forgotten-timer-email"
+            className={DEEP_LINK_HIGHLIGHT_CLASS}
+          >
+            <Switch
+              checked={maxDuration.emailReminder === true}
+              onCheckedChange={(emailReminder) =>
+                save({ maxDuration: { emailReminder } })
+              }
+              aria-label={t("maxDuration.emailReminder.title")}
+              data-testid="max-duration-email-reminder"
+            />
+          </SettingRow>
+        ) : null}
 
         <SettingRow
           title={t("maxDuration.undo.title")}
