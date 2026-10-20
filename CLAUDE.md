@@ -170,6 +170,7 @@ pnpm run test:unit                    # server unit tests (node:test)
 pnpm run test:client                  # client unit tests (Vitest)
 pnpm --filter @starter/extension test  # extension unit tests (Vitest, fake chrome)
 pnpm run test:e2e                     # Playwright E2E tests
+pnpm run test:e2e:export              # built export stays styled after hydration (build:client first)
 pnpm run build                        # build all packages
 ```
 

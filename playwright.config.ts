@@ -9,7 +9,8 @@ export default defineConfig({
   testDir: "./e2e",
   // e2e/desktop/ drives Electron with its own config, servers and build
   // (`pnpm test:e2e:desktop`); none of it belongs to a browser project.
-  testIgnore: /[\\/]desktop[\\/]/,
+  // e2e/export/ checks the export on its own (playwright.export.config.ts).
+  testIgnore: [/[\\/]desktop[\\/]/, /[\\/]export[\\/]/],
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 2 : 0,
@@ -70,7 +71,7 @@ export default defineConfig({
       // it, so naming only the phone spec here put every `e2e/desktop/` spec
       // back into this project — where they fail on the first fetch, because
       // their servers are started by the other config's global setup.
-      testIgnore: [/[\\/]desktop[\\/]/, /mobile-shell\.spec\.ts/],
+      testIgnore: [/[\\/]desktop[\\/]/, /[\\/]export[\\/]/, /mobile-shell\.spec\.ts/],
     },
     {
       // Shared mobile UX on the same export as desktop/native. Chromium is

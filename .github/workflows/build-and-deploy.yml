@@ -329,6 +329,15 @@ jobs:
           test -n "$NEXT_PUBLIC_API_URL" || { echo "::error::NEXT_PUBLIC_API_URL is empty"; exit 1; }
           grep -rqF "$NEXT_PUBLIC_API_URL" packages/client/out/_next/static \
             || { echo "::error::NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL never made it into the bundle"; exit 1; }
+      # The HTML can be fine and the page still lose its stylesheet once
+      # React hydrates: a mismatch in the root layout (an empty NEXT_PUBLIC_*
+      # rendered as text in <head>) makes React drop every <link> in <head>.
+      # Check the exact export this job uploads, built with the real env.
+      - run: npx playwright install --with-deps chromium
+      - name: Check the exported landing page stays styled after hydration
+        run: pnpm run test:e2e:export
+        env:
+          CI: "true"
       # The docs, at https://trackyourtime.dev/docs/, copied into out/docs/.
       # Not part of the client's own `build` script, which also feeds the
       # Electron, Capacitor and E2E builds. Fails on noindex, a foreign
