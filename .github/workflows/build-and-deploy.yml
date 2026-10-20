@@ -396,10 +396,18 @@ jobs:
     timeout-minutes: 45
     # `packages: write` is what moves the server's `:live` (below), with this
     # job's own GITHUB_TOKEN: it can write this repository's packages and
-    # nothing else.
+    # nothing else. `deployments: write` records the web app going live as a
+    # GitHub Deployment (the last step).
     permissions:
       contents: read
       packages: write
+      deployments: write
+    # Job-level, because a step's `if:` cannot read secrets: whether the web app
+    # step below deploys anything. With neither Cloudflare secret set
+    # worker-deploy.mjs prints a notice and exits 0, and that is no ship to
+    # record; with only one set it fails the job.
+    env:
+      CLOUDFLARE_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
     steps:
       # The full history, because the rollback compares the migration registry
       # of the commit being deployed with the one it replaces (below).
@@ -503,6 +511,16 @@ jobs:
           API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
           SHA: ${{ github.sha }}
         run: node scripts/worker-deploy.mjs activate --sha "$SHA" --rollback
+
+      # The step above succeeds only once this commit is live on
+      # trackyourtime.dev and passed its gate, so a deployment here means the
+      # site people open runs this commit.
+      - name: Record the web deploy
+        if: env.CLOUDFLARE_CONFIGURED == 'true'
+        uses: ./.github/actions/record-ship
+        with:
+          environment: web
+          url: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
 
   # DCO gate — pull requests only. Track Your Time takes Developer Certificate of
   # Origin 1.1 sign-off rather than a CLA, so the check is mechanical: every

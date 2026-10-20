@@ -153,6 +153,10 @@ jobs:
   android:
     if: github.event_name != 'workflow_dispatch' || inputs.platform != 'ios'
     runs-on: ubuntu-latest
+    # `deployments: write` records the Play upload as a GitHub Deployment.
+    permissions:
+      contents: read
+      deployments: write
     # Job-level, not step-level: a step's own `env:` is not in scope for that
     # step's `if:`. KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD are the names
     # android/app/build.gradle's signing block reads.
@@ -273,9 +277,20 @@ jobs:
           status: ${{ steps.plan.outputs.status }}
           userFraction: ${{ steps.plan.outputs.user_fraction }}
 
+      - name: Record the Google Play upload
+        if: steps.plan.outputs.upload == 'true'
+        uses: ./.github/actions/record-ship
+        with:
+          environment: google-play
+          branch: ${{ steps.plan.outputs.track }}
+
   ios:
     if: github.event_name != 'workflow_dispatch' || inputs.platform != 'android'
     runs-on: macos-latest
+    # `deployments: write` records the TestFlight upload as a GitHub Deployment.
+    permissions:
+      contents: read
+      deployments: write
     # Job-level for the same reason as Android: the `if:` guards below read the
     # plan, and every step that uses a secret reads it from here.
     env:
@@ -496,6 +511,12 @@ jobs:
             --type ios \
             --apiKey "$APPLE_API_KEY_ID" \
             --apiIssuer "$APPLE_API_ISSUER_ID"
+
+      - name: Record the TestFlight upload
+        if: steps.plan.outputs.upload == 'true'
+        uses: ./.github/actions/record-ship
+        with:
+          environment: testflight
 
       - name: Remove the signing keychain
         if: always() && steps.plan.outputs.build == 'signed'

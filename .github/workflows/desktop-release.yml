@@ -171,6 +171,11 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    # `deployments: write` records the Snap Store upload as a GitHub Deployment.
+    permissions:
+      contents: read
+      deployments: write
+
     # Job-level, so step `if:` guards can read them (a step's own `env:` is not
     # in scope for its `if:`). Each channel sees only its own certificate:
     # electron-builder reads CSC_LINK for both Apple channels, and the two are
@@ -419,6 +424,17 @@ jobs:
         if: matrix.channel == 'linux-x64' && steps.signing.outputs.mode != 'skip'
         shell: bash
         run: node scripts/snap-publish.mjs --dir release
+
+      # snap-publish.mjs uploads only from a tag with the credential set
+      # (snapPublishPlan); otherwise it prints a notice and exits 0, which is
+      # no ship. The channel is the plan's: SNAP_PRERELEASE_CHANNEL for a
+      # prerelease tag, SNAP_RELEASE_CHANNEL otherwise.
+      - name: Record the Snap Store upload
+        if: matrix.channel == 'linux-x64' && steps.signing.outputs.mode != 'skip' && github.ref_type == 'tag' && env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        uses: ./.github/actions/record-ship
+        with:
+          environment: snap
+          branch: ${{ contains(github.ref_name, '-') && 'beta' || 'candidate' }}
 
       - name: Upload artifacts
         if: steps.signing.outputs.mode != 'skip'
