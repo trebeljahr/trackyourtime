@@ -21,7 +21,7 @@ Track Your Time is for freelancers, consultants and small studios who bill clien
 - Every install has every feature. There are no paid plugins and no premium tier.
 - The server has a REST API at `/api/v1` with an OpenAPI document, and sends webhooks signed with HMAC-SHA256.
 - Self-host images are published through v0.3.0 for amd64 and arm64.
-- An MCP server lets an AI assistant start and stop timers, log past time and list entries. It also lists and creates clients, projects, tasks and tags, and reads summary reports. It runs from a clone of the repository and has no invoice tools.
+- An MCP server lets an AI assistant start and stop timers, log past time and list entries. It also lists and creates clients, projects, tasks and tags, and reads summary reports. Install it with npx -y trackyourtime-mcp. It is published on npm and the official MCP Registry and has no invoice tools.
 
 **Current limits**
 
