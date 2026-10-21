@@ -79,7 +79,7 @@ describe("public pages in English", () => {
 
   it("offers only published desktop download channels", () => {
     const html = renderToStaticMarkup(<DownloadPage locale="en" />);
-    // Every channel is null in lib/site-links.ts until a release or a store is live.
+    // Direct releases are public. Store/package-manager listings remain unavailable.
     expect(html).toContain("https://github.com/trebeljahr/trackyourtime/releases/latest");
     expect(html).not.toMatch(/data-testid="download-(homebrew|macAppStore|microsoftStore|flathub|snapStore)"/);
     expect(html.match(/data-testid="download-pending-/g)).toHaveLength(5);

@@ -2,7 +2,7 @@
 
 Every image and every string a store reviewer or a shopper sees, indexed here so
 it can be checked in one place. The images under `docs/marketing/` are the exact
-files uploaded to each console. The **canonical copy** lives in the ricos.site
+files uploaded to each console. The **canonical copy** lives in the ai-work-notes
 vault (`/Users/rico/projects/ai-work-notes/projects/trackyourtime/tracktime-app-store-copy.md` and
 `/Users/rico/projects/ai-work-notes/projects/trackyourtime/trackyourtime-press-kit.md`); the strings below are a
 copy of what was actually submitted, kept here for review beside the images. If

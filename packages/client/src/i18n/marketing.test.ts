@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { localizedPath, marketingMetadata } from "@/i18n/marketing";
+import { localizedPath, marketingHref, marketingMetadata } from "@/i18n/marketing";
 
 describe("localizedPath", () => {
   it("leaves English unprefixed and prefixes German", () => {
@@ -16,6 +16,11 @@ describe("localizedPath", () => {
 });
 
 describe("marketingMetadata", () => {
+  it("keeps the API feature link away from a self-host's API namespace", () => {
+    expect(marketingHref("en", "/api/")).toBe("https://trackyourtime.dev/api/");
+    expect(marketingHref("de", "/api/")).toBe("https://trackyourtime.dev/de/api/");
+    expect(marketingHref("de", "/offline/")).toBe("/de/offline/");
+  });
   it("declares the page's own canonical and every alternate", () => {
     const meta = marketingMetadata("de", { title: "Datenschutz", description: "…", path: "/privacy/" });
     expect(meta.alternates?.canonical).toBe("/de/privacy/");
