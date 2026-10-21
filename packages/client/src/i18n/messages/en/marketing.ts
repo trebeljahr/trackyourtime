@@ -197,7 +197,7 @@ export const marketing = {
       title: "The short version",
       stores: "Track Your Time stores your account and the time you track, so that it can show them back to you.",
       noAnalytics:
-        "It shows no ads and sells no data. The website measures only how fast its pages load, with Cloudflare Web Analytics.",
+        "It shows no ads and sells no data. Self-hosted Plausible counts website visits. Cloudflare Web Analytics measures page performance.",
       noTracking: "The service never learns which websites you visit or what you do in other apps.",
       control: "You can export all of your data at any time, and ask for all of it to be deleted.",
     },
@@ -230,8 +230,10 @@ export const marketing = {
         "<strong>Cloudflare</strong> answers DNS for trackyourtime.dev and passes every request to the server. It sees your IP address and the request. Cloudflare also adds its Web Analytics script to the website’s pages, loaded from static.cloudflareinsights.com. The script reports the page, the referrer and how long the page took to load. It sets no cookies and keeps no ID from one page view to the next. Cloudflare discards the IP address that comes with the report. It does not add the script for visitors who connect through a Cloudflare data center in the EU, the EEA, the United Kingdom or Switzerland.",
       ses: "<strong>Amazon Web Services (SES)</strong> delivers email: password resets and, if you subscribe, the newsletter. It receives your email address and the message.",
       host: "<strong>The server host</strong> rents out the virtual server that runs Track Your Time and its database. Your data is stored on that server.",
+      plausible:
+        "Self-hosted Plausible counts website visits and pages viewed. It receives the page URL, referrer and browser information, and derives approximate location from the IP address. It uses no cookies or persistent identifiers. Statistics are not linked to your account or tracked time.",
       nobodyElse:
-        "No other company receives your data. Track Your Time uses no advertising service, and no analytics service other than Cloudflare Web Analytics.",
+        "Track Your Time uses no advertising service. Its website uses self-hosted Plausible and Cloudflare Web Analytics.",
     },
     extension: {
       title: "The browser extension",

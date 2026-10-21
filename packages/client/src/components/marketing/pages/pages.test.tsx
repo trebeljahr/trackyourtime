@@ -65,7 +65,7 @@ describe("public pages in English", () => {
 
   it("keeps rich-text links and arguments", () => {
     const html = renderToStaticMarkup(<PrivacyPage locale="en" />);
-    expect(html).toContain("Last updated 19 October 2026");
+    expect(html).toContain("Last updated 22 October 2026");
     expect(html).toMatch(/<a href="mailto:[^"]+"[^>]*>[^<]+@[^<]+<\/a>/);
     expect(html).toContain("<strong>Your account.</strong>");
   });

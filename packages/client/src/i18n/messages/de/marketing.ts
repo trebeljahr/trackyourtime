@@ -194,7 +194,7 @@ export const marketing: Translation<typeof source> = {
       title: "Kurz gesagt",
       stores: "Track Your Time speichert dein Konto und die Zeit, die du erfasst, damit es sie dir wieder anzeigen kann.",
       noAnalytics:
-        "Es gibt keine Werbung und keinen Verkauf von Daten. Die Website misst nur, wie schnell ihre Seiten laden, mit Cloudflare Web Analytics.",
+        "Es gibt keine Werbung und keinen Verkauf von Daten. Selbst gehostetes Plausible zählt Websitebesuche. Cloudflare Web Analytics misst die Seitenleistung.",
       noTracking: "Der Dienst erfährt nie, welche Websites du besuchst oder was du in anderen Apps tust.",
       control: "Du kannst jederzeit alle deine Daten exportieren und verlangen, dass alles gelöscht wird.",
     },
@@ -227,8 +227,10 @@ export const marketing: Translation<typeof source> = {
         "<strong>Cloudflare</strong> beantwortet DNS-Anfragen für trackyourtime.dev und leitet jede Anfrage an den Server weiter. Cloudflare sieht deine IP-Adresse und die Anfrage. Außerdem fügt Cloudflare den Seiten der Website sein Web-Analytics-Skript hinzu, das von static.cloudflareinsights.com geladen wird. Das Skript meldet die Seite, den Referrer und wie lange die Seite zum Laden gebraucht hat. Es setzt keine Cookies und behält keine Kennung von einem Seitenaufruf zum nächsten. Cloudflare verwirft die IP-Adresse, die mit der Meldung ankommt. Wenn du dich über ein Cloudflare-Rechenzentrum in der EU, im EWR, im Vereinigten Königreich oder in der Schweiz verbindest, fügt Cloudflare das Skript nicht ein.",
       ses: "<strong>Amazon Web Services (SES)</strong> stellt E-Mails zu: Links zum Zurücksetzen des Passworts und, wenn du ihn abonnierst, den Newsletter. SES erhält deine E-Mail-Adresse und die Nachricht.",
       host: "<strong>Der Server-Anbieter</strong> vermietet den virtuellen Server, auf dem Track Your Time und seine Datenbank laufen. Deine Daten liegen auf diesem Server.",
+      plausible:
+        "Selbst gehostetes Plausible zählt Websitebesuche und Seitenaufrufe. Es erhält die Seitenadresse, den Referrer und Browserinformationen und leitet aus der IP-Adresse den ungefähren Standort ab. Es nutzt keine Cookies oder dauerhaften Kennungen. Die Statistik ist nicht mit deinem Konto oder deinen erfassten Zeiten verknüpft.",
       nobodyElse:
-        "Kein anderes Unternehmen erhält deine Daten. Track Your Time nutzt keine Werbedienste und außer Cloudflare Web Analytics keine Analysedienste.",
+        "Track Your Time nutzt keine Werbedienste. Die Website nutzt selbst gehostetes Plausible und Cloudflare Web Analytics.",
     },
     extension: {
       title: "Die Browsererweiterung",

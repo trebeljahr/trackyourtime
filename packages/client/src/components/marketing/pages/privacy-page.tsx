@@ -17,7 +17,7 @@ export const privacyMetadata = (locale: Locale): Metadata => {
 };
 
 /** Bump when the policy changes in substance. Store listings link to this page. */
-const LAST_UPDATED = Date.UTC(2026, 9, 19);
+const LAST_UPDATED = Date.UTC(2026, 9, 22);
 
 /**
  * The date in the page's language, identical on every build machine.
@@ -100,6 +100,7 @@ export function PrivacyPage({ locale }: { locale: Locale }): React.ReactElement 
           <li>{t.rich("privacy.processors.ses", { strong })}</li>
           <li>{t.rich("privacy.processors.host", { strong })}</li>
         </ul>
+        <p>{t("privacy.processors.plausible")}</p>
         <p>{t("privacy.processors.nobodyElse")}</p>
       </Block>
 
