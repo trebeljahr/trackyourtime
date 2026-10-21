@@ -22,6 +22,18 @@ keeps its nine original product captures and excludes these preview cards.
 
 Last updated 2026-10-22 (social-card build contract).
 
+## Notify search engines after publication
+
+Build the hosted export and docs, then run `node scripts/indexnow.mjs` to preview
+only their public sitemap URLs. After deployment, run
+`node scripts/indexnow.mjs --submit`. It checks the live domain-proof file and
+every page before sending URLs to the shared IndexNow endpoint. It rejects
+private routes, redirects, errors and noindex pages. The public proof file is
+`packages/client/public/indexnow-key.txt`; it grants no access to account data.
+An accepted notification does not guarantee indexing. This is an explicit
+post-deploy command, not a background crawler or an analytics integration.
+Protocol: <https://www.indexnow.org/documentation>.
+
 ## Where each asset lives, and why
 
 Only the three folders under `docs/marketing/` can move. They hold what somebody
