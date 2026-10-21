@@ -111,7 +111,7 @@ Everything is scoped to a workspace. A person can belong to several, and a works
 | **iOS and Android** (Capacitor) | Working from source. `ios/` and `android/` are committed, the bundle id is `com.ricoslabs.trackyourtime`, and `pnpm build:mobile` builds and syncs both. Keychain/Keystore session token, offline queue and running timer that survive an OS kill, safe areas, a bottom tab bar, a server picker on the login screen, and "Sign in with your browser" for two-factor and Google accounts. Signed 0.3.0 builds are on TestFlight and Google Play's internal track. Neither app is in a public store yet. See [`docs/mobile-app-plan.md`](docs/mobile-app-plan.md). |
 | **Desktop** (Electron: macOS, Windows, Linux) | Released. Serves the export from `app://-` and signs in with a bearer token encrypted by `safeStorage`, by password or through the browser for two-factor and Google accounts. A menu bar or tray timer, four rebindable global shortcuts, open at login, notifications for idle and runaway prompts while the window is hidden, the offline queue and a server picker. The dmg, the Windows installer and the AppImage update themselves from GitHub Releases, installing on quit or on "Restart to update". Store and package-manager builds leave updates to their manager. `desktop-release.yml` builds every channel, signs when its secrets are set, and on a tag uploads to a draft release that a person publishes. Version 0.2.2 is published on [GitHub Releases](https://github.com/trebeljahr/trackyourtime/releases/latest): a signed and notarized dmg and zip for macOS (Apple silicon and Intel), a signed Windows installer, and AppImage, deb, rpm and tar.gz files for Linux x64 and ARM64. Version 0.3.0 is built and still a draft. No store lists the app yet; see [release readiness](docs/release-readiness.md). See [`docs-site/docs/desktop.md`](docs-site/docs/desktop.md) and [`docs/desktop-app-plan.md`](docs/desktop-app-plan.md). |
 | **CLI** | No end-user CLI. `trackyourtime-cli` appears only as an allowlisted device-flow client id. The server image does ship an admin CLI for self-hosters (`node dist/cli/admin.js`). |
-| **MCP server** (`packages/mcp`) | Working. Lets Claude Desktop, Claude Code or any MCP client start and stop timers, log time, list entries, manage the catalog and run the summary report, through the public REST API with an API token. stdio only, not published to npm — run it from a clone. See [MCP server](#mcp-server). |
+| **MCP server** (`packages/mcp`) | Published as [`trackyourtime-mcp`](https://www.npmjs.com/package/trackyourtime-mcp) on npm and `io.github.trebeljahr/trackyourtime` in the official MCP Registry. Lets MCP clients manage timers, entries and catalog, and run reports through the REST API. stdio only. See [MCP server](#mcp-server). |
 
 ## Not there yet
 
@@ -174,14 +174,17 @@ Raycast and CLI clients need nothing here — their requests carry neither `Orig
 It authenticates with a personal API token from **Settings → Integrations → API tokens**, and offers only the tools that token's scopes allow. It works against the hosted API or any self-hosted origin.
 
 ```bash
-pnpm install && pnpm build:mcp
+npx -y trackyourtime-mcp --version
 ```
 
 ```bash
-claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token --env TRACKYOURTIME_API_URL=https://api.trackyourtime.dev -- node "$PWD/packages/mcp/dist/index.js"
+claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token -- npx -y trackyourtime-mcp
 ```
 
 `TRACKYOURTIME_API_URL` defaults to `https://api.trackyourtime.dev`; set it to your own origin for a self-hosted instance. Claude Desktop and other clients, the tool list and the error table are in [`docs-site/docs/mcp.md`](docs-site/docs/mcp.md).
+
+To build from a local checkout, run `pnpm install && pnpm build:mcp`. Use `node`
+with the absolute path to `packages/mcp/dist/index.js` in your client configuration.
 
 ## Development
 

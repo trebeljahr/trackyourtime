@@ -173,9 +173,10 @@ a paid tier. Note the vocabulary trap: "Billing" in the settings screen means
 
 The README's claim that there is no telemetry you have not configured yourself
 is a property worth keeping. Error reporting (Sentry/GlitchTip) and the
-newsletter integration are opt-in and off by default, and that is the ceiling.
-Product analytics, event tracking and phone-home version checks are out of
-scope.
+newsletter integration are opt-in and off by default. The hosted website uses
+self-hosted Plausible for aggregate visits; self-hosted installs leave it off
+unless the operator configures it. Per-person analytics, account-linked events,
+signup source tags and A/B tests are out of scope.
 
 ### Screenshot or keystroke monitoring
 
