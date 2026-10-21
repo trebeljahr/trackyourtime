@@ -1,7 +1,7 @@
 // The MCP server end to end: the real binary on stdio, talking to a real API
 // server with its own database, with tokens minted the way a person mints them.
 //
-//   pnpm --filter @starter/mcp test:integration
+//   pnpm --filter trackyourtime-mcp test:integration
 //
 // Needs `mongod` on PATH (started on a random port with a temp data dir), or
 // MONGODB_URI naming a database this suite may write to.

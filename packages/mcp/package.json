@@ -1,17 +1,31 @@
 {
-  "name": "@starter/mcp",
+  "name": "trackyourtime-mcp",
   "version": "0.3.0",
-  "private": true,
   "description": "MCP server for Track Your Time: timers, entries, catalog and reports over the public REST API.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
+  "mcpName": "io.github.trebeljahr/trackyourtime",
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trebeljahr/trackyourtime.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://trackyourtime.dev/docs/mcp/",
+  "bugs": "https://github.com/trebeljahr/trackyourtime/issues",
+  "keywords": ["mcp", "time-tracking", "self-hosted", "timesheets"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": ["dist/index.js", "dist/index.js.map", "dist/server.json", "README.md", "LICENSE"],
   "bin": {
     "trackyourtime-mcp": "./dist/index.js"
   },
-  "main": "./dist/server.js",
-  "types": "./dist/server.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node build.mjs",
+    "prepack": "pnpm run build",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "node --import tsx --test src/tests/*.test.ts",
@@ -19,10 +33,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",
-    "@starter/shared": "workspace:*",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@starter/shared": "workspace:*",
+    "esbuild": "^0.28.1",
     "@types/node": "^25.8.0",
     "tsx": "^4.22.0",
     "typescript": "^6.0.3"

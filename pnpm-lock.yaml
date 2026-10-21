@@ -402,16 +402,19 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.31.0
         version: 1.31.0(zod@4.6.5)
-      '@starter/shared':
-        specifier: workspace:*
-        version: link:../shared
       zod:
         specifier: ^4.6.5
         version: 4.6.5
     devDependencies:
+      '@starter/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@types/node':
         specifier: ^25.8.0
         version: 25.9.0
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.2
       tsx:
         specifier: ^4.22.0
         version: 4.22.2

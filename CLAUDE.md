@@ -2172,14 +2172,14 @@ for a local listener and belongs nowhere else.
 
 ### MCP server
 
-`packages/mcp` (`@starter/mcp`, binary `trackyourtime-mcp`) is an MCP server on
+`packages/mcp` (`trackyourtime-mcp`, binary `trackyourtime-mcp`) is an MCP server on
 stdio over `/api/v1`, configured by `TRACKYOURTIME_API_TOKEN` and
 `TRACKYOURTIME_API_URL` (default `https://api.trackyourtime.dev`). The user
 docs are `docs-site/docs/mcp.md`.
 
 ```bash
 pnpm build:mcp                        # shared, then the server into packages/mcp/dist
-pnpm --filter @starter/mcp test       # fake API, in-memory MCP client; part of test:unit
+pnpm --filter trackyourtime-mcp test       # fake API, in-memory MCP client; part of test:unit
 pnpm test:mcp:integration             # the real binary on stdio against a real API
 ```
 
