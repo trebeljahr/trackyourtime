@@ -17,7 +17,6 @@ self-hosted instance. The REST API is the same code on both.
 
 What it does not do yet:
 
-- It is not published to npm. You run it from a clone of the repository.
 - It speaks stdio only. There is no hosted MCP endpoint.
 - It has no invoice tools, because the REST API has no invoice routes. Invoices
   stay in the web app.
@@ -48,25 +47,21 @@ their answers. Without it they return ids only.
 **Treat the token like a password.** It sits in plain text in your MCP client's
 configuration file. Revoke it in **Settings → Integrations → API tokens** when you stop using it.
 
-## 2. Build the server
+## 2. Run the server
 
-You need Node.js 24 or newer, pnpm and git.
-
-```bash
-git clone https://github.com/trebeljahr/trackyourtime.git
-```
+You need Node.js 24 or newer. npm installs the published
+[`trackyourtime-mcp`](https://www.npmjs.com/package/trackyourtime-mcp) package when you run it.
 
 ```bash
-cd trackyourtime && pnpm install && pnpm build:mcp
+npx -y trackyourtime-mcp --version
 ```
 
-**Expect:** the last line of output comes from `tsc` with no errors, and
-`packages/mcp/dist/index.js` exists.
+**Expect:** the current package version, then the process exits.
 
 Check the server can reach your account before you add it to a client:
 
 ```bash
-TRACKYOURTIME_API_TOKEN=tt_your_token node packages/mcp/dist/index.js
+TRACKYOURTIME_API_TOKEN=tt_your_token npx -y trackyourtime-mcp
 ```
 
 **Expect:** one line on stderr, then the process waits for input. Press Ctrl+C to
@@ -88,18 +83,16 @@ The server reads two environment variables.
 | `TRACKYOURTIME_API_TOKEN` | Required. The `tt_…` token from step 1. |
 | `TRACKYOURTIME_API_URL` | Optional. Defaults to `https://api.trackyourtime.dev`. For a self-hosted instance, use its origin, for example `https://track.example.com`. A pasted `…/api/v1` suffix is accepted too. |
 
-Replace `/path/to/trackyourtime` below with the absolute path of your clone.
-
 ### Claude Code
 
 ```bash
-claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token -- node /path/to/trackyourtime/packages/mcp/dist/index.js
+claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token -- npx -y trackyourtime-mcp
 ```
 
 For a self-hosted instance, add a second `--env`:
 
 ```bash
-claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token --env TRACKYOURTIME_API_URL=https://track.example.com -- node /path/to/trackyourtime/packages/mcp/dist/index.js
+claude mcp add trackyourtime --env TRACKYOURTIME_API_TOKEN=tt_your_token --env TRACKYOURTIME_API_URL=https://track.example.com -- npx -y trackyourtime-mcp
 ```
 
 Add `--scope user` to make it available in every project. Run `claude mcp list` to
@@ -115,8 +108,8 @@ on Windows in `%APPDATA%\Claude\`). Add the server under `mcpServers`:
 {
   "mcpServers": {
     "trackyourtime": {
-      "command": "node",
-      "args": ["/path/to/trackyourtime/packages/mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "trackyourtime-mcp"],
       "env": {
         "TRACKYOURTIME_API_TOKEN": "tt_your_token",
         "TRACKYOURTIME_API_URL": "https://api.trackyourtime.dev"
@@ -132,13 +125,25 @@ Restart Claude Desktop. The tools appear under the tools menu in a new chat.
 
 Any client that launches stdio servers works. Give it:
 
-- **command:** `node`
-- **arguments:** `/path/to/trackyourtime/packages/mcp/dist/index.js`
+- **command:** `npx`
+- **arguments:** `-y`, `trackyourtime-mcp`
 - **environment:** `TRACKYOURTIME_API_TOKEN`, and `TRACKYOURTIME_API_URL` for a
   self-hosted instance
 
-If `node` is not on the client's `PATH`, use the absolute path that `which node`
+If `npx` is not on the client's `PATH`, use the absolute path that `which npx`
 prints.
+
+### Build from source
+
+If you prefer a local checkout, you also need pnpm and git:
+
+```bash
+git clone https://github.com/trebeljahr/trackyourtime.git
+cd trackyourtime && pnpm install && pnpm build:mcp
+```
+
+Use `node` as the client command and the absolute path to
+`packages/mcp/dist/index.js` as its argument. The environment variables stay the same.
 
 ## Tools
 
