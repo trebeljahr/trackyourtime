@@ -3,8 +3,8 @@
 Every image and every string a store reviewer or a shopper sees, indexed here so
 it can be checked in one place. The images under `docs/marketing/` are the exact
 files uploaded to each console. The **canonical copy** lives in the ricos.site
-vault (`.../projects/tracktime/tracktime-app-store-copy.md` and
-`.../projects/tracktime/trackyourtime-press-kit.md`); the strings below are a
+vault (`/Users/rico/projects/ai-work-notes/projects/trackyourtime/tracktime-app-store-copy.md` and
+`/Users/rico/projects/ai-work-notes/projects/trackyourtime/trackyourtime-press-kit.md`); the strings below are a
 copy of what was actually submitted, kept here for review beside the images. If
 you change a string here, change it in the vault too — the vault is the source
 of truth.
@@ -13,7 +13,14 @@ Regenerate the store images from real captures with
 `scripts/marketing/render-graphics.mjs` (see the top of that file). Do not
 hand-edit the PNGs.
 
-Last updated 2026-09-23.
+Page social cards are generated from the route registry, EN/DE catalogs and
+existing product captures. Rebuild them with
+`node scripts/marketing/render-graphics.mjs --social-only`. Output under
+`packages/client/public/marketing/og/{en,de}/` is committed. Both Open Graph and
+Twitter metadata reference the matching page and language. The press-kit ZIP
+keeps its nine original product captures and excludes these preview cards.
+
+Last updated 2026-10-22 (social-card build contract).
 
 ## Where each asset lives, and why
 

@@ -77,12 +77,12 @@ describe("public pages in English", () => {
     expect(html).toMatch(/href="\/login\/?"/);
   });
 
-  it("offers no desktop download that does not exist", () => {
+  it("offers only published desktop download channels", () => {
     const html = renderToStaticMarkup(<DownloadPage locale="en" />);
     // Every channel is null in lib/site-links.ts until a release or a store is live.
-    expect(html).toContain("No version is released yet");
-    expect(html).not.toMatch(/data-testid="download-(mac|windows|linux|homebrew|macAppStore|microsoftStore|flathub|snapStore)"/);
-    expect(html.match(/data-testid="download-pending-/g)).toHaveLength(8);
+    expect(html).toContain("https://github.com/trebeljahr/trackyourtime/releases/latest");
+    expect(html).not.toMatch(/data-testid="download-(homebrew|macAppStore|microsoftStore|flathub|snapStore)"/);
+    expect(html.match(/data-testid="download-pending-/g)).toHaveLength(5);
   });
 
   // The page spells the default shortcut out as prose, so nothing else would
@@ -100,6 +100,6 @@ describe("public pages in English", () => {
 
   it("describes the preview image in the page's language", () => {
     const images = privacyMetadata("en").openGraph?.images;
-    expect(images).toEqual([expect.objectContaining({ url: "/og.png", alt: expect.stringContaining("Track Your Time") })]);
+    expect(images).toEqual([expect.objectContaining({ url: "/marketing/og/en/privacy.png", alt: expect.stringContaining("Track Your Time") })]);
   });
 });

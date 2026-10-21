@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { FactList, Hero, Section } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { StructuredData, faqData } from "@/components/marketing/structured-data";
 import { localizedPath, marketingMetadata, marketingT, type Locale } from "@/i18n/marketing";
 import { CONTACT_EMAIL, ISSUES_URL, SELF_HOSTING_URL } from "@/lib/site-links";
 
@@ -43,8 +44,17 @@ export function SupportPage({ locale }: { locale: Locale }): React.ReactElement 
       </a>
     ),
   };
+  const items = FAQ.map((key) => ({
+    term: t(`support.faq.${key}.term`),
+    detail: key === "deleteAccount"
+      ? t.rich("support.faq.deleteAccount.detail", { privacy: tags.privacy })
+      : key === "selfHost" ? t.rich("support.faq.selfHost.detail", { guide: tags.guide })
+      : t(`support.faq.${key}.detail`),
+  }));
   return (
     <MarketingShell locale={locale} path="/support/">
+      <StructuredData data={faqData(items.map(({ term, detail }) => ({ q: term, a: detail })), locale,
+        `https://trackyourtime.dev${localizedPath(locale, "/support/")}`)} />
       <Hero eyebrow={t("support.hero.eyebrow")} title={t("support.hero.title")}>
         <p>
           {t.rich("support.hero.email", {
@@ -68,17 +78,7 @@ export function SupportPage({ locale }: { locale: Locale }): React.ReactElement 
       </Hero>
 
       <Section title={t("support.faq.title")} className="pb-24">
-        <FactList
-          items={FAQ.map((key) => ({
-            term: t(`support.faq.${key}.term`),
-            detail:
-              key === "deleteAccount"
-                ? t.rich("support.faq.deleteAccount.detail", { privacy: tags.privacy })
-                : key === "selfHost"
-                  ? t.rich("support.faq.selfHost.detail", { guide: tags.guide })
-                  : t(`support.faq.${key}.detail`),
-          }))}
-        />
+        <FactList items={items} />
       </Section>
     </MarketingShell>
   );

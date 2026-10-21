@@ -69,6 +69,19 @@ const FULL_TEXT_IDS = [
 ];
 
 const WEB_PAGES = [
+  {"title": "Self-hosted time tracking", "url": "https://trackyourtime.dev/self-hosting/", "description": "Server requirements, installation, backups, upgrades and operational limits."},
+  {"title": "Time tracking API", "url": "https://trackyourtime.dev/api/", "description": "REST tokens, OpenAPI, signed webhooks and MCP setup."},
+  {"title": "Invoices from tracked hours", "url": "https://trackyourtime.dev/invoicing/", "description": "Historical rates, unbilled entries, payments and e-invoice formats."},
+  {"title": "Offline time tracking", "url": "https://trackyourtime.dev/offline/", "description": "Queues, reconnect behavior and protection of unsent work across clients."},
+  {"title": "Reports", "url": "https://trackyourtime.dev/time-reports/", "description": "Filters, grouping, named views and CSV or PDF export."},
+  {"title": "Freelancer workflow", "url": "https://trackyourtime.dev/freelancers/", "description": "Client setup, daily review and monthly billing."},
+  {"title": "Studio and agency workflow", "url": "https://trackyourtime.dev/studios/", "description": "Team workspaces, rates, visibility and approvals."},
+  {"title": "Developer workflow", "url": "https://trackyourtime.dev/developers/", "description": "Keyboard clients, scoped integrations and own-server setup."},
+  {"title": "CSV migration guide", "url": "https://trackyourtime.dev/import-csv/", "description": "Columns, date order, preview, totals and import undo."},
+  {"title": "Phone tracking without signal", "url": "https://trackyourtime.dev/guides/offline-phone/", "description": "Prepare online, track offline and check queued entries after reconnect."},
+  {"title": "Moving between servers", "url": "https://trackyourtime.dev/guides/move-server/", "description": "Back up, copy a workspace and verify the destination."},
+  {"title": "Changelog", "url": "https://trackyourtime.dev/changelog/", "description": "Version notes generated from the source repository."},
+
   {
     title: "Home",
     url: `${WEB_URL}/`,

@@ -72,7 +72,7 @@ What it does:
 - Each project can have an hourly rate and a budget in hours or money, and each member can have an hourly rate of their own. A new entry takes the project's rate first, then the member's, then the workspace default. Reports show totals by client, project, task, tag, member, day, week or month, or list every entry. Both views export to CSV and PDF.
 - An invoice collects a client's unbilled billable hours and downloads as a PDF, a ZUGFeRD PDF or an XRechnung file. An hour on an invoice can't be billed a second time.
 - Workspaces have members, invitations and three roles. Each member sees only their own time until an owner or admin lets them see colleagues' time or money.
-- Timesheet approval is optional. A member submits a week, and an owner or admin who may see colleagues' time approves or rejects it. An approved week is locked against edits. Approval needs MongoDB running as a replica set, and the repository includes an opt-in compose override for a single-node one.
+- Timesheet approval is optional. A member submits a week, and an owner or admin who may see colleagues' time approves or rejects it. Submitted and approved weeks are locked against edits. Approval needs MongoDB running as a replica set; the self-host compose stack already runs one.
 - You can export a whole workspace as JSON or CSV, and move it between the hosted service and your own server from Settings. A CSV from another tool imports with a preview, and you can undo the import.
 - A [REST API](./api/overview.md) with an OpenAPI document, signed [webhooks](./api/webhooks.md) and an [MCP server](./mcp.md) connect it to other tools and to AI assistants.
 - The web app, the extensions and the phone apps are in English and German. The Raycast extension is in English.

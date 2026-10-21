@@ -63,7 +63,7 @@ export const marketing = {
 
   landing: {
     meta: {
-      title: "Track Your Time — free, open-source time tracking on every device",
+      title: "Offline time tracking for iPhone and Android",
       description:
         "Start a timer in your browser, your Mac’s menu bar or on your phone, even offline. Turn the hours into reports and invoices. Free, open source, and yours to host.",
     },
@@ -121,7 +121,7 @@ export const marketing = {
       invite:
         "Invite colleagues by email, or send them a link. Each person sees only their own time until you let them see colleagues’ hours or money. Reports then split the hours by person.",
       limits:
-        "There’s no screenshot or keystroke monitoring. There’s also no timesheet approval yet, and everyone on a project bills at that project’s rate.",
+        "There’s no screenshot or keystroke monitoring. Optional timesheet approval locks submitted periods. Rates can come from a project, a member or the workspace default.",
     },
     data: {
       title: "Your data goes where you need it",
@@ -140,7 +140,7 @@ export const marketing = {
       clients:
         "Both run the same open-source code, with every feature. The Chrome extension, the Raycast extension and the phone apps work with either one. Each asks for a server address, so none of them needs rebuilding.",
       limits:
-        "The first release isn’t published yet, so the first start builds from source and needs a server with 4 GB of memory. And the app can’t close sign-up yet: the guide shows how to block it at the proxy.",
+        "Published images run on amd64 and arm64. Plan for 1–2 GB of memory. Registration stays open unless you restrict it at the proxy.",
     },
     free: {
       title: "Free, with nothing held back",
@@ -157,7 +157,7 @@ export const marketing = {
       },
       requirements: {
         q: "What do I need to run it?",
-        a: "A Linux server with Docker, a domain name, and 4 GB of memory for the first build. The <guide>guide</guide> lists every command.",
+        a: "A Linux server with Docker Compose, a domain and 1–2 GB of memory for published images. The <guide>guide</guide> lists every command. A source build needs about 4 GB.",
       },
       clients: {
         q: "Can my clients follow their project’s progress?",
@@ -165,7 +165,11 @@ export const marketing = {
       },
       stores: {
         q: "Where do I get the apps?",
-        a: "The browser extension is in the Chrome Web Store, and Edge, Brave, Opera, Vivaldi and Arc install it from there. The Raycast extension and the phone apps aren’t in their stores yet. The web app works in any browser today, on your phone too.",
+        a: "The web app and Chrome extension are public. Desktop downloads are on GitHub Releases. Firefox is in review. Raycast and the phone apps are not in their stores yet.",
+      },
+      api: {
+        q: "Is there an API?",
+        a: "Yes. The <reference>REST API reference</reference> describes entries, timers, catalogs and reports. Download the <openapi>OpenAPI document</openapi> for your tools.",
       },
       shutdown: {
         q: "What happens if the project stops?",
@@ -236,7 +240,7 @@ export const marketing = {
         "Track Your Time uses no advertising service. Its website uses self-hosted Plausible and Cloudflare Web Analytics.",
     },
     extension: {
-      title: "The browser extension",
+      title: "Time tracker for Chrome",
       storage:
         "The extension stores your session token, the server address, your settings and any unsent changes in the browser’s extension storage on your computer.",
       cookies:
@@ -355,7 +359,7 @@ export const marketing = {
       waitingChanges: {
         term: "The app says changes are waiting to sync",
         detail:
-          "The changes are safe on the device. They go to the server in order when the device is online and signed in. Do not sign out of an account with waiting changes in the Chrome extension: signing out there deletes them.",
+          "Changes stay on this device until it is online and signed in to the same account and server. Sign-out keeps queued time entries, including in Chrome. Do not clear app storage or uninstall before they sync.",
       },
       lostDevice: {
         term: "I lost a phone or a computer",
@@ -517,7 +521,7 @@ export const marketing = {
    */
   download: {
     meta: {
-      title: "Desktop app for macOS, Windows and Linux",
+      title: "Time tracker for macOS, Windows and Linux",
       description:
         "Start and stop your timer from the menu bar, the system tray or a keyboard shortcut in any app. Keeps tracking offline. Free and open source.",
     },
@@ -548,7 +552,7 @@ export const marketing = {
     },
     channels: {
       title: "Downloads",
-      notYet: "No version is released yet, so there’s nothing to download today. You can build the app from source. The <docs>desktop guide</docs> lists the steps.",
+      notYet: "Desktop builds are published on GitHub Releases. The <docs>desktop guide</docs> explains installation. Stores and package managers below remain unavailable until their listings go live.",
       intro: "Pick your system. The <docs>desktop guide</docs> explains how each version installs and updates.",
       mac: { name: "macOS (Apple silicon and Intel)", pending: "Not released yet", get: "Download from GitHub" },
       windows: { name: "Windows", pending: "Not released yet", get: "Download from GitHub" },
@@ -736,11 +740,11 @@ export const marketing = {
       platforms: {
         term: "Where it runs",
         detail:
-          "The web app, iPhone, iPad, Android, macOS, Windows, Linux, Chrome, Firefox and Raycast. Only the web app and the Chrome extension are published. The rest build and run from source.",
+          "The web app, Chrome extension and desktop downloads for macOS, Windows and Linux are public. Firefox is in review. Raycast and the phone apps are not in their stores yet.",
       },
       status: {
         term: "Version",
-        detail: "0.1.2. Published Docker images support self-hosting. Desktop downloads remain draft; mobile builds are in testing channels.",
+        detail: "The hosted app and self-host images use 0.3.0. Public desktop downloads use 0.2.2. Mobile builds are in testing and store review.",
       },
       madeBy: { term: "Made by", detail: "Rico Trebeljahr, on his own." },
       source: { term: "Source code", detail: "github.com/trebeljahr/trackyourtime" },

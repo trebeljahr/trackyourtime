@@ -40,6 +40,7 @@ RUN pnpm install --frozen-lockfile
 # ── Stage 2: Build the static export ─────────────────────────────────
 FROM deps AS build
 COPY tsconfig.base.json ./
+COPY CHANGELOG.md ./
 COPY packages/shared packages/shared
 # The invoice PDF renderer is a real build input, not only a server one: the
 # public invoice generator imports `@starter/invoice-pdf/totals` into the

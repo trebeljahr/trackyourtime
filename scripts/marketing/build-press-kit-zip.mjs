@@ -26,7 +26,7 @@
  * here, which is also why nothing can quietly reintroduce a timestamp.
  *
  * The fact sheet is NOT written here. It comes out of the project's press-kit
- * note in the ricos.site vault, so the kit and the note cannot state different
+ * note in the ai-work-notes vault, so the kit and the note cannot state different
  * facts. A missing note, or a renamed heading in it, fails the build rather
  * than shipping a kit with no fact sheet.
  */
@@ -39,7 +39,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 
 /** The vault note this kit's fact sheet comes from. See the header. */
 const SOURCE_PRESS_KIT =
-  "/Users/rico/projects/ricos.site/src/content/Notes/texts/misc/claude-chat-gpt-generated/projects/tracktime/trackyourtime-press-kit.md";
+  "/Users/rico/projects/ai-work-notes/projects/trackyourtime/trackyourtime-press-kit.md";
 
 const PUBLIC_DIR = path.join(ROOT, "packages", "client", "public");
 const OUT_ZIP = path.join(PUBLIC_DIR, "press-kit.zip");
@@ -77,6 +77,8 @@ async function main() {
     if (files.length === 0) throw new Error(`no files under ${path.relative(ROOT, dir)}`);
     for (const file of files) {
       const relativePath = path.relative(dir, file).split(path.sep).join("/");
+      // Page-preview cards are separate from the nine product captures in the kit.
+      if (prefix === "marketing" && relativePath.startsWith("og/")) continue;
       entries.push({ zipPath: `${prefix}/${relativePath}`, data: await readFile(file) });
     }
   }

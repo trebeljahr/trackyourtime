@@ -13,10 +13,12 @@ import {
   Shot,
 } from "@/components/marketing/blocks";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { StructuredData, faqData } from "@/components/marketing/structured-data";
 import { ShellEntryRedirect } from "@/components/marketing/shell-entry-redirect";
 import { localizedPath, marketingMetadata, marketingT, type Locale } from "@/i18n/marketing";
 import {
   API_REFERENCE_URL,
+  OPENAPI_URL,
   DONATE_URL,
   LANDING_DONATE_ASK,
   MCP_DOCS_URL,
@@ -57,8 +59,30 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
       {chunks}
     </a>
   );
+  const questions = [
+    { q: t("landing.faq.hosting.q"), a: t("landing.faq.hosting.a") },
+    { q: t("landing.faq.requirements.q"), a: t.rich("landing.faq.requirements.a", { guide }) },
+    { q: t("landing.faq.clients.q"), a: t("landing.faq.clients.a") },
+    { q: t("landing.faq.stores.q"), a: t("landing.faq.stores.a") },
+    { q: t("landing.faq.api.q"), a: t.rich("landing.faq.api.a", {
+      reference: (chunks) => <a href={API_REFERENCE_URL} className={link}>{chunks}</a>,
+      openapi: (chunks) => <a href={OPENAPI_URL} className={link}>{chunks}</a>,
+    }) },
+    { q: t("landing.faq.shutdown.q"), a: t("landing.faq.shutdown.a") },
+  ];
+  const url = `https://trackyourtime.dev${localizedPath(locale, "/")}`;
   return (
     <MarketingShell locale={locale} path="/">
+      <StructuredData data={{ "@context": "https://schema.org", "@graph": [
+        { "@type": "Organization", "@id": "https://trackyourtime.dev/#project", name: "Track Your Time", url: "https://trackyourtime.dev/", founder: { "@type": "Person", name: "Rico Trebeljahr" } },
+        { "@type": "WebSite", "@id": `${url}#website`, name: "Track Your Time", url, inLanguage: locale, publisher: { "@id": "https://trackyourtime.dev/#project" } },
+        { "@type": "SoftwareApplication", name: "Track Your Time", url, inLanguage: locale,
+          description: t("landing.meta.description"), applicationCategory: "BusinessApplication", operatingSystem: "Web browser",
+          license: `${REPO_URL}/blob/main/LICENSE`, isAccessibleForFree: true,
+          offers: { "@type": "Offer", price: "0", priceCurrency: "USD", url },
+        },
+      ] }} />
+      <StructuredData data={faqData(questions, locale, url)} />
       <ShellEntryRedirect />
       <Hero
         eyebrow={t("landing.hero.eyebrow")}
@@ -198,6 +222,9 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
           <p>{t("landing.selfHost.why")}</p>
           <p>{t.rich("landing.selfHost.install", { guide })}</p>
           <p>{t("landing.selfHost.clients")}</p>
+          <p><a href="https://trackyourtime.dev/docs/choosing-a-self-hosted-time-tracker/" className={link}>
+            {locale === "de" ? "Eine selbst gehostete Zeiterfassung auswählen (Englisch)" : "Choosing a self-hosted time tracker"}
+          </a></p>
           <p className="text-sm">{t("landing.selfHost.limits")}</p>
         </Prose>
       </Section>
@@ -230,15 +257,7 @@ export function LandingPage({ locale }: { locale: Locale }): React.ReactElement 
       </Section>
 
       <Section title={t("landing.faq.title")}>
-        <Questions
-          items={[
-            { q: t("landing.faq.hosting.q"), a: t("landing.faq.hosting.a") },
-            { q: t("landing.faq.requirements.q"), a: t.rich("landing.faq.requirements.a", { guide }) },
-            { q: t("landing.faq.clients.q"), a: t("landing.faq.clients.a") },
-            { q: t("landing.faq.stores.q"), a: t("landing.faq.stores.a") },
-            { q: t("landing.faq.shutdown.q"), a: t("landing.faq.shutdown.a") },
-          ]}
-        />
+        <Questions items={questions} />
       </Section>
 
       <Section title={t("landing.cta.title")} className="pb-24">

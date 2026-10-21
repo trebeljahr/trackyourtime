@@ -21,6 +21,7 @@ export const SELF_HOSTING_UPGRADING_URL = `${SELF_HOSTING_URL}#upgrading`;
 export const API_DOCS_URL = `${DOCS_URL}api/`;
 /** Every route, with a link to the OpenAPI document (`/docs/openapi.json`). */
 export const API_REFERENCE_URL = `${DOCS_URL}api/reference/`;
+export const OPENAPI_URL = `${DOCS_URL}openapi.json`;
 export const MCP_DOCS_URL = `${DOCS_URL}mcp/`;
 /** ZUGFeRD / XRechnung e-invoices (docs-site/docs/e-invoices.md). */
 export const EINVOICE_DOCS_URL = `${DOCS_URL}e-invoices/`;
@@ -91,9 +92,9 @@ export type DesktopDownloadId =
   | "snapStore";
 
 export const DESKTOP_DOWNLOADS: Record<DesktopDownloadId, StoreListing> = {
-  mac: { url: null },
-  windows: { url: null },
-  linux: { url: null },
+  mac: { url: `${REPO_URL}/releases/latest` },
+  windows: { url: `${REPO_URL}/releases/latest` },
+  linux: { url: `${REPO_URL}/releases/latest` },
   homebrew: { url: null },
   macAppStore: { url: null },
   microsoftStore: { url: null },

@@ -238,6 +238,8 @@ jobs:
           labels: |
             org.opencontainers.image.title=trackyourtime-server
             org.opencontainers.image.description=Track Your Time API server
+            org.opencontainers.image.url=https://trackyourtime.dev
+            org.opencontainers.image.documentation=https://trackyourtime.dev/docs/self-hosting/
             org.opencontainers.image.licenses=AGPL-3.0-or-later
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
             org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
@@ -332,6 +334,8 @@ jobs:
           labels: |
             org.opencontainers.image.title=trackyourtime-client-selfhost
             org.opencontainers.image.description=Track Your Time web app, same-origin build for self-hosting
+            org.opencontainers.image.url=https://trackyourtime.dev
+            org.opencontainers.image.documentation=https://trackyourtime.dev/docs/self-hosting/
             org.opencontainers.image.licenses=AGPL-3.0-or-later
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
             org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
@@ -444,6 +448,8 @@ jobs:
           annotations: |
             org.opencontainers.image.title=trackyourtime-${{ matrix.image }}
             org.opencontainers.image.description=${{ matrix.image == 'server' && 'Track Your Time API server' || 'Track Your Time web app, same-origin build for self-hosting' }}
+            org.opencontainers.image.url=https://trackyourtime.dev
+            org.opencontainers.image.documentation=https://trackyourtime.dev/docs/self-hosting/
             org.opencontainers.image.licenses=AGPL-3.0-or-later
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
             org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}

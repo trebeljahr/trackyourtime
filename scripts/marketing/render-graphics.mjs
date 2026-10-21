@@ -17,6 +17,14 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
+import { spawnSync } from "node:child_process";
+
+// Social cards use the same catalog and route registry as page metadata.
+// This path needs no live browser or store screenshot capture directory.
+if (process.argv[2] === "--social-only") {
+  const result = spawnSync(process.execPath, ["--import", "tsx", "scripts/marketing/render-social-cards.mts", ...process.argv.slice(3)], { stdio: "inherit" });
+  process.exit(result.status ?? 1);
+}
 
 const [capturesDir, outDir] = process.argv.slice(2).map((p) => p && resolve(p));
 if (!capturesDir || !outDir) {

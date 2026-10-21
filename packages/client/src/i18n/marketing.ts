@@ -65,6 +65,10 @@ export const localizedPath = (locale: Locale, path: string): string => {
   return slug === "/" ? `/${locale}/` : `/${locale}${slug}`;
 };
 
+/** Self-hosts reserve /api/ for Express, so that feature page lives on the public site. */
+export const marketingHref = (locale: Locale, path: string): string =>
+  path === "/api/" ? `https://trackyourtime.dev${localizedPath(locale, path)}` : localizedPath(locale, path);
+
 /** The `marketing` translator for a build-time render. */
 export const marketingT = (locale: Locale): Translator<"marketing"> =>
   getTranslator(locale, "marketing");
@@ -90,7 +94,7 @@ export const marketingMetadata = (
     path: string;
   },
 ): Metadata => {
-  const base = pageMetadata({ title, description, path: localizedPath(locale, path), locale });
+  const base = pageMetadata({ title, description, path: localizedPath(locale, path), locale, imagePath: path });
   const languages: Record<string, string> = { "x-default": localizedPath("en", path) };
   for (const each of MARKETING_LOCALES) languages[each] = localizedPath(each, path);
   return {

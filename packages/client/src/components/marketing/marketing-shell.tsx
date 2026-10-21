@@ -4,8 +4,9 @@ import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 import { AccountLinks } from "@/components/marketing/account-links";
 import { DonateLink, DonationReturn } from "@/components/marketing/donate-link";
+import { GUIDES } from "@/components/marketing/guide-content";
 import { FixedLocale } from "@/i18n/locale-root";
-import { localizedPath, marketingT, MARKETING_LOCALES, type Locale } from "@/i18n/marketing";
+import { localizedPath, marketingHref, marketingT, MARKETING_LOCALES, type Locale } from "@/i18n/marketing";
 import { API_DOCS_URL, DOCS_URL, REPO_URL } from "@/lib/site-links";
 
 const NAV = [
@@ -43,7 +44,7 @@ export function MarketingShell({
   path: string;
 }): React.ReactElement {
   const t = marketingT(locale);
-  const href = (target: string): string => localizedPath(locale, target);
+  const href = (target: string): string => marketingHref(locale, target);
   return (
     <FixedLocale locale={locale} data-marketing="" className="flex min-h-screen flex-col">
       <header className="border-b">
@@ -98,6 +99,14 @@ export function MarketingShell({
             <li><Link href={href("/press/")} className="hover:text-foreground">{t("shell.footer.press")}</Link></li>
             <DonateLink label={t("shell.footer.donate")} />
           </ul>
+          <nav className="sm:col-span-3" aria-label={locale === "de" ? "Funktionen und Anleitungen" : "Features and guides"}>
+            <ul className="flex flex-wrap gap-x-6 gap-y-3">
+              {Object.entries(GUIDES[locale]).map(([slug, guide]) => <li key={slug}>
+                <Link href={href(`/${slug}/`)} className="hover:text-foreground">{guide.title}</Link>
+              </li>)}
+              <li><Link href={href("/changelog/")} className="hover:text-foreground">{locale === "de" ? "Versionshinweise" : "Changelog"}</Link></li>
+            </ul>
+          </nav>
           <LanguageSwitch locale={locale} path={path} />
         </div>
       </footer>

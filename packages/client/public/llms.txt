@@ -60,6 +60,18 @@ Point a domain at a Linux server with Docker, clone the repository, copy `.env.s
 
 ## Web pages
 
+- [Self-hosted time tracking](https://trackyourtime.dev/self-hosting/): Server requirements, installation, backups, upgrades and operational limits.
+- [Time tracking API](https://trackyourtime.dev/api/): REST tokens, OpenAPI, signed webhooks and MCP setup.
+- [Invoices from tracked hours](https://trackyourtime.dev/invoicing/): Historical rates, unbilled entries, payments and e-invoice formats.
+- [Offline time tracking](https://trackyourtime.dev/offline/): Queues, reconnect behavior and protection of unsent work across clients.
+- [Reports](https://trackyourtime.dev/time-reports/): Filters, grouping, named views and CSV or PDF export.
+- [Freelancer workflow](https://trackyourtime.dev/freelancers/): Client setup, daily review and monthly billing.
+- [Studio and agency workflow](https://trackyourtime.dev/studios/): Team workspaces, rates, visibility and approvals.
+- [Developer workflow](https://trackyourtime.dev/developers/): Keyboard clients, scoped integrations and own-server setup.
+- [CSV migration guide](https://trackyourtime.dev/import-csv/): Columns, date order, preview, totals and import undo.
+- [Phone tracking without signal](https://trackyourtime.dev/guides/offline-phone/): Prepare online, track offline and check queued entries after reconnect.
+- [Moving between servers](https://trackyourtime.dev/guides/move-server/): Back up, copy a workspace and verify the destination.
+- [Changelog](https://trackyourtime.dev/changelog/): Version notes generated from the source repository.
 - [Home](https://trackyourtime.dev/): Free, open-source time tracking on every device, offline included. Reports, invoices, teams, import, export and an API, on the hosted service or on your own server with the same app.
 - [Chrome extension](https://trackyourtime.dev/extension/): Start and stop the timer from the Chrome toolbar, add time you forgot, get entry suggestions from browsing activity, and keep tracking when the connection drops.
 - [Raycast extension](https://trackyourtime.dev/raycast/): Start and stop the timer with a hotkey, and see it running in the Mac menu bar.

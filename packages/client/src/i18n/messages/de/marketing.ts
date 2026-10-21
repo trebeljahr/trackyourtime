@@ -61,7 +61,7 @@ export const marketing: Translation<typeof source> = {
 
   landing: {
     meta: {
-      title: "Track Your Time – kostenlose Open-Source-Zeiterfassung auf jedem Gerät",
+      title: "Offline-Zeiterfassung für iPhone und Android",
       description:
         "Starte einen Timer im Browser, in der Menüleiste deines Macs oder auf dem Handy, auch offline. Aus den Stunden werden Berichte und Rechnungen. Kostenlos, Open Source und selbst hostbar.",
     },
@@ -119,7 +119,7 @@ export const marketing: Translation<typeof source> = {
       invite:
         "Lade Kolleginnen und Kollegen per E-Mail ein oder schick ihnen einen Link. Jede Person sieht nur ihre eigene Zeit, bis du ihr die Stunden oder Beträge der anderen freigibst. Berichte teilen die Stunden dann nach Person auf.",
       limits:
-        "Es gibt keine Überwachung per Screenshot oder Tastenanschlag. Es gibt aber auch noch keine Freigabe von Stundenzetteln, und alle in einem Projekt rechnen zum Stundensatz des Projekts ab.",
+        "Es gibt keine Überwachung per Screenshot oder Tastenanschlag. Die optionale Stundenzettel-Freigabe sperrt eingereichte Zeiträume. Stundensätze kommen vom Projekt, vom Mitglied oder vom Arbeitsbereich.",
     },
     data: {
       title: "Deine Daten gehen dorthin, wo du sie brauchst",
@@ -138,7 +138,7 @@ export const marketing: Translation<typeof source> = {
       clients:
         "Beide laufen mit demselben Open-Source-Code und haben jede Funktion. Die Chrome-Erweiterung, die Raycast-Erweiterung und die Mobil-Apps funktionieren mit beiden. Jede fragt nach einer Serveradresse, neu bauen musst du keine.",
       limits:
-        "Das erste Release ist noch nicht veröffentlicht. Der erste Start baut deshalb aus dem Quellcode und braucht einen Server mit 4 GB Arbeitsspeicher. Außerdem kann die App die Registrierung noch nicht schließen – die Anleitung zeigt, wie du sie am Proxy sperrst.",
+        "Veröffentlichte Images laufen auf amd64 und arm64. Plane 1–2 GB Arbeitsspeicher ein. Ohne Sperre am Proxy bleibt die Registrierung offen.",
     },
     free: {
       title: "Kostenlos, ohne Einschränkungen",
@@ -155,7 +155,7 @@ export const marketing: Translation<typeof source> = {
       },
       requirements: {
         q: "Was brauche ich, um es zu betreiben?",
-        a: "Einen Linux-Server mit Docker, eine Domain und 4 GB Arbeitsspeicher für den ersten Build. Die <guide>Anleitung</guide> nennt jeden Befehl.",
+        a: "Einen Linux-Server mit Docker Compose, eine Domain und 1–2 GB Arbeitsspeicher für veröffentlichte Images. Die <guide>Anleitung</guide> nennt jeden Befehl. Ein eigener Build braucht etwa 4 GB.",
       },
       clients: {
         q: "Können meine Kunden den Fortschritt ihres Projekts verfolgen?",
@@ -163,7 +163,11 @@ export const marketing: Translation<typeof source> = {
       },
       stores: {
         q: "Wo bekomme ich die Apps?",
-        a: "Die Browser-Erweiterung ist im Chrome Web Store, und Edge, Brave, Opera, Vivaldi und Arc installieren sie von dort. Die Raycast-Erweiterung und die Mobil-Apps sind noch nicht in ihren Stores. Die Web-App läuft schon heute in jedem Browser, auch auf dem Handy.",
+        a: "Web-App und Chrome-Erweiterung sind öffentlich. Desktop-Downloads gibt es auf GitHub Releases. Firefox ist in Prüfung. Raycast und die Mobil-Apps sind noch nicht in ihren Stores.",
+      },
+      api: {
+        q: "Gibt es eine API?",
+        a: "Ja. Die <reference>REST-API-Referenz</reference> beschreibt Einträge, Timer, Kataloge und Berichte. Lade das <openapi>OpenAPI-Dokument</openapi> für deine Tools herunter.",
       },
       shutdown: {
         q: "Was passiert, wenn das Projekt eingestellt wird?",
@@ -233,7 +237,7 @@ export const marketing: Translation<typeof source> = {
         "Track Your Time nutzt keine Werbedienste. Die Website nutzt selbst gehostetes Plausible und Cloudflare Web Analytics.",
     },
     extension: {
-      title: "Die Browsererweiterung",
+      title: "Zeiterfassung für Chrome",
       storage:
         "Die Erweiterung speichert dein Sitzungstoken, die Serveradresse, deine Einstellungen und noch nicht gesendete Änderungen im Erweiterungsspeicher des Browsers auf deinem Computer.",
       cookies:
@@ -352,7 +356,7 @@ export const marketing: Translation<typeof source> = {
       waitingChanges: {
         term: "Die App meldet, dass Änderungen auf die Synchronisierung warten",
         detail:
-          "Die Änderungen sind auf dem Gerät sicher und gehen der Reihe nach an den Server, sobald das Gerät online und angemeldet ist. Melde dich in der Chrome-Erweiterung nicht ab, solange dort Änderungen warten: Die Abmeldung löscht sie.",
+          "Änderungen bleiben auf diesem Gerät, bis es online und mit demselben Konto und Server verbunden ist. Die Abmeldung behält wartende Zeiteinträge, auch in Chrome. Lösche keine App-Daten und deinstalliere nicht, bevor sie synchronisiert sind.",
       },
       lostDevice: {
         term: "Ich habe ein Handy oder einen Computer verloren",
@@ -508,7 +512,7 @@ export const marketing: Translation<typeof source> = {
 
   download: {
     meta: {
-      title: "Desktop-App für macOS, Windows und Linux",
+      title: "Zeiterfassung für macOS, Windows und Linux",
       description:
         "Starte und stoppe deinen Timer über die Menüleiste, den Infobereich oder ein Tastenkürzel in jeder App. Erfasst auch offline weiter. Kostenlos und Open Source.",
     },
@@ -539,7 +543,7 @@ export const marketing: Translation<typeof source> = {
     },
     channels: {
       title: "Downloads",
-      notYet: "Noch ist keine Version veröffentlicht, deshalb gibt es heute nichts zum Herunterladen. Du kannst die App aus dem Quellcode bauen. Die <docs>Anleitung für die Desktop-App</docs> nennt die Schritte.",
+      notYet: "Desktop-Versionen gibt es auf GitHub Releases. Die <docs>Desktop-Anleitung</docs> erklärt die Installation. Die unten genannten Stores und Paketmanager bleiben ohne Eintrag, bis ihre Angebote öffentlich sind.",
       intro: "Wähle dein System. Die <docs>Anleitung für die Desktop-App</docs> erklärt, wie sich jede Version installiert und aktualisiert.",
       mac: { name: "macOS (Apple Silicon und Intel)", pending: "Noch nicht veröffentlicht", get: "Von GitHub herunterladen" },
       windows: { name: "Windows", pending: "Noch nicht veröffentlicht", get: "Von GitHub herunterladen" },
@@ -721,11 +725,11 @@ export const marketing: Translation<typeof source> = {
       platforms: {
         term: "Wo es läuft",
         detail:
-          "Web-App, iPhone, iPad, Android, macOS, Windows, Linux, Chrome, Firefox und Raycast. Veröffentlicht sind nur die Web-App und die Chrome-Erweiterung. Der Rest lässt sich aus dem Quellcode bauen.",
+          "Web-App, Chrome-Erweiterung und Desktop-Downloads für macOS, Windows und Linux sind öffentlich. Firefox ist in Prüfung. Raycast und die Mobil-Apps sind noch nicht in ihren Stores.",
       },
       status: {
         term: "Version",
-        detail: "0.1.2. Veröffentlichte Docker-Images stehen für Self-Hosting bereit. Desktop-Downloads sind noch Entwürfe; mobile Builds liegen in Testkanälen.",
+        detail: "Gehostete App und Self-Hosting-Images nutzen 0.3.0. Öffentliche Desktop-Downloads nutzen 0.2.2. Mobil-Versionen sind in Tests und Store-Prüfung.",
       },
       madeBy: { term: "Gemacht von", detail: "Rico Trebeljahr, allein." },
       source: { term: "Quellcode", detail: "github.com/trebeljahr/trackyourtime" },

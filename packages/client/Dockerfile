@@ -16,6 +16,7 @@ RUN pnpm install --frozen-lockfile
 # ── Stage 2: Build ───────────────────────────────────────────────────
 FROM deps AS build
 COPY tsconfig.base.json ./
+COPY CHANGELOG.md ./
 COPY packages/shared packages/shared
 COPY packages/invoice-pdf packages/invoice-pdf
 COPY packages/server packages/server
