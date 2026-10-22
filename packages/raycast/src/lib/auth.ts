@@ -1,4 +1,5 @@
 import { LocalStorage } from "@raycast/api";
+import { createHash } from "node:crypto";
 import { createId, sameServerOrigin, signOutSession, type IssuedSession } from "../vendor/index.js";
 import { clearCache } from "./local-cache.js";
 import { clearEveryOverlay } from "./overlay.js";
@@ -25,6 +26,22 @@ const USER_KEY = "trackyourtime.session.userId";
  */
 const SERVER_KEY = "trackyourtime.session.server";
 const ORIGIN_KEY = "trackyourtime.originId";
+const REJECTED_KEY = "trackyourtime.session.rejected";
+const VERIFIED_USER_KEY = "trackyourtime.session.verifiedUser";
+const listeners = new Set<() => void>();
+
+export const onSessionChanged = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+export const notifySessionChanged = (): void => {
+  for (const listener of listeners) listener();
+};
+
+const fingerprint = (token: string): string => createHash("sha256").update(token).digest("hex");
 
 /** Names this client in Settings → Devices, and in the device flow. */
 export const CLIENT_ID = "trackyourtime-raycast" as const;
@@ -69,8 +86,17 @@ export async function getStoredSession(): Promise<StoredSession | null> {
   if (!(await sessionIsForThisServer())) return null;
   const token = await LocalStorage.getItem<string>(TOKEN_KEY);
   if (!token) return null;
+  if ((await LocalStorage.getItem<string>(REJECTED_KEY)) === fingerprint(token)) return null;
   const email = await LocalStorage.getItem<string>(EMAIL_KEY);
-  const userId = await LocalStorage.getItem<string>(USER_KEY);
+  let userId = await LocalStorage.getItem<string>(USER_KEY);
+  if (!userId) {
+    try {
+      const verified = JSON.parse((await LocalStorage.getItem<string>(VERIFIED_USER_KEY)) ?? "null");
+      if (verified?.fingerprint === fingerprint(token) && typeof verified.userId === "string") userId = verified.userId;
+    } catch {
+      /* an incomplete legacy identity is resolved from the server */
+    }
+  }
   return { token, email: email ?? null, userId: userId ?? null };
 }
 
@@ -81,8 +107,35 @@ export async function getStoredSession(): Promise<StoredSession | null> {
  * only moment it matters.
  */
 export async function getStoredUserId(): Promise<string | null> {
-  if (!(await sessionIsForThisServer())) return null;
-  return (await LocalStorage.getItem<string>(USER_KEY)) ?? null;
+  return (await getStoredSession())?.userId ?? null;
+}
+
+/** Opaque cache identity; never put a bearer token in cache keys or arguments. */
+export async function sessionCacheKey(): Promise<string | null> {
+  const session = await getStoredSession();
+  return session ? `${apiUrl()}:${fingerprint(session.token)}` : null;
+}
+
+/** Retain credentials and queued time, but stop treating a refused token as usable. */
+export async function markSessionRejected(token: string, server: string): Promise<void> {
+  if (
+    (await LocalStorage.getItem<string>(TOKEN_KEY)) !== token ||
+    !sameServerOrigin((await storedServer()) ?? "", server)
+  )
+    return;
+  await LocalStorage.setItem(REJECTED_KEY, fingerprint(token));
+  notifySessionChanged();
+}
+
+/** Upgrade a legacy token only with identity returned by its authenticated server. */
+export async function rememberSessionUserId(token: string, server: string, userId: string): Promise<boolean> {
+  const current = await getStoredSession();
+  if (!current || current.token !== token || !sameServerOrigin(apiUrl(), server)) return false;
+  // Keep the recovered identity bound to this token even if another process
+  // pairs a different account while this response is arriving.
+  await LocalStorage.setItem(VERIFIED_USER_KEY, JSON.stringify({ fingerprint: fingerprint(token), userId }));
+  notifySessionChanged();
+  return true;
 }
 
 export async function storeSession(session: IssuedSession): Promise<void> {
@@ -92,6 +145,9 @@ export async function storeSession(session: IssuedSession): Promise<void> {
   if (session.userId) await LocalStorage.setItem(USER_KEY, session.userId);
   else await LocalStorage.removeItem(USER_KEY);
   await LocalStorage.setItem(SERVER_KEY, apiUrl());
+  await LocalStorage.removeItem(REJECTED_KEY);
+  await LocalStorage.removeItem(VERIFIED_USER_KEY);
+  notifySessionChanged();
 }
 
 /**
@@ -113,6 +169,8 @@ export async function signOut(): Promise<void> {
   await LocalStorage.removeItem(EMAIL_KEY);
   await LocalStorage.removeItem(USER_KEY);
   await LocalStorage.removeItem(SERVER_KEY);
+  await LocalStorage.removeItem(REJECTED_KEY);
+  await LocalStorage.removeItem(VERIFIED_USER_KEY);
 
   // The cached reads and the optimistic overlay both describe one account's
   // workspace, so they go — the next person to pair must not see the last
@@ -132,6 +190,7 @@ export async function signOut(): Promise<void> {
   // rows when it signs back in.
   await clearCache();
   await clearEveryOverlay();
+  notifySessionChanged();
 }
 
 /**

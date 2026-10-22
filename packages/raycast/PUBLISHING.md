@@ -57,6 +57,8 @@ For local development, run `pnpm dev:raycast` from the monorepo root. Under `ray
 
 The export does not keep that: it sets `src/lib/local-defaults.ts` to `false`, so `npm run dev` there uses `https://api.trackyourtime.dev` and `https://trackyourtime.dev` when both preferences are empty. `scripts/export-store.test.mjs` checks both halves.
 
+When updating an installed developer extension, preserve its existing local-defaults setting. Replacing it with the Store export can change the server behind empty preferences; the token for the previous server is then deliberately refused. Build from the monorepo for a local development install, or copy its `local-defaults.ts` into a separate local install copy. Keep the Store export unchanged for submission. Never copy, clear or retarget session credentials to make the two builds agree.
+
 ## Store screenshots
 
 `metadata/` is empty until you take these. `ray lint` does not require screenshots, but store review expects them for an extension with view commands. Take them before the first publish.

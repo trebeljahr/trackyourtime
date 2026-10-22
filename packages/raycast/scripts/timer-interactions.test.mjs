@@ -239,6 +239,16 @@ test("first timer row starts now, then edits the started entry", async () => {
   assert.ok(nodes(first.props.actions, "Action.Push").some((action) => action.props.title === "Start with Details…"));
 });
 
+test("explicit sign-in recovery opens pairing from the Timer command", () => {
+  render(Timer, { launchContext: { signIn: true } });
+  host.effects.forEach((run) => run());
+  assert.equal(host.events.find(([kind]) => kind === "push")[1].type.name, "SignIn");
+  assert.equal(
+    host.events.some(([kind]) => kind === "start"),
+    false,
+  );
+});
+
 test("immediate starts disclose a timer replaced in another workspace", async () => {
   host.api.start = async () => entry({ replaced: { workspaceName: "Studio" } });
   await primary(nodes(render(Timer), "List.Item")[0]).props.onAction();
@@ -246,7 +256,9 @@ test("immediate starts disclose a timer replaced in another workspace", async ()
 
   host.events = [];
   host.showWhenIdle = true;
-  nodes(render(MenuBar), "MenuBarExtra.Item").find((row) => row.props.title === "Start Timer").props.onAction();
+  nodes(render(MenuBar), "MenuBarExtra.Item")
+    .find((row) => row.props.title === "Start Timer")
+    .props.onAction();
   await new Promise((resolve) => setImmediate(resolve));
   assert.ok(host.events.some(([kind, value]) => kind === "toast" && value.message === "Stopped your timer in Studio"));
 });

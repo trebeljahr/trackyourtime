@@ -73,12 +73,13 @@ const MAX_NAMED_FOREIGN = 5;
  */
 export default function Timer({
   launchContext,
-}: LaunchProps<{ launchContext?: { editRunningId?: string } }>): React.JSX.Element {
+}: LaunchProps<{ launchContext?: { editRunningId?: string; signIn?: boolean } }>): React.JSX.Element {
   const { push } = useNavigation();
   const [searchText, setSearchText] = useState("");
   const [isStarting, setIsStarting] = useState(false);
   const starting = useRef(false);
   const openedEditor = useRef<string | null>(null);
+  const openedSignIn = useRef(false);
   const { data, isLoading, signedOut, revalidate, optimistic } = useApi("timer", (api) =>
     loadTimerSnapshot(api, { recentLimit: RECENT_LIMIT }),
   );
@@ -257,6 +258,12 @@ export default function Timer({
       />,
     );
   }, [launchContext?.editRunningId, running, data?.activeWorkspaceId, push, revalidate]);
+
+  useEffect(() => {
+    if (!launchContext?.signIn || openedSignIn.current) return;
+    openedSignIn.current = true;
+    push(<SignIn />);
+  }, [launchContext?.signIn, push]);
 
   if (signedOut) return <SignedOutView />;
 

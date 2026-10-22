@@ -82,6 +82,8 @@ Each waiting change records the account, server and workspace it belongs to. If 
 
 ## Troubleshooting
 
+**Projects are visible, but starting asks you to sign in.** Older pairings can lack the account ID needed to save time. This version restores that ID from the server when connected. If the session has expired, choose **Sign in** to pair again. Queued time stays on this Mac.
+
 **Sign-in cannot reach the server.** The extension cannot connect to the server in **API URL**. The sign-in screen shows the server it tried. Choose **Open Extension Preferences** and correct **API URL**.
 
 **Nothing in the menu bar.** Check these in order:

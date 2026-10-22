@@ -3,6 +3,7 @@ import { ApiError, AuthError } from "../vendor/index.js";
 import { NotSignedInError, StillSyncingError } from "./errors.js";
 import { apiUrl } from "./preferences.js";
 import { reportRaycastError } from "./error-reporting-runtime.js";
+import { notifySessionChanged } from "./auth.js";
 
 /**
  * Nudge the menu bar to re-read the timer.
@@ -88,14 +89,15 @@ export async function showFailureToast(error: unknown, title: string): Promise<v
   }
 
   if (isAuthFailure(error)) {
+    notifySessionChanged();
     await showToast({
       style: Toast.Style.Failure,
       title: "Not signed in",
-      message: "Open the Timer command to pair this Mac.",
+      message: "Sign in to pair this Mac with your account.",
       primaryAction: {
-        title: "Open Timer",
+        title: "Sign in",
         onAction: () => {
-          void launchCommand({ name: "timer", type: LaunchType.UserInitiated });
+          void launchCommand({ name: "timer", type: LaunchType.UserInitiated, context: { signIn: true } });
         },
       },
     });

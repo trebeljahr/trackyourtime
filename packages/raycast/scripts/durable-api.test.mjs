@@ -32,8 +32,9 @@ const mocks = new Map([
   [
     new URL("../src/lib/auth.ts", import.meta.url).href,
     `export const CLIENT_ID='raycast-proof';
-    export const getStoredSession=async()=>({token:'synthetic-token'});
-    export const getStoredUserId=async()=> 'owner'; export const getOriginId=async()=> 'proof-origin';`,
+    export const getStoredSession=async()=>({token:'synthetic-token',userId:'owner'});
+    export const getStoredUserId=async()=> 'owner'; export const getOriginId=async()=> 'proof-origin';
+    export const markSessionRejected=async()=>{}; export const rememberSessionUserId=async()=>true;`,
   ],
   [new URL("../src/lib/preferences.ts", import.meta.url).href, `export const apiUrl=()=> 'http://synthetic.invalid';`],
   [

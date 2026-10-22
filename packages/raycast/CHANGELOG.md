@@ -10,5 +10,6 @@
 - Log past time with ⌘⇧N, and search earlier descriptions with ⌘⇧D.
 - Create a project, task or tag from inside a form.
 - Sign in with a short code approved in your browser, with no API key.
+- Restore older pairings before saving time; expired sessions offer sign-in directly and hide stale cached actions.
 - Keep tracking offline: changes wait on this Mac and go to the server in order.
 - Use a self-hosted server through the API URL and Web App URL preferences.

@@ -7,6 +7,7 @@
  */
 import {
   ApiError,
+  AuthError,
   buildOptimisticEntry,
   buildQuickStartInput,
   CLIENT_TOO_OLD,
@@ -39,7 +40,14 @@ import {
   type TimeEntry,
   type ResolvedSettings,
 } from "../vendor/index.js";
-import { CLIENT_ID, getOriginId, getStoredSession, getStoredUserId } from "./auth.js";
+import {
+  CLIENT_ID,
+  getOriginId,
+  getStoredSession,
+  getStoredUserId,
+  markSessionRejected,
+  rememberSessionUserId,
+} from "./auth.js";
 import { APP_VERSION } from "./version.js";
 import { NotSignedInError, StillSyncingError } from "./errors.js";
 import {
@@ -1133,6 +1141,12 @@ export async function getTrackYourTime(): Promise<TrackYourTime> {
     try {
       return await request;
     } catch (error) {
+      if (
+        error instanceof AuthError ||
+        (error instanceof ApiError && (error.httpStatus === 401 || error.code === "UNAUTHORIZED"))
+      ) {
+        await markSessionRejected(session.token, origin);
+      }
       if (error instanceof ApiError && error.versionRefusal === CLIENT_TOO_OLD) {
         await noteClientTooOld(origin);
       }
@@ -1143,6 +1157,18 @@ export async function getTrackYourTime(): Promise<TrackYourTime> {
     query: (path, input) => noting(raw.query(path, input)),
     mutate: (path, input) => noting(raw.mutate(path, input)),
   };
+
+  // Old installations stored a usable token without a user id. Reads worked,
+  // but durable writes refused to attribute time, and recents filtered it out.
+  // Obtain the identity from this token's server, never from another account's
+  // cached settings, before any write or queue replay can use it.
+  if (!session.userId) {
+    const settings = await client.query<ResolvedSettings>("settings.get");
+    if (!settings.userId || !(await rememberSessionUserId(session.token, origin, settings.userId))) {
+      throw new NotSignedInError();
+    }
+    workspaceId = await activeWorkspaceId();
+  }
 
   return wrap(
     client,

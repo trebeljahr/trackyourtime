@@ -2474,6 +2474,14 @@ What fails quietly if it is changed:
   throws `ApiError` for everything the server answered, so "not an ApiError" is
   exactly "no answer came back" — which matters on Node, where every transport
   failure is the same bare "fetch failed".
+- **Legacy Raycast sessions recover their owner from `settings.get`.** A
+  token stored before user IDs were recorded can read but cannot stamp a
+  durable write. `getTrackYourTime()` verifies and binds that ID to the token
+  before returning a client; cached settings must never supply that identity.
+  A 401 marks only the refused token unusable, preserving credentials and
+  queued time for recovery. UI cache keys and returned values are tagged with
+  a non-secret session fingerprint plus the server and workspace. Missing or
+  refused sessions hide cached actions and offer pairing directly.
 - **The queue drains from the reads, not from a background loop.** Raycast has
   no long-lived process to own one. `loadTimerSnapshot` drains before it reads
   (so the snapshot comes back already carrying the replayed work), the menu
