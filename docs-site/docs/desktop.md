@@ -11,7 +11,7 @@ system tray, and gives it a keyboard shortcut that works in every app. It is
 the web app in its own window, so every screen is there. It keeps tracking
 without a connection and sends your changes when the connection comes back.
 
-Version 0.2.2 is on
+Version 0.3.0 is on
 [GitHub Releases](https://github.com/trebeljahr/trackyourtime/releases/latest)
 for macOS, Windows and Linux. No store lists the app yet. You can also build it
 from source, as described [below](#build-it-from-source).
@@ -30,10 +30,21 @@ from source, as described [below](#build-it-from-source).
 | Snap Store | The store | snapd updates it |
 | Flathub | Flathub | Flatpak updates it |
 
-Today only the GitHub Releases rows are available: the dmg, the Windows
-installer, the AppImage and the deb and rpm packages. The Homebrew tap and the
-stores do not have the app yet. Settings → Desktop → Updates shows which kind of version you
+GitHub Releases and the Homebrew cask are available. The stores do not have
+the app yet. Settings → Desktop → Updates shows which kind of version you
 have and why it does or does not update itself.
+
+### Homebrew
+
+Install the signed and notarized macOS app from the
+[Ricos Labs tap](https://github.com/trebeljahr/homebrew-tap):
+
+```bash
+brew install --cask trebeljahr/tap/track-your-time
+```
+
+The cask picks the Apple silicon or Intel download for your Mac. The app
+updates itself from GitHub Releases.
 
 ## Updates
 

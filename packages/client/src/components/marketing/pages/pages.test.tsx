@@ -79,10 +79,11 @@ describe("public pages in English", () => {
 
   it("offers only published desktop download channels", () => {
     const html = renderToStaticMarkup(<DownloadPage locale="en" />);
-    // Direct releases are public. Store/package-manager listings remain unavailable.
+    // Direct releases and the Homebrew cask are public; store listings remain unavailable.
     expect(html).toContain("https://github.com/trebeljahr/trackyourtime/releases/latest");
-    expect(html).not.toMatch(/data-testid="download-(homebrew|macAppStore|microsoftStore|flathub|snapStore)"/);
-    expect(html.match(/data-testid="download-pending-/g)).toHaveLength(5);
+    expect(html).toContain("https://github.com/trebeljahr/homebrew-tap#readme");
+    expect(html).not.toMatch(/data-testid="download-(macAppStore|microsoftStore|flathub|snapStore)"/);
+    expect(html.match(/data-testid="download-pending-/g)).toHaveLength(4);
   });
 
   // The page spells the default shortcut out as prose, so nothing else would

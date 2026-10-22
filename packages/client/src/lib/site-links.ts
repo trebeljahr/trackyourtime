@@ -95,7 +95,7 @@ export const DESKTOP_DOWNLOADS: Record<DesktopDownloadId, StoreListing> = {
   mac: { url: `${REPO_URL}/releases/latest` },
   windows: { url: `${REPO_URL}/releases/latest` },
   linux: { url: `${REPO_URL}/releases/latest` },
-  homebrew: { url: null },
+  homebrew: { url: "https://github.com/trebeljahr/homebrew-tap#readme" },
   macAppStore: { url: null },
   microsoftStore: { url: null },
   flathub: { url: null },
