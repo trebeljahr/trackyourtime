@@ -160,12 +160,13 @@ try {
   await page.evaluate(() => window.electronAPI.desktop.updates.restart()).catch(() => {});
   await until(async () => windows
     ? await hash(join(resources, "app.asar")) !== oldAsarHash
-    : await hash(oldFile) === await hash(join(newDir, filename(to))), "installed update replacement", 180_000);
+    : await hash(join(oldDir, filename(to))) === await hash(join(newDir, filename(to))), "installed update replacement", 180_000);
   await pause(5000);
   await stopInstalled().catch((error) => { if (windows || error.status !== 1) throw error; });
   if (!windows) {
     await rm(join(installed, "squashfs-root"), { recursive: true, force: true });
-    run(oldFile, ["--appimage-extract"], { cwd: installed });
+    env.APPIMAGE = join(oldDir, filename(to));
+    run(env.APPIMAGE, ["--appimage-extract"], { cwd: installed });
   }
   start(executable, [`--remote-debugging-port=${port}`, "--mute-audio", ...(windows ? [] : ["--password-store=basic"])], env);
   page = await connect(port);
