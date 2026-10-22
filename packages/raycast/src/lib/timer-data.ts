@@ -7,7 +7,6 @@
  * disagreeing about which entries count as recent or where the day starts.
  */
 import {
-  RECENT_TIMER_DAYS,
   entryDurationSec,
   deviceTimeZone,
   isOwnEntry,
@@ -30,8 +29,8 @@ import { pendingCounts } from "./offline.js";
 import { loadTimerEcho } from "./storage.js";
 import { activeWorkspaceId, workspaceNameLookup } from "./workspace.js";
 
-/** How far back the "continue" shortlist looks — core's, shared with the desktop toggle. */
-export const RECENT_DAYS = RECENT_TIMER_DAYS;
+/** Recent work stays useful after a holiday or a quieter week. */
+export const RECENT_DAYS = 30;
 
 export type TimerSnapshot = {
   running: DetailedEntry | null;
@@ -174,7 +173,7 @@ const shortlist = (entries: DetailedEntry[], limit: number): DetailedEntry[] => 
 
   for (const entry of entries) {
     if (entry.end === null) continue;
-    const key = `${entry.description}|${entry.projectId ?? ""}|${entry.taskId ?? ""}`;
+    const key = quickStartKey(toQuickStart(entry));
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(entry);
@@ -211,7 +210,8 @@ export const loadTimerSnapshot = async (
   const workspaceId = await activeWorkspaceId();
   const userId = await resolveUserId();
 
-  const [{ entries: fetched }, favorites, projects] = await Promise.all([
+  const [current, { entries: fetched }, favorites, projects] = await Promise.all([
+    api.current(),
     api.list({
       from: isoDaysAgo(RECENT_DAYS),
       to: new Date(now + 60_000).toISOString(),
@@ -230,21 +230,34 @@ export const loadTimerSnapshot = async (
     return total + entryDurationSec(entry, now);
   }, 0);
 
-  // A read that started before a stop can still land after it, and would then
-  // put the stopped timer back on screen. The echo settles that by time: a
-  // transition recorded after `now` outranks anything in this response.
-  let windowRunning = entries.find((entry) => entry.end === null) ?? null;
-  let runningWorkspaceName: string | null = null;
-  if (windowRunning === null) {
-    // Nothing runs in THIS workspace's window, but the timer is per person:
-    // a start in another workspace — here, in the web app, on a phone — is
-    // this person's running timer. `entries.current` answers wherever it runs.
-    const current = await api.current().catch(() => null);
-    if (current !== null && current.workspaceId !== workspaceId && current.workspaceId !== "") {
-      windowRunning = elsewhere(current);
-      runningWorkspaceName = (await workspaceNameLookup())(current.workspaceId);
-    }
-  }
+  // Current is authoritative, even when the entry started before the history
+  // window or the history response still contains a timer stopped elsewhere.
+  const sameWorkspace = current?.workspaceId === workspaceId;
+  const project = sameWorkspace ? projects.find((row) => row.id === current?.projectId) : undefined;
+  const listed = entries.find(
+    (row) =>
+      row.id === current?.id &&
+      row.projectId === current?.projectId &&
+      row.clientId === current?.clientId &&
+      row.taskId === current?.taskId,
+  );
+  const windowRunning = current
+    ? {
+        ...elsewhere(current),
+        ...(listed ?? {}),
+        ...current,
+        ...(project
+          ? {
+              projectName: project.name,
+              projectColor: project.color,
+              ...(!listed && (current.clientId === undefined || current.clientId === project.clientId)
+                ? { clientName: project.clientName }
+                : {}),
+            }
+          : {}),
+      }
+    : null;
+  const runningWorkspaceName = current && !sameWorkspace ? (await workspaceNameLookup())(current.workspaceId) : null;
 
   const { running, refetch } = reconcileRunning({ running: windowRunning, fetchedAt: now }, await loadTimerEcho());
 

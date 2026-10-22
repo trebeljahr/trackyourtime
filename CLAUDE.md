@@ -2274,7 +2274,7 @@ imports, or every command bundle carries their schemas. The allowlist is
   `LocalStorage` by them, so changing either orphans every install's token,
   offline queue and timer echo. The store also rejects a `description` or
   preference copy that promises more than the code does — the manifest and
-  README claims (7-day resume, 14-day list, 180-day descriptions, what needs
+  README claims (30-day resume, 14-day list, 180-day descriptions, what needs
   the network) are the numbers in `timer-data.ts`, `entries.tsx` and the
   server; change them together. `CHANGELOG.md` headings are
   `## [Title] - {PR_MERGE_DATE}`, and store CI fails a PR that does not touch
@@ -2308,7 +2308,7 @@ The rules below predate the store copy and apply to the extension itself.
   only the *running* command's own subtitle, and background launches are limited
   to `no-view` and menu bar modes — so a "Stop Timer" command is listed whether
   or not anything is running. `timer` therefore adapts on open (Stop is the
-  primary action while a timer runs, the start form when none does) and carries
+  primary action while a timer runs, an immediate start when none does) and carries
   `keywords` so "start" and "stop" still find it. Continuous state belongs in
   the menu bar, which is the one surface that can hold it.
 - `toggle-timer` is the exception, and the mode is the reason: only `no-view`
@@ -2316,8 +2316,8 @@ The rules below predate the store copy and apply to the extension itself.
   surface a **global hotkey** can drive without opening a window. It stops what
   is running, or continues the newest entry in the same `RECENT_DAYS` window
   the other surfaces call recent, and reports either in a HUD. With nothing to
-  resume it launches `timer` rather than starting a nameless entry the user
-  then has to fix. Folding it into `timer` costs the hotkey, which is the whole
+  resume it starts a blank timer immediately, then launches `timer` with
+  `context.editRunningId` to edit the running entry. Folding it into `timer` costs the hotkey, which is the whole
   point of it — a view command opens a window before it can do anything.
 - Pairing has no command: `components/signed-out.tsx` pushes `components/
   sign-in.tsx` from the empty state every view shows while signed out, and
@@ -2361,14 +2361,18 @@ The rules below predate the store copy and apply to the extension itself.
   opening cover the unloaded case. Staying loaded means owning freshness:
   `entries.current` every 4s while ticking, because a stop made elsewhere would
   leave a clock counting up on an ended entry, and the whole snapshot every
-  20s; mutations call `refreshMenuBar()` rather than waiting for either. Idle
-  and running are separate preferences: `idleTitle` (bare mark by default,
-  "Start timer", or the total) and `titleMode` (how much of a running timer).
-  A total shown idle is `36m`, never `0:36` — the running clock owns the
-  colon, and a total that borrowed it was read as a timer still going. The `Timer` view
-  command is the surface that can push forms, which a menu bar item cannot.
-  Both read `lib/timer-data.ts`, so the two surfaces cannot disagree about what
-  is running.
+  20s; mutations call `refreshMenuBar()` rather than waiting for either.
+  Running shows only the elapsed clock, ticking every second. Idle is hidden
+  by default; `showWhenIdle` optionally keeps a monochrome stopwatch. The
+  hidden/unloaded item discovers starts elsewhere on its 1-minute background
+  interval. The `Timer` view is the surface that can push forms. Menu start
+  writes first, then passes `context.editRunningId` to that view; the editor
+  opens only when the id and active workspace match, never for an unsynced id.
+  Both read `lib/timer-data.ts`: `entries.current` is authoritative even for
+  a timer older than the 30-day recent window. Recent rows use the full
+  quick-start key, and the view starts with the live/start row instead of an
+  About row. Start and project shortcuts write immediately, with a single-flight
+  guard; the resulting entry is edited afterwards, preserving its start time.
 - **`refreshMenuBar()` is a nudge, never the mechanism.** It is a background
   `launchCommand`, and Raycast may decline it — and a menu bar command that is
   still *loaded*, which is exactly what a running timer keeps it, is not

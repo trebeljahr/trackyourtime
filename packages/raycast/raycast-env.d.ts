@@ -22,14 +22,8 @@ declare type Preferences = ExtensionPreferences
 declare namespace Preferences {
   /** Preferences accessible in the `menu-bar` command */
   export type MenuBar = ExtensionPreferences & {
-  /** Menu Bar Title - What the menu bar shows while a timer runs. */
-  "titleMode": "duration" | "description" | "both" | "icon",
-  /** When No Timer Runs - What the menu bar shows while no timer runs. */
-  "idleTitle": "none" | "prompt" | "total",
-  /** Clock - On keeps the command loaded so the clock moves every second. Off updates the clock once a minute. */
-  "tickSeconds": boolean,
-  /** Idle - The item comes back when a timer starts. */
-  "hideWhenIdle": boolean
+  /** When Idle - Off shows only a running timer. Timers started elsewhere appear on the next background refresh (within a minute). */
+  "showWhenIdle": boolean
 }
   /** Preferences accessible in the `toggle-timer` command */
   export type ToggleTimer = ExtensionPreferences & {}

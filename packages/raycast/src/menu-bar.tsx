@@ -19,8 +19,8 @@ import {
 } from "./vendor/index.js";
 import { getTrackYourTime, type ProjectWithStats } from "./lib/api.js";
 import { CompatibilityMenuBarSection } from "./components/compatibility-banner.js";
-import { BRAND_MARK } from "./lib/brand.js";
-import { formatClock, formatDurationShort, formatMenuBarClock, formatMenuBarTotal } from "./lib/format.js";
+import { useRef, useState } from "react";
+import { formatClock, formatDurationShort, formatMenuBarClock } from "./lib/format.js";
 import { useApi, useNow, usePoll, useReconciledRunning, useWatchRunning } from "./lib/hooks.js";
 import { heldCopy } from "./lib/offline.js";
 import { webLink } from "./lib/preferences.js";
@@ -62,12 +62,18 @@ const POLL_MS = 20_000;
 const WATCH_MS = 4_000;
 
 /** The live command, where the clock ticks and forms can be pushed. */
-const openTimer = (): void => {
-  void launchCommand({ name: "timer", type: LaunchType.UserInitiated });
+const openTimer = (editRunningId?: string): void => {
+  void launchCommand({
+    name: "timer",
+    type: LaunchType.UserInitiated,
+    ...(editRunningId ? { context: { editRunningId } } : {}),
+  });
 };
 
 export default function MenuBar(): React.JSX.Element | null {
-  const { titleMode, idleTitle, hideWhenIdle, tickSeconds } = getPreferenceValues<Preferences.MenuBar>();
+  const { showWhenIdle } = getPreferenceValues<Preferences.MenuBar>();
+  const starting = useRef(false);
+  const [isStarting, setIsStarting] = useState(false);
   const { data, isLoading, error, signedOut, revalidate, optimistic } = useApi("menu-bar", (api) =>
     loadTimerSnapshot(api, { recentLimit: RECENT_LIMIT }),
   );
@@ -92,7 +98,7 @@ export default function MenuBar(): React.JSX.Element | null {
    * load, so an item that ticks says it is loading for as long as it ticks,
    * and stops claiming that the second the timer stops.
    */
-  const ticking = tickSeconds && running !== null;
+  const ticking = running !== null;
 
   // Both hooks run on every render, before any of the early returns below:
   // React requires it, and the poll has to keep running precisely in the
@@ -113,15 +119,15 @@ export default function MenuBar(): React.JSX.Element | null {
 
   if (signedOut) {
     return (
-      <MenuBarExtra icon={BRAND_MARK} tooltip="Track Your Time — not signed in">
-        <MenuBarExtra.Item title="Sign in to Track Your Time" icon={Icon.Key} onAction={openTimer} />
+      <MenuBarExtra icon={Icon.Stopwatch} tooltip="Track Your Time — not signed in">
+        <MenuBarExtra.Item title="Sign in to Track Your Time" icon={Icon.Key} onAction={() => openTimer()} />
       </MenuBarExtra>
     );
   }
 
   // A version problem is shown even when idle items are hidden: it is why
   // nothing else here will work.
-  if (!running && !isLoading && hideWhenIdle && banner === null) return null;
+  if (!running && !isLoading && !showWhenIdle && !error && banner === null) return null;
 
   const elapsed = running ? entryDurationSec(running, now) : 0;
   const clock = formatMenuBarClock(elapsed);
@@ -131,26 +137,6 @@ export default function MenuBar(): React.JSX.Element | null {
   const pinned = running ? favoriteFor(running, favorites) : undefined;
   const pending = data?.pending ?? 0;
   const foreign = data?.foreign ?? 0;
-
-  const title = ((): string | undefined => {
-    // Idle and running are separate settings because they answer separate
-    // questions. `titleMode` is about how much of a running timer to show;
-    // this is about whether an idle menu bar should carry a number at all.
-    // Default is the bare mark: the total sat there looking like a running
-    // clock, and a tracker that is not tracking has nothing urgent to say.
-    // "Start timer" is for anyone who wants the item to read as a button,
-    // and the total stays available for anyone who was using it.
-    if (!running) {
-      if (idleTitle === "prompt") return "Start timer";
-      if (idleTitle === "total") return formatMenuBarTotal(data?.todaySec ?? 0);
-      return undefined;
-    }
-
-    if (titleMode === "icon") return undefined;
-    if (titleMode === "duration") return clock;
-    if (titleMode === "description") return label;
-    return `${label} · ${clock}`;
-  })();
 
   const act = async (
     run: () => Promise<void>,
@@ -177,6 +163,24 @@ export default function MenuBar(): React.JSX.Element | null {
     }
   };
 
+  // Start first. The view can then edit this already-running entry.
+  const startNow = (project?: ProjectWithStats): void => {
+    if (starting.current) return;
+    starting.current = true;
+    setIsStarting(true);
+    void act(async () => {
+      const api = await getTrackYourTime();
+      const entry = await api.start(
+        project ? { projectId: project.id, billable: project.billableDefault } : { description: "" },
+      );
+      revalidate();
+      openTimer(entry.id);
+    }, "Could not start the timer").finally(() => {
+      starting.current = false;
+      setIsStarting(false);
+    });
+  };
+
   /**
    * File the running timer from the menu bar. The task is cleared with the
    * project because a task only exists inside one — keeping it would leave
@@ -197,9 +201,9 @@ export default function MenuBar(): React.JSX.Element | null {
 
   return (
     <MenuBarExtra
-      icon={BRAND_MARK}
-      title={title}
-      isLoading={ticking || isLoading}
+      icon={running ? undefined : Icon.Stopwatch}
+      title={running ? clock : undefined}
+      isLoading={ticking || isLoading || isStarting}
       tooltip={
         // A failed refresh leaves the previous snapshot on screen, which is
         // the right call for a glanceable item — but it must not pass for a
@@ -223,13 +227,17 @@ export default function MenuBar(): React.JSX.Element | null {
             title={`Running for ${formatDurationShort(elapsed)}`}
             subtitle={`since ${formatClock(running.start)}`}
             icon={Icon.Dot}
-            onAction={openTimer}
+            onAction={() => openTimer()}
           />
           {data?.runningWorkspaceName ? (
-            <MenuBarExtra.Item title={`In ${data.runningWorkspaceName}`} icon={Icon.Building} onAction={openTimer} />
+            <MenuBarExtra.Item
+              title={`In ${data.runningWorkspaceName}`}
+              icon={Icon.Building}
+              onAction={() => openTimer()}
+            />
           ) : null}
           {entryHint(running) ? (
-            <MenuBarExtra.Item title={entryHint(running) ?? ""} icon={Icon.Folder} onAction={openTimer} />
+            <MenuBarExtra.Item title={entryHint(running) ?? ""} icon={Icon.Folder} onAction={() => openTimer()} />
           ) : null}
           <MenuBarExtra.Item
             title="Stop Timer"
@@ -239,7 +247,7 @@ export default function MenuBar(): React.JSX.Element | null {
               void act(
                 async () => {
                   const api = await getTrackYourTime();
-                  const stopped = await api.stop();
+                  const stopped = await api.stop(running.id);
                   await showToast({
                     style: Toast.Style.Success,
                     title: "Timer stopped",
@@ -265,7 +273,7 @@ export default function MenuBar(): React.JSX.Element | null {
             title="Edit Timer…"
             icon={Icon.Pencil}
             shortcut={Keyboard.Shortcut.Common.Edit}
-            onAction={openTimer}
+            onAction={() => openTimer(running.id)}
           />
           <MenuBarExtra.Submenu title="Move to Project" icon={Icon.Folder}>
             {projects.map((project) => (
@@ -309,7 +317,7 @@ export default function MenuBar(): React.JSX.Element | null {
             onAction={() => {
               void act(async () => {
                 const api = await getTrackYourTime();
-                await api.discard();
+                await api.discard(running.id);
                 await showToast({
                   style: Toast.Style.Success,
                   title: "Timer discarded",
@@ -321,10 +329,10 @@ export default function MenuBar(): React.JSX.Element | null {
       ) : (
         <MenuBarExtra.Section title="No timer running">
           <MenuBarExtra.Item
-            title="Start Timer…"
+            title="Start Timer"
             icon={Icon.Play}
             shortcut={Keyboard.Shortcut.Common.New}
-            onAction={openTimer}
+            onAction={() => startNow()}
           />
         </MenuBarExtra.Section>
       )}
@@ -365,7 +373,7 @@ export default function MenuBar(): React.JSX.Element | null {
       ) : null}
 
       {data && data.recent.length > 0 ? (
-        <MenuBarExtra.Section title="Continue">
+        <MenuBarExtra.Section title="Recent Work">
           {data.recent.map((entry) => (
             <MenuBarExtra.Item
               key={entry.id}
@@ -396,6 +404,22 @@ export default function MenuBar(): React.JSX.Element | null {
         </MenuBarExtra.Section>
       ) : null}
 
+      {projects.length > 0 ? (
+        <MenuBarExtra.Section title="Quick Start">
+          <MenuBarExtra.Submenu title="Start in Project" icon={Icon.Folder}>
+            {projects.slice(0, 8).map((project) => (
+              <MenuBarExtra.Item
+                key={project.id}
+                title={project.name}
+                subtitle={project.clientName ?? undefined}
+                icon={{ source: Icon.CircleFilled, tintColor: project.color }}
+                onAction={() => startNow(project)}
+              />
+            ))}
+          </MenuBarExtra.Submenu>
+        </MenuBarExtra.Section>
+      ) : null}
+
       {/* Unsynced work is stated rather than hidden: what is queued is time
           the user tracked, and a client holding it quietly looks exactly like
           one that lost it. Retrying is what every other read here already
@@ -419,7 +443,7 @@ export default function MenuBar(): React.JSX.Element | null {
               }
               subtitle="Kept, never sent from here — open the Timer to review"
               icon={Icon.Person}
-              onAction={openTimer}
+              onAction={() => openTimer()}
             />
           ) : null}
           {(data?.held ?? 0) > 0 ? (
@@ -427,7 +451,7 @@ export default function MenuBar(): React.JSX.Element | null {
               title={heldCopy(data?.held ?? 0, data?.heldReason ?? null).title}
               subtitle="Kept — open the Timer to review"
               icon={Icon.Hourglass}
-              onAction={openTimer}
+              onAction={() => openTimer()}
             />
           ) : null}
         </MenuBarExtra.Section>
@@ -438,7 +462,7 @@ export default function MenuBar(): React.JSX.Element | null {
           title="Timer…"
           icon={Icon.Stopwatch}
           shortcut={{ modifiers: ["cmd"], key: "t" }}
-          onAction={openTimer}
+          onAction={() => openTimer()}
         />
         <MenuBarExtra.Item
           title="Show All Time…"

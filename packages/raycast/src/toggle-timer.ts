@@ -10,8 +10,8 @@ import { ownOnly, resolveUserId } from "./lib/timer-data.js";
 
 /**
  * One hotkey for the whole loop: stop what is running, or pick the last thing
- * up again. With nothing to resume it falls through to the Timer view rather
- * than starting a nameless timer the user then has to fix.
+ * up again. With nothing to resume it starts immediately, then opens the running
+ * entry so details can be added without delaying the clock.
  *
  * This is `no-view` deliberately, and it is why it earns a command of its own
  * rather than living inside `timer`. Raycast can only launch `no-view` and
@@ -90,7 +90,13 @@ export default async function ToggleTimer(): Promise<void> {
     });
 
     if (decision.kind !== "continue") {
-      await launchCommand({ name: "timer", type: LaunchType.UserInitiated });
+      const entry = await api.start({ description: "" });
+      await refreshMenuBar();
+      await launchCommand({
+        name: "timer",
+        type: LaunchType.UserInitiated,
+        context: { editRunningId: entry.id },
+      });
       return;
     }
     const last = decision.candidate;

@@ -2,8 +2,8 @@
 
 ## [Initial Version] - {PR_MERGE_DATE}
 
-- Timer: start from a form, a favorite or recent work, and stop, edit, move, pin or discard the running timer.
-- Timer Menu Bar: the running time in the macOS menu bar, with a choice of title while a timer runs and while none does.
+- Timer: start immediately, then add details. Choose favorites, 30-day recents or a project in Quick Start; the workspace selector stays visible.
+- Timer Menu Bar: a live elapsed clock with no colored icon, hidden while idle unless the optional stopwatch is enabled.
 - Start / Stop Timer: a command for a hotkey that stops the timer or resumes your latest entry.
 - Show All Time: the last 14 days of entries, with continue, edit and delete.
 - Open Dashboard: opens the web app for reports and invoices.

@@ -6,9 +6,9 @@ Start and stop your timer from the keyboard, and see it running in the macOS men
 
 | Command | What it does |
 | --- | --- |
-| **Timer** | Start a timer from a form, a favorite or recent work. While a timer runs, stop, edit, move, pin or discard it. |
+| **Timer** | Start immediately, then add details while it runs. Start from a favorite, recent work or a project. While a timer runs, stop, edit, move, pin or discard it. |
 | **Timer Menu Bar** | Shows the running time in the menu bar. Its menu can stop, edit or discard the timer, continue recent work and show today's total. |
-| **Start / Stop Timer** | Stops the running timer, or resumes your latest entry from the past 7 days. It shows the result in a HUD. |
+| **Start / Stop Timer** | Stops the running timer, or resumes your latest entry from the past 30 days. It shows the result in a HUD. |
 | **Show All Time** | Lists the last 14 days of entries, grouped by day. Continue, edit or delete any of them. |
 | **Open Dashboard** | Opens the web app. |
 
@@ -18,7 +18,15 @@ Reports, invoices, the calendar and catalog editing stay in the web app.
 
 Open Raycast Settings → Extensions → Track Your Time and record a hotkey for **Start / Stop Timer**. One press stops what is running. If nothing runs, the same press resumes your latest entry.
 
-If there is nothing to resume, the press opens **Timer** so you can describe the work first.
+If there is nothing to resume, it starts a timer immediately and opens its details.
+
+### Start now, add details afterwards
+
+Open **Timer** and press **⏎** on **Start Timer**. The clock starts before the details form opens. You can type a description in the search bar first. Leaving the form keeps the timer running.
+
+Favorites, **Recent Work** and projects in **Quick Start** each start with one selection. Recent work covers the past 30 days. If you use several workspaces, the selector at the top shows which one this Mac tracks into.
+
+Use **Start with Details…** in the action panel when you want to fill everything in before starting.
 
 ### Keyboard shortcuts in the forms
 
@@ -42,9 +50,11 @@ To see your account or sign out from Raycast, press **⌘⇧A** in **Timer**.
 
 ### Menu bar item
 
-Run **Timer Menu Bar** once, and the item stays in the menu bar. Its preferences set what it shows while a timer runs and while none does. They can also hide the item when no timer runs.
+Run **Timer Menu Bar** once to enable its background refresh. While tracking, the menu bar shows only the elapsed clock. It counts every second, without a colored icon or title settings.
 
-With **Clock** on, the time counts every second, and a stop made on another device shows up within seconds. With **Clock** off, the menu bar updates once a minute.
+The item is hidden when no timer runs. **When Idle** is the single display preference: turn it on to keep a small monochrome stopwatch for quick access. A timer started from Raycast refreshes the item immediately. A timer started elsewhere while the item is hidden appears on the next background refresh, normally within a minute.
+
+The menu offers **Start Timer**, favorites, recent work and a project shortcut. **Start Timer** starts first and then opens the running entry's details. Editing never pauses the clock.
 
 ### Your own server
 

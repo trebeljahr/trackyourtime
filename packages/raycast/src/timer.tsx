@@ -1,4 +1,18 @@
-import { Action, ActionPanel, Alert, Color, Icon, Keyboard, List, Toast, confirmAlert, showToast } from "@raycast/api";
+import { useEffect, useRef, useState } from "react";
+import {
+  Action,
+  ActionPanel,
+  Alert,
+  Color,
+  Icon,
+  Keyboard,
+  List,
+  Toast,
+  confirmAlert,
+  showToast,
+  useNavigation,
+  type LaunchProps,
+} from "@raycast/api";
 import {
   entryDurationSec,
   formatDuration,
@@ -36,7 +50,6 @@ import {
 import { useServerLevel } from "./lib/server-level.js";
 import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
-import { APP_VERSION, BUILD_ID } from "./lib/version.js";
 import { isAlreadyStopped, refreshMenuBar, replacedNotice, showFailureToast } from "./lib/ui.js";
 import { chooseWorkspace } from "./lib/workspace.js";
 
@@ -55,10 +68,17 @@ const MAX_NAMED_FOREIGN = 5;
  * The live timer surface: what is running, ticking by the second, with
  * everything that changes it one keystroke away.
  *
- * The menu bar is the glanceable version of this and only re-renders on its
- * interval; this one is open in front of the user, so it counts properly.
+ * The menu bar is the glanceable version of this; both clocks tick by the
+ * second while an entry runs.
  */
-export default function Timer(): React.JSX.Element {
+export default function Timer({
+  launchContext,
+}: LaunchProps<{ launchContext?: { editRunningId?: string } }>): React.JSX.Element {
+  const { push } = useNavigation();
+  const [searchText, setSearchText] = useState("");
+  const [isStarting, setIsStarting] = useState(false);
+  const starting = useRef(false);
+  const openedEditor = useRef<string | null>(null);
   const { data, isLoading, signedOut, revalidate, optimistic } = useApi("timer", (api) =>
     loadTimerSnapshot(api, { recentLimit: RECENT_LIMIT }),
   );
@@ -217,6 +237,27 @@ export default function Timer(): React.JSX.Element {
       },
     );
 
+  useEffect(() => {
+    if (
+      openedEditor.current === launchContext?.editRunningId ||
+      !launchContext?.editRunningId ||
+      running?.id !== launchContext.editRunningId ||
+      running.workspaceId !== data?.activeWorkspaceId ||
+      isLocalEntry(running)
+    )
+      return;
+    openedEditor.current = launchContext.editRunningId;
+    push(
+      <EditEntry
+        entry={running}
+        onSaved={() => {
+          revalidate();
+          void refreshMenuBar();
+        }}
+      />,
+    );
+  }, [launchContext?.editRunningId, running, data?.activeWorkspaceId, push, revalidate]);
+
   if (signedOut) return <SignedOutView />;
 
   const elapsed = running ? entryDurationSec(running, now) : 0;
@@ -332,14 +373,51 @@ export default function Timer(): React.JSX.Element {
     </ActionPanel.Section>
   );
 
+  const startNow = async (project?: ProjectWithStats): Promise<void> => {
+    if (starting.current) return;
+    starting.current = true;
+    setIsStarting(true);
+    try {
+      const api = await getTrackYourTime();
+      const entry = await api.start({
+        description: project ? "" : searchText.trim(),
+        ...(project ? { projectId: project.id, billable: project.billableDefault } : {}),
+      });
+      onSaved();
+      if (!isLocalEntry(entry)) {
+        push(
+          <EditEntry
+            entry={{
+              ...entry,
+              projectName: project?.name ?? null,
+              projectColor: project?.color ?? null,
+              clientName: project?.clientName ?? null,
+              taskName: null,
+              amount: 0,
+            }}
+            onSaved={onSaved}
+          />,
+        );
+      } else {
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Timer started",
+          message: "Kept on this Mac. Add details after it syncs.",
+        });
+      }
+    } catch (error) {
+      await showFailureToast(error, "Could not start the timer");
+    } finally {
+      starting.current = false;
+      setIsStarting(false);
+    }
+  };
+
   const startForm = (
-    <Action.Push
-      title="Start New Timer…"
-      icon={Icon.Plus}
-      shortcut={Keyboard.Shortcut.Common.New}
-      target={<StartTimer />}
-    />
+    <Action title="Start Timer" icon={Icon.Play} shortcut={Keyboard.Shortcut.Common.New} onAction={() => startNow()} />
   );
+
+  const composeForm = <Action.Push title="Start with Details…" icon={Icon.Pencil} target={<StartTimer />} />;
 
   /* Work that was never timed. Alongside Start rather than hidden behind the
      web app, because remembering a meeting you forgot to time is exactly the
@@ -384,8 +462,26 @@ export default function Timer(): React.JSX.Element {
 
   return (
     <List
-      isLoading={isLoading}
-      searchBarPlaceholder="Filter favorites and recent work…"
+      isLoading={isLoading || isStarting}
+      searchText={searchText}
+      onSearchTextChange={setSearchText}
+      searchBarPlaceholder="Describe new work, or find a favorite, recent entry or project…"
+      searchBarAccessory={
+        workspaces.length > 1 ? (
+          <List.Dropdown
+            tooltip="Workspace"
+            value={data?.activeWorkspaceId ?? undefined}
+            onChange={(id) => {
+              const workspace = workspaces.find((row) => row.id === id);
+              if (workspace && id !== data?.activeWorkspaceId) void switchTo(id, workspace.name);
+            }}
+          >
+            {workspaces.map((workspace) => (
+              <List.Dropdown.Item key={workspace.id} title={workspace.name} value={workspace.id} />
+            ))}
+          </List.Dropdown>
+        ) : undefined
+      }
       actions={
         <ActionPanel>
           {startForm}
@@ -401,6 +497,7 @@ export default function Timer(): React.JSX.Element {
         actions={
           <ActionPanel>
             {startForm}
+            {composeForm}
             {logForm}
             {commonActions}
           </ActionPanel>
@@ -411,13 +508,231 @@ export default function Timer(): React.JSX.Element {
           the way it should, and the way out is an update, not a retry. */}
       <CompatibilityListSection banner={banner}>{commonActions}</CompatibilityListSection>
 
-      <List.Section title="About">
-        <List.Item
-          icon={Icon.Info}
-          title="Track Your Time for Raycast"
-          subtitle={`Version ${APP_VERSION} (${BUILD_ID})`}
-        />
-      </List.Section>
+      {running ? (
+        <List.Section title="Running" subtitle={`today ${formatDurationShort(todaySec)}`}>
+          <List.Item
+            icon={projectIcon(running.projectColor)}
+            title={entryLabel(running)}
+            // A timer running in another workspace is named by where it runs:
+            // this workspace's catalog cannot name its project.
+            subtitle={runningWorkspaceName !== null ? `Running in ${runningWorkspaceName}` : entryHint(running)}
+            accessories={runningAccessories(running)}
+            actions={
+              <ActionPanel>
+                <ActionPanel.Section>
+                  <Action title="Stop Timer" icon={Icon.Stop} onAction={() => stop(running)} />
+                  {/* Stopping works wherever the timer runs; editing does not.
+                      Every edit is addressed to the chosen workspace, where
+                      that entry does not exist, and this workspace's projects
+                      would be the wrong picker for it anyway. */}
+                  {runningWorkspaceName === null ? (
+                    <>
+                      <Action.Push
+                        title="Edit Timer…"
+                        icon={Icon.Pencil}
+                        shortcut={Keyboard.Shortcut.Common.Edit}
+                        target={<EditEntry entry={running} onSaved={onSaved} />}
+                      />
+                      <ActionPanel.Submenu
+                        title="Move to Project…"
+                        icon={Icon.Folder}
+                        shortcut={{ modifiers: ["cmd", "shift"], key: "m" }}
+                      >
+                        {projects.map((project) => (
+                          <Action
+                            key={project.id}
+                            title={project.clientName ? `${project.name} — ${project.clientName}` : project.name}
+                            icon={projectIcon(project.color)}
+                            onAction={() => fileUnder(running, project)}
+                          />
+                        ))}
+                        <Action title="No Project" icon={Icon.Circle} onAction={() => fileUnder(running, null)} />
+                      </ActionPanel.Submenu>
+                      <Action
+                        title={favoriteFor(running, favorites) ? "Remove Favorite" : "Pin as Favorite"}
+                        icon={Icon.Star}
+                        shortcut={{ modifiers: ["cmd"], key: "f" }}
+                        onAction={() => togglePin(running, favoriteFor(running, favorites))}
+                      />
+                    </>
+                  ) : null}
+                </ActionPanel.Section>
+
+                <ActionPanel.Section>
+                  {startForm}
+                  {composeForm}
+                  {logForm}
+                  <Action.CopyToClipboard
+                    title="Copy Description"
+                    content={entryLabel(running)}
+                    shortcut={Keyboard.Shortcut.Common.Copy}
+                  />
+                </ActionPanel.Section>
+
+                {commonActions}
+
+                <ActionPanel.Section>
+                  <Action
+                    title="Discard Timer"
+                    icon={Icon.Trash}
+                    style={Action.Style.Destructive}
+                    shortcut={{ modifiers: ["cmd", "shift"], key: "backspace" }}
+                    onAction={() => discard(running)}
+                  />
+                </ActionPanel.Section>
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+      ) : (
+        <List.Section title="No timer running" subtitle={`today ${formatDurationShort(todaySec)}`}>
+          <List.Item
+            icon={Icon.Play}
+            title={searchText.trim() ? `Start “${searchText.trim()}”` : "Start Timer"}
+            subtitle="Start now. Add details while it runs."
+            actions={
+              <ActionPanel>
+                {startForm}
+                {logForm}
+                {commonActions}
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+      )}
+
+      {favorites.length > 0 ? (
+        <List.Section title="Favorites">
+          {favorites.map((favorite) => (
+            <List.Item
+              key={favorite.id}
+              icon={{ source: Icon.Star, tintColor: Color.Yellow }}
+              title={quickStartLabel(favorite)}
+              subtitle={quickStartHint(favorite) ?? undefined}
+              actions={
+                <ActionPanel>
+                  <ActionPanel.Section>
+                    <Action
+                      title="Start Timer"
+                      icon={Icon.Play}
+                      onAction={() =>
+                        run(
+                          async () => {
+                            const api = await getTrackYourTime();
+                            const entry = await api.startQuick(repairQuickStart(favorite));
+                            return started(quickStartLabel(favorite), entry);
+                          },
+                          "Could not start the timer",
+                          (snapshot) => ({
+                            ...snapshot,
+                            fetchedAt: Date.now(),
+                            running: previewStarted(repairQuickStart(favorite), favorite, snapshot.activeWorkspaceId),
+                            recent:
+                              snapshot.running?.workspaceId === snapshot.activeWorkspaceId
+                                ? [previewStopped(snapshot.running), ...snapshot.recent]
+                                : snapshot.recent,
+                          }),
+                        )
+                      }
+                    />
+                    <Action
+                      title="Remove Favorite"
+                      icon={Icon.StarDisabled}
+                      shortcut={{ modifiers: ["cmd"], key: "f" }}
+                      onAction={() =>
+                        run(async () => {
+                          const api = await getTrackYourTime();
+                          await api.removeFavorite(favorite.id);
+                          return "Favorite removed";
+                        }, "Could not remove the favorite")
+                      }
+                    />
+                  </ActionPanel.Section>
+                  {commonActions}
+                </ActionPanel>
+              }
+            />
+          ))}
+        </List.Section>
+      ) : null}
+
+      {recent.length > 0 ? (
+        <List.Section title="Recent Work" subtitle={`past ${RECENT_DAYS} days`}>
+          {recent.map((entry) => (
+            <List.Item
+              key={entry.id}
+              icon={projectIcon(entry.projectColor)}
+              title={entryLabel(entry)}
+              subtitle={entryHint(entry)}
+              accessories={[
+                { text: formatClock(entry.start) },
+                {
+                  tag: {
+                    value: formatDurationShort(entryDurationSec(entry, now)),
+                    color: Color.SecondaryText,
+                  },
+                },
+              ]}
+              actions={
+                <ActionPanel>
+                  <ActionPanel.Section>
+                    <Action
+                      title="Continue Entry"
+                      icon={Icon.Play}
+                      onAction={() =>
+                        run(
+                          async () => {
+                            const api = await getTrackYourTime();
+                            const next = await api.continue(entry.id, toQuickStart(entry));
+                            return started(entryLabel(entry), next);
+                          },
+                          "Could not start the timer",
+                          (snapshot) => ({
+                            ...snapshot,
+                            fetchedAt: Date.now(),
+                            running: previewStarted(toQuickStart(entry), entry, snapshot.activeWorkspaceId),
+                          }),
+                        )
+                      }
+                    />
+                    <Action.Push
+                      title="Edit Entry…"
+                      icon={Icon.Pencil}
+                      shortcut={Keyboard.Shortcut.Common.Edit}
+                      target={<EditEntry entry={entry} onSaved={onSaved} />}
+                    />
+                    <Action
+                      title={favoriteFor(entry, favorites) ? "Remove Favorite" : "Pin as Favorite"}
+                      icon={Icon.Star}
+                      shortcut={{ modifiers: ["cmd"], key: "f" }}
+                      onAction={() => togglePin(entry, favoriteFor(entry, favorites))}
+                    />
+                  </ActionPanel.Section>
+                  {commonActions}
+                </ActionPanel>
+              }
+            />
+          ))}
+        </List.Section>
+      ) : null}
+      {projects.length > 0 ? (
+        <List.Section title="Quick Start" subtitle="projects">
+          {projects.slice(0, 8).map((project) => (
+            <List.Item
+              key={`project-${project.id}`}
+              icon={projectIcon(project.color)}
+              title={project.name}
+              subtitle={project.clientName ?? undefined}
+              actions={
+                <ActionPanel>
+                  <Action title="Start in Project" icon={Icon.Play} onAction={() => startNow(project)} />
+                  {commonActions}
+                </ActionPanel>
+              }
+            />
+          ))}
+        </List.Section>
+      ) : null}
 
       {/* Stated rather than hidden: what is queued is time the user tracked,
           and a client holding it quietly looks like one that lost it. */}
@@ -486,213 +801,6 @@ export default function Timer(): React.JSX.Element {
               }
             />
           ) : null}
-        </List.Section>
-      ) : null}
-
-      {running ? (
-        <List.Section title="Running" subtitle={`today ${formatDurationShort(todaySec)}`}>
-          <List.Item
-            icon={projectIcon(running.projectColor)}
-            title={entryLabel(running)}
-            // A timer running in another workspace is named by where it runs:
-            // this workspace's catalog cannot name its project.
-            subtitle={runningWorkspaceName !== null ? `Running in ${runningWorkspaceName}` : entryHint(running)}
-            accessories={runningAccessories(running)}
-            actions={
-              <ActionPanel>
-                <ActionPanel.Section>
-                  <Action title="Stop Timer" icon={Icon.Stop} onAction={() => stop(running)} />
-                  {/* Stopping works wherever the timer runs; editing does not.
-                      Every edit is addressed to the chosen workspace, where
-                      that entry does not exist, and this workspace's projects
-                      would be the wrong picker for it anyway. */}
-                  {runningWorkspaceName === null ? (
-                    <>
-                      <Action.Push
-                        title="Edit Timer…"
-                        icon={Icon.Pencil}
-                        shortcut={Keyboard.Shortcut.Common.Edit}
-                        target={<EditEntry entry={running} onSaved={onSaved} />}
-                      />
-                      <ActionPanel.Submenu
-                        title="Move to Project…"
-                        icon={Icon.Folder}
-                        shortcut={{ modifiers: ["cmd", "shift"], key: "m" }}
-                      >
-                        {projects.map((project) => (
-                          <Action
-                            key={project.id}
-                            title={project.clientName ? `${project.name} — ${project.clientName}` : project.name}
-                            icon={projectIcon(project.color)}
-                            onAction={() => fileUnder(running, project)}
-                          />
-                        ))}
-                        <Action title="No Project" icon={Icon.Circle} onAction={() => fileUnder(running, null)} />
-                      </ActionPanel.Submenu>
-                      <Action
-                        title={favoriteFor(running, favorites) ? "Remove Favorite" : "Pin as Favorite"}
-                        icon={Icon.Star}
-                        shortcut={{ modifiers: ["cmd"], key: "f" }}
-                        onAction={() => togglePin(running, favoriteFor(running, favorites))}
-                      />
-                    </>
-                  ) : null}
-                </ActionPanel.Section>
-
-                <ActionPanel.Section>
-                  {startForm}
-                  {logForm}
-                  <Action.CopyToClipboard
-                    title="Copy Description"
-                    content={entryLabel(running)}
-                    shortcut={Keyboard.Shortcut.Common.Copy}
-                  />
-                </ActionPanel.Section>
-
-                {commonActions}
-
-                <ActionPanel.Section>
-                  <Action
-                    title="Discard Timer"
-                    icon={Icon.Trash}
-                    style={Action.Style.Destructive}
-                    shortcut={{ modifiers: ["cmd", "shift"], key: "backspace" }}
-                    onAction={() => discard(running)}
-                  />
-                </ActionPanel.Section>
-              </ActionPanel>
-            }
-          />
-        </List.Section>
-      ) : (
-        <List.Section title="No timer running" subtitle={`today ${formatDurationShort(todaySec)}`}>
-          <List.Item
-            icon={Icon.Play}
-            title="Start a New Timer…"
-            subtitle="Describe it, file it, and go"
-            actions={
-              <ActionPanel>
-                {startForm}
-                {logForm}
-                {commonActions}
-              </ActionPanel>
-            }
-          />
-        </List.Section>
-      )}
-
-      {favorites.length > 0 ? (
-        <List.Section title="Favorites">
-          {favorites.map((favorite) => (
-            <List.Item
-              key={favorite.id}
-              icon={{ source: Icon.Star, tintColor: Color.Yellow }}
-              title={quickStartLabel(favorite)}
-              subtitle={quickStartHint(favorite) ?? undefined}
-              actions={
-                <ActionPanel>
-                  <ActionPanel.Section>
-                    <Action
-                      title="Start Timer"
-                      icon={Icon.Play}
-                      onAction={() =>
-                        run(
-                          async () => {
-                            const api = await getTrackYourTime();
-                            const entry = await api.startQuick(repairQuickStart(favorite));
-                            return started(quickStartLabel(favorite), entry);
-                          },
-                          "Could not start the timer",
-                          (snapshot) => ({
-                            ...snapshot,
-                            fetchedAt: Date.now(),
-                            running: previewStarted(repairQuickStart(favorite), favorite, snapshot.activeWorkspaceId),
-                            recent:
-                              snapshot.running?.workspaceId === snapshot.activeWorkspaceId
-                                ? [previewStopped(snapshot.running), ...snapshot.recent]
-                                : snapshot.recent,
-                          }),
-                        )
-                      }
-                    />
-                    <Action
-                      title="Remove Favorite"
-                      icon={Icon.StarDisabled}
-                      shortcut={{ modifiers: ["cmd"], key: "f" }}
-                      onAction={() =>
-                        run(async () => {
-                          const api = await getTrackYourTime();
-                          await api.removeFavorite(favorite.id);
-                          return "Favorite removed";
-                        }, "Could not remove the favorite")
-                      }
-                    />
-                  </ActionPanel.Section>
-                  {commonActions}
-                </ActionPanel>
-              }
-            />
-          ))}
-        </List.Section>
-      ) : null}
-
-      {recent.length > 0 ? (
-        <List.Section title="Continue">
-          {recent.map((entry) => (
-            <List.Item
-              key={entry.id}
-              icon={projectIcon(entry.projectColor)}
-              title={entryLabel(entry)}
-              subtitle={entryHint(entry)}
-              accessories={[
-                { text: formatClock(entry.start) },
-                {
-                  tag: {
-                    value: formatDurationShort(entryDurationSec(entry, now)),
-                    color: Color.SecondaryText,
-                  },
-                },
-              ]}
-              actions={
-                <ActionPanel>
-                  <ActionPanel.Section>
-                    <Action
-                      title="Continue Entry"
-                      icon={Icon.Play}
-                      onAction={() =>
-                        run(
-                          async () => {
-                            const api = await getTrackYourTime();
-                            const next = await api.continue(entry.id, toQuickStart(entry));
-                            return started(entryLabel(entry), next);
-                          },
-                          "Could not start the timer",
-                          (snapshot) => ({
-                            ...snapshot,
-                            fetchedAt: Date.now(),
-                            running: previewStarted(toQuickStart(entry), entry, snapshot.activeWorkspaceId),
-                          }),
-                        )
-                      }
-                    />
-                    <Action.Push
-                      title="Edit Entry…"
-                      icon={Icon.Pencil}
-                      shortcut={Keyboard.Shortcut.Common.Edit}
-                      target={<EditEntry entry={entry} onSaved={onSaved} />}
-                    />
-                    <Action
-                      title={favoriteFor(entry, favorites) ? "Remove Favorite" : "Pin as Favorite"}
-                      icon={Icon.Star}
-                      shortcut={{ modifiers: ["cmd"], key: "f" }}
-                      onAction={() => togglePin(entry, favoriteFor(entry, favorites))}
-                    />
-                  </ActionPanel.Section>
-                  {commonActions}
-                </ActionPanel>
-              }
-            />
-          ))}
         </List.Section>
       ) : null}
     </List>
