@@ -95,9 +95,10 @@ async function connect(port) {
   activePage = page;
   page.on("pageerror", (error) => { result.pageErrors ??= []; result.pageErrors.push(String(error)); });
   await page.waitForFunction(() => !!window.electronAPI?.desktop?.updates);
-  await page.locator("body").waitFor({ state: "visible" });
-  await page.waitForFunction(() => (document.body?.innerText.trim().length ?? 0) > 30, undefined, { timeout: 60_000 });
-  assert.ok((await page.locator("body").innerText()).length > 30, "Rendered app content");
+  // The shell first paints /app, then redirects a fresh profile to /login.
+  // Wait for the usable form rather than racing that client-side navigation.
+  await page.getByRole("heading", { name: "Log in", exact: true }).waitFor({ state: "visible", timeout: 60_000 });
+  await page.getByRole("textbox", { name: "Email", exact: true }).waitFor({ state: "visible" });
   return page;
 }
 async function stopInstalled() {
