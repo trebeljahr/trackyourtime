@@ -87,8 +87,8 @@ Each waiting change records the account, server and workspace it belongs to. If 
 **Nothing in the menu bar.** Check these in order:
 
 1. Run **Timer Menu Bar** once. A menu bar command appears only after its first run.
-2. Check the **Idle** preference. When it is on, the item is hidden while no timer runs.
-3. Look for the icon alone. With no timer running, the item shows only the icon unless **When No Timer Runs** says otherwise.
+2. With no timer running, the item is hidden by default. Turn on **When Idle** to keep a small stopwatch visible.
+3. A timer started elsewhere while the item is hidden appears on the next background refresh, normally within a minute.
 
 ## Privacy
 
