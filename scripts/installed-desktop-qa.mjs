@@ -32,6 +32,7 @@ const result = { from, to, platform: process.platform, arch: process.arch, publi
 const children = new Set();
 const logs = [];
 let browser;
+let activePage;
 let server;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const run = (file, args, options = {}) => execFileSync(file, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options });
@@ -91,10 +92,12 @@ async function connect(port) {
   await until(async () => (await fetch(`http://127.0.0.1:${port}/json/version`)).ok, "CDP endpoint");
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
   const page = await until(() => browser.contexts().flatMap((c) => c.pages()).find((p) => p.url().startsWith("app://-")), "app page");
+  activePage = page;
+  page.on("pageerror", (error) => { result.pageErrors ??= []; result.pageErrors.push(String(error)); });
   await page.waitForFunction(() => !!window.electronAPI?.desktop?.updates);
   await page.locator("body").waitFor({ state: "visible" });
+  await page.waitForFunction(() => (document.body?.innerText.trim().length ?? 0) > 30, undefined, { timeout: 60_000 });
   assert.ok((await page.locator("body").innerText()).length > 30, "Rendered app content");
-  page.on("pageerror", (error) => { result.pageErrors ??= []; result.pageErrors.push(String(error)); });
   return page;
 }
 async function stopInstalled() {
@@ -102,7 +105,7 @@ async function stopInstalled() {
   browser = undefined;
   if (windows) {
     // The runner owns every process with this exact product name.
-    run("powershell", ["-NoProfile", "-Command", "Get-Process -Name 'Track Your Time' -ErrorAction SilentlyContinue | Stop-Process -Force; exit 0"]);
+    run("pwsh", ["-NoProfile", "-Command", "Get-Process -Name 'Track Your Time' -ErrorAction SilentlyContinue | Stop-Process -Force; exit 0"]);
   } else {
     for (const child of children) if (child.spawnfile !== "Xvfb" && child.spawnfile !== "dbus-daemon") child.kill("SIGKILL");
     // AppImage's updater relaunches without the parent's CDP flags.
@@ -126,12 +129,12 @@ try {
   if (windows) {
     for (const file of [oldFile, join(newDir, filename(to))]) {
       const escaped = file.replaceAll("'", "''");
-      const status = run("powershell", ["-NoProfile", "-Command", `(Get-AuthenticodeSignature -LiteralPath '${escaped}').Status.ToString()`]).trim();
+      const status = run("pwsh", ["-NoProfile", "-Command", `(Get-AuthenticodeSignature -LiteralPath '${escaped}').Status.ToString()`]).trim();
       assert.equal(status, "Valid", `Authenticode: ${basename(file)}`);
     }
     const escaped = oldFile.replaceAll("'", "''");
     const dest = installed.replaceAll("'", "''");
-    run("powershell", ["-NoProfile", "-Command", `$p = Start-Process -FilePath '${escaped}' -ArgumentList '/S','/D=${dest}' -Wait -PassThru; exit $p.ExitCode`]);
+    run("pwsh", ["-NoProfile", "-Command", `$p = Start-Process -FilePath '${escaped}' -ArgumentList '/S','/D=${dest}' -Wait -PassThru; exit $p.ExitCode`]);
     executable = join(installed, "Track Your Time.exe");
     resources = join(installed, "resources");
   } else {
@@ -199,6 +202,8 @@ try {
   result.ok = true;
 } catch (error) {
   result.error = error.stack;
+  result.body = await activePage?.locator("body").innerText({ timeout: 3000 }).catch(() => null);
+  await activePage?.screenshot({ path: join(out, "failure.png"), timeout: 5000 }).catch(() => {});
   process.exitCode = 1;
 } finally {
   await stopInstalled().catch(() => {});
