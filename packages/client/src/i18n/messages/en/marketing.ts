@@ -165,7 +165,7 @@ export const marketing = {
       },
       stores: {
         q: "Where do I get the apps?",
-        a: "The web app and Chrome extension are public. Desktop downloads are on GitHub Releases. Firefox is in review. Raycast and the phone apps are not in their stores yet.",
+        a: "The web app and Chrome extension are public. Desktop downloads are on GitHub Releases. Firefox is available on Firefox Add-ons. Raycast and the phone apps are not in their stores yet.",
       },
       api: {
         q: "Is there an API?",
@@ -740,7 +740,7 @@ export const marketing = {
       platforms: {
         term: "Where it runs",
         detail:
-          "The web app, Chrome extension and desktop downloads for macOS, Windows and Linux are public. Firefox is in review. Raycast and the phone apps are not in their stores yet.",
+          "The web app, Chrome extension and desktop downloads for macOS, Windows and Linux are public. Firefox is available on Firefox Add-ons. Raycast and the phone apps are not in their stores yet.",
       },
       status: {
         term: "Version",

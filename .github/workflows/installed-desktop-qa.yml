@@ -1,0 +1,65 @@
+name: Installed Desktop QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: Installed version
+        default: "0.2.2"
+        required: true
+      to:
+        description: Update version (may still be a draft)
+        default: "0.3.0"
+        required: true
+      public_feed:
+        description: Use the published GitHub feed instead of a loopback draft mirror
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  installed:
+    name: ${{ matrix.os }} installed update
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        os: [windows-2025, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      QA_FROM: ${{ inputs.from }}
+      QA_TO: ${{ inputs.to }}
+      QA_PUBLIC_FEED: ${{ inputs.public_feed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install Linux runtime dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb dbus-x11 libgtk-3-0 libnss3 libgbm1 libasound2t64 libsecret-1-0 libnotify4
+      - name: Install released app and update it
+        run: node scripts/installed-desktop-qa.mjs
+      - name: Install released deb and rpm packages
+        if: runner.os == 'Linux'
+        run: node scripts/desktop-packages-smoke.mjs --dir test-results/installed-desktop/downloads/new
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-desktop-${{ matrix.os }}-${{ inputs.public_feed && 'public' || 'draft' }}
+          path: |
+            test-results/installed-desktop/*.json
+            test-results/installed-desktop/*.png
+            test-results/installed-desktop/*.log
+            test-results/linux-packages/
+          if-no-files-found: warn

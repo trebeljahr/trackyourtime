@@ -85,7 +85,7 @@ What it cannot do yet:
 - Clients cannot log in or open a shared report. You send them a PDF.
 - Budgets show progress, but nothing notifies you when a project goes over. There are no milestones or deadlines.
 - Anyone who can reach your domain can create an account. The application has no setting to close sign-up, and the self-hosting guide lists workarounds at the proxy.
-- The Chrome extension is in the [Chrome Web Store](https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). Edge, Brave, Opera, Vivaldi and Arc install it from there. The Firefox build is in review at Firefox Add-ons and not public yet. The desktop app downloads from [GitHub Releases](https://github.com/trebeljahr/trackyourtime/releases/latest), and no store lists it. The Raycast extension and the phone apps are not in any store yet.
+- The Chrome extension is in the [Chrome Web Store](https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). Edge, Brave, Opera, Vivaldi and Arc install it from there. Firefox 0.3.0 is public on [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/track-your-time/). The desktop app downloads from [GitHub Releases](https://github.com/trebeljahr/trackyourtime/releases/latest), and no store lists it. The Raycast extension and the phone apps are not in any store yet.
 
 Pick Track Your Time if:
 

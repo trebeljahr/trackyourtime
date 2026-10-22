@@ -163,7 +163,7 @@ export const marketing: Translation<typeof source> = {
       },
       stores: {
         q: "Wo bekomme ich die Apps?",
-        a: "Web-App und Chrome-Erweiterung sind öffentlich. Desktop-Downloads gibt es auf GitHub Releases. Firefox ist in Prüfung. Raycast und die Mobil-Apps sind noch nicht in ihren Stores.",
+        a: "Web-App und Chrome-Erweiterung sind öffentlich. Desktop-Downloads gibt es auf GitHub Releases. Firefox ist bei Firefox Add-ons verfügbar. Raycast und die Mobil-Apps sind noch nicht in ihren Stores.",
       },
       api: {
         q: "Gibt es eine API?",
@@ -725,7 +725,7 @@ export const marketing: Translation<typeof source> = {
       platforms: {
         term: "Wo es läuft",
         detail:
-          "Web-App, Chrome-Erweiterung und Desktop-Downloads für macOS, Windows und Linux sind öffentlich. Firefox ist in Prüfung. Raycast und die Mobil-Apps sind noch nicht in ihren Stores.",
+          "Web-App, Chrome-Erweiterung und Desktop-Downloads für macOS, Windows und Linux sind öffentlich. Firefox ist bei Firefox Add-ons verfügbar. Raycast und die Mobil-Apps sind noch nicht in ihren Stores.",
       },
       status: {
         term: "Version",

@@ -66,7 +66,7 @@ export const STORES: Record<StoreId, StoreListing> = {
   // addons.mozilla.org, once a version has been submitted AND approved. The
   // same rule as every other entry: a listing nobody can open is `null`, and
   // the page says "not in the store yet" rather than linking a 404.
-  firefox: { url: null },
+  firefox: { url: "https://addons.mozilla.org/firefox/addon/track-your-time/" },
   raycast: { url: null },
   appStore: { url: null },
   googlePlay: { url: null },

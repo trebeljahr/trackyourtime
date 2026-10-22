@@ -24,7 +24,7 @@ built. Both were checked against the source, not remembered.
 - **Tagged self-host images:** v0.3.0 server and client images passed unauthenticated pulls and smoke checks on amd64 and arm64. The `0.3` and `latest` tags were promoted.
 - **Chrome listing:** version 0.3.0 is available in the Chrome Web Store.
 - **Desktop release:** version 0.2.2 is published on GitHub Releases, with a signed and notarized dmg and zip for macOS, a signed Windows installer, and AppImage, deb, rpm and tar.gz files for Linux x64 and ARM64. The dmg, the Windows installer and the AppImage update themselves from published releases.
-- **Firefox build:** a separate MV3 target, device-flow sign-in, a sign-in relay for trackyourtime.dev and server-origin support exist. Version 0.3.0 is in review at Firefox Add-ons.
+- **Firefox build:** a separate MV3 target, device-flow sign-in, a sign-in relay for trackyourtime.dev and server-origin support exist. Version 0.3.0 is public on Firefox Add-ons.
 - **Rates per person:** an owner or admin who may see money can give each member an hourly rate. A new billable entry snapshots its project's rate first, then its author's member rate, then the workspace default (`resolveHourlyRate` in `packages/shared/src/rates.ts`).
 - **Timesheet approval:** optional per workspace. A member submits a week, and an owner or admin with time visibility approves, rejects or reopens it. Submitted and approved weeks are locked, and an offline edit queued into one is held for a deliberate retry rather than dropped. An invoice can be limited to approved time. Activation needs MongoDB transactions; [`docs/timesheet-approvals.md`](docs/timesheet-approvals.md) has the rules and the setup.
 - **Searching entries from the command palette:** typing in Cmd/Ctrl+K searches entry descriptions in the current workspace. Choosing an entry opens it for editing, or read-only when it belongs to a colleague.
@@ -41,7 +41,7 @@ work rather than a design question.
 
 ### Store listings
 
-**Exists.** Chrome version 0.3.0 is live. Firefox 0.3.0 is in review at Firefox Add-ons. The v0.3.0 workflow signed the mobile builds and uploaded them to Google Play's internal track and TestFlight. Apple answered the iOS and Mac App Store submissions with a request for more information (Guideline 2.1), not a reported defect. Chrome, Firefox and both phone apps can be submitted from CI once their store credentials are set.
+**Exists.** Chrome version 0.3.0 is live. Firefox 0.3.0 is public on Firefox Add-ons. The v0.3.0 workflow signed the mobile builds and uploaded them to Google Play's internal track and TestFlight. Apple answered the iOS and Mac App Store submissions with a request for more information (Guideline 2.1), not a reported defect. Chrome, Firefox and both phone apps can be submitted from CI once their store credentials are set.
 
 **Missing.** Public App Store, Mac App Store and Google Play listings, Firefox approval, a Raycast Store listing and a Microsoft Store build. The Microsoft Store job skips until a Partner Center identity is configured. Raycast's licensing decision remains recorded in the launch notes.
 

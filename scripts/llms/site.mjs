@@ -75,7 +75,7 @@ ${PRODUCT_NAME} is for freelancers, consultants and small studios who bill clien
 - There is no client login or shared report link, and no budget alert.
 - Desktop downloads come only from GitHub Releases: version 0.2.2 for macOS, Windows and Linux (https://github.com/trebeljahr/trackyourtime/releases/latest). No store lists the desktop app.
 - A self-hosted instance has open sign-up. The application has no setting to close registration. The self-hosting guide lists workarounds at the proxy.
-- The Chrome extension is in the Chrome Web Store (https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). The Firefox build is in review at Firefox Add-ons. The Raycast extension and the phone apps are not in any store yet.
+- The Chrome extension is in the Chrome Web Store (https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). Firefox 0.3.0 is public on Firefox Add-ons (https://addons.mozilla.org/firefox/addon/track-your-time/). The Raycast extension and the phone apps are not in any store yet.
 
 **How to self-host**
 
