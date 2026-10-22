@@ -80,7 +80,7 @@ The store takes up to six PNG screenshots at 2000×1250 in `metadata/`, named `t
 
    The script prints the email and password of an invented account, Maya Lindgren. The account has three clients, four projects, six tasks, three tags, about 25 weekdays of entries, two favorites and a timer that started 47 minutes ago.
 
-3. Run `pnpm dev:raycast`. This replaces any development copy of the extension that Raycast already has, including its stored session and preferences.
+3. Use a separate development copy for screenshots. Export it to a temporary directory, give its `package.json` a unique `name` such as `trackyourtime-store-qa`, and run `npm run dev` there. Keep the production extension title and command titles. This preserves the existing extension's session and preferences.
 
 4. In Raycast, open Extensions → Track Your Time. Set **API URL** to `http://localhost:<api>` and **Web App URL** to `http://localhost:<web>`. For the **Timer Menu Bar** command, set **Menu Bar Title** to "Description and Duration" and turn on **Clock**.
 

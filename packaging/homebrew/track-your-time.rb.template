@@ -8,8 +8,7 @@ cask "track-your-time" do
   sha256 arm:   "{{sha256_mac_arm64_dmg}}",
          intel: "{{sha256_mac_x64_dmg}}"
 
-  url "https://github.com/trebeljahr/trackyourtime/releases/download/v#{version}/TrackYourTime-#{version}-mac-#{arch}.dmg",
-      verified: "github.com/trebeljahr/trackyourtime/"
+  url "https://github.com/trebeljahr/trackyourtime/releases/download/v#{version}/TrackYourTime-#{version}-mac-#{arch}.dmg"
   name "Track Your Time"
   desc "Open-source time tracker"
   homepage "https://trackyourtime.dev/"
