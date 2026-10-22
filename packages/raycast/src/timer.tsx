@@ -521,10 +521,16 @@ export default function Timer({
         <List.Section title="Running" subtitle={`today ${formatDurationShort(todaySec)}`}>
           <List.Item
             icon={projectIcon(running.projectColor)}
-            title={entryLabel(running)}
+            title="Stop Timer"
+            keywords={[entryLabel(running), entryHint(running) ?? ""]}
             // A timer running in another workspace is named by where it runs:
             // this workspace's catalog cannot name its project.
-            subtitle={runningWorkspaceName !== null ? `Running in ${runningWorkspaceName}` : entryHint(running)}
+            subtitle={[
+              entryLabel(running),
+              runningWorkspaceName !== null ? `Running in ${runningWorkspaceName}` : entryHint(running),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
             accessories={runningAccessories(running)}
             actions={
               <ActionPanel>

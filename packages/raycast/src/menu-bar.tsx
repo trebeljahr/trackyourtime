@@ -156,6 +156,8 @@ export default function MenuBar(): React.JSX.Element | null {
     try {
       await (preview ? optimistic(run(), preview) : run());
       if (!preview) revalidate();
+      // Refresh the root-search action after a menu start, stop or edit.
+      await launchCommand({ name: "toggle-timer", type: LaunchType.Background }).catch(() => undefined);
     } catch (error) {
       // Somebody stopped it elsewhere between this item's last read and the
       // click. The user got what they wanted; record it and move on rather

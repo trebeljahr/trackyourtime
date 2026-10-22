@@ -11,12 +11,15 @@ import { notifySessionChanged } from "./auth.js";
  * Menu bar commands otherwise only refresh on their interval, which would
  * leave the clock showing a timer the user just stopped from a hotkey.
  */
-export async function refreshMenuBar(): Promise<void> {
-  try {
-    await launchCommand({ name: "menu-bar", type: LaunchType.Background });
-  } catch {
-    // The command is disabled, or Raycast declined to launch it. The menu bar
-    // just stays stale until its next tick — not worth surfacing.
+export async function refreshMenuBar(refreshToggle = true): Promise<void> {
+  // The toggle updates its own subtitle after acting; relaunching itself
+  // while handling a user action could interrupt that action.
+  for (const name of refreshToggle ? ["menu-bar", "toggle-timer"] : ["menu-bar"]) {
+    try {
+      await launchCommand({ name, type: LaunchType.Background });
+    } catch {
+      // A disabled command can wait for its next scheduled refresh.
+    }
   }
 }
 

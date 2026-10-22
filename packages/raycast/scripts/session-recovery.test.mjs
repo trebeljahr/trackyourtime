@@ -81,7 +81,7 @@ const hook = registerHooks({
 const auth = await import("../src/lib/auth.ts");
 const { getTrackYourTime } = await import("../src/lib/api.ts");
 const { useApi } = await import("../src/lib/hooks.ts");
-const { showFailureToast } = await import("../src/lib/ui.ts");
+const { refreshMenuBar, showFailureToast } = await import("../src/lib/ui.ts");
 const { NotSignedInError } = await import("../src/lib/errors.ts");
 const { ApiError } = await import("../src/vendor/index.ts");
 const originalFetch = globalThis.fetch;
@@ -244,4 +244,17 @@ test("mutation recovery opens pairing directly instead of relaunching a stale Ti
   assert.equal(host.toasts[0].primaryAction.title, "Sign in");
   host.toasts[0].primaryAction.onAction();
   assert.deepEqual(host.launches[0], { name: "timer", type: "user", context: { signIn: true } });
+});
+
+test("timer changes refresh both menu and root-search status without foreground launches", async () => {
+  await refreshMenuBar();
+  assert.deepEqual(host.launches, [
+    { name: "menu-bar", type: "background" },
+    { name: "toggle-timer", type: "background" },
+  ]);
+});
+
+test("the toggle can refresh the menu without relaunching itself", async () => {
+  await refreshMenuBar(false);
+  assert.deepEqual(host.launches, [{ name: "menu-bar", type: "background" }]);
 });

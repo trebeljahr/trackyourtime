@@ -34,6 +34,8 @@ const mocks = new Map([
     export const Keyboard={Shortcut:{Common:{New:{key:'n'},Edit:{key:'e'},Save:{key:'s'},Open:{key:'o'},Refresh:{key:'r'},Copy:{key:'c'}}}};
     export const Toast={Style:{Success:'success',Failure:'failure'}}; export const Alert={ActionStyle:{Destructive:'destructive'}};
     export const LaunchType={UserInitiated:'user',Background:'background'};
+    export const environment={get launchType(){return h.launchType;}};
+    export const updateCommandMetadata=async metadata=>{if(h.metadataFails)throw Error('metadata unavailable');h.events.push(['metadata',metadata]);};
     export const launchCommand=async options=>h.events.push(['launch',options]);
     export const showToast=async options=>h.events.push(['toast',options]); export const showHUD=async text=>h.events.push(['hud',text]);
     export const open=async()=>{}; export const confirmAlert=async()=>true;
@@ -169,6 +171,8 @@ beforeEach(() => {
     search: undefined,
     now: Date.now(),
     showWhenIdle: false,
+    launchType: "user",
+    metadataFails: false,
     workspace: "work",
   });
   host.data = {
@@ -199,6 +203,10 @@ beforeEach(() => {
     start: async (input) => {
       host.events.push(["start", input]);
       return entry({ description: input.description ?? "" });
+    },
+    stop: async (id) => {
+      host.events.push(["stop", id]);
+      return entry({ end: new Date().toISOString(), durationSec: 60 });
     },
     startQuick: async (input) => {
       host.events.push(["favorite", input]);
@@ -402,6 +410,57 @@ test("a first-ever hotkey starts immediately, without a preliminary form", async
   await ToggleTimer();
   assert.ok(host.events.some((e) => e[0] === "start"));
   assert.equal(host.events.find((e) => e[0] === "launch")[1].context.editRunningId, "new-entry");
+});
+test("the Timer view replaces its first start row with an explicit stop action", async () => {
+  const running = entry({ id: "running-entry", description: "Design review", projectName: "Website" });
+  host.data.running = running;
+  const row = nodes(render(Timer), "List.Item")[0];
+  assert.equal(row.props.title, "Stop Timer");
+  assert.match(row.props.subtitle, /Design review/);
+  assert.match(row.props.subtitle, /Website/);
+  assert.ok(row.props.keywords.includes("Design review"));
+  assert.equal(primary(row).props.title, "Stop Timer");
+  await primary(row).props.onAction();
+  assert.deepEqual(
+    host.events.find(([kind]) => kind === "stop"),
+    ["stop", "running-entry"],
+  );
+  assert.ok(!host.events.some(([kind]) => kind === "start"));
+});
+test("background toggle refreshes running and idle labels without tracking or opening UI", async () => {
+  host.launchType = "background";
+  host.data.running = entry({ description: "Design review" });
+  await ToggleTimer();
+  assert.match(host.events[0][1].subtitle, /^Stop Timer · Design review · /);
+  host.data.running = null;
+  await ToggleTimer();
+  assert.equal(host.events[1][1].subtitle, "Start Timer · No timer running");
+  assert.ok(host.events.every(([kind]) => kind === "metadata"));
+});
+test("a failed background status read clears stale action hints without showing UI", async () => {
+  host.launchType = "background";
+  host.api.current = async () => {
+    throw Error("offline");
+  };
+  await ToggleTimer();
+  assert.deepEqual(host.events, [["metadata", { subtitle: "Timer status unavailable · Open Timer to check" }]]);
+});
+test("the toggle stops the current entry and switches its search hint back to Start", async () => {
+  host.data.running = entry({ id: "running-entry" });
+  await ToggleTimer();
+  assert.deepEqual(
+    host.events.find(([kind]) => kind === "stop"),
+    ["stop", "running-entry"],
+  );
+  assert.equal(host.events.find(([kind]) => kind === "metadata")[1].subtitle, "Start Timer · No timer running");
+  assert.ok(!host.events.some(([kind]) => kind === "start" || kind === "continue"));
+});
+test("metadata failures do not prevent a user from stopping their timer", async () => {
+  host.metadataFails = true;
+  host.data.running = entry();
+  await ToggleTimer();
+  assert.ok(host.events.some(([kind]) => kind === "stop"));
+  assert.ok(!host.events.some(([kind]) => kind === "failure"));
 });
 test("current timer is independent of the recent window and stale history", async () => {
   host.data.running = entry({ start: "2026-01-01T00:00:00Z" });

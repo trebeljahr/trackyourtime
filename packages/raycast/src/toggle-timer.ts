@@ -1,5 +1,5 @@
-import { LaunchType, launchCommand, showHUD } from "@raycast/api";
-import { decideTimerToggle, toQuickStart } from "./vendor/index.js";
+import { LaunchType, environment, launchCommand, showHUD, updateCommandMetadata } from "@raycast/api";
+import { decideTimerToggle, entryDurationSec, toQuickStart, type TimeEntry } from "./vendor/index.js";
 import { getTrackYourTime } from "./lib/api.js";
 import { pendingCounts } from "./lib/offline.js";
 import { formatDurationShort, isoDaysAgo } from "./lib/format.js";
@@ -33,18 +33,42 @@ const queuedSuffix = async (): Promise<string> => {
   return mine > 0 ? ` · ${mine} queued` : "";
 };
 
+/** Search metadata is helpful, but a failed update must never block tracking. */
+const setSubtitle = async (subtitle: string): Promise<void> => {
+  try {
+    await updateCommandMetadata({ subtitle });
+  } catch {
+    // The next background refresh can retry.
+  }
+};
+
+const showState = async (running: TimeEntry | null): Promise<void> => {
+  if (!running) return setSubtitle("Start Timer · No timer running");
+  const name = running.description.trim().split(/\r?\n/, 1)[0] || "Untitled work";
+  const chars = Array.from(name);
+  const short = chars.length > 48 ? `${chars.slice(0, 47).join("").trimEnd()}…` : name;
+  await setSubtitle(`Stop Timer · ${short} · ${formatDurationShort(entryDurationSec(running, Date.now()))}`);
+};
+
 export default async function ToggleTimer(): Promise<void> {
+  const background = environment.launchType === LaunchType.Background;
   try {
     const api = await getTrackYourTime();
     const running = await api.current();
+    // Scheduled runs only publish status. They must never toggle a timer or open UI.
+    if (background) {
+      await showState(running);
+      return;
+    }
 
     if (running) {
       await noteTimerEcho(null);
-      void refreshMenuBar();
+      void refreshMenuBar(false);
       void showHUD("⏹ Stopping timer…");
       try {
         const stopped = await api.stop(running.id);
-        await refreshMenuBar();
+        await showState(null);
+        await refreshMenuBar(false);
         await showHUD(
           `⏹ Stopped — ${formatDurationShort(stopped.durationSec)}${
             stopped.description ? ` · ${stopped.description}` : ""
@@ -53,7 +77,8 @@ export default async function ToggleTimer(): Promise<void> {
       } catch (error) {
         if (!isAlreadyStopped(error)) {
           await noteTimerEcho(running.id);
-          await refreshMenuBar();
+          await showState(running);
+          await refreshMenuBar(false);
           throw error;
         }
         // Stopped elsewhere between the read above and the write. The user got
@@ -61,7 +86,8 @@ export default async function ToggleTimer(): Promise<void> {
         // failure. `api.stop` threw before it could record the echo, so this
         // clears it — the same repair the Timer view and the menu bar make.
         await noteTimerEcho(null);
-        await refreshMenuBar();
+        await showState(null);
+        await refreshMenuBar(false);
         await showHUD("⏹ Timer already stopped");
       }
       return;
@@ -91,7 +117,8 @@ export default async function ToggleTimer(): Promise<void> {
 
     if (decision.kind !== "continue") {
       const entry = await api.start({ description: "" });
-      await refreshMenuBar();
+      await showState(entry);
+      await refreshMenuBar(false);
       await launchCommand({
         name: "timer",
         type: LaunchType.UserInitiated,
@@ -103,13 +130,18 @@ export default async function ToggleTimer(): Promise<void> {
 
     void showHUD(`▶ Starting — ${entryLabel(last)}…`);
     const started = await api.continue(last.id, toQuickStart(last));
-    await refreshMenuBar();
+    await showState(started);
+    await refreshMenuBar(false);
     // Labelled from the entry that was continued, not from the one that came
     // back: the list rows are joined with their project and client names, so
     // an entry with no description still reads as something.
     const replaced = replacedNotice(started);
     await showHUD(`▶ Started — ${entryLabel(last)}${replaced ? ` · ${replaced}` : ""}${await queuedSuffix()}`);
   } catch (error) {
+    if (background) {
+      await setSubtitle("Timer status unavailable · Open Timer to check");
+      return;
+    }
     await showFailureToast(error, "Could not toggle the timer");
   }
 }

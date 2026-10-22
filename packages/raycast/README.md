@@ -20,9 +20,15 @@ Open Raycast Settings → Extensions → Track Your Time and record a hotkey for
 
 If there is nothing to resume, it starts a timer immediately and opens its details.
 
+In Raycast search, the command's subtitle shows **Stop Timer**, the work description and elapsed time while tracking. When idle, it shows **Start Timer**. The command name stays **Start / Stop Timer** because Raycast only supports dynamic subtitles.
+
+The subtitle refreshes after timer changes in Raycast and on a one-minute background schedule. Raycast controls background scheduling, so changes from another device may appear later. Every press checks the current timer before acting.
+
 ### Start now, add details afterwards
 
 Open **Timer** and press **⏎** on **Start Timer**. The clock starts before the details form opens. You can type a description in the search bar first. Leaving the form keeps the timer running.
+
+While tracking, that first row becomes **Stop Timer**, with the work details and a ticking duration. Press **⏎** to stop it.
 
 Favorites, **Recent Work** and projects in **Quick Start** each start with one selection. Recent work covers the past 30 days. If you use several workspaces, the selector at the top shows which one this Mac tracks into.
 
