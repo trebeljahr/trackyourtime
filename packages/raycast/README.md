@@ -8,19 +8,21 @@ Start and stop your timer from the keyboard, and see it running in the macOS men
 | --- | --- |
 | **Timer** | Start immediately, then add details while it runs. Start from a favorite, recent work or a project. While a timer runs, stop, edit, move, pin or discard it. |
 | **Timer Menu Bar** | Shows the running time in the menu bar. Its menu can stop, edit or discard the timer, continue recent work and show today's total. |
-| **Start / Stop Timer** | Stops the running timer, or resumes your latest entry from the past 30 days. It shows the result in a HUD. |
+| **Quick Toggle Timer** (optional) | Stops the running timer, or resumes your latest entry from the past 30 days. Enable it for a global hotkey. |
 | **Show All Time** | Lists the last 14 days of entries, grouped by day. Continue, edit or delete any of them. |
 | **Open Dashboard** | Opens the web app. |
 
 Reports, invoices, the calendar and catalog editing stay in the web app.
 
+**Timer** is the main command for starting and stopping work. **Quick Toggle Timer** is disabled by default on new installs. Enable it only if you want a separate global hotkey. Existing installs keep their command settings.
+
 ### A hotkey for the timer
 
-Open Raycast Settings → Extensions → Track Your Time and record a hotkey for **Start / Stop Timer**. One press stops what is running. If nothing runs, the same press resumes your latest entry.
+Open Raycast Settings → Extensions → Track Your Time, enable **Quick Toggle Timer**, and record a hotkey. One press stops what is running. If nothing runs, the same press resumes your latest entry.
 
 If there is nothing to resume, it starts a timer immediately and opens its details.
 
-In Raycast search, the command's subtitle shows **Stop Timer**, the work description and elapsed time while tracking. When idle, it shows **Start Timer**. The command name stays **Start / Stop Timer** because Raycast only supports dynamic subtitles.
+When enabled, the quick toggle's subtitle shows **Stop Timer**, the work description and elapsed time while tracking. When idle, it shows **Start Timer**. The command name stays **Quick Toggle Timer** because Raycast only supports dynamic subtitles.
 
 The subtitle refreshes after timer changes in Raycast and on a one-minute background schedule. Raycast controls background scheduling, so changes from another device may appear later. Every press checks the current timer before acting.
 

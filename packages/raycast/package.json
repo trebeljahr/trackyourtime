@@ -32,10 +32,11 @@
     },
     {
       "name": "toggle-timer",
-      "title": "Start / Stop Timer",
+      "title": "Quick Toggle Timer",
       "subtitle": "Track Your Time",
       "description": "Stop the running timer, or resume your latest entry from the past 30 days. Assign a hotkey to it.",
       "mode": "no-view",
+      "disabledByDefault": true,
       "interval": "1m",
       "keywords": ["toggle", "start", "stop", "resume", "continue", "track"]
     },
