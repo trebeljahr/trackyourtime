@@ -19,8 +19,9 @@ import {
 } from "./vendor/index.js";
 import { getTrackYourTime, type ProjectWithStats } from "./lib/api.js";
 import { CompatibilityMenuBarSection } from "./components/compatibility-banner.js";
+import { BRAND_MARK } from "./lib/brand.js";
 import { useRef, useState } from "react";
-import { formatClock, formatDurationShort, formatMenuBarClock } from "./lib/format.js";
+import { formatClock, formatDurationShort, formatMenuBarClock, projectIcon } from "./lib/format.js";
 import { useApi, useNow, usePoll, useReconciledRunning, useWatchRunning } from "./lib/hooks.js";
 import { heldCopy } from "./lib/offline.js";
 import { webLink } from "./lib/preferences.js";
@@ -40,6 +41,15 @@ import { describeFailure, isAlreadyStopped, replacedNotice, showFailureToast } f
 
 /** A dropdown is a glance, not a browser — six rows is already a lot. */
 const RECENT_LIMIT = 6;
+
+/** Native menus grow to fit their text, so keep each label to one short line. */
+const menuText = (text: string): string => {
+  const line = text.trim().split(/\r?\n/, 1)[0].trim();
+  const chars = Array.from(line);
+  return chars.length > 48 ? `${chars.slice(0, 47).join("").trimEnd()}…` : line;
+};
+
+const recentWorkTitle = (entry: DetailedEntry): string => menuText(entry.taskName?.trim() || entryLabel(entry));
 
 /**
  * How often the item re-reads the whole snapshot.
@@ -119,7 +129,7 @@ export default function MenuBar(): React.JSX.Element | null {
 
   if (signedOut) {
     return (
-      <MenuBarExtra icon={Icon.Stopwatch} tooltip="Track Your Time — not signed in">
+      <MenuBarExtra icon={BRAND_MARK} tooltip="Track Your Time — not signed in">
         <MenuBarExtra.Item title="Sign in to Track Your Time" icon={Icon.Key} onAction={() => openTimer()} />
       </MenuBarExtra>
     );
@@ -203,7 +213,7 @@ export default function MenuBar(): React.JSX.Element | null {
 
   return (
     <MenuBarExtra
-      icon={running ? undefined : Icon.Stopwatch}
+      icon={running ? undefined : BRAND_MARK}
       title={running ? clock : undefined}
       isLoading={ticking || isLoading || isStarting}
       tooltip={
@@ -379,9 +389,9 @@ export default function MenuBar(): React.JSX.Element | null {
           {data.recent.map((entry) => (
             <MenuBarExtra.Item
               key={entry.id}
-              title={entryLabel(entry)}
-              subtitle={entry.projectName ?? undefined}
-              icon={Icon.ArrowClockwise}
+              title={recentWorkTitle(entry)}
+              subtitle={menuText([entry.projectName, entry.clientName].filter(Boolean).join(" · ")) || undefined}
+              icon={projectIcon(entry.projectColor)}
               onAction={() => {
                 void act(
                   async () => {

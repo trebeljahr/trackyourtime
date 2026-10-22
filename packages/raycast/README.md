@@ -52,9 +52,11 @@ To see your account or sign out from Raycast, press **⌘⇧A** in **Timer**.
 
 Run **Timer Menu Bar** once to enable its background refresh. While tracking, the menu bar shows only the elapsed clock. It counts every second, without a colored icon or title settings.
 
-The item is hidden when no timer runs. **When Idle** is the single display preference: turn it on to keep a small monochrome stopwatch for quick access. A timer started from Raycast refreshes the item immediately. A timer started elsewhere while the item is hidden appears on the next background refresh, normally within a minute.
+The item is hidden when no timer runs. **When Idle** is the single display preference: turn it on to keep the app logo for quick access. A timer started from Raycast refreshes the item immediately. A timer started elsewhere while the item is hidden appears on the next background refresh, normally within a minute.
 
 The menu offers **Start Timer**, favorites, recent work and a project shortcut. **Start Timer** starts first and then opens the running entry's details. Editing never pauses the clock.
+
+Recent work shows each project's color, task name and project/client context. Without a task name, it shows a shortened description. Continuing an entry keeps its full description.
 
 ### Your own server
 
@@ -89,7 +91,7 @@ Each waiting change records the account, server and workspace it belongs to. If 
 **Nothing in the menu bar.** Check these in order:
 
 1. Run **Timer Menu Bar** once. A menu bar command appears only after its first run.
-2. With no timer running, the item is hidden by default. Turn on **When Idle** to keep a small stopwatch visible.
+2. With no timer running, the item is hidden by default. Turn on **When Idle** to keep the app logo visible.
 3. A timer started elsewhere while the item is hidden appears on the next background refresh, normally within a minute.
 
 ## Privacy

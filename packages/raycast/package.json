@@ -22,7 +22,7 @@
         {
           "name": "showWhenIdle",
           "title": "When Idle",
-          "label": "Keep a small stopwatch in the menu bar when no timer runs",
+          "label": "Keep the app logo in the menu bar when no timer runs",
           "description": "Off shows only a running timer. Timers started elsewhere appear on the next background refresh (within a minute).",
           "type": "checkbox",
           "required": false,

@@ -327,6 +327,52 @@ test("menu is hidden idle and displays only a moving clock while tracking", () =
   host.now += 1000;
   assert.equal(render(MenuBar).props.title, "1:01");
 });
+test("menu recents show a task name while continuing the complete original entry", async () => {
+  host.showWhenIdle = true;
+  const past = entry({
+    id: "past-entry",
+    taskId: "task",
+    taskName: "Health checks",
+    projectId: "project",
+    projectName: "Website",
+    clientName: "Studio",
+    description:
+      "Investigate the restart loop; review logs and adjust the container health check frequency.\nMore notes.",
+  });
+  host.data.recent = [past];
+  host.api.continue = async (id, input) => {
+    host.events.push(["continue", id, input]);
+    return entry();
+  };
+  const section = nodes(render(MenuBar), "MenuBarExtra.Section").find((n) => n.props.title === "Recent Work");
+  const row = nodes(section, "MenuBarExtra.Item")[0];
+  assert.equal(row.props.title, "Health checks");
+  assert.equal(row.props.subtitle, "Website · Studio");
+  row.props.onAction();
+  await new Promise(setImmediate);
+  const [, id, input] = host.events.find(([kind]) => kind === "continue");
+  assert.equal(id, past.id);
+  assert.equal(input.description, past.description);
+  assert.equal(input.taskId, past.taskId);
+  assert.equal(input.projectId, past.projectId);
+});
+test("menu recents bound free-text labels and retain useful empty-description fallbacks", () => {
+  host.showWhenIdle = true;
+  host.data.recent = [
+    entry({ id: "long", description: "A long work name ".repeat(20), projectName: "P".repeat(100) }),
+    entry({ id: "notes", description: "  Review changes\nA full paragraph of notes  " }),
+    entry({ id: "project", description: " ", projectName: "Website" }),
+    entry({ id: "blank", description: "" }),
+  ];
+  const section = nodes(render(MenuBar), "MenuBarExtra.Section").find((n) => n.props.title === "Recent Work");
+  const rows = nodes(section, "MenuBarExtra.Item");
+  assert.ok(rows[0].props.title.length <= 48);
+  assert.ok(rows[0].props.title.endsWith("…"));
+  assert.ok(rows[0].props.subtitle.length <= 48);
+  assert.equal(rows[1].props.title, "Review changes");
+  assert.equal(rows[2].props.title, "Website");
+  assert.equal(rows[3].props.title, "No description");
+});
 test("menu editor launch never edits an entry from another workspace", () => {
   host.data.running = entry();
   render(Timer, { launchContext: { editRunningId: "new-entry" } });
