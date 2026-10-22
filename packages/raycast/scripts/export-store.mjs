@@ -41,6 +41,7 @@ const COPY = [
   { name: "media" },
   { name: "README.md", required: true },
   { name: "CHANGELOG.md", required: true },
+  { name: "LICENSE", required: true },
   { name: "tsconfig.json", required: true },
   { name: "raycast-env.d.ts" },
   { name: "eslint.config.js", required: true },

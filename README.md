@@ -277,6 +277,8 @@ Commits must be signed off under the [Developer Certificate of Origin](https://d
 
 Licensed under the GNU Affero General Public License, version 3 or later (`AGPL-3.0-or-later`). See [LICENSE](LICENSE).
 
+The Raycast extension, including the core/shared code copied into its package, is available under the [MIT license](packages/raycast/LICENSE).
+
 Track Your Time is an application you run, not a library you link. Running an unmodified copy internally does not require publishing your own software. If you modify it and let others use that version over a network, offer those users its corresponding source under the AGPL. See [GOVERNANCE.md](GOVERNANCE.md) for the contribution policy and [TRADEMARK.md](TRADEMARK.md) for the name and logo rules.
 
 The code is AGPL; the Track Your Time name, logo and domain are not — see [TRADEMARK.md](TRADEMARK.md).

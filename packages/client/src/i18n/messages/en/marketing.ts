@@ -145,7 +145,7 @@ export const marketing = {
     free: {
       title: "Free, with nothing held back",
       license:
-        "Track Your Time is open source under the AGPL-3.0. Every feature is in every install, the hosted version included. There’s no paid plan and no premium tier, and there won’t be one.",
+        "Track Your Time's web app and server are open source under AGPL-3.0. The Raycast extension uses MIT. Every feature is in every install, the hosted version included. There’s no paid plan and no premium tier, and there won’t be one.",
       builtBy: "It’s built by one developer, Rico Trebeljahr, in the open on <repo>GitHub</repo>.",
       donate: "If it saves you a subscription, <donate>you can support development</donate>.",
     },
@@ -735,7 +735,7 @@ export const marketing = {
       },
       licence: {
         term: "Licence",
-        detail: "AGPL-3.0. Read the code, run it on your own server, and change it.",
+        detail: "AGPL-3.0 for the main app and server; MIT for the Raycast extension. Read the code, run it on your own server, and change it.",
       },
       platforms: {
         term: "Where it runs",

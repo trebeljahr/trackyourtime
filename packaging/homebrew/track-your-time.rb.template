@@ -27,7 +27,7 @@ cask "track-your-time" do
   # `brew install` gets the current release.
   auto_updates true
   # Electron 42 needs macOS 12.
-  depends_on macos: ">= :monterey"
+  depends_on macos: :monterey
 
   app "Track Your Time.app"
 

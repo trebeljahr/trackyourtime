@@ -82,6 +82,12 @@ Each waiting change records the account, server and workspace it belongs to. If 
 
 ## Privacy
 
-The extension has no analytics and no tracking. It connects only to the server in **API URL** and opens pages of the web app in **Web App URL**.
+The extension has no usage analytics. It connects to the server in **API URL** and opens pages of the web app in **Web App URL**.
+
+**Error Report DSN** is optional and empty by default. Leave it empty to send no error reports. If configured, unexpected errors go to your chosen HTTPS endpoint. Reports exclude account details, session tokens, request bodies and entry descriptions.
 
 Your session token is kept in Raycast's encrypted local storage. Cached data and waiting changes stay on this Mac.
+
+## License
+
+This extension, including its copied core/shared code, uses the MIT license. The main Track Your Time web app and server use AGPL-3.0-or-later.

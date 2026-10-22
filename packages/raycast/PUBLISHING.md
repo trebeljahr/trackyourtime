@@ -2,6 +2,10 @@
 
 This file is for maintainers and is not part of the store copy. The extension is developed in the Track Your Time monorepo, in `packages/raycast`. The store copy is exported into `packages/raycast/store`, a gitignored folder, and published from there.
 
+## License
+
+The extension, including Rico Trebeljahr's core/shared code copied into `src/vendor/`, is licensed under MIT; see `LICENSE`. Rico approved this grant on 22 October 2026. The main web app and server remain AGPL-3.0-or-later. Before copying future contributions into this package, verify that their copyright holders permit MIT distribution.
+
 ## Error reporting
 
 Raycast error reporting is opt-in per installation. The extension preference **Error Report DSN** accepts an HTTPS Sentry-compatible project DSN, including a self-hosted GlitchTip DSN. It is empty by default. An empty or invalid DSN causes no report request. A standalone Store export needs no environment variable or extra package; the export stamps its source commit into `src/lib/report-build.ts` for the release and build tags. To collect reports, configure the DSN in Raycast's extension preferences after installation.
@@ -18,7 +22,7 @@ Only unexpected failures caught by command actions and the cached data loader ar
 
    This writes `packages/raycast/store` (gitignored), runs `npm install` to create `package-lock.json`, runs `ray lint`, and builds into a temporary directory. Pass a directory after `export:raycast` to export somewhere else. The export refuses to run without `--author` and `--license`. `--draft` writes a copy without them, for inspection only, because `ray lint` and `publish` reject it.
 
-   Two decisions come before the first export. The author must be your real Raycast Store username: `ray lint` checks it against `raycast.com/api/v1/users/<name>`, and `name` and `author` cannot change after release. The store copy, including the files under `src/vendor/` that come from `packages/core` and `packages/shared`, is published under MIT.
+   The author is `trebeljahr`, verified against the Raycast account API. `ray lint` checks it against `raycast.com/api/v1/users/<name>`, and `name` and `author` cannot change after release. The store copy includes its MIT `LICENSE` and the files under `src/vendor/` that come from `packages/core` and `packages/shared`.
 
    The export also changes three things in the copy only. `src/lib/local-defaults.ts` is set to `false`, so `npm run dev` in the export uses the hosted service when **API URL** and **Web App URL** are empty. The headers of the files under `src/vendor/`, `.prettierignore` and the comment in `eslint.config.js` no longer name monorepo scripts.
 

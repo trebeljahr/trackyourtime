@@ -143,7 +143,7 @@ export const marketing: Translation<typeof source> = {
     free: {
       title: "Kostenlos, ohne Einschränkungen",
       license:
-        "Track Your Time ist Open Source unter der AGPL-3.0. Jede Installation hat jede Funktion, auch die gehostete Version. Es gibt kein Bezahlmodell und keine Premium-Stufe, und es wird keine geben.",
+        "Die Web-App und der Server von Track Your Time stehen unter der AGPL-3.0. Die Raycast-Erweiterung steht unter MIT. Jede Installation hat jede Funktion, auch die gehostete Version. Es gibt kein Bezahlmodell und keine Premium-Stufe, und es wird keine geben.",
       builtBy: "Entwickelt wird es von einer Person, Rico Trebeljahr, öffentlich auf <repo>GitHub</repo>.",
       donate: "Wenn es dir ein Abo erspart, <donate>kannst du die Entwicklung unterstützen</donate>.",
     },
@@ -720,7 +720,7 @@ export const marketing: Translation<typeof source> = {
       },
       licence: {
         term: "Lizenz",
-        detail: "AGPL-3.0. Lies den Code, betreibe ihn auf deinem eigenen Server und ändere ihn.",
+        detail: "AGPL-3.0 für die Haupt-App und den Server; MIT für die Raycast-Erweiterung. Lies den Code, betreibe ihn auf deinem eigenen Server und ändere ihn.",
       },
       platforms: {
         term: "Wo es läuft",

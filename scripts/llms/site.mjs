@@ -49,7 +49,7 @@ export function renderHeader() {
 
 > Free, open-source time tracking. Use the hosted service at trackyourtime.dev, or run the same app on your own server. A timer in the browser, a desktop app, the Mac menu bar and a phone app keeps working offline and syncs across devices, and tracked hours become reports and invoices: a plain PDF, a ZUGFeRD PDF or an XRechnung file.
 
-${PRODUCT_NAME} is for freelancers, consultants and small studios who bill clients by the hour. The code is on GitHub at ${REPO_URL} under AGPL-3.0-or-later. A hosted instance runs at ${WEB_URL}. It is free, has no paid plan, and runs the same code as a self-hosted server.
+${PRODUCT_NAME} is for freelancers, consultants and small studios who bill clients by the hour. The code is on GitHub at ${REPO_URL}. The main app and server use AGPL-3.0-or-later. The Raycast extension, including its copied core/shared code, uses MIT. A hosted instance runs at ${WEB_URL}. It is free, has no paid plan, and runs the same code as a self-hosted server.
 
 **What it does today**
 
