@@ -9,7 +9,8 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, writeFile, chmod, stat, rm } from "node:fs/promises";
 import { createServer } from "node:http";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 
 assert.equal(process.env.GITHUB_ACTIONS, "true", "Run only on disposable GitHub runners");
@@ -54,7 +55,25 @@ function start(file, args, env = {}) {
   return child;
 }
 async function download(version, dir, names) {
-  run("gh", ["release", "download", `v${version}`, "--dir", dir, ...["SHA256SUMS.txt", ...names].flatMap((name) => ["--pattern", name])]);
+  try {
+    run("gh", ["release", "download", `v${version}`, "--dir", dir, ...["SHA256SUMS.txt", ...names].flatMap((name) => ["--pattern", name])]);
+  } catch (error) {
+    if (version !== to || publicFeed || !String(error.stderr).includes("release not found")) throw error;
+    const sourceRun = process.env.QA_SOURCE_RUN;
+    assert.match(sourceRun ?? "", /^\d+$/);
+    const source = JSON.parse(run("gh", ["run", "view", sourceRun, "--json", "headSha,headBranch,conclusion,workflowName"]));
+    const tagSha = run("gh", ["api", `repos/${process.env.GITHUB_REPOSITORY}/commits/v${version}`, "--jq", ".sha"]).trim();
+    assert.equal(source.headSha, tagSha, "Build artifacts must come from the exact release tag");
+    assert.equal(source.workflowName, "Desktop Release");
+    assert.equal(source.conclusion, "success");
+    const artifact = windows ? "desktop-win-signed" : `desktop-linux-${process.arch === "arm64" ? "arm64" : "x64"}-unsigned`;
+    run("gh", ["run", "download", sourceRun, "--name", artifact, "--dir", dir]);
+    // Captured directly from the existing draft, never derived from the
+    // fallback artifacts themselves. Any changed/mismatched byte fails QA.
+    const expected = join(dirname(fileURLToPath(import.meta.url)), "fixtures/releases", `v${version}.sha256`);
+    await writeFile(join(dir, "SHA256SUMS.txt"), await readFile(expected));
+    result.artifactSource = { run: sourceRun, artifact, commit: source.headSha };
+  }
   const checksums = await readFile(join(dir, "SHA256SUMS.txt"), "utf8");
   for (const name of names.filter((name) => /\.(exe|AppImage|deb|rpm)$/.test(name))) {
     const line = checksums.split("\n").find((line) => line.trim().endsWith(name));
@@ -99,6 +118,8 @@ try {
   ];
   await download(to, newDir, [filename(to), feed, ...extras]);
   if (publicFeed) assert.equal(run("gh", ["release", "view", `v${to}`, "--json", "isDraft", "--jq", ".isDraft"]).trim(), "false");
+  delete process.env.GH_TOKEN;
+  delete process.env.GITHUB_TOKEN;
   const installed = join(out, "installed");
   let executable;
   let resources;

@@ -15,9 +15,14 @@ on:
         description: Use the published GitHub feed instead of a loopback draft mirror
         type: boolean
         default: false
+      source_run:
+        description: Original Desktop Release run (read-only fallback for draft assets)
+        default: "37729218359"
+        required: true
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   installed:
@@ -34,6 +39,7 @@ jobs:
       QA_FROM: ${{ inputs.from }}
       QA_TO: ${{ inputs.to }}
       QA_PUBLIC_FEED: ${{ inputs.public_feed }}
+      QA_SOURCE_RUN: ${{ inputs.source_run }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
