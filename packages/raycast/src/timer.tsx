@@ -384,6 +384,8 @@ export default function Timer({
         ...(project ? { projectId: project.id, billable: project.billableDefault } : {}),
       });
       onSaved();
+      const replaced = replacedNotice(entry);
+      if (replaced) await showToast({ style: Toast.Style.Success, title: "Timer started", message: replaced });
       if (!isLocalEntry(entry)) {
         push(
           <EditEntry
@@ -593,6 +595,7 @@ export default function Timer({
             actions={
               <ActionPanel>
                 {startForm}
+                {composeForm}
                 {logForm}
                 {commonActions}
               </ActionPanel>

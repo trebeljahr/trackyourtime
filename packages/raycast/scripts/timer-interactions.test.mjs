@@ -75,7 +75,7 @@ const mocks = new Map([
     `const h=globalThis.__raycastInteraction;
     export const refreshMenuBar=async()=>h.events.push(['menu-refresh']);
     export const showFailureToast=async error=>h.events.push(['failure',error.message]);
-    export const isAlreadyStopped=()=>false; export const replacedNotice=()=>undefined; export const describeFailure=String;`,
+    export const isAlreadyStopped=()=>false; export const replacedNotice=entry=>entry.replaced?'Stopped your timer in '+entry.replaced.workspaceName:undefined; export const describeFailure=String;`,
   ],
 ]);
 for (const [file, names] of [
@@ -236,6 +236,19 @@ test("first timer row starts now, then edits the started entry", async () => {
   const pushed = host.events.find((e) => e[0] === "push");
   assert.equal(pushed[1].props.entry.id, "new-entry");
   assert.ok(host.events.findIndex((e) => e[0] === "start") < host.events.findIndex((e) => e[0] === "push"));
+  assert.ok(nodes(first.props.actions, "Action.Push").some((action) => action.props.title === "Start with Details…"));
+});
+
+test("immediate starts disclose a timer replaced in another workspace", async () => {
+  host.api.start = async () => entry({ replaced: { workspaceName: "Studio" } });
+  await primary(nodes(render(Timer), "List.Item")[0]).props.onAction();
+  assert.ok(host.events.some(([kind, value]) => kind === "toast" && value.message === "Stopped your timer in Studio"));
+
+  host.events = [];
+  host.showWhenIdle = true;
+  nodes(render(MenuBar), "MenuBarExtra.Item").find((row) => row.props.title === "Start Timer").props.onAction();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(host.events.some(([kind, value]) => kind === "toast" && value.message === "Stopped your timer in Studio"));
 });
 test("project shortcut starts without treating a search query as its description", async () => {
   host.search = "  Review  ";

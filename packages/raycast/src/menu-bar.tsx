@@ -174,6 +174,8 @@ export default function MenuBar(): React.JSX.Element | null {
         project ? { projectId: project.id, billable: project.billableDefault } : { description: "" },
       );
       revalidate();
+      const replaced = replacedNotice(entry);
+      if (replaced) await showToast({ style: Toast.Style.Success, title: "Timer started", message: replaced });
       openTimer(entry.id);
     }, "Could not start the timer").finally(() => {
       starting.current = false;
