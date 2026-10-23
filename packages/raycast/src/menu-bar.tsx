@@ -22,12 +22,11 @@ import { CompatibilityMenuBarSection } from "./components/compatibility-banner.j
 import { BRAND_MARK } from "./lib/brand.js";
 import { refreshTimerSearch } from "./lib/timer-search.js";
 import { useRef, useState } from "react";
-import { formatClock, formatDurationShort, formatMenuBarClock, projectIcon } from "./lib/format.js";
+import { formatClock, formatDurationShort, formatMenuBarClock } from "./lib/format.js";
 import { useApi, useNow, usePoll, useReconciledRunning, useWatchRunning } from "./lib/hooks.js";
 import { heldCopy } from "./lib/offline.js";
 import { webLink } from "./lib/preferences.js";
 import {
-  entryHint,
   entryLabel,
   favoriteFor,
   loadTimerSnapshot,
@@ -208,105 +207,105 @@ export default function MenuBar(): React.JSX.Element | null {
       <CompatibilityMenuBarSection banner={banner} />
 
       {running ? (
-        <MenuBarExtra.Section>
-          {/* Section titles are dimmed by macOS. An actionable row keeps the
-              timer's name at full contrast and opens the same entry editor. */}
-          <MenuBarExtra.Item title={menuText(label)} icon={Icon.Stopwatch} onAction={() => openTimer(running.id)} />
-          <MenuBarExtra.Item
-            title={`Running for ${formatDurationShort(elapsed)}`}
-            subtitle={`since ${formatClock(running.start)}`}
-            icon={Icon.Dot}
-            onAction={() => openTimer(running.id)}
-          />
-          {data?.runningWorkspaceName ? (
+        <>
+          <MenuBarExtra.Section>
+            {/* Native menu fonts are fixed. Keep the name at full contrast,
+              with passive timing below and controls in a separate section. */}
             <MenuBarExtra.Item
-              title={`In ${data.runningWorkspaceName}`}
-              icon={Icon.Building}
-              onAction={() => openTimer()}
-            />
-          ) : null}
-          {entryHint(running) ? (
-            <MenuBarExtra.Item
-              title={entryHint(running) ?? ""}
-              icon={projectIcon(running.projectColor)}
+              title={menuText(label)}
+              tooltip={label}
+              icon={Icon.Stopwatch}
               onAction={() => openTimer(running.id)}
             />
-          ) : null}
-          <MenuBarExtra.Item
-            title="Stop Timer"
-            icon={Icon.Stop}
-            shortcut={Keyboard.Shortcut.Common.Save}
-            onAction={() => {
-              return act(
-                async () => {
-                  const api = await getTrackYourTime();
-                  const stopped = await api.stop(running.id);
-                  await showToast({
-                    style: Toast.Style.Success,
-                    title: "Timer stopped",
-                    message: formatDurationShort(stopped.durationSec),
-                  });
-                },
-                "Could not stop the timer",
-                (snapshot) => ({
-                  ...snapshot,
-                  fetchedAt: Date.now(),
-                  running: null,
-                  recent:
-                    running?.workspaceId === snapshot.activeWorkspaceId
-                      ? [previewStopped(running), ...snapshot.recent.filter((row) => row.id !== running.id)]
-                      : snapshot.recent,
-                }),
-              );
-            }}
-          />
-          {/* A menu bar item cannot host a form, so editing hands off to the
+            <MenuBarExtra.Item
+              title={`Running for ${formatDurationShort(elapsed)}`}
+              subtitle={`since ${formatClock(running.start)}`}
+            />
+            {data?.runningWorkspaceName ? (
+              <MenuBarExtra.Item
+                title={`In ${data.runningWorkspaceName}`}
+                icon={Icon.Building}
+                onAction={() => openTimer()}
+              />
+            ) : null}
+          </MenuBarExtra.Section>
+          <MenuBarExtra.Section>
+            <MenuBarExtra.Item
+              title="Stop Timer"
+              icon={Icon.Stop}
+              shortcut={Keyboard.Shortcut.Common.Save}
+              onAction={() => {
+                return act(
+                  async () => {
+                    const api = await getTrackYourTime();
+                    const stopped = await api.stop(running.id);
+                    await showToast({
+                      style: Toast.Style.Success,
+                      title: "Timer stopped",
+                      message: formatDurationShort(stopped.durationSec),
+                    });
+                  },
+                  "Could not stop the timer",
+                  (snapshot) => ({
+                    ...snapshot,
+                    fetchedAt: Date.now(),
+                    running: null,
+                    recent:
+                      running?.workspaceId === snapshot.activeWorkspaceId
+                        ? [previewStopped(running), ...snapshot.recent.filter((row) => row.id !== running.id)]
+                        : snapshot.recent,
+                  }),
+                );
+              }}
+            />
+            {/* A menu bar item cannot host a form, so editing hands off to the
               Timer command, which opens on the running entry. */}
-          <MenuBarExtra.Item
-            title="Edit Timer…"
-            icon={Icon.Pencil}
-            shortcut={Keyboard.Shortcut.Common.Edit}
-            onAction={() => openTimer(running.id)}
-          />
-          <MenuBarExtra.Item
-            title={pinned ? "Remove Favorite" : "Pin as Favorite"}
-            icon={pinned ? Icon.StarDisabled : Icon.Star}
-            shortcut={{ modifiers: ["cmd"], key: "f" }}
-            onAction={() => {
-              return act(async () => {
-                const api = await getTrackYourTime();
-                if (pinned) {
-                  await api.removeFavorite(pinned.id);
+            <MenuBarExtra.Item
+              title="Edit Timer…"
+              icon={Icon.Pencil}
+              shortcut={Keyboard.Shortcut.Common.Edit}
+              onAction={() => openTimer(running.id)}
+            />
+            <MenuBarExtra.Item
+              title={pinned ? "Remove Favorite" : "Pin as Favorite"}
+              icon={pinned ? Icon.StarDisabled : Icon.Star}
+              shortcut={{ modifiers: ["cmd"], key: "f" }}
+              onAction={() => {
+                return act(async () => {
+                  const api = await getTrackYourTime();
+                  if (pinned) {
+                    await api.removeFavorite(pinned.id);
+                    await showToast({
+                      style: Toast.Style.Success,
+                      title: "Favorite removed",
+                    });
+                    return;
+                  }
+                  await api.addFavorite(toQuickStart(running));
                   await showToast({
                     style: Toast.Style.Success,
-                    title: "Favorite removed",
+                    title: "Pinned as a favorite",
                   });
-                  return;
-                }
-                await api.addFavorite(toQuickStart(running));
-                await showToast({
-                  style: Toast.Style.Success,
-                  title: "Pinned as a favorite",
-                });
-              }, "Could not update favorites");
-            }}
-          />
-          <MenuBarExtra.Item
-            title="Discard Timer"
-            icon={Icon.Trash}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "backspace" }}
-            onAction={() => {
-              return act(async () => {
-                const api = await getTrackYourTime();
-                await api.discard(running.id);
-                await showToast({
-                  style: Toast.Style.Success,
-                  title: "Timer discarded",
-                });
-              }, "Could not discard the timer");
-            }}
-          />
-        </MenuBarExtra.Section>
+                }, "Could not update favorites");
+              }}
+            />
+            <MenuBarExtra.Item
+              title="Discard Timer"
+              icon={Icon.Trash}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "backspace" }}
+              onAction={() => {
+                return act(async () => {
+                  const api = await getTrackYourTime();
+                  await api.discard(running.id);
+                  await showToast({
+                    style: Toast.Style.Success,
+                    title: "Timer discarded",
+                  });
+                }, "Could not discard the timer");
+              }}
+            />
+          </MenuBarExtra.Section>
+        </>
       ) : (
         <MenuBarExtra.Section title="No timer running">
           <MenuBarExtra.Item

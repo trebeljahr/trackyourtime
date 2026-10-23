@@ -367,7 +367,7 @@ test("menu is hidden idle and releases the host after reading a running timer", 
   host.now += 60_000;
   assert.equal(render(MenuBar).props.title, "2m");
 });
-test("the running timer name and project open the same editor as Edit Timer", async () => {
+test("the running timer name leads a separate summary without project or client context", async () => {
   host.data.running = entry({
     description: "Design review",
     projectName: "Website",
@@ -378,15 +378,19 @@ test("the running timer name and project open the same editor as Edit Timer", as
   const rows = nodes(tree, "MenuBarExtra.Item");
   const name = rows[0];
   assert.equal(name.props.title, "Design review");
-  assert.equal(nodes(tree, "MenuBarExtra.Section")[0].props.title, undefined);
-  const project = rows.find((row) => row.props.title === "Studio · Website");
-  assert.deepEqual(project.props.icon, { source: "CircleFilled", tintColor: "#19a7ce" });
-  for (const row of [
-    name,
-    rows.find((row) => row.props.title.startsWith("Running for")),
-    project,
-    rows.find((row) => row.props.title === "Edit Timer…"),
-  ]) {
+  assert.equal(name.props.tooltip, "Design review");
+  const [summary, controls] = nodes(tree, "MenuBarExtra.Section");
+  assert.equal(summary.props.title, undefined);
+  assert.deepEqual(nodes(summary, "MenuBarExtra.Item").map((row) => row.props.title), [
+    "Design review",
+    "Running for 1m",
+  ]);
+  const timing = rows.find((row) => row.props.title.startsWith("Running for"));
+  assert.equal(timing.props.onAction, undefined, "passive timing uses the native dimmed style");
+  assert.equal(timing.props.icon, undefined);
+  assert.ok(!rows.some((row) => row.props.title.includes("Studio") || row.props.title.includes("Website")));
+  assert.equal(nodes(controls, "MenuBarExtra.Item")[0].props.title, "Stop Timer");
+  for (const row of [name, rows.find((row) => row.props.title === "Edit Timer…")]) {
     host.events = [];
     await row.props.onAction();
     assert.deepEqual(host.events, [

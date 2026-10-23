@@ -55,7 +55,7 @@ The item is hidden when no timer runs. **When Idle** is the single display prefe
 
 Raycast unloads menu bar commands between refreshes. macOS can delay scheduled refreshes, particularly on battery. Opening the menu reads the current timer.
 
-While tracking, the menu shows the timer name, elapsed time and project context with the project’s color. Click the name or project, or choose **Edit Timer…**, to open the entry editor. Editing never pauses the clock.
+While tracking, the menu shows the timer name above dimmed elapsed time, with controls in a separate section. Click the name or choose **Edit Timer…** to open the entry editor. Editing never pauses the clock.
 
 When idle, the menu offers **Start Timer**, favorites and a project shortcut. **Start Timer** starts first and then opens the entry editor. Recent work stays in **Show All Time**.
 
