@@ -159,6 +159,8 @@ export const reports: Translation<typeof source> = {
   },
 
   detailed: {
+    billing: "Abrechnung",
+    hourlyRate: "{amount}/h",
     details: "Details",
     selectAll: "Alle geladenen Einträge auswählen",
     selectEntry: "Eintrag „{description}“ auswählen",

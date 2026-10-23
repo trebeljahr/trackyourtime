@@ -183,6 +183,8 @@ export const reports = {
   },
 
   detailed: {
+    billing: "Billing",
+    hourlyRate: "{amount}/h",
     details: "Details",
     selectAll: "Select all loaded entries",
     selectEntry: "Select entry {description}",

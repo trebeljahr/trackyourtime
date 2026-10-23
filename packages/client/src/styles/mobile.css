@@ -296,9 +296,9 @@
     width: auto;
     padding: 0.25rem;
   }
-  .mobile-entry-table th:nth-child(n + 3):not(:nth-child(9)),
+  .mobile-entry-table th:nth-child(n + 3):not([data-mobile-duration]),
   .mobile-entry-table
-    td:nth-child(n + 4):not(:nth-child(9)):not([data-mobile-details]) {
+    td:nth-child(n + 4):not([data-mobile-duration]):not([data-mobile-details]) {
     display: none;
   }
   .mobile-entry-table td:first-child {

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import type { DetailedEntry } from "@starter/shared";
-import { formatReportAmounts } from "@/components/reports/report-money";
+import { MONEY_WITHHELD } from "@/components/reports/report-money";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -170,11 +170,10 @@ export function DetailedTable({
           <TableHead className="w-40">{tc("fields.project")}</TableHead>
           <TableHead className="w-32">{tc("fields.client")}</TableHead>
           <TableHead className="w-32">{tc("fields.task")}</TableHead>
-          <TableHead className="w-24">{tc("fields.billable")}</TableHead>
           <TableHead className="w-32 text-right">
             {t("detailed.startEnd")}
           </TableHead>
-          <TableHead className="w-24 text-right">
+          <TableHead className="w-24 text-right" data-mobile-duration>
             <SortButton
               label={tc("fields.duration")}
               field="duration"
@@ -183,8 +182,8 @@ export function DetailedTable({
               className="ml-auto"
             />
           </TableHead>
-          <TableHead className="w-24 text-right">
-            {tc("fields.amount")}
+          <TableHead className="w-32 text-right">
+            {t("detailed.billing")}
           </TableHead>
         </TableRow>
       </TableHeader>
@@ -192,6 +191,11 @@ export function DetailedTable({
         {entries.map((entry) => {
           const isSelected = selected.has(entry.id);
           const running = entry.end === null;
+          const billingLabel = !entry.billable
+            ? tc("fields.nonBillable")
+            : entry.hourlyRate === null
+              ? MONEY_WITHHELD
+              : t("detailed.hourlyRate", { amount: money(entry.hourlyRate, entry.currency) });
           // Hoisted so the narrowing survives into the click handler below.
           const projectId = entry.projectId;
           return (
@@ -271,13 +275,6 @@ export function DetailedTable({
               <TableCell className="truncate text-muted-foreground">
                 {entry.taskName ?? "—"}
               </TableCell>
-              <TableCell>
-                <Badge variant={entry.billable ? "default" : "outline"}>
-                  {entry.billable
-                    ? tc("fields.billable")
-                    : tc("fields.nonBillable")}
-                </Badge>
-              </TableCell>
               <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">
                 {clock(entry.start)}
                 {" – "}
@@ -291,8 +288,10 @@ export function DetailedTable({
               >
                 {duration(entry.durationSec)}
               </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatReportAmounts(undefined, entry.amount, entry.currency, money)}
+              <TableCell className="text-right tabular-nums" data-billing>
+                <Badge variant="outline" className="whitespace-nowrap">
+                  {billingLabel}
+                </Badge>
               </TableCell>
               <TableCell className="hidden" data-mobile-details>
                 <details>
@@ -309,12 +308,8 @@ export function DetailedTable({
                     <dd className="break-words">{entry.clientName ?? "—"}</dd>
                     <dt>{tc("fields.task")}</dt>
                     <dd className="break-words">{entry.taskName ?? "—"}</dd>
-                    <dt>{tc("fields.billable")}</dt>
-                    <dd>
-                      {entry.billable
-                        ? tc("fields.billable")
-                        : tc("fields.nonBillable")}
-                    </dd>
+                    <dt>{t("detailed.billing")}</dt>
+                    <dd>{billingLabel}</dd>
                     <dt>{t("detailed.startEnd")}</dt>
                     <dd>
                       {clock(entry.start)} –{" "}
@@ -322,8 +317,6 @@ export function DetailedTable({
                         ? t("detailed.running")
                         : clock(entry.end ?? entry.start)}
                     </dd>
-                    <dt>{tc("fields.amount")}</dt>
-                    <dd>{formatReportAmounts(undefined, entry.amount, entry.currency, money)}</dd>
                   </dl>
                   {onEditProject && projectId !== null ? (
                     <Button

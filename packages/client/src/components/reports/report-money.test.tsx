@@ -114,10 +114,10 @@ const entry = (id: string, amount: number | null, hourlyRate: number | null): De
 });
 
 describe("DetailedTable with a colleague's withheld row", () => {
-  it("dashes the colleague's amount and formats the caller's own", () => {
+  it("dashes the colleague's rate and formats the caller's hourly rate", () => {
     render(
       <DetailedTable
-        entries={[entry("colleague", null, null), entry("own", 90, 90)]}
+        entries={[entry("colleague", null, null), entry("own", 180, 90)]}
         selected={new Set()}
         onToggle={() => undefined}
         onToggleAll={() => undefined}
@@ -129,16 +129,13 @@ describe("DetailedTable with a colleague's withheld row", () => {
       />
     );
 
-    // The amount is the row's last cell; the project cell dashes too when a
-    // row is unfiled, so the assertion is on the cell, not on the page.
-    const amountCell = (rowId: string): Element | undefined => {
-      const cells = screen.getByTestId(`detailed-row-${rowId}`).querySelectorAll("td");
-      return cells[cells.length - 1];
-    };
+    const billingCell = (rowId: string): Element | null =>
+      screen.getByTestId(`detailed-row-${rowId}`).querySelector("[data-billing]");
 
-    expect(amountCell("colleague")).toHaveTextContent(MONEY_WITHHELD);
+    expect(billingCell("colleague")).toHaveTextContent(MONEY_WITHHELD);
     expect(within(screen.getByTestId("detailed-row-colleague")).queryByText(/€/)).toBeNull();
-    expect(amountCell("own")).toHaveTextContent("€90.00");
+    expect(billingCell("own")).toHaveTextContent("€90.00/h");
+    expect(screen.getByTestId("detailed-row-own")).not.toHaveTextContent("€180.00");
   });
 });
 
@@ -152,13 +149,21 @@ it("formats each report bucket in its snapshot currency and keeps legacy server 
   expect(within(screen.getByTestId("summary-row-history")).getByText("EUR 10.00")).toBeInTheDocument();
 });
 
-it("detailed rows use their own currency after workspace currency changes", () => {
-  render(<DetailedTable entries={[{ ...entry("eur", 10, 10), currency: "EUR" }, { ...entry("usd", 20, 20), currency: "USD" }]}
+it("detailed billing uses snapshot currencies, zero rates and non-billable labels", () => {
+  render(<DetailedTable entries={[
+    { ...entry("eur", 10, 10), currency: "EUR" },
+    { ...entry("usd", 20, 20), currency: "USD" },
+    entry("zero", 0, 0),
+    { ...entry("non-billable", 0, 90), billable: false },
+  ]}
     selected={new Set()} onToggle={() => undefined} onToggleAll={() => undefined}
     sort={DEFAULT_DETAILED_SORT} onSort={() => undefined} duration={duration}
     money={(amount, currency = "GBP") => `${currency} ${amount.toFixed(2)}`}
     clock={(iso) => iso.slice(11, 16)} />);
-  expect(screen.getByTestId("detailed-row-eur")).toHaveTextContent("EUR 10.00");
-  expect(screen.getByTestId("detailed-row-usd")).toHaveTextContent("USD 20.00");
+  expect(screen.getByTestId("detailed-row-eur")).toHaveTextContent("EUR 10.00/h");
+  expect(screen.getByTestId("detailed-row-usd")).toHaveTextContent("USD 20.00/h");
+  expect(screen.getByTestId("detailed-row-zero")).toHaveTextContent("EUR 0.00/h");
+  expect(screen.getByTestId("detailed-row-non-billable")).toHaveTextContent("Non-billable");
+  expect(screen.getByTestId("detailed-row-non-billable")).not.toHaveTextContent(/EUR|\/h/);
   expect(screen.queryByText(/GBP/)).toBeNull();
 });
