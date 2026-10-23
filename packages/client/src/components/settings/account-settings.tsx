@@ -184,7 +184,7 @@ export function AccountSettings({
             </SettingRow>
           ) : null}
 
-          {passkeysSupported && <PasskeysRow />}
+          {passkeysSupported && <PasskeysRow key={user?.id ?? "signed-out"} />}
 
           <SettingRow
             title={tc("actions.signOut")}

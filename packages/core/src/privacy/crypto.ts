@@ -35,6 +35,7 @@ export async function unseal<T>(secret: Uint8Array, box: Ciphertext, context: st
   return JSON.parse(decoder.decode(plain)) as T;
 }
 export async function deriveSecret(secret: Uint8Array, context: string): Promise<Uint8Array<ArrayBuffer>> {
+  if (secret.length !== 32 || !context) throw new Error("A 256-bit secret and derivation context are required");
   const key = await crypto.subtle.importKey("raw", bytes(secret), "HKDF", false, ["deriveBits"]);
   return new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt: encoder.encode("trackyourtime-privacy-v1"), info: encoder.encode(context) }, key, 256));
 }

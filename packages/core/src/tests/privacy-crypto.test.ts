@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createKeyPair, decryptBackup, encryptBackup, randomSecret, seal, sealForRecipient, unseal, unsealForRecipient } from "../privacy/crypto.js";
+import { createKeyPair, decryptBackup, deriveSecret, encryptBackup, randomSecret, seal, sealForRecipient, unseal, unsealForRecipient } from "../privacy/crypto.js";
 
 describe("private data encryption", () => {
   it("authenticates the key, content and account/record context", async () => {
@@ -19,6 +19,15 @@ describe("private data encryption", () => {
     assert.deepEqual(await unsealForRecipient(alice.privateKey, box, "workspace:1:user:alice"), { workspaceKey: "synthetic-secret" });
     await assert.rejects(unsealForRecipient(bob.privateKey, box, "workspace:1:user:alice"));
     await assert.rejects(unsealForRecipient(alice.privateKey, box, "workspace:2:user:alice"));
+  });
+  it("separates derived keys by purpose and refuses absent context or invalid root secrets", async () => {
+    const master = randomSecret();
+    const activity = await deriveSecret(master, "local-activity"), backup = await deriveSecret(master, "backup");
+    assert.notDeepEqual(activity, backup);
+    assert.deepEqual(activity, await deriveSecret(master, "local-activity"));
+    await assert.rejects(deriveSecret(master, ""));
+    await assert.rejects(deriveSecret(new Uint8Array(0), "backup"));
+    await assert.rejects(deriveSecret(new Uint8Array(31), "backup"));
   });
   it("restores encrypted backups and refuses wrong passwords or unbounded KDF parameters", async () => {
     const password = "a separate long test-only backup password";

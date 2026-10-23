@@ -63,4 +63,21 @@ describe("private session keys", () => {
     lockPrivateData(); expect(lock).toHaveBeenCalled();
     await expect(protectPrivateActivity("owner")).rejects.toThrow();
   });
+  it("rejects substituted encryption or signing public keys even when its recovery envelope decrypts", async () => {
+    const draft = await newPrivateIdentity("owner"), other = await newPrivateIdentity("owner");
+    await expect(unlockPrivateRecovery("owner", { ...draft.identity, publicKey: other.identity.publicKey }, draft.recoveryKey)).rejects.toThrow("do not match");
+    await expect(unlockPrivateRecovery("owner", { ...draft.identity, signingPublicKey: other.identity.signingPublicKey }, draft.recoveryKey)).rejects.toThrow("do not match");
+    expect(privateSession("owner")).toBeNull();
+    installPrivateSession("owner", draft.secrets);
+    const secret = randomSecret(), envelope = await wrapIdentityWithPrf("owner", secret);
+    lockPrivateData();
+    await expect(unlockPrivatePrf("owner", { ...draft.identity, publicKey: other.identity.publicKey, passkeys: [{ credentialId: "credential", envelope }] }, "credential", secret)).rejects.toThrow("do not match");
+    expect(privateSession("owner")).toBeNull();
+  });
+  it("does not finish passkey enrollment when private data locks while its envelope is being encrypted", async () => {
+    const draft = await newPrivateIdentity("owner"); installPrivateSession("owner", draft.secrets);
+    const wrapping = wrapIdentityWithPrf("owner", randomSecret());
+    lockPrivateData();
+    await expect(wrapping).rejects.toThrow("changed during");
+  });
 });

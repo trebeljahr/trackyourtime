@@ -4,7 +4,7 @@ import * as React from "react";
 import { fingerprint, signPrivateChange } from "@starter/core";
 import { authClient } from "@/lib/auth-client";
 import { downloadBlob } from "@/lib/download";
-import { evaluatePrivatePasskey, installPrivateSession, lockPrivateData, newPrivateIdentity, privateSession, privateDataOrigin, prfBytes, PRIVATE_PRF_INPUT, subscribePrivateSession, unlockPrivateRecovery, unlockWithSavedPasskey, wrapIdentityWithPrf } from "@/lib/private-session";
+import { evaluatePrivatePasskey, installPrivateSession, lockPrivateData, newPrivateIdentity, privateSession, privateOperationScope, privateDataOrigin, prfBytes, PRIVATE_PRF_INPUT, subscribePrivateSession, unlockPrivateRecovery, unlockWithSavedPasskey, wrapIdentityWithPrf } from "@/lib/private-session";
 import { useIsTokenShell } from "@/hooks/use-shell";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
@@ -67,6 +67,7 @@ function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
       {identity && current && <div className="space-y-3">
         <p role="status" className="text-sm">{t("privateData.unlocked")}</p>
         <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={native || pending} onClick={() => void run(async () => {
+          const assertCurrent = privateOperationScope(id);
           const listed = await authClient.passkey.listUserPasskeys();
           if (listed.error) throw new Error("Could not load passkeys");
           const available = (listed.data ?? []).filter((p) => !identity.passkeys.some((saved) => saved.credentialId === p.credentialID));
@@ -88,6 +89,7 @@ function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
             const next = { ...identity, passkeys: [...identity.passkeys, { credentialId, envelope: await wrapIdentityWithPrf(id, secret) }] };
             const revision = account.data!.revision;
             const signature = await signPrivateChange(current.signingPrivateKey, { userId: id, revision, identity: next });
+            assertCurrent(); if (privateSession(id) !== current) throw new Error("Private data is locked");
             await updateIdentity.mutateAsync({ identity: next, revision, signature }); await account.refetch();
           } finally { secret.fill(0); }
         })}>{t("privateData.addPasskey")}</Button><Button variant="outline" onClick={lockPrivateData}>{t("privateData.lock")}</Button></div>
