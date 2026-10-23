@@ -187,7 +187,7 @@ export async function withStorageOwnershipAdoption<T>(work: () => Promise<T>): P
 /** Install on each persistent workspace model, so REST, tRPC, jobs and direct
  * service callers share the boundary. Native collection writes are reserved
  * for migrations/account erasure; new application writers must use models. */
-export function installStorageQuota<T>(mongooseModel: Model<T>): void {
+export function installStorageQuota(mongooseModel: ModelIdentity): void {
   const model = mongooseModel as unknown as StorageModel;
   const marker = Symbol.for("trackyourtime.storageQuota");
   if (model[marker]) return;
