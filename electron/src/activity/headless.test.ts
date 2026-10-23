@@ -68,11 +68,20 @@ describe("headless activity capture", () => {
     assert.deepEqual(importers, ["activity/process-runner.ts"]);
   });
 
-  it("never asks for a permission that could prompt", () => {
+  it("requests screen permission only for an explicit non-headless title opt-in", () => {
+    const { inside, outside } = headlessGuard(code(path.join(here, "install.ts")), 'if (!headless && platform === "darwin" && parsed?.storeTitles === true) {');
+    assert.match(inside, /desktopCapturer\.getSources/);
+    assert.match(inside, /width: 0, height: 0/);
+    assert.doesNotMatch(outside, /desktopCapturer\.getSources/);
+  });
+
+  it("does not prompt outside the explicit title opt-in handler", () => {
     for (const file of sources(here)) {
       assert.doesNotMatch(
         code(file),
-        /systemPreferences|desktopCapturer|CGRequestScreenCaptureAccess|askForMediaAccess|powerMonitor/,
+        path.basename(file) === "install.ts"
+          ? /CGRequestScreenCaptureAccess|askForMediaAccess|powerMonitor/
+          : /systemPreferences|desktopCapturer|CGRequestScreenCaptureAccess|askForMediaAccess|powerMonitor/,
         path.basename(file),
       );
     }

@@ -38,6 +38,7 @@ const CHANNEL_REASONS: ReadonlySet<DesktopActivityUnavailableReason> = new Set([
   "wayland",
   "unsupported-platform",
   "newer-format",
+  "encrypted-locked",
 ]);
 
 export function captureSwitchable(snapshot: DesktopActivitySnapshot): boolean {
@@ -49,11 +50,9 @@ export function captureSwitchable(snapshot: DesktopActivitySnapshot): boolean {
  * app is in front, for the suggestions on /app/activity.
  *
  * Off by default, and every value here is a device preference kept by the
- * main process in `userData/activity/`, never a synced setting. No OS
- * permission is asked for, on any system: the app reads only which app is in
- * front, which macOS, Windows and X11 all answer without a prompt. Window
- * titles are the app's own opt-in on Windows and Linux, and are not offered
- * on macOS (they would need Screen Recording).
+ * main process in `userData/activity/`, never a synced setting. App identity
+ * needs no OS permission. Window titles are a separate opt-in; macOS needs
+ * Screen Recording permission before its metadata API supplies them.
  *
  * Rendered after hydration, and only when the preload has an activity
  * bridge, so the prerendered settings page never differs from the web's.
@@ -135,7 +134,7 @@ export function DesktopActivityCard(): React.JSX.Element | null {
     ? mac
       ? t("desktop.activity.titles.notOnMac")
       : t("desktop.activity.titles.notHere")
-    : t("desktop.activity.titles.description");
+    : mac ? t("desktop.activity.titles.macDescription") : t("desktop.activity.titles.description");
 
   return (
     <Card data-testid="settings-desktop-activity">
@@ -224,7 +223,7 @@ export function DesktopActivityCard(): React.JSX.Element | null {
 
         <SettingRow
           title={t("desktop.activity.titles.title")}
-          description={titlesNote}
+          description={<>{titlesNote}{snapshot.titlesPermissionRequired && <span role="status" className="mt-2 block text-destructive">{t("desktop.activity.titles.permissionRequired")}</span>}</>}
           testId="setting-desktop-activity-titles"
         >
           <Switch
@@ -340,7 +339,7 @@ export function DesktopActivityCard(): React.JSX.Element | null {
           title={t("desktop.activity.wipe.title")}
           description={
             <>
-              {t("desktop.activity.wipe.description", { count: snapshot.storedSegments })}
+              {snapshot.protection?.locked ? t("desktop.activity.wipe.locked") : t("desktop.activity.wipe.description", { count: snapshot.storedSegments })}
               {wiped ? (
                 <span className="mt-2 block" role="status" data-testid="desktop-activity-wiped">
                   {t("desktop.activity.wipe.done")}

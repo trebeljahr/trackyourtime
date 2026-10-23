@@ -141,6 +141,8 @@ export const shell = {
       signupFailed: "Could not create the account. Try again.",
     },
     login: {
+      passkey: "Sign in with a passkey",
+      passkeyFailed: "Could not sign in with this passkey. Use another sign-in method or try again.",
       passwordFill: "Use a saved password",
       passwordOpening: "Opening password manager…",
       passwordNone: "No saved password was found for Track Your Time. Enter your password or sign in with your browser.",

@@ -17,6 +17,8 @@
  * `capabilities.test.ts` in core fails when a level has no capability.
  */
 export const REQUIRES_API_LEVEL = {
+  "auth.passkeys": 18,
+  "privacy.keys": 18,
   "catalog.options": 16,
   "reports.splitDetailed": 16,
   /** Automation tags with explicit catalog opt-in. */

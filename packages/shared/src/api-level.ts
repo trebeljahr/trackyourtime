@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 17;
+export const API_LEVEL = 18;
 
 export type ApiLevelChange = {
   level: number;
@@ -147,6 +147,14 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     release: "0.4.0",
     added: [
       "`hidden` on tag rows, `tags.create` and `tags.update`; `includeHidden` on `tags.list` (also REST and MCP). Hidden automation tags are omitted from normal catalogs and report group labels.",
+    ],
+  },
+  {
+    level: 18,
+    release: "0.4.0",
+    added: [
+      "Passkey sign-in and private identity enrollment with signed key updates under `privacy.*`.",
+      "Encrypted workspace transport and migration preparation endpoints; workspace conversion remains disabled until client compatibility and restore validation are complete.",
     ],
   },
 ];

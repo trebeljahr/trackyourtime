@@ -5,6 +5,8 @@ import * as React from "react";
 import { useActiveWorkspace } from "@/components/members/use-active-workspace";
 import { useAuth } from "@/hooks/use-auth";
 import { useIsElectron } from "@/hooks/use-shell";
+import { getApiOrigin } from "@/lib/api-origin";
+import { resumePrivateActivity } from "@/lib/private-session";
 import { desktopActivity } from "@/lib/desktop-activity";
 
 /**
@@ -30,7 +32,7 @@ export function DesktopActivityScope(): null {
     if (!electron || userId === null || workspaceId === null) return;
     const activity = desktopActivity();
     if (activity === null) return;
-    void activity.setScope({ userId, workspaceId }).catch(() => undefined);
+    void resumePrivateActivity(userId).then(() => activity.setScope({ userId, workspaceId, origin: getApiOrigin() })).catch(() => undefined);
   }, [electron, userId, workspaceId]);
 
   return null;

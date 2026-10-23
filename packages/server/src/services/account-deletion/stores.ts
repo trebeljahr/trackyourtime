@@ -1,4 +1,5 @@
 // The two real row stores behind `deleteAccountData`.
+import { PrivateAccount, PrivateRecord, PrivateWorkspace } from "../../models/PrivateData.js";
 import type { Model } from "mongoose";
 import { withStorageOwnershipAdoption } from "../storage-quota.js";
 import { withBusinessTransaction } from "../business-transaction.js";
@@ -38,11 +39,15 @@ type AppCollection = Exclude<
   | "authMembers"
   | "authInvitations"
   | "authDeviceCodes"
+  | "authPasskeys"
   | "authTwoFactors"
 >;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const APP_MODELS: Record<AppCollection, Model<any>> = {
+const APP_MODELS: Record<AppCollection, Model<any, {}, {}, any>> = {
+  privateAccounts: PrivateAccount,
+  privateRecords: PrivateRecord,
+  privateWorkspaces: PrivateWorkspace,
   timeEntries: TimeEntry,
   entryOperations: EntryOperation,
   storageUsage: StorageUsage,
@@ -76,6 +81,7 @@ const AUTH_MODELS: Record<string, string> = {
   authInvitations: "invitation",
   authDeviceCodes: "deviceCode",
   authTwoFactors: "twoFactor",
+  authPasskeys: "passkey",
 };
 
 /**
@@ -86,7 +92,7 @@ const appModel = (
   collection: DeletionCollection,
   filter: DeletionFilter,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Model<any> => {
+): Model<any, {}, {}, any> => {
   if (AUTH_COLLECTIONS.has(collection)) {
     throw new Error(`account deletion: ${collection} is an auth table`);
   }

@@ -1,3 +1,5 @@
+import { lockPrivateData, PRIVATE_PRF_INPUT, prfBytes, unlockPrivatePrf } from "./private-session";
+import { passkeyClient } from "@better-auth/passkey/client";
 import { fetchAuthWithTimeout } from "./auth-request";
 import { createAuthClient } from "better-auth/react";
 import {
@@ -167,6 +169,7 @@ export const authClient = createAuthClient({
    * has nowhere sensible to type a password.
    */
   plugins: [
+    passkeyClient(),
     magicLinkClient(),
     deviceAuthorizationClient(),
     /**
@@ -258,6 +261,27 @@ export async function signInWithPassword(email: string, password: string) {
   }
 }
 
+/** A successful passkey login can unlock its enrolled private key locally.
+ * The authentication library strips extension results from its server request. */
+export async function signInWithPasskey() {
+  const origin = getApiOrigin(), revision = ++authRevision;
+  const result = await authClient.signIn.passkey({ extensions: { prf: { eval: { first: PRIVATE_PRF_INPUT } } }, returnWebAuthnResponse: true } as unknown as Parameters<typeof authClient.signIn.passkey>[0]);
+  if (revision !== authRevision || origin !== getApiOrigin()) throw new Error("Authentication changed during login");
+  if (result.error || !("webauthn" in result)) return result;
+  const secret = prfBytes((result.webauthn.clientExtensionResults as { prf?: { results?: { first?: unknown } } }).prf?.results?.first);
+  if (!secret) return result;
+  try {
+    const userId = result.data?.user.id;
+    if (userId) {
+      const { getTRPCClient } = await import("./trpc");
+      const account = await getTRPCClient().privacy.identity.query({ userId });
+      if (revision === authRevision && origin === getApiOrigin() && account?.identity.passkeys.some((p) => p.credentialId === result.webauthn.response.id)) await unlockPrivatePrf(userId, account.identity, result.webauthn.response.id, secret);
+    }
+  } catch { /* Login still succeeds when this passkey has no encryption grant. */ }
+  finally { secret.fill(0); }
+  return result;
+}
+
 /**
  * Re-read the session from the server and push it into every `useSession()`.
  *
@@ -335,6 +359,7 @@ const forgetAccountOnDevice = async (): Promise<void> => {
  * ever seen.
  */
 export const signOut: typeof authClient.signOut = async (...args) => {
+  lockPrivateData();
   loginSession = null;
   authRevision++;
   await loginPending;
@@ -424,6 +449,7 @@ export const deleteAccount = async (args: {
 
   loginSession = null;
   authRevision++;
+  lockPrivateData();
   // The account is gone whatever happens below; a local cleanup that throws
   // must not report the deletion as failed.
   await Promise.allSettled([

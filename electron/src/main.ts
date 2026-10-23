@@ -235,6 +235,12 @@ function start(): void {
      * runs get the fake source and the test hook, never the real frontmost app.
      */
     activity = installActivity({
+      encryption: headless ? undefined : {
+        isAvailable: () => safeStorage.isEncryptionAvailable(),
+        backend: () => process.platform === "linux" ? safeStorage.getSelectedStorageBackend() : platformBackend(process.platform),
+        encrypt: (plain) => safeStorage.encryptString(plain),
+        decrypt: (cipher) => safeStorage.decryptString(cipher),
+      },
       headless,
       platform: process.platform,
       channel: distributionChannel({

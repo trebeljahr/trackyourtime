@@ -220,6 +220,28 @@ describe("macOS source", () => {
     assert.equal(runner.runs.length, before);
   });
 
+  it("refreshes titles in the same app and drops a result after titles are disabled", async () => {
+    const runner = fakeRunner((_file, args) => args[0] === "front"
+      ? { code: 0, stdout: "ASN:0x0-0x1:" }
+      : { code: 0, stdout: '\"CFBundleIdentifier\"=\"editor\"\n\"LSDisplayName\"=\"Editor\"\n\"pid\"=5\n' });
+    const timers = fakeTimers(), listener = recorder();
+    let reads = 0, finish: ((title: string | null) => void) | undefined;
+    const source = createMacosSource(runner, timers, async () => {
+      reads++;
+      if (reads === 3) return new Promise((resolve) => { finish = resolve; });
+      return `Document ${reads}`;
+    });
+    source.start(listener); await settle(); assert.equal(reads, 0);
+    source.setTitles(true); timers.advance(5000); await settle();
+    assert.equal(listener.targets.at(-1)?.title, "Document 1");
+    timers.advance(5000); await settle(); assert.equal(listener.targets.at(-1)?.title, "Document 2");
+    timers.advance(5000); await settle(); source.setTitles(false); finish?.("Must not be recorded"); await settle();
+    assert.equal(listener.targets.at(-1)?.title, undefined);
+    timers.advance(5000); await settle(); assert.equal(reads, 3);
+    assert.equal(runner.runs.filter((run) => run[1] === "info").length, 1);
+    source.stop();
+  });
+
   it("gives up after three failures and retries five minutes later", async () => {
     let broken = true;
     const runner = fakeRunner((_file, args) =>

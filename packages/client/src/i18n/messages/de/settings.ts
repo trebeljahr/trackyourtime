@@ -4,6 +4,39 @@ import type { settings as source } from "../en/settings";
 
 /** German `settings`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const settings: Translation<typeof source> = {
+  backups: {
+    title: "Verschlüsselte Sicherungen", description: "Einen passwortgeschützten Workspace-Export auf deinem Gerät speichern. Das Passwort sicher aufbewahren; wir können es nicht wiederherstellen.",
+    password: "Sicherungspasswort (mindestens 12 Zeichen)", confirm: "Sicherungspasswort bestätigen", working: "Vorbereitung…", download: "Verschlüsselte Sicherung speichern",
+    exportLimits: "Diese Sicherung verwendet das Workspace-Exportformat. Ausgestellte Rechnungen sind als Referenz enthalten; der Import stellt sie und ihre Abrechnungsverknüpfungen nicht wieder her. Deine Sichtbarkeitsrechte gelten weiterhin.",
+    remind: "Hier eine Erinnerung anzeigen", never: "Aus", weekly: "Alle 7 Tage", monthly: "Alle 30 Tage", due: "Dein gewählter Sicherungszeitraum ist abgelaufen. Bei Gelegenheit eine neue Sicherung speichern.",
+    last: "Letzter Sicherungsdownload angefordert: {date}. Prüfen, ob die Datei gespeichert wurde.", open: "Verschlüsselte Sicherung öffnen", openHint: "Oben das Sicherungspasswort eingeben. Die Entschlüsselung erfolgt auf diesem Gerät. Die wiederhergestellte JSON-Datei lässt sich in der Importvorschau öffnen.",
+    saveRestored: "Entschlüsselte JSON-Datei speichern", failed: "Die Sicherung konnte nicht erstellt oder geöffnet werden. Passwort und Datei prüfen und erneut versuchen.",
+  },
+  privateActivity: {
+    remember: "Aktivitätsschlüssel im sicheren Schlüsselbund dieses Geräts merken", trusted: "Dieses Gerät kann die lokale Aufzeichnung nach der Anmeldung fortsetzen. Die Sperre gilt bis zum Schließen der App. Beim Abmelden wird der gespeicherte Schlüssel gelöscht.", saveTrust: "Geräteeinstellung speichern",
+    title: "Aktivitätsverlauf auf diesem Computer", description: "Verschlüssele aufgezeichnete Apps, Fenstertitel, Regeln und lokale Einstellungen mit deinem privaten Datenschlüssel. Die Aufzeichnung pausiert, solange die Daten gesperrt sind. Kein Aktivitätsschlüssel wird an den Server gesendet.",
+    standard: "Der lokale Aktivitätsverlauf ist nicht verschlüsselt.", encrypted: "Der lokale Aktivitätsverlauf ist verschlüsselt und entsperrt.", locked: "Der lokale Aktivitätsverlauf ist verschlüsselt und gesperrt.",
+    protect: "Lokalen Aktivitätsverlauf verschlüsseln", unlock: "Lokalen Aktivitätsverlauf entsperren", needsKeys: "Richte oben zuerst deine privaten Datenschlüssel ein und entsperre sie.",
+    failed: "Der lokale Verlauf konnte nicht verschlüsselt oder entsperrt werden. Prüfe deine Schlüssel. Vorhandene Daten wurden beibehalten.",
+  },
+  privateData: {
+    nativePasskeys: "Verwalte Passkeys für die Verschlüsselung im Browser. Verwende deinen Wiederherstellungsschlüssel, um private Daten in dieser App zu öffnen.",
+    title: "Schlüssel für private Daten", description: "Bereite Schlüssel für private Daten vor. Die Workspace-Migration ist noch in Entwicklung. Diese Einstellung verschlüsselt deine synchronisierten Workspace-Daten noch nicht.",
+    recoveryExplanation: "Ein Zurücksetzen des Passworts stellt den Kontozugang wieder her. Verschlüsselte Inhalte benötigen zusätzlich einen registrierten Passkey oder deinen Wiederherstellungsschlüssel. Eine Kopie außerhalb dieser App aufbewahren.",
+    prepare: "Schlüssel einrichten", saveRecovery: "Diesen Wiederherstellungsschlüssel sicher aufbewahren. Wer ihn und deine verschlüsselte Identität besitzt, kann deine privaten Daten entsperren.",
+    downloadRecovery: "Wiederherstellungsschlüssel speichern", confirmRecovery: "Die letzten 8 Zeichen eingeben, um das Speichern zu bestätigen", finishSetup: "Schlüssel speichern",
+    unlockPasskey: "Mit Passkey entsperren", recoveryKey: "Wiederherstellungsschlüssel", unlockRecovery: "Mit Wiederherstellungsschlüssel entsperren", unlocked: "Private Daten sind für diese Sitzung entsperrt.",
+    addPasskey: "Passkey zur Verschlüsselung hinzufügen", lock: "Private Daten sperren", passkeyName: "Private Daten", fingerprint: "Fingerabdruck des Verschlüsselungsschlüssels: {fingerprint}",
+    passkeyNoEncryption: "Dieser Passkey ist zur Anmeldung verfügbar. Das Gerät bietet dafür keine Verschlüsselung an. Private Daten weiterhin mit dem Wiederherstellungsschlüssel entsperren.",
+    failed: "Die Anfrage konnte nicht abgeschlossen werden. Wiederherstellungsschlüssel oder Passkey prüfen und erneut versuchen. Bestehende verschlüsselte Daten wurden nicht ersetzt.",
+  },
+  passkeys: {
+    title: "Passkeys", description: "Mit Fingerabdruck, Gesicht, Geräte-PIN oder Sicherheitsschlüssel anmelden. Das Zurücksetzen des Passworts bleibt möglich.",
+    browser: "Passkeys im Browser verwalten. In der Desktop- oder Mobil-App die Anmeldung über den Browser verwenden.",
+    name: "Name dieses Passkeys", unnamed: "Passkey", add: "Passkey hinzufügen", remove: "Entfernen", waiting: "Warte auf dein Gerät…",
+    failed: "Die Passkey-Anfrage konnte nicht abgeschlossen werden. Erneut in einem unterstützten Browser versuchen; eventuell ist eine neue Anmeldung nötig.",
+  },
+
   about: {
     appVersion: "Track Your Time, Version {version}",
     appVersionUnknown: "Track Your Time (Entwicklungs-Build)",
@@ -893,8 +926,8 @@ export const settings: Translation<typeof source> = {
     title: "Zwei-Faktor-Authentifizierung",
     googleAccount:
       "Du meldest dich mit Google an. Die Zwei-Faktor-Einstellungen dafür verwaltest du bei Google.",
-    on: "An. Zum Anmelden brauchst du einen Code aus deiner Authenticator-App oder einen Backup-Code.",
-    off: "Aus. Verlange bei jeder Anmeldung zusätzlich einen Code aus einer Authenticator-App.",
+    on: "An. Bei der Passwort-Anmeldung brauchst du einen Authenticator-Code oder Backup-Code. Passkeys verwenden stattdessen deine Geräte-PIN oder Biometrie.",
+    off: "Aus. Ergänze die Passwort-Anmeldung um einen Authenticator-Code.",
     turnOn: "Einschalten",
     turnOff: "Ausschalten",
     invalidPassword: "Dieses Passwort ist nicht richtig.",
@@ -905,7 +938,7 @@ export const settings: Translation<typeof source> = {
     enable: {
       title: "Zwei-Faktor-Authentifizierung einschalten",
       description:
-        "Jede Anmeldung im Web fragt dann nach einem Code aus einer Authenticator-App. Die Mobil- und Desktop-App können sich über deinen Browser anmelden. Bereits angemeldete Geräte bleiben angemeldet.",
+        "Die Passwort-Anmeldung fragt nach einem Authenticator-Code. Passkeys verwenden stattdessen die Geräteprüfung. Mobil- und Desktop-Apps können sich über den Browser anmelden. Bestehende Sitzungen bleiben angemeldet.",
     },
     scan: {
       title: "QR-Code scannen",
@@ -1154,8 +1187,12 @@ export const settings: Translation<typeof source> = {
         "blocked-by-policy": "Eine Windows-Richtlinie auf diesem Computer blockiert das PowerShell-Hilfsprogramm, das die App im Vordergrund liest. Frag die Person, die diesen Computer verwaltet.",
         "source-failed": "Das Hilfsprogramm, das die App im Vordergrund liest, antwortet nicht mehr. Track Your Time versucht es alle 5 Minuten noch einmal.",
         "newer-format": "Eine neuere Version von Track Your Time hat die Aktivität auf diesem Computer gespeichert. Die Erfassung bleibt aus, bis du aktualisierst. Nichts wurde gelöscht.",
+          "encrypted-locked": "Der Aktivitätsverlauf ist verschlüsselt und gesperrt. Entsperre private Daten in den Kontoeinstellungen, um die Aufzeichnung fortzusetzen.",
       },
       titles: {
+        macDescription: "Fenstertitel können private Dokumentnamen und Nachrichten enthalten. Beim Einschalten wird die Berechtigung zur Bildschirmaufnahme angefragt. Ausschalten löscht gespeicherte Titel.",
+        permissionRequired: "Track Your Time unter Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme erlauben. Danach die App neu starten und Fenstertitel wieder einschalten.",
+
         title: "Fenstertitel mit aufzeichnen",
         description: "Fenstertitel verraten mehr über dich als App-Namen. Wenn du das ausschaltest, werden die gespeicherten Titel gelöscht.",
         notOnMac: "Unter macOS werden Fenstertitel noch nicht aufgezeichnet.",
@@ -1177,6 +1214,7 @@ export const settings: Translation<typeof source> = {
         label: "Aufbewahrung der Aktivität in Tagen",
       },
       wipe: {
+        locked: "Der verschlüsselte Aktivitätsverlauf ist gesperrt. Du kannst ihn trotzdem von diesem Computer löschen.",
         title: "Alle Aktivität löschen",
         description:
           "{count, plural, =0 {Für dieses Konto ist keine Aktivität gespeichert.} one {# gespeicherter Abschnitt Aktivität.} other {# gespeicherte Abschnitte Aktivität.}} Beim Löschen werden auch deine Regeln und ausgeblendeten Vorschläge entfernt.",

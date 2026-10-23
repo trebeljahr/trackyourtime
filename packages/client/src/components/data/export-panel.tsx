@@ -1,5 +1,6 @@
 "use client";
 
+import { EncryptedBackup } from "./encrypted-backup";
 import * as React from "react";
 import { FileJson, FileSpreadsheet, Loader2 } from "lucide-react";
 
@@ -217,6 +218,7 @@ export function ExportPanel(): React.JSX.Element {
             {error}
           </p>
         ) : null}
+        <EncryptedBackup />
       </CardContent>
     </Card>
   );

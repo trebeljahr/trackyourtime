@@ -15,6 +15,7 @@
  * `updateSettings`, which only the renderer calls.
  */
 
+import type { ActivityCodec } from "./protection.ts";
 import { randomUUID } from "node:crypto";
 
 import { hostMatchesAny } from "../../../packages/core/src/activity/index.ts";
@@ -58,8 +59,10 @@ import {
 
 export interface ActivityServiceOptions {
   userData: string;
+  codec?: ActivityCodec;
+  protectionStatus?: () => { encrypted: boolean; locked: boolean };
   support: ActivityCaptureSupport;
-  /** Whether this OS can record window titles (false on macOS for now). */
+  /** Whether this OS can record window titles after any required permission. */
   titlesAvailable: boolean;
   /** Null when the channel is unsupported: there is nothing to start. */
   source: FrontmostSource | null;
@@ -129,7 +132,7 @@ export interface ActivityService {
 
 export function createActivityService(options: ActivityServiceOptions): ActivityService {
   const now = options.now ?? Date.now;
-  const store = createActivityStore(options.userData, now);
+  const store = createActivityStore(options.userData, now, options.codec);
   const source = options.source;
   let titlesAvailable = options.titlesAvailable;
   let supportOverride: DesktopActivitySupport | null = null;
@@ -169,6 +172,7 @@ export function createActivityService(options: ActivityServiceOptions): Activity
   };
 
   const support = (): DesktopActivitySupport => {
+    if (store.status === "locked") return { supported: false, reason: "encrypted-locked", hint: null };
     if (store.status === "newer-format") return { supported: false, reason: "newer-format", hint: null };
     const base = channelSupport();
     if (!base.supported) return base;
@@ -286,6 +290,7 @@ export function createActivityService(options: ActivityServiceOptions): Activity
     // After an unlock nothing records until input is seen, so that reads as idle.
     const paused = !armed ? null : state.locked ? "locked" : state.idle || state.awaitingInput ? "idle" : null;
     return {
+      ...(options.protectionStatus ? { protection: options.protectionStatus() } : {}),
       settings: { ...state.settings, excludedApps: [...state.settings.excludedApps] },
       support: currentSupport,
       titlesAvailable,
@@ -329,7 +334,7 @@ export function createActivityService(options: ActivityServiceOptions): Activity
         // The renderer disables both switches where they cannot work; main
         // refuses them too, so no caller can switch capture on for a channel
         // that must not record (the stores, Snap, Flatpak, Wayland) or store
-        // titles an OS cannot give (macOS, for now). Turning off always works.
+        // titles an OS cannot give. Turning off always works.
         if (!channelSupport().supported) next.enabled = false;
         if (!titlesAvailable) next.storeTitles = false;
         const autopilotWasOn = state.settings.autopilot;

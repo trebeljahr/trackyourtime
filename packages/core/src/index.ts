@@ -33,3 +33,5 @@ export * from "./activity/index.js";
 export { assertEntryClientSupported } from "./api-client.js";
 
 export * from "./durable-entry.js";
+export * from "./privacy/crypto.js";
+export * from "./privacy/records.js";

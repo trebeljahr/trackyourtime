@@ -88,6 +88,8 @@ const bridge: DesktopBridge = {
    * no raw segment is ever handed to the page.
    */
   activity: {
+    protect: (input) => ipcRenderer.invoke(DESKTOP_IPC.activityProtect, input),
+    lock: () => ipcRenderer.invoke(DESKTOP_IPC.activityLock),
     snapshot: () => ipcRenderer.invoke(DESKTOP_IPC.activitySnapshot),
     onChanged: (listener) => {
       const handler = (_event: unknown, snapshot: DesktopActivitySnapshot): void => listener(snapshot);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useServerSupports, refreshServerLevel } from "@/lib/server-level";
 import { markLoginSubmitted } from "@/lib/startup-timing";
 
 import { useEffect, useRef, useState } from "react";
@@ -7,6 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   authClient,
+  signInWithPasskey,
   signInWithPassword,
   getSession,
   isTwoFactorChallenge,
@@ -55,6 +57,8 @@ export default function LoginPage() {
   const [magicLoading, setMagicLoading] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
   const tokenShell = useIsTokenShell();
+  const passkeysSupported = useServerSupports("auth.passkeys");
+  useEffect(() => { void refreshServerLevel(); }, []);
   const [step, setStep] = useState<"password" | "two-factor">("password");
   // `?next=` (validated by lib/safe-next.ts) and `?email=`, both read in an
   // effect for the same prerender reason as the revoked notice below. The
@@ -312,6 +316,14 @@ export default function LoginPage() {
             {loading ? t("auth.login.submitting") : t("auth.login.submit")}
           </button>
         </form>
+
+        {!tokenShell && passkeysSupported && <button type="button" disabled={loading} className="inline-flex h-10 w-full items-center justify-center rounded-md border border-input text-sm font-medium hover:bg-muted disabled:opacity-50" data-testid="login-passkey" onClick={() => {
+          setLoading(true); setError("");
+          void signInWithPasskey().then((result) => {
+            if (result.error) setError(t("auth.login.passkeyFailed"));
+            else router.replace(next ?? POST_AUTH_REDIRECT);
+          }).catch(() => setError(t("auth.login.passkeyFailed"))).finally(() => setLoading(false));
+        }}>{t("auth.login.passkey")}</button>}
 
         <AndroidPasswordFill disabled={loading} onFill={(credential) => {
           filledFromAndroid.current = true;

@@ -135,6 +135,8 @@ export const shell: Translation<typeof source> = {
       signupFailed: "Das Konto konnte nicht erstellt werden. Versuch es noch einmal.",
     },
     login: {
+      passkey: "Mit Passkey anmelden",
+      passkeyFailed: "Anmeldung mit diesem Passkey nicht möglich. Eine andere Anmeldemethode verwenden oder erneut versuchen.",
       passwordFill: "Gespeichertes Passwort verwenden",
       passwordOpening: "Passwortmanager wird geöffnet …",
       passwordNone: "Kein gespeichertes Passwort für Track Your Time gefunden. Gib es ein oder melde dich mit deinem Browser an.",

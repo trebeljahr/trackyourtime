@@ -23,6 +23,8 @@ import { DeleteAccountCard } from "@/components/settings/delete-account";
 import { ProfilePicture } from "@/components/profile/profile-picture";
 import { SettingRow } from "@/components/settings/setting-row";
 import { DEEP_LINK_HIGHLIGHT_CLASS } from "@/components/einvoice/use-deep-link-focus";
+import { PrivateDataCard } from "@/components/settings/private-data";
+import { PasskeysRow } from "@/components/settings/passkeys";
 import { TwoFactorRow } from "@/components/settings/two-factor";
 import { useAuth } from "@/hooks/use-auth";
 import { useT } from "@/i18n/use-t";
@@ -47,6 +49,8 @@ export function AccountSettings({
   const profileQuery = trpc.profile.get.useQuery();
   // The forgotten-timer email has its own switch under Limits, off unless
   // turned on. Only a server too old for that switch still reads this one.
+  const passkeysSupported = useServerSupports("auth.passkeys");
+  const privateKeysSupported = useServerSupports("privacy.keys");
   const legacyEmailSwitch = !useServerSupports("settings.forgottenTimerEmail");
   const billingStatus = trpc.billing.status.useQuery();
   const [signingOut, setSigningOut] = React.useState(false);
@@ -180,6 +184,8 @@ export function AccountSettings({
             </SettingRow>
           ) : null}
 
+          {passkeysSupported && <PasskeysRow />}
+
           <SettingRow
             title={tc("actions.signOut")}
             description={t("account.signOut.description")}
@@ -271,6 +277,7 @@ export function AccountSettings({
         </Card>
       ) : null}
 
+      {privateKeysSupported && <PrivateDataCard />}
       <DeleteAccountCard onShowExport={onShowExport} />
     </div>
   );

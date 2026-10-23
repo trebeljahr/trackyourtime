@@ -1,5 +1,6 @@
 "use client";
 
+import { privateAccountChanged } from "@/lib/private-session";
 import { createContext, useContext, useEffect } from "react";
 import {
   getNativeSessionRequestToken,
@@ -37,6 +38,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!needsNativeValidation || isPending || isRefetching || isPasswordLoginPending()) return;
     void refetch();
   }, [needsNativeValidation, nativeToken, isPending, isRefetching, refetch]);
+
+  useEffect(() => { if (!isPending) privateAccountChanged(session?.user?.id ?? null); }, [isPending, session?.user?.id]);
 
   const value: AuthContextType = {
     user: session?.user

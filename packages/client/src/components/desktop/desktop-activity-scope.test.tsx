@@ -54,10 +54,10 @@ describe("DesktopActivityScope", () => {
     user = { id: "u1" };
     workspace = { id: "w1" };
     const { rerender } = render(<DesktopActivityScope />);
-    await waitFor(() => expect(setScope).toHaveBeenCalledWith({ userId: "u1", workspaceId: "w1" }));
+    await waitFor(() => expect(setScope).toHaveBeenCalledWith({ userId: "u1", workspaceId: "w1", origin: expect.any(String) }));
     workspace = { id: "w2" };
     rerender(<DesktopActivityScope />);
-    await waitFor(() => expect(setScope).toHaveBeenLastCalledWith({ userId: "u1", workspaceId: "w2" }));
+    await waitFor(() => expect(setScope).toHaveBeenLastCalledWith({ userId: "u1", workspaceId: "w2", origin: expect.any(String) }));
   });
 
   it("keeps the last scope when the session goes pending again", async () => {

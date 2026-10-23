@@ -323,7 +323,8 @@ export type DesktopActivityUnavailableReason =
   | "tool-missing"
   | "blocked-by-policy"
   | "source-failed"
-  | "newer-format";
+  | "newer-format"
+  | "encrypted-locked";
 
 /** Device preferences: they stay when the account signs out. */
 export interface DesktopActivitySettings {
@@ -371,9 +372,12 @@ export type DesktopActivitySupport =
   | { supported: false; reason: DesktopActivityUnavailableReason; hint: string | null };
 
 export interface DesktopActivitySnapshot {
+  protection?: { encrypted: boolean; locked: boolean; trusted?: boolean; canTrust?: boolean };
+  /** An explicit title opt-in was refused until system permission is granted. */
+  titlesPermissionRequired?: boolean;
   settings: DesktopActivitySettings;
   support: DesktopActivitySupport;
-  /** Whether window titles can be recorded on this OS at all: false on macOS for now. */
+  /** Whether this OS can record window titles after any required permission. */
   titlesAvailable: boolean;
   /** An account and workspace to file activity under is known. */
   scoped: boolean;
@@ -567,11 +571,14 @@ export interface DesktopAutopilot {
  * the main process composes suggestions and answers with those.
  */
 export interface DesktopActivity {
+  /** Optional for compatibility with an older desktop preload. */
+  protect?: (input: { key: string; userId: string; origin: string; remember?: boolean }) => Promise<DesktopActivitySnapshot>;
+  lock?: () => Promise<DesktopActivitySnapshot>;
   snapshot: () => Promise<DesktopActivitySnapshot>;
   onChanged: (listener: (snapshot: DesktopActivitySnapshot) => void) => () => void;
   updateSettings: (patch: Partial<DesktopActivitySettings>) => Promise<DesktopActivitySnapshot>;
   /** Whose activity is recorded. There is no way to clear it but `forget`. */
-  setScope: (scope: { userId: string; workspaceId: string }) => Promise<void>;
+  setScope: (scope: { userId: string; workspaceId: string; origin?: string }) => Promise<void>;
   /** Sign-out and account deletion: every row, rule and dismissal, and the scope. */
   forget: () => Promise<void>;
   /** "Delete all activity now": every row, rule and dismissal; the scope stays. */
@@ -656,6 +663,8 @@ export const DESKTOP_IPC = {
   updateGetStatus: "update:status",
   updateCheck: "update:check",
   updateRestart: "update:restart",
+  activityProtect: "activity:protect",
+  activityLock: "activity:lock",
   activitySnapshot: "activity:snapshot",
   activitySettings: "activity:settings",
   activityScope: "activity:scope",

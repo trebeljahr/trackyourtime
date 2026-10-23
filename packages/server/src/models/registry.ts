@@ -1,3 +1,4 @@
+import "./PrivateData.js";
 // Imports every app model, so `mongoose.models` is complete wherever this is
 // imported — the boot index check and `admin doctor`, which would otherwise
 // see only the models some route happened to load. Add a new model here.

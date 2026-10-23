@@ -8,8 +8,8 @@
  * Recording — nothing that can raise a permission prompt. Each call is a
  * spawn that exits at once.
  *
- * Window titles are not read on macOS: they need Screen Recording, whose
- * prompt and relaunch cannot be exercised here. `titlesAvailable` is false.
+ * Optional titles use an injected metadata reader only after explicit opt-in
+ * and the system Screen Recording grant. App identity remains permission-free.
  *
  * The output format is undocumented. A macOS release that changes it makes
  * the parser answer null — no capture, never wrong capture — and after three
@@ -64,7 +64,9 @@ export function parseLsappinfoInfo(stdout: string): FrontmostTarget | null {
   return { key, name: displayName !== "" ? displayName : bundleId, ...(pid !== undefined ? { pid } : {}) };
 }
 
-export function createMacosSource(runner: ProcessRunner, timers: Timers): FrontmostSource {
+export function createMacosSource(runner: ProcessRunner, timers: Timers, readTitle?: (pid: number) => Promise<string | null>): FrontmostSource {
+  let titles = false;
+  let titleRevision = 0;
   let listener: SourceListener | null = null;
   let poll: unknown = null;
   let retry: unknown = null;
@@ -130,9 +132,19 @@ export function createMacosSource(runner: ProcessRunner, timers: Timers): Frontm
         lastAsn = asn;
         lastTarget = target;
       }
+      let target = lastTarget;
+      if (titles && readTitle && target?.pid !== undefined) {
+        const revision = titleRevision;
+        try {
+          const title = await readTitle(target.pid);
+          if (listener === null || run !== generation) return;
+          if (titles && titleRevision === revision && title !== null) target = { ...target, title };
+        } catch { /* A missing title must not stop application capture. */ }
+      }
+      if (listener === null || run !== generation) return;
       policy.succeed();
       listener.failure(null);
-      listener.target(lastTarget);
+      listener.target(target);
     } finally {
       busy = false;
     }
@@ -158,7 +170,6 @@ export function createMacosSource(runner: ProcessRunner, timers: Timers): Frontm
       lastAsn = null;
       lastTarget = null;
     },
-    // No titles on macOS in Stage 8.
-    setTitles: () => undefined,
+    setTitles: (on) => { if (titles !== on) titleRevision += 1; titles = on; },
   };
 }

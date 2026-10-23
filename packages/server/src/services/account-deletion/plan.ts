@@ -23,6 +23,9 @@ export {
  * `deleteUser` removes those itself, after this cascade has finished.
  */
 export type DeletionCollection =
+  | "privateAccounts"
+  | "privateRecords"
+  | "privateWorkspaces"
   | "timeEntries"
   | "entryOperations"
   | "storageUsage"
@@ -51,7 +54,8 @@ export type DeletionCollection =
   | "authMembers"
   | "authInvitations"
   | "authDeviceCodes"
-  | "authTwoFactors";
+  | "authTwoFactors"
+  | "authPasskeys";
 
 export const AUTH_COLLECTIONS: ReadonlySet<DeletionCollection> = new Set([
   "authOrganizations",
@@ -59,6 +63,7 @@ export const AUTH_COLLECTIONS: ReadonlySet<DeletionCollection> = new Set([
   "authInvitations",
   "authDeviceCodes",
   "authTwoFactors",
+  "authPasskeys",
 ]);
 
 /**
@@ -91,6 +96,8 @@ export function workspaceDeletionSteps(workspaceId: string): DeletionStep[] {
   return [
     // Refuse locked time before removing the workspace's other records.
     scoped("timeEntries"),
+    scoped("privateRecords"),
+    scoped("privateWorkspaces"),
     scoped("entryOperations"),
     scoped("timesheetApprovals"),
     scoped("timesheetPolicies"),
@@ -200,6 +207,8 @@ export function userScopedSteps(user: { id: string; email?: string | null }): De
     { collection: "authTwoFactors", filter: { userId: user.id } },
     { collection: "storageFences", filter: { _id: `account:${user.id}` } },
     { collection: "importLeases", filter: { _id: JSON.stringify(["user", user.id]) } },
+    { collection: "authPasskeys", filter: { userId: user.id } },
+    { collection: "privateAccounts", filter: { userId: user.id } },
     ...(email ? [{ collection: "authInvitations" as const, filter: { email } }] : []),
   ];
 }

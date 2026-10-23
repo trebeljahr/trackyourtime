@@ -7,6 +7,7 @@
 import type { ActivityCaptureMechanism } from "../distribution.ts";
 import { createNodeProcessRunner } from "./process-runner.ts";
 import { createLinuxSource } from "./source-linux.ts";
+import { createMacosTitleReader } from "./macos-titles.ts";
 import { createMacosSource } from "./source-macos.ts";
 import { createWindowsSource } from "./source-windows.ts";
 import { realTimers, type FrontmostSource, type ProcessRunner } from "./source.ts";
@@ -27,12 +28,12 @@ export function recordingRunner(inner: ProcessRunner, spawns: string[]): Process
 
 export function createPlatformSource(
   mechanism: ActivityCaptureMechanism,
-  options: { env: Record<string, string | undefined>; parentPid: number; spawns: string[] },
+  options: { env: Record<string, string | undefined>; parentPid: number; spawns: string[]; titlesPermitted?: () => boolean },
 ): FrontmostSource {
   const runner = recordingRunner(createNodeProcessRunner(), options.spawns);
   switch (mechanism) {
     case "macos-lsappinfo":
-      return createMacosSource(runner, realTimers);
+      return createMacosSource(runner, realTimers, createMacosTitleReader(runner, options.titlesPermitted ?? (() => false)));
     case "windows-powershell":
       return createWindowsSource(runner, realTimers, { env: options.env, parentPid: options.parentPid });
     case "linux-xprop":

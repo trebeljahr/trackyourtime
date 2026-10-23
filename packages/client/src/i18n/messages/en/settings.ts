@@ -7,6 +7,39 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const settings = {
+  backups: {
+    title: "Encrypted backups", description: "Save a password-protected workspace export on your device. Keep its password somewhere safe; we cannot recover it.",
+    password: "Backup password (at least 12 characters)", confirm: "Confirm backup password", working: "Preparing…", download: "Save encrypted backup",
+    exportLimits: "This uses the workspace export format. Issued invoices are included for reference; importing this format does not restore issued invoices or their billing links. Your visibility permissions also apply.",
+    remind: "Show a reminder here", never: "Off", weekly: "Every 7 days", monthly: "Every 30 days", due: "Your chosen backup interval has passed. Save a new backup when ready.",
+    last: "Last backup download requested: {date}. Check that the file was saved.", open: "Open an encrypted backup", openHint: "Enter its backup password above. Decryption happens on this device. The restored JSON can be opened in the import preview.",
+    saveRestored: "Save decrypted JSON", failed: "Could not create or open this backup. Check its password and file, then try again.",
+  },
+  privateActivity: {
+    remember: "Remember the activity key in this device’s secure OS keychain", trusted: "This device can resume local capture after you sign in. Lock lasts until the app closes; sign-out removes the saved key.", saveTrust: "Save device preference",
+    title: "Activity history on this computer", description: "Encrypt recorded apps, window titles, rules, and local settings with your private data key. Capture pauses while locked. No activity key is sent to the server.",
+    standard: "Local activity history is not encrypted.", encrypted: "Local activity history is encrypted and unlocked.", locked: "Local activity history is encrypted and locked.",
+    protect: "Encrypt local activity history", unlock: "Unlock local activity history", needsKeys: "Set up and unlock your private data keys above first.",
+    failed: "Could not encrypt or unlock local history. Check your keys and try again. Existing history was kept.",
+  },
+  privateData: {
+    nativePasskeys: "Manage encryption passkeys in your browser. Use your recovery key to open private data in this app.",
+    title: "Private data keys", description: "Prepare encryption keys for private data. Workspace migration is still in development. Your synced workspace data is not encrypted by this setting.",
+    recoveryExplanation: "Password resets restore account access. Unlocking encrypted content also needs an enrolled passkey or your recovery key. Keep a recovery copy outside this app.",
+    prepare: "Set up private data keys", saveRecovery: "Save this recovery key in a safe place. Anyone holding it and your encrypted identity can unlock your private data.",
+    downloadRecovery: "Save recovery key", confirmRecovery: "Enter its last 8 characters to confirm you saved it", finishSetup: "Save private data keys",
+    unlockPasskey: "Unlock with passkey", recoveryKey: "Recovery key", unlockRecovery: "Unlock with recovery key", unlocked: "Private data is unlocked for this session.",
+    addPasskey: "Use a passkey for encryption", lock: "Lock private data", passkeyName: "Private data", fingerprint: "Encryption key fingerprint: {fingerprint}",
+    passkeyNoEncryption: "This passkey is available for sign-in, but this device did not provide encryption support. Keep using your recovery key to unlock private data.",
+    failed: "Could not complete this request. Check your recovery key or passkey and try again. Existing encrypted data has not been replaced.",
+  },
+  passkeys: {
+    title: "Passkeys", description: "Sign in with your fingerprint, face, device PIN, or security key. Password recovery stays available.",
+    browser: "Manage passkeys in your browser. Use Sign in with your browser when opening the desktop or mobile app.",
+    name: "Name this passkey", unnamed: "Passkey", add: "Add a passkey", remove: "Remove", waiting: "Waiting for your device…",
+    failed: "Could not complete the passkey request. Try again in a supported browser; you may need to sign in again.",
+  },
+
   about: {
     /** The release of the app on this screen, from the root package.json. */
     appVersion: "Track Your Time {version}",
@@ -927,8 +960,8 @@ export const settings = {
   twoFactor: {
     title: "Two-factor authentication",
     googleAccount: "Your account signs in with Google, which has its own two-factor settings.",
-    on: "On. Signing in needs a code from your authenticator app or a backup code.",
-    off: "Off. Add a code from an authenticator app to every sign-in.",
+    on: "On. Password sign-in needs an authenticator code or backup code. Passkeys use your device PIN or biometric check instead.",
+    off: "Off. Add an authenticator code to password sign-ins.",
     turnOn: "Turn on",
     turnOff: "Turn off",
     invalidPassword: "That password is not correct.",
@@ -938,7 +971,7 @@ export const settings = {
     enable: {
       title: "Turn on two-factor authentication",
       description:
-        "Every sign-in on the web will ask for a code from an authenticator app. The mobile and desktop apps can sign in through your browser. Devices already signed in stay signed in.",
+        "Password sign-in will ask for an authenticator code. Passkeys use device verification instead. Mobile and desktop apps can sign in through your browser. Existing sessions stay signed in.",
     },
     scan: {
       title: "Scan the QR code",
@@ -1183,8 +1216,12 @@ export const settings = {
         "blocked-by-policy": "A Windows policy on this computer blocks the PowerShell helper that reads the app in front. Ask whoever manages this computer.",
         "source-failed": "The helper that reads the app in front stopped answering. Track Your Time tries again every 5 minutes.",
         "newer-format": "A newer version of Track Your Time wrote the activity on this computer. Capture is off until you update. Nothing was deleted.",
+          "encrypted-locked": "Activity history is encrypted and locked. Unlock private data in Account settings to resume capture.",
       },
       titles: {
+        macDescription: "Window titles may contain private document names and messages. Enabling this requests Screen Recording permission. Turning it off deletes stored titles.",
+        permissionRequired: "Allow Track Your Time in System Settings → Privacy & Security → Screen Recording, then restart the app and enable titles again.",
+
         title: "Include window titles",
         description: "Window titles say more about you than app names. Turning this off deletes the titles already stored.",
         notOnMac: "Window titles are not recorded on macOS yet.",
@@ -1206,6 +1243,7 @@ export const settings = {
         label: "Activity retention in days",
       },
       wipe: {
+        locked: "Encrypted activity history is locked. You can still delete it from this computer.",
         title: "Delete all activity",
         description:
           "{count, plural, =0 {No activity is stored for this account.} one {# stored stretch of activity.} other {# stored stretches of activity.}} Deleting also removes your rules and dismissed suggestions.",

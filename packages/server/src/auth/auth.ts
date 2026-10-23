@@ -1,3 +1,4 @@
+import { passkeyPlugin } from "./passkeys.js";
 import { loginSessionPlugin } from "./login-session.js";
 import { emailLinkForWeb } from "./email-link.js";
 import { logAuthLink as logAuthUrl } from "./link-policy.js";
@@ -305,6 +306,7 @@ export async function initAuth(): Promise<void> {
        * `auth/account-security.ts` has the rest, and
        * `tests/two-factor-integration.test.ts` pins the order.
        */
+      passkeyPlugin(env.FRONTEND_URL),
       twoFactorPlugin(),
 
       /**

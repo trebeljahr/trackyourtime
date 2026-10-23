@@ -37,3 +37,4 @@ export * from "./approvals.js";
 
 export * from "./approval-errors.js";
 export * from "./timer-menu.js";
+export * from "./privacy.js";

@@ -14,7 +14,9 @@
  * turns it on.
  */
 
-import { BrowserWindow } from "electron";
+import { createActivityVault } from "./vault.ts";
+import type { Encryption } from "../secure-store.ts";
+import { BrowserWindow, desktopCapturer, systemPreferences } from "electron";
 
 import {
   DESKTOP_IPC,
@@ -35,7 +37,6 @@ import {
   parseInterval,
   parseRuleId,
   parseRuleInput,
-  parseScope,
   parseSettingsPatch,
   parseSuggestionsInput,
 } from "./ipc-parse.ts";
@@ -61,6 +62,7 @@ export interface ActivityController {
 
 export function installActivity(options: {
   headless: boolean;
+  encryption?: Encryption;
   platform: NodeJS.Platform;
   channel: DistributionChannel;
   env: Record<string, string | undefined>;
@@ -77,7 +79,7 @@ export function installActivity(options: {
   const fake = headless ? createFakeFrontmostSource() : null;
   let source: FrontmostSource | null = fake;
   if (!headless && support.kind === "supported") {
-    source = createPlatformSource(support.mechanism, { env, parentPid: process.pid, spawns });
+    source = createPlatformSource(support.mechanism, { env, parentPid: process.pid, spawns, titlesPermitted: () => systemPreferences.getMediaAccessStatus("screen") === "granted" });
   }
 
   // ── change push, throttled ──────────────────────────────────────────
@@ -106,32 +108,44 @@ export function installActivity(options: {
     }, CHANGED_THROTTLE_MS);
   };
 
-  const activity = createActivityService({
+  let activity: ActivityService;
+  let initialized = false;
+  const vault = createActivityVault({
     userData: options.userData,
-    support,
-    // Window titles need Screen Recording on macOS, which Stage 8 never asks for.
-    titlesAvailable: platform !== "darwin",
-    source,
-    selfPid: process.pid,
-    now,
-    onChanged: changed,
+    // Never construct an OS credential store during headless runs.
+    encryption: headless ? undefined : options.encryption,
+    makeService: (codec, protectionStatus) => createActivityService({
+      userData: options.userData, support, titlesAvailable: true, source,
+      selfPid: process.pid, now, onChanged: changed, codec, protectionStatus,
+    }),
+    onReplace: (next) => { activity = next; service = next; if (initialized) changed(); },
   });
-  service = activity;
-
-  // ── IPC ─────────────────────────────────────────────────────────────
+  initialized = true;
+  // Assigned synchronously by the vault factory.
+  activity = service!;
   const currentRules = async (): Promise<DesktopActivityRule[]> => (await activity.snapshot()).rules;
 
-  handle(DESKTOP_IPC.activitySnapshot, () => activity.snapshot());
-  handle(DESKTOP_IPC.activitySettings, (_event, patch: unknown) => {
+  handle(DESKTOP_IPC.activityProtect, (_event, input: unknown) => vault.protect(input));
+  handle(DESKTOP_IPC.activityLock, () => vault.lock());
+  handle(DESKTOP_IPC.activitySnapshot, async () => { await vault.settled(); return activity.snapshot(); });
+  handle(DESKTOP_IPC.activitySettings, async (_event, patch: unknown) => {
     const parsed = parseSettingsPatch(patch);
+    if (!headless && platform === "darwin" && parsed?.storeTitles === true) {
+      // Only a deliberate toggle may initiate the OS permission request.
+      // No thumbnails, icons, screenshots, audio, or capture streams are read.
+      if (systemPreferences.getMediaAccessStatus("screen") === "not-determined") {
+        try { await desktopCapturer.getSources({ types: ["window"], thumbnailSize: { width: 0, height: 0 }, fetchWindowIcons: false }); }
+        catch { /* The permission state below is authoritative. */ }
+      }
+      if (systemPreferences.getMediaAccessStatus("screen") !== "granted") {
+        return { ...await activity.updateSettings({ ...parsed, storeTitles: false }), titlesPermissionRequired: true };
+      }
+    }
     return parsed === null ? activity.snapshot() : activity.updateSettings(parsed);
   });
-  handle(DESKTOP_IPC.activityScope, async (_event, scope: unknown) => {
-    const parsed = parseScope(scope);
-    if (parsed !== null) await activity.setScope(parsed);
-  });
-  handle(DESKTOP_IPC.activityForget, () => activity.forget());
-  handle(DESKTOP_IPC.activityWipe, () => activity.wipe());
+  handle(DESKTOP_IPC.activityScope, (_event, scope: unknown) => vault.setScope(scope));
+  handle(DESKTOP_IPC.activityForget, () => vault.forget());
+  handle(DESKTOP_IPC.activityWipe, () => vault.wipeLocked());
   handle(DESKTOP_IPC.activitySuggestions, (_event, input: unknown) => {
     const parsed = parseSuggestionsInput(input);
     return parsed === null ? null : activity.suggestions(parsed);
@@ -208,7 +222,7 @@ export function installActivity(options: {
       for (const timer of timers) clearInterval(timer);
       if (pushTimer !== null) clearTimeout(pushTimer);
       unsubscribeIdle?.();
-      activity.dispose();
+      vault.dispose();
     },
   };
 }

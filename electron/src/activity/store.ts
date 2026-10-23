@@ -7,9 +7,10 @@
  *   segments/YYYY-MM-DD.jsonl  closed segments, one JSON line each, filed
  *                              under the UTC day of their start
  *
- * Plain files, directory 0700 and files 0600. Not encrypted: on Linux's
- * `basic_text` backend and under the headless mock keychain encryption would
- * be decoration, and the content is less sensitive than the session token.
+ * Directory 0700 and files 0600. Optional account-derived AES-GCM encryption
+ * covers settings, segments, titles, rules and dismissals. Protected stores
+ * stay locked without their key; an unavailable OS keychain never causes a
+ * plaintext fallback.
  * Nothing here opens a connection; the only way activity leaves the device is
  * as an entry the person accepted, which the renderer creates.
  *
@@ -26,6 +27,7 @@
 import {
   appendFileSync,
   chmodSync,
+  existsSync,
   copyFileSync,
   mkdirSync,
   readdirSync,
@@ -42,6 +44,8 @@ import type { AutopilotPause, OwnedTimer } from "./autopilot.ts";
 import type { OpenSegment, StoredSegment } from "./model.ts";
 import { DEFAULT_ACTIVITY_SETTINGS, parseActivitySettings } from "./settings.ts";
 
+import { ACTIVITY_PROTECTION_FILE, ACTIVITY_PROTECTION_REQUIRED, type ActivityCodec } from "./protection.ts";
+
 export const ACTIVITY_FORMAT_VERSION = 1;
 export const ACTIVITY_DIR = "activity";
 
@@ -53,7 +57,7 @@ const DAY_MS = 86_400_000;
 /** A line longer than this is not one this app wrote. */
 const MAX_LINE_LENGTH = 64 * 1024;
 
-export type StoreStatus = "ok" | "newer-format";
+export type StoreStatus = "ok" | "newer-format" | "locked";
 
 export interface StoredRule extends ActivityRule {
   scope: string;
@@ -221,13 +225,15 @@ const withoutScope = (rule: StoredRule): ActivityRule => {
   return rest;
 };
 
-export function createActivityStore(userData: string, clock: () => number = Date.now): ActivityStore {
+export function createActivityStore(userData: string, clock: () => number = Date.now, codec?: ActivityCodec): ActivityStore {
   const dir = path.join(userData, ACTIVITY_DIR);
   const segmentsDir = path.join(dir, SEGMENTS_DIR);
   const statePath = path.join(dir, STATE_FILE);
   const openPath = path.join(dir, OPEN_FILE);
 
-  let status: StoreStatus = "ok";
+  let status: StoreStatus = (existsSync(path.join(dir, ACTIVITY_PROTECTION_FILE)) || existsSync(path.join(userData, ACTIVITY_PROTECTION_REQUIRED))) && !codec ? "locked" : "ok";
+  const encode = (text: string, file: string) => codec ? codec.encode(text, file) : text;
+  const decode = (text: string, file: string) => codec ? codec.decode(text, file) : text;
   let state = defaultState();
 
   const ensureDirs = (): void => {
@@ -249,7 +255,7 @@ export function createActivityStore(userData: string, clock: () => number = Date
   // ── load state.json ────────────────────────────────────────────────
   let raw: string | null = null;
   try {
-    raw = readFileSync(statePath, "utf8");
+    raw = status === "locked" ? null : decode(readFileSync(statePath, "utf8"), STATE_FILE);
   } catch {
     raw = null;
   }
@@ -290,10 +296,24 @@ export function createActivityStore(userData: string, clock: () => number = Date
 
   const locked = (): boolean => status !== "ok";
 
+  const discardMigrationBackup = (): void => {
+    if (!codec) return;
+    rmSync(path.join(dir, "migration-backup.bin"), { force: true });
+    // Recovery copies must not retain excluded apps or stripped titles after
+    // a later privacy change. They are temporary crash recovery, not backups.
+    if (existsSync(segmentsDir)) for (const file of readdirSync(segmentsDir)) {
+      if (file.includes(".torn.")) rmSync(path.join(segmentsDir, file), { force: true });
+    }
+    if (existsSync(dir)) for (const file of readdirSync(dir)) {
+      if (/^(state|open)\.json\.corrupt\./.test(file)) rmSync(path.join(dir, file), { force: true });
+    }
+  };
+
   const saveStateFile = (): void => {
     if (locked()) return;
     ensureDirs();
-    writeAtomic(statePath, `${JSON.stringify(state)}\n`);
+    discardMigrationBackup();
+    writeAtomic(statePath, `${encode(JSON.stringify(state), STATE_FILE)}\n`);
   };
 
   // ── segments ───────────────────────────────────────────────────────
@@ -312,7 +332,7 @@ export function createActivityStore(userData: string, clock: () => number = Date
   const readDayFile = (file: string): StoredSegment[] => {
     let text: string;
     try {
-      text = readFileSync(path.join(segmentsDir, file), "utf8");
+      text = locked() ? "" : readFileSync(path.join(segmentsDir, file), "utf8");
     } catch {
       return [];
     }
@@ -320,7 +340,7 @@ export function createActivityStore(userData: string, clock: () => number = Date
     for (const line of text.split("\n")) {
       if (line === "" || line.length > MAX_LINE_LENGTH) continue;
       try {
-        const segment = parseStoredSegment(JSON.parse(line) as unknown);
+        const segment = parseStoredSegment(JSON.parse(decode(line, `${SEGMENTS_DIR}/${file}`)) as unknown);
         if (segment !== null) out.push(segment);
       } catch {
         // A torn last line from a crash mid-append: skipped, never fatal.
@@ -330,17 +350,19 @@ export function createActivityStore(userData: string, clock: () => number = Date
   };
 
   const loadAll = (): StoredSegment[] => {
+    if (locked()) return [];
     cache ??= dayFiles().flatMap(readDayFile);
     return cache;
   };
 
   const writeDayFile = (file: string, segments: StoredSegment[]): void => {
     const target = path.join(segmentsDir, file);
+    discardMigrationBackup();
     if (segments.length === 0) {
       rmSync(target, { force: true });
       return;
     }
-    writeAtomic(target, segments.map((segment) => `${JSON.stringify(segment)}\n`).join(""));
+    writeAtomic(target, segments.map((segment) => `${encode(JSON.stringify(segment), `${SEGMENTS_DIR}/${file}`)}\n`).join(""));
   };
 
   const rewriteFiles = (files: readonly string[], map: (segment: StoredSegment) => StoredSegment | null): number => {
@@ -416,25 +438,27 @@ export function createActivityStore(userData: string, clock: () => number = Date
     readOpen: () => {
       if (locked()) return null;
       try {
-        return parseOpenSegment(JSON.parse(readFileSync(openPath, "utf8")) as unknown);
+        return parseOpenSegment(JSON.parse(decode(readFileSync(openPath, "utf8"), OPEN_FILE)) as unknown);
       } catch {
         return null;
       }
     },
     writeOpen: (open) => {
       if (locked()) return;
+      discardMigrationBackup();
       if (open === null) {
         rmSync(openPath, { force: true });
         return;
       }
       ensureDirs();
-      writeAtomic(openPath, `${JSON.stringify(open)}\n`);
+      writeAtomic(openPath, `${encode(JSON.stringify(open), OPEN_FILE)}\n`);
     },
 
     append: (segment) => {
       if (locked()) return;
+      discardMigrationBackup();
       ensureDirs();
-      appendFileSync(path.join(segmentsDir, dayFileOf(segment.start)), `${JSON.stringify(segment)}\n`, {
+      appendFileSync(path.join(segmentsDir, dayFileOf(segment.start)), `${encode(JSON.stringify(segment), `${SEGMENTS_DIR}/${dayFileOf(segment.start)}`)}\n`, {
         mode: 0o600,
       });
       cache?.push(segment);
@@ -480,7 +504,7 @@ export function createActivityStore(userData: string, clock: () => number = Date
     files: () => {
       const readJson = (target: string): unknown => {
         try {
-          return JSON.parse(readFileSync(target, "utf8")) as unknown;
+          return locked() ? null : JSON.parse(decode(readFileSync(target, "utf8"), path.relative(dir, target))) as unknown;
         } catch {
           return null;
         }

@@ -77,6 +77,10 @@ const seed = (): NonNullable<Parameters<typeof memoryRowStore>[0]> => ({
     { id: "d1", userId: ALICE },
     { id: "d2", userId: BOB },
   ],
+  privateAccounts: [{ id: "vault-a", userId: ALICE }, { id: "vault-b", userId: BOB }],
+  privateRecords: [{ id: "cipher-solo", workspaceId: SOLO }, { id: "cipher-team", workspaceId: TEAM }, { id: "cipher-bob", workspaceId: BOBS }],
+  privateWorkspaces: [{ id: "private-solo", workspaceId: SOLO }, { id: "private-team", workspaceId: TEAM }, { id: "private-bob", workspaceId: BOBS }],
+  authPasskeys: [{ id: "pk-a", userId: ALICE }, { id: "pk-b", userId: BOB }],
   authTwoFactors: [
     { id: "tf1", userId: ALICE },
     { id: "tf2", userId: BOB },
@@ -310,6 +314,10 @@ describe("deleteAccountData", () => {
     assert.deepEqual(store.rows.avatars, [{ userId: BOB }]);
     assert.deepEqual(ids(store, "authDeviceCodes"), ["d2"]);
     assert.deepEqual(ids(store, "authTwoFactors"), ["tf2"]);
+    assert.deepEqual(ids(store, "authPasskeys"), ["pk-b"]);
+    assert.deepEqual(ids(store, "privateAccounts"), ["vault-b"]);
+    assert.deepEqual(ids(store, "privateRecords"), ["cipher-bob", "cipher-team"]);
+    assert.deepEqual(ids(store, "privateWorkspaces"), ["private-bob", "private-team"]);
   });
 
   it("does not touch Bob's own workspace at all", async () => {
