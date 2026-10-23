@@ -49,7 +49,7 @@ To see your account or sign out, open **Timer Details…** from the menu bar and
 
 ### Menu bar item
 
-Run **Timer Menu Bar** once to enable its background refresh. While tracking, the menu bar shows elapsed minutes.
+Run **Timer Menu Bar** once to enable its background refresh. While tracking, the menu bar shows the Track Your Time icon beside elapsed minutes.
 
 The item is hidden when no timer runs. **When Idle** is the single display preference: turn it on to keep the app logo for quick access. A timer started from Raycast requests an immediate menu bar refresh. A timer started elsewhere while the item is hidden appears on the next background refresh, scheduled about every 10 seconds.
 

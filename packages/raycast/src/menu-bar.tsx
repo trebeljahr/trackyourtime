@@ -205,7 +205,7 @@ export default function MenuBar(): React.JSX.Element | null {
 
   return (
     <MenuBarExtra
-      icon={running ? undefined : BRAND_MARK}
+      icon={BRAND_MARK}
       title={running ? clock : undefined}
       isLoading={isLoading || isActing}
       tooltip={

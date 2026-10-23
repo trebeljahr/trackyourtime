@@ -362,7 +362,7 @@ test("menu is hidden idle and releases the host after reading a running timer", 
   host.data.running = entry({ start: new Date(host.now - 60_000).toISOString() });
   const first = render(MenuBar);
   assert.equal(first.props.title, "1m");
-  assert.equal(first.props.icon, undefined);
+  assert.equal(first.props.icon, "menu-bar.png");
   assert.equal(first.props.isLoading, false);
   host.now += 60_000;
   assert.equal(render(MenuBar).props.title, "2m");
