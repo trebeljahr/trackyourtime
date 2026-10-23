@@ -456,11 +456,16 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
           className="hidden w-56 shrink-0 border-r border-border lg:flex lg:flex-col"
           data-testid="sidebar"
         >
+          <div
+            className="hidden h-14 shrink-0 border-b border-border"
+            data-sidebar-titlebar
+            data-window-drag
+            aria-hidden="true"
+          />
           <Link
             href="/app/track"
             className="flex h-14 items-center gap-2 px-4 font-semibold"
             data-testid="brand"
-            data-window-inset
           >
             <BrandMark />
             <span>Track Your Time</span>

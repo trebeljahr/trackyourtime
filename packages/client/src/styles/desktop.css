@@ -15,10 +15,10 @@
  *
  * 2. The traffic lights. They are drawn by macOS over the page at
  *    `trafficLightPosition` { x: 16, y: 20 } — three 12px buttons ending near
- *    x = 68. The sidebar's brand row sits exactly there, so on macOS it is
- *    pushed right. The window's minimum width (800px) is above Tailwind's `md`
- *    breakpoint, so the sidebar is always shown and the header's hamburger,
- *    which would otherwise sit under the lights, never is.
+ *    x = 68. A dedicated sidebar title bar reserves that space. The brand
+ *    sits below it at its normal size, aligned with the navigation. The
+ *    sidebar stays visible down to the full window's minimum width (800px),
+ *    so the header's hamburger never sits under the lights.
  *
  * Windows and Linux keep their native frame and title bar, so only the drag
  * rules for the header apply there (harmless: the frame already drags).
@@ -33,19 +33,19 @@ html.electron [data-window-drag] :is(a, button, input, select, textarea, label, 
   -webkit-app-region: no-drag;
 }
 
-html.electron[data-platform="darwin"] [data-window-inset] {
-  /*
-   * Clear the traffic lights (they end at x ≈ 68). The row is also a drag
-   * handle, so the brand link is not clickable here; Track in the nav is the
-   * same destination. 80px of inset leaves the 14rem sidebar too narrow for
-   * the wordmark at its web size (it wrapped onto two lines), so it steps
-   * down one size and never wraps.
-   */
-  padding-left: 5rem;
-  padding-right: 0.75rem;
-  white-space: nowrap;
-  font-size: 0.875rem;
-  -webkit-app-region: drag;
+@media (min-width: 800px) {
+  html.electron[data-platform="darwin"] [data-testid="sidebar"] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  html.electron[data-platform="darwin"] [data-testid="sidebar-toggle"] {
+    display: none;
+  }
+}
+
+html.electron[data-platform="darwin"] [data-sidebar-titlebar] {
+  display: block;
 }
 
 html.electron[data-platform="darwin"] [data-compact-header] {
@@ -80,7 +80,7 @@ html.electron[data-platform="darwin"] body:not(:has([data-window-drag])) :is(a, 
  * region, so its clicks would move the window instead (a tall dialog reaches
  * 1rem from the top, its close button inside the header's 3.5rem). So every
  * overlay opts out, and while a modal holds the page (Radix's scroll lock
- * marks <body> with `data-scroll-locked`) the header, the brand row and the
+ * marks <body> with `data-scroll-locked`) the header, the sidebar title bar and the
  * login strip stand down entirely, so a click on the backdrop closes the
  * dialog rather than dragging the window. Specificity matches or beats the
  * drag rules above; these come last.
@@ -89,7 +89,7 @@ html.electron :is([role="dialog"], [role="alertdialog"], [role="menu"], [role="l
   -webkit-app-region: no-drag;
 }
 
-html.electron[data-platform] body[data-scroll-locked] :is([data-window-drag], [data-window-inset]) {
+html.electron[data-platform] body[data-scroll-locked] [data-window-drag] {
   -webkit-app-region: no-drag;
 }
 
