@@ -367,52 +367,72 @@ test("menu is hidden idle and releases the host after reading a running timer", 
   host.now += 60_000;
   assert.equal(render(MenuBar).props.title, "2m");
 });
-test("menu recents show a task name while continuing the complete original entry", async () => {
-  host.showWhenIdle = true;
-  const past = entry({
-    id: "past-entry",
-    taskId: "task",
-    taskName: "Health checks",
-    projectId: "project",
+test("the running timer name and project open the same editor as Edit Timer", async () => {
+  host.data.running = entry({
+    description: "Design review",
     projectName: "Website",
+    projectColor: "#19a7ce",
     clientName: "Studio",
-    description:
-      "Investigate the restart loop; review logs and adjust the container health check frequency.\nMore notes.",
   });
-  host.data.recent = [past];
-  host.api.continue = async (id, input) => {
-    host.events.push(["continue", id, input]);
-    return entry();
-  };
-  const section = nodes(render(MenuBar), "MenuBarExtra.Section").find((n) => n.props.title === "Recent Work");
-  const row = nodes(section, "MenuBarExtra.Item")[0];
-  assert.equal(row.props.title, "Health checks");
-  assert.equal(row.props.subtitle, "Website · Studio");
-  row.props.onAction();
-  await new Promise(setImmediate);
-  const [, id, input] = host.events.find(([kind]) => kind === "continue");
-  assert.equal(id, past.id);
-  assert.equal(input.description, past.description);
-  assert.equal(input.taskId, past.taskId);
-  assert.equal(input.projectId, past.projectId);
+  const tree = render(MenuBar);
+  const rows = nodes(tree, "MenuBarExtra.Item");
+  const name = rows[0];
+  assert.equal(name.props.title, "Design review");
+  assert.equal(nodes(tree, "MenuBarExtra.Section")[0].props.title, undefined);
+  const project = rows.find((row) => row.props.title === "Studio · Website");
+  assert.deepEqual(project.props.icon, { source: "CircleFilled", tintColor: "#19a7ce" });
+  for (const row of [
+    name,
+    rows.find((row) => row.props.title.startsWith("Running for")),
+    project,
+    rows.find((row) => row.props.title === "Edit Timer…"),
+  ]) {
+    host.events = [];
+    await row.props.onAction();
+    assert.deepEqual(host.events, [
+      ["launch", { name: "entries", type: "user", context: { showTimer: true, editRunningId: "new-entry" } }],
+    ]);
+  }
 });
-test("menu recents bound free-text labels and retain useful empty-description fallbacks", () => {
+
+test("timer names stay on one line and retain empty-description fallbacks", () => {
+  for (const [description, projectName, expected] of [
+    ["  Review changes\nMore notes  ", null, "Review changes"],
+    [" ", "Website", "Website"],
+    ["", null, "No description"],
+  ]) {
+    host.data.running = entry({ description, projectName });
+    assert.equal(nodes(render(MenuBar), "MenuBarExtra.Item")[0].props.title, expected);
+  }
+  host.data.running = entry({ description: "A long work name ".repeat(20) });
+  const name = nodes(render(MenuBar), "MenuBarExtra.Item")[0].props.title;
+  assert.ok(name.length <= 48);
+  assert.ok(name.endsWith("…"));
+});
+
+test("starting other work is offered only while idle, and history stays outside the menu", () => {
   host.showWhenIdle = true;
-  host.data.recent = [
-    entry({ id: "long", description: "A long work name ".repeat(20), projectName: "P".repeat(100) }),
-    entry({ id: "notes", description: "  Review changes\nA full paragraph of notes  " }),
-    entry({ id: "project", description: " ", projectName: "Website" }),
-    entry({ id: "blank", description: "" }),
-  ];
-  const section = nodes(render(MenuBar), "MenuBarExtra.Section").find((n) => n.props.title === "Recent Work");
-  const rows = nodes(section, "MenuBarExtra.Item");
-  assert.ok(rows[0].props.title.length <= 48);
-  assert.ok(rows[0].props.title.endsWith("…"));
-  assert.ok(rows[0].props.subtitle.length <= 48);
-  assert.equal(rows[1].props.title, "Review changes");
-  assert.equal(rows[2].props.title, "Website");
-  assert.equal(rows[3].props.title, "No description");
+  host.data.recent = [entry({ id: "past" })];
+  host.data.favorites = [{ id: "pin", description: "Favorite" }];
+  host.data.projects = [{ id: "project", name: "Website", color: "#19a7ce" }];
+  host.data.running = entry();
+  const running = render(MenuBar);
+  const sectionTitles = nodes(running, "MenuBarExtra.Section").map((row) => row.props.title);
+  const actionTitles = nodes(running, "MenuBarExtra.Item").map((row) => row.props.title);
+  assert.ok(!sectionTitles.includes("Recent Work"));
+  assert.ok(!sectionTitles.includes("Quick Start"));
+  assert.ok(!sectionTitles.includes("Favorites"));
+  assert.ok(!actionTitles.includes("Start Timer"));
+  assert.ok(!actionTitles.includes("Timer Details…"));
+  assert.ok(!nodes(running, "MenuBarExtra.Submenu").some((row) => row.props.title === "Move to Project"));
+  host.data.running = null;
+  const idle = render(MenuBar);
+  assert.ok(!nodes(idle, "MenuBarExtra.Section").some((row) => row.props.title === "Recent Work"));
+  assert.ok(nodes(idle, "MenuBarExtra.Section").some((row) => row.props.title === "Quick Start"));
+  assert.ok(nodes(idle, "MenuBarExtra.Item").some((row) => row.props.title === "Favorite"));
+  assert.ok(nodes(idle, "MenuBarExtra.Item").some((row) => row.props.title === "Start Timer"));
 });
+
 test("menu editor launch never edits an entry from another workspace", () => {
   host.data.running = entry();
   render(Timer, { launchContext: { editRunningId: "new-entry" } });
@@ -619,9 +639,9 @@ test("every timer mutation from the menu refreshes its native item after settlin
     { id: "pin", description: "Favorite", projectId: null, taskId: null, clientId: null, billable: false },
   ];
   host.api.discard = async () => {};
-  host.api.update = async () => {};
+  host.api.addFavorite = async () => {};
   const tree = render(MenuBar);
-  for (const title of ["Stop Timer", "Discard Timer", "Favorite", "Design", "No Project"]) {
+  for (const title of ["Stop Timer", "Discard Timer", "Pin as Favorite"]) {
     host.events = [];
     const row = nodes(tree, "MenuBarExtra.Item").find((n) => n.props.title === title);
     const action = row.props.onAction();
@@ -636,6 +656,11 @@ test("every timer mutation from the menu refreshes its native item after settlin
       title,
     );
   }
+  host.data.running = null;
+  host.events = [];
+  const favorite = nodes(render(MenuBar), "MenuBarExtra.Item").find((row) => row.props.title === "Favorite");
+  await favorite.props.onAction();
+  assert.ok(host.events.some(([kind]) => kind === "menu-refresh"));
 });
 
 test("an offline menu start refreshes without opening an editor for a temporary id", async () => {

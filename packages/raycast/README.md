@@ -23,7 +23,7 @@ There is no separate Start / Stop Timer command.
 
 ### Details and recent work
 
-Choose **Timer Details…** in the menu bar, or open **Show All Time** and press **⌘T**. This opens the work list without toggling your timer. Edit the running entry, start a favorite, continue recent work, choose a project or switch workspace there.
+When idle, choose **Timer Details…** in the menu bar, or open **Show All Time** and press **⌘T**. This opens the work list without toggling your timer. Edit the running entry, start a favorite, continue recent work, choose a project or switch workspace there.
 
 In that list, **Start Timer** starts immediately and opens details while the clock runs. You can type a description in the list's search bar first. **Stop Timer** replaces the first row while tracking. Use **Start with Details…** to fill everything in before starting.
 
@@ -45,7 +45,7 @@ If you belong to more than one workspace, **⌘⇧W** in the details list picks 
 
 You do not create or paste an API key. The session appears as **Raycast** under Settings → Devices in the web app. Sign it out there to remove this Mac's access.
 
-To see your account or sign out, open **Timer Details…** from the menu bar and press **⌘⇧A**.
+To see your account or sign out, open **Show All Time**, press **⌘T**, then press **⌘⇧A**.
 
 ### Menu bar item
 
@@ -55,9 +55,9 @@ The item is hidden when no timer runs. **When Idle** is the single display prefe
 
 Raycast unloads menu bar commands between refreshes. macOS can delay scheduled refreshes, particularly on battery. Opening the menu reads the current timer.
 
-The menu offers **Start Timer**, favorites, recent work and a project shortcut. **Start Timer** starts first and then opens the running entry's details. Editing never pauses the clock.
+While tracking, the menu shows the timer name, elapsed time and project context with the project’s color. Click the name or project, or choose **Edit Timer…**, to open the entry editor. Editing never pauses the clock.
 
-Recent work shows each project's color, task name and project/client context. Without a task name, it shows a shortened description. Continuing an entry keeps its full description.
+When idle, the menu offers **Start Timer**, favorites and a project shortcut. **Start Timer** starts first and then opens the entry editor. Recent work stays in **Show All Time**.
 
 ### Alongside the desktop app
 

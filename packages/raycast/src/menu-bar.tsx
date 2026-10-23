@@ -16,7 +16,6 @@ import {
   quickStartLabel,
   repairQuickStart,
   toQuickStart,
-  type DetailedEntry,
 } from "./vendor/index.js";
 import { getTrackYourTime, type ProjectWithStats } from "./lib/api.js";
 import { CompatibilityMenuBarSection } from "./components/compatibility-banner.js";
@@ -41,7 +40,7 @@ import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
 import { describeFailure, isAlreadyStopped, refreshMenuBar, replacedNotice, showFailureToast } from "./lib/ui.js";
 
-/** A dropdown is a glance, not a browser — six rows is already a lot. */
+/** History contributes today’s total, but has no separate section in this menu. */
 const RECENT_LIMIT = 6;
 
 /** Native menus grow to fit their text, so keep each label to one short line. */
@@ -50,8 +49,6 @@ const menuText = (text: string): string => {
   const chars = Array.from(line);
   return chars.length > 48 ? `${chars.slice(0, 47).join("").trimEnd()}…` : line;
 };
-
-const recentWorkTitle = (entry: DetailedEntry): string => menuText(entry.taskName?.trim() || entryLabel(entry));
 
 /** Full snapshot fallback while the menu is open; the manifest refreshes unloaded commands. */
 const POLL_MS = 10_000;
@@ -189,20 +186,6 @@ export default function MenuBar(): React.JSX.Element | null {
     }
   };
 
-  /** Move the running entry without revising its task. */
-  const fileUnder = (entry: DetailedEntry, project: ProjectWithStats | null): Promise<void> => {
-    return act(async () => {
-      const api = await getTrackYourTime();
-      // The task is left alone: moving an entry to another project does not
-      // revise what the work was.
-      await api.update({ id: entry.id, projectId: project?.id ?? null });
-      await showToast({
-        style: Toast.Style.Success,
-        title: project ? `Moved to ${project.name}` : "Project cleared",
-      });
-    }, "Could not change the project");
-  };
-
   return (
     <MenuBarExtra
       icon={BRAND_MARK}
@@ -225,13 +208,15 @@ export default function MenuBar(): React.JSX.Element | null {
       <CompatibilityMenuBarSection banner={banner} />
 
       {running ? (
-        <MenuBarExtra.Section title={label}>
-          {/* Same clock as the title, spelled out rather than abbreviated. */}
+        <MenuBarExtra.Section>
+          {/* Section titles are dimmed by macOS. An actionable row keeps the
+              timer's name at full contrast and opens the same entry editor. */}
+          <MenuBarExtra.Item title={menuText(label)} icon={Icon.Stopwatch} onAction={() => openTimer(running.id)} />
           <MenuBarExtra.Item
             title={`Running for ${formatDurationShort(elapsed)}`}
             subtitle={`since ${formatClock(running.start)}`}
             icon={Icon.Dot}
-            onAction={() => openTimer()}
+            onAction={() => openTimer(running.id)}
           />
           {data?.runningWorkspaceName ? (
             <MenuBarExtra.Item
@@ -241,7 +226,11 @@ export default function MenuBar(): React.JSX.Element | null {
             />
           ) : null}
           {entryHint(running) ? (
-            <MenuBarExtra.Item title={entryHint(running) ?? ""} icon={Icon.Folder} onAction={() => openTimer()} />
+            <MenuBarExtra.Item
+              title={entryHint(running) ?? ""}
+              icon={projectIcon(running.projectColor)}
+              onAction={() => openTimer(running.id)}
+            />
           ) : null}
           <MenuBarExtra.Item
             title="Stop Timer"
@@ -279,18 +268,6 @@ export default function MenuBar(): React.JSX.Element | null {
             shortcut={Keyboard.Shortcut.Common.Edit}
             onAction={() => openTimer(running.id)}
           />
-          <MenuBarExtra.Submenu title="Move to Project" icon={Icon.Folder}>
-            {projects.map((project) => (
-              <MenuBarExtra.Item
-                key={project.id}
-                title={project.name}
-                subtitle={project.clientName ?? undefined}
-                icon={{ source: Icon.CircleFilled, tintColor: project.color }}
-                onAction={() => fileUnder(running, project)}
-              />
-            ))}
-            <MenuBarExtra.Item title="No Project" icon={Icon.Circle} onAction={() => fileUnder(running, null)} />
-          </MenuBarExtra.Submenu>
           <MenuBarExtra.Item
             title={pinned ? "Remove Favorite" : "Pin as Favorite"}
             icon={pinned ? Icon.StarDisabled : Icon.Star}
@@ -341,10 +318,8 @@ export default function MenuBar(): React.JSX.Element | null {
         </MenuBarExtra.Section>
       )}
 
-      {/* Pins first, and above Continue: they are the whole point of pinning.
-          Started through `startQuick`, which is `entries.start` with the
-          favorite's own fields — the same path every other client uses. */}
-      {favorites.length > 0 ? (
+      {/* Starting other work belongs to the idle menu. */}
+      {!running && favorites.length > 0 ? (
         <MenuBarExtra.Section title="Favorites">
           {favorites.map((favorite) => (
             <MenuBarExtra.Item
@@ -376,39 +351,7 @@ export default function MenuBar(): React.JSX.Element | null {
         </MenuBarExtra.Section>
       ) : null}
 
-      {data && data.recent.length > 0 ? (
-        <MenuBarExtra.Section title="Recent Work">
-          {data.recent.map((entry) => (
-            <MenuBarExtra.Item
-              key={entry.id}
-              title={recentWorkTitle(entry)}
-              subtitle={menuText([entry.projectName, entry.clientName].filter(Boolean).join(" · ")) || undefined}
-              icon={projectIcon(entry.projectColor)}
-              onAction={() => {
-                return act(
-                  async () => {
-                    const api = await getTrackYourTime();
-                    const started = await api.continue(entry.id, toQuickStart(entry));
-                    await showToast({
-                      style: Toast.Style.Success,
-                      title: "Timer started",
-                      message: [entryLabel(entry), replacedNotice(started)].filter(Boolean).join(" · "),
-                    });
-                  },
-                  "Could not start the timer",
-                  (snapshot) => ({
-                    ...snapshot,
-                    fetchedAt: Date.now(),
-                    running: previewStarted(toQuickStart(entry), entry, snapshot.activeWorkspaceId),
-                  }),
-                );
-              }}
-            />
-          ))}
-        </MenuBarExtra.Section>
-      ) : null}
-
-      {projects.length > 0 ? (
+      {!running && projects.length > 0 ? (
         <MenuBarExtra.Section title="Quick Start">
           <MenuBarExtra.Submenu title="Start in Project" icon={Icon.Folder}>
             {projects.slice(0, 8).map((project) => (
@@ -462,12 +405,14 @@ export default function MenuBar(): React.JSX.Element | null {
       ) : null}
 
       <MenuBarExtra.Section title={`Today · ${formatDurationShort(data?.todaySec ?? 0)}`}>
-        <MenuBarExtra.Item
-          title="Timer Details…"
-          icon={Icon.Stopwatch}
-          shortcut={{ modifiers: ["cmd"], key: "t" }}
-          onAction={() => openTimer()}
-        />
+        {!running ? (
+          <MenuBarExtra.Item
+            title="Timer Details…"
+            icon={Icon.Stopwatch}
+            shortcut={{ modifiers: ["cmd"], key: "t" }}
+            onAction={() => openTimer()}
+          />
+        ) : null}
         <MenuBarExtra.Item
           title="Show All Time…"
           icon={Icon.List}
