@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema, type Document } from "mongoose";
 import {
   SUPPORTED_LOCALES,
@@ -101,3 +102,5 @@ export function toClientClient(doc: ClientDocLike): ClientWire {
     updatedAt: doc.updatedAt.toISOString(),
   };
 }
+
+installStorageQuota(Client);

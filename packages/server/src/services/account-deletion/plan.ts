@@ -25,6 +25,9 @@ export {
 export type DeletionCollection =
   | "timeEntries"
   | "entryOperations"
+  | "storageUsage"
+  | "storageFences"
+  | "importLeases"
   | "timesheetApprovals"
   | "timesheetPolicies"
   | "workspaceWriteFences"
@@ -107,6 +110,9 @@ export function workspaceDeletionSteps(workspaceId: string): DeletionStep[] {
     // scoped like its settings: it goes with a solo workspace and stays with
     // a shared one, whose invoices keep their own frozen copy regardless.
     scoped("businessProfiles"),
+    { collection: "storageUsage", filter: { _id: workspaceId } },
+    { collection: "storageFences", filter: { _id: `workspace:${workspaceId}` } },
+    { collection: "importLeases", filter: { _id: JSON.stringify(["workspace", workspaceId]) } },
     { collection: "authInvitations", filter: { organizationId: workspaceId } },
     { collection: "authOrganizations", filter: { id: workspaceId } },
     { collection: "authMembers", filter: { organizationId: workspaceId } },
@@ -192,6 +198,8 @@ export function userScopedSteps(user: { id: string; email?: string | null }): De
     // only user, account and session rows, and Mongo has no foreign-key
     // cascade, so without this step the secret outlives the account.
     { collection: "authTwoFactors", filter: { userId: user.id } },
+    { collection: "storageFences", filter: { _id: `account:${user.id}` } },
+    { collection: "importLeases", filter: { _id: JSON.stringify(["user", user.id]) } },
     ...(email ? [{ collection: "authInvitations" as const, filter: { email } }] : []),
   ];
 }

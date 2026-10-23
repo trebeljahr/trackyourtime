@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 // App-owned membership: who is in a workspace, and what they may see.
 //
 // This is deliberately a SIBLING of better-auth's `member` collection, not a
@@ -116,3 +117,5 @@ export function authorScopeFilter(
 ): { authorId: string } | null {
   return visibility.canViewOthersTime ? null : { authorId: visibility.userId };
 }
+
+installStorageQuota(WorkspaceMember);

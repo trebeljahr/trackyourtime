@@ -74,6 +74,9 @@ test("refuses cells that are not dates", () => {
   assert.equal(parseCalendarDate("", "dmy"), null);
   assert.equal(parseCalendarDate("later", "dmy"), null);
   assert.equal(parseCalendarDate("31/31/2026", "dmy"), null);
+  assert.equal(parseCalendarDate("2026-02-29", "ymd"), null);
+  assert.equal(parseCalendarDate("2026-04-31", "ymd"), null);
+  assert.deepEqual(parseCalendarDate("2024-02-29", "ymd"), { year: 2024, month: 2, day: 29 });
 });
 
 test("reads 12- and 24-hour clock times", () => {
@@ -113,6 +116,12 @@ test("a cell without an offset is a wall clock in the import's zone", () => {
   assert.equal(new Date(ms ?? 0).toISOString(), "2026-08-21T07:15:00.000Z");
 });
 
+test("invalid wall clocks and zones return unreadable rather than throwing", () => {
+  assert.equal(parseInstant("2026-02-30T09:00:00Z", "ymd", "UTC"), null);
+  assert.equal(parseInstant("2026-10-23T25:00:00", "ymd", "UTC"), null);
+  assert.equal(parseInstant("2026-10-23T09:00:00", "ymd", "Not/AZone"), null);
+});
+
 test("reads a date and a time written in one cell, in either notation", () => {
   const slashed = parseInstant("21/08/2026 09:15", "dmy", "UTC");
   assert.equal(
@@ -128,6 +137,11 @@ test("durations: clock form, decimals and comma decimals", () => {
   assert.equal(parseDurationSec("1:30"), 5400);
   assert.equal(parseDurationSec("1.5"), 5400);
   assert.equal(parseDurationSec("1,5"), 5400);
+});
+
+test("duration multiplication cannot produce an infinite value", () => {
+  assert.equal(parseDurationSec("9".repeat(308) + ":00"), null);
+  assert.equal(parseDurationSec("9".repeat(308), "hours"), null);
 });
 
 test("a bare integer duration reads as hours up to a day, seconds beyond it", () => {

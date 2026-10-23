@@ -475,7 +475,8 @@ commented out:
 | `TRUST_STORE_APPS` | Only to refuse the phone apps and the store extension. It is `true` by default. See [The other clients](#the-other-clients). |
 | `TRUST_EXTENSION_ORIGINS` | Only to accept or refuse the Firefox extension on its own. Unset follows `TRUST_STORE_APPS`. See [The other clients](#the-other-clients). |
 | `TRUSTED_ORIGINS` | Only for an extension you built yourself, or a web app that copies data in directly. See [The other clients](#the-other-clients). |
-| `MONGODB_URI`, `REDIS_URL` | Only to use a managed database instead of the containers. A managed MongoDB must be a replica set or `mongos`: a standalone refuses time-entry writes with `DURABLE_REPLAY_REQUIRES_REPLICA_SET`. |
+| `MONGODB_URI`, `REDIS_URL` | Only to use a managed database instead of the containers. A managed MongoDB must be a replica set or `mongos`: storage quotas and durable replay require transactions for workspace writes. |
+| `STORAGE_QUOTA_BYTES` | Positive integer; defaults to 536,870,912 (512 MiB). Storage allowance shared across an account's owned workspaces. See [Storage and import limits](storage-limits.md). |
 
 The app must run at the **root** of the domain. Hosting it under
 `https://example.com/trackyourtime/` breaks live sync: the browser derives the

@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema, type Document } from "mongoose";
 import {
   IDLE_BEHAVIORS,
@@ -105,3 +106,5 @@ export function toClientProject(doc: ProjectDocLike): ProjectWire {
     updatedAt: doc.updatedAt.toISOString(),
   };
 }
+
+installStorageQuota(Project);

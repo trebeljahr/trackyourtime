@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema, type Document } from "mongoose";
 import { pickCatalogColor, TASK_COLOR_OFFSET, type Task as TaskWire } from "@starter/shared";
 
@@ -70,3 +71,5 @@ export function toClientTask(doc: TaskDocLike): TaskWire {
     updatedAt: doc.updatedAt.toISOString(),
   };
 }
+
+installStorageQuota(Task);

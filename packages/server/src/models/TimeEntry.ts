@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import { entryApprovalGuards, installEntryTransactionBoundary } from "../services/approvals/entry-guard.js";
 import mongoose, { Schema, type Document } from "mongoose";
 import type {
@@ -278,3 +279,5 @@ export function toClientTimeEntry(doc: TimeEntryDocLike): TimeEntryWire {
     updatedAt: doc.updatedAt.toISOString(),
   };
 }
+
+installStorageQuota(TimeEntry);

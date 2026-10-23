@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema, type Document } from "mongoose";
 import type { Tag as TagWire } from "@starter/shared";
 
@@ -75,3 +76,5 @@ export function toClientTag(doc: TagDocLike): TagWire {
     updatedAt: doc.updatedAt.toISOString(),
   };
 }
+
+installStorageQuota(Tag);

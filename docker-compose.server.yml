@@ -47,6 +47,7 @@ services:
       # Supplied by Coolify from the managed database resources.
       MONGODB_URI: ${MONGODB_URI}
       REDIS_URL: ${REDIS_URL:-}
+      STORAGE_QUOTA_BYTES: ${STORAGE_QUOTA_BYTES:-536870912}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       AUTH_LOG_LINKS: ${AUTH_LOG_LINKS:-false}
       # The API's OWN origin — https://api.trackyourtime.dev, not the web

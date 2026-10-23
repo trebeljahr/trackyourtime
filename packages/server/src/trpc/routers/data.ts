@@ -1,5 +1,11 @@
 import { toClientInvoice } from "../../models/Invoice.js";
-import { businessReads } from "../../services/business-transaction.js";
+import {
+  beforeBusinessCommit,
+  businessReads,
+  transactionSession,
+  withBusinessTransaction,
+} from "../../services/business-transaction.js";
+import { importBudget } from "../../services/import/budget.js";
 // Getting a whole history in, and getting a whole workspace out.
 //
 // Import is an onboarding feature first: somebody arriving with years of
@@ -22,6 +28,7 @@ import { TRPCError } from "@trpc/server";
 import {
   IMPORT_PREVIEW_ISSUES,
   IMPORT_PREVIEW_ROWS,
+  ImportFileError,
   MAX_IMPORT_ROWS,
   WORKSPACE_EXPORT_VERSION,
   canUseInvoices,
@@ -131,6 +138,29 @@ export const MAX_EXPORT_INVOICES = 10_000;
 
 const badRequest = (message: string): TRPCError =>
   new TRPCError({ code: "BAD_REQUEST", message });
+
+// Before schema parsing and outside the business transaction: malformed files
+// count too, and a transaction retry/rollback cannot reset or repeat a charge.
+const importProcedure = workspaceProcedure.use(async ({ ctx, getRawInput, next }) =>
+  importBudget.run({
+    userId: ctx.user.id,
+    workspaceId: ctx.workspaceId,
+    input: await getRawInput(),
+  }, (assertImportLease) => next({ ctx: { ...ctx, assertImportLease } })),
+);
+
+const importCommitProcedure = importProcedure.use(async ({ ctx, next }) =>
+  withBusinessTransaction(async () => {
+    if (transactionSession()) {
+      beforeBusinessCommit(() => ctx.assertImportLease(transactionSession()));
+    } else {
+      await ctx.assertImportLease();
+    }
+    const result = await next();
+    if (!result.ok) throw result.error;
+    return result;
+  }),
+);
 
 /**
  * Refuse an export that would not be whole.
@@ -307,11 +337,17 @@ function readFile(input: ImportInput): {
   const overrides = new Map<number, ImportColumnRole>(
     (input.columns ?? []).map((column) => [column.index, column.role]),
   );
-  const parsed = parseImportFile(input.text, {
-    timeZone,
-    dateOrder: input.dateOrder,
-    overrides,
-  });
+  let parsed: ParsedFile;
+  try {
+    parsed = parseImportFile(input.text, {
+      timeZone,
+      dateOrder: input.dateOrder,
+      overrides,
+    });
+  } catch (error) {
+    if (error instanceof ImportFileError) throw badRequest(error.message);
+    throw error;
+  }
 
   if (parsed.totalRows > MAX_IMPORT_ROWS) {
     throw badRequest(
@@ -1247,7 +1283,7 @@ export const dataRouter = router({
    * whole file, and a query would put it in a URL and in every cache between
    * here and the browser.
    */
-  analyze: workspaceProcedure
+  analyze: importProcedure
     .input(importInputSchema)
     .mutation(async ({ ctx, input }): Promise<ImportPreview> => {
       const { parsed, timeZone } = readFile(input);
@@ -1295,7 +1331,7 @@ export const dataRouter = router({
     }),
 
   /** Write the file. Same input, same parser, same rows as the preview. */
-  commit: businessProcedure
+  commit: importCommitProcedure
     .input(importInputSchema)
     .mutation(async ({ ctx, input }): Promise<ImportResult> => {
       const { parsed, timeZone } = readFile(input);

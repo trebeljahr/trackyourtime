@@ -8,13 +8,19 @@
 import {
   IDLE_BEHAVIORS,
   IMPORT_DAY_START_HOUR,
+  ImportFileError,
+  MAX_IMPORT_CELL_CHARS,
   MAX_IMPORT_ENTRY_SEC,
+  MAX_IMPORT_METADATA_ROWS,
+  MAX_IMPORT_ROWS,
+  MAX_IMPORT_TAGS,
   ELECTRONIC_ADDRESS_SCHEMES,
   IDENTITY_LIMITS,
   INVOICE_FORMATS,
   TAX_CATEGORIES,
   WORKSPACE_EXPORT_VERSION,
   businessProfileProblems,
+  assertImportTextWithinLimit,
   dayKeyInZone,
   imageDataUrl,
   isIdentityEmpty,
@@ -26,7 +32,6 @@ import {
   normalizeClientBilling,
   parseImageDataUrl,
   stripSpacesUpper,
-  zonedWallClockToMs,
   type BusinessProfileFields,
   type BusinessProfileValues,
   type ClientBilling,
@@ -49,7 +54,7 @@ import {
   type WorkspaceExportTask,
 } from "@starter/shared";
 import { inspectLogoUpload } from "../invoice-logo.js";
-import { cell, readDelimitedFile } from "./delimited.js";
+import { cell, readDelimitedFile, stripBom } from "./delimited.js";
 import { dateCandidateValues, detectColumns } from "./columns.js";
 import {
   combine,
@@ -123,10 +128,16 @@ export function parseImportFile(
   text: string,
   options: ParseOptions,
 ): ParsedFile {
-  const head = text.trimStart().slice(0, 1);
+  assertImportTextWithinLimit(text);
+  const clean = stripBom(text).trimStart();
+  if (clean.includes("\0")) {
+    throw new ImportFileError("Import a plaintext CSV or workspace JSON export. Binary and encrypted files are not supported.");
+  }
+  const head = clean.slice(0, 1);
   if (head === "{" || head === "[") {
-    const parsed = parseWorkspaceJson(text);
+    const parsed = parseWorkspaceJson(clean);
     if (parsed) return parsed;
+    throw new ImportFileError("Import a plaintext workspace JSON export containing time entries. Arbitrary JSON and encrypted backups are not supported.");
   }
   return parseDelimitedImport(text, options);
 }
@@ -193,6 +204,13 @@ function parseDelimitedImport(
 
     if ("code" in placed) {
       issues.push(issue(rowNumber, placed.code, placed.message));
+      return;
+    }
+
+    if (!Number.isFinite(placed.startMs) || !Number.isFinite(placed.endMs) ||
+      !Number.isFinite(new Date(placed.startMs).getTime()) ||
+      !Number.isFinite(new Date(placed.endMs).getTime())) {
+      issues.push(issue(rowNumber, "unparsable-end", "The entry's dates are outside the supported range."));
       return;
     }
 
@@ -305,18 +323,21 @@ function placeRow(args: {
     // Stack the day's rows back-to-back from the working-day start, in file
     // order, so a date-only file produces a plausible day instead of a stack
     // of entries all beginning at midnight.
-    const dayStart = zonedWallClockToMs(
-      {
-        year: startDate.year,
-        month: startDate.month,
-        day: startDate.day,
-        hour: IMPORT_DAY_START_HOUR,
-      },
+    const dayStart = combine(
+      startDate,
+      { hour: IMPORT_DAY_START_HOUR, minute: 0, second: 0 },
       timeZone,
     );
+    if (dayStart === null) return { code: "unparsable-start", message: "No readable start time." };
     const key = dayKeyInZone(dayStart, timeZone);
     const cursor = dayCursor.get(key) ?? dayStart;
     const endMs = cursor + declaredSec * MS;
+    if (declaredSec <= 0) {
+      return { code: "nonpositive-duration", message: "Zero-length, or it ends before it starts." };
+    }
+    if (!Number.isFinite(endMs) || declaredSec > MAX_IMPORT_ENTRY_SEC) {
+      return { code: "implausible-duration", message: "The duration must be positive and no longer than a day." };
+    }
     dayCursor.set(key, endMs);
     return { startMs: cursor, endMs };
   }
@@ -411,7 +432,7 @@ export function parseWorkspaceJson(text: string): ParsedFile | null {
 
   doc.entries.forEach((entry, index) => {
     const rowNumber = index + 1;
-    const startMs = Date.parse(String(entry?.start ?? ""));
+    const startMs = Date.parse(entry.start ?? "");
     if (Number.isNaN(startMs)) {
       issues.push(issue(rowNumber, "unparsable-start", "No readable start."));
       return;
@@ -432,19 +453,24 @@ export function parseWorkspaceJson(text: string): ParsedFile | null {
       );
       return;
     }
+    const endMs = startMs + durationSec * MS;
+    if (!Number.isFinite(new Date(endMs).getTime())) {
+      issues.push(issue(rowNumber, "unparsable-end", "The entry's end is outside the supported date range."));
+      return;
+    }
 
     const row: ImportRow = {
       row: rowNumber,
-      description: String(entry?.description ?? "").slice(0, 500),
-      clientName: nameOrNull(String(entry?.clientName ?? "")),
-      projectName: nameOrNull(String(entry?.projectName ?? "")),
-      taskName: nameOrNull(String(entry?.taskName ?? "")),
+      description: (entry.description ?? "").slice(0, 500),
+      clientName: nameOrNull(entry.clientName ?? ""),
+      projectName: nameOrNull(entry.projectName ?? ""),
+      taskName: nameOrNull(entry.taskName ?? ""),
       tagNames: Array.isArray(entry?.tagNames)
-        ? entry.tagNames.map((name) => String(name).trim()).filter(Boolean)
+        ? [...new Set(entry.tagNames.map((name) => name.trim()).filter(Boolean))]
         : [],
       billable: typeof entry?.billable === "boolean" ? entry.billable : null,
       start: new Date(startMs).toISOString(),
-      end: new Date(startMs + durationSec * MS).toISOString(),
+      end: new Date(endMs).toISOString(),
       durationSec,
       hourlyRate:
         typeof entry?.hourlyRate === "number" ? entry.hourlyRate : null,
@@ -484,19 +510,47 @@ export function parseWorkspaceJson(text: string): ParsedFile | null {
  * The catalog half of a JSON export — the colors, archived flags and project
  * settings that the entries alone cannot carry.
  *
- * Returns null for anything that is not one of our exports, which is also how
- * {@link parseImportFile} decides a `{`-leading file is really JSON.
+ * Returns null for unsupported JSON. The import entry point refuses that
+ * result instead of reinterpreting arbitrary JSON as a delimited document.
  */
 export function workspaceJsonCatalog(text: string): WorkspaceExport | null {
+  assertImportTextWithinLimit(text);
+  assertJsonDepthWithinLimit(text);
   let data: unknown;
   try {
-    data = JSON.parse(text);
+    data = JSON.parse(stripBom(text));
   } catch {
     return null;
   }
-  if (typeof data !== "object" || data === null) return null;
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
+  const envelope = data as Record<string, unknown>;
+  if (envelope.encrypted === true || ["ciphertext", "cyphertext", "encryptedPayload"].some((key) => key in envelope)) {
+    throw new ImportFileError("Encrypted backups are not supported. Import a plaintext CSV or workspace JSON export.");
+  }
   const doc = data as Partial<WorkspaceExport>;
   if (!Array.isArray(doc.entries)) return null;
+  if (doc.entries.length > MAX_IMPORT_ROWS) {
+    throw new ImportFileError(`An import can have at most ${MAX_IMPORT_ROWS.toLocaleString("en-US")} rows. Split the file by date range.`);
+  }
+  let metadataRows = 0;
+  for (const key of ["clients", "projects", "tasks", "tags", "favorites", "invoices"] as const) {
+    const section = doc[key];
+    if (section == null) continue;
+    if (!Array.isArray(section)) {
+      throw new ImportFileError(`The ${key} section must be an array.`);
+    }
+    metadataRows += section.length;
+    if (metadataRows > MAX_IMPORT_METADATA_ROWS) {
+      throw new ImportFileError(`An import can contain at most ${MAX_IMPORT_METADATA_ROWS.toLocaleString("en-US")} catalog, favorite and invoice records.`);
+    }
+  }
+  for (const [index, entry] of doc.entries.entries()) validateEntryShape(entry, index + 1);
+  for (const key of ["exportedAt", "workspaceId", "currency"] as const) {
+    const value = doc[key];
+    if (value != null && (typeof value !== "string" || value.length > 200)) {
+      throw new ImportFileError(`The ${key} field must be plain text of at most 200 characters.`);
+    }
+  }
 
   const settings = readExportSettings(doc.settings);
   const businessProfile = readExportBusinessProfile(doc.businessProfile);
@@ -509,9 +563,9 @@ export function workspaceJsonCatalog(text: string): WorkspaceExport | null {
     // unredacted export looks like.
     ...(doc.moneyRedacted === true ? { moneyRedacted: true } : {}),
     ...readExportVersion(doc.version),
-    exportedAt: String(doc.exportedAt ?? new Date().toISOString()),
-    workspaceId: String(doc.workspaceId ?? ""),
-    currency: String(doc.currency ?? "EUR"),
+    exportedAt: doc.exportedAt ?? new Date().toISOString(),
+    workspaceId: doc.workspaceId ?? "",
+    currency: doc.currency ?? "EUR",
     ...(settings ? { settings } : {}),
     ...(businessProfile ? { businessProfile } : {}),
     clients: readExportClients(doc.clients),
@@ -526,6 +580,58 @@ export function workspaceJsonCatalog(text: string): WorkspaceExport | null {
       : {}),
     ...(Array.isArray(doc.invoices) ? { invoices: doc.invoices } : {}),
   };
+}
+
+/** Avoid building an arbitrarily deep JSON tree, including ignored future sections. */
+function assertJsonDepthWithinLimit(value: string): void {
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (const char of value) {
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+    } else if (char === '"') quoted = true;
+    else if (char === "{" || char === "[") {
+      depth += 1;
+      if (depth > 32) throw new ImportFileError("The JSON document is nested too deeply for a workspace export.");
+    } else if (char === "}" || char === "]") depth -= 1;
+  }
+}
+
+/** Entry scalar fields must never stringify an object or an encrypted envelope. */
+function validateEntryShape(value: unknown, rowNumber: number): void {
+  const fail = (field: string): never => {
+    throw new ImportFileError(`Entry ${rowNumber} has an invalid ${field} field. Import plaintext time records.`);
+  };
+  if (typeof value !== "object" || value === null || Array.isArray(value)) fail("record");
+  const entry = value as Record<string, unknown>;
+  if (entry.encrypted === true || ["ciphertext", "cyphertext", "encryptedPayload"].some((key) => key in entry)) {
+    fail("encrypted record");
+  }
+  const textLimits = {
+    description: MAX_IMPORT_CELL_CHARS,
+    clientName: 200,
+    projectName: 200,
+    taskName: 200,
+    start: 100,
+    end: 100,
+    currency: 8,
+    timeZone: 64,
+  } as const;
+  for (const [key, max] of Object.entries(textLimits)) {
+    const field = entry[key];
+    if (field != null && (typeof field !== "string" || field.length > max)) fail(key);
+  }
+  for (const key of ["durationSec", "hourlyRate"] as const) {
+    if (entry[key] != null && (typeof entry[key] !== "number" || !Number.isFinite(entry[key]))) fail(key);
+  }
+  if (entry.billable != null && typeof entry.billable !== "boolean") fail("billable");
+  if (entry.tagNames != null) {
+    if (!Array.isArray(entry.tagNames) || entry.tagNames.length > MAX_IMPORT_TAGS) fail("tagNames");
+    if ((entry.tagNames as unknown[]).some((tag) => typeof tag !== "string" || tag.trim().length > 60)) fail("tagNames");
+  }
 }
 
 /**

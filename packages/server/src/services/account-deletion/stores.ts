@@ -1,5 +1,9 @@
 // The two real row stores behind `deleteAccountData`.
 import type { Model } from "mongoose";
+import { withStorageOwnershipAdoption } from "../storage-quota.js";
+import { withBusinessTransaction } from "../business-transaction.js";
+import { StorageUsage, StorageFence } from "../../models/StorageUsage.js";
+import { ImportLease } from "../../models/ImportBudget.js";
 import { ApiToken } from "../../models/ApiToken.js";
 import { Avatar } from "../../models/Avatar.js";
 import { BusinessProfileModel } from "../../models/BusinessProfile.js";
@@ -41,6 +45,9 @@ type AppCollection = Exclude<
 const APP_MODELS: Record<AppCollection, Model<any>> = {
   timeEntries: TimeEntry,
   entryOperations: EntryOperation,
+  storageUsage: StorageUsage,
+  storageFences: StorageFence,
+  importLeases: ImportLease,
   timesheetApprovals: TimesheetApproval,
   timesheetPolicies: TimesheetPolicy,
   workspaceWriteFences: WorkspaceWriteFence,
@@ -98,13 +105,25 @@ export const mongooseRowStore: DeletionRowStore = {
   },
   async updateMany(collection, filter, set) {
     const model = appModel(collection, filter);
-    const result = await model.updateMany(filter, { $set: set });
+    const write = async () => await model.updateMany(filter, { $set: set });
+    const result = collection === "workspaceMembers" && set.role === "owner"
+      ? await withStorageOwnershipAdoption(write) : await write();
     return result.modifiedCount;
   },
   async deleteMany(collection, filter) {
     const model = appModel(collection, filter);
-    const result = await model.deleteMany(filter);
-    return result.deletedCount;
+    return withBusinessTransaction(async () => {
+      const result = await model.deleteMany(filter);
+      // Removing the final mirror row also removes the locator needed to
+      // retry account erasure. Clean any ledger re-seeded by that last guarded
+      // write in the same transaction, before that locator can disappear.
+      if (collection === "workspaceMembers" && typeof filter.workspaceId === "string" && !await WorkspaceMember.exists({ workspaceId: filter.workspaceId })) {
+        await StorageUsage.deleteOne({ _id: filter.workspaceId });
+        await StorageFence.deleteOne({ _id: `workspace:${filter.workspaceId}` });
+        await ImportLease.deleteOne({ _id: JSON.stringify(["workspace", filter.workspaceId]) });
+      }
+      return result.deletedCount;
+    });
   },
 };
 

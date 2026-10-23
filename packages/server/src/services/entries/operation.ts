@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { EntryOperation } from "../../models/EntryOperation.js";
+import { TimeEntry } from "../../models/TimeEntry.js";
+import { isValidObjectId } from "mongoose";
 import { supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
 import type { WorkspaceScope } from "../scope.js";
 
@@ -40,9 +42,21 @@ export async function withEntryOperation<T>(
     return await withBusinessTransaction(async () => {
       const prior = await read();
       if (prior) return prior.result;
+      // Session clients may stop their timer while viewing another workspace.
+      // Charge completion to the timer's reserved space, while keeping the
+      // replay key bound to the original request scope.
+      let receiptWorkspaceId = scope.workspaceId;
+      const entryId = (input as { id?: unknown }).id;
+      if ((operation === "entries.stop" || operation === "entries.discard") && typeof entryId === "string" && isValidObjectId(entryId)) {
+        const timer = await TimeEntry.findOne({ _id: entryId, authorId: scope.userId }).select({ workspaceId: 1 }).lean();
+        if (timer) receiptWorkspaceId = timer.workspaceId;
+      } else if (operation === "entries.stop" && entryId === undefined) {
+        const timer = await TimeEntry.findOne({ authorId: scope.userId, end: null }).select({ workspaceId: 1 }).lean();
+        if (timer) receiptWorkspaceId = timer.workspaceId;
+      }
       // Claim the key before any business writes. The placeholder never commits:
       // a crash or thrown error rolls back both the claim and all entry changes.
-      await EntryOperation.create({ _id: id, userId: scope.userId, workspaceId: scope.workspaceId, requestHash, operation, result: {} });
+      await EntryOperation.create({ _id: id, userId: scope.userId, workspaceId: receiptWorkspaceId, requestHash, operation, result: {} });
       const result = await work();
       await EntryOperation.updateOne({ _id: id }, { $set: { result } });
       return result;

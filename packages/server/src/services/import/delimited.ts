@@ -8,6 +8,13 @@
  * fields containing the delimiter, doubled quotes inside them, and a BOM the
  * first header would otherwise carry into its own name.
  */
+import {
+  ImportFileError,
+  MAX_IMPORT_CELL_CHARS,
+  MAX_IMPORT_COLUMNS,
+  MAX_IMPORT_ROWS,
+  assertImportTextWithinLimit,
+} from "@starter/shared";
 
 /** Delimiters worth guessing between, in the order ties are broken. */
 const CANDIDATES = [",", ";", "\t", "|"] as const;
@@ -28,6 +35,11 @@ export type DelimitedFile = {
  * turns a split-based parser into silent data corruption rather than an error.
  */
 export function parseDelimited(text: string, delimiter: string): string[][] {
+  assertImportTextWithinLimit(text);
+  return scanDelimited(text, delimiter);
+}
+
+function scanDelimited(text: string, delimiter: string, sampleRows?: number): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -36,16 +48,33 @@ export function parseDelimited(text: string, delimiter: string): string[][] {
   // A trailing newline must not produce a final empty row, so rows are only
   // pushed when they hold something.
   const endField = (): void => {
+    if (field.length > MAX_IMPORT_CELL_CHARS) {
+      throw new ImportFileError(`An import cell can have at most ${MAX_IMPORT_CELL_CHARS.toLocaleString("en-US")} characters.`);
+    }
+    if (row.length >= MAX_IMPORT_COLUMNS) {
+      throw new ImportFileError(`An import row can have at most ${MAX_IMPORT_COLUMNS} columns.`);
+    }
     row.push(field);
     field = "";
   };
   const endRow = (): void => {
     endField();
-    if (row.length > 1 || (row[0] ?? "").length > 0) rows.push(row);
+    if (row.length > 1 || (row[0] ?? "").length > 0) {
+      // One header plus the bounded number of data rows. Refuse while scanning,
+      // before building or detecting the columns of an oversized document.
+      if (rows.length >= MAX_IMPORT_ROWS + 1) {
+        throw new ImportFileError(`An import can have at most ${MAX_IMPORT_ROWS.toLocaleString("en-US")} rows. Split the file by date range.`);
+      }
+      rows.push(row);
+    }
     row = [];
   };
 
   while (index < text.length) {
+    if (sampleRows !== undefined && rows.length >= sampleRows) break;
+    if (field.length > MAX_IMPORT_CELL_CHARS) {
+      throw new ImportFileError(`An import cell can have at most ${MAX_IMPORT_CELL_CHARS.toLocaleString("en-US")} characters.`);
+    }
     const char = text[index] as string;
 
     if (quoted) {
@@ -90,6 +119,12 @@ export function parseDelimited(text: string, delimiter: string): string[][] {
     index += 1;
   }
 
+  if (quoted) {
+    // Delimiter detection deliberately sees only a prefix, which can end
+    // inside a quoted cell. The full read must not silently accept that.
+    if (sampleRows !== undefined) return rows;
+    throw new ImportFileError("The file ends inside a quoted cell. Close the quote and try again.");
+  }
   if (field.length > 0 || row.length > 0) endRow();
   return rows;
 }
@@ -108,7 +143,15 @@ export function sniffDelimiter(text: string): string {
   let bestScore = -1;
 
   for (const candidate of CANDIDATES) {
-    const rows = parseDelimited(head, candidate).slice(0, 20);
+    let rows: string[][];
+    try {
+      rows = scanDelimited(head, candidate, 20);
+    } catch (error) {
+      // A wrong delimiter can turn a whole row into one overlong cell. Only
+      // the selected delimiter's limits decide whether the file is accepted.
+      if (error instanceof ImportFileError) continue;
+      throw error;
+    }
     if (rows.length === 0) continue;
     const width = rows[0]?.length ?? 0;
     if (width < 2) continue;
@@ -137,6 +180,7 @@ export const stripBom = (text: string): string =>
  * answer and both are handled by {@link cell}.
  */
 export function readDelimitedFile(text: string): DelimitedFile {
+  assertImportTextWithinLimit(text);
   const clean = stripBom(text);
   const delimiter = sniffDelimiter(clean);
   const all = parseDelimited(clean, delimiter);

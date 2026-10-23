@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import { businessReads } from "../services/business-transaction.js";
 // Settings live in two collections, because they answer to two different
 // owners.
@@ -360,3 +361,5 @@ export async function getResolvedSettings(
     maxDuration: user.maxDuration,
   };
 }
+
+installStorageQuota(WorkspaceSettingsModel);

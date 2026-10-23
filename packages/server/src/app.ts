@@ -43,6 +43,19 @@ const IMPORT_BODY_LIMIT = `${Math.ceil((MAX_IMPORT_BYTES * 2) / 1_000_000)}mb`;
  */
 const AVATAR_BODY_LIMIT = `${Math.ceil((MAX_AVATAR_BYTES * 1.5) / 1000)}kb`;
 
+/** Exact procedure paths only; a mixed batch cannot borrow an upload's limit. */
+export function trpcUploadJsonParser(): RequestHandler {
+  const importJson = express.json({ limit: IMPORT_BODY_LIMIT });
+  const avatarJson = express.json({ limit: AVATAR_BODY_LIMIT });
+  return (req, res, next) => {
+    if (req.path === "/data.analyze" || req.path === "/data.commit") {
+      return importJson(req, res, next);
+    }
+    if (req.path === "/profile.setAvatar") return avatarJson(req, res, next);
+    return next();
+  };
+}
+
 // Cache successful preflights for ten minutes, bounding stale permissions after
 // an origin-policy change. Browsers may evict sooner; different URLs (including
 // tRPC batch paths/query strings), methods or headers can need new preflights.
@@ -180,19 +193,10 @@ export function createApp() {
   // Scoped to those procedure names rather than raised globally: 100kb is the
   // right ceiling for every other endpoint, and a limit that only the import
   // path relaxes is a limit an unauthenticated caller cannot reach through any
-  // other route. tRPC's batch link puts the procedure names in the path, so a
-  // batched call carrying the import still matches.
-  const importJson = express.json({ limit: IMPORT_BODY_LIMIT });
-  const avatarJson = express.json({ limit: AVATAR_BODY_LIMIT });
-  app.use("/api/trpc", (req, res, next) => {
-    if (req.path.includes("data.analyze") || req.path.includes("data.commit")) {
-      return importJson(req, res, next);
-    }
-    if (req.path.includes("profile.setAvatar")) {
-      return avatarJson(req, res, next);
-    }
-    return next();
-  });
+  // other route. A single-item tRPC batch has the same path and remains
+  // supported. Multiple procedures retain the normal limit: an import may
+  // not enlarge an unrelated endpoint merely by sharing its batch.
+  app.use("/api/trpc", trpcUploadJsonParser());
 
   app.use(express.json({ limit: "100kb" }));
   app.use(express.urlencoded({ extended: true }));

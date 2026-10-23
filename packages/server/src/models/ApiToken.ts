@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 // A credential for the public REST API, bound to ONE workspace.
 //
 // Nothing here can reproduce the token: only `sha256(plaintext)` is stored,
@@ -95,3 +96,5 @@ export function toClientApiToken(doc: ApiTokenDocLike): ApiTokenSummary {
     createdAt: doc.createdAt.toISOString(),
   };
 }
+
+installStorageQuota(ApiToken);

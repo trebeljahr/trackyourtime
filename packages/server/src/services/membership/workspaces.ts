@@ -152,7 +152,8 @@ export function teamWorkspaceSlug(name: string, tail: string): string {
 }
 
 export type WorkspaceCreationDeps = {
-  store: MembershipRowStore;
+  /** Serialize this owner's count/quota check and commit all creation writes. */
+  transaction: <T>(userId: string, work: (store: MembershipRowStore) => Promise<T>) => Promise<T>;
   now: () => Date;
   /** Random hex for the slug tail. */
   slugTail: () => string;
@@ -169,9 +170,8 @@ export type WorkspaceCreationDeps = {
  *
  * The write order is the lifecycle's: the organization (with its kind), then
  * better-auth's `member`, then the settings, and the `WorkspaceMember` mirror
- * LAST, because the mirror is what grants access. A crash before it leaves an
- * organization nobody can reach — no access, nothing listed — which is the
- * safe disagreement; the person simply creates again.
+ * LAST, because the mirror is what grants access. All four writes share one
+ * transaction: a quota refusal or crash leaves no partial workspace behind.
  *
  * The session is not moved: a client joins the new workspace with a full page
  * load, which addresses it explicitly from then on.
@@ -181,43 +181,46 @@ export async function createTeamWorkspace(
   user: { id: string; name?: string | null; email?: string | null },
   input: { name: string; currency: string; weekStartsOn: 0 | 1 },
 ): Promise<{ workspaceId: string }> {
-  const owned = (await deps.store.find("workspaceMembers", { userId: user.id })).filter(
-    (row) => row.role === "owner",
-  );
-  if (owned.length >= MAX_OWNED_WORKSPACES) throw membershipRefused("workspace-limit-reached");
+  const result = await deps.transaction(user.id, async (store) => {
+    const owned = (await store.find("workspaceMembers", { userId: user.id })).filter(
+      (row) => row.role === "owner",
+    );
+    if (owned.length >= MAX_OWNED_WORKSPACES) throw membershipRefused("workspace-limit-reached");
 
-  const now = deps.now();
-  const name = input.name.trim().slice(0, WORKSPACE_NAME_MAX);
-  const org = await deps.store.insertOne("authOrganizations", {
-    name,
-    slug: teamWorkspaceSlug(name, deps.slugTail()),
-    kind: "team",
-    createdAt: now,
-  });
-  const workspaceId = asId(org.id);
-  if (!workspaceId) throw new Error("membership: created organization has no id");
+    const now = deps.now();
+    const name = input.name.trim().slice(0, WORKSPACE_NAME_MAX);
+    const org = await store.insertOne("authOrganizations", {
+      name,
+      slug: teamWorkspaceSlug(name, deps.slugTail()),
+      kind: "team",
+      createdAt: now,
+    });
+    const workspaceId = asId(org.id);
+    if (!workspaceId) throw new Error("membership: created organization has no id");
 
-  await deps.store.insertOne("authMembers", {
-    organizationId: workspaceId,
-    userId: user.id,
-    role: "owner",
-    createdAt: now,
-  });
-  await deps.seedSettings(workspaceId, {
-    currency: input.currency,
-    weekStartsOn: input.weekStartsOn,
-  });
-  await deps.store.insertOne("workspaceMembers", {
-    workspaceId,
-    userId: user.id,
-    role: "owner",
-    name: ((user.name ?? "").trim() || (user.email ?? "")).slice(0, 200),
-    hourlyRate: null,
-    ...initialFlags("owner"),
-    createdAt: now,
-    updatedAt: now,
+    await store.insertOne("authMembers", {
+      organizationId: workspaceId,
+      userId: user.id,
+      role: "owner",
+      createdAt: now,
+    });
+    await deps.seedSettings(workspaceId, {
+      currency: input.currency,
+      weekStartsOn: input.weekStartsOn,
+    });
+    await store.insertOne("workspaceMembers", {
+      workspaceId,
+      userId: user.id,
+      role: "owner",
+      name: ((user.name ?? "").trim() || (user.email ?? "")).slice(0, 200),
+      hourlyRate: null,
+      ...initialFlags("owner"),
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { workspaceId };
   });
 
-  deps.publishUser(user.id, { kind: "membership.changed", workspaceId, reason: "joined" });
-  return { workspaceId };
+  deps.publishUser(user.id, { kind: "membership.changed", workspaceId: result.workspaceId, reason: "joined" });
+  return result;
 }

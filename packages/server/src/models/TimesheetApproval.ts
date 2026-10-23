@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema } from "mongoose";
 
 export interface ApprovalPolicy {
@@ -48,3 +49,6 @@ export const TimesheetApproval = mongoose.model<ApprovalRecord>("TimesheetApprov
 // across a submission that acquired the same row, even after a process restart.
 const fenceSchema = new Schema({ _id: String, revision: { type: Number, default: 0 } });
 export const WorkspaceWriteFence = mongoose.model("WorkspaceWriteFence", fenceSchema);
+
+installStorageQuota(TimesheetApproval);
+installStorageQuota(TimesheetPolicy);

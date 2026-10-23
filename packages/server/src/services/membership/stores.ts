@@ -2,9 +2,14 @@
 // `WorkspaceMember` through mongoose, and better-auth's own tables through its
 // adapter — never raw Mongo, because the adapter is what knows which fields it
 // stored as ObjectIds.
-import { isValidObjectId } from "mongoose";
+import mongoose, { isValidObjectId } from "mongoose";
+import { mongodbAdapter } from "better-auth/adapters/mongodb";
+import type { BetterAuthOptions } from "better-auth";
+import { TRPCError } from "@trpc/server";
 import { getAuth } from "../../auth/auth.js";
+import { StorageFence } from "../../models/StorageUsage.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
+import { transactionSession, withBusinessTransaction } from "../business-transaction.js";
 import { isDuplicateKeyError } from "../entries/errors.js";
 import {
   DuplicateRowError,
@@ -186,4 +191,48 @@ export function routedMembershipStore(
 export async function productionMembershipStore(): Promise<MembershipRowStore> {
   const context = (await getAuth().$context) as { adapter: MembershipAuthAdapter };
   return routedMembershipStore(workspaceMemberStore, authMembershipStore(context.adapter));
+}
+
+/**
+ * Team creation must commit the auth rows, settings and owner mirror together.
+ * The normal auth adapter owns a separate MongoClient, so it cannot join the
+ * application's session. Keep the official adapter's schema/id conversion,
+ * but give this scoped instance only session-bound operations on our client.
+ */
+export async function withWorkspaceCreationTransaction<T>(
+  options: BetterAuthOptions,
+  userId: string,
+  work: (store: MembershipRowStore) => Promise<T>,
+): Promise<T> {
+  return withBusinessTransaction(async () => {
+    const session = transactionSession();
+    const db = mongoose.connection.db;
+    if (!session || !db) throw new TRPCError({
+      code: "PRECONDITION_FAILED", message: "Workspace creation requires MongoDB transactions. Configure a replica set.",
+    });
+    // The quota guard uses this same account fence. Acquire it before reading
+    // the workspace count, so simultaneous creates cannot both claim the last
+    // slot or race a quota-consuming write in another workspace.
+    try {
+      await StorageFence.updateOne({ _id: `account:${userId}` }, { $inc: { revision: 1 } }, { upsert: true });
+    } catch (error) {
+      if (error instanceof mongoose.mongo.MongoServerError && error.code === 11000) error.addErrorLabel("TransientTransactionError");
+      throw error;
+    }
+    const sessionDb = {
+      collection(name: string) {
+        const collection = db.collection(name);
+        // Deliberately expose only the methods used by MembershipAuthAdapter.
+        // An added adapter operation must explicitly join this session too.
+        return {
+          aggregate: (...[pipeline, config]: Parameters<typeof collection.aggregate>) => collection.aggregate(pipeline, { ...config, session }),
+          insertOne: (...[document, config]: Parameters<typeof collection.insertOne>) => collection.insertOne(document, { ...config, session }),
+          updateMany: (...[filter, update, config]: Parameters<typeof collection.updateMany>) => collection.updateMany(filter, update, { ...config, session }),
+          deleteMany: (...[filter, config]: Parameters<typeof collection.deleteMany>) => collection.deleteMany(filter, { ...config, session }),
+        };
+      },
+    };
+    const adapter = mongodbAdapter(sessionDb as Parameters<typeof mongodbAdapter>[0], { transaction: false })(options);
+    return work(routedMembershipStore(workspaceMemberStore, authMembershipStore(adapter)));
+  });
 }

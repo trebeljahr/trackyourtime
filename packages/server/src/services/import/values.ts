@@ -2,11 +2,11 @@
  * Turning the strings in somebody else's export into the values this app
  * stores: instants, seconds, booleans, tag lists.
  *
- * Everything here is pure and total — a cell it cannot read returns null
- * rather than throwing or guessing, so one unreadable row becomes one skipped
- * row with an explanation instead of a failed import.
+ * Unreadable dates, durations and amounts return null, so one bad row becomes
+ * one skipped row with an explanation. Tag limits refuse the whole file rather
+ * than silently discarding names the caller expected to restore.
  */
-import { zonedWallClockToMs, type ImportDateOrder } from "@starter/shared";
+import { ImportFileError, MAX_IMPORT_TAGS, zonedWallClockToMs, type ImportDateOrder } from "@starter/shared";
 
 /** A calendar date with no time of day attached. */
 export type CalendarDate = { year: number; month: number; day: number };
@@ -94,6 +94,8 @@ function buildDate(
   if (!isBetween(year, 1970, 2999)) return null;
   if (!isBetween(month, 1, 12)) return null;
   if (!isBetween(day, 1, 31)) return null;
+  const actual = new Date(Date.UTC(year, month - 1, day));
+  if (actual.getUTCMonth() !== month - 1 || actual.getUTCDate() !== day) return null;
   return { year, month, day };
 }
 
@@ -141,21 +143,15 @@ export function parseInstant(
   const iso = ISO_INSTANT.exec(text);
   if (iso) {
     const [, y, mo, d, h, mi, s, offset] = iso;
+    const date = buildDate(Number(y), Number(mo), Number(d));
+    const clock = { hour: Number(h), minute: Number(mi), second: s === undefined ? 0 : Number(s) };
+    if (!date || !isBetween(clock.hour, 0, 23) ||
+      !isBetween(clock.minute, 0, 59) || !isBetween(clock.second, 0, 59)) return null;
     if (offset) {
       const parsed = Date.parse(text.replace(" ", "T"));
       return Number.isNaN(parsed) ? null : parsed;
     }
-    return zonedWallClockToMs(
-      {
-        year: Number(y),
-        month: Number(mo),
-        day: Number(d),
-        hour: Number(h),
-        minute: Number(mi),
-        second: s === undefined ? 0 : Number(s),
-      },
-      timeZone,
-    );
+    return combine(date, clock, timeZone);
   }
 
   // Anything else: split on the first space and read the halves separately, so
@@ -196,18 +192,25 @@ export const combine = (
   date: CalendarDate,
   clock: ClockTime,
   timeZone: string,
-): number =>
-  zonedWallClockToMs(
-    {
-      year: date.year,
-      month: date.month,
-      day: date.day,
-      hour: clock.hour,
-      minute: clock.minute,
-      second: clock.second,
-    },
-    timeZone,
-  );
+): number | null => {
+  try {
+    const result = zonedWallClockToMs(
+      {
+        year: date.year,
+        month: date.month,
+        day: date.day,
+        hour: clock.hour,
+        minute: clock.minute,
+        second: clock.second,
+      },
+      timeZone,
+    );
+    return Number.isFinite(result) ? result : null;
+  } catch (error) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
+};
 
 /** What a temporal cell turned out to be — used to refine column roles. */
 export type TemporalKind = "instant" | "date" | "time" | "unknown";
@@ -258,7 +261,7 @@ export function parseDurationSec(
     const [, sign, h, m, s] = clock;
     const seconds =
       Number(h) * 3600 + Number(m) * 60 + (s === undefined ? 0 : Number(s));
-    return sign === "-" ? -seconds : seconds;
+    return Number.isFinite(seconds) ? (sign === "-" ? -seconds : seconds) : null;
   }
 
   // `1,5` is `1.5` wherever the comma is the decimal separator. Safe to swap
@@ -273,9 +276,8 @@ export function parseDurationSec(
         ? "seconds"
         : "hours";
 
-  if (effective === "seconds") return Math.round(numeric);
-  if (effective === "minutes") return Math.round(numeric * 60);
-  return Math.round(numeric * 3600);
+  const seconds = Math.round(numeric * (effective === "seconds" ? 1 : effective === "minutes" ? 60 : 3600));
+  return Number.isFinite(seconds) ? seconds : null;
 }
 
 const TRUE_WORDS = new Set([
@@ -299,10 +301,17 @@ export function parseBoolean(value: string): boolean | null {
  * tag containing a comma is unrecoverable from a comma-joined cell anyway.
  */
 export function parseTagNames(value: string): string[] {
-  return value
-    .split(/[,;|]/)
-    .map((name) => name.trim())
-    .filter((name) => name.length > 0);
+  const names = new Set<string>();
+  for (const part of value.split(/[,;|]/)) {
+    const name = part.trim();
+    if (name === "") continue;
+    if (name.length > 60) throw new ImportFileError("An imported tag name can have at most 60 characters.");
+    names.add(name);
+    if (names.size > MAX_IMPORT_TAGS) {
+      throw new ImportFileError(`An imported entry can have at most ${MAX_IMPORT_TAGS} tags.`);
+    }
+  }
+  return [...names];
 }
 
 /** A money cell: strips currency symbols and thousands separators. */

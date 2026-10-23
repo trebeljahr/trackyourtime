@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 // The workspace's own business identity — the issuer block of its invoices.
 //
 // One document per workspace, created on first save and never before: a
@@ -176,3 +177,5 @@ export async function saveBusinessProfile(
   );
   return getBusinessProfile(workspaceId);
 }
+
+installStorageQuota(BusinessProfileModel);

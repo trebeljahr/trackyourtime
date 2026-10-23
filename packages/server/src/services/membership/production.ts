@@ -10,6 +10,8 @@ import {
   type SyncEvent,
 } from "@starter/shared";
 import { env } from "../../config/env.js";
+import { getAuth } from "../../auth/auth.js";
+import type { BetterAuthOptions } from "better-auth";
 import { getRedis } from "../../db/redis.js";
 import { ensurePersonalWorkspace } from "../../auth/workspace.js";
 import { randomBytes } from "node:crypto";
@@ -34,7 +36,7 @@ import {
 } from "./invitations.js";
 import { createInviteBudget } from "./invite-rate-limit.js";
 import type { MembershipDeps } from "./members.js";
-import { productionMembershipStore } from "./stores.js";
+import { productionMembershipStore, withWorkspaceCreationTransaction } from "./stores.js";
 import type { WorkspaceCreationDeps } from "./workspaces.js";
 
 /**
@@ -150,8 +152,9 @@ async function seedWorkspaceSettings(
 }
 
 export async function workspaceCreationDeps(): Promise<WorkspaceCreationDeps> {
+  const context = (await getAuth().$context) as { options: BetterAuthOptions };
   return {
-    store: await productionMembershipStore(),
+    transaction: (userId, work) => withWorkspaceCreationTransaction(context.options, userId, work),
     now: () => new Date(),
     slugTail: () => randomBytes(4).toString("hex"),
     seedSettings: seedWorkspaceSettings,

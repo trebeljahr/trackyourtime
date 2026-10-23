@@ -34,9 +34,48 @@ import type {
   WeekStart,
 } from "./types.js";
 
-/** Hard ceilings, enforced server-side. A file past either is refused whole. */
+/** Hard ceilings, enforced server-side. An oversized file is refused whole. */
 export const MAX_IMPORT_BYTES = 8_000_000;
 export const MAX_IMPORT_ROWS = 25_000;
+export const MAX_IMPORT_COLUMNS = 512;
+export const MAX_IMPORT_CELL_CHARS = 16_000;
+export const MAX_IMPORT_TAGS = 20;
+export const MAX_IMPORT_METADATA_ROWS = 25_000;
+
+/** A file refusal that the transport can report without exposing an internal error. */
+export class ImportFileError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ImportFileError";
+  }
+}
+
+/** UTF-8 bytes, rather than JavaScript string length, bound an uploaded file. */
+export function importTextWithinByteLimit(value: string): boolean {
+  if (value.length > MAX_IMPORT_BYTES) return false;
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x7f) bytes += 1;
+    else if (code <= 0x7ff) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff &&
+      value.charCodeAt(index + 1) >= 0xdc00 && value.charCodeAt(index + 1) <= 0xdfff) {
+      bytes += 4;
+      index += 1;
+    } else {
+      // Unpaired surrogates encode as U+FFFD, also three UTF-8 bytes.
+      bytes += 3;
+    }
+    if (bytes > MAX_IMPORT_BYTES) return false;
+  }
+  return true;
+}
+
+export function assertImportTextWithinLimit(value: string): void {
+  if (!importTextWithinByteLimit(value)) {
+    throw new ImportFileError(`That file exceeds the ${MAX_IMPORT_BYTES.toLocaleString("en-US")}-byte import limit.`);
+  }
+}
 
 /** How many issues and sample rows a preview carries back. */
 export const IMPORT_PREVIEW_ISSUES = 50;
@@ -604,10 +643,12 @@ export const importInputSchema = z.object({
   originId: z.string().max(64).optional(),
   /** Shown in the history table; never used to decide how to parse. */
   filename: z.string().max(255).optional(),
-  text: z.string().min(1).max(MAX_IMPORT_BYTES),
+  text: z.string().min(1).max(MAX_IMPORT_BYTES).refine(importTextWithinByteLimit, {
+    message: `The import file must be at most ${MAX_IMPORT_BYTES} UTF-8 bytes.`,
+  }),
   /** IANA zone the file's wall-clock readings are in. */
   timeZone: z.string().max(64).optional(),
-  columns: z.array(importColumnOverrideSchema).max(512).optional(),
+  columns: z.array(importColumnOverrideSchema).max(MAX_IMPORT_COLUMNS).optional(),
   /** Overrides the detected day/month order for slashed dates. */
   dateOrder: z.enum(["dmy", "mdy", "ymd"]).optional(),
   /** Rows matching an existing entry are skipped rather than duplicated. */

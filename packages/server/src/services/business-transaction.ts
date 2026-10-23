@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
 
 mongoose.set("transactionAsyncLocalStorage", true);
-type State = { session: ClientSession; fenced: Set<string>; effects: (() => void | Promise<void>)[] };
+type State = { session: ClientSession; fenced: Set<string>; effects: (() => void | Promise<void>)[]; checks: (() => Promise<void>)[]; resources: Map<string, unknown> };
 const context = new AsyncLocalStorage<State>();
 let topology: { db: object; supported: boolean } | undefined;
 
@@ -23,6 +23,20 @@ export function approvalConflict(message = "TIMESHEET_LOCKED"): TRPCError {
 }
 export function transactionSession(): ClientSession | undefined { return context.getStore()?.session; }
 
+/** Attempt-local state: discarded on abort and rebuilt on a driver retry. */
+export function transactionResource<T>(key: string, create: () => T): T {
+  const state = context.getStore();
+  if (!state) throw new Error("A database transaction is required");
+  if (!state.resources.has(key)) state.resources.set(key, create());
+  return state.resources.get(key) as T;
+}
+
+export function beforeBusinessCommit(check: () => Promise<void>): void {
+  const state = context.getStore();
+  if (!state) throw new Error("A database transaction is required");
+  state.checks.push(check);
+}
+
 /** Return true when publication was queued; discarded retries publish nothing. */
 export function deferAfterCommit(effect: () => void | Promise<void>): boolean {
   const state = context.getStore();
@@ -35,9 +49,13 @@ export async function withBusinessTransaction<T>(work: () => Promise<T>): Promis
   if (context.getStore() || !(await supportsBusinessTransactions())) return work();
   let committedEffects: State["effects"] = [];
   const result = await mongoose.connection.transaction(async (session) => {
-    const state: State = { session, fenced: new Set(), effects: [] };
+    const state: State = { session, fenced: new Set(), effects: [], checks: [], resources: new Map() };
     const value = await context.run(state, async () => {
-      try { return await work(); } catch (error) {
+      try {
+        const value = await work();
+        for (const check of state.checks) await check();
+        return value;
+      } catch (error) {
         // tRPC wraps a resolver's Mongo error. Preserve the driver's retry
         // label instead of turning a write conflict into a permanent 500.
         let cause: unknown = error;

@@ -138,6 +138,7 @@ services:
       # replica set (or mongos): every time-entry write is a transaction.
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/trackyourtime?replicaSet=rs0}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      STORAGE_QUOTA_BYTES: ${STORAGE_QUOTA_BYTES:-536870912}
 
       # Accept sign-ins from the store-installed clients with no extra step:
       # the iOS and Android apps (capacitor://localhost, https://localhost),

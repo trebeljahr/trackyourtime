@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 // One endpoint a workspace pushes events to.
 //
 // `secret` never leaves this collection: it is returned once, at create time,
@@ -90,3 +91,5 @@ export function toClientWebhookSubscription(
     updatedAt: doc.updatedAt.toISOString(),
   };
 }
+
+installStorageQuota(WebhookSubscription);

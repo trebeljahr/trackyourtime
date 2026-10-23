@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema, type Document } from "mongoose";
 import type { Favorite as FavoriteWire } from "@starter/shared";
 
@@ -79,3 +80,5 @@ export function toClientFavorite(doc: FavoriteDocLike): FavoriteWire {
     updatedAt: doc.updatedAt.toISOString(),
   };
 }
+
+installStorageQuota(Favorite);

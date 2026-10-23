@@ -8,6 +8,7 @@ import "./BusinessProfile.js";
 import "./Client.js";
 import "./Favorite.js";
 import "./ImportBatch.js";
+import "./ImportBudget.js";
 import "./Invoice.js";
 import "./Profile.js";
 import "./Project.js";
@@ -20,6 +21,7 @@ import "./EntryOperation.js";
 import "./WebhookDelivery.js";
 import "./WebhookSubscription.js";
 import "./WorkspaceMember.js";
+import "./StorageUsage.js";
 
 /** Every registered app model, sorted by name for stable output. */
 export function allModels(): mongoose.Model<unknown>[] {

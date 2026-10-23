@@ -141,7 +141,7 @@ function getPositiveInt(key: string, defaultValue: number): number {
   if (raw === undefined || raw.trim() === "") return defaultValue;
 
   const parsed = Number(raw.trim());
-  if (!Number.isInteger(parsed) || parsed <= 0) {
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     console.warn(
       `[env] ${key}=${JSON.stringify(raw)} is not a positive integer — using ${defaultValue}.`,
     );
@@ -320,6 +320,10 @@ export const env = {
   // documented caveat for a single-container self-host.
   // Validated, not parsed: an unusable value here would 429 every caller.
   API_RATE_LIMIT_PER_MINUTE: getPositiveInt("API_RATE_LIMIT_PER_MINUTE", 600),
+
+  // Shared across all workspaces owned by an account; also bounds ownerless
+  // workspace bootstrap. Logical document bytes include metadata reserves.
+  STORAGE_QUOTA_BYTES: getPositiveInt("STORAGE_QUOTA_BYTES", 512 * 1024 * 1024),
 
   // Webhooks
   // Opt-in for delivering to private/loopback addresses and over plain http.

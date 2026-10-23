@@ -250,7 +250,7 @@ describe("workspaces.create", () => {
       },
     };
     return {
-      store: logged,
+      transaction: async (_userId, work) => work(logged),
       now: () => NOW,
       slugTail: () => "abcd1234",
       seedSettings: async (workspaceId, value) => {

@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema, type Document } from "mongoose";
 import {
   invoiceBalance,
@@ -387,3 +388,5 @@ function copyBreakdownRow(row: TaxBreakdownRow): TaxBreakdownRow {
     exemptionReasonCode: row.exemptionReasonCode ?? null,
   };
 }
+
+installStorageQuota(Invoice);

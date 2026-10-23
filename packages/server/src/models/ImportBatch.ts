@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema, type Document } from "mongoose";
 import type {
   ImportBatchSummary,
@@ -131,3 +132,5 @@ export function toClientImportBatch(
     undoneAt: doc.undoneAt ? doc.undoneAt.toISOString() : null,
   };
 }
+
+installStorageQuota(ImportBatch);
