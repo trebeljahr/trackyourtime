@@ -144,7 +144,7 @@ export function DetailedTable({
   const someSelected = selected.size > 0 && !allSelected;
 
   return (
-    <Table className="mobile-entry-table" data-testid="detailed-table">
+    <Table className="mobile-entry-table sm:min-w-[72rem] sm:table-fixed" data-testid="detailed-table">
       <TableHeader>
         <TableRow>
           <TableHead className="w-10">
@@ -225,8 +225,8 @@ export function DetailedTable({
               <TableCell className="whitespace-nowrap text-muted-foreground">
                 {f.date(entry.start, "dayLabel") || entry.start}
               </TableCell>
-              <TableCell className="max-w-0" data-mobile-description>
-                <span className="block truncate">
+              <TableCell className="min-w-0" data-mobile-description>
+                <span className="block truncate" title={entry.description || undefined}>
                   {entry.description === "" ? (
                     <span className="text-muted-foreground">
                       {t("detailed.noDescription")}
@@ -248,6 +248,7 @@ export function DetailedTable({
                   <CatalogName
                     name={entry.projectName}
                     color={entry.projectColor}
+                    className="max-w-full"
                     nameClassName="font-normal"
                     editLabel={t("detailed.editProject", {
                       name: entry.projectName,
