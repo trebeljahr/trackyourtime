@@ -50,6 +50,11 @@ const mocks = new Map([
     source("lib/server-level.ts"),
     `export const knownServerApiLevel=async()=>${level}; export const refreshServerLevel=async()=>null; export const noteClientTooOld=async()=>{};`,
   ],
+  // Linux CI has no macOS lockf. This suite checks identity recovery in one
+  // process; queue-lock.test.mjs verifies the real kernel lock on macOS.
+  ...(process.platform === "darwin"
+    ? []
+    : [[source("lib/queue-lock.ts"), `export const withQueueFileLock=async(_path,task)=>task();`]]),
 ]);
 const hook = registerHooks({
   resolve(specifier, context, next) {
