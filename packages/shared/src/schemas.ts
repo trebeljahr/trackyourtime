@@ -288,15 +288,19 @@ export const updateClientSchema = z.object({
 
 export const tagListSchema = z.object({
   includeArchived: z.boolean().optional(),
+  /** Automation tags are opt-in; normal catalogs stay uncluttered. */
+  includeHidden: z.boolean().optional(),
 });
 
 export const createTagSchema = z.object({
+  hidden: z.boolean().optional(),
   name: z.string().min(1, "Name is required").max(60),
   color: hexColorSchema.optional(),
   originId,
 });
 
 export const updateTagSchema = z.object({
+  hidden: z.boolean().optional(),
   id: idString,
   name: z.string().min(1).max(60).optional(),
   color: hexColorSchema.optional(),

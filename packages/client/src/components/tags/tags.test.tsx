@@ -5,7 +5,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { TagChips, splitForOverflow } from "./tag-chips";
 import { canCreateTag, pickableTags, toggleTagId } from "./tag-picker";
 import { removalPreview } from "./tag-manager";
-import type { TagRow } from "./use-tags";
+import { tagsForIds, type TagRow } from "./use-tags";
 import {
   toReportFilters,
   type ReportFilterState,
@@ -172,5 +172,20 @@ describe("toReportFilters — tags", () => {
 
   it("passes the selection through when tags are picked", () => {
     expect(toReportFilters(state(["a", "b"])).tagIds).toEqual(["a", "b"]);
+  });
+});
+
+
+describe("automation tags", () => {
+  const hidden = tag({ id: "automation", hidden: true });
+  const visible = tag({ id: "normal" });
+  it("never offers hidden tags, even when already selected", () => {
+    expect(pickableTags([hidden, visible], [hidden.id])).toEqual([visible]);
+    expect(tagsForIds([hidden, visible], [hidden.id, visible.id])).toEqual([visible]);
+  });
+  it("does not count hidden tags in chip overflow or tooltips", () => {
+    expect(splitForOverflow([hidden, visible], 1)).toEqual({ shown: [visible], hidden: 0, hiddenNames: [] });
+    render(<TagChips tags={[hidden]} />);
+    expect(screen.queryByTestId("tag-chips")).toBeNull();
   });
 });

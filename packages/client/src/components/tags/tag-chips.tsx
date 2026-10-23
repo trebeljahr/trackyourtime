@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import type { TagRow } from "@/components/tags/use-tags";
 
 /** What a chip needs — a subset of `TagRow`, so a bare `Tag` works too. */
-export type ChipTag = { id: string; name: string; color: string };
+export type ChipTag = { id: string; name: string; color: string; hidden?: boolean };
 
 export type TagOverflow = {
   shown: ChipTag[];
@@ -23,6 +23,7 @@ export type TagOverflow = {
  * eight tags must not push every other row's controls onto a second line.
  */
 export function splitForOverflow(tags: ChipTag[], max: number): TagOverflow {
+  tags = tags.filter((tag) => !tag.hidden);
   if (max <= 0 || tags.length <= max) {
     return { shown: tags, hidden: 0, hiddenNames: [] };
   }
@@ -63,13 +64,14 @@ export function TagChips({
     [tags, max],
   );
 
-  if (tags.length === 0) return null;
+  const count = shown.length + hidden;
+  if (count === 0) return null;
 
   return (
     <span
       className={cn("flex min-w-0 items-center gap-1", className)}
       data-testid={testId}
-      data-tag-count={tags.length}
+      data-tag-count={count}
     >
       {shown.map((tag) => (
         <span
@@ -105,5 +107,5 @@ export function TagChips({
 
 /** `TagChips` fed straight from a resolved catalog — the common call. */
 export function tagChipList(tags: TagRow[]): ChipTag[] {
-  return tags.map((tag) => ({ id: tag.id, name: tag.name, color: tag.color }));
+  return tags.filter((tag) => !tag.hidden).map((tag) => ({ id: tag.id, name: tag.name, color: tag.color }));
 }

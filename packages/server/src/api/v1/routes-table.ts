@@ -285,6 +285,7 @@ const tagShape = {
   name: z.string(),
   color: z.string(),
   archived: z.boolean(),
+  hidden: z.boolean().optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 };

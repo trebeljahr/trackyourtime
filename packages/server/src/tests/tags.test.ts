@@ -66,9 +66,11 @@ test("updateTagSchema is a patch — id required, everything else optional", () 
   assert.ok(!accepts(updateTagSchema, { id: DEEP_WORK, archived: "yes" }));
 });
 
-test("tagListSchema only ever asks about archived tags", () => {
+test("tagListSchema requires explicit boolean opt-in for hidden tags", () => {
   assert.ok(accepts(tagListSchema, {}));
   assert.ok(accepts(tagListSchema, { includeArchived: true }));
+  assert.equal(tagListSchema.parse({ includeHidden: true }).includeHidden, true);
+  assert.ok(!accepts(tagListSchema, { includeHidden: "true" }));
   assert.ok(!accepts(tagListSchema, { includeArchived: "true" }));
 });
 
@@ -304,4 +306,21 @@ test("accumulateGroups is a plain accumulate for the partitioning groupings", ()
       currency: "EUR",
     },
   ]);
+});
+
+
+test("hidden tag state survives create and update schemas", () => {
+  assert.equal(createTagSchema.parse({ name: "github-history", hidden: true }).hidden, true);
+  assert.equal(updateTagSchema.parse({ id: DEEP_WORK, hidden: false }).hidden, false);
+  assert.ok(!accepts(createTagSchema, { name: "github-history", hidden: "yes" }));
+});
+
+
+test("hidden tags do not leak into normal report group labels", () => {
+  const tags = new Map<string, TagLabel>([
+    [DEEP_WORK, { name: "normal", color: "#111111" }],
+    [ADMIN, { name: "github-history", color: "#222222", hidden: true }],
+  ]);
+  assert.deepEqual(tagGroupIdentities([ADMIN], tags), [NO_TAG]);
+  assert.deepEqual(tagGroupIdentities([ADMIN, DEEP_WORK], tags), [{ key: DEEP_WORK, label: "normal", color: "#111111" }]);
 });

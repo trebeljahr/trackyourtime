@@ -134,6 +134,7 @@ export async function listTags(
     Tag.find({
       workspaceId,
       ...(input.includeArchived ? {} : { archived: false }),
+      ...(input.includeHidden ? {} : { hidden: { $ne: true } }),
     })
       // Same collation as the unique index, so "design" and "Design"
       // sort next to each other rather than in two alphabets.
@@ -191,6 +192,7 @@ export async function createTag(
       name,
       color: input.color ?? pickCatalogColor(existing, TAG_COLOR_OFFSET),
       archived: false,
+      hidden: input.hidden ?? false,
     });
   } catch (error) {
     // The check above lost a race with a concurrent create; the index
@@ -231,6 +233,7 @@ export async function updateTag(
           ...(name !== undefined ? { name } : {}),
           ...(input.color !== undefined ? { color: input.color } : {}),
           ...(input.archived !== undefined ? { archived: input.archived } : {}),
+          ...(input.hidden !== undefined ? { hidden: input.hidden } : {}),
         },
       },
       { returnDocument: "after" },

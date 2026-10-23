@@ -767,7 +767,7 @@ export const NO_TAG: GroupIdentity = {
 };
 
 /** Just enough of a Tag to label a group — name and color. */
-export type TagLabel = { name: string; color: string };
+export type TagLabel = { name: string; color: string; hidden?: boolean };
 
 /**
  * TAG GROUPING FANS ONE ENTRY OUT ACROSS SEVERAL GROUPS. READ THIS BEFORE
@@ -807,7 +807,7 @@ export const tagGroupIdentities = (
   for (const id of tagIds ?? []) {
     if (seen.has(id)) continue;
     const tag = tags.get(id);
-    if (!tag) continue;
+    if (!tag || tag.hidden) continue;
     seen.add(id);
     identities.push({ key: id, label: tag.name, color: tag.color });
   }
@@ -1149,9 +1149,9 @@ export const buildSummary = async (
   // dropping it would move that time into "No tag".
   const tagIndex = new Map<string, TagLabel>();
   if (groupBy === "tag") {
-    const tags = await Tag.find({ workspaceId }).select("name color").lean();
+    const tags = await Tag.find({ workspaceId }).select("name color hidden").lean();
     for (const tag of tags) {
-      tagIndex.set(String(tag._id), { name: tag.name, color: tag.color });
+      tagIndex.set(String(tag._id), { name: tag.name, color: tag.color, hidden: tag.hidden });
     }
   }
 

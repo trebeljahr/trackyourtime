@@ -330,3 +330,10 @@ test("invoices survive the file but have no restore path at all", () => {
   // document is the only thing a commit reads.
   assert.equal("entryIds" in (parsed.invoices?.[0] ?? {}), false);
 });
+
+
+test("hidden automation tags survive a workspace JSON round trip", () => {
+  const doc = v2({ tags: [{ name: "github-history", color: "#444444", archived: false, hidden: true }] });
+  assert.equal(read(doc).tags[0]?.hidden, true);
+  assert.equal(read(v2()).tags[0]?.hidden, undefined);
+});

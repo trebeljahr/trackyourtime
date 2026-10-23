@@ -63,7 +63,7 @@ export function TagPicker({
   const selectedIds = new Set(value);
   const selected = value
     .map((id) => tags.find((tag) => tag.id === id))
-    .filter((tag): tag is Tag => tag !== undefined);
+    .filter((tag): tag is Tag => tag !== undefined && !tag.hidden);
 
   return (
     <div className="field">
@@ -100,7 +100,7 @@ export function TagPicker({
           // Already-chosen tags are filtered out: offering one that is on the
           // entry would look selectable and then do nothing.
           options={tags
-            .filter((tag) => !selectedIds.has(tag.id))
+            .filter((tag) => !tag.hidden && !selectedIds.has(tag.id))
             .map((tag) => ({ id: tag.id, label: tag.name, color: tag.color }))}
           // Always null: this control adds, it never displays a "current" tag.
           value={null}

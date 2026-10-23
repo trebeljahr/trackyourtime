@@ -8335,6 +8335,14 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "includeHidden",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -8386,6 +8394,9 @@
                             "type": "string"
                           },
                           "archived": {
+                            "type": "boolean"
+                          },
+                          "hidden": {
                             "type": "boolean"
                           },
                           "createdAt": {
@@ -8528,6 +8539,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "hidden": {
+                    "type": "boolean"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -8596,6 +8610,9 @@
                           "type": "string"
                         },
                         "archived": {
+                          "type": "boolean"
+                        },
+                        "hidden": {
                           "type": "boolean"
                         },
                         "createdAt": {
@@ -8777,6 +8794,9 @@
                         "archived": {
                           "type": "boolean"
                         },
+                        "hidden": {
+                          "type": "boolean"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time",
@@ -8922,6 +8942,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "hidden": {
+                    "type": "boolean"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -8990,6 +9013,9 @@
                           "type": "string"
                         },
                         "archived": {
+                          "type": "boolean"
+                        },
+                        "hidden": {
                           "type": "boolean"
                         },
                         "createdAt": {

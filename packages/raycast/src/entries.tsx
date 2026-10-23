@@ -139,7 +139,7 @@ function History(): React.JSX.Element {
   });
 
   const tags = useApi("tags", (api) => api.tags());
-  const tagNames = new Map((tags.data ?? []).map((tag) => [tag.id, tag.name] as const));
+  const tagNames = new Map((tags.data ?? []).filter((tag) => !tag.hidden).map((tag) => [tag.id, tag.name] as const));
   // Also the command-start refresh of the server's API level.
   const { banner } = useServerLevel();
 

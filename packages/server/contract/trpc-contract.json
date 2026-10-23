@@ -1,5 +1,5 @@
 {
-  "apiLevel": 16,
+  "apiLevel": 17,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -5561,6 +5561,9 @@
             "pattern": "^#[0-9a-fA-F]{6}$",
             "type": "string"
           },
+          "hidden": {
+            "type": "boolean"
+          },
           "name": {
             "maxLength": 60,
             "minLength": 1,
@@ -5582,6 +5585,9 @@
       "input": {
         "properties": {
           "includeArchived": {
+            "type": "boolean"
+          },
+          "includeHidden": {
             "type": "boolean"
           }
         },
@@ -5617,6 +5623,9 @@
           "color": {
             "pattern": "^#[0-9a-fA-F]{6}$",
             "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
           },
           "id": {
             "minLength": 1,

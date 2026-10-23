@@ -553,6 +553,7 @@ export type WorkspaceExportTag = {
   name: string;
   color: string;
   archived: boolean;
+  hidden?: boolean;
 };
 
 /**

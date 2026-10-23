@@ -78,7 +78,7 @@ export function pickableTags(
   selected: readonly string[],
 ): TagRow[] {
   const chosen = new Set(selected);
-  return all.filter((tag) => !tag.archived || chosen.has(tag.id));
+  return all.filter((tag) => !tag.hidden && (!tag.archived || chosen.has(tag.id)));
 }
 
 // ── component ────────────────────────────────────────────────────────

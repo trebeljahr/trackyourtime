@@ -19,6 +19,8 @@
 export const REQUIRES_API_LEVEL = {
   "catalog.options": 16,
   "reports.splitDetailed": 16,
+  /** Automation tags with explicit catalog opt-in. */
+  "tags.hidden": 17,
   "invoices.followThrough": 9,
   "entries.bulkEdit": 10,
   "members.rates": 11,

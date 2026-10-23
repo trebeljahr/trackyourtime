@@ -157,6 +157,8 @@ export type Tag = {
   /** Hex color, e.g. "#4f46e5". */
   color: string;
   archived: boolean;
+  /** Automation-only label. Absent on older servers means visible. */
+  hidden?: boolean;
   createdAt: string;
   updatedAt: string;
 };

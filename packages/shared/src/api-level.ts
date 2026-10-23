@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 16;
+export const API_LEVEL = 17;
 
 export type ApiLevelChange = {
   level: number;
@@ -142,6 +142,13 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     "Lightweight projects.options, clients.options and tasks.options; independent tasks.projectLinks.",
     "reports.rows and reports.totals: paginated entries independent of full-range totals.",
   ] },
+  {
+    level: 17,
+    release: "0.4.0",
+    added: [
+      "`hidden` on tag rows, `tags.create` and `tags.update`; `includeHidden` on `tags.list` (also REST and MCP). Hidden automation tags are omitted from normal catalogs and report group labels.",
+    ],
+  },
 ];
 
 /**

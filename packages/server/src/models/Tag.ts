@@ -9,6 +9,7 @@ export interface ITag extends Document {
   name: string;
   color: string;
   archived: boolean;
+  hidden?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +25,7 @@ export type TagDocLike = {
   name: string;
   color: string;
   archived: boolean;
+  hidden?: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -37,6 +39,7 @@ const tagSchema = new Schema<ITag>(
     name: { type: String, required: true, maxlength: 60, trim: true },
     color: { type: String, required: true, default: DEFAULT_TAG_COLOR },
     archived: { type: Boolean, required: true, default: false },
+    hidden: { type: Boolean, required: true, default: false },
   },
   { timestamps: true },
 );
@@ -67,6 +70,7 @@ export function toClientTag(doc: TagDocLike): TagWire {
     name: doc.name,
     color: doc.color,
     archived: doc.archived,
+    hidden: doc.hidden ?? false,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };

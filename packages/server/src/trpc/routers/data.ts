@@ -375,6 +375,7 @@ type CatalogHints = {
   projectBillable: Map<string, boolean>;
   taskColor: Map<string, string>;
   tagColor: Map<string, string>;
+  tagHidden: Map<string, boolean>;
   /**
    * The rest of what a project states about itself. Restored with it, because
    * a project recreated without its budget or its estimate is not the project
@@ -398,6 +399,7 @@ const emptyHints = (): CatalogHints => ({
   projectBillable: new Map(),
   taskColor: new Map(),
   tagColor: new Map(),
+  tagHidden: new Map(),
   projectExtras: new Map(),
 });
 
@@ -437,7 +439,10 @@ function hintsFromDoc(doc: WorkspaceExport | null): CatalogHints {
       hints.taskColor.set(lower(task.name), task.color);
   }
   for (const tag of doc.tags) {
-    if (tag?.name && tag.color) hints.tagColor.set(lower(tag.name), tag.color);
+    if (tag?.name) {
+      if (tag.color) hints.tagColor.set(lower(tag.name), tag.color);
+      hints.tagHidden.set(lower(tag.name), tag.hidden ?? false);
+    }
   }
   return hints;
 }
@@ -810,6 +815,7 @@ async function createMissingCatalog(args: {
       createdBy,
       name,
       color: hints.tagColor.get(key) ?? DEFAULT_TAG_COLOR,
+      hidden: hints.tagHidden.get(key) ?? false,
     });
     const id = String(doc._id);
     catalog.tags.set(key, id);
@@ -1218,6 +1224,7 @@ async function buildWorkspaceExport(args: {
       name: tag.name,
       color: tag.color,
       archived: tag.archived,
+      hidden: tag.hidden ?? false,
     })),
     entries: exportEntries,
     favorites: exportFavorites,

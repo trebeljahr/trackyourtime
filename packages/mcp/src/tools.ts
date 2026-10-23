@@ -326,7 +326,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   {
     name: "list_tags",
     title: "List tags",
-    description: "List tags with how many entries carry each one and their total time.",
+    description: "List tags with usage totals. Automation-only hidden tags are excluded unless includeHidden is true.",
     scope: "catalog:read",
     inputSchema: tagListSchema,
     readOnly: true,

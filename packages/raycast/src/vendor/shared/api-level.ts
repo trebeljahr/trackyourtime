@@ -24,7 +24,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 15;
+export const API_LEVEL = 17;
 
 export type ApiLevelChange = {
   level: number;
@@ -138,6 +138,17 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     release: "0.4.0",
     added: [
       "`maxDuration.emailReminder` on `settings.get` and `settings.update`: the forgotten-timer email, off unless the person turns it on. `Profile.preferences.notifications` no longer controls it.",
+    ],
+  },
+  { level: 16, release: "0.4.0", added: [
+    "Lightweight projects.options, clients.options and tasks.options; independent tasks.projectLinks.",
+    "reports.rows and reports.totals: paginated entries independent of full-range totals.",
+  ] },
+  {
+    level: 17,
+    release: "0.4.0",
+    added: [
+      "`hidden` on tag rows, `tags.create` and `tags.update`; `includeHidden` on `tags.list` (also REST and MCP). Hidden automation tags are omitted from normal catalogs and report group labels.",
     ],
   },
 ];

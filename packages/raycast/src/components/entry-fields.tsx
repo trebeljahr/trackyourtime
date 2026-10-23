@@ -178,7 +178,7 @@ export const tagsField = (
   tagIds: string[],
   onChange: (value: string[]) => void,
 ): React.JSX.Element | null => {
-  const tags = catalog.tags.data ?? [];
+  const tags = (catalog.tags.data ?? []).filter((tag) => !tag.hidden);
   if (tags.length === 0) return null;
 
   return (
@@ -186,7 +186,7 @@ export const tagsField = (
       id="tagIds"
       title="Tags"
       value={tagIds}
-      onChange={onChange}
+      onChange={(ids) => onChange([...tagIds.filter((id) => !tags.some((tag) => tag.id === id)), ...ids])}
       info="Tags cut across projects — an entry can carry several."
     >
       {tags.map((tag) => (

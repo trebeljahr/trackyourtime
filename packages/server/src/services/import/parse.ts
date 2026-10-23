@@ -832,7 +832,8 @@ function readExportTags(value: unknown): WorkspaceExportTag[] {
     const name = text(row.name, 60);
     if (name === "") return [];
     return [
-      { name, color: text(row.color, 32), archived: flag(row.archived, false) },
+      { name, color: text(row.color, 32), archived: flag(row.archived, false),
+        ...(row.hidden === undefined ? {} : { hidden: flag(row.hidden, false) }) },
     ];
   });
 }

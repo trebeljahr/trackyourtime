@@ -56,7 +56,7 @@ export function useTags(options?: UseTagsOptions): UseTagsResult {
   const query = trpc.tags.list.useQuery(TAG_LIST_INPUT);
   const includeArchived = options?.includeArchived ?? false;
 
-  const allTags = React.useMemo<TagRow[]>(() => query.data ?? [], [query.data]);
+  const allTags = React.useMemo<TagRow[]>(() => (query.data ?? []).filter((tag) => !tag.hidden), [query.data]);
 
   const tags = React.useMemo<TagRow[]>(
     () => (includeArchived ? allTags : allTags.filter((tag) => !tag.archived)),
@@ -83,7 +83,7 @@ export function tagsForIds(tags: TagRow[], ids: readonly string[]): TagRow[] {
   const resolved: TagRow[] = [];
   for (const id of ids) {
     const tag = byId.get(id);
-    if (tag) resolved.push(tag);
+    if (tag && !tag.hidden) resolved.push(tag);
   }
   return resolved;
 }
