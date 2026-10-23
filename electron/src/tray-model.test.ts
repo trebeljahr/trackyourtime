@@ -54,7 +54,7 @@ describe("trayMenuModel", () => {
     const model = trayMenuModel(running, { nowMs: at(125) });
     assert.deepEqual(
       model.map((item) => (item.type === "item" ? item.id : item.type === "heading" ? `# ${item.label}` : "---")),
-      ["edit", "# Running for 2m", "---", "stop", "edit", "---", "# 2 unsent changes", "---", "open", "settings", "---", "quit"],
+      ["edit", "# Running for 2m", "---", "stop", "edit", "---", "# 2 unsent changes", "---", "open", "compact", "settings", "---", "quit"],
     );
     assert.equal(model[0].type === "item" && model[0].label, "Write the plan");
     assert.ok(model.some((item) => item.type === "item" && item.label === "Stoppen"));

@@ -305,6 +305,16 @@ export const shell: Translation<typeof source> = {
     },
   },
   desktop: {
+    compact: {
+      open: "Kompakten Timer öffnen",
+      title: "Kompakter Timer",
+      expand: "Vollständige App öffnen",
+      pin: "Kompakten Timer im Vordergrund halten",
+      running: "Timer läuft",
+      ready: "Bereit zur Zeiterfassung",
+      noRecents: "Nach der ersten Zeiterfassung erscheint hier deine letzte Arbeit.",
+      failed: "Das Fenster konnte nicht geändert werden. Versuche es erneut.",
+    },
     tray: {
       stop: "Timer stoppen",
       edit: "Timer bearbeiten …",

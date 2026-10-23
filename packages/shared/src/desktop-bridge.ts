@@ -114,6 +114,7 @@ export interface DesktopTrayLabels {
   startTimer: string;
   recentHeading: string;
   open: string;
+  compactTimer: string;
   settings: string;
   quit: string;
   noDescription: string;
@@ -270,6 +271,8 @@ export interface DesktopUpdates {
 
 /** The desktop-app surface beyond auth: tray, shortcuts, settings, attention. */
 export interface DesktopShell {
+  /** Same window and renderer, resized between the full app and timer. */
+  window?: DesktopWindowControls;
   publishTimerState: (state: DesktopTimerState) => Promise<void>;
   onCommand: (listener: (command: DesktopCommand) => void) => () => void;
   getSettings: () => Promise<DesktopSettingsSnapshot>;
@@ -282,6 +285,19 @@ export interface DesktopShell {
   notify: (notice: DesktopNotice) => Promise<boolean>;
   /** Auto-update (Stage 7). Optional so an older preload is still a valid bridge. */
   updates?: DesktopUpdates;
+}
+
+export type DesktopWindowMode = "full" | "compact";
+export interface DesktopWindowSnapshot {
+  mode: DesktopWindowMode;
+  /** Preference; applied only while the signed-in compact timer is visible. */
+  alwaysOnTop: boolean;
+}
+export interface DesktopWindowControls {
+  getState: () => Promise<DesktopWindowSnapshot>;
+  setMode: (mode: DesktopWindowMode) => Promise<DesktopWindowSnapshot>;
+  setAlwaysOnTop: (enabled: boolean) => Promise<DesktopWindowSnapshot>;
+  onChanged: (listener: (snapshot: DesktopWindowSnapshot) => void) => () => void;
 }
 
 /**
@@ -632,6 +648,10 @@ export const DESKTOP_IPC = {
   desktopSettingsUpdate: "desktop:settings-update",
   desktopSuspendShortcuts: "desktop:shortcuts-suspend",
   desktopShowWindow: "desktop:window-show",
+  windowGet: "desktop:window-get",
+  windowMode: "desktop:window-mode",
+  windowPin: "desktop:window-pin",
+  windowChanged: "desktop:window-changed",
   desktopNotify: "desktop:notify",
   updateGetStatus: "update:status",
   updateCheck: "update:check",

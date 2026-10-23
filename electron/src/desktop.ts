@@ -62,6 +62,7 @@ import { installUpdater } from "./updater.ts";
 import type { UpdaterEvent } from "./updater-model.ts";
 import { markQuitting } from "./window.ts";
 import { desktopWindowPolicy } from "./window-policy.ts";
+import { windowsUserTasks } from "./taskbar-model.ts";
 import {
   FALLBACK_TRAY_LABELS,
   parseNotice,
@@ -128,6 +129,8 @@ export function installDesktop(options: {
   mainWindow: () => BrowserWindow | null;
   /** Show and focus the window (a no-op headless). */
   reveal: () => void;
+  setWindowMode?: (mode: "full" | "compact") => unknown;
+  signedInChanged?: (signedIn: boolean) => void;
   /** "Pause Autopilot for an hour" (true) and "Resume Autopilot" (false). */
   pauseAutopilot?: (paused: boolean) => void;
 }): DesktopController {
@@ -152,6 +155,16 @@ export function installDesktop(options: {
     /* first launch */
   }
 
+  let taskbarKey = "";
+  const syncTaskbar = (): void => {
+    const tasks = windowsUserTasks({ platform, headless, isPackaged: options.isPackaged, execPath: process.execPath, labels: rememberedLabels });
+    if (tasks === null) return;
+    const key = JSON.stringify(tasks);
+    if (key === taskbarKey) return;
+    try { if (app.setUserTasks(tasks)) taskbarKey = key; } catch (error) { console.warn("[taskbar] tasks unavailable:", error); }
+  };
+  syncTaskbar();
+
   // ── test hook state (headless only) ──────────────────────────────────
   const notifications: DesktopNotice[] = [];
   const quitNotices: { title: string; body: string }[] = [];
@@ -160,7 +173,8 @@ export function installDesktop(options: {
   let pretendFocused = false;
   let badgeOn = false;
 
-  const reveal = (): void => {
+  const reveal = (mode?: "full" | "compact"): void => {
+    if (mode) void Promise.resolve(options.setWindowMode?.(mode)).catch((error) => console.warn("[window] mode change failed:", error));
     reveals += 1;
     options.reveal();
   };
@@ -347,7 +361,8 @@ export function installDesktop(options: {
     } else if (id.startsWith("continue:")) send({ kind: "continue", key: id.slice("continue:".length) });
     else if (id === "autopilot-pause") options.pauseAutopilot?.(true);
     else if (id === "autopilot-resume") options.pauseAutopilot?.(false);
-    else if (id === "open") reveal();
+    else if (id === "compact") reveal("compact");
+    else if (id === "open") reveal("full");
     else if (id === "settings") {
       reveal();
       send({ kind: "open-settings" });
@@ -404,8 +419,10 @@ export function installDesktop(options: {
     const next = parseTimerState(payload);
     if (next === null) return;
     state = next;
+    options.signedInChanged?.(next.signedIn);
     if (JSON.stringify(next.labels) !== JSON.stringify(rememberedLabels)) {
       rememberedLabels = next.labels;
+      syncTaskbar();
       try {
         writeFileSync(path.join(userData, LABELS_FILE), JSON.stringify(next.labels), "utf8");
       } catch {
@@ -468,7 +485,7 @@ export function installDesktop(options: {
   handle(DESKTOP_IPC.updateRestart, () => updates.controller.restart());
 
   handle(DESKTOP_IPC.desktopShowWindow, () => {
-    reveal();
+    reveal("full");
   });
 
   // A tag replaces an earlier notice; it does not say whether this is the same

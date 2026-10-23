@@ -325,6 +325,16 @@ export const shell = {
   },
   /** The desktop app's tray menu and quit notice, drawn by the main process. */
   desktop: {
+    compact: {
+      open: "Open compact timer",
+      title: "Compact timer",
+      expand: "Open full app",
+      pin: "Keep compact timer on top",
+      running: "Timer running",
+      ready: "Ready to track",
+      noRecents: "Recent work appears here after you track time.",
+      failed: "The window could not change. Try again.",
+    },
     tray: {
       stop: "Stop Timer",
       edit: "Edit Timer…",

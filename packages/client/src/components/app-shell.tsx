@@ -12,6 +12,7 @@ import {
   ListChecks,
   LogOut,
   Menu,
+  PanelTop,
   Receipt,
   Search,
   Settings as SettingsIcon,
@@ -46,6 +47,7 @@ import {
 import { DesktopAutopilotDriver } from "@/components/activity/autopilot-driver";
 import { DesktopActivityScope } from "@/components/desktop/desktop-activity-scope";
 import { DesktopBridgePublisher } from "@/components/desktop/desktop-bridge-publisher";
+import { useDesktopWindow } from "@/components/desktop/use-desktop-window";
 import { ThemeSync } from "@/components/theme-sync";
 import {
   CommandPalette,
@@ -370,6 +372,7 @@ export function AppShell({ children }: AppShellProps): React.JSX.Element {
 }
 
 function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
+  const windowView = useDesktopWindow();
   const pathname = usePathname();
   const router = useRouter();
   const status = useSync();
@@ -398,8 +401,11 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
   // Mounted here so Cmd/Ctrl+K works on every protected screen.
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const togglePalette = React.useCallback(
-    (): void => setPaletteOpen((current) => !current),
-    [],
+    (): void => {
+      if (windowView.compact) void windowView.setMode("full").then((ok) => { if (ok) setPaletteOpen(true); });
+      else setPaletteOpen((current) => !current);
+    },
+    [windowView],
   );
   useCommandPaletteShortcut(togglePalette);
   const openPalette = React.useCallback((): void => setPaletteOpen(true), []);
@@ -440,7 +446,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex min-h-screen bg-background">
+      <div className={windowView.compact ? "hidden" : "flex min-h-screen bg-background"} inert={windowView.compact || undefined}>
         {/* Persistent sidebar — wide viewports only. Below `lg` (portrait
             tablets, phones) it folds into the hamburger drawer, and on the
             native shells it never shows at all (styles/native.css), which is
@@ -544,6 +550,9 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
             </Button>
 
             <div className="ml-auto flex items-center gap-1.5">
+              {windowView.failed ? <span role="alert" className="text-xs text-destructive">{t("desktop.compact.failed")}</span> : null}
+              {windowView.supported ? <Button variant="ghost" size="icon" onClick={() => void windowView.setMode("compact")}
+                aria-label={t("desktop.compact.open")} title={t("desktop.compact.open")} data-testid="desktop-open-compact"><PanelTop className="size-4" /></Button> : null}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -607,12 +616,12 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
         />
 
         {/* The desktop app's tray and global shortcuts. Inert on the web. */}
-        <DesktopBridgePublisher onOpenPalette={openPalette} />
         {/* Whose activity the desktop app records. Inert on the web. */}
         <DesktopActivityScope />
         {/* Autopilot: starts, switches and stops timers from that activity. Inert on the web. */}
         <DesktopAutopilotDriver />
       </div>
+      <DesktopBridgePublisher onOpenPalette={openPalette} windowView={windowView} />
     </TooltipProvider>
   );
 }

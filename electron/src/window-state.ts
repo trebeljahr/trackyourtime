@@ -11,6 +11,9 @@ export interface Rect {
 }
 
 export interface WindowState {
+  mode?: "full" | "compact";
+  compactBounds?: Rect;
+  alwaysOnTop?: boolean;
   bounds?: Rect;
   maximized?: boolean;
   fullscreen?: boolean;
@@ -18,6 +21,8 @@ export interface WindowState {
 
 export const DEFAULT_SIZE = { width: 1280, height: 800 } as const;
 export const MIN_SIZE = { width: 800, height: 500 } as const;
+export const COMPACT_SIZE = { width: 380, height: 540 } as const;
+export const COMPACT_MIN_SIZE = { width: 320, height: 420 } as const;
 
 function isFiniteRect(value: unknown): value is Rect {
   if (typeof value !== "object" || value === null) return false;
@@ -39,6 +44,9 @@ export function parseWindowState(raw: string | null): WindowState {
   if (typeof data !== "object" || data === null) return {};
   const d = data as Record<string, unknown>;
   const state: WindowState = {};
+  if (d.mode === "full" || d.mode === "compact") state.mode = d.mode;
+  if (isFiniteRect(d.compactBounds)) state.compactBounds = d.compactBounds;
+  if (typeof d.alwaysOnTop === "boolean") state.alwaysOnTop = d.alwaysOnTop;
   if (isFiniteRect(d.bounds)) state.bounds = d.bounds;
   if (typeof d.maximized === "boolean") state.maximized = d.maximized;
   if (typeof d.fullscreen === "boolean") state.fullscreen = d.fullscreen;
@@ -54,10 +62,12 @@ export function parseWindowState(raw: string | null): WindowState {
 export function initialBounds(
   saved: Rect | undefined,
   workAreas: Rect[],
+  mode: "full" | "compact" = "full",
 ): Partial<Rect> & { width: number; height: number } {
-  if (!saved) return { ...DEFAULT_SIZE };
-  const width = Math.max(MIN_SIZE.width, Math.round(saved.width));
-  const height = Math.max(MIN_SIZE.height, Math.round(saved.height));
+  const minimum = mode === "compact" ? COMPACT_MIN_SIZE : MIN_SIZE;
+  if (!saved) return { ...(mode === "compact" ? COMPACT_SIZE : DEFAULT_SIZE) };
+  const width = Math.max(minimum.width, Math.round(saved.width));
+  const height = Math.max(minimum.height, Math.round(saved.height));
   const titleArea: Rect = { x: saved.x, y: saved.y, width: Math.min(width, 100), height: 50 };
   const visible = workAreas.some((area) => overlap(titleArea, area) >= 100 * 50 * 0.99);
   if (!visible) return { width, height };

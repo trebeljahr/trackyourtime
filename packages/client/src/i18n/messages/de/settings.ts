@@ -1069,6 +1069,7 @@ export const settings: Translation<typeof source> = {
       description: "Die laufende Zeit und ein Menü zum Stoppen, Fortsetzen oder Starten eines Timers.",
     },
     closeHides: {
+      descriptionLinux: "Aktiviere dies nur, wenn dein Desktop das Tray-Symbol anzeigt. Lass es sonst aus und öffne die App über den Programmstarter.",
       title: "Beim Schließen des Fensters weiterlaufen",
       description: "Der Schließen-Knopf blendet das Fenster aus, und der Timer synchronisiert weiter. Beenden kannst du über das Menü im Infobereich.",
       needsTray: "Dafür muss der Timer im Infobereich angezeigt werden.",

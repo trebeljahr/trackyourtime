@@ -18,6 +18,7 @@ import {
   type DesktopIdlePayload,
   type DesktopSettingsSnapshot,
   type DesktopUpdateSnapshot,
+  type DesktopWindowSnapshot,
 } from "../../packages/shared/src/desktop-bridge.ts";
 
 const bridge: DesktopBridge = {
@@ -38,6 +39,16 @@ const bridge: DesktopBridge = {
   },
 
   desktop: {
+    window: {
+      getState: () => ipcRenderer.invoke(DESKTOP_IPC.windowGet),
+      setMode: (mode) => ipcRenderer.invoke(DESKTOP_IPC.windowMode, mode),
+      setAlwaysOnTop: (enabled) => ipcRenderer.invoke(DESKTOP_IPC.windowPin, enabled),
+      onChanged: (listener) => {
+        const handler = (_event: unknown, snapshot: DesktopWindowSnapshot): void => listener(snapshot);
+        ipcRenderer.on(DESKTOP_IPC.windowChanged, handler);
+        return () => ipcRenderer.removeListener(DESKTOP_IPC.windowChanged, handler);
+      },
+    },
     publishTimerState: (state) => ipcRenderer.invoke(DESKTOP_IPC.desktopPublishState, state),
     onCommand: (listener) => {
       const handler = (_event: unknown, command: DesktopCommand): void => listener(command);

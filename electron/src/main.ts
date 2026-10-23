@@ -31,7 +31,8 @@ import { handleAppScheme, registerAppScheme } from "./protocol.ts";
 import { createSecureStore, platformBackend, sessionFileAt, type SecureStore } from "./secure-store.ts";
 import { installSecurity } from "./security.ts";
 import { isExternalWebUrl } from "./trust.ts";
-import { createMainWindow, revealWindow } from "./window.ts";
+import { createMainWindow, revealWindow, windowPresentation } from "./window.ts";
+import { requestedWindowMode } from "./taskbar-model.ts";
 
 /*
  * A packaged app ignores ELECTRON_DEV_URL: honoring it would let anything that
@@ -110,6 +111,17 @@ function start(): void {
   /** Activity capture (activity/install.ts); set once ready. */
   let activity: ActivityController | null = null;
 
+  const currentWindowState = () => windowPresentation(mainWindow)?.snapshot() ?? { mode: "full" as const, alwaysOnTop: false };
+  handle(DESKTOP_IPC.windowGet, currentWindowState);
+  handle(DESKTOP_IPC.windowMode, (_event, mode: unknown) => {
+    if (mode !== "full" && mode !== "compact") throw new Error("Invalid desktop window mode");
+    return windowPresentation(mainWindow)?.setMode(mode) ?? currentWindowState();
+  });
+  handle(DESKTOP_IPC.windowPin, (_event, enabled: unknown) => {
+    if (typeof enabled !== "boolean") throw new Error("Invalid desktop pin preference");
+    return windowPresentation(mainWindow)?.setAlwaysOnTop(enabled) ?? currentWindowState();
+  });
+
   const showMain = (): void => {
     if (headless) return;
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -121,7 +133,11 @@ function start(): void {
 
   // A login-item launch while the app already runs changes nothing on screen.
   app.on("second-instance", (_event, argv) => {
-    if (!isHiddenLaunch(argv)) showMain();
+    if (!isHiddenLaunch(argv)) {
+      const mode = requestedWindowMode(argv);
+      if (mode) void windowPresentation(mainWindow)?.setMode(mode).catch((error) => console.warn("[window] mode change failed:", error));
+      showMain();
+    }
   });
 
   handle(DESKTOP_IPC.quit, () => {
@@ -206,6 +222,10 @@ function start(): void {
       isPackaged: app.isPackaged,
       mainWindow: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null),
       reveal: showMain,
+      setWindowMode: (mode) => windowPresentation(mainWindow)?.setMode(mode),
+      signedInChanged: (signedIn) => {
+        void windowPresentation(mainWindow)?.setSignedIn(signedIn).catch((error) => console.warn("[window] mode change failed:", error));
+      },
       // Installed just below; the tray only offers this once a renderer has
       // published an Autopilot that is on, which is long after.
       pauseAutopilot: (paused) => activity?.pauseAutopilot(paused),
@@ -232,6 +252,8 @@ function start(): void {
     if (hook !== undefined && activity.testHook !== null) hook.activity = activity.testHook;
 
     mainWindow = openWindow({ show: !desktop.launchHidden(process.argv) });
+    const requestedMode = requestedWindowMode(process.argv);
+    if (requestedMode) void windowPresentation(mainWindow)?.setMode(requestedMode).catch((error) => console.warn("[window] mode change failed:", error));
 
     // macOS: the Dock icon brings back a window hidden by its close button.
     app.on("activate", showMain);

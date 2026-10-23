@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { defaultDesktopSettings } from "./desktop-settings.ts";
-import { desktopWindowPolicy } from "./window-policy.ts";
+import { defaultWindowMode, desktopWindowPolicy } from "./window-policy.ts";
+
+it("defaults GNOME to compact without inferring that a tray host exists", () => {
+  for (const desktop of ["GNOME", "ubuntu:GNOME", "GNOME;Other"]) {
+    assert.equal(defaultWindowMode("linux", { XDG_CURRENT_DESKTOP: desktop }), "compact");
+  }
+  for (const desktop of ["KDE", "XFCE", "X-Cinnamon", ""]) {
+    assert.equal(defaultWindowMode("linux", { XDG_CURRENT_DESKTOP: desktop }), "full");
+  }
+  assert.equal(defaultWindowMode("win32", { XDG_CURRENT_DESKTOP: "GNOME" }), "full");
+});
 
 it("keeps a default Linux login launch reachable without an indicator host", () => {
   assert.deepEqual(desktopWindowPolicy("linux", defaultDesktopSettings("linux")), {

@@ -27,6 +27,7 @@ export const FALLBACK_TRAY_LABELS: DesktopTrayLabels = {
   ...TIMER_MENU_LABELS,
   recentHeading: "Continue",
   open: "Open Track Your Time",
+  compactTimer: "Open compact timer",
   settings: "Settings…",
   quit: "Quit Track Your Time",
   noDescription: "(no description)",
@@ -224,6 +225,7 @@ export function trayMenuModel(
   }
   items.push({ type: "separator" });
   items.push({ type: "item", id: "open", label: labels.open, enabled: true });
+  items.push({ type: "item", id: "compact", label: labels.compactTimer, enabled: true });
   items.push({ type: "item", id: "settings", label: labels.settings, enabled: true });
   items.push({ type: "separator" });
   items.push(...restart);

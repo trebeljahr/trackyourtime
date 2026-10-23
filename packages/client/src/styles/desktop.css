@@ -48,6 +48,10 @@ html.electron[data-platform="darwin"] [data-window-inset] {
   -webkit-app-region: drag;
 }
 
+html.electron[data-platform="darwin"] [data-compact-header] {
+  padding-left: 5rem;
+}
+
 /*
  * Screens without the app shell (sign-in, 404) have no header to drag by and
  * nothing to clear the traffic lights with. A strip across the top of the

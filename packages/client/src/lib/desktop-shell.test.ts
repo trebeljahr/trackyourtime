@@ -161,6 +161,21 @@ describe("notifyDesktopOnce", () => {
 });
 
 describe("focusTrackerDescription", () => {
+  it("waits until the full app is no longer inert after leaving compact mode", async () => {
+    vi.useFakeTimers();
+    const fullApp = document.createElement("div");
+    fullApp.setAttribute("inert", "");
+    const input = document.createElement("input");
+    input.dataset.testid = "tracker-description";
+    fullApp.append(input); document.body.append(fullApp);
+    focusTrackerDescription(1000);
+    expect(document.activeElement).not.toBe(input);
+    fullApp.removeAttribute("inert");
+    await vi.advanceTimersByTimeAsync(60);
+    expect(document.activeElement).toBe(input);
+    fullApp.remove();
+    vi.useRealTimers();
+  });
   it("waits for the field to mount", async () => {
     vi.useFakeTimers();
     focusTrackerDescription(1000);

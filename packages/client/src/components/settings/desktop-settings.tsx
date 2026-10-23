@@ -212,7 +212,8 @@ export function DesktopSettingsPanel(): React.JSX.Element | null {
             <SettingRow
               title={t("desktop.closeHides.title")}
               description={
-                settings.showInTray ? t("desktop.closeHides.description") : t("desktop.closeHides.needsTray")
+                !settings.showInTray ? t("desktop.closeHides.needsTray")
+                  : platform === "linux" ? t("desktop.closeHides.descriptionLinux") : t("desktop.closeHides.description")
               }
               testId="setting-desktop-close-hides"
             >

@@ -1100,6 +1100,7 @@ export const settings = {
     closeHides: {
       title: "Keep running when the window is closed",
       description: "The close button hides the window, and the timer keeps syncing. Quit from the tray menu.",
+      descriptionLinux: "Enable only if your desktop shows the tray icon. Otherwise leave this off and reopen the app from your launcher.",
       needsTray: "Needs the timer in the system tray.",
     },
     runningBadge: {

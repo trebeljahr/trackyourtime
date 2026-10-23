@@ -8,6 +8,9 @@ import path from "node:path";
 import { app, BrowserWindow, nativeTheme, screen } from "electron";
 
 import { isHeadless } from "./headless.ts";
+import { DESKTOP_IPC } from "../../packages/shared/src/desktop-bridge.ts";
+import { createWindowPresentation, type WindowPresentation } from "./window-presentation.ts";
+import { defaultWindowMode } from "./window-policy.ts";
 import {
   MIN_SIZE,
   backgroundColorFor,
@@ -17,6 +20,9 @@ import {
 } from "./window-state.ts";
 
 let quitting = false;
+const presentations = new WeakMap<BrowserWindow, WindowPresentation>();
+export const windowPresentation = (win: BrowserWindow | null): WindowPresentation | undefined =>
+  win ? presentations.get(win) : undefined;
 app.on("before-quit", () => {
   quitting = true;
 });
@@ -68,7 +74,8 @@ export function createMainWindow(options: {
   hideOnClose?: () => boolean;
 }): BrowserWindow {
   const isMac = process.platform === "darwin";
-  const saved = readWindowState();
+  const stored = readWindowState();
+  const saved = { ...stored, mode: stored.mode ?? defaultWindowMode(process.platform, process.env) };
   const bounds = initialBounds(
     saved.bounds,
     screen.getAllDisplays().map((d) => d.workArea),
@@ -90,7 +97,7 @@ export function createMainWindow(options: {
       ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 16, y: 20 } }
       : { autoHideMenuBar: true }),
     // Never in headless: a fullscreen window cannot stay hidden.
-    fullscreen: saved.fullscreen === true && !options.headless,
+    fullscreen: saved.mode !== "compact" && saved.fullscreen === true && !options.headless,
     webPreferences: {
       preload: options.preload,
       sandbox: true,
@@ -109,6 +116,26 @@ export function createMainWindow(options: {
     ...(options.headless ? { skipTaskbar: true } : {}),
   });
 
+  const presentation = createWindowPresentation({
+    window: win,
+    saved,
+    headless: options.headless === true,
+    workAreas: () => screen.getAllDisplays().map((display) => display.workArea),
+    save: writeWindowState,
+    changed: (snapshot) => { if (!win.isDestroyed()) win.webContents.send(DESKTOP_IPC.windowChanged, snapshot); },
+    leaveFullscreen: () => {
+      if (win.isSimpleFullScreen()) win.setSimpleFullScreen(false);
+      if (!win.isFullScreen()) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const done = (): void => { win.removeListener("leave-full-screen", done); win.removeListener("closed", done); resolve(); };
+        win.once("leave-full-screen", done);
+        win.once("closed", done);
+        win.setFullScreen(false);
+      });
+    },
+  });
+  presentations.set(win, presentation);
+
   // `maximize()` also SHOWS a hidden window (Electron's docs say so), so it
   // waits for ready-to-show: called right after construction it put the
   // window on screen before the page painted — the flash `show: false`
@@ -116,7 +143,7 @@ export function createMainWindow(options: {
   // last closed maximised visible.
   win.once("ready-to-show", () => {
     if (win.isDestroyed() || options.headless || options.showOnReady === false) return;
-    if (saved.maximized) win.maximize();
+    if (saved.maximized && presentation.snapshot().mode === "full") win.maximize();
     win.show();
   });
 
@@ -125,12 +152,7 @@ export function createMainWindow(options: {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       if (win.isDestroyed()) return;
-      writeWindowState({
-        // Normal bounds, so a maximised window restores to its old size.
-        bounds: win.getNormalBounds(),
-        maximized: win.isMaximized(),
-        fullscreen: win.isFullScreen() || win.isSimpleFullScreen(),
-      });
+      presentation.remember();
     }, 400);
   };
   for (const event of ["resize", "move", "maximize", "unmaximize", "enter-full-screen", "leave-full-screen"] as const) {
@@ -139,11 +161,7 @@ export function createMainWindow(options: {
 
   win.on("close", (event) => {
     if (saveTimer) clearTimeout(saveTimer);
-    writeWindowState({
-      bounds: win.getNormalBounds(),
-      maximized: win.isMaximized(),
-      fullscreen: win.isFullScreen() || win.isSimpleFullScreen(),
-    });
+    presentation.remember();
     // Closing the window hides it and the app keeps running, so the renderer
     // — which owns the socket, the offline queue and the running timer —
     // stays alive. macOS always (the Dock icon brings it back); Windows and
@@ -166,6 +184,7 @@ export function createMainWindow(options: {
 export function revealWindow(win: BrowserWindow): void {
   if (win.isDestroyed() || isHeadless()) return;
   if (win.isMinimized()) win.restore();
+  if (process.platform !== "darwin") win.setSkipTaskbar(false);
   win.show();
   win.focus();
   // A tray click or a global shortcut arrives while another app is in front;

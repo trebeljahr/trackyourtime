@@ -14,6 +14,8 @@ import type {
 import { isAutopilotTimer } from "@/components/activity/autopilot-data";
 import { useDesktopAutopilotBrief, type DesktopAutopilotBrief } from "@/components/activity/use-desktop-activity";
 import { DesktopAttentionGuards } from "@/components/desktop/desktop-attention-guards";
+import { CompactTimer } from "./compact-timer";
+import type { DesktopWindowView } from "./use-desktop-window";
 import { useEntryMutations } from "@/components/tracker/use-entry-mutations";
 import { RECENT_INPUT } from "@/hooks/use-favorites";
 import { useIsElectron } from "@/hooks/use-shell";
@@ -90,6 +92,7 @@ export function buildDesktopTimerState(input: {
       startTimer: t("desktop.tray.startTimer"),
       recentHeading: t("desktop.tray.recentHeading"),
       open: t("desktop.tray.open"),
+      compactTimer: t("desktop.compact.open"),
       settings: t("desktop.tray.settings"),
       quit: t("desktop.tray.quit"),
       noDescription: t("desktop.tray.noDescription"),
@@ -126,8 +129,10 @@ export function buildDesktopTimerState(input: {
  */
 export function DesktopBridgePublisher({
   onOpenPalette,
+  windowView,
 }: {
   onOpenPalette: () => void;
+  windowView?: DesktopWindowView;
 }): React.JSX.Element | null {
   const electron = useIsElectron();
   const t = useT("shell");
@@ -200,6 +205,9 @@ export function DesktopBridgePublisher({
   const handle = React.useCallback(
     async (command: DesktopCommand): Promise<void> => {
       const shell = desktopShell();
+      if (["compose", "open-palette", "open-settings", "open-prompt"].includes(command.kind)) {
+        try { await shell?.window?.setMode("full"); } catch { return; }
+      }
       switch (command.kind) {
         case "stop":
           if (timerStore.getState().running !== null) mutations.stopTimer();
@@ -297,5 +305,8 @@ export function DesktopBridgePublisher({
   }, [electron]);
 
   // `electron` is false during hydration, so the prerendered tree is the web's.
-  return electron && !isTrackPath(pathname) ? <DesktopAttentionGuards /> : null;
+  return <>
+    {electron && windowView?.compact ? <CompactTimer state={state} onCommand={(command) => void handle(command)} view={windowView} busy={mutations.isBusy} /> : null}
+    {electron && !isTrackPath(pathname) ? <DesktopAttentionGuards /> : null}
+  </>;
 }

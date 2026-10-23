@@ -262,9 +262,11 @@ export function focusTrackerDescription(timeoutMs = 3000): void {
   const started = Date.now();
   const attempt = (): void => {
     const input = document.querySelector<HTMLInputElement>('[data-testid="tracker-description"]');
-    if (input) {
+    if (input && !input.closest("[inert]")) {
       input.focus();
-      return;
+      // Compact-to-full resizing can finish before React reveals the form.
+      // Keep waiting when an existing input is still hidden or inert.
+      if (document.activeElement === input) return;
     }
     if (Date.now() - started < timeoutMs) window.setTimeout(attempt, 50);
   };

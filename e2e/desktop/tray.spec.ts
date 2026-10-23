@@ -185,7 +185,7 @@ test("German: the tray draws the renderer's German labels", async () => {
   await page.reload();
   await expect
     .poll(async () => (await trayMenu()).flatMap((item) => (item.type === "item" ? [item.label] : [])))
-    .toEqual(["Timer starten …", "Deutsch", "Track Your Time öffnen", "Einstellungen …", "Track Your Time beenden"]);
+    .toEqual(["Timer starten …", "Deutsch", "Track Your Time öffnen", "Kompakten Timer öffnen", "Einstellungen …", "Track Your Time beenden"]);
   expect((await trayMenu()).find((item) => item.type === "heading" && item.label === "Fortsetzen")).toEqual({ type: "heading", label: "Fortsetzen" });
 });
 
