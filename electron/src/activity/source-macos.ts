@@ -2,7 +2,7 @@
  * macOS: `/usr/bin/lsappinfo`, polled.
  *
  * `lsappinfo front` prints the frontmost application's ASN
- * (`ASN:0x0-0xaadaad:`), and `lsappinfo info -only bundleid -only name -only
+ * (`ASN:0x0-0xaadaad:`), and `lsappinfo info -long -only bundleid -only name -only
  * pid <ASN>` its bundle id, display name and pid. Both read LaunchServices'
  * own table: no TCC surface, no AppleEvents, no Accessibility, no Screen
  * Recording — nothing that can raise a permission prompt. Each call is a
@@ -71,6 +71,7 @@ export function createMacosSource(runner: ProcessRunner, timers: Timers): Frontm
   let busy = false;
   let lastAsn: string | null = null;
   let lastTarget: FrontmostTarget | null = null;
+  let generation = 0;
   const policy = createRestartPolicy(timers.now);
 
   const clear = (): void => {
@@ -94,9 +95,10 @@ export function createMacosSource(runner: ProcessRunner, timers: Timers): Frontm
   const read = async (): Promise<void> => {
     if (busy || listener === null) return;
     busy = true;
+    const run = generation;
     try {
       const front = await runner.run(LSAPPINFO, ["front"]);
-      if (listener === null) return;
+      if (listener === null || run !== generation) return;
       if (front.code !== 0) {
         fail();
         return;
@@ -104,9 +106,11 @@ export function createMacosSource(runner: ProcessRunner, timers: Timers): Frontm
       const asn = parseLsappinfoFront(front.stdout);
       if (asn === null) {
         // Nothing in front (every window closed, a transition): not a failure.
-        if (front.stdout.trim() === "") {
+        if (front.stdout.trim() === "" || front.stdout.trim() === "[ NULL ]") {
           lastAsn = null;
           lastTarget = null;
+          policy.succeed();
+          listener.failure(null);
           listener.target(null);
           return;
         }
@@ -114,8 +118,10 @@ export function createMacosSource(runner: ProcessRunner, timers: Timers): Frontm
         return;
       }
       if (asn !== lastAsn) {
-        const info = await runner.run(LSAPPINFO, ["info", "-only", "bundleid", "-only", "name", "-only", "pid", asn]);
-        if (listener === null) return;
+        // Without -long, lsappinfo prints a human-readable summary instead
+        // of the quoted LaunchServices fields parsed below.
+        const info = await runner.run(LSAPPINFO, ["info", "-long", "-only", "bundleid", "-only", "name", "-only", "pid", asn]);
+        if (listener === null || run !== generation) return;
         const target = info.code === 0 ? parseLsappinfoInfo(info.stdout) : null;
         if (target === null) {
           fail();
@@ -141,10 +147,12 @@ export function createMacosSource(runner: ProcessRunner, timers: Timers): Frontm
   return {
     kind: "macos-lsappinfo",
     start: (next) => {
+      generation += 1;
       listener = next;
       begin();
     },
     stop: () => {
+      generation += 1;
       listener = null;
       clear();
       lastAsn = null;

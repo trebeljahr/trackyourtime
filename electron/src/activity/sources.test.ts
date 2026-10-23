@@ -208,6 +208,7 @@ describe("macOS source", () => {
     await settle();
     assert.ok(runner.runs.every((run) => run[0] === LSAPPINFO));
     assert.equal(runner.runs.filter((run) => run[1] === "info").length, 2);
+    assert.ok(runner.runs.filter((run) => run[1] === "info").every((run) => run.includes("-long")));
     assert.deepEqual(
       listener.targets.map((t) => t?.key),
       ["app.ASN:0x0-0x1:", "app.ASN:0x0-0x1:", "app.ASN:0x0-0x2:"],
@@ -248,6 +249,41 @@ describe("macOS source", () => {
     await settle();
     assert.equal(listener.failures.at(-1), null);
     assert.equal(listener.targets.at(-1)?.key, "a.b");
+  });
+
+  it("does not treat the native no-frontmost-app marker as a helper failure", async () => {
+    const runner = fakeRunner(() => ({ code: 0, stdout: "[ NULL ] \n" }));
+    const timers = fakeTimers();
+    const source = createMacosSource(runner, timers);
+    const listener = recorder();
+    source.start(listener);
+    for (let i = 0; i < 4; i += 1) {
+      await settle();
+      timers.advance(5_000);
+    }
+    await settle();
+    assert.ok(listener.failures.every((failure) => failure === null));
+    assert.equal(listener.targets.at(-1), null);
+    assert.ok(runner.runs.length >= 5);
+    source.stop();
+  });
+
+  it("drops a read that finishes after capture was stopped and restarted", async () => {
+    let finish!: (result: RunResult) => void;
+    const runner = fakeRunner(() => ({ code: 0, stdout: '"CFBundleIdentifier"="a.b"\n' }));
+    runner.run = () => new Promise((resolve) => { finish = resolve; });
+    const timers = fakeTimers();
+    const source = createMacosSource(runner, timers);
+    const previous = recorder();
+    const next = recorder();
+    source.start(previous);
+    source.stop();
+    source.start(next);
+    finish({ code: 0, stdout: "[ NULL ]" });
+    await settle();
+    assert.deepEqual(previous.targets, []);
+    assert.deepEqual(next.targets, []);
+    source.stop();
   });
 });
 
@@ -427,8 +463,24 @@ describe("real lsappinfo", () => {
     const front = await runner.run(LSAPPINFO, ["front"]);
     const asn = parseLsappinfoFront(front.stdout);
     assert.ok(asn !== null, front.stdout);
-    const info = await runner.run(LSAPPINFO, ["info", "-only", "bundleid", "-only", "name", "-only", "pid", asn]);
+    const info = await runner.run(LSAPPINFO, ["info", "-long", "-only", "bundleid", "-only", "name", "-only", "pid", asn]);
     const target = parseLsappinfoInfo(info.stdout);
     assert.ok(target !== null && target.key !== "", info.stdout);
+    // Exercise the source's own argv too, rather than just duplicating it.
+    const source = createMacosSource(runner, fakeTimers());
+    try {
+      const detected = await new Promise<FrontmostTarget | null>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("macOS source did not answer")), 15_000);
+        source.start({
+          target: (value) => { clearTimeout(timeout); resolve(value); },
+          failure: (failure) => {
+            if (failure !== null) { clearTimeout(timeout); reject(new Error(failure.reason)); }
+          },
+        });
+      });
+      assert.ok(detected !== null && detected.key !== "");
+    } finally {
+      source.stop();
+    }
   });
 });
