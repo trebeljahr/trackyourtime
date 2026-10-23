@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { randomSecret } from "@starter/core";
+import { memoryStorage, randomSecret } from "@starter/core";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", changed: null as (() => void) | null, bridge: null as unknown }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiOrigin: (fn: () => void) => { state.changed = fn; return () => {}; } }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => state.bridge }));
-const { installPrivateSession, lockPrivateData, newPrivateIdentity, privateSession, unlockPrivateRecovery, unlockPrivatePrf, wrapIdentityWithPrf, protectPrivateActivity, privateAccountChanged } = await import("./private-session");
+const { installPrivateSession, lockPrivateData, newPrivateIdentity, privateSession, privateWorkspaceStorage, unlockPrivateRecovery, unlockPrivatePrf, wrapIdentityWithPrf, protectPrivateActivity, privateAccountChanged } = await import("./private-session");
 beforeEach(() => { vi.stubGlobal("crypto", webcrypto); state.origin = "https://api.example.test"; state.bridge = null; lockPrivateData(); privateAccountChanged(null); });
 afterEach(() => { state.bridge = null; lockPrivateData(); vi.unstubAllGlobals(); });
 describe("private session keys", () => {
@@ -29,7 +29,7 @@ describe("private session keys", () => {
   });
   it("uses local passkey PRF results to unwrap the identity and rejects a different credential", async () => {
     const draft = await newPrivateIdentity("owner"), prf = randomSecret(); installPrivateSession("owner", draft.secrets);
-    const envelope = await wrapIdentityWithPrf("owner", prf);
+    const envelope = await wrapIdentityWithPrf("owner", prf, draft.identity);
     const identity = { ...draft.identity, passkeys: [{ credentialId: "credential", envelope }] };
     lockPrivateData(); await unlockPrivatePrf("owner", identity, "credential", prf);
     expect(privateSession("owner")).toEqual(draft.secrets); lockPrivateData();
@@ -44,7 +44,7 @@ describe("private session keys", () => {
     expect(privateSession("owner")).toBeNull();
     expect(() => draft.assertCurrent()).toThrow("changed during");
     installPrivateSession("owner", draft.secrets);
-    const secret = randomSecret(), envelope = await wrapIdentityWithPrf("owner", secret);
+    const secret = randomSecret(), envelope = await wrapIdentityWithPrf("owner", secret, draft.identity);
     lockPrivateData(); privateAccountChanged("owner");
     const prfUnlock = unlockPrivatePrf("owner", { ...draft.identity, passkeys: [{ credentialId: "credential", envelope }] }, "credential", secret);
     privateAccountChanged("other");
@@ -69,15 +69,34 @@ describe("private session keys", () => {
     await expect(unlockPrivateRecovery("owner", { ...draft.identity, signingPublicKey: other.identity.signingPublicKey }, draft.recoveryKey)).rejects.toThrow("do not match");
     expect(privateSession("owner")).toBeNull();
     installPrivateSession("owner", draft.secrets);
-    const secret = randomSecret(), envelope = await wrapIdentityWithPrf("owner", secret);
+    await expect(wrapIdentityWithPrf("owner", randomSecret(), { ...draft.identity, publicKey: other.identity.publicKey })).rejects.toThrow("do not match");
+    const secret = randomSecret(), envelope = await wrapIdentityWithPrf("owner", secret, draft.identity);
     lockPrivateData();
     await expect(unlockPrivatePrf("owner", { ...draft.identity, publicKey: other.identity.publicKey, passkeys: [{ credentialId: "credential", envelope }] }, "credential", secret)).rejects.toThrow("do not match");
     expect(privateSession("owner")).toBeNull();
   });
   it("does not finish passkey enrollment when private data locks while its envelope is being encrypted", async () => {
     const draft = await newPrivateIdentity("owner"); installPrivateSession("owner", draft.secrets);
-    const wrapping = wrapIdentityWithPrf("owner", randomSecret());
+    const wrapping = wrapIdentityWithPrf("owner", randomSecret(), draft.identity);
     lockPrivateData();
     await expect(wrapping).rejects.toThrow("changed during");
+  });
+  it("binds private workspace storage to the unlocked identity and leaves the legacy multi-account queue untouched", async () => {
+    const draft = await newPrivateIdentity("owner"), backing = memoryStorage(); installPrivateSession("owner", draft.secrets);
+    await backing.setItem("trackyourtime.offline-queue", "other account's unsent work");
+    const encrypted = await privateWorkspaceStorage("owner", "workspace", backing);
+    await encrypted.setItem("replica", "private cached work");
+    expect(await encrypted.getItem("replica")).toBe("private cached work");
+    expect(await backing.getItem(`${encrypted.namespace}replica`)).not.toContain("private cached work");
+    expect(await backing.getItem("trackyourtime.offline-queue")).toBe("other account's unsent work");
+    lockPrivateData(); await expect(encrypted.getItem("replica")).rejects.toThrow("Unlock private data");
+    await unlockPrivateRecovery("owner", draft.identity, draft.recoveryKey);
+    expect(await encrypted.getItem("replica")).toBe("private cached work");
+    state.origin = "https://other.example.test"; state.changed?.();
+    const other = await newPrivateIdentity("owner"); installPrivateSession("owner", other.secrets);
+    await expect(encrypted.getItem("replica")).rejects.toThrow("Unlock private data");
+    const elsewhere = await privateWorkspaceStorage("owner", "workspace", backing);
+    expect(elsewhere.namespace).not.toBe(encrypted.namespace);
+    expect(await elsewhere.getItem("replica")).toBeNull();
   });
 });

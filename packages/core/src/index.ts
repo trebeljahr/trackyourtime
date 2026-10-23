@@ -36,3 +36,4 @@ export * from "./durable-entry.js";
 export * from "./privacy/crypto.js";
 export * from "./privacy/records.js";
 export * from "./privacy/recovery.js";
+export * from "./privacy/storage.js";

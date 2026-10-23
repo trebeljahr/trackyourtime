@@ -1,4 +1,4 @@
-import { createKeyPair, createSigningPair, decodeSecret, deriveSecret, encodeSecret, randomSecret, seal, unseal, type Ciphertext, type PublicKey } from "@starter/core";
+import { createKeyPair, createPrivateStorage, createSigningPair, decodeSecret, deriveSecret, encodeSecret, randomSecret, seal, unseal, type Ciphertext, type KeyValueStorage, type PublicKey } from "@starter/core";
 import { desktopActivity } from "./desktop-activity";
 import type { PrivateIdentity } from "@starter/shared";
 import { getApiOrigin, subscribeApiOrigin } from "./api-origin";
@@ -61,8 +61,9 @@ export function prfBytes(value: unknown): Uint8Array<ArrayBuffer> | null {
   } catch { /* Unsupported output is not encryption support. */ }
   return null;
 }
-export async function wrapIdentityWithPrf(userId: string, secret: Uint8Array): Promise<Ciphertext> {
+export async function wrapIdentityWithPrf(userId: string, secret: Uint8Array, identity: PrivateIdentity): Promise<Ciphertext> {
   const current = privateSession(userId); if (!current) throw new Error("Unlock private data first");
+  assertIdentityKeys(identity, current);
   const assertCurrent = privateOperationScope(userId), aad = context(userId);
   const key = await deriveSecret(secret, aad);
   try {
@@ -120,4 +121,18 @@ export async function resumePrivateActivity(userId: string): Promise<void> {
 export function privateAccountChanged(userId: string | null): void {
   if ((resolvedAccount != null && resolvedAccount !== userId) || (session && session.userId !== userId)) lockPrivateData();
   resolvedAccount = userId;
+}
+
+/** Private workspace replicas use their own scoped namespace. The legacy
+ * multi-account queue must be migrated separately, under its existing lock. */
+export function privateWorkspaceStorage(userId: string, workspaceId: string, storage: KeyValueStorage) {
+  const server = privateDataOrigin();
+  return createPrivateStorage({ storage, scope: { server, userId, workspaceId }, resolveKey: () => {
+    const current = privateSession(userId);
+    if (!current || privateDataOrigin() !== server) return null;
+    const assertCurrent = privateOperationScope(userId), key = decodeSecret(current.master, 32);
+    return { key, current: () => {
+      try { assertCurrent(); return privateSession(userId) === current; } catch { return false; }
+    }, release: () => key.fill(0) };
+  } });
 }

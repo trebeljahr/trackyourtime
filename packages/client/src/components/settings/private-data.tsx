@@ -86,7 +86,7 @@ function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
             }
           }
           try {
-            const next = { ...identity, passkeys: [...identity.passkeys, { credentialId, envelope: await wrapIdentityWithPrf(id, secret) }] };
+            const next = { ...identity, passkeys: [...identity.passkeys, { credentialId, envelope: await wrapIdentityWithPrf(id, secret, identity) }] };
             const revision = account.data!.revision;
             const signature = await signPrivateChange(current.signingPrivateKey, { userId: id, revision, identity: next });
             assertCurrent(); if (privateSession(id) !== current) throw new Error("Private data is locked");
