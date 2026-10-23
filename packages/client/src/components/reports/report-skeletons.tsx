@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { kpiGridClassName } from "@/components/reports/kpi-row";
 
 /**
  * Loading placeholders sized to the real layout, so nothing on the report
@@ -28,13 +29,13 @@ export function FilterBarSkeleton(): React.JSX.Element {
   );
 }
 
-export function KpiRowSkeleton(): React.JSX.Element {
+export function KpiRowSkeleton({ count = 4 }: { count?: number }): React.JSX.Element {
   return (
     <div
-      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      className={kpiGridClassName(count)}
       data-testid="kpi-row-skeleton"
     >
-      {[0, 1, 2, 3].map((index) => (
+      {Array.from({ length: count }, (_, index) => (
         <Card key={index}>
           <CardHeader className="pb-2">
             <Skeleton className="h-3 w-24" />

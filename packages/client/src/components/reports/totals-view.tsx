@@ -244,7 +244,7 @@ export function TotalsView({
       whole > 0
         ? t("kpi.shareOfTracked", { percent: f.percent(part / whole) })
         : "";
-    return [
+    const items: KpiItem[] = [
       {
         label: t("kpi.totalTracked"),
         value: fmt.duration(totalSec),
@@ -252,6 +252,8 @@ export function TotalsView({
         icon: Clock,
         testId: "kpi-total",
       },
+    ];
+    if (state.billable !== "no") items.push(
       {
         label: tc("fields.billable"),
         value: fmt.duration(billableSec),
@@ -259,6 +261,8 @@ export function TotalsView({
         icon: Receipt,
         testId: "kpi-billable",
       },
+    );
+    if (state.billable !== "yes") items.push(
       {
         label: tc("fields.nonBillable"),
         value: fmt.duration(nonBillableSec),
@@ -266,6 +270,8 @@ export function TotalsView({
         icon: Clock,
         testId: "kpi-non-billable",
       },
+    );
+    if (state.billable !== "no") items.push(
       {
         label: t("kpi.amountEarned"),
         value: formatReportAmounts(
@@ -280,15 +286,16 @@ export function TotalsView({
           : currencyIcon(result?.currency ?? fmt.currency) ?? CURRENCY_FALLBACK_ICON,
         testId: "kpi-amount",
       },
-    ];
-  }, [fmt, result, t, tc, f]);
+    );
+    return items;
+  }, [fmt, result, t, tc, f, state.billable]);
 
   const isLoading = query.isPending;
   const isEmpty = result !== undefined && result.totalSec === 0;
 
   return (
     <div className="space-y-4" data-testid="summary-report">
-      {isLoading ? <KpiRowSkeleton /> : <KpiRow items={kpis} />}
+      {isLoading ? <KpiRowSkeleton count={kpis.length} /> : <KpiRow items={kpis} />}
       <MoneyHiddenNote moneyVisible={result?.moneyVisible} />
 
       {/*
@@ -395,6 +402,7 @@ export function TotalsView({
               timeline={result.timeline}
               duration={fmt.duration}
               weekStartsOn={fmt.weekStartsOn}
+              billable={reportFilters.billable}
               onSelectBucket={drillIntoBucket}
             />
           ) : null}

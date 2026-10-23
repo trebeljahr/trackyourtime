@@ -73,6 +73,7 @@ type ChartTooltipProps = {
   formatMoneyValue?: (amount: number) => string;
   /** Whether a click on the mark under the cursor narrows the report. */
   drillable?: boolean;
+  billable?: boolean;
 };
 
 const readString = (
@@ -132,6 +133,7 @@ function TimelineTooltip({
   formatDurationValue,
   granularity = "day",
   drillable = false,
+  billable: billableFilter,
 }: ChartTooltipProps): React.JSX.Element | null {
   const tc = useT("common");
   const f = useFormat();
@@ -149,16 +151,16 @@ function TimelineTooltip({
       <p className="mb-1 font-medium">
         {formatBucketLabel(dayLabel, granularity, true, f.locale)}
       </p>
-      <p className="flex items-center gap-2">
+      {billableFilter !== false && <p className="flex items-center gap-2">
         <TooltipSwatch color={BILLABLE_COLOR} />
         <span className="text-muted-foreground">{tc("fields.billable")}</span>
         <span className="ml-auto tabular-nums">{asDuration(billable)}</span>
-      </p>
-      <p className="flex items-center gap-2">
+      </p>}
+      {billableFilter !== true && <p className="flex items-center gap-2">
         <TooltipSwatch color={NON_BILLABLE_COLOR} />
         <span className="text-muted-foreground">{tc("fields.nonBillable")}</span>
         <span className="ml-auto tabular-nums">{asDuration(nonBillable)}</span>
-      </p>
+      </p>}
       <p className="mt-1 flex items-center gap-2 border-t border-border pt-1 font-medium">
         <span>{tc("fields.total")}</span>
         <span className="ml-auto tabular-nums">
@@ -241,6 +243,8 @@ export type TimelineChartProps = {
   timeline: SummaryTimelinePoint[];
   duration: (seconds: number) => string;
   weekStartsOn?: WeekStart;
+  /** Omitted for all time; otherwise only the selected series is shown. */
+  billable?: boolean;
   /**
    * Called with the bar somebody clicked — the way to narrow the report to
    * that day, week or month. Omitted, the bars are only a picture.
@@ -256,6 +260,7 @@ export function TimelineChart({
   timeline,
   duration,
   weekStartsOn = 1,
+  billable,
   onSelectBucket,
 }: TimelineChartProps): React.JSX.Element {
   const t = useT("reports");
@@ -298,14 +303,14 @@ export function TimelineChart({
         <CardTitle className="flex items-center justify-between text-sm font-medium">
           <span>{t(`charts.timelineTitle.${granularity}`)}</span>
           <span className="flex items-center gap-3 text-xs font-normal text-muted-foreground">
-            <span className="flex items-center gap-1.5">
+            {billable !== false && <span className="flex items-center gap-1.5">
               <TooltipSwatch color={BILLABLE_COLOR} />
               {tc("fields.billable")}
-            </span>
-            <span className="flex items-center gap-1.5">
+            </span>}
+            {billable !== true && <span className="flex items-center gap-1.5">
               <TooltipSwatch color={NON_BILLABLE_COLOR} />
               {tc("fields.nonBillable")}
-            </span>
+            </span>}
           </span>
         </CardTitle>
       </CardHeader>
@@ -357,25 +362,26 @@ export function TimelineChart({
                       formatDurationValue={duration}
                       granularity={granularity}
                       drillable={onSelectBucket !== undefined}
+                      billable={billable}
                     />
                   }
                 />
-                <Bar
+                {billable !== false && <Bar
                   dataKey="billableSec"
                   name={tc("fields.billable")}
                   stackId="time"
                   fill={BILLABLE_COLOR}
-                  radius={[0, 0, 0, 0]}
+                  radius={billable === true ? [3, 3, 0, 0] : [0, 0, 0, 0]}
                   onClick={selectBar}
-                />
-                <Bar
+                />}
+                {billable !== true && <Bar
                   dataKey="nonBillableSec"
                   name={tc("fields.nonBillable")}
                   stackId="time"
                   fill={NON_BILLABLE_COLOR}
                   radius={[3, 3, 0, 0]}
                   onClick={selectBar}
-                />
+                />}
               </BarChart>
             </ResponsiveContainer>
           ) : (

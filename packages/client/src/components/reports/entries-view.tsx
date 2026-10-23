@@ -229,7 +229,7 @@ export function EntriesView({
         icon: Clock,
         testId: "kpi-total",
       },
-      {
+      ...(reportFilters.billable === false ? [] : [{
         label: t("kpi.amountEarned"),
         value: formatReportAmounts(
           totals?.totalAmounts,
@@ -242,7 +242,7 @@ export function EntriesView({
           ? CURRENCY_FALLBACK_ICON
           : currencyIcon(totals?.currency ?? fmt.currency) ?? CURRENCY_FALLBACK_ICON,
         testId: "kpi-amount",
-      },
+      }]),
       {
         label: t("kpi.entriesLoaded"),
         value: f.number(entries.length),
@@ -251,14 +251,14 @@ export function EntriesView({
         testId: "kpi-entries",
       },
     ],
-    [entries.length, f, fmt, query.hasNextPage, t, totals]
+    [entries.length, f, fmt, query.hasNextPage, t, totals, reportFilters.billable]
   );
 
   const isLoading = query.isPending;
 
   return (
     <div className="space-y-4" data-testid="detailed-report">
-      {isLoading ? <KpiRowSkeleton /> : <KpiRow items={kpis} />}
+      {isLoading ? <KpiRowSkeleton count={kpis.length} /> : <KpiRow items={kpis} />}
       <MoneyHiddenNote moneyVisible={totals?.moneyVisible} />
 
       {eligible.length > 100 ? <p className="text-sm text-muted-foreground" data-testid="bulk-selection-limit">{t("bulk.selectFirst", { count: f.number(100) })}</p> : null}

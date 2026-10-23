@@ -21,11 +21,18 @@ export type KpiRowProps = {
   className?: string;
 };
 
+export const kpiGridClassName = (count: number): string => cn(
+  "grid gap-3",
+  count > 1 && "sm:grid-cols-2",
+  count === 3 && "xl:grid-cols-3",
+  count >= 4 && "xl:grid-cols-4",
+);
+
 /** The headline figures strip that opens every report. */
 export function KpiRow({ items, className }: KpiRowProps): React.JSX.Element {
   return (
     <div
-      className={cn("grid gap-3 sm:grid-cols-2 xl:grid-cols-4", className)}
+      className={cn(kpiGridClassName(items.length), className)}
       data-testid="kpi-row"
       data-count={items.length}
     >
