@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions, useTaskOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -200,8 +202,8 @@ function DesktopSuggestions({ activity }: { activity: DesktopActivity }): React.
     { staleTime: 30_000 },
   );
 
-  const projects = trpc.projects.list.useQuery({});
-  const tasks = trpc.tasks.list.useQuery({});
+  const projects = useProjectOptions({});
+  const tasks = useTaskOptions({});
   const tags = trpc.tags.list.useQuery(TAG_LIST_INPUT);
   const catalog = React.useMemo<KnownCatalog>(
     () => ({

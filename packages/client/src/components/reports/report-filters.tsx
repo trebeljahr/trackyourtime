@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions, useClientOptions, useTaskOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 
@@ -8,8 +10,8 @@ import { ProjectFormDialog } from "@/components/catalog/project-form-dialog";
 import { TaskFormDialog } from "@/components/catalog/task-form-dialog";
 import type {
   ClientRow,
-  ProjectRow,
-  TaskRow,
+  ProjectOption,
+  TaskTableRow,
 } from "@/components/catalog/types";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { useTrackedSpan } from "@/lib/entry-links";
@@ -23,7 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/i18n/use-t";
-import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import {
   MultiSelect,
@@ -127,8 +128,8 @@ function SearchField({
 type CatalogDialog =
   | null
   | { kind: "client"; row: ClientRow | null }
-  | { kind: "project"; row: ProjectRow | null }
-  | { kind: "task"; row: TaskRow | null };
+  | { kind: "project"; row: ProjectOption | null }
+  | { kind: "task"; row: TaskTableRow | null };
 
 export type ReportFiltersBarProps = {
   filters: UseReportFiltersResult;
@@ -181,12 +182,12 @@ export function ReportFiltersBar({
     Number(state.billable !== "all") +
     Number(state.search.trim() !== "");
   const trackedSpan = useTrackedSpan();
-  const clientsQuery = trpc.clients.list.useQuery({});
-  const projectsQuery = trpc.projects.list.useQuery({});
+  const clientsQuery = useClientOptions({});
+  const projectsQuery = useProjectOptions({});
   // Tasks are workspace-wide, so this filter stands on its own: it lists every
   // task whatever the project filter says, and picking one never depends on -
   // or disturbs - the projects beside it.
-  const tasksQuery = trpc.tasks.list.useQuery({});
+  const tasksQuery = useTaskOptions({});
 
   const clientOptions = React.useMemo<MultiSelectOption[]>(
     () =>
@@ -227,10 +228,10 @@ export function ReportFiltersBar({
   const findClient = (id: string): ClientRow | null =>
     (clientsQuery.data ?? []).find((client) => client.id === id) ?? null;
 
-  const findProject = (id: string): ProjectRow | null =>
+  const findProject = (id: string): ProjectOption | null =>
     (projectsQuery.data ?? []).find((project) => project.id === id) ?? null;
 
-  const findTask = (id: string): TaskRow | null =>
+  const findTask = (id: string): TaskTableRow | null =>
     (tasksQuery.data ?? []).find((task) => task.id === id) ?? null;
 
   return (

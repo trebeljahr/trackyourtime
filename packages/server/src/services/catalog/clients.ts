@@ -120,6 +120,15 @@ export async function listClients(
   }));
 }
 
+/** Catalog metadata for pickers. Never reads time entries. */
+export async function clientOptions(scope: WorkspaceScope, input: ClientListInput): Promise<ClientWire[]> {
+  const docs = await Client.find({
+    workspaceId: scope.workspaceId,
+    ...(input.includeArchived ? {} : { archived: false }),
+  }).collation({ locale: "en", strength: 2 }).sort({ name: 1 }).lean();
+  return docs.map(toClientClient);
+}
+
 /** One client by id. Same `{ _id, workspaceId }` filter as everything else. */
 export async function getClient(
   scope: WorkspaceScope,

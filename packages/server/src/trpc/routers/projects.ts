@@ -15,6 +15,7 @@ import {
   archiveProject,
   createProject,
   listProjects,
+  projectOptions,
   removeProject,
   updateProjectWithEntries,
   type ProjectWithStats,
@@ -29,6 +30,7 @@ import { archiveInputSchema } from "./clients.js";
 export type { ProjectWithStats };
 
 export const projectsRouter = router({
+  options: workspaceProcedure.input(projectListSchema).query(({ ctx, input }) => projectOptions(scopeFromContext(ctx), input)),
   list: workspaceProcedure
     .input(projectListSchema)
     .query(async ({ ctx, input }): Promise<ProjectWithStats[]> =>

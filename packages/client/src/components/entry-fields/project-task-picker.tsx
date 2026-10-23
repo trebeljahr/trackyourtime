@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions, useClientOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { useServerSupports } from "@/lib/server-level";
@@ -9,7 +11,6 @@ import { ProjectPicker } from "@/components/project-picker";
 import { Label } from "@/components/ui/label";
 import { TaskPicker } from "@/components/task-picker";
 import { useT } from "@/i18n/use-t";
-import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,7 +21,7 @@ import { cn } from "@/lib/utils";
 export const useProjectClientName = (
   projectId: string | null,
 ): string | null => {
-  const projects = trpc.projects.list.useQuery({});
+  const projects = useProjectOptions({});
   if (projectId === null) return null;
   return (
     projects.data?.find((candidate) => candidate.id === projectId)
@@ -71,8 +72,8 @@ export function ProjectTaskPicker({
   className,
 }: ProjectTaskPickerProps): React.JSX.Element {
   const t = useT("tracker");
-  const clients = trpc.clients.list.useQuery({});
-  const projects = trpc.projects.list.useQuery({});
+  const clients = useClientOptions({});
+  const projects = useProjectOptions({});
   const supportsClient = useServerSupports("entries.client");
   const tc = useT("common");
   const selectedClient =

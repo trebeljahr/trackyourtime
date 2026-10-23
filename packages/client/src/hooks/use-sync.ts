@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  FALLBACK_RESYNC_MS, HEALTH_LEASE_MS, holdSyncSnapshots, needsSyncReconciliation,
+  FALLBACK_RESYNC_MS, HEALTH_LEASE_MS, needsSyncReconciliation,
   reconcileQueries, reconcileInvalidatedReads, unsafeStartupQueries,
 } from "@/lib/sync-reconciliation";
 import {
@@ -250,10 +250,7 @@ export const useSync = (): SyncStatus => {
     const url = resolveSyncUrl(getApiOrigin(), window.location.origin);
     if (url === "") return;
 
-    const held = holdSyncSnapshots();
-    const startupQueries = unsafeStartupQueries(queryClient);
     let active = true;
-    let firstFence = true;
     let fenced = false;
     let distributedAt: number | null = null;
     let lastRefresh = Date.now();
@@ -267,10 +264,9 @@ export const useSync = (): SyncStatus => {
       if (fenced || !active) return;
       fenced = true;
       clearTimeout(legacyFence);
-      // Held requests have not taken a snapshot yet, so need no second fetch.
-      reconcile(firstFence && held.pending() ? startupQueries : undefined);
-      firstFence = false;
-      held.release();
+      // Include reads sent since mount, even if their response is still held.
+      // Requests still waiting for the batch scheduler need no catch-up.
+      reconcile(unsafeStartupQueries(queryClient));
     };
 
     const client = createSyncClient({
@@ -355,7 +351,6 @@ export const useSync = (): SyncStatus => {
     }, FALLBACK_RESYNC_MS);
     return () => {
       active = false;
-      held.release();
       clearTimeout(legacyFence);
       window.clearInterval(resync);
       if (activeClient === client) activeClient = null;

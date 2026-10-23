@@ -33,13 +33,13 @@ import {
   useClientMutations,
   useProjectMutations,
 } from "./use-catalog-mutations";
-import type { ClientRow, ProjectRow } from "./types";
+import type { ClientRow, ProjectOption } from "./types";
 
 export type ProjectFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Omitted/null creates; otherwise the dialog edits this project. */
-  project?: ProjectRow | null;
+  project?: ProjectOption | null;
   clients: ClientRow[];
   /**
    * Called with the newly created project. Lets a caller act on the result —
@@ -117,7 +117,7 @@ export function ProjectFormDialog({
 }
 
 type ProjectFormProps = {
-  project: ProjectRow | null;
+  project: ProjectOption | null;
   clients: ClientRow[];
   /** Receives the created project on create; nothing on edit. */
   onDone: (created?: { id: string; name: string }) => void;

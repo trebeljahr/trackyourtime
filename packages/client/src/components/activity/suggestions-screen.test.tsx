@@ -55,8 +55,8 @@ vi.mock("@/lib/trpc", () => {
   return {
     trpc: {
       useUtils: () => utils,
-      projects: { list: query([{ id: "p1", name: "Website", billableDefault: true, clientName: null }]) },
-      tasks: { list: query([]) },
+      projects: { options: query([{ id: "p1", name: "Website", billableDefault: true, clientName: null }]) },
+      tasks: { projectLinks: { useQuery: () => ({ data: {} }) }, options: query([]) },
       tags: { list: query([]) },
       settings: { get: query(undefined) },
       entries: { list: query({ entries: [] }) },

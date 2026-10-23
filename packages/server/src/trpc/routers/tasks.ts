@@ -12,6 +12,7 @@ import {
   archiveTask,
   createTask,
   listTasks,
+  taskOptions,
   removeTask,
   updateTask,
   type TaskWithStats,
@@ -35,6 +36,11 @@ export type { TaskWithStats };
 export type TaskWithProjects = TaskWithStats & { projectIds: string[] };
 
 export const tasksRouter = router({
+  options: workspaceProcedure.input(taskListSchema).query(({ ctx, input }) => taskOptions(scopeFromContext(ctx), input)),
+  projectLinks: workspaceProcedure.input(taskListSchema.pick({})).query(async ({ ctx }) => {
+    const links = await taskProjectLinks(scopeFromContext(ctx));
+    return Object.fromEntries([...links].map(([id, projects]) => [id, [...projects].sort()]));
+  }),
   list: workspaceProcedure
     .input(taskListSchema)
     .query(async ({ ctx, input }): Promise<TaskWithProjects[]> => {

@@ -1,11 +1,9 @@
 import type { Query, QueryClient } from "@tanstack/react-query";
 
-const STARTUP_WAIT_MS = 1000;
 export const FALLBACK_RESYNC_MS = 30_000;
 export const HEALTHY_RESYNC_MS = 300_000;
 export const HEALTH_LEASE_MS = 25_000;
 
-let gate: { promise: Promise<void>; release: () => void } | null = null;
 // Keep reads tracked until decoded results, including streamed batches whose
 // HTTP headers arrive before their queries finish.
 const reads = new Set<{ sent: boolean }>();
@@ -16,37 +14,10 @@ export function trackSyncQuery(): () => void {
 }
 const pendingRefreshes = new WeakMap<Query, { promise: Promise<unknown>; refresh: () => void }>();
 
-/** Hold new snapshots briefly, until room placement, without blocking offline launch. */
-export function holdSyncSnapshots() {
-  gate?.release();
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => { resolve = done; });
-  let pending = true;
-  const current = {
-    promise,
-    release: () => {
-      if (!pending) return;
-      pending = false;
-      clearTimeout(timeout);
-      if (gate === current) gate = null;
-      resolve();
-    },
-  };
-  const timeout = setTimeout(current.release, STARTUP_WAIT_MS);
-  gate = current;
-  return { release: current.release, pending: () => pending };
-}
-
-/** Only queries wait; mutations keep their normal delivery and echo semantics. */
+/** Read immediately. Socket room placement reconciles snapshots sent before it. */
 export function fetchSyncSnapshot<T>(query: boolean, fetch: () => Promise<T>): Promise<T> {
-  const send = () => {
-    const request = fetch();
-    if (query) {
-      for (const read of reads) read.sent = true;
-    }
-    return request;
-  };
-  return query && gate ? gate.promise.then(send) : send();
+  if (query) for (const read of reads) read.sent = true;
+  return fetch();
 }
 
 /** Queries already read (or sent) before the room was joined need catch-up. */

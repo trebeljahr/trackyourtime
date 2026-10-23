@@ -15,7 +15,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { translate, useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
-import { errorMessage, type ProjectRow } from "./types";
+import { errorMessage, type ProjectOption } from "./types";
 
 /**
  * What to do with the time already booked on a project whose billing changed.
@@ -31,7 +31,7 @@ export type BillingChange = {
 
 /** True when `next` would change what new entries on `project` are billed at. */
 export function billingChanged(
-  project: Pick<ProjectRow, "billableDefault" | "hourlyRate">,
+  project: Pick<ProjectOption, "billableDefault" | "hourlyRate">,
   next: BillingChange,
 ): boolean {
   return (
@@ -41,7 +41,7 @@ export function billingChanged(
 }
 
 type Pending = {
-  project: ProjectRow;
+  project: ProjectOption;
   next: BillingChange;
   impact: ProjectBillingImpact;
   resolve: (choice: ApplyChoice) => void;
@@ -53,7 +53,7 @@ export type ApplyToEntriesPrompt = {
    * project. Resolves without asking when there is nothing to ask about: no
    * billing change, or no entries it could reach.
    */
-  ask: (project: ProjectRow, next: BillingChange) => Promise<ApplyChoice>;
+  ask: (project: ProjectOption, next: BillingChange) => Promise<ApplyChoice>;
   /** Render this once, anywhere in the caller's tree. */
   dialog: React.JSX.Element;
 };
@@ -74,7 +74,7 @@ export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
   const [pending, setPending] = React.useState<Pending | null>(null);
 
   const ask = React.useCallback(
-    async (project: ProjectRow, next: BillingChange): Promise<ApplyChoice> => {
+    async (project: ProjectOption, next: BillingChange): Promise<ApplyChoice> => {
       if (!billingChanged(project, next)) return "new-only";
 
       let impact: ProjectBillingImpact;

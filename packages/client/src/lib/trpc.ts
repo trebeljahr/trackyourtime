@@ -1,6 +1,7 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { TRPCClientError, httpBatchLink, httpBatchStreamLink, splitLink, type TRPCLink } from "@trpc/client";
 import { observable } from "@trpc/server/observable";
+import { REQUIRES_API_LEVEL } from "@starter/shared";
 import { durableRequestSignal, durableEntryEnvelope, isDurableEntryOp, assertEntryClientSupported, CLIENT_TOO_OLD, versionHeaders, withWorkspaceId } from "@starter/core";
 import type { AppRouter } from "@starter/server/trpc";
 import { clientId, isTokenShell } from "@/lib/shell";
@@ -18,6 +19,43 @@ import { submitDurableEntry } from "@/lib/offline";
 import { fetchSyncSnapshot, trackSyncQuery } from "@/lib/sync-reconciliation";
 
 export const trpc = createTRPCReact<AppRouter>();
+
+/** New clients retain read compatibility with older self-hosted servers. */
+export const compatibleReadsLink = (): TRPCLink<AppRouter> => () => {
+  const legacy = new Set<string>();
+  const required = REQUIRES_API_LEVEL["catalog.options"];
+  return ({ op, next }) => {
+    const level = currentServerApiLevel();
+    const legacyKey = `${level}:${op.path}`;
+    const fallback = ({
+      "projects.options": "projects.list",
+      "clients.options": "clients.list",
+      "tasks.options": "tasks.list",
+      "reports.rows": "reports.detailed",
+      "reports.totals": "reports.detailed",
+    } as Record<string, string>)[op.path];
+    if (op.type !== "query" || (!fallback && op.path !== "tasks.projectLinks")) return next(op);
+    return observable((observer) => {
+      let subscription: { unsubscribe: () => void } | undefined;
+      const readLegacy = () => {
+        if (fallback) subscription = next({ ...op, path: fallback, context: { ...op.context, independent: op.path === "reports.rows" } }).subscribe(observer);
+        else { observer.next({ result: { data: {} } }); observer.complete(); }
+      };
+      if ((level !== null && level < required) || legacy.has(legacyKey)) readLegacy();
+      else subscription = next(op).subscribe({
+        next: (value) => observer.next(value),
+        complete: () => observer.complete(),
+        error: (error) => {
+          // A modern server's NOT_FOUND can mean revoked workspace access.
+          if (error.data?.code !== "NOT_FOUND" || (level !== null && level >= required)) { observer.error(error); return; }
+          legacy.add(legacyKey);
+          readLegacy();
+        },
+      });
+      return () => subscription?.unsubscribe();
+    });
+  };
+};
 
 /**
  * Stands in for the workspace on an operation that left before the native
@@ -257,7 +295,12 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
       durableEntryLink(),
       syncSnapshotLink(),
       versionRefusalLink(),
+      compatibleReadsLink(),
       splitLink({
+        // Keep report pages independent even on WebViews without streaming.
+        condition: (op) => op.path === "reports.rows" || op.context.independent === true,
+        true: httpBatchLink(options),
+        false: splitLink({
         // Queries do not set response headers. Keep mutations on ordinary
         // JSON batches so their HTTP status/header behavior stays intact.
         // CapacitorHttp patching is disabled in capacitor.config.ts: phones
@@ -266,6 +309,7 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
           op.context.skipStreaming !== true && supportsBatchStreaming(),
         true: httpBatchStreamLink({ ...options, streamHeader: "accept" }),
         false: httpBatchLink(options),
+        }),
       }),
     ],
   });

@@ -17,6 +17,8 @@
  * `capabilities.test.ts` in core fails when a level has no capability.
  */
 export const REQUIRES_API_LEVEL = {
+  "catalog.options": 16,
+  "reports.splitDetailed": 16,
   "invoices.followThrough": 9,
   "entries.bulkEdit": 10,
   "members.rates": 11,

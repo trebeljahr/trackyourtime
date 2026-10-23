@@ -1,5 +1,7 @@
 "use client";
 
+import { useClientOptions, useProjectOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { overallBudgetStatus } from "@starter/shared";
 
@@ -10,7 +12,7 @@ import {
   CLIENT_LIST_INPUT,
   PROJECT_LIST_INPUT,
   type ClientRow,
-  type ProjectRow,
+  type ProjectTableRow,
 } from "@/components/catalog/types";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { useFormatSettings } from "@/lib/format";
@@ -33,16 +35,23 @@ export default function ProjectsPage(): React.JSX.Element {
   const [showArchived, setShowArchived] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
 
+  const metadata = useProjectOptions(PROJECT_LIST_INPUT);
   const projectsQuery = trpc.projects.list.useQuery(PROJECT_LIST_INPUT, {
     staleTime: 30_000,
   });
-  const clientsQuery = trpc.clients.list.useQuery(CLIENT_LIST_INPUT, {
+  const clientsQuery = useClientOptions(CLIENT_LIST_INPUT, {
     staleTime: 30_000,
   });
 
-  const allProjects = React.useMemo<ProjectRow[]>(
-    () => projectsQuery.data ?? [],
-    [projectsQuery.data],
+  const allProjects = React.useMemo<ProjectTableRow[]>(
+    () => {
+      const stats = new Map(projectsQuery.data?.map((row) => [row.id, row]));
+      return (metadata.data ?? projectsQuery.data ?? []).map((row) => {
+        const totals = stats.get(row.id);
+        return totals ? { ...row, entryCount: totals.entryCount, totalSec: totals.totalSec, progress: totals.progress } : row;
+      });
+    },
+    [metadata.data, projectsQuery.data],
   );
   const allClients = React.useMemo<ClientRow[]>(
     () => clientsQuery.data ?? [],
@@ -89,7 +98,7 @@ export default function ProjectsPage(): React.JSX.Element {
   );
 
   const trackedTotal = visibleProjects.reduce(
-    (sum, project) => sum + project.totalSec,
+    (sum, project) => sum + (project.totalSec ?? 0),
     0,
   );
 
@@ -97,7 +106,7 @@ export default function ProjectsPage(): React.JSX.Element {
   // reading their own project list does not need to be notified as well.
   const overBudget = visibleProjects.filter(
     (project) =>
-      project.progress !== null &&
+      project.progress != null &&
       overallBudgetStatus(project.progress) === "over",
   ).length;
 
@@ -131,7 +140,7 @@ export default function ProjectsPage(): React.JSX.Element {
         <>
           {t("projects.summary", {
             count: visibleProjects.length,
-            duration: format.duration(trackedTotal),
+            duration: projectsQuery.data ? format.duration(trackedTotal) : "—",
           })}
           {overBudget > 0 ? (
             <span className="text-destructive" data-testid="projects-over-budget">
@@ -147,7 +156,7 @@ export default function ProjectsPage(): React.JSX.Element {
       <ProjectsTable
         projects={visibleProjects}
         clients={allClients}
-        isLoading={projectsQuery.isLoading}
+        isLoading={metadata.isPending && projectsQuery.isPending}
         isFiltered={needle !== "" || clientFilter !== null}
         onCreate={() => setCreating(true)}
       />

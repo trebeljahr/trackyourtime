@@ -35,7 +35,7 @@ vi.mock("@/components/workspace-switcher", () => ({
   useActiveWorkspace: () => ({ activeId: "ws", workspaces: [] }),
 }));
 vi.mock("@/lib/trpc", () => ({
-  trpc: { projects: { list: { useQuery: () => ({ data: [], isSuccess: true }) } } },
+  trpc: { projects: { options: { useQuery: () => ({ data: [], isSuccess: true }) } } },
 }));
 vi.mock("@/lib/format", () => ({
   useFormatSettings: () => ({ locale: "en", timeFormat: "24h", currency: "EUR", duration: () => "0:00:00" }),

@@ -37,7 +37,7 @@ import { CatalogName } from "./catalog-name";
 import { ClientFormDialog } from "./client-form-dialog";
 import { ConfirmDialog } from "./confirm-dialog";
 import { EntriesLink, ShowEntriesItem } from "./entries-link";
-import type { ClientRow, ProjectRow } from "./types";
+import type { ClientRow, ProjectTableRow } from "./types";
 import { useClientMutations } from "./use-catalog-mutations";
 
 /** Roll-ups a client owns, derived from the already-loaded project list. */
@@ -54,7 +54,7 @@ const EMPTY_STATS: ClientStats = {
 };
 
 export function clientStatsByClientId(
-  projects: ProjectRow[],
+  projects: ProjectTableRow[],
 ): Map<string, ClientStats> {
   const stats = new Map<string, ClientStats>();
   for (const project of projects) {
@@ -62,8 +62,8 @@ export function clientStatsByClientId(
     const current = stats.get(project.clientId) ?? { ...EMPTY_STATS };
     stats.set(project.clientId, {
       projectCount: current.projectCount + 1,
-      totalSec: current.totalSec + project.totalSec,
-      entryCount: current.entryCount + project.entryCount,
+      totalSec: current.totalSec + (project.totalSec ?? 0),
+      entryCount: current.entryCount + (project.entryCount ?? 0),
     });
   }
   return stats;
@@ -72,8 +72,9 @@ export function clientStatsByClientId(
 export type ClientsTableProps = {
   clients: ClientRow[];
   /** Every project (archived included) — the source of the roll-ups. */
-  projects: ProjectRow[];
+  projects: ProjectTableRow[];
   isLoading: boolean;
+  statsPending?: boolean;
   isFiltered: boolean;
   onCreate: () => void;
   /** The issuer's country, for the default VAT category suggestion. */
@@ -84,6 +85,7 @@ export function ClientsTable({
   clients,
   projects,
   isLoading,
+  statsPending = false,
   isFiltered,
   onCreate,
   issuerCountry = null,
@@ -202,7 +204,7 @@ export function ClientsTable({
                       label={client.name}
                       testId={`client-tracked-link-${client.id}`}
                     >
-                      {format.duration(rollup.totalSec)}
+                      {statsPending ? "—" : format.duration(rollup.totalSec)}
                     </EntriesLink>
                   </TableCell>
 
@@ -216,7 +218,7 @@ export function ClientsTable({
                       label={client.name}
                       testId={`client-entries-link-${client.id}`}
                     >
-                      {f.number(rollup.entryCount)}
+                      {statsPending ? "—" : f.number(rollup.entryCount)}
                     </EntriesLink>
                   </TableCell>
 
@@ -265,6 +267,7 @@ export function ClientsTable({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           variant="destructive"
+                          disabled={statsPending}
                           onSelect={() => setPendingDelete(client)}
                           data-testid={`client-delete-${client.id}`}
                         >

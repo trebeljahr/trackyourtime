@@ -80,6 +80,39 @@ export type ProjectWithStats = ProjectWire & {
   progress: BudgetProgress | null;
 };
 
+export type ProjectOption = ProjectWire & { clientName: string | null; clientColor: string | null };
+
+/** Metadata is shared by pickers and tables; totals and budgets are separate. */
+export async function projectOptions(scope: WorkspaceScope, input: ProjectListInput): Promise<ProjectOption[]> {
+  if (typeof input.clientId === "string") assertObjectId(input.clientId);
+  const [settings, rows] = await Promise.all([
+    getAuthorBillingSettings(scope.workspaceId, scope.userId),
+    Project.aggregate<ProjectAggregateRow>([
+      { $match: {
+        workspaceId: scope.workspaceId,
+        ...(input.includeArchived ? {} : { archived: false }),
+        ...(input.clientId !== undefined ? { clientId: input.clientId ?? null } : {}),
+      } },
+      { $set: { clientOid: { $convert: { input: "$clientId", to: "objectId", onError: null, onNull: null } } } },
+      { $lookup: {
+        from: "clients", localField: "clientOid", foreignField: "_id",
+        pipeline: [{ $match: { workspaceId: scope.workspaceId } }, { $project: { name: 1, color: 1 } }],
+        as: "clientDoc",
+      } },
+      { $set: { sortName: { $toLower: "$name" } } },
+      { $sort: { sortName: 1, _id: 1 } },
+    ]),
+  ]);
+  return rows.map((row) => {
+    const client = row.clientDoc[0];
+    return projectProjectForVisibility({
+      ...projectWire(row, settings),
+      clientName: client?.name ?? null,
+      clientColor: client?.color ?? null,
+    }, scope.visibility);
+  });
+}
+
 /** Raw shape produced by the `list` aggregation. */
 type ProjectAggregateRow = ProjectDocLike & {
   clientDoc: { name: string; color: string }[];

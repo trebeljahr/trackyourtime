@@ -17,14 +17,14 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { translate, useT } from "@/i18n/use-t";
 import { useServerSupports } from "@/lib/server-level";
-import type { TaskRow } from "./types";
+import type { TaskTableRow } from "./types";
 import { useTaskMutations } from "./use-catalog-mutations";
 
 export type TaskFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Omitted/null creates; otherwise the dialog edits this task. */
-  task?: TaskRow | null;
+  task?: TaskTableRow | null;
   /**
    * Called with the newly created task. Lets a caller act on the result — the
    * tracker's task picker selects it immediately, so "New task…" leaves you
@@ -65,7 +65,7 @@ export function TaskFormDialog({
 }
 
 type TaskFormProps = {
-  task: TaskRow | null;
+  task: TaskTableRow | null;
   /** Receives the created task on create; nothing on edit. */
   onDone: (created?: { id: string; name: string }) => void;
 };

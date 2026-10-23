@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions, useClientOptions, useTaskOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { DetailedEntry } from "@starter/shared";
@@ -162,9 +164,9 @@ function PaletteBody({
   const reportRange = useAllTimeRange();
 
   // The same inputs every other screen asks with, so these are cache hits.
-  const projects = trpc.projects.list.useQuery({});
-  const clients = trpc.clients.list.useQuery({});
-  const tasks = trpc.tasks.list.useQuery({});
+  const projects = useProjectOptions({});
+  const clients = useClientOptions({});
+  const tasks = useTaskOptions({});
   const tags = trpc.tags.list.useQuery(TAG_LIST_INPUT);
 
   const setPage = React.useCallback((next: PalettePage): void => {

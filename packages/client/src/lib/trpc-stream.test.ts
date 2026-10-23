@@ -18,6 +18,7 @@ let workspace: string | null;
 let workspaceReady: boolean;
 let originReady: Promise<void>;
 let workspaceSettled: Promise<void>;
+let serverLevel: number | null;
 const refused = vi.fn();
 const requests: Request[] = [];
 const credentials: (RequestCredentials | undefined)[] = [];
@@ -40,7 +41,7 @@ const loadClient = async (streamQueries = true) => {
     },
   }));
   vi.doMock("@/lib/server-level", () => ({
-    currentServerApiLevel: () => null,
+    currentServerApiLevel: () => serverLevel,
     noteClientTooOld: refused,
   }));
   vi.doMock("@/lib/app-version", () => ({ APP_VERSION: "9.8.7" }));
@@ -90,6 +91,7 @@ beforeEach(() => {
   workspaceReady = true;
   originReady = Promise.resolve();
   workspaceSettled = Promise.resolve();
+  serverLevel = null;
   refused.mockClear();
   requests.length = credentials.length = statuses.length = 0;
 });
@@ -102,6 +104,67 @@ afterEach(() => {
 });
 
 describe("real tRPC batch transport", () => {
+  it("a modern server's missing workspace remains an error, including task associations", async () => {
+    serverLevel = 16;
+    const router = t.router({ tasks: t.router({ projectLinks: t.procedure.query(() => {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Workspace not found" });
+    }) }) });
+    vi.stubGlobal("fetch", async (url: RequestInfo | URL, init?: RequestInit) => fetchRequestHandler({
+      endpoint: "/api/trpc", req: new Request(new URL(String(url), "https://test.invalid"), init), router,
+    }));
+    const client = await loadClient();
+    await expect(client.query("tasks.projectLinks", {})).rejects.toMatchObject({ data: { code: "NOT_FOUND" } });
+  });
+  it.each([true, false])("report rows finish while totals are held (streaming=%s)", async (streaming) => {
+    const slow = deferred();
+    let totalsDone = false;
+    const router = t.router({ reports: t.router({
+      rows: t.procedure.query(() => ({ entries: [{ id: "row-1" }] })),
+      totals: t.procedure.query(async () => { await slow.promise; return { totalSec: 123 }; }),
+    }) });
+    vi.stubGlobal("fetch", async (url: RequestInfo | URL, init?: RequestInit) => {
+      const req = new Request(new URL(String(url), "https://test.invalid"), init);
+      requests.push(req);
+      return fetchRequestHandler({ endpoint: "/api/trpc", req, router });
+    });
+    const client = await loadClient(streaming);
+    const totals = client.query("reports.totals").then((value) => { totalsDone = true; return value; });
+    try {
+      expect(await client.query("reports.rows", undefined, { signal: AbortSignal.timeout(2000) })).toEqual({ entries: [{ id: "row-1" }] });
+      expect(totalsDone).toBe(false);
+      expect(requests).toHaveLength(2);
+    } finally { slow.resolve(); await totals; }
+  });
+
+  it("older servers fall back once per procedure and keep serving catalog reads", async () => {
+    const router = t.router({ projects: t.router({ list: t.procedure.query(() => [{ id: "p1", name: "Old server" }]) }) });
+    vi.stubGlobal("fetch", async (url: RequestInfo | URL, init?: RequestInit) => {
+      const req = new Request(new URL(String(url), "https://test.invalid"), init);
+      requests.push(req);
+      return fetchRequestHandler({ endpoint: "/api/trpc", req, router });
+    });
+    const client = await loadClient();
+    expect(await client.query("projects.options", { includeArchived: true })).toEqual([{ id: "p1", name: "Old server" }]);
+    expect(requests).toHaveLength(2);
+    await client.query("projects.options", { includeArchived: true });
+    expect(requests).toHaveLength(3);
+    expect(new URL(requests[2]!.url).pathname).toContain("projects.list");
+    expect(await client.query("tasks.projectLinks")).toEqual({});
+  });
+
+  it("compatibility reads never retry an authorization refusal against a legacy endpoint", async () => {
+    const old = vi.fn(() => []);
+    const router = t.router({ projects: t.router({
+      options: t.procedure.query(() => { throw new TRPCError({ code: "FORBIDDEN" }); }),
+      list: t.procedure.query(old),
+    }) });
+    vi.stubGlobal("fetch", async (url: RequestInfo | URL, init?: RequestInit) => fetchRequestHandler({
+      endpoint: "/api/trpc", req: new Request(new URL(String(url), "https://test.invalid"), init), router,
+    }));
+    const client = await loadClient();
+    await expect(client.query("projects.options", {})).rejects.toMatchObject({ data: { code: "FORBIDDEN" } });
+    expect(old).not.toHaveBeenCalled();
+  });
   it("delivers fast data over a real HTTP response before the slow query completes", async () => {
     const slow = deferred();
     const server = createHTTPServer({ router: serve(slow), basePath: "/api/trpc/" });

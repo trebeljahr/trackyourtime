@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions, useClientOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { Clock, ListChecks, Loader2, Table2 } from "lucide-react";
 import {
@@ -27,7 +29,7 @@ import { ProjectFormDialog } from "@/components/catalog/project-form-dialog";
 import {
   CLIENT_LIST_INPUT,
   PROJECT_LIST_INPUT,
-  type ProjectRow,
+  type ProjectOption,
 } from "@/components/catalog/types";
 import { BulkActionBar } from "@/components/reports/bulk-action-bar";
 import {
@@ -77,10 +79,11 @@ export function EntriesView({
     [reportFilters]
   );
 
-  const query = trpc.reports.detailed.useInfiniteQuery(input, {
+  const query = trpc.reports.rows.useInfiniteQuery(input, {
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? null,
     staleTime: 15_000,
   });
+  const totalsQuery = trpc.reports.totals.useQuery(reportFilters, { staleTime: 15_000 });
 
   // The export covers the whole filtered range server-side, so it only waits
   // for the first answer rather than for every page.
@@ -91,12 +94,12 @@ export function EntriesView({
     onExportReady(exportReady);
   }, [exportReady, onExportReady]);
 
-  const projectsQuery = trpc.projects.list.useQuery(PROJECT_LIST_INPUT);
+  const projectsQuery = useProjectOptions(PROJECT_LIST_INPUT);
   // Only for the project dialog a row's Project cell opens.
-  const clientsQuery = trpc.clients.list.useQuery(CLIENT_LIST_INPUT, {
+  const clientsQuery = useClientOptions(CLIENT_LIST_INPUT, {
     staleTime: 30_000,
   });
-  const [editingProject, setEditingProject] = React.useState<ProjectRow | null>(
+  const [editingProject, setEditingProject] = React.useState<ProjectOption | null>(
     null,
   );
   const openProject = React.useCallback(
@@ -141,7 +144,7 @@ export function EntriesView({
     () => sortDetailedEntries(loadedEntries, sort),
     [loadedEntries, sort]
   );
-  const totals = pages[0];
+  const totals = totalsQuery.data;
 
   // ── selection ──────────────────────────────────────────────────────
   const [selected, setSelected] = React.useState<ReadonlySet<string>>(
@@ -258,7 +261,7 @@ export function EntriesView({
 
   return (
     <div className="space-y-4" data-testid="detailed-report">
-      {isLoading ? <KpiRowSkeleton count={kpis.length} /> : <KpiRow items={kpis} />}
+      {totalsQuery.isPending ? <KpiRowSkeleton count={kpis.length} /> : <KpiRow items={kpis} />}
       <MoneyHiddenNote moneyVisible={totals?.moneyVisible} />
 
       {eligible.length > 100 ? <p className="text-sm text-muted-foreground" data-testid="bulk-selection-limit">{t("bulk.selectFirst", { count: f.number(100) })}</p> : null}
@@ -344,9 +347,9 @@ export function EntriesView({
         clients={clientsQuery.data ?? []}
       />
 
-      {query.isError ? (
+      {query.isError || totalsQuery.isError ? (
         <p className="text-sm text-destructive" data-testid="detailed-error">
-          {userErrorMessage(query.error, undefined, tc)}
+          {userErrorMessage(query.error ?? totalsQuery.error, undefined, tc)}
         </p>
       ) : null}
     </div>

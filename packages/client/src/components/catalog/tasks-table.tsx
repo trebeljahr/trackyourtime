@@ -37,11 +37,11 @@ import { CatalogName } from "./catalog-name";
 import { ConfirmDialog } from "./confirm-dialog";
 import { EntriesLink, ShowEntriesItem } from "./entries-link";
 import { TaskFormDialog } from "./task-form-dialog";
-import type { TaskRow } from "./types";
+import type { TaskTableRow } from "./types";
 import { useTaskMutations } from "./use-catalog-mutations";
 
 export type TasksTableProps = {
-  tasks: TaskRow[];
+  tasks: TaskTableRow[];
   isLoading: boolean;
   /** True when filters are hiding rows, so the empty state can say so. */
   isFiltered: boolean;
@@ -63,8 +63,8 @@ export function TasksTable({
   // The Tracked column is a lifetime total, so its link has to span one too.
   const allTime = useAllTimeRange();
 
-  const [editing, setEditing] = React.useState<TaskRow | null>(null);
-  const [pendingDelete, setPendingDelete] = React.useState<TaskRow | null>(
+  const [editing, setEditing] = React.useState<TaskTableRow | null>(null);
+  const [pendingDelete, setPendingDelete] = React.useState<TaskTableRow | null>(
     null,
   );
 
@@ -141,7 +141,7 @@ export function TasksTable({
                     label={task.name}
                     testId={`task-total-link-${task.id}`}
                   >
-                    {format.duration(task.totalSec)}
+                    {task.totalSec === undefined ? "—" : format.duration(task.totalSec)}
                   </EntriesLink>
                 </TableCell>
 
@@ -155,7 +155,7 @@ export function TasksTable({
                     label={task.name}
                     testId={`task-entries-link-${task.id}`}
                   >
-                    {f.number(task.entryCount)}
+                    {task.entryCount === undefined ? "—" : f.number(task.entryCount)}
                   </EntriesLink>
                 </TableCell>
 
@@ -204,6 +204,7 @@ export function TasksTable({
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
+                        disabled={task.totalSec === undefined}
                         onSelect={() => setPendingDelete(task)}
                         data-testid={`task-delete-${task.id}`}
                       >
@@ -234,7 +235,7 @@ export function TasksTable({
         }}
         title={t("tasks.delete.title", { name: pendingDelete?.name ?? "" })}
         description={
-          pendingDelete && pendingDelete.totalSec > 0
+          pendingDelete && (pendingDelete.totalSec ?? 0) > 0
             ? t("tasks.delete.withTime")
             : t("tasks.delete.noTime")
         }

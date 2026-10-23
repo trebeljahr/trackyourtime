@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions, useTaskOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
@@ -126,8 +128,8 @@ function AutopilotLoop({
   const utils = trpc.useUtils();
   const mutations = useEntryMutations();
   const viewerId = useViewerId();
-  const projects = trpc.projects.list.useQuery({});
-  const tasks = trpc.tasks.list.useQuery({});
+  const projects = useProjectOptions({});
+  const tasks = useTaskOptions({});
   const tags = trpc.tags.list.useQuery(TAG_LIST_INPUT);
 
   const context = React.useMemo<LoopContext>(() => {

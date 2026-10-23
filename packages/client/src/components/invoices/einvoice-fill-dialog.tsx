@@ -1,5 +1,7 @@
 "use client";
 
+import { useClientOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import Link from "next/link";
 import { AlertOctagon, Info, Loader2 } from "lucide-react";
@@ -430,7 +432,7 @@ export function EinvoiceFillDialog({
   const businessProfile = trpc.settings.businessProfile.useQuery(undefined, { staleTime: 0 });
   // The same list every catalog screen reads; archived clients are in it. A
   // client missing from a loaded list was deleted, so there is nothing to copy.
-  const clients = trpc.clients.list.useQuery(CLIENT_LIST_INPUT, { staleTime: 0 });
+  const clients = useClientOptions(CLIENT_LIST_INPUT, { staleTime: 0 });
   const clientBilling =
     clients.data?.find((client) => client.id === invoice.clientId)?.billing ?? null;
   const { attach, isPending } = useAttachEinvoiceData();

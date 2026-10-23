@@ -1,5 +1,7 @@
 "use client";
 
+import { useTaskOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 
 import { TaskFormDialog } from "@/components/catalog/task-form-dialog";
@@ -58,7 +60,7 @@ export function TaskPicker({
   const utils = trpc.useUtils();
   const [dialogOpen, setDialogOpen] = React.useState(false);
 
-  const tasks = trpc.tasks.list.useQuery({});
+  const tasks = useTaskOptions({});
 
   const createTask = trpc.tasks.create.useMutation({
     onSuccess: async (task) => {

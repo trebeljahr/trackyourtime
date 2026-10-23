@@ -2,7 +2,7 @@ import type { KeyValueStorage } from "@starter/core";
 import { hashKey, type Query, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 export const QUERY_SNAPSHOT_KEY = "trackyourtime.catalog-snapshot";
-export const SNAPSHOT_VERSION = 1;
+export const SNAPSHOT_VERSION = 2;
 export const SNAPSHOT_RETENTION_MS = 24 * 60 * 60 * 1000;
 export const SNAPSHOT_MAX_CHARS = 128 * 1024; // At most 256 KiB of UTF-16 storage.
 
@@ -12,18 +12,18 @@ type Snapshot = { version: number; scope: CacheScope; queries: SavedQuery[] };
 
 const scopeKey = (scope: CacheScope | null): string => JSON.stringify(scope && [scope.server, scope.userId, scope.workspaceId, scope.access]);
 
-/** Only the four tracker picker lists. No entries, sessions, tokens or mutations. */
+/** Bounded shared metadata and management lists. No entries or credentials. */
 export const isPersistedCatalog = (key: QueryKey): boolean => {
   const [path, options] = key;
   if (key.length !== 2 || !Array.isArray(path) || path.length !== 2) return false;
-  if (!["clients", "projects", "tasks", "tags"].includes(path[0]) || path[1] !== "list") return false;
+  if (!["clients", "projects", "tasks", "tags"].includes(path[0]) || !["list", "options"].includes(path[1])) return false;
   if (!options || typeof options !== "object") return false;
   const { input, type, ...extra } = options as Record<string, unknown>;
   if (type !== "query" || Object.keys(extra).length || !input || typeof input !== "object" || Array.isArray(input)) return false;
   const fields = Object.keys(input);
-  return path[0] === "tags"
-    ? fields.length === 1 && (input as { includeArchived?: unknown }).includeArchived === true
-    : fields.length === 0;
+  const all = fields.length === 1 && (input as { includeArchived?: unknown }).includeArchived === true;
+  if (path[0] === "tags") return path[1] === "list" && all;
+  return path[1] === "options" ? all : fields.length === 0 || all;
 };
 
 const validData = (data: unknown): data is unknown[] =>
@@ -35,7 +35,7 @@ const decode = (raw: string | null, scope: CacheScope, now: number): SavedQuery[
   if (!raw || raw.length > SNAPSHOT_MAX_CHARS) return [];
   try {
     const saved = JSON.parse(raw) as Snapshot;
-    if (saved.version !== SNAPSHOT_VERSION || scopeKey(saved.scope) !== scopeKey(scope) || !Array.isArray(saved.queries) || saved.queries.length > 4) return [];
+    if (saved.version !== SNAPSHOT_VERSION || scopeKey(saved.scope) !== scopeKey(scope) || !Array.isArray(saved.queries) || saved.queries.length > 10) return [];
     const seen = new Set<string>();
     return saved.queries.filter((row) => {
       if (!row || !Array.isArray(row.key) || !isPersistedCatalog(row.key) || !validData(row.data)) return false;
@@ -55,6 +55,7 @@ export function createQueryPersistence(client: QueryClient, storage: KeyValueSto
   let accepting = false;
   let rows = new Map<string, SavedQuery>();
   const fetchEpoch = new WeakMap<Query, number>();
+  const networkData = new WeakMap<Query, unknown>();
   let io: Promise<void> = Promise.resolve();
   const serialize = (work: () => Promise<void>): Promise<void> => {
     io = io.then(work, work).catch(() => undefined);
@@ -91,6 +92,12 @@ export function createQueryPersistence(client: QueryClient, storage: KeyValueSto
   const unsubscribe = client.getQueryCache().subscribe((event) => {
     if (event.type !== "updated") return;
     const { query, action } = event;
+    // Remember provenance before membership resolves, without writing to disk.
+    // An optimistic/manual edit changes the reference and is never eligible.
+    if (isPersistedCatalog(query.queryKey) && action.type === "success" && !action.manual) {
+      networkData.set(query, query.state.data);
+    }
+    if (action.type === "success" && action.manual && networkData.get(query) !== query.state.data) networkData.delete(query);
     const path = query.queryKey[0];
     if (action.type === "error") {
       const code = (action.error as { data?: { code?: string } })?.data?.code;
@@ -120,9 +127,13 @@ export function createQueryPersistence(client: QueryClient, storage: KeyValueSto
       accepting = false;
       scope = next;
       rows = new Map();
-      await client.cancelQueries(filters);
+      // Initial membership verification must not restart healthy startup reads.
+      if (changing) await client.cancelQueries(filters);
       if (at !== epoch) return;
       if (changing) reset();
+      for (const query of client.getQueryCache().findAll(filters)) {
+        if (query.state.fetchStatus !== "idle") fetchEpoch.set(query, at);
+      }
       await serialize(async () => {
         const raw = await storage.getItem(QUERY_SNAPSHOT_KEY);
         if (at !== epoch) return;
@@ -138,8 +149,15 @@ export function createQueryPersistence(client: QueryClient, storage: KeyValueSto
       });
       if (at !== epoch) return;
       accepting = true;
-      // Retained data renders immediately; staleTime defaults cannot suppress refresh.
-      void client.invalidateQueries(filters);
+      for (const query of client.getQueryCache().findAll(filters)) {
+        if (networkData.get(query) === query.state.data && validData(query.state.data)) {
+          rows.set(hashKey(query.queryKey), { key: query.queryKey, data: query.state.data, updatedAt: query.state.dataUpdatedAt });
+        }
+      }
+      void save();
+      // Only disk/manual answers need a refresh. Live reads keep their progress.
+      void client.invalidateQueries({ predicate: (query) => isPersistedCatalog(query.queryKey) &&
+        query.state.fetchStatus === "idle" && query.state.data !== undefined && networkData.get(query) !== query.state.data });
     },
     /** Pause on route/scope changes without discarding the next launch's snapshot. */
     pause(): void {

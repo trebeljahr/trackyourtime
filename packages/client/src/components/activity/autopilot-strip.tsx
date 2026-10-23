@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { Sparkles } from "lucide-react";
 import type { EntryFields } from "@starter/core";
@@ -36,7 +38,7 @@ export function AutopilotStrip({
   const format = useFormatSettings();
   const utils = trpc.useUtils();
   const snapshot = useDesktopActivitySnapshot();
-  const projects = trpc.projects.list.useQuery({}, { enabled: snapshot?.autopilot?.active === true });
+  const projects = useProjectOptions({}, { enabled: snapshot?.autopilot?.active === true });
   const [teaching, setTeaching] = React.useState<{ key: string; name: string } | null>(null);
   const [busy, setBusy] = React.useState(false);
 

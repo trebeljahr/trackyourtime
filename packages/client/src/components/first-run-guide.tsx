@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions, useClientOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import Link from "next/link";
 import { Check, Circle, X } from "lucide-react";
@@ -129,11 +131,11 @@ export function FirstRunGuide({
     shouldLoadChecklist &&
     canUseBilling &&
     (statusForScope === "enrolled" || statusForScope === "billing");
-  const projects = trpc.projects.list.useQuery(PROJECT_LIST_INPUT, {
+  const projects = useProjectOptions(PROJECT_LIST_INPUT, {
     enabled: shouldLoadChecklist,
     staleTime: 30_000,
   });
-  const clients = trpc.clients.list.useQuery(CLIENT_LIST_INPUT, {
+  const clients = useClientOptions(CLIENT_LIST_INPUT, {
     enabled: shouldLoadBilling,
     staleTime: 30_000,
   });

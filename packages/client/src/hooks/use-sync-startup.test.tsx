@@ -58,12 +58,15 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
-it("cold startup sends one snapshot after room join, no open or healthy 30s refetch", async () => {
-  mount(); await advance(); expect(count).toBe(0);
-  sockets[0]!.open(); await advance(); expect(count).toBe(0);
-  sockets[0]!.state(); await advance(); expect(count).toBe(1);
+it("cold startup reads before socket open, then catches the room-join gap once", async () => {
+  const client = mount(); await advance(); expect(count).toBe(1);
+  expect(client.getQueryCache().getAll()[0]?.state.data).toBe("before");
+  value = "changed-before-subscription";
+  sockets[0]!.open(); await advance(); expect(count).toBe(1);
+  sockets[0]!.state(); await advance(); expect(count).toBe(2);
+  expect(client.getQueryCache().getAll()[0]?.state.data).toBe(value);
   for (let i = 0; i < 3; i++) { await advance(10_000); sockets[0]!.state(); }
-  expect(count).toBe(1);
+  expect(count).toBe(2);
 });
 it("cached pre-subscription data is refreshed once", async () => {
   const client = new QueryClient(); client.setQueryData([["entries", "current"], { type: "query" }], "cached");

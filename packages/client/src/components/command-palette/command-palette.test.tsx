@@ -36,7 +36,7 @@ vi.mock("@/lib/trpc", () => {
   return {
     trpc: {
       projects: {
-        list: list([
+        options: list([
           {
             id: "p1",
             name: "Website",
@@ -47,8 +47,8 @@ vi.mock("@/lib/trpc", () => {
           },
         ]),
       },
-      clients: { list: list([{ id: "c1", name: "Acme", archived: false }]) },
-      tasks: { list: list([]) },
+      clients: { options: list([{ id: "c1", name: "Acme", archived: false }]) },
+      tasks: { projectLinks: { useQuery: () => ({ data: {} }) }, options: list([]) },
       tags: { list: list([]) },
     },
   };

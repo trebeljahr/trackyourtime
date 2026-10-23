@@ -40,6 +40,15 @@ export type TaskWithStats = TaskWire & {
   totalSec: number;
 };
 
+/** Flat metadata; historical project associations are loaded independently. */
+export async function taskOptions(scope: WorkspaceScope, input: TaskListInput): Promise<TaskWire[]> {
+  const rows = await Task.find({
+    workspaceId: scope.workspaceId,
+    ...(input.includeArchived ? {} : { archived: false }),
+  }).collation({ locale: "en", strength: 2 }).sort({ name: 1 }).lean();
+  return rows.map(toClientTask);
+}
+
 /** Raw shape produced by the `list` aggregation. */
 type TaskAggregateRow = TaskDocLike & {
   stats: { entryCount: number; totalSec: number }[];

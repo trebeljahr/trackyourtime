@@ -1309,6 +1309,7 @@ export const buildDetailed = async (
    * `detailedExportPages`.)
    */
   withTotals = true,
+  withRows = true,
 ): Promise<DetailedReportResult> => {
   const { workspaceId } = scope;
   const settings = await getOrCreateWorkspaceSettings(workspaceId);
@@ -1359,7 +1360,7 @@ export const buildDetailed = async (
     pageConditions.push(...keysetAfter("start", cursor.start, cursor.id));
   }
 
-  const docs = await runJoinedQuery(pageConditions, limit + 1);
+  const docs = withRows ? await runJoinedQuery(pageConditions, limit + 1) : [];
 
   const window = docs.slice(0, limit);
   const entries = window
@@ -1981,6 +1982,16 @@ const reportScope = (ctx: {
 });
 
 export const reportsRouter = router({
+  /** First paint never waits for a scan of the full filtered range. */
+  rows: workspaceProcedure.input(detailedReportSchema).query(async ({ ctx, input }) => {
+    const { entries, nextCursor } = await buildDetailed(reportScope(ctx), input, input, false);
+    return { entries, ...(nextCursor ? { nextCursor } : {}) };
+  }),
+  /** Independent of cursor and page size, so pagination reuses one answer. */
+  totals: workspaceProcedure.input(summaryReportSchema.omit({ groupBy: true })).query(async ({ ctx, input }) => {
+    const { entries: _entries, nextCursor: _cursor, ...totals } = await buildDetailed(reportScope(ctx), input, {}, true, false);
+    return totals;
+  }),
   /** Totals, grouped breakdown and a zero-filled daily series for charts. */
   summary: workspaceProcedure
     .input(summaryReportSchema)

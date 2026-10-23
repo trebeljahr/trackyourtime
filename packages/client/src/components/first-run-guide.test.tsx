@@ -32,8 +32,8 @@ vi.mock("@/lib/trpc", () => ({
       get: { useQuery: () => ({ data: { defaultHourlyRate: state.defaultHourlyRate, memberHourlyRate: state.memberHourlyRate } }) },
       businessProfile: { useQuery: () => ({ data: state.profile }) },
     },
-    projects: { list: { useQuery: () => ({ data: state.projects }) } },
-    clients: { list: { useQuery: () => ({ data: state.clients }) } },
+    projects: { options: { useQuery: () => ({ data: state.projects }) } },
+    clients: { options: { useQuery: () => ({ data: state.clients }) } },
     invoices: { list: { useQuery: () => ({ data: state.invoices }) } },
   },
 }));

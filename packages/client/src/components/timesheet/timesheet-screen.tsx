@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions, useTaskOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -149,8 +151,8 @@ export function TimesheetScreen({ cellDisabledReason }: TimesheetScreenProps = {
     placeholderData: (previous) => previous,
   });
 
-  const projectsQuery = trpc.projects.list.useQuery({});
-  const tasksQuery = trpc.tasks.list.useQuery({});
+  const projectsQuery = useProjectOptions({});
+  const tasksQuery = useTaskOptions({});
 
   const { rows: pinnedRows, pin, unpin } = useTimesheetRows();
   const { applyPlan, isBusy } = useTimesheetMutations(listInput);

@@ -20,11 +20,11 @@ import {
   billingChanged,
   type ApplyToEntriesPrompt,
 } from "./apply-to-entries-prompt";
-import type { ProjectRow } from "./types";
+import type { ProjectOption } from "./types";
 import type { ProjectMutations } from "./use-catalog-mutations";
 
 export type ProjectBillingCellProps = {
-  project: ProjectRow;
+  project: ProjectOption;
   /** Shared by every row, so the table renders one prompt dialog. */
   prompt: ApplyToEntriesPrompt;
   /** Passed in rather than hooked per row: a table of rows, one set of mutations. */

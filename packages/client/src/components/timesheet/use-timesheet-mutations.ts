@@ -1,5 +1,7 @@
 "use client";
 
+import { CATALOG_OPTIONS_INPUT } from "@/hooks/use-catalog-options";
+
 import { entryMutationScope } from "@/lib/entry-mutation-result";
 
 import * as React from "react";
@@ -74,8 +76,8 @@ export const useTimesheetMutations = (
 
   const shapeContext = React.useCallback(
     (): EntryShapeContext => ({
-      projects: utils.projects.list.getData({}) ?? [],
-      tasks: utils.tasks.list.getData({}) ?? [],
+      projects: (utils.projects.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.projects.list.getData({})) ?? [],
+      tasks: (utils.tasks.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.tasks.list.getData({})) ?? [],
       settings: utils.settings.get.getData() ?? null,
     }),
     [utils]
@@ -84,8 +86,7 @@ export const useTimesheetMutations = (
   const billableFor = React.useCallback(
     (projectId: string | null, explicit: boolean | undefined): boolean => {
       if (explicit !== undefined) return explicit;
-      const project = utils.projects.list
-        .getData({})
+      const project = (utils.projects.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.projects.list.getData({}))
         ?.find((candidate) => candidate.id === projectId);
       return project?.billableDefault ?? false;
     },

@@ -46,6 +46,10 @@ export type TaskRow = Task & {
   projectIds: string[];
 };
 
+export type ProjectOption = Project & { clientName: string | null; clientColor: string | null };
+export type ProjectTableRow = ProjectOption & Partial<Pick<ProjectRow, "entryCount" | "totalSec" | "progress">>;
+export type TaskTableRow = Task & Partial<Pick<TaskRow, "entryCount" | "totalSec" | "projectIds">>;
+
 /**
  * What every catalog `remove` resolves to. Deletion always happens — the
  * counts describe what the cascade detached on the way.

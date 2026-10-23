@@ -28,7 +28,7 @@ vi.mock("@/lib/trpc", () => ({
     settings: {
       get: { useQuery: () => ({ data: settingsUserId ? { userId: settingsUserId } : undefined }) },
     },
-    projects: { list: { useQuery: () => ({ data: [] }) } },
+    projects: { options: { useQuery: () => ({ data: [] }) } },
     entries: {
       current: { useQuery: () => ({ data: null }) },
       list: {

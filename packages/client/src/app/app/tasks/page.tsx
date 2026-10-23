@@ -1,11 +1,13 @@
 "use client";
 
+import { useTaskOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 
 import { CatalogScreen } from "@/components/catalog/catalog-screen";
 import { TaskFormDialog } from "@/components/catalog/task-form-dialog";
 import { TasksTable } from "@/components/catalog/tasks-table";
-import { TASK_LIST_INPUT, type TaskRow } from "@/components/catalog/types";
+import { TASK_LIST_INPUT, type TaskTableRow } from "@/components/catalog/types";
 import { useFormatSettings } from "@/lib/format";
 import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
@@ -19,13 +21,20 @@ export default function TasksPage(): React.JSX.Element {
   const [showArchived, setShowArchived] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
 
+  const metadata = useTaskOptions(TASK_LIST_INPUT);
   const tasksQuery = trpc.tasks.list.useQuery(TASK_LIST_INPUT, {
     staleTime: 30_000,
   });
 
-  const allTasks = React.useMemo<TaskRow[]>(
-    () => tasksQuery.data ?? [],
-    [tasksQuery.data],
+  const allTasks = React.useMemo<TaskTableRow[]>(
+    () => {
+      const stats = new Map(tasksQuery.data?.map((row) => [row.id, row]));
+      return (metadata.data ?? tasksQuery.data ?? []).map((row) => {
+        const totals = stats.get(row.id);
+        return totals ? { ...row, entryCount: totals.entryCount, totalSec: totals.totalSec, projectIds: totals.projectIds } : row;
+      });
+    },
+    [metadata.data, tasksQuery.data],
   );
 
   const needle = search.trim().toLowerCase();
@@ -41,7 +50,7 @@ export default function TasksPage(): React.JSX.Element {
   );
 
   const trackedTotal = visibleTasks.reduce(
-    (sum, task) => sum + task.totalSec,
+    (sum, task) => sum + (task.totalSec ?? 0),
     0,
   );
   return (
@@ -58,14 +67,14 @@ export default function TasksPage(): React.JSX.Element {
       onShowArchivedChange={setShowArchived}
       summary={t("tasks.summary", {
         count: visibleTasks.length,
-        duration: format.duration(trackedTotal),
+        duration: tasksQuery.data ? format.duration(trackedTotal) : "—",
       })}
       hasError={tasksQuery.isError}
       testId="tasks-page"
     >
       <TasksTable
         tasks={visibleTasks}
-        isLoading={tasksQuery.isLoading}
+        isLoading={metadata.isPending && tasksQuery.isPending}
         isFiltered={needle !== ""}
         onCreate={() => setCreating(true)}
       />

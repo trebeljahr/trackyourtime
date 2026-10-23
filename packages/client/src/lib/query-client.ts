@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 
 import { getQueryPersistence } from "@/lib/app-query-persistence";
+import { bindCatalogCaches } from "@/lib/catalog-cache";
 import { noteNotFound } from "@/lib/active-workspace";
 import {
   isAuthError,
@@ -91,7 +92,10 @@ export const createAppQueryClient = (): QueryClient => {
     appQueryClient.setQueryDefaults([[router, "list"]], {
       staleTime: 60_000,
     });
+    appQueryClient.setQueryDefaults([[router, "options"]], { staleTime: 60_000 });
   }
+  appQueryClient.setQueryDefaults([["tasks", "projectLinks"]], { staleTime: 60_000 });
+  bindCatalogCaches(appQueryClient);
   getQueryPersistence(appQueryClient);
   return appQueryClient;
 };

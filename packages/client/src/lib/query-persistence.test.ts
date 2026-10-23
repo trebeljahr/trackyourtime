@@ -2,6 +2,7 @@ import { memoryStorage, type KeyValueStorage } from "@starter/core";
 import { QueryClient, QueryObserver, type QueryKey } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryPersistence, isPersistedCatalog, QUERY_SNAPSHOT_KEY, SNAPSHOT_MAX_CHARS, SNAPSHOT_RETENTION_MS, SNAPSHOT_VERSION, type CacheScope } from "./query-persistence";
+import { bindCatalogCaches } from "./catalog-cache";
 
 const scope: CacheScope = { server: "https://one.test", userId: "u1", workspaceId: "w1", access: "member:own" };
 const key = (router = "projects", input: object = {}): QueryKey => [[router, "list"], { input, type: "query" }];
@@ -25,6 +26,67 @@ async function savedFixture() {
 }
 
 describe("catalog persistence", () => {
+  it("seeding metadata from a full list does not restart its pending request", async () => {
+    const c = client();
+    const unbind = bindCatalogCaches(c);
+    const persistence = createQueryPersistence(c, memoryStorage(), () => instant);
+    const metadataKey: QueryKey = [["projects", "options"], { input: { includeArchived: true }, type: "query" }];
+    const answer = deferred<typeof project>();
+    const fetch = vi.fn(() => answer.promise);
+    const observer = new QueryObserver(c, { queryKey: metadataKey, queryFn: fetch });
+    const stop = observer.subscribe(() => {});
+    await c.fetchQuery({ queryKey: key("projects", { includeArchived: true }), queryFn: async () => [{ ...project[0], totalSec: 100 }] });
+    await persistence.activate(scope);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    answer.resolve(project);
+    await observer.refetch({ cancelRefetch: false });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    stop(); unbind(); persistence.dispose();
+  });
+  it("initial membership verification neither restarts a live read nor refetches a fresh network answer", async () => {
+    const c = client();
+    const store = memoryStorage();
+    const persistence = createQueryPersistence(c, store, () => instant);
+    const response = deferred<typeof project>();
+    const fetch = vi.fn(() => response.promise);
+    const observer = new QueryObserver(c, { queryKey: key(), queryFn: fetch, staleTime: Infinity });
+    const stop = observer.subscribe(() => {});
+    await persistence.activate(scope);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    response.resolve(project);
+    await observer.refetch();
+    await persistence.settled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse((await store.getItem(QUERY_SNAPSHOT_KEY))!).queries[0].data).toEqual(project);
+    stop(); persistence.dispose();
+
+    const ready = client();
+    const other = createQueryPersistence(ready, memoryStorage(), () => instant);
+    const query = vi.fn(async () => project);
+    const next = new QueryObserver(ready, { queryKey: key(), queryFn: query, staleTime: Infinity });
+    const unsubscribe = next.subscribe(() => {});
+    await next.refetch();
+    await other.activate(scope);
+    expect(query).toHaveBeenCalledTimes(1);
+    unsubscribe(); other.dispose();
+  });
+  it("restores shared metadata and management statistics without mixing their shapes", async () => {
+    const metadataKey: QueryKey = [["projects", "options"], { input: { includeArchived: true }, type: "query" }];
+    const statsKey = key("projects", { includeArchived: true });
+    const store = memoryStorage();
+    const first = client();
+    const writer = createQueryPersistence(first, store, () => instant);
+    await writer.activate(scope);
+    await first.fetchQuery({ queryKey: metadataKey, queryFn: async () => project });
+    await first.fetchQuery({ queryKey: statsKey, queryFn: async () => [{ ...project[0], totalSec: 123, entryCount: 1 }] });
+    await writer.settled(); writer.dispose();
+    const second = client();
+    const reader = createQueryPersistence(second, store, () => instant);
+    await reader.activate(scope);
+    expect(second.getQueryData(metadataKey)).toEqual(project);
+    expect(second.getQueryData(statsKey)).toEqual([{ ...project[0], totalSec: 123, entryCount: 1 }]);
+    reader.dispose();
+  });
   it("restores data on a repeat launch with its original age", async () => {
     const { store, persistence } = await savedFixture();
     persistence.dispose();
@@ -84,7 +146,7 @@ describe("catalog persistence", () => {
 
   it("ignores auth, timers, history, reports, filtered and explicit-workspace queries", async () => {
     const { c, persistence, store } = await savedFixture();
-    const excluded = [key("entries"), key("profile"), key("apiTokens"), key("reports"), [["entries", "current"], { type: "query" }], key("projects", { workspaceId: "w2" }), key("projects", { includeArchived: true })];
+    const excluded = [key("entries"), key("profile"), key("apiTokens"), key("reports"), [["entries", "current"], { type: "query" }], key("projects", { workspaceId: "w2" }), key("projects", { clientId: "filtered" })];
     for (const queryKey of excluded) await c.fetchQuery({ queryKey, queryFn: async () => ({ token: "secret", running: "queued" }) });
     await persistence.settled();
     const raw = (await store.getItem(QUERY_SNAPSHOT_KEY))!;

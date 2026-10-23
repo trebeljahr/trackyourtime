@@ -1,3 +1,4 @@
+import { CATALOG_OPTIONS_INPUT } from "@/hooks/use-catalog-options";
 import type { DesktopActivity, DesktopAutopilot, TimeEntry } from "@starter/shared";
 
 import { TRACKER_LIST_INPUT, type EntryMutations } from "@/components/tracker/use-entry-mutations";
@@ -47,8 +48,8 @@ export const undoAutopilotStart = async (input: {
       listed ??
         decorateEntry(
           {
-            projects: utils.projects.list.getData({}) ?? [],
-            clients: utils.clients.list.getData({}) ?? [],
+            projects: (utils.projects.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.projects.list.getData({})) ?? [],
+            clients: (utils.clients.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.clients.list.getData({})) ?? [],
             settings: utils.settings.get.getData() ?? null,
           },
           running,

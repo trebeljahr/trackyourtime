@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions, useClientOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 
 import { ProjectFormDialog } from "@/components/catalog/project-form-dialog";
@@ -93,8 +95,8 @@ export function ProjectPicker({
   const t = useT("tracker");
   const tc = useT("common");
   const utils = trpc.useUtils();
-  const projects = trpc.projects.list.useQuery({});
-  const clients = trpc.clients.list.useQuery({});
+  const projects = useProjectOptions({});
+  const clients = useClientOptions({});
 
   const createProject = trpc.projects.create.useMutation({
     onSuccess: async (project) => {

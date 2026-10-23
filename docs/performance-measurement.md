@@ -68,3 +68,30 @@ Keep samples separate per condition and metric. Report raw counts/range first.
 Only calculate p50/p95 with at least 100 actual successful runs per condition
 (nearest rank: sorted sample at `ceil(n * percentile) - 1`); also report failures.
 No production timings or percentile results have been collected by this change.
+
+## Independent reads (API level 16)
+
+- Pickers and management tables share `*.options({ includeArchived: true })`.
+  Active-only pickers filter the same cached metadata locally. These procedures
+  do not read time entries. Task/project associations use `tasks.projectLinks`
+  independently, so their aggregation cannot delay task names.
+- Management screens attach statistics from the existing `*.list` procedures.
+  Names remain usable while numeric cells show a dash. Complete list reads and
+  optimistic edits also seed metadata; metadata never fabricates statistics.
+- The local catalog snapshot includes metadata and management lists, within
+  the existing size and retention limits. Restoration still requires a live
+  session and confirmed workspace membership, with matching access rights.
+- `reports.rows` reads only the requested page. `reports.totals` folds the full
+  filtered range independently and has no cursor in its cache key. Rows use a
+  separate transport batch even without streaming support. The older
+  `reports.detailed` contract remains available to existing clients.
+- Initial HTTP queries no longer wait for the sync socket. Room placement
+  reconciles completed and in-flight pre-subscription snapshots; a late result
+  gets one catch-up read after it settles. The legacy socket timeout controls
+  reconciliation only, without holding the initial HTTP request.
+
+For regression checks, hold statistics/totals responses in a synthetic local
+fixture. Confirm names/rows render before release, pagination leaves the totals
+request count unchanged, and a write between the first read and socket room
+placement appears after catch-up. Distinguish these controlled checks from
+production latency measurements.

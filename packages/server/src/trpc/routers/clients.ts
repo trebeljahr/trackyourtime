@@ -21,6 +21,7 @@ import {
   archiveClient,
   createClient,
   listClients,
+  clientOptions,
   removeClient,
   updateClient,
 } from "../../services/catalog/clients.js";
@@ -45,6 +46,7 @@ export const archiveInputSchema = idInputSchema.extend({
 });
 
 export const clientsRouter = router({
+  options: workspaceProcedure.input(clientListSchema).query(({ ctx, input }) => clientOptions(scopeFromContext(ctx), input)),
   list: workspaceProcedure
     .input(clientListSchema)
     .query(async ({ ctx, input }): Promise<ClientWire[]> =>

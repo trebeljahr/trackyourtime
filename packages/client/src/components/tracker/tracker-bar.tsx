@@ -1,4 +1,6 @@
 "use client";
+
+import { useProjectOptions } from "@/hooks/use-catalog-options";
 import { trackerDataReady } from "@/lib/startup-timing";
 import { PRODUCT_NAME } from "@/lib/site-links";
 
@@ -42,7 +44,6 @@ import { useT } from "@/i18n/use-t";
 import { useFormatSettings } from "@/lib/format";
 import { isSameEntry } from "@/lib/resolved-temp-ids";
 import { isCapacitor } from "@/lib/shell";
-import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
 /**
@@ -61,7 +62,7 @@ export function TrackerBar(): React.JSX.Element {
   // The shell owns the queue, so it keeps draining on Reports and Settings
   // too — see providers/offline-queue-provider.tsx.
   const { pending, foreign, held, online, authBlocked } = useOfflineQueueState();
-  const projects = trpc.projects.list.useQuery({});
+  const projects = useProjectOptions({});
   React.useEffect(() => {
     trackerDataReady("projects", projects.isSuccess);
   }, [projects.isSuccess]);

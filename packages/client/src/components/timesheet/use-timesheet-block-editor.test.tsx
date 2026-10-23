@@ -41,8 +41,8 @@ vi.mock("@/lib/trpc", () => ({ trpc: { useUtils: () => ({
     getInfiniteData: () => { throw new Error("Tracker cache must not be consulted"); },
     setData: (_input: unknown, update: (data: typeof state.week) => typeof state.week) => { state.week = update(state.week); },
   } },
-  projects: { list: { getData: () => [] } },
-  tasks: { list: { getData: () => [] } },
+  projects: { options: { getData: () => undefined }, list: { getData: () => [] } },
+  tasks: { options: { getData: () => undefined }, list: { getData: () => [] } },
   settings: { get: { getData: () => state.settings } },
 }) } }));
 

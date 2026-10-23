@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { decideTimerToggle } from "@starter/core";
@@ -147,7 +149,7 @@ export function DesktopBridgePublisher({
   // The running entry without the once-a-second tick `useRunningEntry` adds:
   // the tray computes its own clock from `startedAt`.
   const running = React.useSyncExternalStore(timerStore.subscribe, selectRunning, () => null);
-  const projects = trpc.projects.list.useQuery({}, { enabled: electron, staleTime: 60_000 });
+  const projects = useProjectOptions({}, { enabled: electron, staleTime: 60_000 });
   const recents = trpc.entries.recent.useQuery(RECENT_INPUT, { enabled: electron, staleTime: 30_000 });
 
   const state = React.useMemo(

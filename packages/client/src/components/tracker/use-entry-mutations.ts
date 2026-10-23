@@ -1,5 +1,7 @@
 "use client";
 
+import { CATALOG_OPTIONS_INPUT } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { useQueryClient, type Mutation } from "@tanstack/react-query";
 import { buildQuickStartInput, deviceTimeZone } from "@starter/core";
@@ -442,8 +444,8 @@ export const useEntryMutations = (): EntryMutations => {
 
   const shapeContext = React.useCallback(
     (): EntryShapeContext => ({
-      projects: utils.projects.list.getData({}) ?? [],
-      clients: utils.clients.list.getData({}) ?? [],
+      projects: (utils.projects.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.projects.list.getData({})) ?? [],
+      clients: (utils.clients.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.clients.list.getData({})) ?? [],
       settings: utils.settings.get.getData() ?? null,
     }),
     [utils]

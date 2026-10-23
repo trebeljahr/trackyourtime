@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import type { DetailedEntry } from "@starter/shared";
 
@@ -149,7 +151,7 @@ export const useCalendarActions = (
   // Stamped on the optimistic block so the own-entries filter keeps it on
   // screen until the server's answer replaces it.
   const viewerId = useViewerId();
-  const projects = trpc.projects.list.useQuery({});
+  const projects = useProjectOptions({});
   const projectsData = projects.data;
   const createScopes = React.useRef(new WeakMap<object, EntryMutationScope>());
 

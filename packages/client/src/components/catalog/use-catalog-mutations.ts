@@ -161,7 +161,7 @@ export function useProjectMutations(
 
   const findClient = (id: string | null | undefined): ClientRow | null => {
     if (!id) return null;
-    const clients = utils.clients.list.getData(CLIENT_LIST_INPUT) ?? [];
+    const clients = utils.clients.options.getData(CLIENT_LIST_INPUT) ?? utils.clients.list.getData(CLIENT_LIST_INPUT) ?? [];
     return clients.find((client) => client.id === id) ?? null;
   };
 
@@ -187,7 +187,7 @@ export function useProjectMutations(
   };
 
   const settleProjects = (): void => {
-    void utils.projects.list.invalidate();
+    void utils.projects.invalidate();
   };
 
   const create = trpc.projects.create.useMutation({
@@ -354,7 +354,7 @@ export function useProjectMutations(
     // entry-backed caches are stale too.
     onSettled: () => {
       settleProjects();
-      void utils.tasks.list.invalidate();
+      void utils.tasks.invalidate();
       void utils.entries.invalidate();
       void utils.reports.invalidate();
     },
@@ -411,8 +411,8 @@ export function useClientMutations(
 
   // Projects denormalize the client name/colour, so they refresh too.
   const settleClients = (): void => {
-    void utils.clients.list.invalidate();
-    void utils.projects.list.invalidate();
+    void utils.clients.invalidate();
+    void utils.projects.invalidate();
   };
 
   const create = trpc.clients.create.useMutation({
@@ -565,7 +565,7 @@ export function useTaskMutations(
   };
 
   const settleTasks = (): void => {
-    void utils.tasks.list.invalidate();
+    void utils.tasks.invalidate();
   };
 
   const create = trpc.tasks.create.useMutation({

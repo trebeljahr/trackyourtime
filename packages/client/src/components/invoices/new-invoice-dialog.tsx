@@ -1,5 +1,7 @@
 "use client";
 
+import { useClientOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { AlertTriangle, Info, Loader2, ShieldCheck } from "lucide-react";
 import {
@@ -196,7 +198,7 @@ function NewInvoiceForm({
   const [language, setLanguage] = React.useState<LanguageChoice>(AUTO_LANGUAGE);
   const [confirming, setConfirming] = React.useState(false);
 
-  const clients = trpc.clients.list.useQuery(CLIENT_LIST_INPUT);
+  const clients = useClientOptions(CLIENT_LIST_INPUT);
   // A refusal (a role that may not read the profile) simply means no terms
   // and no warning — creating the invoice is decided on the server.
   const profile = trpc.settings.businessProfile.useQuery(undefined, {

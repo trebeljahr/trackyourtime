@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { after, beforeEach, describe, it } from "node:test";
+import { after, beforeEach, describe, it, mock } from "node:test";
+import { TimeEntry } from "../models/TimeEntry.js";
 import { sumCurrencyAmounts, rollUpEntries, budgetProgress } from "@starter/shared";
 import { reportsRouter, summaryCsvRows, summaryCsvColumns } from "../trpc/routers/reports.js";
 import { renderSummaryPdf, renderDetailedPdf } from "../services/pdf.js";
@@ -25,6 +26,34 @@ function currencies(): void {
 }
 
  describe("report currency snapshots", () => {
+  it("rows never run the full-range totals fold; totals never fetch joined rows", async () => {
+    const find = mock.method(TimeEntry, "find", () => { throw Error("full-range fold"); });
+    try {
+      assert.equal((await caller().rows({ ...range, limit: 1 })).entries.length, 1);
+    } finally { find.mock.restore(); }
+    const aggregate = mock.method(TimeEntry, "aggregate", () => { throw Error("joined rows"); });
+    try {
+      assert.ok((await caller().totals(range)).totalSec > 0);
+    } finally { aggregate.mock.restore(); }
+  });
+  it("independent rows and totals preserve the legacy report across pagination", async () => {
+    currencies();
+    for (const person of [OWNER, ADMIN]) {
+      const api = reportsRouter.createCaller(contextFor(person));
+      const legacy = await api.detailed({ ...range, limit: 1 });
+      const first = await api.rows({ ...range, limit: 1 });
+      const totals = await api.totals(range);
+      const { entries, nextCursor, ...expectedTotals } = legacy;
+      assert.deepEqual(first, { entries, ...(nextCursor ? { nextCursor } : {}) });
+      assert.deepEqual(totals, expectedTotals);
+      assert.equal("totalSec" in first, false);
+      assert.equal("entries" in totals, false);
+      if (nextCursor) {
+        const next = await api.rows({ ...range, limit: 1, cursor: nextCursor });
+        assert.notEqual(next.entries[0]?.id, first.entries[0]?.id);
+      }
+    }
+  });
   it("summary groups and range totals retain separate currency buckets", async () => {
     currencies();
     const result = await caller().summary({ ...range, groupBy: "project" });

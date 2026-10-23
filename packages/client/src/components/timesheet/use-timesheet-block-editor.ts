@@ -1,5 +1,7 @@
 "use client";
 
+import { CATALOG_OPTIONS_INPUT } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import { resolveHourlyRate, zonedWallClockToMs, type DetailedEntry, type TimeEntry, type EntryListInput, type TimesheetRow } from "@starter/shared";
 import { decorateEntry } from "@/lib/entry-shape";
@@ -74,8 +76,8 @@ export const useTimesheetBlockEditor = (args: {
   const stillHere = (): boolean => draft !== null && draft.userId === currentUser.current && draft.workspaceId === getActiveWorkspaceId() && sameEntryMutationScope(draft.scope);
 
   const detailed = (entry: TimeEntry): DetailedEntry => decorateEntry({
-    projects: utils.projects.list.getData({}) ?? [],
-    tasks: utils.tasks.list.getData({}) ?? [],
+    projects: (utils.projects.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.projects.list.getData({})) ?? [],
+    tasks: (utils.tasks.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.tasks.list.getData({})) ?? [],
     settings: utils.settings.get.getData() ?? null,
   }, entry);
 
@@ -120,7 +122,7 @@ export const useTimesheetBlockEditor = (args: {
         const resnapshot = (projectId !== entry.projectId || billable !== entry.billable) &&
           settings?.workspaceId === entry.workspaceId && settings?.userId === entry.authorId;
         const hourlyRate = resnapshot ? resolveHourlyRate({
-          billable, projectRate: utils.projects.list.getData({})?.find((project) => project.id === projectId)?.hourlyRate,
+          billable, projectRate: (utils.projects.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.projects.list.getData({}))?.find((project) => project.id === projectId)?.hourlyRate,
           memberRate: settings?.memberHourlyRate, defaultRate: settings?.defaultHourlyRate,
         }) : entry.hourlyRate;
         const saved = result.entry ?? (result.saved === "offline" ? {
@@ -151,7 +153,7 @@ export const useTimesheetBlockEditor = (args: {
     manual: draft === null || draft.entry !== null ? null : {
       seed: { description: "", projectId: draft.row.projectId, taskId: draft.row.taskId,
         billable: blockBillableDefault(
-          utils.projects.list.getData({})?.find((project) => project.id === draft.row.projectId),
+          (utils.projects.options.getData(CATALOG_OPTIONS_INPUT) ?? utils.projects.list.getData({}))?.find((project) => project.id === draft.row.projectId),
           utils.settings.get.getData()?.defaultHourlyRate, args.memberRate,
         ), tagIds: [] },
       range: draft.range,

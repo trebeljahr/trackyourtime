@@ -38,7 +38,7 @@ vi.mock("@/lib/trpc", () => ({
     }),
     settings: { get: { useQuery: () => ({ data: undefined }) } },
     projects: {
-      list: {
+      options: {
         useQuery: (input: unknown, options: unknown) => {
           projectQuery(input, options);
           return { data: [{ id: "p1", name: "Website", color: "#ff0000" }] };

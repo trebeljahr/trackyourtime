@@ -42,11 +42,11 @@ import { ConfirmDialog } from "./confirm-dialog";
 import { EntriesLink, ShowEntriesItem } from "./entries-link";
 import { ProjectBillingCell } from "./project-billing-cell";
 import { ProjectFormDialog } from "./project-form-dialog";
-import type { ClientRow, ProjectRow } from "./types";
+import type { ClientRow, ProjectTableRow } from "./types";
 import { useProjectMutations } from "./use-catalog-mutations";
 
 export type ProjectsTableProps = {
-  projects: ProjectRow[];
+  projects: ProjectTableRow[];
   clients: ClientRow[];
   isLoading: boolean;
   /** True when filters are hiding rows, so the empty state can say so. */
@@ -86,12 +86,12 @@ export function ProjectsTable({
     [format.durationShort, format.currency, format.locale],
   );
 
-  const [editing, setEditing] = React.useState<ProjectRow | null>(null);
+  const [editing, setEditing] = React.useState<ProjectTableRow | null>(null);
   /** The project row's client, opened for editing from the Client cell. */
   const [editingClient, setEditingClient] = React.useState<ClientRow | null>(
     null,
   );
-  const [pendingDelete, setPendingDelete] = React.useState<ProjectRow | null>(
+  const [pendingDelete, setPendingDelete] = React.useState<ProjectTableRow | null>(
     null,
   );
 
@@ -206,16 +206,16 @@ export function ProjectsTable({
                         label={project.name}
                         testId={`project-tracked-link-${project.id}`}
                       >
-                        {format.duration(project.totalSec)}
+                        {project.totalSec === undefined ? "—" : format.duration(project.totalSec)}
                       </EntriesLink>
                     </TableCell>
 
                     <TableCell data-label={t("columns.budget")} data-testid={`project-budget-${project.id}`}>
-                      <BudgetMeterCell
+                      {project.progress === undefined ? "—" : <BudgetMeterCell
                         view={budgetView(project.progress, budgetFormat)}
                         emptyLabel={t("projects.noBudget")}
                         testId={`project-budget-meter-${project.id}`}
-                      />
+                      />}
                     </TableCell>
 
                     <TableCell data-label={t("columns.entries")}
@@ -228,7 +228,7 @@ export function ProjectsTable({
                         label={project.name}
                         testId={`project-entries-link-${project.id}`}
                       >
-                        {f.number(project.entryCount)}
+                        {project.entryCount === undefined ? "—" : f.number(project.entryCount)}
                       </EntriesLink>
                     </TableCell>
 
@@ -277,6 +277,7 @@ export function ProjectsTable({
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
+                            disabled={project.entryCount === undefined}
                             onSelect={() => setPendingDelete(project)}
                             data-testid={`project-delete-${project.id}`}
                           >
@@ -320,9 +321,9 @@ export function ProjectsTable({
         }}
         title={t("projects.delete.title", { name: pendingDelete?.name ?? "" })}
         description={
-          pendingDelete && pendingDelete.entryCount > 0
+          pendingDelete && (pendingDelete.entryCount ?? 0) > 0
             ? t("projects.delete.withEntries", {
-                count: pendingDelete.entryCount,
+                count: pendingDelete.entryCount ?? 0,
               })
             : t("projects.delete.noEntries")
         }

@@ -1,5 +1,7 @@
 "use client";
 
+import { useProjectOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 import {
   resolveIdleSettings,
@@ -18,7 +20,6 @@ import { useFormatSettings } from "@/lib/format";
 import { notifyDesktop } from "@/lib/desktop-shell";
 import { idleWatcher } from "@/lib/idle-watcher";
 import { translate } from "@/i18n/translate";
-import { trpc } from "@/lib/trpc";
 
 /** Toast id, so a second reading replaces the prompt instead of stacking one. */
 const IDLE_TOAST_ID = "trackyourtime-idle";
@@ -57,7 +58,7 @@ export const useIdleGuard = (): void => {
   const { entry: running } = useRunningEntry();
   const format = useFormatSettings();
   const mutations = useEntryMutations();
-  const projects = trpc.projects.list.useQuery({});
+  const projects = useProjectOptions({});
 
   // Everything the reading handler reads, behind a ref so the handler's
   // identity never changes — the detector installs its listeners once.

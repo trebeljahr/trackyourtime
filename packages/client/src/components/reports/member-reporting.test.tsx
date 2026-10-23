@@ -51,9 +51,9 @@ vi.mock("@/lib/trpc", () => ({
         },
       },
     },
-    clients: { list: { useQuery: () => emptyList } },
-    projects: { list: { useQuery: () => emptyList } },
-    tasks: { list: { useQuery: () => emptyList } },
+    clients: { options: { useQuery: () => emptyList } },
+    projects: { options: { useQuery: () => emptyList } },
+    tasks: { projectLinks: { useQuery: () => ({ data: {} }) }, options: { useQuery: () => emptyList } },
     reports: { trackedSpan: { useQuery: () => ({ data: undefined }) } },
   },
 }));

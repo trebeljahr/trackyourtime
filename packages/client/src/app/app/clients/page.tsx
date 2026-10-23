@@ -1,5 +1,7 @@
 "use client";
 
+import { useClientOptions, useProjectOptions } from "@/hooks/use-catalog-options";
+
 import * as React from "react";
 
 import { CatalogScreen } from "@/components/catalog/catalog-screen";
@@ -10,7 +12,7 @@ import {
   CLIENT_LIST_INPUT,
   PROJECT_LIST_INPUT,
   type ClientRow,
-  type ProjectRow,
+  type ProjectTableRow,
 } from "@/components/catalog/types";
 import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
@@ -26,11 +28,12 @@ export default function ClientsPage(): React.JSX.Element {
   const link = useDeepLink();
   const [linkDismissed, setLinkDismissed] = React.useState(false);
 
+  const metadata = useClientOptions(CLIENT_LIST_INPUT);
   const clientsQuery = trpc.clients.list.useQuery(CLIENT_LIST_INPUT, {
     staleTime: 30_000,
   });
   // The roll-ups on each client row are derived from the project list.
-  const projectsQuery = trpc.projects.list.useQuery(PROJECT_LIST_INPUT, {
+  const projectsQuery = useProjectOptions(PROJECT_LIST_INPUT, {
     staleTime: 30_000,
   });
 
@@ -43,10 +46,16 @@ export default function ClientsPage(): React.JSX.Element {
   const issuerCountry = profileQuery.data?.country ?? null;
 
   const allClients = React.useMemo<ClientRow[]>(
-    () => clientsQuery.data ?? [],
-    [clientsQuery.data],
+    () => {
+      const stats = new Map(clientsQuery.data?.map((row) => [row.id, row]));
+      return (metadata.data ?? clientsQuery.data ?? []).map((row) => {
+        const totals = stats.get(row.id);
+        return totals ? { ...row, entryCount: totals.entryCount, totalSec: totals.totalSec } : row;
+      });
+    },
+    [metadata.data, clientsQuery.data],
   );
-  const allProjects = React.useMemo<ProjectRow[]>(
+  const allProjects = React.useMemo<ProjectTableRow[]>(
     () => projectsQuery.data ?? [],
     [projectsQuery.data],
   );
@@ -88,7 +97,8 @@ export default function ClientsPage(): React.JSX.Element {
       <ClientsTable
         clients={visibleClients}
         projects={allProjects}
-        isLoading={clientsQuery.isLoading}
+        isLoading={metadata.isPending && clientsQuery.isPending}
+        statsPending={clientsQuery.isPending}
         isFiltered={needle !== ""}
         onCreate={() => setCreating(true)}
         issuerCountry={issuerCountry}
