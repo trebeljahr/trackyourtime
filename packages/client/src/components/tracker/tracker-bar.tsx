@@ -304,8 +304,9 @@ export function TrackerBar(): React.JSX.Element {
         className="flex flex-col gap-2"
         data-testid="tracker-composer"
       >
+        <QuickStartMenu mutations={mutations} />
+
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <QuickStartMenu mutations={mutations} />
           <DescriptionCombobox
             value={description}
             committed={running?.description ?? ""}
@@ -324,11 +325,14 @@ export function TrackerBar(): React.JSX.Element {
                one that decides. */
             autoFocus={!isCapacitor() && (typeof window === "undefined" || !window.matchMedia?.("(pointer: coarse)").matches)}
             className="min-w-0 flex-1 basis-64"
-            inputClassName="h-10 border-0 bg-transparent px-2 text-base shadow-none focus-visible:ring-0"
+            inputClassName={cn(
+              "h-10 border-0 bg-transparent px-2 text-base shadow-none focus-visible:ring-0",
+              isRunning && "text-lg font-medium"
+            )}
             testId="tracker-description"
           />
 
-          <div className="flex shrink-0 items-center gap-3 sm:ml-auto">
+          <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-3 sm:ml-auto">
             {editsRunning && running ? (
               <label className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                 {t("fields.startTime")}
@@ -399,7 +403,7 @@ export function TrackerBar(): React.JSX.Element {
             value={fields}
             onChange={applyFields}
             bare
-            className="flex-1 basis-full sm:basis-auto sm:flex-none"
+            className="max-w-full flex-1 basis-full sm:basis-auto sm:flex-none"
             controlClassName="h-10 min-w-0 max-w-full flex-auto sm:min-w-48 sm:flex-none"
             testIdPrefix="tracker"
           />
