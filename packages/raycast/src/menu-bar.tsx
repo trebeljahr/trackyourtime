@@ -20,6 +20,7 @@ import {
 import { getTrackYourTime, type ProjectWithStats } from "./lib/api.js";
 import { CompatibilityMenuBarSection } from "./components/compatibility-banner.js";
 import { BRAND_MARK } from "./lib/brand.js";
+import { refreshTimerSearch } from "./lib/timer-search.js";
 import { useRef, useState } from "react";
 import { formatClock, formatDurationShort, formatMenuBarClock, projectIcon } from "./lib/format.js";
 import { useApi, useNow, usePoll, useReconciledRunning, useWatchRunning } from "./lib/hooks.js";
@@ -84,9 +85,11 @@ export default function MenuBar(): React.JSX.Element | null {
   const { showWhenIdle } = getPreferenceValues<Preferences.MenuBar>();
   const starting = useRef(false);
   const [isStarting, setIsStarting] = useState(false);
-  const { data, isLoading, error, signedOut, revalidate, optimistic } = useApi("menu-bar", (api) =>
-    loadTimerSnapshot(api, { recentLimit: RECENT_LIMIT }),
-  );
+  const { data, isLoading, error, signedOut, revalidate, optimistic } = useApi("menu-bar", async (api) => {
+    const snapshot = await loadTimerSnapshot(api, { recentLimit: RECENT_LIMIT });
+    await refreshTimerSearch();
+    return snapshot;
+  });
 
   /**
    * What is running, after this Mac's own timer echo is applied.
@@ -157,7 +160,7 @@ export default function MenuBar(): React.JSX.Element | null {
       await (preview ? optimistic(run(), preview) : run());
       if (!preview) revalidate();
       // Refresh the root-search action after a menu start, stop or edit.
-      await launchCommand({ name: "timer", type: LaunchType.Background }).catch(() => undefined);
+      await refreshTimerSearch();
     } catch (error) {
       // Somebody stopped it elsewhere between this item's last read and the
       // click. The user got what they wanted; record it and move on rather

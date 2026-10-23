@@ -10,6 +10,7 @@ import { ownOnly, resolveUserId } from "./lib/timer-data.js";
 import { loadCache } from "./lib/local-cache.js";
 import { activeWorkspaceId } from "./lib/workspace.js";
 import { isLocalEntry } from "./lib/overlay.js";
+import { markTimerAction, timerActionBusy } from "./lib/timer-search.js";
 
 /**
  * The single timer command. User launches toggle tracking; background launches
@@ -55,6 +56,8 @@ const showState = async (running: TimeEntry | null): Promise<void> => {
 
 export default async function Timer(): Promise<void> {
   const background = environment.launchType === LaunchType.Background;
+  if (background && (await timerActionBusy())) return;
+  if (!background) await markTimerAction(true);
   try {
     const api = await getTrackYourTime();
     const running = await api.current();
@@ -66,12 +69,10 @@ export default async function Timer(): Promise<void> {
 
     if (running) {
       await noteTimerEcho(null);
-      void refreshMenuBar(false);
       void showHUD("⏹ Stopping timer…");
       try {
         const stopped = await api.stop(running.id);
         await showState(null);
-        await refreshMenuBar(false);
         await showHUD(
           `⏹ Stopped — ${formatDurationShort(stopped.durationSec)}${
             stopped.description ? ` · ${stopped.description}` : ""
@@ -81,7 +82,6 @@ export default async function Timer(): Promise<void> {
         if (!isAlreadyStopped(error)) {
           await noteTimerEcho(running.id);
           await showState(running);
-          await refreshMenuBar(false);
           throw error;
         }
         // Stopped elsewhere between the read above and the write. The user got
@@ -90,7 +90,6 @@ export default async function Timer(): Promise<void> {
         // clears it — the same repair the Timer view and the menu bar make.
         await noteTimerEcho(null);
         await showState(null);
-        await refreshMenuBar(false);
         await showHUD("⏹ Timer already stopped");
       }
       return;
@@ -121,7 +120,6 @@ export default async function Timer(): Promise<void> {
     if (decision.kind !== "continue") {
       const entry = await api.start({ description: "" });
       await showState(entry);
-      await refreshMenuBar(false);
       if (!isLocalEntry(entry)) {
         await launchCommand({
           name: "entries",
@@ -138,7 +136,6 @@ export default async function Timer(): Promise<void> {
     void showHUD(`▶ Starting — ${entryLabel(last)}…`);
     const started = await api.continue(last.id, toQuickStart(last));
     await showState(started);
-    await refreshMenuBar(false);
     // Labelled from the entry that was continued, not from the one that came
     // back: the list rows are joined with their project and client names, so
     // an entry with no description still reads as something.
@@ -150,5 +147,10 @@ export default async function Timer(): Promise<void> {
       return;
     }
     await showFailureToast(error, "Could not toggle the timer");
+  } finally {
+    if (!background) {
+      await markTimerAction(false);
+      await refreshMenuBar(false);
+    }
   }
 }

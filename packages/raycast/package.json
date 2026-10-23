@@ -36,8 +36,7 @@
       "subtitle": "Track Your Time",
       "description": "Stop the running timer, or resume your latest work. Shows the current action and work in search.",
       "mode": "no-view",
-      "keywords": ["toggle", "start", "stop", "track", "resume", "continue"],
-      "interval": "1m"
+      "keywords": ["toggle", "start", "stop", "track", "resume", "continue", "track your time", "trackyourtime"]
     },
     {
       "name": "entries",

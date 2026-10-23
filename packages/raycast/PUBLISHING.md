@@ -59,7 +59,7 @@ The export does not keep that: it sets `src/lib/local-defaults.ts` to `false`, s
 
 When updating an installed developer extension, preserve its existing local-defaults setting. Replacing it with the Store export can change the server behind empty preferences; the token for the previous server is then deliberately refused. Build from the monorepo for a local development install, or copy its `local-defaults.ts` into a separate local install copy. Keep the Store export unchanged for submission. Never copy, clear or retarget session credentials to make the two builds agree.
 
-Keep one active developer installation, `trackyourtime-raycast`. Extra development identities, including `tracktime-raycast` and temporary Store QA installs, can leave duplicate command titles in search. Identify the registered duplicate in Raycast Settings rather than inferring it from extension folders: a folder can remain after its registration is gone. Disable the registered duplicate before considering removal; disabling preserves its session and queued work. Do not delete its support data or migrate credentials between identities. The only timer action is **Timer** (`timer`, `no-view`): foreground launches toggle tracking, background launches only update its subtitle. The old `toggle-timer` command is removed from the manifest. Timer details are hosted by `entries` with `showTimer` launch context, so opening details cannot accidentally toggle tracking. Refresh the existing developer registration after changing command names or modes; preserve account data and user settings. Editing compiled manifests or moving extension folders does not prove that Raycast's command catalog refreshed.
+Keep one active developer installation, `trackyourtime-raycast`. Extra development identities, including `tracktime-raycast` and temporary Store QA installs, can leave duplicate command titles in search. Identify the registered duplicate in Raycast Settings rather than inferring it from extension folders: a folder can remain after its registration is gone. Disable the registered duplicate before considering removal; disabling preserves its session and queued work. Do not delete its support data or migrate credentials between identities. The only timer action is **Timer** (`timer`, `no-view`): foreground launches toggle tracking, programmatic background launches only update its subtitle. Do not add an interval to `timer`: Raycast presents scheduled commands with a Refresh action that launches in the background. The menu-bar snapshot loader owns periodic caption refresh and skips it during a foreground timer action. The old `toggle-timer` command is removed from the manifest. Timer details are hosted by `entries` with `showTimer` launch context, so opening details cannot accidentally toggle tracking. Refresh the existing developer registration after changing command names or modes; preserve account data and user settings. Editing compiled manifests or moving extension folders does not prove that Raycast's command catalog refreshed.
 
 ## Store screenshots
 
@@ -88,7 +88,7 @@ The store takes up to six PNG screenshots at 2000×1250 in `metadata/`, named `t
 
 4. In Raycast, open Extensions → Track Your Time. Set **API URL** to `http://localhost:<api>` and **Web App URL** to `http://localhost:<web>`. For the **Timer Menu Bar** command, set **Menu Bar Title** to "Description and Duration" and turn on **Clock**.
 
-5. Open **Timer**. The signed-out screen opens Sign In, and the browser opens `http://localhost:<web>/app/device`. Sign in there as the seeded account and approve the code.
+5. Open **Show All Time**. The signed-out screen opens Sign In, and the browser opens `http://localhost:<web>/app/device`. Sign in there as the seeded account and approve the code.
 
 6. Set one appearance for every shot, light or dark. In Raycast Settings → Advanced, give **Window Capture** a hotkey (for example ⌘⇧⌥M) and turn on **Save to Metadata**.
 
@@ -96,7 +96,7 @@ The store takes up to six PNG screenshots at 2000×1250 in `metadata/`, named `t
 
    | File | View | State |
    |---|---|---|
-   | `trackyourtime-1.png` | **Timer** | The seeded timer runs. Stop Timer is the primary action. Favorites and Continue show below it. |
+   | `trackyourtime-1.png` | **Timer Details** (⌘T in Show All Time) | The seeded timer runs. Stop Timer is the primary action. Favorites and Continue show below it. |
    | `trackyourtime-2.png` | **Show All Time** | Entries over several days, with the action panel (⌘K) open on one entry. |
    | `trackyourtime-3.png` | **Log Past Time…** (⌘⇧N in Timer) | A meeting from earlier today, with project, task and a tag set. |
    | `trackyourtime-4.png` | **Edit Entry…** (⌘E on a Continue row) | An entry with a task and tags. |

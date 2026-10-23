@@ -4,6 +4,7 @@ import { NotSignedInError, StillSyncingError } from "./errors.js";
 import { apiUrl } from "./preferences.js";
 import { reportRaycastError } from "./error-reporting-runtime.js";
 import { notifySessionChanged } from "./auth.js";
+import { refreshTimerSearch } from "./timer-search.js";
 
 /**
  * Nudge the menu bar to re-read the timer.
@@ -14,13 +15,12 @@ import { notifySessionChanged } from "./auth.js";
 export async function refreshMenuBar(refreshToggle = true): Promise<void> {
   // The toggle updates its own subtitle after acting; relaunching itself
   // while handling a user action could interrupt that action.
-  for (const name of refreshToggle ? ["menu-bar", "timer"] : ["menu-bar"]) {
-    try {
-      await launchCommand({ name, type: LaunchType.Background });
-    } catch {
-      // A disabled command can wait for its next scheduled refresh.
-    }
+  try {
+    await launchCommand({ name: "menu-bar", type: LaunchType.Background });
+  } catch {
+    // A disabled menu bar can wait for its next scheduled refresh.
   }
+  if (refreshToggle) await refreshTimerSearch();
 }
 
 /**

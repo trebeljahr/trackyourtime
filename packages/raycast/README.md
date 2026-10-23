@@ -17,7 +17,7 @@ Reports, invoices, the calendar and catalog editing stay in the web app.
 
 Run **Timer** or assign it a global hotkey. While tracking, it stops your current timer. When idle, it resumes your latest work from the past 30 days. With nothing to resume, it starts immediately and opens details.
 
-The search subtitle shows **Stop Timer · work · project · elapsed** while tracking and **Start Timer · No timer running** when idle. A task name takes priority over notes. Background refresh updates the subtitle without changing tracked time. Changes from another device follow Raycast's background schedule, normally about a minute. Every press checks the current timer before acting.
+The search subtitle shows **Stop Timer · work · project · elapsed** while tracking and **Start Timer · No timer running** when idle. A task name takes priority over notes. The menu-bar updater refreshes the subtitle without changing tracked time. Keep Timer Menu Bar enabled for updates from other devices, normally about once a minute. Every press checks the current timer before acting.
 
 There is no separate Start / Stop Timer command.
 

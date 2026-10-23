@@ -55,7 +55,10 @@ const mocks = new Map([
     source("lib/local-cache.ts"),
     `export const loadCache=async()=>globalThis.__raycastInteraction.cache??({settings:null});`,
   ],
-  [source("lib/storage.ts"), `export const loadTimerEcho=async()=>null; export const noteTimerEcho=async()=>{};`],
+  [
+    source("lib/storage.ts"),
+    `const h=globalThis.__raycastInteraction; export const loadTimerEcho=async()=>null; export const noteTimerEcho=async()=>{}; export const raycastStorage={getItem:async key=>h.statusValues.get(key)??null,setItem:async(key,value)=>h.statusValues.set(key,value),removeItem:async key=>h.statusValues.delete(key)};`,
+  ],
   [
     source("lib/workspace.ts"),
     `const h=globalThis.__raycastInteraction;
@@ -138,6 +141,7 @@ const { default: MenuBar } = await import("../src/menu-bar.tsx");
 const { default: ToggleTimer } = await import("../src/timer.ts");
 const { default: Entries } = await import("../src/entries.tsx");
 const { loadTimerSnapshot } = await import("../src/lib/timer-data.ts");
+const { markTimerAction, refreshTimerSearch } = await import("../src/lib/timer-search.ts");
 const entry = (overrides = {}) => ({
   id: "new-entry",
   workspaceId: "work",
@@ -178,6 +182,7 @@ beforeEach(() => {
     launchType: "user",
     metadataFails: false,
     cache: { settings: null, projects: [], tasks: [] },
+    statusValues: new Map(),
     workspace: "work",
   });
   host.data = {
@@ -428,6 +433,8 @@ test("the manifest exposes one timer toggle and no alternate timer command", () 
   const timer = commands.find((command) => command.name === "timer");
   assert.equal(timer.mode, "no-view");
   assert.equal(timer.disabledByDefault, undefined);
+  assert.equal(timer.interval, undefined);
+  assert.ok(timer.keywords.includes("track your time"));
 });
 test("history hosts timer details without invoking the toggle", () => {
   const screen = render(Entries, { launchContext: { showTimer: true, editRunningId: "running-entry" } });
@@ -466,6 +473,16 @@ test("background toggle refreshes running and idle labels without tracking or op
   await ToggleTimer();
   assert.equal(host.events[1][1].subtitle, "Start Timer · No timer running");
   assert.ok(host.events.every(([kind]) => kind === "metadata"));
+});
+test("status refresh waits until a foreground timer action finishes", async () => {
+  await markTimerAction(true);
+  await refreshTimerSearch();
+  host.launchType = "background";
+  await ToggleTimer();
+  assert.deepEqual(host.events, []);
+  await markTimerAction(false);
+  await refreshTimerSearch();
+  assert.deepEqual(host.events, [["launch", { name: "timer", type: "background" }]]);
 });
 test("search names the task and project of the timer it will stop", async () => {
   host.launchType = "background";
