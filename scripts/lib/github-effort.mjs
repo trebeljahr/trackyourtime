@@ -16,6 +16,22 @@ const eraOf = (date, baselineCutoff, aiSurge) =>
 export const githubEffortId = (repository, date) =>
   createHash("sha256").update(`github-effort-v1:${repository}:${date}`).digest("hex").slice(0, 24);
 
+/** Keep work evidence readable; numerical estimates remain in the private plan. */
+export function githubEffortDescription(group) {
+  const subjects = [...new Set(group.commits.map((commit) =>
+    typeof commit.subject === "string" ? commit.subject.replace(/\s+/g, " ").trim() : ""
+  ).filter((subject) => /[\p{L}\p{N}]/u.test(subject)))];
+  const label = " (estimated from GitHub)";
+  if (!subjects.length) return `${group.project || group.repository} development`.slice(0, 500 - label.length) + label;
+  for (let count = subjects.length; count > 0; count--) {
+    const more = count < subjects.length ? `; +${subjects.length - count} more changes` : "";
+    const description = subjects.slice(0, count).join("; ") + more + label;
+    if (description.length <= 500) return description;
+  }
+  const more = subjects.length > 1 ? `; +${subjects.length - 1} more changes` : "";
+  return subjects[0].slice(0, 499 - more.length - label.length).trimEnd() + "…" + more + label;
+}
+
 /**
  * A relative change-size proxy, NOT hours or a lines-per-hour rule. Generated
  * files must be removed by the collector. A log scale limits giant imports.
@@ -170,7 +186,7 @@ export function planGithubEffort(input) {
     newEntries.push({ id: g.id, project: g.project, repository: g.repository, date: g.date,
       start: new Date(start).toISOString(), end: new Date(end).toISOString(), durationSec,
       lowSec: Math.floor(g.lowHours * 3600), highSec: Math.ceil(g.highHours * 3600),
-      description: `GitHub estimate: ${g.repository}; ${g.commits.length} commits; likely ${g.hours.toFixed(2)}h (plausible ${g.lowHours.toFixed(2)}–${g.highHours.toFixed(2)}h). Not timed; calendar placement inferred. ${g.commits[0].sha.slice(0, 10)}` });
+      description: githubEffortDescription(g) });
   }
   const names = new Set(projectDays.map((g) => g.project));
   const projectEstimates = [...names].sort().map((project) => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { planGithubEffort, occupiedDays, githubEffortId } from "./github-effort.mjs";
+import { planGithubEffort, occupiedDays, githubEffortId, githubEffortDescription } from "./github-effort.mjs";
 
 const sha = (n) => n.toString(16).padStart(40, "0");
 const fixture = () => ({
@@ -19,6 +19,26 @@ test("covered dates are estimated in the audit but never logged again", () => {
   assert.equal(plan.newEntries[0].date, "2022-01-09");
   assert.equal(plan.projectDays.filter((d) => d.status === "covered-date-no-addition").length, 8);
   assert.equal(plan.projectEstimates[0].existingHours, 8);
+  assert.equal(plan.newEntries[0].description, "Build toy (estimated from GitHub)");
+});
+
+test("descriptions use unique work subjects and skip empty punctuation", () => {
+  assert.equal(githubEffortDescription({ project: "Toy", commits: [
+    { subject: "." }, { subject: " Add Roboto\n styling " },
+    { subject: "Add Roboto styling" }, { subject: "Update README" }, {},
+  ] }), "Add Roboto styling; Update README (estimated from GitHub)");
+  assert.equal(githubEffortDescription({ project: "Toy", commits: [{ subject: "." }] }),
+    "Toy development (estimated from GitHub)");
+});
+
+test("long descriptions fit the entry limit without losing the estimate label", () => {
+  for (const subjects of [["A".repeat(1000)], ["A".repeat(1000), "Second"],
+    Array.from({ length: 20 }, (_, i) => `Change ${i}: ${"work ".repeat(20)}`)]) {
+    const description = githubEffortDescription({ commits: subjects.map((subject) => ({ subject })) });
+    assert.ok(description.length <= 500);
+    assert.ok(description.endsWith(" (estimated from GitHub)"));
+    if (subjects.length > 1) assert.match(description, /\+\d+ more changes/);
+  }
 });
 
 test("fork and branch duplicate SHAs count once; IDs survive expanded evidence", () => {

@@ -41,6 +41,11 @@ statistical confidence intervals; uncertainty within a day is correlated.
 which no time can safely be added. `newEntries` contains only uncovered dates,
 with synthetic, non-overlapping bookkeeping blocks explicitly labelled as
 estimates. The hash of repository and date gives each block a stable identifier.
+Descriptions use distinct commit subjects and a short “estimated from GitHub”
+label. Numerical ranges, hashes, and inferred calendar placement stay in the
+private plan. Updating old imported descriptions requires a separate,
+description-only repair against the exact saved batch and before-values;
+re-running the planner does not update existing entries.
 Apply with an atomic insert-only upsert and re-check occupancy against live
 entries inside the write transaction. A stale plan must fail and be regenerated.
 
