@@ -25,8 +25,6 @@ declare namespace Preferences {
   /** When Idle - Off shows only a running timer. Timers started elsewhere appear on the next background refresh (within a minute). */
   "showWhenIdle": boolean
 }
-  /** Preferences accessible in the `toggle-timer` command */
-  export type ToggleTimer = ExtensionPreferences & {}
   /** Preferences accessible in the `timer` command */
   export type Timer = ExtensionPreferences & {}
   /** Preferences accessible in the `entries` command */
@@ -38,8 +36,6 @@ declare namespace Preferences {
 declare namespace Arguments {
   /** Arguments passed to the `menu-bar` command */
   export type MenuBar = {}
-  /** Arguments passed to the `toggle-timer` command */
-  export type ToggleTimer = {}
   /** Arguments passed to the `timer` command */
   export type Timer = {}
   /** Arguments passed to the `entries` command */
