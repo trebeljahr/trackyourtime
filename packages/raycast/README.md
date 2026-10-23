@@ -6,45 +6,36 @@ Start and stop your timer from the keyboard, and see it running in the macOS men
 
 | Command | What it does |
 | --- | --- |
-| **Timer** | Start immediately, then add details while it runs. Start from a favorite, recent work or a project. While a timer runs, stop, edit, move, pin or discard it. |
+| **Timer** | Stops the running timer, or resumes your latest work. Its search subtitle names the work and elapsed time. |
 | **Timer Menu Bar** | Shows the running time in the menu bar. Its menu can stop, edit or discard the timer, continue recent work and show today's total. |
-| **Quick Toggle Timer** (optional) | Stops the running timer, or resumes your latest entry from the past 30 days. Enable it for a global hotkey. |
 | **Show All Time** | Lists the last 14 days of entries, grouped by day. Continue, edit or delete any of them. |
 | **Open Dashboard** | Opens the web app. |
 
 Reports, invoices, the calendar and catalog editing stay in the web app.
 
-**Timer** is the main command for starting and stopping work. **Quick Toggle Timer** is disabled by default on new installs. Enable it only if you want a separate global hotkey. Existing installs keep their command settings.
+### One command for the timer
 
-### A hotkey for the timer
+Run **Timer** or assign it a global hotkey. While tracking, it stops your current timer. When idle, it resumes your latest work from the past 30 days. With nothing to resume, it starts immediately and opens details.
 
-Open Raycast Settings → Extensions → Track Your Time, enable **Quick Toggle Timer**, and record a hotkey. One press stops what is running. If nothing runs, the same press resumes your latest entry.
+The search subtitle shows **Stop Timer · work · project · elapsed** while tracking and **Start Timer · No timer running** when idle. A task name takes priority over notes. Background refresh updates the subtitle without changing tracked time. Changes from another device follow Raycast's background schedule, normally about a minute. Every press checks the current timer before acting.
 
-If there is nothing to resume, it starts a timer immediately and opens its details.
+There is no separate Start / Stop Timer command.
 
-When enabled, the quick toggle's subtitle shows **Stop Timer**, the work description and elapsed time while tracking. When idle, it shows **Start Timer**. The command name stays **Quick Toggle Timer** because Raycast only supports dynamic subtitles.
+### Details and recent work
 
-The subtitle refreshes after timer changes in Raycast and on a one-minute background schedule. Raycast controls background scheduling, so changes from another device may appear later. Every press checks the current timer before acting.
+Choose **Timer Details…** in the menu bar, or open **Show All Time** and press **⌘T**. This opens the work list without toggling your timer. Edit the running entry, start a favorite, continue recent work, choose a project or switch workspace there.
 
-### Start now, add details afterwards
-
-Open **Timer** and press **⏎** on **Start Timer**. The clock starts before the details form opens. You can type a description in the search bar first. Leaving the form keeps the timer running.
-
-While tracking, that first row becomes **Stop Timer**, with the work details and a ticking duration. Press **⏎** to stop it.
-
-Favorites, **Recent Work** and projects in **Quick Start** each start with one selection. Recent work covers the past 30 days. If you use several workspaces, the selector at the top shows which one this Mac tracks into.
-
-Use **Start with Details…** in the action panel when you want to fill everything in before starting.
+In that list, **Start Timer** starts immediately and opens details while the clock runs. You can type a description in the list's search bar first. **Stop Timer** replaces the first row while tracking. Use **Start with Details…** to fill everything in before starting.
 
 ### Keyboard shortcuts in the forms
 
 Starting a timer, logging past time and editing an entry use the same fields: description, project, task, tags and billable. Projects are grouped by client.
 
-- **⌘⇧N** logs time you forgot to track, in **Timer** and **Show All Time**.
+- **⌘⇧N** logs time you forgot to track, in the details list and **Show All Time**.
 - **⌘⇧D** searches descriptions from the past 180 days. **⏎** takes the name. **⌘⇧⏎** also takes its project, task, tags and billable setting.
 - **⌘⇧P**, **⌘⇧T** and **⌘⇧G** create a project, task or tag, and the form selects the new one.
 
-If you belong to more than one workspace, **⌘⇧W** in **Timer** picks the workspace this Mac tracks into.
+If you belong to more than one workspace, **⌘⇧W** in the details list picks the workspace this Mac tracks into.
 
 ## Setup
 
@@ -54,7 +45,7 @@ If you belong to more than one workspace, **⌘⇧W** in **Timer** picks the wor
 
 You do not create or paste an API key. The session appears as **Raycast** under Settings → Devices in the web app. Sign it out there to remove this Mac's access.
 
-To see your account or sign out from Raycast, press **⌘⇧A** in **Timer**.
+To see your account or sign out, open **Timer Details…** from the menu bar and press **⌘⇧A**.
 
 ### Menu bar item
 
@@ -79,7 +70,7 @@ Leave both empty to use `https://api.trackyourtime.dev` and `https://trackyourti
 
 You can start, stop, log, move, discard and delete entries with no connection. The extension keeps the changes on this Mac. It sends them in order when the server answers again.
 
-While changes wait, **Timer** and the menu bar show a **Not synced** section with the count. The hotkey's HUD shows the count too.
+While changes wait, The details list and the menu bar show a **Not synced** section with the count. The hotkey's HUD shows the count too.
 
 Some actions need the connection:
 
@@ -88,7 +79,7 @@ Some actions need the connection:
 - Pinning a favorite needs the server.
 - Until an entry syncs, its rate and amount are an estimate from the last data this Mac loaded.
 
-Each waiting change records the account, server and workspace it belongs to. If you sign out or change the API URL, the changes stay on this Mac. Another account never sends them. **Timer** lists changes that are not yours to send, and you can discard them after a confirmation.
+Each waiting change records the account, server and workspace it belongs to. If you sign out or change the API URL, the changes stay on this Mac. Another account never sends them. The details list shows changes that are not yours to send, and you can discard them after a confirmation.
 
 ## Troubleshooting
 

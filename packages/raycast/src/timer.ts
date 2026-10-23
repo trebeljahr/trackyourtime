@@ -7,18 +7,14 @@ import { noteTimerEcho } from "./lib/storage.js";
 import { entryLabel, RECENT_DAYS } from "./lib/timer-data.js";
 import { isAlreadyStopped, refreshMenuBar, replacedNotice, showFailureToast } from "./lib/ui.js";
 import { ownOnly, resolveUserId } from "./lib/timer-data.js";
+import { loadCache } from "./lib/local-cache.js";
+import { activeWorkspaceId } from "./lib/workspace.js";
+import { isLocalEntry } from "./lib/overlay.js";
 
 /**
- * One hotkey for the whole loop: stop what is running, or pick the last thing
- * up again. With nothing to resume it starts immediately, then opens the running
- * entry so details can be added without delaying the clock.
- *
- * This is `no-view` deliberately, and it is why it earns a command of its own
- * rather than living inside `timer`. Raycast can only launch `no-view` and
- * menu bar commands in the background, so this is the only mode a global
- * hotkey can drive without opening a window: press it, see a HUD, keep
- * working. The `timer` view is the surface for choosing *what* to start;
- * this one is for the case where there is nothing to choose.
+ * The single timer command. User launches toggle tracking; background launches
+ * only publish the action and work name in search. Browsing and editing live
+ * inside the existing history view, never in a second root timer command.
  */
 /**
  * " · queued" when this Mac is holding work no server has seen.
@@ -44,13 +40,20 @@ const setSubtitle = async (subtitle: string): Promise<void> => {
 
 const showState = async (running: TimeEntry | null): Promise<void> => {
   if (!running) return setSubtitle("Start Timer · No timer running");
-  const name = running.description.trim().split(/\r?\n/, 1)[0] || "Untitled work";
+  // Catalog ids only name work inside their own workspace. Cached names are
+  // optional context, so a cache failure cannot block the actual timer action.
+  const cache = await loadCache().catch(() => null);
+  const sameWorkspace = (await activeWorkspaceId().catch(() => null)) === running.workspaceId;
+  const task = sameWorkspace ? cache?.tasks?.find((row) => row.id === running.taskId)?.name : undefined;
+  const project = sameWorkspace ? cache?.projects?.find((row) => row.id === running.projectId)?.name : undefined;
+  const name = task?.trim() || running.description.trim().split(/\r?\n/, 1)[0] || project || "Untitled work";
   const chars = Array.from(name);
   const short = chars.length > 48 ? `${chars.slice(0, 47).join("").trimEnd()}…` : name;
-  await setSubtitle(`Stop Timer · ${short} · ${formatDurationShort(entryDurationSec(running, Date.now()))}`);
+  const context = project && project !== name ? ` · ${Array.from(project).slice(0, 32).join("")}` : "";
+  await setSubtitle(`Stop Timer · ${short}${context} · ${formatDurationShort(entryDurationSec(running, Date.now()))}`);
 };
 
-export default async function ToggleTimer(): Promise<void> {
+export default async function Timer(): Promise<void> {
   const background = environment.launchType === LaunchType.Background;
   try {
     const api = await getTrackYourTime();
@@ -119,11 +122,15 @@ export default async function ToggleTimer(): Promise<void> {
       const entry = await api.start({ description: "" });
       await showState(entry);
       await refreshMenuBar(false);
-      await launchCommand({
-        name: "timer",
-        type: LaunchType.UserInitiated,
-        context: { editRunningId: entry.id },
-      });
+      if (!isLocalEntry(entry)) {
+        await launchCommand({
+          name: "entries",
+          type: LaunchType.UserInitiated,
+          context: { showTimer: true, editRunningId: entry.id },
+        });
+      } else {
+        await showHUD(`▶ Timer started${await queuedSuffix()}`);
+      }
       return;
     }
     const last = decision.candidate;

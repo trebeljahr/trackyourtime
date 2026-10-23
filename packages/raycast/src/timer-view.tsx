@@ -11,7 +11,6 @@ import {
   confirmAlert,
   showToast,
   useNavigation,
-  type LaunchProps,
 } from "@raycast/api";
 import {
   entryDurationSec,
@@ -71,9 +70,9 @@ const MAX_NAMED_FOREIGN = 5;
  * The menu bar is the glanceable version of this; both clocks tick by the
  * second while an entry runs.
  */
-export default function Timer({
-  launchContext,
-}: LaunchProps<{ launchContext?: { editRunningId?: string; signIn?: boolean } }>): React.JSX.Element {
+export type TimerViewContext = { editRunningId?: string; signIn?: boolean };
+
+export default function TimerView({ launchContext }: { launchContext?: TimerViewContext } = {}): React.JSX.Element {
   const { push } = useNavigation();
   const [searchText, setSearchText] = useState("");
   const [isStarting, setIsStarting] = useState(false);

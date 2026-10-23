@@ -31,22 +31,13 @@
       ]
     },
     {
-      "name": "toggle-timer",
-      "title": "Quick Toggle Timer",
-      "subtitle": "Track Your Time",
-      "description": "Stop the running timer, or resume your latest entry from the past 30 days. Assign a hotkey to it.",
-      "mode": "no-view",
-      "disabledByDefault": true,
-      "interval": "1m",
-      "keywords": ["toggle", "start", "stop", "resume", "continue", "track"]
-    },
-    {
       "name": "timer",
       "title": "Timer",
       "subtitle": "Track Your Time",
-      "description": "Start immediately, add details while tracking, or resume a favorite or recent work.",
-      "mode": "view",
-      "keywords": ["start", "stop", "track", "resume", "favorites", "recent"]
+      "description": "Stop the running timer, or resume your latest work. Shows the current action and work in search.",
+      "mode": "no-view",
+      "keywords": ["toggle", "start", "stop", "track", "resume", "continue"],
+      "interval": "1m"
     },
     {
       "name": "entries",

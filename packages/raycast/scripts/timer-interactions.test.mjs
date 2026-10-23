@@ -51,7 +51,10 @@ const mocks = new Map([
     export const usePoll=()=>{}; export const useWatchRunning=()=>{};`,
   ],
   [source("lib/auth.ts"), `export const getStoredUserId=async()=> 'owner';`],
-  [source("lib/local-cache.ts"), `export const loadCache=async()=>({settings:null});`],
+  [
+    source("lib/local-cache.ts"),
+    `export const loadCache=async()=>globalThis.__raycastInteraction.cache??({settings:null});`,
+  ],
   [source("lib/storage.ts"), `export const loadTimerEcho=async()=>null; export const noteTimerEcho=async()=>{};`],
   [
     source("lib/workspace.ts"),
@@ -130,9 +133,10 @@ after(() => {
   hook.deregister();
   delete globalThis.__raycastInteraction;
 });
-const { default: Timer } = await import("../src/timer.tsx");
+const { default: Timer } = await import("../src/timer-view.tsx");
 const { default: MenuBar } = await import("../src/menu-bar.tsx");
-const { default: ToggleTimer } = await import("../src/toggle-timer.ts");
+const { default: ToggleTimer } = await import("../src/timer.ts");
+const { default: Entries } = await import("../src/entries.tsx");
 const { loadTimerSnapshot } = await import("../src/lib/timer-data.ts");
 const entry = (overrides = {}) => ({
   id: "new-entry",
@@ -173,6 +177,7 @@ beforeEach(() => {
     showWhenIdle: false,
     launchType: "user",
     metadataFails: false,
+    cache: { settings: null, projects: [], tasks: [] },
     workspace: "work",
   });
   host.data = {
@@ -322,6 +327,8 @@ test("menu start creates a timer before handing off to its editor", async () => 
   start.props.onAction();
   await new Promise(setImmediate);
   const launch = host.events.find((e) => e[0] === "launch");
+  assert.equal(launch[1].name, "entries");
+  assert.equal(launch[1].context.showTimer, true);
   assert.equal(launch[1].context.editRunningId, "new-entry");
   assert.ok(host.events.findIndex((e) => e[0] === "start") < host.events.findIndex((e) => e[0] === "launch"));
 });
@@ -410,6 +417,29 @@ test("a first-ever hotkey starts immediately, without a preliminary form", async
   await ToggleTimer();
   assert.ok(host.events.some((e) => e[0] === "start"));
   assert.equal(host.events.find((e) => e[0] === "launch")[1].context.editRunningId, "new-entry");
+  assert.equal(host.events.find((e) => e[0] === "launch")[1].name, "entries");
+});
+test("the manifest exposes one timer toggle and no alternate timer command", () => {
+  const { commands } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(
+    commands.some((command) => command.name === "toggle-timer"),
+    false,
+  );
+  const timer = commands.find((command) => command.name === "timer");
+  assert.equal(timer.mode, "no-view");
+  assert.equal(timer.disabledByDefault, undefined);
+});
+test("history hosts timer details without invoking the toggle", () => {
+  const screen = render(Entries, { launchContext: { showTimer: true, editRunningId: "running-entry" } });
+  assert.equal(screen.type, Timer);
+  assert.equal(screen.props.launchContext.editRunningId, "running-entry");
+  assert.deepEqual(host.events, []);
+});
+test("offline immediate starts never launch an editor for a temporary id", async () => {
+  host.api.start = async () => entry({ id: "temp-synthetic" });
+  await ToggleTimer();
+  assert.ok(!host.events.some(([kind]) => kind === "launch"));
+  assert.ok(host.events.some(([kind, value]) => kind === "hud" && value.startsWith("▶ Timer started")));
 });
 test("the Timer view replaces its first start row with an explicit stop action", async () => {
   const running = entry({ id: "running-entry", description: "Design review", projectName: "Website" });
@@ -436,6 +466,24 @@ test("background toggle refreshes running and idle labels without tracking or op
   await ToggleTimer();
   assert.equal(host.events[1][1].subtitle, "Start Timer · No timer running");
   assert.ok(host.events.every(([kind]) => kind === "metadata"));
+});
+test("search names the task and project of the timer it will stop", async () => {
+  host.launchType = "background";
+  host.cache.projects = [{ id: "project", name: "Website" }];
+  host.cache.tasks = [{ id: "task", name: "Health checks" }];
+  host.data.running = entry({ taskId: "task", projectId: "project", description: "Long notes ".repeat(40) });
+  await ToggleTimer();
+  assert.match(host.events[0][1].subtitle, /^Stop Timer · Health checks · Website · /);
+  assert.ok(host.events.every(([kind]) => kind === "metadata"));
+});
+test("search never labels a timer with another workspace's catalog names", async () => {
+  host.launchType = "background";
+  host.cache.projects = [{ id: "project", name: "Wrong workspace" }];
+  host.cache.tasks = [{ id: "task", name: "Wrong task" }];
+  host.data.running = entry({ workspaceId: "other", taskId: "task", projectId: "project", description: "Actual work" });
+  await ToggleTimer();
+  assert.match(host.events[0][1].subtitle, /^Stop Timer · Actual work · /);
+  assert.ok(!host.events[0][1].subtitle.includes("Wrong"));
 });
 test("a failed background status read clears stale action hints without showing UI", async () => {
   host.launchType = "background";

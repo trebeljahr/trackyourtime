@@ -243,14 +243,14 @@ test("mutation recovery opens pairing directly instead of relaunching a stale Ti
   await showFailureToast(new NotSignedInError(), "Could not start");
   assert.equal(host.toasts[0].primaryAction.title, "Sign in");
   host.toasts[0].primaryAction.onAction();
-  assert.deepEqual(host.launches[0], { name: "timer", type: "user", context: { signIn: true } });
+  assert.deepEqual(host.launches[0], { name: "entries", type: "user", context: { showTimer: true, signIn: true } });
 });
 
 test("timer changes refresh both menu and root-search status without foreground launches", async () => {
   await refreshMenuBar();
   assert.deepEqual(host.launches, [
     { name: "menu-bar", type: "background" },
-    { name: "toggle-timer", type: "background" },
+    { name: "timer", type: "background" },
   ]);
 });
 

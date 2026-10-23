@@ -74,9 +74,9 @@ const WATCH_MS = 4_000;
 /** The live command, where the clock ticks and forms can be pushed. */
 const openTimer = (editRunningId?: string): void => {
   void launchCommand({
-    name: "timer",
+    name: "entries",
     type: LaunchType.UserInitiated,
-    ...(editRunningId ? { context: { editRunningId } } : {}),
+    context: { showTimer: true, ...(editRunningId ? { editRunningId } : {}) },
   });
 };
 
@@ -157,7 +157,7 @@ export default function MenuBar(): React.JSX.Element | null {
       await (preview ? optimistic(run(), preview) : run());
       if (!preview) revalidate();
       // Refresh the root-search action after a menu start, stop or edit.
-      await launchCommand({ name: "toggle-timer", type: LaunchType.Background }).catch(() => undefined);
+      await launchCommand({ name: "timer", type: LaunchType.Background }).catch(() => undefined);
     } catch (error) {
       // Somebody stopped it elsewhere between this item's last read and the
       // click. The user got what they wanted; record it and move on rather
@@ -473,7 +473,7 @@ export default function MenuBar(): React.JSX.Element | null {
 
       <MenuBarExtra.Section title={`Today · ${formatDurationShort(data?.todaySec ?? 0)}`}>
         <MenuBarExtra.Item
-          title="Timer…"
+          title="Timer Details…"
           icon={Icon.Stopwatch}
           shortcut={{ modifiers: ["cmd"], key: "t" }}
           onAction={() => openTimer()}

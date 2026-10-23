@@ -1,4 +1,16 @@
-import { Action, ActionPanel, Alert, Color, Icon, Keyboard, List, Toast, confirmAlert, showToast } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  Alert,
+  Color,
+  Icon,
+  Keyboard,
+  List,
+  Toast,
+  confirmAlert,
+  showToast,
+  type LaunchProps,
+} from "@raycast/api";
 import { entryDurationSec, toQuickStart, type DetailedEntry } from "./vendor/index.js";
 import { getTrackYourTime } from "./lib/api.js";
 import { isLocalEntry } from "./lib/overlay.js";
@@ -13,6 +25,7 @@ import { CompatibilityListSection } from "./components/compatibility-banner.js";
 import { EditEntry } from "./components/edit-entry.js";
 import { LogTime } from "./components/log-time.js";
 import { SignedOutView } from "./components/signed-out.js";
+import TimerView, { type TimerViewContext } from "./timer-view.js";
 
 /** Window the list covers. Anything older belongs in the web app's reports. */
 const HISTORY_DAYS = 14;
@@ -104,7 +117,14 @@ const accessoriesFor = (
   return accessories;
 };
 
-export default function Entries(): React.JSX.Element {
+export default function Entries({
+  launchContext,
+}: LaunchProps<{ launchContext?: TimerViewContext & { showTimer?: boolean } }>): React.JSX.Element {
+  // Opening details must never invoke the root command: it now toggles time.
+  return launchContext?.showTimer ? <TimerView launchContext={launchContext} /> : <History />;
+}
+
+function History(): React.JSX.Element {
   const now = Date.now();
   const { data, isLoading, signedOut, revalidate, optimistic } = useApi("entries", async (api) => {
     const { entries } = await api.list({
@@ -171,6 +191,14 @@ export default function Entries(): React.JSX.Element {
       target={<LogTime onSaved={revalidate} />}
     />
   );
+  const timerDetails = (
+    <Action.Push
+      title="Timer Details and Recent Work"
+      icon={Icon.Stopwatch}
+      shortcut={{ modifiers: ["cmd"], key: "t" }}
+      target={<TimerView />}
+    />
+  );
 
   return (
     <List
@@ -178,6 +206,7 @@ export default function Entries(): React.JSX.Element {
       searchBarPlaceholder="Search recent entries…"
       actions={
         <ActionPanel>
+          {timerDetails}
           {logTime}
           <Action.OpenInBrowser title="Open Web App" url={webLink("/app/track")} />
         </ActionPanel>
@@ -251,6 +280,7 @@ export default function Entries(): React.JSX.Element {
                     </ActionPanel.Section>
 
                     <ActionPanel.Section>
+                      {timerDetails}
                       {logTime}
                       <Action.CopyToClipboard
                         title="Copy Description"

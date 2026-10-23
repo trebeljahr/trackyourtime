@@ -14,7 +14,7 @@ import { notifySessionChanged } from "./auth.js";
 export async function refreshMenuBar(refreshToggle = true): Promise<void> {
   // The toggle updates its own subtitle after acting; relaunching itself
   // while handling a user action could interrupt that action.
-  for (const name of refreshToggle ? ["menu-bar", "toggle-timer"] : ["menu-bar"]) {
+  for (const name of refreshToggle ? ["menu-bar", "timer"] : ["menu-bar"]) {
     try {
       await launchCommand({ name, type: LaunchType.Background });
     } catch {
@@ -100,7 +100,11 @@ export async function showFailureToast(error: unknown, title: string): Promise<v
       primaryAction: {
         title: "Sign in",
         onAction: () => {
-          void launchCommand({ name: "timer", type: LaunchType.UserInitiated, context: { signIn: true } });
+          void launchCommand({
+            name: "entries",
+            type: LaunchType.UserInitiated,
+            context: { showTimer: true, signIn: true },
+          });
         },
       },
     });
