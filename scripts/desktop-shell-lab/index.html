@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Track Your Time · Desktop study</title><style>/* STYLES */</style></head>
+<body><main>
+<header><span class="brand">◷ Track Your Time</span><span class="study">Desktop interaction study / 23 October 2026</span></header>
+<div class="layout"><aside>
+<p class="eyebrow">ONE TIMER, DIFFERENT DESKTOPS</p><h1>Keep work <br>within reach.</h1>
+<p class="intro">Explore tray controls and a compact timer fallback when the desktop has no tray.</p>
+<label for="platform">Desktop</label><select id="platform"><option value="win32">Windows 11</option><option value="kde">KDE Plasma</option><option value="gnome">GNOME · no extension</option><option value="ubuntu">GNOME · AppIndicator enabled</option><option value="xfce">Xfce / Cinnamon · indicator host</option><option value="darwin">macOS · comparison</option></select>
+<label for="state">Timer state</label><select id="state"><option value="running">Running</option><option value="idle">Stopped</option><option value="signed-out">Signed out</option></select>
+<label class="check"><input id="offline" type="checkbox"> Unsent changes</label>
+<label class="check"><input id="tray" type="checkbox" checked> Show tray icon</label>
+<label class="check"><input id="background" type="checkbox"> Hide window on close</label>
+<div class="tools"><button id="login">Simulate login launch</button><button id="reset">Reset study</button></div>
+<p class="disclosure">Browser concept with synthetic work. Menu labels and clock use the app’s tray model. Compact view is a proposal. Shell styling is illustrative.</p>
+</aside><section class="workspace" aria-label="Desktop preview">
+<div id="desktop" class="desktop"><div id="topbar" class="topbar"></div>
+<div class="desktop-label"><span id="shell-name"></span><small>Interactive shell sketch</small></div>
+<section id="timer-window" class="timer-window" aria-label="Compact timer concept"><div class="titlebar"><span>Track Your Time · compact view concept</span><button id="close-window" aria-label="Close timer window">×</button></div>
+<div class="timer-content"><p class="eyebrow" id="timer-status"></p><h2 id="task"></h2><p class="project">Website / Example studio</p><p class="clock" id="clock"></p><button class="primary" id="toggle-timer"></button>
+<div id="recent-work"><p class="eyebrow">CONTINUE</p><button class="recent" data-task="Design review">Design review <span>Website</span></button><button class="recent" data-task="Invoice preparation">Invoice preparation <span>Admin</span></button></div><p id="sync-state" class="sync-state"></p></div></section>
+<section id="native-menu" class="native-menu" aria-label="Tray menu" hidden></section>
+<div id="panel" class="panel"><button id="launcher">Open Track Your Time</button><div class="panel-right"><button id="tray-button" aria-label="Tray icon"></button><span>10:42</span></div></div>
+</div><div class="preview-actions"><button id="show-menu">Open tray menu</button><button id="quick-view">Open compact view concept</button><button id="shortcut">Simulate timer shortcut</button></div>
+<output id="event" aria-live="polite">Ready. Choose a desktop, then try its tray.</output>
+<div class="facts"><div><p class="eyebrow">SHELL BEHAVIOR</p><p id="behavior"></p></div><div><p class="eyebrow">RECOVERY & LIMITS</p><p id="limits"></p></div></div>
+</section></div><footer>Prototype only · No account access · No system settings changed · No notifications</footer>
+</main><script>/* SCRIPT */</script></body></html>

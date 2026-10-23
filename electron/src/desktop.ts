@@ -60,6 +60,7 @@ import { createElectronTray, type TrayView } from "./tray.ts";
 import { installUpdater } from "./updater.ts";
 import type { UpdaterEvent } from "./updater-model.ts";
 import { markQuitting } from "./window.ts";
+import { desktopWindowPolicy } from "./window-policy.ts";
 import {
   FALLBACK_TRAY_LABELS,
   parseNotice,
@@ -560,9 +561,9 @@ export function installDesktop(options: {
   }
 
   return {
-    hideOnClose: () => platform === "darwin" || (settings.closeHides && settings.showInTray),
+    hideOnClose: () => desktopWindowPolicy(platform, settings).hideOnClose,
     launchHidden: (argv) =>
-      argv.includes(HIDDEN_LAUNCH_ARG) && settings.showInTray && platform !== "darwin",
+      argv.includes(HIDDEN_LAUNCH_ARG) && desktopWindowPolicy(platform, settings).allowHiddenLaunch,
     rendererReset: resumeShortcuts,
   };
 }

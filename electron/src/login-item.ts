@@ -11,7 +11,8 @@
  * disappears on exit).
  *
  * A launch the OS started at login gets `--hidden` (Windows and Linux) and
- * opens to the tray without a window, when the tray is on. macOS 13 and
+ * opens to the tray without a window when the tray is on; Linux also requires
+ * opting into hide-on-close because a tray host may be absent. macOS 13 and
  * later register through SMAppService, which passes no arguments and does not
  * report `wasOpenedAtLogin` reliably, so a Mac opens its window at login; its
  * close button hides it.
