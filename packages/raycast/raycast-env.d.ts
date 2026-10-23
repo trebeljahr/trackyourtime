@@ -22,7 +22,7 @@ declare type Preferences = ExtensionPreferences
 declare namespace Preferences {
   /** Preferences accessible in the `menu-bar` command */
   export type MenuBar = ExtensionPreferences & {
-  /** When Idle - Off shows only a running timer. Timers started elsewhere appear on the next background refresh (within a minute). */
+  /** When Idle - Off shows only a running timer. Timers started elsewhere appear on the next scheduled refresh (about every 10 seconds; macOS may delay it). */
   "showWhenIdle": boolean
 }
   /** Preferences accessible in the `timer` command */

@@ -9,6 +9,18 @@ import ts from "typescript";
 // run unchanged. No OS keychain, personal records, network or Raycast preferences.
 const host = {};
 globalThis.__raycastInteraction = host;
+const originalWebSocket = globalThis.WebSocket;
+// Real sync client and event routing, with no network or personal sessions.
+class Socket {
+  constructor() {
+    host.sockets.push(this);
+  }
+  close() {}
+  send(event, originId, workspaceId = "work") {
+    this.onmessage({ data: JSON.stringify({ type: "tt:sync", event, originId, workspaceId }) });
+  }
+}
+globalThis.WebSocket = Socket;
 const source = (file) => new URL(`../src/${file}`, import.meta.url).href;
 const mocks = new Map([
   [
@@ -46,11 +58,14 @@ const mocks = new Map([
   [
     source("lib/hooks.ts"),
     `const h=globalThis.__raycastInteraction;
-    export const useApi=()=>({data:h.data,isLoading:false,signedOut:false,revalidate:()=>h.events.push(['refresh']),optimistic:request=>request});
+    export const useApi=()=>({data:h.data,isLoading:false,signedOut:false,revalidate:()=>h.events.push(['refresh']),refresh:async()=>{h.events.push(['refresh']);if(h.revalidate)await h.revalidate();},optimistic:async request=>{const result=await request;h.events.push(['refresh']);if(h.revalidate)await h.revalidate();return result;}});
     export const useReconciledRunning=data=>data?.running??null; export const useNow=()=>h.now;
     export const usePoll=()=>{}; export const useWatchRunning=()=>{};`,
   ],
-  [source("lib/auth.ts"), `export const getStoredUserId=async()=> 'owner';`],
+  [
+    source("lib/auth.ts"),
+    `export const getStoredUserId=async()=> 'owner'; export const getStoredSession=async()=>({token:'synthetic-token'});`,
+  ],
   [
     source("lib/local-cache.ts"),
     `export const loadCache=async()=>globalThis.__raycastInteraction.cache??({settings:null});`,
@@ -77,7 +92,6 @@ const mocks = new Map([
     `export const apiUrl=()=> 'https://synthetic.invalid'; export const hostLabel=()=> 'Synthetic'; export const webLink=p=>'https://synthetic.invalid'+p;`,
   ],
   [source("lib/server-level.ts"), `export const useServerLevel=()=>({banner:null,supports:()=>true});`],
-  [source("lib/sync.ts"), `export const useSyncRevalidate=()=>true;`],
   [
     source("lib/ui.ts"),
     `const h=globalThis.__raycastInteraction;
@@ -134,12 +148,15 @@ const hook = registerHooks({
 });
 after(() => {
   hook.deregister();
+  globalThis.WebSocket = originalWebSocket;
   delete globalThis.__raycastInteraction;
 });
 const { default: Timer } = await import("../src/timer-view.tsx");
 const { default: MenuBar } = await import("../src/menu-bar.tsx");
 const { default: ToggleTimer } = await import("../src/timer.ts");
 const { default: Entries } = await import("../src/entries.tsx");
+const { useSyncRevalidate } = await import("../src/lib/sync.ts");
+const { formatMenuBarClock } = await import("../src/lib/format.ts");
 const { loadTimerSnapshot } = await import("../src/lib/timer-data.ts");
 const { markTimerAction, refreshTimerSearch } = await import("../src/lib/timer-search.ts");
 const entry = (overrides = {}) => ({
@@ -174,7 +191,9 @@ const entry = (overrides = {}) => ({
 beforeEach(() => {
   Object.assign(host, {
     events: [],
+    revalidate: null,
     effects: [],
+    sockets: [],
     stateIndex: 0,
     search: undefined,
     now: Date.now(),
@@ -329,23 +348,24 @@ test("menu start creates a timer before handing off to its editor", async () => 
   host.showWhenIdle = true;
   const tree = render(MenuBar);
   const start = nodes(tree, "MenuBarExtra.Item").find((n) => n.props.title === "Start Timer");
-  start.props.onAction();
-  await new Promise(setImmediate);
+  const action = start.props.onAction();
+  assert.ok(action instanceof Promise);
+  await action;
   const launch = host.events.find((e) => e[0] === "launch");
   assert.equal(launch[1].name, "entries");
   assert.equal(launch[1].context.showTimer, true);
   assert.equal(launch[1].context.editRunningId, "new-entry");
   assert.ok(host.events.findIndex((e) => e[0] === "start") < host.events.findIndex((e) => e[0] === "launch"));
 });
-test("menu is hidden idle and displays only a moving clock while tracking", () => {
+test("menu is hidden idle and releases the host after reading a running timer", () => {
   assert.equal(render(MenuBar), null);
   host.data.running = entry({ start: new Date(host.now - 60_000).toISOString() });
   const first = render(MenuBar);
-  assert.equal(first.props.title, "1:00");
+  assert.equal(first.props.title, "1m");
   assert.equal(first.props.icon, undefined);
-  assert.equal(first.props.isLoading, true);
-  host.now += 1000;
-  assert.equal(render(MenuBar).props.title, "1:01");
+  assert.equal(first.props.isLoading, false);
+  host.now += 60_000;
+  assert.equal(render(MenuBar).props.title, "2m");
 });
 test("menu recents show a task name while continuing the complete original entry", async () => {
   host.showWhenIdle = true;
@@ -571,4 +591,117 @@ test("fresh current fields outrank an older history response", async () => {
   const snapshot = await loadTimerSnapshot(host.api, { recentLimit: 8 });
   assert.equal(snapshot.running.description, "Fresh");
   assert.equal(snapshot.running.projectName, null);
+});
+
+test("menu actions wait for the snapshot and request a fresh native item before opening details", async () => {
+  host.showWhenIdle = true;
+  let finish;
+  host.revalidate = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
+  const start = nodes(render(MenuBar), "MenuBarExtra.Item").find((n) => n.props.title === "Start Timer");
+  const action = start.props.onAction();
+  await new Promise(setImmediate);
+  assert.ok(!host.events.some(([kind]) => kind === "menu-refresh" || kind === "launch"));
+  finish();
+  await action;
+  const refresh = host.events.findIndex(([kind]) => kind === "menu-refresh");
+  const editor = host.events.findIndex(([kind]) => kind === "launch");
+  assert.ok(refresh >= 0 && refresh < editor);
+});
+
+test("every timer mutation from the menu refreshes its native item after settling", async () => {
+  host.showWhenIdle = true;
+  host.data.running = entry();
+  host.data.recent = [entry({ id: "past", end: new Date().toISOString() })];
+  host.data.favorites = [
+    { id: "pin", description: "Favorite", projectId: null, taskId: null, clientId: null, billable: false },
+  ];
+  host.api.discard = async () => {};
+  host.api.update = async () => {};
+  const tree = render(MenuBar);
+  for (const title of ["Stop Timer", "Discard Timer", "Favorite", "Design", "No Project"]) {
+    host.events = [];
+    const row = nodes(tree, "MenuBarExtra.Item").find((n) => n.props.title === title);
+    const action = row.props.onAction();
+    assert.ok(action instanceof Promise, title);
+    await action;
+    assert.ok(
+      host.events.some(([kind]) => kind === "refresh"),
+      title,
+    );
+    assert.ok(
+      host.events.some(([kind]) => kind === "menu-refresh"),
+      title,
+    );
+  }
+});
+
+test("an offline menu start refreshes without opening an editor for a temporary id", async () => {
+  host.showWhenIdle = true;
+  host.api.start = async () => entry({ id: "temp-offline" });
+  const row = nodes(render(MenuBar), "MenuBarExtra.Item").find((n) => n.props.title === "Start Timer");
+  await row.props.onAction();
+  assert.ok(host.events.some(([kind]) => kind === "menu-refresh"));
+  assert.ok(!host.events.some(([kind]) => kind === "launch"));
+});
+
+test("scheduled launches refresh hidden timers without needing an open command", () => {
+  const { commands } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(commands.find((command) => command.name === "menu-bar").interval, "10s");
+});
+
+test("a newly loaded menu adopts starts, replacements and stops from other clients", async () => {
+  // Persisted history deliberately lags: current() must decide what runs.
+  host.data.recent = [entry({ id: "old-timer" })];
+  let remote = null;
+  host.api.current = async () => remote;
+  for (const source of ["web", "chrome", "desktop"]) {
+    remote = entry({ id: source + "-timer", description: source });
+    host.data = await loadTimerSnapshot(host.api, { recentLimit: 6 });
+    assert.match(render(MenuBar).props.tooltip, new RegExp(source));
+    remote = null;
+    host.data = await loadTimerSnapshot(host.api, { recentLimit: 6 });
+    assert.equal(render(MenuBar), null);
+  }
+});
+
+test("menu clock labels keep minute precision across hour boundaries", () => {
+  for (const [seconds, label] of [
+    [-1, "<1m"],
+    [0, "<1m"],
+    [59, "<1m"],
+    [60, "1m"],
+    [3599, "59m"],
+    [3600, "1h 00m"],
+    [3720, "1h 02m"],
+  ]) {
+    assert.equal(formatMenuBarClock(seconds), label);
+  }
+});
+
+test("a loaded menu receives timer events from the web, Chrome, desktop and other Raycast commands", async () => {
+  let reads = 0;
+  useSyncRevalidate(() => {
+    reads++;
+  }, true);
+  const cleanups = host.effects.map((effect) => effect());
+  await new Promise(setImmediate);
+  const [socket] = host.sockets;
+  assert.ok(socket);
+  socket.onopen();
+  assert.equal(reads, 1); // Catch up after reconnect, including missed events.
+  for (const origin of ["web", "chrome", "desktop", "same-raycast-install"]) {
+    socket.send({ kind: "timer.started", entry: entry() }, origin);
+    socket.send({ kind: "timer.stopped", entry: entry({ end: new Date().toISOString() }) }, origin);
+  }
+  // Timers follow the person even when another workspace is on screen.
+  socket.send({ kind: "timer.started", entry: entry({ workspaceId: "other" }) }, "desktop", "other");
+  await new Promise(setImmediate);
+  assert.equal(reads, 10);
+  cleanups.forEach((cleanup) => cleanup?.());
+  socket.send({ kind: "timer.stopped", entry: entry() }, "web");
+  await new Promise(setImmediate);
+  assert.equal(reads, 10); // The next scheduled launch owns unloaded state.
 });

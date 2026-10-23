@@ -11,6 +11,7 @@ import {
 } from "@raycast/api";
 import {
   entryDurationSec,
+  isTempId,
   quickStartHint,
   quickStartLabel,
   repairQuickStart,
@@ -38,7 +39,7 @@ import {
 import { useServerLevel } from "./lib/server-level.js";
 import { useSyncRevalidate } from "./lib/sync.js";
 import { noteTimerEcho } from "./lib/storage.js";
-import { describeFailure, isAlreadyStopped, replacedNotice, showFailureToast } from "./lib/ui.js";
+import { describeFailure, isAlreadyStopped, refreshMenuBar, replacedNotice, showFailureToast } from "./lib/ui.js";
 
 /** A dropdown is a glance, not a browser — six rows is already a lot. */
 const RECENT_LIMIT = 6;
@@ -52,15 +53,8 @@ const menuText = (text: string): string => {
 
 const recentWorkTitle = (entry: DetailedEntry): string => menuText(entry.taskName?.trim() || entryLabel(entry));
 
-/**
- * How often the item re-reads the whole snapshot.
- *
- * The clock itself does not need this — it counts up locally from the running
- * entry's start. This is about the rest of the dropdown: favorites, recents,
- * today's total. Well below the `interval` in the manifest, which exists for
- * the case where this process is no longer alive at all.
- */
-const POLL_MS = 20_000;
+/** Full snapshot fallback while the menu is open; the manifest refreshes unloaded commands. */
+const POLL_MS = 10_000;
 
 /**
  * How often a ticking item checks that its entry is still the running one.
@@ -73,8 +67,8 @@ const POLL_MS = 20_000;
 const WATCH_MS = 4_000;
 
 /** The live command, where the clock ticks and forms can be pushed. */
-const openTimer = (editRunningId?: string): void => {
-  void launchCommand({
+const openTimer = (editRunningId?: string): Promise<void> => {
+  return launchCommand({
     name: "entries",
     type: LaunchType.UserInitiated,
     context: { showTimer: true, ...(editRunningId ? { editRunningId } : {}) },
@@ -84,8 +78,8 @@ const openTimer = (editRunningId?: string): void => {
 export default function MenuBar(): React.JSX.Element | null {
   const { showWhenIdle } = getPreferenceValues<Preferences.MenuBar>();
   const starting = useRef(false);
-  const [isStarting, setIsStarting] = useState(false);
-  const { data, isLoading, error, signedOut, revalidate, optimistic } = useApi("menu-bar", async (api) => {
+  const [isActing, setIsActing] = useState(false);
+  const { data, isLoading, error, signedOut, revalidate, refresh, optimistic } = useApi("menu-bar", async (api) => {
     const snapshot = await loadTimerSnapshot(api, { recentLimit: RECENT_LIMIT });
     await refreshTimerSearch();
     return snapshot;
@@ -101,33 +95,22 @@ export default function MenuBar(): React.JSX.Element | null {
    */
   const running = useReconciledRunning(data, revalidate);
 
-  /**
-   * Whether this item is currently a clock rather than a label.
-   *
-   * Raycast unloads a menu bar command the moment its first render settles,
-   * and an unloaded command's `setInterval` never fires again — which is why
-   * the title used to be minutes, honest at a one-minute refresh and wrong in
-   * between. The one thing that keeps the process alive is an unfinished
-   * load, so an item that ticks says it is loading for as long as it ticks,
-   * and stops claiming that the second the timer stops.
-   */
+  // A menu-bar command is unloaded after a fetch or when its menu closes.
+  // Only real requests keep isLoading true; a running timer is not a load.
   const ticking = running !== null;
 
-  // Both hooks run on every render, before any of the early returns below:
-  // React requires it, and the poll has to keep running precisely in the
-  // states where the item shows nothing — a hidden idle item is how a timer
-  // started in the web app would otherwise go unnoticed.
+  // These hooks keep an open menu current. The scheduled command is the
+  // fallback once Raycast unloads it, including when the idle item is hidden.
   const now = useNow(ticking);
   usePoll(revalidate, POLL_MS);
-  // While the item ticks it is a live process, so it can hold the sync socket
-  // and hear a stop made in the web app or on another machine at once.
+  // While loaded, the socket hears changes from every client, including this install.
   const synced = useSyncRevalidate(revalidate, !signedOut);
   // The fallback for a socket that cannot connect at all — a proxy that drops
   // upgrades, a host with no global WebSocket. While one is open it carries
   // every stop already, so polling `entries.current` underneath it would ask
   // a question that has been answered.
   useWatchRunning(running?.id ?? null, ticking && !synced, revalidate, WATCH_MS);
-  // The command runs every minute; the refresh inside is throttled per origin.
+  // The server-level refresh is throttled per origin.
   const { banner } = useServerLevel();
 
   if (signedOut) {
@@ -140,7 +123,7 @@ export default function MenuBar(): React.JSX.Element | null {
 
   // A version problem is shown even when idle items are hidden: it is why
   // nothing else here will work.
-  if (!running && !isLoading && !showWhenIdle && !error && banner === null) return null;
+  if (!running && !isLoading && !isActing && !showWhenIdle && !error && banner === null) return null;
 
   const elapsed = running ? entryDurationSec(running, now) : 0;
   const clock = formatMenuBarClock(elapsed);
@@ -156,18 +139,22 @@ export default function MenuBar(): React.JSX.Element | null {
     failureTitle: string,
     preview?: (snapshot: TimerSnapshot) => TimerSnapshot,
   ): Promise<void> => {
+    setIsActing(true);
     try {
       await (preview ? optimistic(run(), preview) : run());
-      if (!preview) revalidate();
-      // Refresh the root-search action after a menu start, stop or edit.
-      await refreshTimerSearch();
+      // Finish the read before Raycast closes this action's process. A void
+      // revalidation can leave the native item holding its pre-click snapshot.
+      // Optimistic mutations already await this refresh in menu-bar commands.
+      if (!preview) await refresh();
+      await refreshMenuBar();
     } catch (error) {
       // Somebody stopped it elsewhere between this item's last read and the
       // click. The user got what they wanted; record it and move on rather
       // than reporting a failure for a state that is already correct.
       if (isAlreadyStopped(error)) {
         await noteTimerEcho(null);
-        revalidate();
+        await refresh();
+        await refreshMenuBar();
         await showToast({
           style: Toast.Style.Success,
           title: "Timer already stopped",
@@ -175,36 +162,36 @@ export default function MenuBar(): React.JSX.Element | null {
         return;
       }
       await showFailureToast(error, failureTitle);
+    } finally {
+      setIsActing(false);
     }
   };
 
   // Start first. The view can then edit this already-running entry.
-  const startNow = (project?: ProjectWithStats): void => {
+  const startNow = async (project?: ProjectWithStats): Promise<void> => {
     if (starting.current) return;
     starting.current = true;
-    setIsStarting(true);
-    void act(async () => {
-      const api = await getTrackYourTime();
-      const entry = await api.start(
-        project ? { projectId: project.id, billable: project.billableDefault } : { description: "" },
-      );
-      revalidate();
-      const replaced = replacedNotice(entry);
-      if (replaced) await showToast({ style: Toast.Style.Success, title: "Timer started", message: replaced });
-      openTimer(entry.id);
-    }, "Could not start the timer").finally(() => {
+    let editId: string | undefined;
+    try {
+      await act(async () => {
+        const api = await getTrackYourTime();
+        const entry = await api.start(
+          project ? { projectId: project.id, billable: project.billableDefault } : { description: "" },
+        );
+        if (!isTempId(entry.id)) editId = entry.id;
+        const replaced = replacedNotice(entry);
+        if (replaced) await showToast({ style: Toast.Style.Success, title: "Timer started", message: replaced });
+      }, "Could not start the timer");
+      // Hand off only after the native item has read and refreshed its timer.
+      if (editId) await openTimer(editId);
+    } finally {
       starting.current = false;
-      setIsStarting(false);
-    });
+    }
   };
 
-  /**
-   * File the running timer from the menu bar. The task is cleared with the
-   * project because a task only exists inside one — keeping it would leave
-   * the entry pointing at a task from a project it is no longer in.
-   */
-  const fileUnder = (entry: DetailedEntry, project: ProjectWithStats | null): void => {
-    void act(async () => {
+  /** Move the running entry without revising its task. */
+  const fileUnder = (entry: DetailedEntry, project: ProjectWithStats | null): Promise<void> => {
+    return act(async () => {
       const api = await getTrackYourTime();
       // The task is left alone: moving an entry to another project does not
       // revise what the work was.
@@ -220,7 +207,7 @@ export default function MenuBar(): React.JSX.Element | null {
     <MenuBarExtra
       icon={running ? undefined : BRAND_MARK}
       title={running ? clock : undefined}
-      isLoading={ticking || isLoading || isStarting}
+      isLoading={isLoading || isActing}
       tooltip={
         // A failed refresh leaves the previous snapshot on screen, which is
         // the right call for a glanceable item — but it must not pass for a
@@ -261,7 +248,7 @@ export default function MenuBar(): React.JSX.Element | null {
             icon={Icon.Stop}
             shortcut={Keyboard.Shortcut.Common.Save}
             onAction={() => {
-              void act(
+              return act(
                 async () => {
                   const api = await getTrackYourTime();
                   const stopped = await api.stop(running.id);
@@ -309,7 +296,7 @@ export default function MenuBar(): React.JSX.Element | null {
             icon={pinned ? Icon.StarDisabled : Icon.Star}
             shortcut={{ modifiers: ["cmd"], key: "f" }}
             onAction={() => {
-              void act(async () => {
+              return act(async () => {
                 const api = await getTrackYourTime();
                 if (pinned) {
                   await api.removeFavorite(pinned.id);
@@ -332,7 +319,7 @@ export default function MenuBar(): React.JSX.Element | null {
             icon={Icon.Trash}
             shortcut={{ modifiers: ["cmd", "shift"], key: "backspace" }}
             onAction={() => {
-              void act(async () => {
+              return act(async () => {
                 const api = await getTrackYourTime();
                 await api.discard(running.id);
                 await showToast({
@@ -366,7 +353,7 @@ export default function MenuBar(): React.JSX.Element | null {
               subtitle={quickStartHint(favorite) ?? undefined}
               icon={Icon.Star}
               onAction={() => {
-                void act(
+                return act(
                   async () => {
                     const api = await getTrackYourTime();
                     const started = await api.startQuick(repairQuickStart(favorite));
@@ -398,7 +385,7 @@ export default function MenuBar(): React.JSX.Element | null {
               subtitle={menuText([entry.projectName, entry.clientName].filter(Boolean).join(" · ")) || undefined}
               icon={projectIcon(entry.projectColor)}
               onAction={() => {
-                void act(
+                return act(
                   async () => {
                     const api = await getTrackYourTime();
                     const started = await api.continue(entry.id, toQuickStart(entry));
@@ -485,7 +472,7 @@ export default function MenuBar(): React.JSX.Element | null {
           title="Show All Time…"
           icon={Icon.List}
           onAction={() => {
-            void launchCommand({
+            return launchCommand({
               name: "entries",
               type: LaunchType.UserInitiated,
             });
@@ -495,7 +482,7 @@ export default function MenuBar(): React.JSX.Element | null {
           title="Open Dashboard"
           icon={Icon.Globe}
           onAction={() => {
-            void open(webLink("/app/track"));
+            return open(webLink("/app/track"));
           }}
         />
         <MenuBarExtra.Item

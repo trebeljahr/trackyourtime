@@ -1,5 +1,6 @@
+import { environment, LaunchType } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { reconcileRunning, type TimerEcho } from "../vendor/index.js";
 import { getTrackYourTime, type TrackYourTime } from "./api.js";
 import { loadTimerEcho } from "./storage.js";
@@ -75,6 +76,8 @@ export type ApiHookResult<T> = {
   /** True when the failure was "no session", so the caller shows sign-in. */
   signedOut: boolean;
   revalidate: () => void;
+  /** Await a menu-bar refresh before Raycast unloads its action handler. */
+  refresh: () => Promise<unknown>;
   /** Apply a visible change now, then refresh or restore on refusal. */
   optimistic: <R>(request: Promise<R>, update: (value: T) => T) => Promise<R>;
 };
@@ -121,10 +124,18 @@ export function useApi<T>(
           notifySessionChanged();
           return;
         }
-        void showFailureToast(failure, "Could not reach Track Your Time");
+        // Scheduled menu refreshes cannot show UI. Their last snapshot and
+        // error tooltip remain available until the next successful read.
+        if (environment.launchType !== LaunchType.Background) {
+          void showFailureToast(failure, "Could not reach Track Your Time");
+        }
       },
     },
   );
+
+  // useCachedPromise types revalidate as void. Its mutation API explicitly
+  // awaits revalidation in menu-bar commands, including a read-only mutate().
+  const refresh = useCallback(() => mutate(), [mutate]);
 
   return {
     data:
@@ -140,6 +151,7 @@ export function useApi<T>(
     error,
     signedOut: (workspace.resolved && workspace.sessionKey === null) || isAuthFailure(error),
     revalidate,
+    refresh,
     optimistic: <R>(request: Promise<R>, update: (value: T) => T): Promise<R> =>
       mutate(request, {
         optimisticUpdate: (current) =>

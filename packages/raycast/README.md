@@ -17,7 +17,7 @@ Reports, invoices, the calendar and catalog editing stay in the web app.
 
 Run **Timer** or assign it a global hotkey. While tracking, it stops your current timer. When idle, it resumes your latest work from the past 30 days. With nothing to resume, it starts immediately and opens details.
 
-The search subtitle shows **Stop Timer · work · project · elapsed** while tracking and **Start Timer · No timer running** when idle. A task name takes priority over notes. The menu-bar updater refreshes the subtitle without changing tracked time. Keep Timer Menu Bar enabled for updates from other devices, normally about once a minute. Every press checks the current timer before acting.
+The search subtitle shows **Stop Timer · work · project · elapsed** while tracking and **Start Timer · No timer running** when idle. A task name takes priority over notes. The menu-bar updater refreshes the subtitle without changing tracked time. Keep Timer Menu Bar enabled for scheduled updates from other devices. Every press checks the current timer before acting.
 
 There is no separate Start / Stop Timer command.
 
@@ -49,13 +49,23 @@ To see your account or sign out, open **Timer Details…** from the menu bar and
 
 ### Menu bar item
 
-Run **Timer Menu Bar** once to enable its background refresh. While tracking, the menu bar shows only the elapsed clock. It counts every second, without a colored icon or title settings.
+Run **Timer Menu Bar** once to enable its background refresh. While tracking, the menu bar shows elapsed minutes.
 
-The item is hidden when no timer runs. **When Idle** is the single display preference: turn it on to keep the app logo for quick access. A timer started from Raycast refreshes the item immediately. A timer started elsewhere while the item is hidden appears on the next background refresh, normally within a minute.
+The item is hidden when no timer runs. **When Idle** is the single display preference: turn it on to keep the app logo for quick access. A timer started from Raycast requests an immediate menu bar refresh. A timer started elsewhere while the item is hidden appears on the next background refresh, scheduled about every 10 seconds.
+
+Raycast unloads menu bar commands between refreshes. macOS can delay scheduled refreshes, particularly on battery. Opening the menu reads the current timer.
 
 The menu offers **Start Timer**, favorites, recent work and a project shortcut. **Start Timer** starts first and then opens the running entry's details. Editing never pauses the clock.
 
 Recent work shows each project's color, task name and project/client context. Without a task name, it shows a shortened description. Continuing an entry keeps its full description.
+
+### Alongside the desktop app
+
+Sign both into the same account and server to control the same timer. Each app has its own sign-in and local offline queue. Starting a timer in either app replaces your running timer, including one in another workspace.
+
+Both menu bar items can be enabled. To keep one clock, disable **Timer Menu Bar** in Raycast, or turn off the menu bar item in the desktop settings. Raycast's **Timer** hotkey still works with its menu bar command disabled. Choose different shortcuts in each app to avoid conflicts.
+
+Offline changes sync after each app reconnects. The apps cannot share changes that have not reached the server.
 
 ### Your own server
 
@@ -91,7 +101,7 @@ Each waiting change records the account, server and workspace it belongs to. If 
 
 1. Run **Timer Menu Bar** once. A menu bar command appears only after its first run.
 2. With no timer running, the item is hidden by default. Turn on **When Idle** to keep the app logo visible.
-3. A timer started elsewhere while the item is hidden appears on the next background refresh, normally within a minute.
+3. A timer started elsewhere while the item is hidden appears on the next background refresh, scheduled about every 10 seconds.
 
 ## Privacy
 

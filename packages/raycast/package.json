@@ -3,7 +3,7 @@
   "name": "trackyourtime-raycast",
   "version": "0.3.0",
   "title": "Track Your Time",
-  "description": "Start, stop and edit Track Your Time entries, with a live timer in the macOS menu bar.",
+  "description": "Start, stop and edit Track Your Time entries, with your running timer in the macOS menu bar.",
   "icon": "icon.png",
   "author": "trebeljahr",
   "categories": ["Productivity"],
@@ -17,13 +17,13 @@
       "subtitle": "Track Your Time",
       "description": "Show the running timer in the macOS menu bar, with stop, edit and recent work in its menu.",
       "mode": "menu-bar",
-      "interval": "1m",
+      "interval": "10s",
       "preferences": [
         {
           "name": "showWhenIdle",
           "title": "When Idle",
           "label": "Keep the app logo in the menu bar when no timer runs",
-          "description": "Off shows only a running timer. Timers started elsewhere appear on the next background refresh (within a minute).",
+          "description": "Off shows only a running timer. Timers started elsewhere appear on the next scheduled refresh (about every 10 seconds; macOS may delay it).",
           "type": "checkbox",
           "required": false,
           "default": false

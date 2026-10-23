@@ -25,9 +25,7 @@ import { apiUrl } from "./preferences.js";
 import { raycastStorage } from "./storage.js";
 
 /**
- * How long a health read stands before a command start asks again. The menu
- * bar command runs every minute, and a server's level changes only when its
- * operator upgrades it.
+ * How long a health read stands before a command start asks again. A server's level changes only when its operator upgrades it.
  */
 const REFRESH_AFTER_MS = 10 * 60 * 1000;
 

@@ -1,16 +1,6 @@
 /**
- * The sync socket, for as long as Raycast keeps a command alive.
- *
- * Raycast is not a place a socket can live permanently — a view command dies
- * when it closes, and a menu bar command is unloaded the moment its first
- * render settles. But the states this extension most needs to be right about
- * are exactly the states where something IS alive: a view command open in
- * front of the user, and the menu bar item while it counts a running timer.
- * In both, a stop made in the web app, the browser extension or on another
- * machine should land now rather than on the next poll.
- *
- * When nothing is alive, the command's `interval` and `usePoll` still cover
- * it. This only ever narrows the window; it never becomes the sole path.
+ * Sync events refresh commands while Raycast keeps them loaded. Scheduled
+ * menu-bar launches cover the gaps after the native menu closes.
  */
 import { useEffect, useRef, useState } from "react";
 import { createSyncClient, resolveSyncUrl, syncEventReach, type SyncEvent } from "../vendor/index.js";

@@ -16,32 +16,23 @@ export const elapsedSec = (entry: TimeEntry): number => entryDurationSec(entry, 
  * Menu bar title for a total that is not moving — today's tracked time while
  * nothing runs.
  *
- * "36m", never "0:36". The running clock counts in `m:ss`, so a colon in the
- * menu bar means a timer is going, and a total that borrowed that shape read
- * as one: 36 minutes tracked today and a timer 36 seconds in are the same
- * four characters. Minutes are also all a total nobody is adding to needs.
+ * "36m", never "0:36". An explicit unit avoids confusing minutes with
+ * seconds. Minutes are all a total nobody is adding to needs.
  * Seconds only appear below a minute, where "0m" would read as nothing
  * tracked at all.
  */
 export const formatMenuBarTotal = (seconds: number): string => formatDurationShort(Math.max(0, seconds));
 
 /**
- * Menu bar clock for the running timer, ticking: `m:ss` under an hour and
- * `h:mm:ss` above it.
- *
- * The elapsed time is derived from the entry's start, not from the server, so
- * the second only needs the command's own process to still be alive — the
- * interval refetch is about *which* entry is running, never about the clock.
- * The hour is dropped below 60 minutes so the item stays about as wide as the
- * clock beside it in the menu bar.
+ * Minute precision survives Raycast unloading the command between scheduled
+ * refreshes. Seconds in an unloaded item's title would look like a frozen clock.
  */
 export const formatMenuBarClock = (seconds: number): string => {
-  const total = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const secs = String(total % 60).padStart(2, "0");
-  if (hours === 0) return `${minutes}:${secs}`;
-  return `${hours}:${String(minutes).padStart(2, "0")}:${secs}`;
+  const total = Math.max(0, Math.floor(seconds / 60));
+  if (total === 0) return "<1m";
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return hours === 0 ? `${minutes}m` : `${hours}h ${String(minutes).padStart(2, "0")}m`;
 };
 
 /** Respects the workspace's hms/decimal preference when one is loaded. */

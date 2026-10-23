@@ -23,7 +23,7 @@ const mocks = new Map([
   [
     "@raycast/api",
     `const h=globalThis.__raycastSessionProof;
-    export const environment={supportPath:h.root};
+    export const environment={supportPath:h.root,get launchType(){return h.launchType;}};
     export const LocalStorage={getItem:async k=>h.values.get(k),setItem:async(k,v)=>h.values.set(k,v),removeItem:async k=>h.values.delete(k),allItems:async()=>Object.fromEntries(h.values)};
     export const LaunchType={UserInitiated:'user',Background:'background'};
     export const Toast={Style:{Failure:'failure',Success:'success'}};
@@ -35,7 +35,7 @@ const mocks = new Map([
     "@raycast/utils",
     `export const useCachedPromise=(loader,args,options)=>{
     const h=globalThis.__raycastSessionProof; h.cachedCall={loader,args,options};
-    return {data:h.cached,error:h.error,isLoading:false,revalidate:()=>{},mutate:async promise=>promise};
+    return {data:h.cached,error:h.error,isLoading:false,revalidate:()=>{},mutate:async promise=>{await h.refreshGate;return promise;}};
   };`,
   ],
   [
@@ -43,7 +43,7 @@ const mocks = new Map([
     `const h=globalThis.__raycastSessionProof;
     export const useState=initial=>{const i=h.cursor++; if(!(i in h.states))h.states[i]=typeof initial==='function'?initial():initial; return [h.states[i],next=>{h.states[i]=typeof next==='function'?next(h.states[i]):next;}];};
     export const useEffect=(effect,deps)=>{const i=h.effectCursor++;const before=h.deps[i];if(!before||deps.some((value,j)=>value!==before[j])){h.cleanups[i]?.();h.deps[i]=deps;h.effects.push(()=>{h.cleanups[i]=effect();});}};
-    export const useRef=value=>({current:value});`,
+    export const useRef=value=>({current:value}); export const useCallback=fn=>fn;`,
   ],
   [source("lib/preferences.ts"), `export const apiUrl=()=>globalThis.__raycastSessionProof.server;`],
   [
@@ -116,6 +116,7 @@ beforeEach(async () => {
   host.cleanups.forEach((cleanup) => cleanup?.());
   Object.assign(host, {
     server: "https://synthetic.invalid",
+    launchType: "user",
     requests: [],
     toasts: [],
     launches: [],
@@ -126,6 +127,7 @@ beforeEach(async () => {
     cached: undefined,
     error: undefined,
     fail: false,
+    refreshGate: undefined,
   });
   host.values.clear();
   await auth.storeSession({ token: "synthetic-token", userId: "verified-owner", email: "synthetic@example.com" });
@@ -257,4 +259,42 @@ test("timer changes refresh both menu and root-search status without foreground 
 test("the toggle can refresh the menu without relaunching itself", async () => {
   await refreshMenuBar(false);
   assert.deepEqual(host.launches, [{ name: "menu-bar", type: "background" }]);
+});
+
+test("the menu refresh waits for the cached promise mutation's revalidation", async () => {
+  let release;
+  host.refreshGate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let finished = false;
+  const refresh = render()
+    .refresh()
+    .then(() => {
+      finished = true;
+    });
+  await settle();
+  assert.equal(finished, false);
+  release();
+  await refresh;
+  assert.equal(finished, true);
+});
+
+test("background read failures keep cached data without calling the unsupported Toast API", async () => {
+  host.launchType = "background";
+  host.cached = { workspaceId: null, sessionKey: await auth.sessionCacheKey(), value: { projects: ["Known project"] } };
+  render();
+  await settle();
+  host.error = new TypeError("fetch failed");
+  const result = render();
+  host.cachedCall.options.onError(host.error);
+  await settle();
+  assert.deepEqual(result.data, { projects: ["Known project"] });
+  assert.equal(host.toasts.length, 0);
+});
+
+test("foreground read failures still explain the error", async () => {
+  render();
+  host.cachedCall.options.onError(new TypeError("fetch failed"));
+  await settle();
+  assert.equal(host.toasts[0].title, "Could not reach Track Your Time");
 });
