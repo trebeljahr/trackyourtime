@@ -3,7 +3,8 @@ import { useActiveWorkspace } from "@/components/members/use-active-workspace";
 import { useAuth } from "@/hooks/use-auth";
 import { privateDataOrigin } from "@/lib/private-session";
 import * as React from "react";
-import { decryptBackup, encryptBackup, type PasswordCiphertext } from "@starter/core";
+import { decryptBackup, encryptBackup, verifyWorkspaceRecoveryArchive, type PasswordCiphertext, type WorkspaceRecoveryArchive } from "@starter/core";
+import { useServerSupports } from "@/lib/server-level";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,17 +17,19 @@ import { useT } from "@/i18n/use-t";
 export function EncryptedBackup(): React.JSX.Element {
   const t = useT("settings");
   const { user } = useAuth(), { workspace } = useActiveWorkspace();
+  const recoverySupported = useServerSupports("privacy.keys") && workspace?.role === "owner";
   const preferenceKey = user && workspace ? `trackyourtime:encrypted-backup:${privateDataOrigin()}:${user.id}:${workspace.id}` : null;
   const currentScope = React.useRef(preferenceKey);
   React.useLayoutEffect(() => { currentScope.current = preferenceKey; return () => { currentScope.current = null; }; }, [preferenceKey]);
   const [checkedAt] = React.useState(Date.now);
   const savePreference = (suffix: string, value: string) => { try { if (preferenceKey) localStorage.setItem(`${preferenceKey}:${suffix}`, value); } catch { /* Downloads still work without browser preferences. */ } };
   const exportJson = trpc.data.exportJson.useMutation();
+  const recoverySnapshot = trpc.privacy.recoverySnapshot.useMutation();
   const [password, setPassword] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState(false);
-  const [restored, setRestored] = React.useState<string | null>(null);
+  const [restored, setRestored] = React.useState<{ json: string; recovery: boolean } | null>(null);
   const [lastBackup, setLastBackup] = React.useState<string | null>(null);
   const [remindDays, setRemindDays] = React.useState(0);
   // A backup of A must never make B's reminder look up to date.
@@ -49,6 +52,22 @@ export function EncryptedBackup(): React.JSX.Element {
     setError(false); setPending(true);
     try { await task(); } catch { setError(true); } finally { setPending(false); }
   };
+  const saveBackup = (full: boolean) => run(async () => {
+    const scope = preferenceKey;
+    const data = full ? await verifyWorkspaceRecoveryArchive({
+      format: "trackyourtime-workspace-recovery-v1", server: privateDataOrigin(), ownerId: user!.id,
+      snapshot: await recoverySnapshot.mutateAsync({ workspaceId: workspace!.id }),
+    } satisfies WorkspaceRecoveryArchive, { server: privateDataOrigin(), ownerId: user!.id, workspaceId: workspace!.id }) : await exportJson.mutateAsync({ workspaceId: workspace!.id });
+    if (currentScope.current !== scope) return;
+    const encrypted = await encryptBackup(data, password);
+    const check = await decryptBackup(encrypted, password);
+    if (JSON.stringify(check) !== JSON.stringify(data)) throw new Error("Backup verification failed");
+    if (currentScope.current !== scope) return;
+    downloadBlob(`trackyourtime-${full ? "recovery" : "backup"}-${new Date().toISOString().slice(0, 10)}.tytbackup`, new Blob([JSON.stringify(encrypted)], { type: "application/json" }));
+    const stamp = new Date().toISOString(); setLastBackup(stamp);
+    savePreference("last", stamp);
+    setPassword(""); setConfirm("");
+  });
   return <section className="space-y-3 border-t pt-4" data-testid="encrypted-backup">
     <h3 className="text-sm font-medium">{t("backups.title")}</h3>
     <p className="max-w-prose text-sm text-muted-foreground">{t("backups.description")}</p>
@@ -56,20 +75,11 @@ export function EncryptedBackup(): React.JSX.Element {
       <div className="space-y-1"><Label htmlFor="backup-password">{t("backups.password")}</Label><PasswordInput id="backup-password" value={password} autoComplete="new-password" onChange={(event) => setPassword(event.target.value)} /></div>
       <div className="space-y-1"><Label htmlFor="backup-confirm">{t("backups.confirm")}</Label><PasswordInput id="backup-confirm" value={confirm} autoComplete="new-password" onChange={(event) => setConfirm(event.target.value)} /></div>
     </div>
-    <Button variant="outline" disabled={pending || !workspace || password.length < 12 || password !== confirm} data-testid="encrypted-backup-download" onClick={() => void run(async () => {
-      const scope = preferenceKey;
-      const data = await exportJson.mutateAsync({ workspaceId: workspace!.id });
-      if (currentScope.current !== scope) return;
-      const encrypted = await encryptBackup(data, password);
-      // Verify the complete round trip before calling this a usable backup.
-      const check = await decryptBackup(encrypted, password);
-      if (JSON.stringify(check) !== JSON.stringify(data)) throw new Error("Backup verification failed");
-      if (currentScope.current !== scope) return;
-      downloadBlob(`trackyourtime-backup-${new Date().toISOString().slice(0, 10)}.tytbackup`, new Blob([JSON.stringify(encrypted)], { type: "application/json" }));
-      const stamp = new Date().toISOString(); setLastBackup(stamp);
-      savePreference("last", stamp);
-      setPassword(""); setConfirm("");
-    })}>{pending ? t("backups.working") : t("backups.download")}</Button>
+    <div className="flex flex-wrap gap-2">
+      {recoverySupported && <Button variant="outline" disabled={pending || password.length < 12 || password !== confirm} data-testid="encrypted-recovery-download" onClick={() => void saveBackup(true)}>{pending ? t("backups.working") : t("backups.downloadRecovery")}</Button>}
+      <Button variant="outline" disabled={pending || !workspace || password.length < 12 || password !== confirm} data-testid="encrypted-backup-download" onClick={() => void saveBackup(false)}>{pending ? t("backups.working") : t("backups.download")}</Button>
+    </div>
+    {recoverySupported && <p className="max-w-prose text-xs text-muted-foreground">{t("backups.recoveryLimits")}</p>}
     <p className="max-w-prose text-xs text-muted-foreground">{t("backups.exportLimits")}</p>
     <div className="max-w-xs space-y-1"><Label htmlFor="backup-reminder">{t("backups.remind")}</Label><select id="backup-reminder" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={remindDays} onChange={(event) => {
       const value = Number(event.target.value); setRemindDays(value); savePreference("reminder", String(value));
@@ -86,17 +96,20 @@ export function EncryptedBackup(): React.JSX.Element {
           const scope = preferenceKey;
           const box = JSON.parse(await file.text()) as PasswordCiphertext;
           const value = await decryptBackup<unknown>(box, password);
+          const recovery = value !== null && typeof value === "object" && "format" in value && value.format === "trackyourtime-workspace-recovery-v1";
+          if (recovery) await verifyWorkspaceRecoveryArchive(value);
           // This action saves plaintext only at the person's explicit request.
           // It does not send the password or the encrypted file to the server.
           if (currentScope.current !== scope) return;
-          setRestored(JSON.stringify(value, null, 2));
+          setRestored({ json: JSON.stringify(value, null, 2), recovery });
           setPassword(""); setConfirm("");
         });
         event.target.value = "";
       }} />
+      {restored?.recovery && <p role="status" className="text-xs text-muted-foreground">{t("backups.recoveryOpened")}</p>}
       {restored !== null && <Button variant="outline" onClick={() => {
-        downloadBlob("trackyourtime-restored-export.json", new Blob([restored], { type: "application/json" })); setRestored(null);
-      }}>{t("backups.saveRestored")}</Button>}
+        downloadBlob(restored.recovery ? "trackyourtime-workspace-recovery.json" : "trackyourtime-restored-export.json", new Blob([restored.json], { type: "application/json" })); setRestored(null);
+      }}>{t(restored.recovery ? "backups.saveRecoveryJson" : "backups.saveRestored")}</Button>}
     </div>
     {error && <p role="alert" className="text-sm text-destructive">{t("backups.failed")}</p>}
   </section>;

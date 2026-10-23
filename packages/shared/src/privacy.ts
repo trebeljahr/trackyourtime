@@ -19,4 +19,8 @@ export type PrivateIdentity = z.infer<typeof privateIdentitySchema>;
 export const RECOVERY_KINDS = ["timeentries", "entryoperations", "clients", "projects", "tasks", "tags", "favorites", "invoices", "importbatches", "workspacesettings", "businessprofiles", "timesheetapprovals", "timesheetpolicies", "workspacemembers"] as const;
 export type RecoveryKind = typeof RECOVERY_KINDS[number];
 export type WorkspaceRecovery = { v: 1; workspaceId: string; createdAt: string; sourceRevision: string; collections: Record<RecoveryKind, Record<string, unknown>[]> };
+/** Leaves room for the archive header and password envelope's 24 MiB limit. */
+export const RECOVERY_MAX_BYTES = 23 * 1024 * 1024;
+export const RECOVERY_MAX_RECORDS = 200_000;
+export type WorkspaceRecoveryArchive = { format: "trackyourtime-workspace-recovery-v1"; server: string; ownerId: string; snapshot: WorkspaceRecovery };
 export const PRIVATE_WORKSPACE_REQUIRED = "PRIVATE_WORKSPACE_REQUIRES_UNLOCK";

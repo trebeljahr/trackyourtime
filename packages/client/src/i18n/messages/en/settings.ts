@@ -9,10 +9,12 @@
 export const settings = {
   backups: {
     title: "Encrypted backups", description: "Save a password-protected workspace export on your device. Keep its password somewhere safe; we cannot recover it.",
-    password: "Backup password (at least 12 characters)", confirm: "Confirm backup password", working: "Preparing…", download: "Save encrypted backup",
+    password: "Backup password (at least 12 characters)", confirm: "Confirm backup password", working: "Preparing…", download: "Save encrypted portable export",
+    downloadRecovery: "Save encrypted recovery backup", recoveryLimits: "Owner recovery backups preserve original IDs, issued invoices, XML, billing links, approvals and operation receipts. They include your own favorites. Other members’ private favorites and account credentials are excluded. Restoring these records to the server is still in development.",
+    recoveryOpened: "Recovery file verified. Keep this file for lossless recovery; the ordinary import preview does not accept this format.", saveRecoveryJson: "Save decrypted recovery JSON",
     exportLimits: "This uses the workspace export format. Issued invoices are included for reference; importing this format does not restore issued invoices or their billing links. Your visibility permissions also apply.",
     remind: "Show a reminder here", never: "Off", weekly: "Every 7 days", monthly: "Every 30 days", due: "Your chosen backup interval has passed. Save a new backup when ready.",
-    last: "Last backup download requested: {date}. Check that the file was saved.", open: "Open an encrypted backup", openHint: "Enter its backup password above. Decryption happens on this device. The restored JSON can be opened in the import preview.",
+    last: "Last backup download requested: {date}. Check that the file was saved.", open: "Open an encrypted backup", openHint: "Enter its backup password above. Decryption happens on this device. Portable exports can be opened in the import preview; recovery backups use a separate lossless format.",
     saveRestored: "Save decrypted JSON", failed: "Could not create or open this backup. Check its password and file, then try again.",
   },
   privateActivity: {

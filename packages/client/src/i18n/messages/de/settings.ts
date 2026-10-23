@@ -6,10 +6,12 @@ import type { settings as source } from "../en/settings";
 export const settings: Translation<typeof source> = {
   backups: {
     title: "Verschlüsselte Sicherungen", description: "Einen passwortgeschützten Workspace-Export auf deinem Gerät speichern. Das Passwort sicher aufbewahren; wir können es nicht wiederherstellen.",
-    password: "Sicherungspasswort (mindestens 12 Zeichen)", confirm: "Sicherungspasswort bestätigen", working: "Vorbereitung…", download: "Verschlüsselte Sicherung speichern",
+    password: "Sicherungspasswort (mindestens 12 Zeichen)", confirm: "Sicherungspasswort bestätigen", working: "Vorbereitung…", download: "Verschlüsselten portablen Export speichern",
+    downloadRecovery: "Verschlüsselte Wiederherstellungssicherung speichern", recoveryLimits: "Die Sicherung für Eigentümer bewahrt ursprüngliche IDs, ausgestellte Rechnungen, XML, Abrechnungsverknüpfungen, Freigaben und Vorgangsbelege. Deine eigenen Favoriten sind enthalten. Private Favoriten anderer Mitglieder und Anmeldedaten sind ausgeschlossen. Die Wiederherstellung auf dem Server ist noch in Entwicklung.",
+    recoveryOpened: "Wiederherstellungsdatei geprüft. Für eine verlustfreie Wiederherstellung aufbewahren. Die normale Importvorschau unterstützt dieses Format nicht.", saveRecoveryJson: "Entschlüsselte Wiederherstellungsdatei speichern",
     exportLimits: "Diese Sicherung verwendet das Workspace-Exportformat. Ausgestellte Rechnungen sind als Referenz enthalten; der Import stellt sie und ihre Abrechnungsverknüpfungen nicht wieder her. Deine Sichtbarkeitsrechte gelten weiterhin.",
     remind: "Hier eine Erinnerung anzeigen", never: "Aus", weekly: "Alle 7 Tage", monthly: "Alle 30 Tage", due: "Dein gewählter Sicherungszeitraum ist abgelaufen. Bei Gelegenheit eine neue Sicherung speichern.",
-    last: "Letzter Sicherungsdownload angefordert: {date}. Prüfen, ob die Datei gespeichert wurde.", open: "Verschlüsselte Sicherung öffnen", openHint: "Oben das Sicherungspasswort eingeben. Die Entschlüsselung erfolgt auf diesem Gerät. Die wiederhergestellte JSON-Datei lässt sich in der Importvorschau öffnen.",
+    last: "Letzter Sicherungsdownload angefordert: {date}. Prüfen, ob die Datei gespeichert wurde.", open: "Verschlüsselte Sicherung öffnen", openHint: "Oben das Sicherungspasswort eingeben. Die Entschlüsselung erfolgt auf diesem Gerät. Portable Exporte lassen sich in der Importvorschau öffnen. Wiederherstellungssicherungen verwenden ein eigenes verlustfreies Format.",
     saveRestored: "Entschlüsselte JSON-Datei speichern", failed: "Die Sicherung konnte nicht erstellt oder geöffnet werden. Passwort und Datei prüfen und erneut versuchen.",
   },
   privateActivity: {
