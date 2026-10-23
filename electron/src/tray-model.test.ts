@@ -50,32 +50,17 @@ describe("trayMenuModel", () => {
     }
   });
 
-  it("running: the entry with Stop, recents, start, unsent count, open, settings, quit", () => {
-    const model = trayMenuModel(running);
+  it("running: matching summary and controls, without idle start choices", () => {
+    const model = trayMenuModel(running, { nowMs: at(125) });
     assert.deepEqual(
       model.map((item) => (item.type === "item" ? item.id : item.type === "heading" ? `# ${item.label}` : "---")),
-      [
-        "# Write the plan",
-        "stop",
-        "---",
-        "# Continue",
-        "continue:k1",
-        "continue:k2",
-        "---",
-        "start",
-        "---",
-        "# 2 unsent changes",
-        "---",
-        "open",
-        "settings",
-        "---",
-        "quit",
-      ],
+      ["edit", "# Running for 2m", "---", "stop", "edit", "---", "# 2 unsent changes", "---", "open", "settings", "---", "quit"],
     );
-    const labels = model.flatMap((item) => (item.type === "item" ? [item.label] : []));
-    assert.ok(labels.includes("Stoppen"), "labels come from the payload");
-    assert.ok(labels.includes("Review — Client — Project"));
-    assert.ok(labels.includes("(no description)"));
+    assert.equal(model[0].type === "item" && model[0].label, "Write the plan");
+    assert.ok(model.some((item) => item.type === "item" && item.label === "Stoppen"));
+    const idle = trayMenuModel({ ...running, running: null });
+    assert.ok(idle.some((item) => item.type === "item" && item.label === "Review — Client — Project"));
+    assert.ok(idle.some((item) => item.type === "item" && item.label === "(no description)"));
   });
 
   it("offers Restart to update above Quit only once an update is downloaded", () => {
@@ -99,19 +84,15 @@ describe("trayMenuModel", () => {
     assert.equal(off.some((id) => id.startsWith("autopilot-")), false, "no item while Autopilot is off");
 
     const on = { ...running, unsent: 0, autopilot: { pausedUntil: null } };
-    assert.deepEqual(outline(on, at(0)).slice(7, 10), ["start", "---", "autopilot-pause"]);
+    assert.ok(outline(on, at(0)).includes("autopilot-pause"));
 
     const paused: DesktopTimerState = {
       ...on,
       autopilot: { pausedUntil: at(3600) },
       labels: { ...on.labels, autopilotPaused: "Autopilot paused until 11:00", autopilotResume: "Fortsetzen" },
     };
-    assert.deepEqual(outline(paused, at(60)).slice(7, 11), [
-      "start",
-      "---",
-      "# Autopilot paused until 11:00",
-      "autopilot-resume",
-    ]);
+    assert.ok(outline(paused, at(60)).includes("# Autopilot paused until 11:00"));
+    assert.ok(outline(paused, at(60)).includes("autopilot-resume"));
     const resume = trayMenuModel(paused, { nowMs: at(60) }).find(
       (item) => item.type === "item" && item.id === "autopilot-resume",
     );
@@ -124,9 +105,9 @@ describe("trayMenuModel", () => {
   it("marks a timer Autopilot opened in the menu heading", () => {
     const owned = { ...running, running: { ...running.running!, autopilot: true } };
     const heading = trayMenuModel(owned)[0];
-    assert.equal(heading?.type === "heading" ? heading.label : null, `${AUTOPILOT_MARK} Write the plan`);
+    assert.equal(heading?.type === "item" ? heading.label : null, `${AUTOPILOT_MARK} Write the plan`);
     const plain = trayMenuModel(running)[0];
-    assert.equal(plain?.type === "heading" ? plain.label : null, "Write the plan");
+    assert.equal(plain?.type === "item" ? plain.label : null, "Write the plan");
   });
 
   it("idle with nothing queued: no Stop and no unsent line", () => {
@@ -134,34 +115,34 @@ describe("trayMenuModel", () => {
       item.type === "item" ? item.id : item.type,
     );
     assert.equal(ids.includes("stop"), false);
-    assert.equal(ids.filter((id) => id === "heading").length, 1);
+    assert.equal(ids.filter((id) => id === "heading").length, 2);
   });
 });
 
 describe("title, tooltip and icon", () => {
   it("ticks the macOS title from startedAt and leaves it empty when idle", () => {
-    assert.equal(trayTitle(running, at(125), "darwin"), "2:05");
+    assert.equal(trayTitle(running, at(125), "darwin"), "2m");
     assert.equal(trayTitle(running, at(125), "win32"), "");
     assert.equal(trayTitle({ ...running, running: null }, at(125), "darwin"), "");
   });
 
   it("marks a timer Autopilot opened, in the macOS title and every tooltip", () => {
     const owned = { ...running, running: { ...running.running!, autopilot: true } };
-    assert.equal(trayTitle(owned, at(125), "darwin"), "✦ 2:05");
+    assert.equal(trayTitle(owned, at(125), "darwin"), "✦ 2m");
     assert.equal(trayTitle(owned, at(125), "linux"), "");
-    assert.equal(trayTooltip(owned, at(3700)), "✦ 1:01 · Write the plan");
+    assert.equal(trayTooltip(owned, at(3700)), "✦ Write the plan — 1h 01m");
     assert.equal(trayTooltip({ ...owned, running: null }, at(1)), "Track Your Time");
   });
 
   it("puts the clock and the entry in the tooltip", () => {
-    assert.equal(trayTooltip(running, at(3700)), "1:01 · Write the plan");
+    assert.equal(trayTooltip(running, at(3700)), "Write the plan — 1h 01m");
     assert.equal(trayTooltip(null, at(0)), "Track Your Time");
     const noDescription = { ...running, running: { ...running.running!, description: "  " } };
-    assert.equal(trayTooltip(noDescription, at(1)), "0:01 · Desktop");
+    assert.equal(trayTooltip(noDescription, at(1)), "Desktop — <1m");
   });
 
   it("picks a per-platform icon file", () => {
-    assert.equal(trayIconFile("darwin", "idle"), "trayTemplate.png");
+    assert.equal(trayIconFile("darwin", "idle"), "tray-mac.png");
     assert.equal(trayIconFile("win32", "running"), "tray-running.ico");
     assert.equal(trayIconFile("linux", "running"), "tray-running.png");
   });

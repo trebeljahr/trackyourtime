@@ -282,7 +282,7 @@ await esbuild({ ...common, entryPoints: ["electron/src/preload.ts"], outfile: "e
 // The tray icons (scripts/icons-brand.mjs) sit beside the bundle, where
 // electron/src/desktop.ts looks for them in both a packaged and an unpackaged run.
 const trayIcons = resolve(repoRoot, "electron/assets/tray");
-if (!existsSync(join(trayIcons, "trayTemplate.png"))) {
+if (!existsSync(join(trayIcons, "tray-mac.png"))) {
   fail("No tray icons in electron/assets/tray. Run: pnpm icons:brand");
 }
 cpSync(trayIcons, join(electronDist, "tray"), { recursive: true });

@@ -23,6 +23,7 @@ class Socket {
 globalThis.WebSocket = Socket;
 const source = (file) => new URL(`../src/${file}`, import.meta.url).href;
 const mocks = new Map([
+  [source("lib/menu-presence.ts"), `export const useMenuPresence=visible=>visible;`],
   [
     "react",
     `const h=globalThis.__raycastInteraction;
@@ -370,6 +371,7 @@ test("menu is hidden idle and releases the host after reading a running timer", 
 test("the running timer name leads a separate summary without project or client context", async () => {
   host.data.running = entry({
     description: "Design review",
+    start: new Date(host.now - 60_000).toISOString(),
     projectName: "Website",
     projectColor: "#19a7ce",
     clientName: "Studio",

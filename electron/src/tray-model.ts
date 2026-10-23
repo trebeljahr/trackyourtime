@@ -15,6 +15,8 @@ import type {
   DesktopTrayLabels,
 } from "../../packages/shared/src/desktop-bridge.ts";
 
+import { TIMER_MENU_LABELS, timerMenuClock, timerMenuSections, timerMenuText } from "../../packages/shared/src/timer-menu.ts";
+
 /**
  * English, for the moments no renderer has published labels yet: before the
  * first page load, or signed out on the first launch. The last labels a
@@ -22,8 +24,7 @@ import type {
  * English here only on a first launch.
  */
 export const FALLBACK_TRAY_LABELS: DesktopTrayLabels = {
-  stop: "Stop timer",
-  startTimer: "Start timer…",
+  ...TIMER_MENU_LABELS,
   recentHeading: "Continue",
   open: "Open Track Your Time",
   settings: "Settings…",
@@ -156,7 +157,7 @@ export type TrayMenuItem =
   | { type: "separator" };
 
 /**
- * Running entry with Stop, up to five recents to continue, "Start timer…",
+ * Running summary with Stop and Edit; idle Start and up to five recents.
  * Autopilot's pause or resume while it is on, the unsent count when non-zero,
  * Open, Settings, Quit. Signed out (or before any state arrived): Open and
  * Quit.
@@ -164,7 +165,7 @@ export type TrayMenuItem =
  * With a downloaded update, "Restart to update" sits above Quit in either
  * menu: the person picks the moment, the app never restarts by itself.
  *
- * Item ids are what `tray.ts` hands back on a click: `stop`, `start`,
+ * Item ids are what `tray.ts` hands back on a click: `stop`, `edit`, `start`,
  * `continue:<key>`, `autopilot-pause`, `autopilot-resume`, `open`,
  * `settings`, `restart-to-update`, `quit`.
  */
@@ -185,25 +186,29 @@ export function trayMenuModel(
     ];
   }
   const items: TrayMenuItem[] = [];
-  if (state.running !== null) {
-    items.push({ type: "heading", label: `${autopilotPrefix(state)}${runningLabel(state)}` });
-    items.push({ type: "item", id: "stop", label: labels.stop, enabled: true });
+  const sections = timerMenuSections(state.running === null ? null : {
+    label: `${autopilotPrefix(state)}${runningLabel(state)}`,
+    elapsedSec: elapsedSecAt(state.running.startedAt, options.nowMs ?? Date.now()),
+  }, labels);
+  for (const section of sections) {
+    if (section.title) items.push({ type: "heading", label: section.title });
+    for (const row of section.rows) {
+      if (row.kind === "timing") items.push({ type: "heading", label: row.title });
+      else items.push({ type: "item", id: row.kind === "name" ? "edit" : row.kind, label: row.title, enabled: true });
+    }
     items.push({ type: "separator" });
   }
-  if (state.recents.length > 0) {
+  if (state.running === null && state.recents.length > 0) {
     items.push({ type: "heading", label: labels.recentHeading });
     for (const recent of state.recents) {
       const label = recent.label.trim() === "" ? labels.noDescription : recent.label;
       items.push({
-        type: "item",
-        id: `continue:${recent.key}`,
-        label: recent.hint ? `${label} — ${recent.hint}` : label,
-        enabled: true,
+        type: "item", id: `continue:${recent.key}`,
+        label: timerMenuText(recent.hint ? `${label} — ${recent.hint}` : label), enabled: true,
       });
     }
     items.push({ type: "separator" });
   }
-  items.push({ type: "item", id: "start", label: labels.startTimer, enabled: true });
   if (state.autopilot != null) {
     items.push({ type: "separator" });
     if (autopilotPausedAt(state, options.nowMs ?? Date.now())) {
@@ -223,7 +228,7 @@ export function trayMenuModel(
   items.push({ type: "separator" });
   items.push(...restart);
   items.push({ type: "item", id: "quit", label: labels.quit, enabled: true });
-  return items;
+  return items.filter((item, index) => item.type !== "separator" || (index > 0 && items[index - 1].type !== "separator"));
 }
 
 /**
@@ -233,14 +238,14 @@ export function trayMenuModel(
  */
 export function trayTitle(state: DesktopTimerState | null, nowMs: number, platform: string): string {
   if (platform !== "darwin" || state?.running == null) return "";
-  return `${autopilotPrefix(state)}${trayClock(elapsedSecAt(state.running.startedAt, nowMs))}`;
+  return `${autopilotPrefix(state)}${timerMenuClock(elapsedSecAt(state.running.startedAt, nowMs))}`;
 }
 
 /** Windows and Linux carry the clock (and the Autopilot mark) in the tooltip instead. */
 export function trayTooltip(state: DesktopTimerState | null, nowMs: number): string {
   const labels = state?.labels ?? FALLBACK_TRAY_LABELS;
   if (state?.running == null) return labels.idleTooltip;
-  return `${autopilotPrefix(state)}${trayClock(elapsedSecAt(state.running.startedAt, nowMs))} · ${runningLabel(state)}`;
+  return `${autopilotPrefix(state)}${runningLabel(state)} — ${timerMenuClock(elapsedSecAt(state.running.startedAt, nowMs))}`;
 }
 
 export type TrayIconVariant = "idle" | "running";
@@ -252,7 +257,7 @@ export function trayIconVariant(state: DesktopTimerState | null): TrayIconVarian
 /** The icon file for a platform, under electron/dist/tray (scripts/icons-brand.mjs). */
 export function trayIconFile(platform: string, variant: TrayIconVariant): string {
   const running = variant === "running";
-  if (platform === "darwin") return running ? "trayRunningTemplate.png" : "trayTemplate.png";
+  if (platform === "darwin") return "tray-mac.png";
   if (platform === "win32") return running ? "tray-running.ico" : "tray.ico";
   return running ? "tray-running.png" : "tray.png";
 }

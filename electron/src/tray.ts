@@ -1,8 +1,7 @@
 /*
  * The tray icon (the menu bar item on macOS), drawn from `tray-model.ts`.
  *
- * macOS: a template icon, which the system tints for light and dark menu
- * bars, and the running clock as its title. Windows and Linux: `setTitle`
+ * macOS: the same indigo tile and minute-precision clock as Raycast. Windows and Linux: `setTitle`
  * does not exist there, so the clock goes in the tooltip and a second icon
  * marks a running timer. Windows opens the window on a left click and the
  * menu on a right click; macOS and Linux (AppIndicator only knows menus) open
@@ -51,7 +50,7 @@ export function createElectronTray(options: {
     let image = icons.get(variant);
     if (!image) {
       image = nativeImage.createFromPath(path.join(options.iconDir, trayIconFile(options.platform, variant)));
-      if (options.platform === "darwin") image.setTemplateImage(true);
+      if (options.platform === "darwin") image.setTemplateImage(false);
       icons.set(variant, image);
     }
     return image;

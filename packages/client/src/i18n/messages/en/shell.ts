@@ -326,8 +326,11 @@ export const shell = {
   /** The desktop app's tray menu and quit notice, drawn by the main process. */
   desktop: {
     tray: {
-      stop: "Stop timer",
-      startTimer: "Start timer…",
+      stop: "Stop Timer",
+      edit: "Edit Timer…",
+      runningFor: "Running for {duration}",
+      noTimer: "No timer running",
+      startTimer: "Start Timer",
       recentHeading: "Continue",
       open: "Open Track Your Time",
       settings: "Settings…",

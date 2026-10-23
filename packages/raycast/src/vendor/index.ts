@@ -46,4 +46,5 @@ export type { SyncEvent } from "./shared/protocol.js";
 export { quickStartHint, quickStartKey, quickStartLabel, toQuickStart } from "./shared/quick-start.js";
 export type { DescriptionSuggestion, DetailedFavorite, QuickStart } from "./shared/quick-start.js";
 export type { DetailedEntry } from "./shared/reports.js";
+export { DESKTOP_MENU_LEASE_PARTS, RAYCAST_MENU_LEASE_PARTS, timerMenuClock, timerMenuSections } from "./shared/timer-menu.js";
 export type { Client, DurationFormat, Project, ResolvedSettings, Tag, Task, TimeEntry } from "./shared/types.js";

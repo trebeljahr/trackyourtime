@@ -108,6 +108,9 @@ export interface DesktopRecent {
  */
 export interface DesktopTrayLabels {
   stop: string;
+  edit: string;
+  runningFor: string;
+  noTimer: string;
   startTimer: string;
   recentHeading: string;
   open: string;

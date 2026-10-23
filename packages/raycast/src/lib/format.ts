@@ -1,6 +1,7 @@
 import { Color, Icon } from "@raycast/api";
 import {
   entryDurationSec,
+  timerMenuClock,
   formatDuration,
   formatDurationShort,
   type DurationFormat,
@@ -27,13 +28,7 @@ export const formatMenuBarTotal = (seconds: number): string => formatDurationSho
  * Minute precision survives Raycast unloading the command between scheduled
  * refreshes. Seconds in an unloaded item's title would look like a frozen clock.
  */
-export const formatMenuBarClock = (seconds: number): string => {
-  const total = Math.max(0, Math.floor(seconds / 60));
-  if (total === 0) return "<1m";
-  const hours = Math.floor(total / 60);
-  const minutes = total % 60;
-  return hours === 0 ? `${minutes}m` : `${hours}h ${String(minutes).padStart(2, "0")}m`;
-};
+export const formatMenuBarClock = timerMenuClock;
 
 /** Respects the workspace's hms/decimal preference when one is loaded. */
 export const formatEntryDuration = (entry: TimeEntry, format: DurationFormat = "hms"): string =>

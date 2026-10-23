@@ -97,8 +97,8 @@ test("start from the tray, stop from the web: the tray clears within a second", 
     .toBe("Tray recent/desktop");
   await expect(page.getByTestId("tracker-toggle")).toHaveAttribute("data-state", "running");
   await expect.poll(async () => (await trayMenu()).some((item) => item.type === "item" && item.id === "stop")).toBe(true);
-  expect(await hook<string>("return hook.trayTooltip()")).toMatch(/^\d+:\d{2} · Tray recent$/);
-  if (process.platform === "darwin") expect(await hook<string>("return hook.trayTitle()")).toMatch(/^\d+:\d{2}$/);
+  expect(await hook<string>("return hook.trayTooltip()")).toMatch(/^Tray recent — (<1m|\d+m|\d+h \d{2}m)$/);
+  if (process.platform === "darwin") expect(await hook<string>("return hook.trayTitle()")).toMatch(/^(<1m|\d+m|\d+h \d{2}m)$/);
 
   await trpcCall(web, "entries.stop", {}, "mutation");
   const stoppedAt = Date.now();
@@ -185,8 +185,8 @@ test("German: the tray draws the renderer's German labels", async () => {
   await page.reload();
   await expect
     .poll(async () => (await trayMenu()).flatMap((item) => (item.type === "item" ? [item.label] : [])))
-    .toEqual(["Deutsch", "Timer starten …", "Track Your Time öffnen", "Einstellungen …", "Track Your Time beenden"]);
-  expect((await trayMenu()).find((item) => item.type === "heading")).toEqual({ type: "heading", label: "Fortsetzen" });
+    .toEqual(["Timer starten …", "Deutsch", "Track Your Time öffnen", "Einstellungen …", "Track Your Time beenden"]);
+  expect((await trayMenu()).find((item) => item.type === "heading" && item.label === "Fortsetzen")).toEqual({ type: "heading", label: "Fortsetzen" });
 });
 
 test("Settings → Desktop rebinds, refuses a taken chord, clears, persists, and a shortcut opens the palette", async () => {

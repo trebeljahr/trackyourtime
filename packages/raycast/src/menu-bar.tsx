@@ -16,9 +16,11 @@ import {
   quickStartLabel,
   repairQuickStart,
   toQuickStart,
+  timerMenuSections,
 } from "./vendor/index.js";
 import { getTrackYourTime, type ProjectWithStats } from "./lib/api.js";
 import { CompatibilityMenuBarSection } from "./components/compatibility-banner.js";
+import { useMenuPresence } from "./lib/menu-presence.js";
 import { BRAND_MARK } from "./lib/brand.js";
 import { refreshTimerSearch } from "./lib/timer-search.js";
 import { useRef, useState } from "react";
@@ -41,13 +43,6 @@ import { describeFailure, isAlreadyStopped, refreshMenuBar, replacedNotice, show
 
 /** History contributes today’s total, but has no separate section in this menu. */
 const RECENT_LIMIT = 6;
-
-/** Native menus grow to fit their text, so keep each label to one short line. */
-const menuText = (text: string): string => {
-  const line = text.trim().split(/\r?\n/, 1)[0].trim();
-  const chars = Array.from(line);
-  return chars.length > 48 ? `${chars.slice(0, 47).join("").trimEnd()}…` : line;
-};
 
 /** Full snapshot fallback while the menu is open; the manifest refreshes unloaded commands. */
 const POLL_MS = 10_000;
@@ -109,6 +104,11 @@ export default function MenuBar(): React.JSX.Element | null {
   // The server-level refresh is throttled per origin.
   const { banner } = useServerLevel();
 
+  // Version and refresh problems remain visible even when idle items are hidden.
+  const visible = signedOut || !!running || isLoading || isActing || showWhenIdle || !!error || banner !== null;
+  const ownsMenu = useMenuPresence(visible);
+  if (!visible || !ownsMenu) return null;
+
   if (signedOut) {
     return (
       <MenuBarExtra icon={BRAND_MARK} tooltip="Track Your Time — not signed in">
@@ -117,13 +117,11 @@ export default function MenuBar(): React.JSX.Element | null {
     );
   }
 
-  // A version problem is shown even when idle items are hidden: it is why
-  // nothing else here will work.
-  if (!running && !isLoading && !isActing && !showWhenIdle && !error && banner === null) return null;
-
   const elapsed = running ? entryDurationSec(running, now) : 0;
   const clock = formatMenuBarClock(elapsed);
   const label = running ? entryLabel(running) : "";
+  const sections = timerMenuSections(running ? { label, elapsedSec: elapsed } : null);
+  const [summary, controls] = sections;
   const favorites = data?.favorites ?? [];
   const projects = data?.projects ?? [];
   const pinned = running ? favoriteFor(running, favorites) : undefined;
@@ -211,16 +209,16 @@ export default function MenuBar(): React.JSX.Element | null {
           <MenuBarExtra.Section>
             {/* Native menu fonts are fixed. Keep the name at full contrast,
               with passive timing below and controls in a separate section. */}
-            <MenuBarExtra.Item
-              title={menuText(label)}
-              tooltip={label}
-              icon={Icon.Stopwatch}
-              onAction={() => openTimer(running.id)}
-            />
-            <MenuBarExtra.Item
-              title={`Running for ${formatDurationShort(elapsed)}`}
-              subtitle={`since ${formatClock(running.start)}`}
-            />
+            {summary.rows.map((row) => (
+              <MenuBarExtra.Item
+                key={row.kind}
+                title={row.title}
+                tooltip={row.kind === "name" ? row.tooltip : undefined}
+                icon={row.kind === "name" ? Icon.Stopwatch : undefined}
+                subtitle={row.kind === "timing" ? `since ${formatClock(running.start)}` : undefined}
+                onAction={row.kind === "name" ? () => openTimer(running.id) : undefined}
+              />
+            ))}
             {data?.runningWorkspaceName ? (
               <MenuBarExtra.Item
                 title={`In ${data.runningWorkspaceName}`}
@@ -231,7 +229,7 @@ export default function MenuBar(): React.JSX.Element | null {
           </MenuBarExtra.Section>
           <MenuBarExtra.Section>
             <MenuBarExtra.Item
-              title="Stop Timer"
+              title={controls.rows[0].title}
               icon={Icon.Stop}
               shortcut={Keyboard.Shortcut.Common.Save}
               onAction={() => {
@@ -261,7 +259,7 @@ export default function MenuBar(): React.JSX.Element | null {
             {/* A menu bar item cannot host a form, so editing hands off to the
               Timer command, which opens on the running entry. */}
             <MenuBarExtra.Item
-              title="Edit Timer…"
+              title={controls.rows[1].title}
               icon={Icon.Pencil}
               shortcut={Keyboard.Shortcut.Common.Edit}
               onAction={() => openTimer(running.id)}
@@ -307,9 +305,9 @@ export default function MenuBar(): React.JSX.Element | null {
           </MenuBarExtra.Section>
         </>
       ) : (
-        <MenuBarExtra.Section title="No timer running">
+        <MenuBarExtra.Section title={summary.title}>
           <MenuBarExtra.Item
-            title="Start Timer"
+            title={summary.rows[0].title}
             icon={Icon.Play}
             shortcut={Keyboard.Shortcut.Common.New}
             onAction={() => startNow()}

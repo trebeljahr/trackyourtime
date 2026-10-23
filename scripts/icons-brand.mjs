@@ -219,11 +219,9 @@ await emit(
  * The desktop app's tray icons (electron/assets/tray, copied beside the main
  * bundle by scripts/build-desktop.mjs), idle and running.
  *
- * macOS takes a *template* image: black on transparent, which the menu bar
- * tints for light and dark itself — so the mark is drawn bare, without the
- * indigo tile, and the running variant closes the ring and fills the centre
- * instead of adding a colour macOS would strip. The `Template` suffix is what
- * tells Electron; `@2x` is picked up for Retina.
+ * macOS uses the same indigo tile as Raycast at 16 and 32 pixels. Legacy
+ * template assets are still generated for older consumers. `@2x` supplies
+ * the Retina representation.
  *
  * Windows (`.ico`, 16 and 32) and Linux (22 and 44 PNG, the AppIndicator
  * sizes) draw in colour on backgrounds nobody controls, so they use the tile,
@@ -253,6 +251,9 @@ const overlayRunning = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" view
 </svg>`);
 
 const trayDir = "electron/assets/tray";
+// Same indigo tile as Raycast, at native macOS menu-bar sizes.
+await emit(`${trayDir}/tray-mac.png`, await render(tile, 16));
+await emit(`${trayDir}/tray-mac@2x.png`, await render(tile, 32));
 for (const [name, svg] of [
   ["trayTemplate", trayTemplateIdle],
   ["trayRunningTemplate", trayTemplateRunning],

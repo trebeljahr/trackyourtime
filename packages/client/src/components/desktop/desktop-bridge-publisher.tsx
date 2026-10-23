@@ -84,6 +84,9 @@ export function buildDesktopTimerState(input: {
     autopilot: autopilot === null ? null : { pausedUntil },
     labels: {
       stop: t("desktop.tray.stop"),
+      edit: t("desktop.tray.edit"),
+      runningFor: t("desktop.tray.runningFor", { duration: "{duration}" }),
+      noTimer: t("desktop.tray.noTimer"),
       startTimer: t("desktop.tray.startTimer"),
       recentHeading: t("desktop.tray.recentHeading"),
       open: t("desktop.tray.open"),

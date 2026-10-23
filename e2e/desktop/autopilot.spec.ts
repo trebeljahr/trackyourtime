@@ -144,8 +144,8 @@ test("Autopilot starts a filed app's timer from when the work began, and Undo ta
   await expect(strip).toHaveAttribute("data-kind", "owned");
 
   // The tray marks Autopilot's timer, and offers to pause Autopilot.
-  await expect.poll(() => desktop<string>("return hook.trayTooltip()")).toMatch(/^✦ \d+:\d{2} · Website redesign$/);
-  if (process.platform === "darwin") expect(await desktop<string>("return hook.trayTitle()")).toMatch(/^✦ \d+:\d{2}$/);
+  await expect.poll(() => desktop<string>("return hook.trayTooltip()")).toMatch(/^✦ Website redesign — (<1m|\d+m|\d+h \d{2}m)$/);
+  if (process.platform === "darwin") expect(await desktop<string>("return hook.trayTitle()")).toMatch(/^✦ (<1m|\d+m|\d+h \d{2}m)$/);
   await expect.poll(trayIds).toContain("autopilot-pause");
 
   // Paused from the tray: main holds back for an hour (of its pinned clock,

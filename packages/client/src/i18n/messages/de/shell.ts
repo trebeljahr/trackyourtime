@@ -307,6 +307,9 @@ export const shell: Translation<typeof source> = {
   desktop: {
     tray: {
       stop: "Timer stoppen",
+      edit: "Timer bearbeiten …",
+      runningFor: "Läuft seit {duration}",
+      noTimer: "Kein Timer läuft",
       startTimer: "Timer starten …",
       recentHeading: "Fortsetzen",
       open: "Track Your Time öffnen",

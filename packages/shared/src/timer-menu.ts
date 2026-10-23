@@ -1,0 +1,67 @@
+/** Presentation shared by the desktop tray and Raycast's native menu. */
+import { formatDurationShort } from "./duration.js";
+
+export const RAYCAST_MENU_LEASE_PARTS = ["Library", "Application Support", "dev.trackyourtime", "menu-bar", "raycast-menu.json"] as const;
+export const DESKTOP_MENU_LEASE_PARTS = ["Library", "Application Support", "dev.trackyourtime", "menu-bar", "desktop-menu.json"] as const;
+export const RAYCAST_MENU_POLL_MS = 500;
+
+/** A command can unload while its native item remains. Ownership lasts until
+ * it explicitly hides the item or its Raycast host exits, never a timer expiry. */
+export function raycastMenuVisible(value: unknown): value is { version: 1; visible: true; ownerPid: number } {
+  if (typeof value !== "object" || value === null) return false;
+  const lease = value as Record<string, unknown>;
+  return lease.version === 1 && lease.visible === true && Number.isSafeInteger(lease.ownerPid) && Number(lease.ownerPid) > 0;
+}
+
+/** Minute precision keeps an unloaded Raycast item from showing frozen seconds. */
+export function timerMenuClock(seconds: number): string {
+  const total = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds / 60)) : 0;
+  if (total === 0) return "<1m";
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return hours === 0 ? `${minutes}m` : `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+/** Native menus grow to fit text. Keep names on one short line. */
+export function timerMenuText(text: string): string {
+  const line = text.trim().split(/\r?\n/, 1)[0].trim();
+  const chars = Array.from(line);
+  return chars.length > 48 ? `${chars.slice(0, 47).join("").trimEnd()}…` : line;
+}
+
+export interface TimerMenuLabels {
+  stop: string;
+  edit: string;
+  startTimer: string;
+  noTimer: string;
+  /** Translated sentence with a literal {duration} placeholder. */
+  runningFor: string;
+}
+
+export const TIMER_MENU_LABELS: TimerMenuLabels = {
+  stop: "Stop Timer",
+  edit: "Edit Timer…",
+  startTimer: "Start Timer",
+  noTimer: "No timer running",
+  runningFor: "Running for {duration}",
+};
+
+export type TimerMenuRow =
+  | { kind: "name"; title: string; tooltip: string }
+  | { kind: "timing"; title: string }
+  | { kind: "stop" | "edit" | "start"; title: string };
+
+/** Both hosts draw these same summary and control sections, then add their own tools. */
+export function timerMenuSections(
+  running: { label: string; elapsedSec: number } | null,
+  labels: TimerMenuLabels = TIMER_MENU_LABELS,
+): { title?: string; rows: TimerMenuRow[] }[] {
+  if (running === null) return [{ title: labels.noTimer, rows: [{ kind: "start", title: labels.startTimer }] }];
+  return [
+    { rows: [
+      { kind: "name", title: timerMenuText(running.label), tooltip: running.label },
+      { kind: "timing", title: labels.runningFor.replace("{duration}", formatDurationShort(running.elapsedSec)) },
+    ] },
+    { rows: [{ kind: "stop", title: labels.stop }, { kind: "edit", title: labels.edit }] },
+  ];
+}

@@ -57,6 +57,7 @@ import { distributionChannel, loginItemMechanism } from "./distribution.ts";
 import type { ActivityTestHook } from "./activity/test-hook.ts";
 import { createMemoryRegistrar, createShortcutManager, type ShortcutRegistrar } from "./shortcuts.ts";
 import { createElectronTray, type TrayView } from "./tray.ts";
+import { watchRaycastMenu } from "./raycast-menu.ts";
 import { installUpdater } from "./updater.ts";
 import type { UpdaterEvent } from "./updater-model.ts";
 import { markQuitting } from "./window.ts";
@@ -135,6 +136,7 @@ export function installDesktop(options: {
   let settings: DesktopSettings = readDesktopSettings(userData, platform);
   let state: DesktopTimerState | null = null;
   let tray: TrayView | null = null;
+  let raycastMenu = false;
   let tick: ReturnType<typeof setInterval> | null = null;
   /** Redraws the tray the moment an Autopilot pause runs out, when nothing else would. */
   let pauseEnd: ReturnType<typeof setTimeout> | null = null;
@@ -278,7 +280,7 @@ export function installDesktop(options: {
   };
 
   const syncTray = (): void => {
-    if (!settings.showInTray || headless) {
+    if (!settings.showInTray || raycastMenu || headless) {
       tray?.destroy();
       tray = null;
       return;
@@ -339,7 +341,7 @@ export function installDesktop(options: {
 
   const onTrayItem = (id: string): void => {
     if (id === "stop") send({ kind: "stop" });
-    else if (id === "start") {
+    else if (id === "start" || id === "edit") {
       reveal();
       send({ kind: "compose" });
     } else if (id.startsWith("continue:")) send({ kind: "continue", key: id.slice("continue:".length) });
@@ -512,6 +514,7 @@ export function installDesktop(options: {
   });
 
   app.on("will-quit", () => {
+    stopWatchingRaycast();
     updates.controller.dispose();
     shortcuts.dispose();
     tray?.destroy();
@@ -522,6 +525,11 @@ export function installDesktop(options: {
 
   // ── start ────────────────────────────────────────────────────────────
   shortcuts.apply(settings.shortcuts);
+  const stopWatchingRaycast = headless ? () => {} : watchRaycastMenu(platform, (visible) => {
+    raycastMenu = visible;
+    syncTray();
+    syncTick();
+  });
   syncTray();
 
   if (headless) {
