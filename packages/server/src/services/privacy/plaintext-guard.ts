@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { PRIVATE_WORKSPACE_REQUIRED } from "@starter/shared";
 import { PrivateWorkspace } from "../../models/PrivateData.js";
 import { fenceWorkspace, transactionSession } from "../business-transaction.js";
+import { discardPrivatePreparation } from "./preparation.js";
 const erasure = new AsyncLocalStorage<ReadonlySet<string>>();
 /** Internal account-erasure exception, limited to the workspaces selected by
  * its already-authorized deletion plan. Ordinary member/role changes never
@@ -17,6 +18,10 @@ export async function guardPlaintextWorkspaceWrites(workspaceIds: readonly strin
   if (!transactionSession()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Workspace storage protection requires MongoDB transactions." });
   for (const workspaceId of [...new Set(workspaceIds.filter((id) => typeof id === "string" && id.length > 0))].sort()) {
     await fenceWorkspace(workspaceId);
-    if (!erasure.getStore()?.has(workspaceId) && await PrivateWorkspace.exists({ workspaceId })) throw new TRPCError({ code: "PRECONDITION_FAILED", message: PRIVATE_WORKSPACE_REQUIRED });
+    if (erasure.getStore()?.has(workspaceId)) continue;
+    const mode = await PrivateWorkspace.findOne({ workspaceId }).lean();
+    // Expiry retires disposable preparation atomically with this ordinary write.
+    // A failed writer rolls cleanup back; the next writer can retry it safely.
+    if (mode && !await discardPrivatePreparation(workspaceId, mode.migrationId, true)) throw new TRPCError({ code: "PRECONDITION_FAILED", message: PRIVATE_WORKSPACE_REQUIRED });
   }
 }

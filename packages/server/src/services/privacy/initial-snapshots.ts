@@ -6,6 +6,7 @@ import { encryptedRecordSchema, PRIVATE_SNAPSHOT_MAX_BYTES, PRIVATE_SNAPSHOT_PAG
 import { PrivateDirectory, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
+import { requireActivePrivatePreparation } from "./preparation.js";
 import { privateReaders } from "./access.js";
 import { verifyPrivateChange } from "./signatures.js";
 
@@ -42,7 +43,8 @@ export async function preparePrivateInitialSnapshot(scope: Scope, input: readonl
       if (existing.length !== readers.length || readers.some((row) => canonicalJson(existing.find((prior) => prior.userId === row.manifest.readerId)?.signed.manifest) !== canonicalJson(row.manifest)) || new Set(existing.map((row) => row.fullRecordsDigest)).size !== 1) throw new TRPCError({ code: "CONFLICT", message: "The initial snapshot was already prepared with different data." });
       return { migrationId, recordsDigest: existing[0]!.fullRecordsDigest };
     }
-    if (mode.state !== "migrating" || await PrivateSnapshotChunk.exists({ workspaceId, migrationId })) throw incomplete();
+    requireActivePrivatePreparation(mode);
+    if (await PrivateSnapshotChunk.exists({ workspaceId, migrationId })) throw incomplete();
     const latest = await PrivateDirectory.findOne({ workspaceId }).sort({ revision: -1 }).lean();
     if (latest?.digest !== directory.digest) throw new TRPCError({ code: "CONFLICT", message: "Workspace sharing keys changed." });
     const members = await WorkspaceMember.find({ workspaceId }).sort({ userId: 1 }).lean();

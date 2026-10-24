@@ -300,6 +300,31 @@ must precede enabling encrypted owner departure. The account-scoped deletion pre
 retention policy, wait for a current preview and state that user-owned backup
 files remain outside account deletion.
 
+## Preparation cancellation and expiry
+
+Preparation has a bounded lease (currently one hour). Internal staging validates
+that the mode is still revision zero, has no history head and has not marked a
+backup verified. It captures a source/directory under the workspace transaction
+fence, encrypts at most fifty records outside that transaction, then reacquires
+the fence and checks the exact preparation ID, lease, source and directory before
+publishing. Concurrent retries keep the original stored ciphertext. Frozen
+initial snapshots cannot acquire new records through a late staging request.
+
+`discardPrivatePreparation` retires only disposable preparation ciphertext,
+reader snapshots, receipts and the preparation mode, in one fenced transaction.
+It preserves original collections, user-held files, account keys and public key
+history. It refuses converted workspaces and unexpected committed history.
+Explicit cancellation still requires the outer controller's owner authorization.
+
+Expired preparations are retired lazily on authenticated standard workspace
+access, private workspace status polling or a model write, so offline members cannot keep a workspace frozen
+indefinitely. Cleanup during a model write participates in that write's
+transaction and rolls back if it fails. No background deletion of user backups
+or original records occurs. A pending encryption job cannot resurrect canceled,
+expired or replaced preparation. Snapshot creation and content acknowledgements
+also refuse expired writable preparations. All public rollout guards remain
+closed; the internal stage engine is not a migration entry point.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes snapshot v2, consumes

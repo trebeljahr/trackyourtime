@@ -6,6 +6,7 @@ import { PrivateDirectory, PrivateMigrationReceipt, PrivateRecord, PrivateSnapsh
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
 import { migrationFavoritesSource, workspaceRecovery } from "./recovery.js";
+import { requireActivePrivatePreparation } from "./preparation.js";
 import { verifyPrivateChange } from "./signatures.js";
 
 /** Internal acknowledgement engine; it never changes workspace mode or wipes
@@ -18,7 +19,9 @@ export async function recordPrivateFavoritesMigrationProof(scope: { server: stri
     const { workspaceId, userId } = scope, { migrationId } = proof;
     await fenceWorkspace(workspaceId);
     if (!await WorkspaceMember.exists({ workspaceId, userId })) throw new TRPCError({ code: "NOT_FOUND" });
-    if (!await PrivateWorkspace.exists({ workspaceId, migrationId, state: "migrating" })) throw new TRPCError({ code: "PRECONDITION_FAILED" });
+    const mode = await PrivateWorkspace.findOne({ workspaceId, migrationId, state: "migrating" }).lean();
+    if (!mode) throw new TRPCError({ code: "PRECONDITION_FAILED" });
+    requireActivePrivatePreparation(mode);
     const snapshot = await PrivateSnapshotReader.findOne({ workspaceId, migrationId, userId }).lean();
     if (!snapshot || snapshot.signed.manifest.root !== proof.snapshotRoot || snapshot.signed.manifest.directoryDigest !== proof.directoryDigest) throw new TRPCError({ code: "CONFLICT", message: "Verify the current initial snapshot before acknowledging preferences." });
     const directory = await PrivateDirectory.findOne({ workspaceId, digest: proof.directoryDigest }).lean();
@@ -84,6 +87,7 @@ export async function recordPrivateOwnerMigrationProof(scope: { server: string; 
     if (!await WorkspaceMember.exists({ workspaceId, userId, role: "owner" })) throw new TRPCError({ code: "FORBIDDEN" });
     const mode = await PrivateWorkspace.findOne({ workspaceId, migrationId, ownerId: userId, state: "migrating" }).lean();
     if (!mode) throw new TRPCError({ code: "PRECONDITION_FAILED" });
+    requireActivePrivatePreparation(mode);
     const snapshot = await PrivateSnapshotReader.findOne({ workspaceId, migrationId, userId }).lean();
     const directory = await PrivateDirectory.findOne({ workspaceId }).sort({ revision: -1 }).lean();
     const owner = directory?.signed.directory.members.find((row) => row.userId === userId && row.role === "owner");

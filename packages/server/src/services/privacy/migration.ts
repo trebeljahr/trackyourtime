@@ -2,12 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 import { TRPCError } from "@trpc/server";
 import { canonicalJson, encryptPrivateRecord, partitionPrivateRecovery, type PrivateRecipient } from "@starter/core";
-import { RECOVERY_KINDS } from "@starter/shared";
-import { PrivateAccount, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
+import { RECOVERY_KINDS, type EncryptedRecord } from "@starter/shared";
+import { PrivateAccount, PrivateDirectory, PrivateRecord, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { workspaceRecovery } from "./recovery.js";
 import { verifyPrivateChange } from "./signatures.js";
 import { fenceWorkspace, supportsBusinessTransactions, transactionSession, withBusinessTransaction } from "../business-transaction.js";
+import { discardPrivatePreparation, requireActivePrivatePreparation } from "./preparation.js";
 /** Kept closed until encrypted clients, restore drills, and legacy-write
  * fencing have passed end-to-end validation. Never enable through an env var. */
 export function requirePrivateWorkspaceRollout(): void {
@@ -51,22 +52,60 @@ export async function beginPrivateMigration(workspaceId: string, userId: string,
     return { migrationId };
   });
 }
+/** Internal bounded staging. Encrypt outside the transaction; publish only
+ * after rechecking the exact source, directory and live preparation fence.
+ * A canceled/expired/replaced migration can never be recreated by a late job.
+ * The optional encryptor is a local dependency for deterministic race checks,
+ * never an API parameter. */
+export async function stagePrivateMigrationBatch(workspaceId: string, userId: string, migrationId: string, offset: number, encrypt = encryptPrivateRecord): Promise<{ next: number | null; total: number }> {
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > 400_000) throw new TRPCError({ code: "BAD_REQUEST" });
+  if (!await supportsBusinessTransactions()) throw new TRPCError({ code: "PRECONDITION_FAILED" });
+  const prepared = await withBusinessTransaction(async () => {
+    await fenceWorkspace(workspaceId);
+    const mode = await PrivateWorkspace.findOne({ workspaceId, migrationId, ownerId: userId }).lean();
+    if (!mode) throw new TRPCError({ code: "NOT_FOUND" });
+    requireActivePrivatePreparation(mode);
+    if (!await WorkspaceMember.exists({ workspaceId, userId, role: "owner" })) throw new TRPCError({ code: "FORBIDDEN" });
+    const source = await workspaceRecovery(workspaceId, userId, true);
+    if (source.sourceRevision !== mode.sourceRevision) throw new TRPCError({ code: "CONFLICT", message: "Original data changed. Cancel and prepare a new migration." });
+    const directory = await PrivateDirectory.findOne({ workspaceId }).sort({ revision: -1 }).lean();
+    if (!directory || directory.signed.directory.ownerId !== userId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Verify the sharing directory before staging." });
+    const members = await privateRecipients(workspaceId);
+    const coordinates = ({ kty, crv, x, y }: PrivateRecipient["publicKey"]) => ({ kty, crv, x, y });
+    const normalized = (rows: PrivateRecipient[]) => rows.map((m) => ({ userId: m.userId, role: m.role, canViewOthersTime: m.role === "owner" || m.canViewOthersTime, canViewOthersMoney: m.role === "owner" || m.canViewOthersMoney, publicKey: coordinates(m.publicKey) })).sort((a, b) => a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0);
+    if (canonicalJson(normalized(members)) !== canonicalJson(normalized(directory.signed.directory.members))) throw new TRPCError({ code: "CONFLICT", message: "Sharing keys or permissions changed." });
+    const plain = partitionPrivateRecovery(source);
+    if (offset > plain.length) throw new TRPCError({ code: "BAD_REQUEST" });
+    return { sourceRevision: source.sourceRevision, directoryDigest: directory.digest, records: plain.slice(offset, offset + 50), total: plain.length, recipients: directory.signed.directory.members };
+  });
+  const encrypted: EncryptedRecord[] = [];
+  for (const row of prepared.records) encrypted.push(await encrypt(workspaceId, row, prepared.recipients, 1));
+  return withBusinessTransaction(async () => {
+    await fenceWorkspace(workspaceId);
+    const mode = await PrivateWorkspace.findOne({ workspaceId, migrationId, ownerId: userId }).lean();
+    if (!mode) throw new TRPCError({ code: "NOT_FOUND" });
+    requireActivePrivatePreparation(mode);
+    if (!await WorkspaceMember.exists({ workspaceId, userId, role: "owner" })) throw new TRPCError({ code: "FORBIDDEN" });
+    const directory = await PrivateDirectory.findOne({ workspaceId }).sort({ revision: -1 }).lean();
+    const source = await workspaceRecovery(workspaceId, userId, true);
+    if (directory?.digest !== prepared.directoryDigest || mode.sourceRevision !== prepared.sourceRevision || source.sourceRevision !== prepared.sourceRevision) throw new TRPCError({ code: "CONFLICT", message: "Preparation changed while encrypting. Source data was kept." });
+    const frozen = await PrivateSnapshotReader.exists({ workspaceId, migrationId });
+    for (const record of encrypted) {
+      const existing = await PrivateRecord.findOne({ workspaceId, kind: record.kind, id: record.id }).lean();
+      if (existing) {
+        if (existing.deleted || existing.revision !== 1 || existing.authorId !== record.authorId) throw new TRPCError({ code: "CONFLICT" });
+        continue; // Lost replies and concurrent retries keep the first ciphertext.
+      }
+      if (frozen) throw new TRPCError({ code: "CONFLICT", message: "The initial snapshot is already frozen. Source data was kept." });
+      await PrivateRecord.create({ workspaceId, ...record, deleted: false });
+    }
+    const end = offset + prepared.records.length;
+    return { next: end >= prepared.total ? null : end, total: prepared.total };
+  });
+}
 export async function stagePrivateMigration(workspaceId: string, userId: string, migrationId: string, offset: number): Promise<{ next: number | null; total: number }> {
   requirePrivateWorkspaceRollout();
-  const mode = await PrivateWorkspace.findOne({ workspaceId, state: "migrating", migrationId, ownerId: userId }).lean();
-  if (!mode) throw new TRPCError({ code: "NOT_FOUND" });
-  const source = await workspaceRecovery(workspaceId, userId, true);
-  const plain = partitionPrivateRecovery(source);
-  const recipients = await privateRecipients(workspaceId);
-  const end = Math.min(plain.length, offset + 50);
-  for (const record of plain.slice(offset, end)) {
-    // Retries preserve the same ciphertext, so a downloaded archive does not
-    // silently become obsolete after a lost response.
-    if (await PrivateRecord.exists({ workspaceId, kind: record.kind, id: record.id })) continue;
-    const encrypted = await encryptPrivateRecord(workspaceId, record, recipients, 1);
-    await PrivateRecord.create({ workspaceId, ...encrypted, deleted: false });
-  }
-  return { next: end >= plain.length ? null : end, total: plain.length };
+  return stagePrivateMigrationBatch(workspaceId, userId, migrationId, offset);
 }
 function requireVerifiedMigrationArchive(): void {
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "Legacy migration archives are unavailable. Use verified reader snapshots and user-held recovery backups." });
@@ -118,10 +157,6 @@ export async function cancelPrivateMigration(workspaceId: string, userId: string
     await fenceWorkspace(workspaceId);
     const mode = await PrivateWorkspace.findOne({ workspaceId, ownerId: userId, state: "migrating", migrationId });
     if (!mode) throw new TRPCError({ code: "CONFLICT" });
-    await PrivateRecord.deleteMany({ workspaceId });
-    await PrivateSnapshotChunk.deleteMany({ workspaceId, migrationId });
-    await PrivateSnapshotReader.deleteMany({ workspaceId, migrationId });
-    await PrivateMigrationReceipt.deleteMany({ workspaceId, migrationId });
-    await mode.deleteOne();
+    if (!await WorkspaceMember.exists({ workspaceId, userId, role: "owner" }) || !await discardPrivatePreparation(workspaceId, migrationId)) throw new TRPCError({ code: "CONFLICT" });
   });
 }

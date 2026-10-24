@@ -59,7 +59,7 @@ describe("immutable initial snapshot storage", { skip: skipWithoutDatabase }, ()
     const signed = await signPrivateWorkspaceDirectory({ v: 1, server: base.server, workspaceId: base.workspaceId, ownerId: "owner", revision: 1, previousDigest: null, members: people }, owner.signingPrivateKey, null, confirmed);
     await commitPrivateDirectory(base, signed);
     directory = await verifyPrivateWorkspaceDirectory(signed, base, { ownerId: "owner", signingPublicKey: signing.publicKey, revision: 0, digest: null });
-    await PrivateWorkspace.create({ workspaceId: base.workspaceId, migrationId, ownerId: "owner", state: "migrating", sourceRevision: "synthetic", leaseUntil: new Date() });
+    await PrivateWorkspace.create({ workspaceId: base.workspaceId, migrationId, ownerId: "owner", state: "migrating", sourceRevision: "synthetic", leaseUntil: new Date(Date.now() + 3600000) });
     records = await Promise.all([
       encryptPrivateRecord(base.workspaceId, { kind: "tags", id: "tag", authorId: null, value: { name: "Shared label" } }, people, 1),
       encryptPrivateRecord(base.workspaceId, { kind: "entries", id: "owner-entry", authorId: "owner", value: { description: "Owner private work" } }, people, 1),

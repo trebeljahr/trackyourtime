@@ -2,6 +2,7 @@ import { commitPrivateDirectory, privateDirectoryPage } from "../../services/pri
 import { privateInitialSnapshotManifest, privateInitialSnapshotPage } from "../../services/privacy/initial-snapshots.js";
 import { migrationFavoritesSource } from "../../services/privacy/recovery.js";
 import { recordPrivateFavoritesMigrationProof, recordPrivateOwnerMigrationProof } from "../../services/privacy/migration-receipts.js";
+import { discardPrivatePreparation } from "../../services/privacy/preparation.js";
 import { env } from "../../config/env.js";
 import { signedPrivateDirectorySchema, signedPrivateFavoritesMigrationProofSchema, signedPrivateOwnerMigrationProofSchema } from "@starter/shared";
 import { getAuth } from "../../auth/auth.js";
@@ -100,7 +101,11 @@ export const privacyRouter = router({
   approveDeviceUnlock: privateAccountProcedure.input(z.object({ requestId: z.uuid(), box: privateDeviceApprovalSchema })).mutation(({ ctx, input }) => approvePrivateDevice(ctx.user.id, input.requestId, input.box)),
   cancelDeviceUnlock: privateAccountProcedure.input(z.object({ requestId: z.uuid() })).mutation(({ ctx, input }) => cancelPrivateDevice(ctx.user.id, input.requestId)),
   status: privateWorkspaceProcedure.input(scopeSchema).query(async ({ ctx }) => {
-    const mode = await PrivateWorkspace.findOne({ workspaceId: ctx.workspaceId }).lean();
+    let mode = await PrivateWorkspace.findOne({ workspaceId: ctx.workspaceId }).lean();
+    if (mode?.state === "migrating" && mode.leaseUntil.getTime() <= Date.now()) {
+      await discardPrivatePreparation(ctx.workspaceId, mode.migrationId, true);
+      mode = await PrivateWorkspace.findOne({ workspaceId: ctx.workspaceId }).lean();
+    }
     return { mode: mode?.state ?? "standard", revision: mode?.revision ?? 0, owner: ctx.membership.role === "owner" };
   }),
   recipients: privateWorkspaceProcedure.input(scopeSchema).query(async ({ ctx }) => {
