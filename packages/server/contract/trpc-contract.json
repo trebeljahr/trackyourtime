@@ -1,5 +1,5 @@
 {
-  "apiLevel": 21,
+  "apiLevel": 22,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -4235,6 +4235,30 @@
       },
       "type": "mutation"
     },
+    "privacy.directory": {
+      "input": {
+        "properties": {
+          "after": {
+            "default": 0,
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "through": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "query"
+    },
     "privacy.enroll": {
       "input": {
         "properties": {
@@ -4392,6 +4416,16 @@
               "passkeys"
             ],
             "type": "object"
+          },
+          "server": {
+            "format": "uri",
+            "maxLength": 2048,
+            "type": "string"
+          },
+          "userId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
           }
         },
         "required": [
@@ -4430,6 +4464,204 @@
         },
         "required": [
           "migrationId"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.prepareDirectory": {
+      "input": {
+        "properties": {
+          "signed": {
+            "additionalProperties": false,
+            "properties": {
+              "directory": {
+                "additionalProperties": false,
+                "properties": {
+                  "members": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "canViewOthersMoney": {
+                          "type": "boolean"
+                        },
+                        "canViewOthersTime": {
+                          "type": "boolean"
+                        },
+                        "publicKey": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "crv": {
+                              "const": "P-256",
+                              "type": "string"
+                            },
+                            "ext": {
+                              "type": "boolean"
+                            },
+                            "key_ops": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "kty": {
+                              "const": "EC",
+                              "type": "string"
+                            },
+                            "x": {
+                              "pattern": "^[A-Za-z0-9_-]{43}$",
+                              "type": "string"
+                            },
+                            "y": {
+                              "pattern": "^[A-Za-z0-9_-]{43}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kty",
+                            "crv",
+                            "x",
+                            "y"
+                          ],
+                          "type": "object"
+                        },
+                        "role": {
+                          "enum": [
+                            "owner",
+                            "admin",
+                            "member"
+                          ],
+                          "type": "string"
+                        },
+                        "signingPublicKey": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "crv": {
+                              "const": "P-256",
+                              "type": "string"
+                            },
+                            "ext": {
+                              "type": "boolean"
+                            },
+                            "key_ops": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "kty": {
+                              "const": "EC",
+                              "type": "string"
+                            },
+                            "x": {
+                              "pattern": "^[A-Za-z0-9_-]{43}$",
+                              "type": "string"
+                            },
+                            "y": {
+                              "pattern": "^[A-Za-z0-9_-]{43}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kty",
+                            "crv",
+                            "x",
+                            "y"
+                          ],
+                          "type": "object"
+                        },
+                        "userId": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "userId",
+                        "role",
+                        "canViewOthersTime",
+                        "canViewOthersMoney",
+                        "publicKey",
+                        "signingPublicKey"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "ownerId": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "previousDigest": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{43}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "revision": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "server": {
+                    "format": "uri",
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  "v": {
+                    "const": 1,
+                    "type": "number"
+                  },
+                  "workspaceId": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "v",
+                  "server",
+                  "workspaceId",
+                  "revision",
+                  "previousDigest",
+                  "ownerId",
+                  "members"
+                ],
+                "type": "object"
+              },
+              "signature": {
+                "pattern": "^[A-Za-z0-9_-]{86}$",
+                "type": "string"
+              },
+              "signerId": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "directory",
+              "signerId",
+              "signature"
+            ],
+            "type": "object"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "signed"
         ],
         "type": "object"
       },

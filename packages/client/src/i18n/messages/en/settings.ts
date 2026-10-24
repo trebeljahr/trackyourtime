@@ -53,6 +53,9 @@ export const settings = {
     failed: "Could not encrypt or unlock local history. Check your keys and try again. Existing history was kept.",
   },
   privateData: {
+    verificationTitle: "Your key verification code",
+    verificationHint: "Compare this code with a workspace owner through a trusted call or message before sharing encrypted data. This code is safe to share. Keep your recovery key private.",
+    verificationLocked: "Unlock your private data to see the code derived from your keys on this device.",
     nativeBrowserUnlock: "Approve private data access in your browser, or use your recovery key. Passkeys are managed in the browser.",
     nativePasskeys: "Manage encryption passkeys in your browser. Use your recovery key to open private data in this app.",
     title: "Private data keys", description: "Prepare encryption keys for private data. Workspace migration is still in development. Your synced workspace data is not encrypted by this setting.",

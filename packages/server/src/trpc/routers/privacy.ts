@@ -1,3 +1,6 @@
+import { commitPrivateDirectory, privateDirectoryPage } from "../../services/privacy/directories.js";
+import { env } from "../../config/env.js";
+import { signedPrivateDirectorySchema } from "@starter/shared";
 import { getAuth } from "../../auth/auth.js";
 import { previewAccountDeletion } from "../../services/account-deletion/delete-account.js";
 import { authRowStore, mongooseRowStore, routedRowStore } from "../../services/account-deletion/stores.js";
@@ -7,12 +10,12 @@ import { requirePrivateWorkspaceRollout, beginPrivateMigration, stagePrivateMigr
 import { canonicalJson } from "@starter/core";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { encryptedRecordSchema, privateIdentitySchema, privateDeviceApprovalSchema, publicEncryptionKeySchema, type EncryptedRecord } from "@starter/shared";
+import { encryptedRecordSchema, privateIdentitySchema, privateDeviceApprovalSchema, publicEncryptionKeySchema, type PrivateIdentity, type EncryptedRecord } from "@starter/shared";
 import { approvePrivateDevice, cancelPrivateDevice, createPrivateDeviceRequest, privateDeviceStatus } from "../../services/privacy/devices.js";
-import { PrivateAccount, PrivateRecord, PrivateWorkspace } from "../../models/PrivateData.js";
+import { PrivateAccount, PrivateDirectory, PrivateRecord, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { workspaceIdFromInput, resolveWorkspace } from "../../auth/workspace.js";
-import { supportsBusinessTransactions, withBusinessTransaction, fenceWorkspace } from "../../services/business-transaction.js";
+import { supportsBusinessTransactions, withBusinessTransaction, fenceWorkspace, transactionSession } from "../../services/business-transaction.js";
 import { privateReaders, canWritePrivate } from "../../services/privacy/access.js";
 import { verifyPrivateChange } from "../../services/privacy/signatures.js";
 import { workspaceRecovery } from "../../services/privacy/recovery.js";
@@ -28,6 +31,13 @@ const privateWorkspaceProcedure = privateAccountProcedure.use(async ({ ctx, next
   return next({ ctx: { ...ctx, ...found } });
 });
 const signatureSchema = z.string().regex(/^[A-Za-z0-9_-]{86}$/);
+function privateServerOrigin(): string {
+  try {
+    const url = new URL(env.BETTER_AUTH_URL);
+    if (["https:", "http:"].includes(url.protocol)) return url.origin;
+  } catch { /* An unset public API origin cannot bind a private identity. */ }
+  throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure this server's public API origin before enrolling private keys." });
+}
 async function requireTransactions(): Promise<void> {
   if (!await supportsBusinessTransactions()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Encryption migration requires a MongoDB replica set." });
 }
@@ -48,7 +58,8 @@ export const privacyRouter = router({
     const doc = await PrivateAccount.findOne({ userId: ctx.user.id }).lean();
     return doc ? { identity: doc.identity, revision: doc.revision } : null;
   }),
-  enroll: privateAccountProcedure.input(z.object({ identity: privateIdentitySchema })).mutation(async ({ ctx, input }) => {
+  enroll: privateAccountProcedure.input(z.object({ identity: privateIdentitySchema, userId: z.string().min(1).max(100).optional(), server: z.string().url().max(2048).optional() })).mutation(async ({ ctx, input }) => {
+    if ((input.userId && input.userId !== ctx.user.id) || (input.server && input.server !== privateServerOrigin())) throw new TRPCError({ code: "NOT_FOUND" });
     // A retry may reuse the exact encrypted identity after a lost response.
     // Login/reset alone must never overwrite an existing identity.
     const current = await PrivateAccount.findOne({ userId: ctx.user.id }).lean();
@@ -65,14 +76,21 @@ export const privacyRouter = router({
     }
     return { revision: 1 };
   }),
-  updateIdentity: privateAccountProcedure.input(z.object({ identity: privateIdentitySchema, revision: z.number().int().positive(), signature: signatureSchema })).mutation(async ({ ctx, input }) => {
+  updateIdentity: privateAccountProcedure.input(z.object({ identity: privateIdentitySchema, revision: z.number().int().positive(), signature: signatureSchema })).mutation(({ ctx, input }) => withBusinessTransaction(async () => {
     const current = await PrivateAccount.findOne({ userId: ctx.user.id }).lean();
     if (!current) throw new TRPCError({ code: "NOT_FOUND" });
     await verifyPrivateChange(current.identity.signingPublicKey, { userId: ctx.user.id, revision: input.revision, identity: input.identity }, input.signature);
+    const coordinates = ({ kty, crv, x, y }: PrivateIdentity["publicKey"]) => ({ kty, crv, x, y });
+    const keySet = (identity: PrivateIdentity) => canonicalJson([coordinates(identity.publicKey), coordinates(identity.signingPublicKey)]);
+    if (keySet(current.identity) !== keySet(input.identity)) {
+      const workspaces = await WorkspaceMember.distinct("workspaceId", { userId: ctx.user.id });
+      if (transactionSession()) for (const workspaceId of [...workspaces].sort()) await fenceWorkspace(workspaceId);
+      if (await PrivateWorkspace.exists({ workspaceId: { $in: workspaces } }) || await PrivateDirectory.exists({ workspaceId: { $in: workspaces } })) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Verified workspace keys require a signed directory transition and regrant before rotation." });
+    }
     const next = await PrivateAccount.findOneAndUpdate({ userId: ctx.user.id, revision: input.revision }, { $set: { identity: input.identity }, $inc: { revision: 1 } }, { returnDocument: "after" }).lean();
     if (!next) throw new TRPCError({ code: "CONFLICT" });
     return { revision: next.revision };
-  }),
+  })),
   createDeviceUnlock: privateAccountProcedure.input(z.object({ requestId: z.uuid(), publicKey: publicEncryptionKeySchema })).mutation(({ ctx, input }) => createPrivateDeviceRequest(ctx.user.id, input.requestId, input.publicKey)),
   // POST avoids caching a one-time key-transfer response in HTTP disk caches.
   deviceUnlockStatus: privateAccountProcedure.input(z.object({ requestId: z.uuid() })).mutation(({ ctx, input }) => privateDeviceStatus(ctx.user.id, input.requestId)),
@@ -85,7 +103,7 @@ export const privacyRouter = router({
   recipients: privateWorkspaceProcedure.input(scopeSchema).query(async ({ ctx }) => {
     const members = await allMembers(ctx.workspaceId);
     const accounts = await PrivateAccount.find({ userId: { $in: members.map((m) => m.userId) } }).lean();
-    return members.map((m) => ({ userId: m.userId, role: m.role, name: m.name, canViewOthersTime: m.canViewOthersTime, canViewOthersMoney: m.canViewOthersMoney, publicKey: accounts.find((a) => a.userId === m.userId)?.identity.publicKey ?? null }));
+    return members.map((m) => ({ userId: m.userId, role: m.role, name: m.name, canViewOthersTime: m.canViewOthersTime, canViewOthersMoney: m.canViewOthersMoney, publicKey: accounts.find((a) => a.userId === m.userId)?.identity.publicKey ?? null, signingPublicKey: accounts.find((a) => a.userId === m.userId)?.identity.signingPublicKey ?? null }));
   }),
   records: privateWorkspaceProcedure.input(scopeSchema.extend({ after: z.number().int().nonnegative().default(0), cursor: z.string().max(100).optional() })).query(async ({ ctx, input }) => {
     const mode = await PrivateWorkspace.findOne({ workspaceId: ctx.workspaceId, state: "encrypted" }).lean();
@@ -128,6 +146,11 @@ export const privacyRouter = router({
   changes: privateWorkspaceProcedure.input(scopeSchema.extend({ after: z.number().int().nonnegative(), through: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(20).default(20) })).query(({ ctx, input }) => {
     requirePrivateWorkspaceRollout();
     return privateWorkspaceChanges(ctx.workspaceId, ctx.user.id, input.after, input.through, input.limit);
+  }),
+  directory: privateWorkspaceProcedure.input(scopeSchema.extend({ after: z.number().int().nonnegative().default(0), through: z.number().int().nonnegative().optional() })).query(({ ctx, input }) => privateDirectoryPage(ctx.workspaceId, ctx.user.id, input.after, input.through)),
+  prepareDirectory: privateWorkspaceProcedure.input(scopeSchema.extend({ signed: signedPrivateDirectorySchema })).mutation(({ ctx, input }) => {
+    requirePrivateWorkspaceRollout();
+    return commitPrivateDirectory({ server: privateServerOrigin(), workspaceId: ctx.workspaceId, userId: ctx.user.id }, input.signed);
   }),
   beginMigration: privateWorkspaceProcedure.input(scopeSchema.extend({ sourceRevision: z.string().length(64), signature: signatureSchema })).mutation(({ctx, input}) => beginPrivateMigration(ctx.workspaceId, ctx.user.id, input.sourceRevision, input.signature)),
   stageMigration: privateWorkspaceProcedure.input(scopeSchema.extend({ migrationId: z.string().uuid(), offset: z.number().int().nonnegative().max(400000) })).mutation(({ctx, input}) => stagePrivateMigration(ctx.workspaceId, ctx.user.id, input.migrationId, input.offset)),

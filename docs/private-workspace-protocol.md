@@ -50,9 +50,26 @@ new updates; this is not a global freshness or key-transparency service.
 The client adapter derives recipients only from a verified directory whose own
 entry matches the account's unlocked keys. A directory change cancels in-flight
 work. Prepared offline ciphertext is bound to the directory digest and stays
-local for review if sharing keys change before a retry. The sharing UI, trusted
-invitation exchange, server directory transport and rotation workflow are not
-connected yet.
+local for review if sharing keys change before a retry.
+
+API level 22 adds immutable, member-only directory history in bounded pages.
+The internal preparation service serializes current members and keys through
+the workspace fence and account-key write serials. All members must enroll
+keys; signed roles, visibility and both keys must match the current membership.
+An exact authenticated retry returns its original receipt. A new owner may
+relay the previous owner's pre-signed transfer after roles change; the new
+owner cannot self-sign the transition. This service refuses updates once a
+migrating or encrypted workspace exists, until atomic regrant support exists.
+The public preparation mutation remains behind the unconditional rollout guard.
+
+Settings show a combined encryption/signing verification code from the unlocked
+local root, scoped to account and server. The code is safe to compare through an
+independent trusted channel. API-advertised keys never supply this code. Lock,
+account and server changes clear it and discard late computation. This does not
+yet implement member confirmation, trusted invitation exchange or rotation UI.
+Identity changes cannot replace public keys used by a prepared directory or a
+migrating/encrypted workspace; signed recovery and passkey wrapper changes remain available. New
+clients bind enrollment to the intended account and canonical API origin.
 
 ## Encrypted local replica and outbox
 

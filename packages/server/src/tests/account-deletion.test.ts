@@ -79,6 +79,7 @@ const seed = (): NonNullable<Parameters<typeof memoryRowStore>[0]> => ({
   ],
   privateAccounts: [{ id: "vault-a", userId: ALICE }, { id: "vault-b", userId: BOB }],
   privateDeviceRequests: [{ id: "unlock-a", userId: ALICE }, { id: "unlock-b", userId: BOB }],
+  privateDirectories: [{ id: "directory-solo", workspaceId: SOLO }, { id: "directory-team", workspaceId: TEAM }, { id: "directory-bob", workspaceId: BOBS }],
   privateWorkspaceCommits: [{ id: "commit-solo", workspaceId: SOLO }, { id: "commit-team", workspaceId: TEAM }, { id: "commit-bob", workspaceId: BOBS }],
   privateRecords: [{ id: "cipher-solo", workspaceId: SOLO }, { id: "cipher-team", workspaceId: TEAM }, { id: "cipher-bob", workspaceId: BOBS }],
   privateWorkspaces: [{ id: "private-solo", workspaceId: SOLO }, { id: "private-team", workspaceId: TEAM }, { id: "private-bob", workspaceId: BOBS }],
@@ -319,6 +320,7 @@ describe("deleteAccountData", () => {
     assert.deepEqual(ids(store, "authPasskeys"), ["pk-b"]);
     assert.deepEqual(ids(store, "privateAccounts"), ["vault-b"]);
     assert.deepEqual(ids(store, "privateDeviceRequests"), ["unlock-b"]);
+    assert.deepEqual(ids(store, "privateDirectories"), ["directory-bob", "directory-team"]);
     assert.deepEqual(ids(store, "privateWorkspaceCommits"), ["commit-bob", "commit-team"]);
     assert.deepEqual(ids(store, "privateRecords"), ["cipher-bob", "cipher-team"]);
     assert.deepEqual(ids(store, "privateWorkspaces"), ["private-bob", "private-team"]);

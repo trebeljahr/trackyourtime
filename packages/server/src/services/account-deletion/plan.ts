@@ -25,6 +25,7 @@ export {
 export type DeletionCollection =
   | "privateAccounts"
   | "privateDeviceRequests"
+  | "privateDirectories"
   | "privateWorkspaceCommits"
   | "privateRecords"
   | "privateWorkspaces"
@@ -100,6 +101,7 @@ export function workspaceDeletionSteps(workspaceId: string): DeletionStep[] {
     scoped("timeEntries"),
     scoped("privateRecords"),
     scoped("privateWorkspaceCommits"),
+    scoped("privateDirectories"),
     scoped("privateWorkspaces"),
     scoped("entryOperations"),
     scoped("timesheetApprovals"),

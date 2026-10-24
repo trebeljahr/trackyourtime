@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 21;
+export const API_LEVEL = 22;
 
 export type ApiLevelChange = {
   level: number;
@@ -165,6 +165,9 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
   ] },
   { level: 21, release: "0.4.0", added: [
     "Account-scoped deletion previews distinguish encrypted and standard shared-workspace retention policies under privacy.deletionPreview.",
+  ] },
+  { level: 22, release: "0.4.0", added: [
+    "Owner-signed workspace key directory history and guarded preparation under privacy.directory and privacy.prepareDirectory; recipient metadata includes signing public keys. New private-key enrollments can bind their intended account and server.",
   ] },
 ];
 

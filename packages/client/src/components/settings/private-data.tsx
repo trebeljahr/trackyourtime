@@ -1,9 +1,10 @@
 "use client";
+import { PrivateKeyCode } from "./private-key-code";
 import { PrivateActivity } from "./private-activity";
 import { PrivateDeviceUnlock } from "./private-device-unlock";
 import { useServerSupports } from "@/lib/server-level";
 import * as React from "react";
-import { fingerprint, signPrivateChange } from "@starter/core";
+import { signPrivateChange } from "@starter/core";
 import { authClient } from "@/lib/auth-client";
 import { downloadBlob } from "@/lib/download";
 import { evaluatePrivatePasskey, installPrivateSession, lockPrivateData, newPrivateIdentity, privateSession, privateOperationScope, privateDataOrigin, prfBytes, PRIVATE_PRF_INPUT, subscribePrivateSession, unlockPrivateRecovery, unlockWithSavedPasskey, wrapIdentityWithPrf } from "@/lib/private-session";
@@ -33,13 +34,8 @@ function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
   const [recovery, setRecovery] = React.useState("");
   const [pending, setPending] = React.useState(false);
   const [problem, setProblem] = React.useState<string | null>(null);
-  const [keyFingerprint, setKeyFingerprint] = React.useState("");
   const [, redraw] = React.useReducer((v: number) => v + 1, 0);
   React.useEffect(() => subscribePrivateSession(redraw), []);
-  React.useEffect(() => {
-    const key = account.data?.identity.publicKey;
-    if (key) void fingerprint(key).then(setKeyFingerprint);
-  }, [account.data]);
   const current = privateSession(id), identity = account.data?.identity;
   const run = async (task: () => Promise<void>) => {
     setPending(true); setProblem(null);
@@ -58,7 +54,7 @@ function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
         <Label htmlFor="private-confirm">{t("privateData.confirmRecovery")}</Label>
         <Input id="private-confirm" value={confirmation} autoComplete="off" onChange={(event) => setConfirmation(event.target.value)} />
         <Button disabled={pending || confirmation.trim() !== draft.recoveryKey.slice(-8)} onClick={() => void run(async () => {
-          draft.assertCurrent(); await enroll.mutateAsync({ identity: draft.identity }); draft.assertCurrent(); installPrivateSession(id, draft.secrets); setDraft(null); setConfirmation(""); await account.refetch();
+          draft.assertCurrent(); await enroll.mutateAsync({ identity: draft.identity, userId: id, server: privateDataOrigin() }); draft.assertCurrent(); installPrivateSession(id, draft.secrets); setDraft(null); setConfirmation(""); await account.refetch();
         })}>{t("privateData.finishSetup")}</Button>
       </div>}
       {identity && !current && <div className="max-w-xl space-y-3">
@@ -99,7 +95,7 @@ function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
         })}>{t("privateData.addPasskey")}</Button><Button variant="outline" onClick={lockPrivateData}>{t("privateData.lock")}</Button></div>
       </div>}
       <PrivateActivity userId={id} />
-      {keyFingerprint && <p className="max-w-xl break-all text-xs text-muted-foreground">{t("privateData.fingerprint", { fingerprint: keyFingerprint })}</p>}
+      {identity && <PrivateKeyCode userId={id} />}
       {(problem || account.isError) && <p role="alert" className="text-sm text-destructive">{problem ?? t("privateData.failed")}</p>}
     </CardContent>
   </Card>;

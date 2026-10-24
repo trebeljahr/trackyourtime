@@ -1,8 +1,8 @@
 import mongoose, { Schema } from "mongoose";
 import type { EncryptedRecord, PrivateIdentity, PrivateDeviceApproval, PrivateDeviceInvite } from "@starter/shared";
-export const PrivateAccount = mongoose.model("PrivateAccount", new Schema<{ userId: string; identity: PrivateIdentity; revision: number; deviceSerial: number }>({
+export const PrivateAccount = mongoose.model("PrivateAccount", new Schema<{ userId: string; identity: PrivateIdentity; revision: number; deviceSerial: number; keySerial: number }>({
   userId: { type: String, required: true, unique: true }, identity: { type: Schema.Types.Mixed, required: true }, revision: { type: Number, default: 1 },
-  deviceSerial: { type: Number, default: 0 },
+  deviceSerial: { type: Number, default: 0 }, keySerial: { type: Number, default: 0 },
 }, { timestamps: true }));
 export const PrivateWorkspace = mongoose.model("PrivateWorkspace", new Schema<{ workspaceId: string; state: "migrating" | "encrypted"; ownerId: string; revision: number; leaseUntil: Date; migrationId: string; sourceRevision: string; backupVerified: boolean }>({
   workspaceId: { type: String, required: true, unique: true }, state: { type: String, enum: ["migrating", "encrypted"], required: true },
@@ -39,3 +39,16 @@ const privateWorkspaceCommitSchema = new Schema<{
 privateWorkspaceCommitSchema.index({ workspaceId: 1, revision: 1 }, { unique: true });
 privateWorkspaceCommitSchema.index({ workspaceId: 1, userId: 1, operationId: 1 }, { unique: true });
 export const PrivateWorkspaceCommit = mongoose.model("PrivateWorkspaceCommit", privateWorkspaceCommitSchema);
+
+
+/** Public keys only. Retained with shared workspaces so departed authors'
+ * historical signatures remain verifiable after account-key erasure. */
+const privateDirectorySchema = new Schema<{
+  workspaceId: string; revision: number; digest: string;
+  signerPublicKey: import("@starter/core").PublicKey; signed: import("@starter/shared").SignedPrivateDirectory;
+}>({
+  workspaceId: { type: String, required: true }, revision: { type: Number, required: true }, digest: { type: String, required: true },
+  signerPublicKey: { type: Schema.Types.Mixed, required: true }, signed: { type: Schema.Types.Mixed, required: true },
+}, { timestamps: true });
+privateDirectorySchema.index({ workspaceId: 1, revision: 1 }, { unique: true });
+export const PrivateDirectory = mongoose.model("PrivateDirectory", privateDirectorySchema);

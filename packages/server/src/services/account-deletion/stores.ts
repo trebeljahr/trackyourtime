@@ -1,6 +1,6 @@
 import { withPrivateWorkspaceErasure } from "../privacy/plaintext-guard.js";
 // The two real row stores behind `deleteAccountData`.
-import { PrivateAccount, PrivateDeviceRequest, PrivateRecord, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
+import { PrivateAccount, PrivateDirectory, PrivateDeviceRequest, PrivateRecord, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
 import type { Model } from "mongoose";
 import { withStorageOwnershipAdoption } from "../storage-quota.js";
 import { fenceWorkspace, withBusinessTransaction } from "../business-transaction.js";
@@ -47,6 +47,7 @@ type AppCollection = Exclude<
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const APP_MODELS: Record<AppCollection, Model<any, {}, {}, any>> = {
   privateAccounts: PrivateAccount,
+  privateDirectories: PrivateDirectory,
   privateDeviceRequests: PrivateDeviceRequest,
   privateRecords: PrivateRecord,
   privateWorkspaceCommits: PrivateWorkspaceCommit,

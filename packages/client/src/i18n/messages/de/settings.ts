@@ -50,6 +50,9 @@ export const settings: Translation<typeof source> = {
     failed: "Der lokale Verlauf konnte nicht verschlüsselt oder entsperrt werden. Prüfe deine Schlüssel. Vorhandene Daten wurden beibehalten.",
   },
   privateData: {
+    verificationTitle: "Dein Schlüssel-Prüfcode",
+    verificationHint: "Vergleiche diesen Code über einen vertrauenswürdigen Anruf oder eine Nachricht mit dem Workspace-Eigentümer, bevor ihr verschlüsselte Daten teilt. Diesen Code kannst du weitergeben. Halte deinen Wiederherstellungsschlüssel geheim.",
+    verificationLocked: "Entsperre deine privaten Daten, um den Code aus deinen Schlüsseln auf diesem Gerät anzuzeigen.",
     nativeBrowserUnlock: "Bestätige den Zugriff auf private Daten im Browser oder nutze deinen Wiederherstellungsschlüssel. Passkeys werden im Browser verwaltet.",
     nativePasskeys: "Verwalte Passkeys für die Verschlüsselung im Browser. Verwende deinen Wiederherstellungsschlüssel, um private Daten in dieser App zu öffnen.",
     title: "Schlüssel für private Daten", description: "Bereite Schlüssel für private Daten vor. Die Workspace-Migration ist noch in Entwicklung. Diese Einstellung verschlüsselt deine synchronisierten Workspace-Daten noch nicht.",
