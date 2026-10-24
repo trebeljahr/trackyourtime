@@ -25,6 +25,7 @@ export const settings = {
     failed: "Could not encrypt or unlock local history. Check your keys and try again. Existing history was kept.",
   },
   privateData: {
+    nativeBrowserUnlock: "Approve private data access in your browser, or use your recovery key. Passkeys are managed in the browser.",
     nativePasskeys: "Manage encryption passkeys in your browser. Use your recovery key to open private data in this app.",
     title: "Private data keys", description: "Prepare encryption keys for private data. Workspace migration is still in development. Your synced workspace data is not encrypted by this setting.",
     recoveryExplanation: "Password resets restore account access. Unlocking encrypted content also needs an enrolled passkey or your recovery key. Keep a recovery copy outside this app.",
@@ -40,6 +41,18 @@ export const settings = {
     browser: "Manage passkeys in your browser. Use Sign in with your browser when opening the desktop or mobile app.",
     name: "Name this passkey", unnamed: "Passkey", add: "Add a passkey", remove: "Remove", waiting: "Waiting for your device…",
     failed: "Could not complete the passkey request. Try again in a supported browser; you may need to sign in again.",
+  },
+  privateDevice: {
+    browserAddress: "Use a trusted HTTPS browser address for this server. Choose the server again, or use your recovery key.",
+    start: "Unlock with your browser", starting: "Opening a private data request…", waiting: "Approve the request in your browser. Then enter its confirmation code here.",
+    reopen: "Open browser again", cancel: "Cancel request", codeLabel: "8-character code from your browser", confirm: "Confirm and unlock",
+    failed: "Could not complete this request. Start a new request or use your recovery key. Existing encrypted data was kept.",
+    codeMismatch: "The code did not match. Check the code in your browser. After three attempts, start a new request.", expired: "This request expired. Start a new request in the app.",
+    approvalTitle: "Unlock private data in your app", approvalDescription: "This shares your private data keys with that app. Only approve requests you started in your app.",
+    invalid: "This request is missing, expired, or already answered. Start a new request in the app.", signIn: "Sign in to approve this request",
+    wrongAccount: "You are signed in as {email}. Use the same account as your app.", switchAccount: "Sign out and switch account", account: "Account: {email}",
+    codeHint: "Enter this code in the app that opened this page.", sent: "The encrypted response was sent. Enter the code in your app, then close this page.",
+    sending: "Sending encrypted response…", retry: "Send the same response again", approve: "Approve private data access",
   },
 
   about: {

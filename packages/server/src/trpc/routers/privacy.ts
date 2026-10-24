@@ -2,7 +2,8 @@ import { requirePrivateWorkspaceRollout, beginPrivateMigration, stagePrivateMigr
 import { canonicalJson } from "@starter/core";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { encryptedRecordSchema, privateIdentitySchema, type EncryptedRecord } from "@starter/shared";
+import { encryptedRecordSchema, privateIdentitySchema, privateDeviceApprovalSchema, publicEncryptionKeySchema, type EncryptedRecord } from "@starter/shared";
+import { approvePrivateDevice, cancelPrivateDevice, createPrivateDeviceRequest, privateDeviceStatus } from "../../services/privacy/devices.js";
 import { PrivateAccount, PrivateRecord, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { workspaceIdFromInput, resolveWorkspace } from "../../auth/workspace.js";
@@ -12,7 +13,11 @@ import { verifyPrivateChange } from "../../services/privacy/signatures.js";
 import { workspaceRecovery } from "../../services/privacy/recovery.js";
 import { protectedProcedure, router } from "../trpc.js";
 const scopeSchema = z.object({ workspaceId: z.string().min(1).max(100).optional() });
-const privateWorkspaceProcedure = protectedProcedure.use(async ({ ctx, next, getRawInput }) => {
+const privateAccountProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.res && !ctx.res.headersSent) ctx.res.setHeader("Cache-Control", "no-store");
+  return next();
+});
+const privateWorkspaceProcedure = privateAccountProcedure.use(async ({ ctx, next, getRawInput }) => {
   const found = await resolveWorkspace({ user: ctx.user, requested: workspaceIdFromInput(await getRawInput()), activeWorkspaceId: ctx.activeWorkspaceId });
   if (!found) throw new TRPCError({ code: "NOT_FOUND" });
   return next({ ctx: { ...ctx, ...found } });
@@ -28,12 +33,12 @@ function validateRecordAudience(record: EncryptedRecord, members: Awaited<Return
 }
 const allMembers = (workspaceId: string) => WorkspaceMember.find({ workspaceId }).lean();
 export const privacyRouter = router({
-  identity: protectedProcedure.input(z.object({ userId: z.string().min(1).max(100).optional() }).optional()).query(async ({ ctx, input }) => {
+  identity: privateAccountProcedure.input(z.object({ userId: z.string().min(1).max(100).optional() }).optional()).query(async ({ ctx, input }) => {
     if (input?.userId && input.userId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND" });
     const doc = await PrivateAccount.findOne({ userId: ctx.user.id }).lean();
     return doc ? { identity: doc.identity, revision: doc.revision } : null;
   }),
-  enroll: protectedProcedure.input(z.object({ identity: privateIdentitySchema })).mutation(async ({ ctx, input }) => {
+  enroll: privateAccountProcedure.input(z.object({ identity: privateIdentitySchema })).mutation(async ({ ctx, input }) => {
     // A retry may reuse the exact encrypted identity after a lost response.
     // Login/reset alone must never overwrite an existing identity.
     const current = await PrivateAccount.findOne({ userId: ctx.user.id }).lean();
@@ -50,7 +55,7 @@ export const privacyRouter = router({
     }
     return { revision: 1 };
   }),
-  updateIdentity: protectedProcedure.input(z.object({ identity: privateIdentitySchema, revision: z.number().int().positive(), signature: signatureSchema })).mutation(async ({ ctx, input }) => {
+  updateIdentity: privateAccountProcedure.input(z.object({ identity: privateIdentitySchema, revision: z.number().int().positive(), signature: signatureSchema })).mutation(async ({ ctx, input }) => {
     const current = await PrivateAccount.findOne({ userId: ctx.user.id }).lean();
     if (!current) throw new TRPCError({ code: "NOT_FOUND" });
     await verifyPrivateChange(current.identity.signingPublicKey, { userId: ctx.user.id, revision: input.revision, identity: input.identity }, input.signature);
@@ -58,6 +63,11 @@ export const privacyRouter = router({
     if (!next) throw new TRPCError({ code: "CONFLICT" });
     return { revision: next.revision };
   }),
+  createDeviceUnlock: privateAccountProcedure.input(z.object({ requestId: z.uuid(), publicKey: publicEncryptionKeySchema })).mutation(({ ctx, input }) => createPrivateDeviceRequest(ctx.user.id, input.requestId, input.publicKey)),
+  // POST avoids caching a one-time key-transfer response in HTTP disk caches.
+  deviceUnlockStatus: privateAccountProcedure.input(z.object({ requestId: z.uuid() })).mutation(({ ctx, input }) => privateDeviceStatus(ctx.user.id, input.requestId)),
+  approveDeviceUnlock: privateAccountProcedure.input(z.object({ requestId: z.uuid(), box: privateDeviceApprovalSchema })).mutation(({ ctx, input }) => approvePrivateDevice(ctx.user.id, input.requestId, input.box)),
+  cancelDeviceUnlock: privateAccountProcedure.input(z.object({ requestId: z.uuid() })).mutation(({ ctx, input }) => cancelPrivateDevice(ctx.user.id, input.requestId)),
   status: privateWorkspaceProcedure.input(scopeSchema).query(async ({ ctx }) => {
     const mode = await PrivateWorkspace.findOne({ workspaceId: ctx.workspaceId }).lean();
     return { mode: mode?.state ?? "standard", revision: mode?.revision ?? 0, owner: ctx.membership.role === "owner" };

@@ -1,0 +1,71 @@
+import assert from "node:assert/strict";
+import { before, after, beforeEach, describe, it } from "node:test";
+import { createKeyPair, createPrivateDeviceReceiver, createSigningPair, encryptPrivateDeviceApproval, randomSecret, seal } from "@starter/core";
+import { PRIVATE_DEVICE_TTL_MS } from "@starter/shared";
+import { PrivateAccount, PrivateDeviceRequest } from "../models/PrivateData.js";
+import { privacyRouter } from "../trpc/routers/privacy.js";
+import type { Context } from "../trpc/context.js";
+import { connectTestDatabase, clearTestDatabase, dropTestDatabase, skipWithoutDatabase, testDatabaseTransactions } from "./support/test-database.js";
+const context = (id: string) => ({ user: { id }, session: { user: { id } } }) as unknown as Context;
+const owner = privacyRouter.createCaller(context("owner")), other = privacyRouter.createCaller(context("other"));
+async function enroll() {
+  const pair = await createKeyPair(), signing = await createSigningPair();
+  await owner.enroll({ identity: { publicKey: pair.publicKey, signingPublicKey: signing.publicKey, recovery: await seal(randomSecret(), { master: "test-only" }, "synthetic-root"), passkeys: [] } });
+}
+describe("encrypted private-device relay", { skip: skipWithoutDatabase }, () => {
+  before(() => connectTestDatabase("private-devices", [PrivateAccount, PrivateDeviceRequest] as never));
+  beforeEach(clearTestDatabase);
+  after(dropTestDatabase);
+  it("relays only ciphertext, isolates accounts and preserves the first delivered response across retries", async (t) => {
+    if (!await testDatabaseTransactions()) return t.skip("Request bounds need a replica set");
+    await enroll();
+    const receiver = await createPrivateDeviceReceiver<{ master: string }>({ server: "https://api.example.test", userId: "owner" });
+    const input = { requestId: receiver.invite.requestId, publicKey: receiver.invite.publicKey };
+    const created = await owner.createDeviceUnlock(input);
+    assert.ok(Math.abs(Date.parse(created.expiresAt) - Date.now() - PRIVATE_DEVICE_TTL_MS) < 5000);
+    assert.deepEqual(await owner.createDeviceUnlock(input), created);
+    assert.equal((await owner.deviceUnlockStatus(input)).box, null);
+    await assert.rejects(other.deviceUnlockStatus(input), { code: "NOT_FOUND" });
+    const response = await encryptPrivateDeviceApproval(receiver.invite, { master: "synthetic-private-root" });
+    await assert.rejects(other.approveDeviceUnlock({ requestId: input.requestId, box: response.approval }), { code: "NOT_FOUND" });
+    await owner.approveDeviceUnlock({ requestId: input.requestId, box: response.approval });
+    await owner.approveDeviceUnlock({ requestId: input.requestId, box: response.approval });
+    const replacement = await encryptPrivateDeviceApproval(receiver.invite, { master: "replacement" });
+    await assert.rejects(owner.approveDeviceUnlock({ requestId: input.requestId, box: replacement.approval }), { code: "CONFLICT" });
+    const stored = await PrivateDeviceRequest.findById(input.requestId).lean();
+    assert.doesNotMatch(JSON.stringify(stored), /synthetic-private-root/);
+    assert.ok(!JSON.stringify(stored).includes(response.code));
+    await other.cancelDeviceUnlock({ requestId: input.requestId });
+    const delivered = await owner.deviceUnlockStatus({ requestId: input.requestId });
+    await receiver.accept(delivered.box);
+    assert.deepEqual(receiver.confirm(response.code), { master: "synthetic-private-root" });
+    await owner.cancelDeviceUnlock({ requestId: input.requestId });
+    await owner.cancelDeviceUnlock({ requestId: input.requestId });
+    assert.equal(await PrivateDeviceRequest.countDocuments(), 0);
+    await assert.rejects(owner.deviceUnlockStatus(input), { code: "NOT_FOUND" });
+  });
+  it("bounds simultaneous requests atomically and refuses expired requests without changing identity revisions", async (t) => {
+    if (!await testDatabaseTransactions()) return t.skip("Request bounds need a replica set");
+    await enroll(); const key = (await createKeyPair()).publicKey;
+    const attempts = await Promise.allSettled(Array.from({ length: 5 }, () => owner.createDeviceUnlock({ requestId: crypto.randomUUID(), publicKey: key })));
+    assert.equal(attempts.filter((result) => result.status === "fulfilled").length, 3);
+    for (const result of attempts) if (result.status === "rejected") assert.equal(result.reason.code, "TOO_MANY_REQUESTS");
+    assert.equal(await PrivateDeviceRequest.countDocuments(), 3);
+    assert.equal((await owner.identity())?.revision, 1);
+    const expired = await PrivateDeviceRequest.findOne().lean(); assert.ok(expired);
+    await PrivateDeviceRequest.updateOne({ _id: expired._id }, { $set: { expiresAt: new Date(0) } });
+    await assert.rejects(owner.deviceUnlockStatus({ requestId: expired._id }), { code: "NOT_FOUND" });
+    const next = { requestId: crypto.randomUUID(), publicKey: key };
+    await owner.createDeviceUnlock(next);
+    assert.equal(await PrivateDeviceRequest.countDocuments(), 3);
+  });
+  it("rejects plaintext private keys at the wire boundary and requires prior private-key setup", async (t) => {
+    if (!await testDatabaseTransactions()) return t.skip("Request bounds need a replica set");
+    const pair = await createKeyPair();
+    await assert.rejects(owner.createDeviceUnlock({ requestId: crypto.randomUUID(), publicKey: pair.privateKey }), { code: "BAD_REQUEST" });
+    await assert.rejects(owner.createDeviceUnlock({ requestId: crypto.randomUUID(), publicKey: pair.publicKey }), { code: "PRECONDITION_FAILED" });
+    await enroll();
+    await assert.rejects(owner.createDeviceUnlock({ requestId: crypto.randomUUID(), publicKey: { ...pair.publicKey, key_ops: Array(500).fill("deriveBits") } }), { code: "BAD_REQUEST" });
+    assert.equal(await PrivateDeviceRequest.countDocuments(), 0);
+  });
+});

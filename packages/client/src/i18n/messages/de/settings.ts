@@ -22,6 +22,7 @@ export const settings: Translation<typeof source> = {
     failed: "Der lokale Verlauf konnte nicht verschlüsselt oder entsperrt werden. Prüfe deine Schlüssel. Vorhandene Daten wurden beibehalten.",
   },
   privateData: {
+    nativeBrowserUnlock: "Bestätige den Zugriff auf private Daten im Browser oder nutze deinen Wiederherstellungsschlüssel. Passkeys werden im Browser verwaltet.",
     nativePasskeys: "Verwalte Passkeys für die Verschlüsselung im Browser. Verwende deinen Wiederherstellungsschlüssel, um private Daten in dieser App zu öffnen.",
     title: "Schlüssel für private Daten", description: "Bereite Schlüssel für private Daten vor. Die Workspace-Migration ist noch in Entwicklung. Diese Einstellung verschlüsselt deine synchronisierten Workspace-Daten noch nicht.",
     recoveryExplanation: "Ein Zurücksetzen des Passworts stellt den Kontozugang wieder her. Verschlüsselte Inhalte benötigen zusätzlich einen registrierten Passkey oder deinen Wiederherstellungsschlüssel. Eine Kopie außerhalb dieser App aufbewahren.",
@@ -37,6 +38,18 @@ export const settings: Translation<typeof source> = {
     browser: "Passkeys im Browser verwalten. In der Desktop- oder Mobil-App die Anmeldung über den Browser verwenden.",
     name: "Name dieses Passkeys", unnamed: "Passkey", add: "Passkey hinzufügen", remove: "Entfernen", waiting: "Warte auf dein Gerät…",
     failed: "Die Passkey-Anfrage konnte nicht abgeschlossen werden. Erneut in einem unterstützten Browser versuchen; eventuell ist eine neue Anmeldung nötig.",
+  },
+  privateDevice: {
+    browserAddress: "Verwende eine vertrauenswürdige HTTPS-Browseradresse für diesen Server. Wähle den Server erneut oder nutze deinen Wiederherstellungsschlüssel.",
+    start: "Mit dem Browser entsperren", starting: "Anfrage für private Daten wird geöffnet…", waiting: "Bestätige die Anfrage im Browser. Gib danach hier den Bestätigungscode ein.",
+    reopen: "Browser erneut öffnen", cancel: "Anfrage abbrechen", codeLabel: "8-stelliger Code aus deinem Browser", confirm: "Bestätigen und entsperren",
+    failed: "Die Anfrage konnte nicht abgeschlossen werden. Starte eine neue Anfrage oder nutze deinen Wiederherstellungsschlüssel. Vorhandene verschlüsselte Daten wurden beibehalten.",
+    codeMismatch: "Der Code stimmt nicht überein. Prüfe ihn im Browser. Starte nach drei Versuchen eine neue Anfrage.", expired: "Diese Anfrage ist abgelaufen. Starte eine neue Anfrage in der App.",
+    approvalTitle: "Private Daten in deiner App entsperren", approvalDescription: "Dadurch erhält die App deine privaten Datenschlüssel. Bestätige nur Anfragen, die du selbst in deiner App gestartet hast.",
+    invalid: "Diese Anfrage fehlt, ist abgelaufen oder wurde bereits beantwortet. Starte eine neue Anfrage in der App.", signIn: "Zum Bestätigen anmelden",
+    wrongAccount: "Du bist als {email} angemeldet. Verwende dasselbe Konto wie in deiner App.", switchAccount: "Abmelden und Konto wechseln", account: "Konto: {email}",
+    codeHint: "Gib diesen Code in der App ein, die diese Seite geöffnet hat.", sent: "Die verschlüsselte Antwort wurde gesendet. Gib den Code in deiner App ein und schließe danach diese Seite.",
+    sending: "Verschlüsselte Antwort wird gesendet…", retry: "Dieselbe Antwort erneut senden", approve: "Zugriff auf private Daten bestätigen",
   },
 
   about: {

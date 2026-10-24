@@ -16,6 +16,14 @@ export type PrivateCiphertext = z.infer<typeof cipherSchema>;
 const identityEnvelopeSchema = cipherSchema.extend({ data: cipherSchema.shape.data.max(16_384) });
 export const privateIdentitySchema = z.object({ publicKey: publicEncryptionKeySchema, signingPublicKey: publicEncryptionKeySchema, recovery: identityEnvelopeSchema, passkeys: z.array(z.object({ credentialId: z.string().min(1).max(1500), envelope: identityEnvelopeSchema }).strict()).max(20) }).strict();
 export type PrivateIdentity = z.infer<typeof privateIdentitySchema>;
+export const PRIVATE_DEVICE_TTL_MS = 5 * 60 * 1000;
+export const privateDeviceInviteSchema = z.object({
+  v: z.literal(1), requestId: z.uuid(), server: z.string().url().max(2048), userId: z.string().min(1).max(100),
+  publicKey: publicEncryptionKeySchema, expiresAt: z.number().int().positive(),
+}).strict();
+export type PrivateDeviceInvite = z.infer<typeof privateDeviceInviteSchema>;
+export const privateDeviceApprovalSchema = recipientBoxSchema.extend({ box: identityEnvelopeSchema });
+export type PrivateDeviceApproval = z.infer<typeof privateDeviceApprovalSchema>;
 export const RECOVERY_KINDS = ["timeentries", "entryoperations", "clients", "projects", "tasks", "tags", "favorites", "invoices", "importbatches", "workspacesettings", "businessprofiles", "timesheetapprovals", "timesheetpolicies", "workspacemembers"] as const;
 export type RecoveryKind = typeof RECOVERY_KINDS[number];
 export type WorkspaceRecovery = { v: 1; workspaceId: string; createdAt: string; sourceRevision: string; collections: Record<RecoveryKind, Record<string, unknown>[]> };

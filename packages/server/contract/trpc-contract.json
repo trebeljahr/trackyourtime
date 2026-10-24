@@ -1,5 +1,5 @@
 {
-  "apiLevel": 18,
+  "apiLevel": 19,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -3923,6 +3923,100 @@
       },
       "type": "mutation"
     },
+    "privacy.approveDeviceUnlock": {
+      "input": {
+        "properties": {
+          "box": {
+            "additionalProperties": false,
+            "properties": {
+              "box": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "maxLength": 16384,
+                    "minLength": 22,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "type": "string"
+                  },
+                  "nonce": {
+                    "pattern": "^[A-Za-z0-9_-]{16}$",
+                    "type": "string"
+                  },
+                  "v": {
+                    "const": 1,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "v",
+                  "nonce",
+                  "data"
+                ],
+                "type": "object"
+              },
+              "ephemeral": {
+                "additionalProperties": false,
+                "properties": {
+                  "crv": {
+                    "const": "P-256",
+                    "type": "string"
+                  },
+                  "ext": {
+                    "type": "boolean"
+                  },
+                  "key_ops": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "kty": {
+                    "const": "EC",
+                    "type": "string"
+                  },
+                  "x": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "type": "string"
+                  },
+                  "y": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kty",
+                  "crv",
+                  "x",
+                  "y"
+                ],
+                "type": "object"
+              },
+              "v": {
+                "const": 1,
+                "type": "number"
+              }
+            },
+            "required": [
+              "v",
+              "ephemeral",
+              "box"
+            ],
+            "type": "object"
+          },
+          "requestId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestId",
+          "box"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
     "privacy.beginMigration": {
       "input": {
         "properties": {
@@ -3944,6 +4038,22 @@
         "required": [
           "sourceRevision",
           "signature"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.cancelDeviceUnlock": {
+      "input": {
+        "properties": {
+          "requestId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestId"
         ],
         "type": "object"
       },
@@ -4002,6 +4112,76 @@
           "migrationId",
           "backupHash",
           "signature"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.createDeviceUnlock": {
+      "input": {
+        "properties": {
+          "publicKey": {
+            "additionalProperties": false,
+            "properties": {
+              "crv": {
+                "const": "P-256",
+                "type": "string"
+              },
+              "ext": {
+                "type": "boolean"
+              },
+              "key_ops": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kty": {
+                "const": "EC",
+                "type": "string"
+              },
+              "x": {
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              },
+              "y": {
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kty",
+              "crv",
+              "x",
+              "y"
+            ],
+            "type": "object"
+          },
+          "requestId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestId",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.deviceUnlockStatus": {
+      "input": {
+        "properties": {
+          "requestId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestId"
         ],
         "type": "object"
       },

@@ -30,6 +30,7 @@ export const SAFE_NEXT_PREFIXES = [
   "/app/track",
   "/app/members",
   "/app/settings",
+  "/private-device",
 ] as const;
 
 /** Longer than any real return path; a cap keeps a crafted value cheap to reject. */

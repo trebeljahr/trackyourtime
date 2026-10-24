@@ -1,5 +1,7 @@
 "use client";
 import { PrivateActivity } from "./private-activity";
+import { PrivateDeviceUnlock } from "./private-device-unlock";
+import { useServerSupports } from "@/lib/server-level";
 import * as React from "react";
 import { fingerprint, signPrivateChange } from "@starter/core";
 import { authClient } from "@/lib/auth-client";
@@ -22,6 +24,7 @@ export function PrivateDataCard(): React.JSX.Element | null {
 function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
   const t = useT("settings");
   const native = useIsTokenShell();
+  const deviceUnlockSupported = useServerSupports("privacy.deviceUnlock");
   const account = trpc.privacy.identity.useQuery({ userId: id }, { retry: false });
   const enroll = trpc.privacy.enroll.useMutation();
   const updateIdentity = trpc.privacy.updateIdentity.useMutation();
@@ -46,7 +49,7 @@ function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
     <CardHeader><CardTitle>{t("privateData.title")}</CardTitle><CardDescription>{t("privateData.description")}</CardDescription></CardHeader>
     <CardContent className="space-y-4">
       <p className="max-w-prose text-sm text-muted-foreground">{t("privateData.recoveryExplanation")}</p>
-      {native && <p className="max-w-prose text-sm text-muted-foreground">{t("privateData.nativePasskeys")}</p>}
+      {native && <p className="max-w-prose text-sm text-muted-foreground">{t(deviceUnlockSupported ? "privateData.nativeBrowserUnlock" : "privateData.nativePasskeys")}</p>}
       {!identity && !draft && <Button variant="outline" disabled={pending || account.isLoading || account.isError} onClick={() => void run(async () => setDraft(await newPrivateIdentity(id)))}>{t("privateData.prepare")}</Button>}
       {draft && <div className="max-w-xl space-y-3">
         <p className="text-sm">{t("privateData.saveRecovery")}</p>
@@ -59,7 +62,8 @@ function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
         })}>{t("privateData.finishSetup")}</Button>
       </div>}
       {identity && !current && <div className="max-w-xl space-y-3">
-        <Button variant="outline" disabled={native || pending || identity.passkeys.length === 0} onClick={() => void run(() => unlockWithSavedPasskey(id, identity))}>{t("privateData.unlockPasskey")}</Button>
+        {native && deviceUnlockSupported && <PrivateDeviceUnlock userId={id} />}
+        {!native && <Button variant="outline" disabled={pending || identity.passkeys.length === 0} onClick={() => void run(() => unlockWithSavedPasskey(id, identity))}>{t("privateData.unlockPasskey")}</Button>}
         <Label htmlFor="private-recovery">{t("privateData.recoveryKey")}</Label>
         <Input id="private-recovery" type="password" autoComplete="off" value={recovery} onChange={(event) => setRecovery(event.target.value)} />
         <Button variant="outline" disabled={pending || recovery.trim().length !== 43} onClick={() => void run(async () => { await unlockPrivateRecovery(id, identity, recovery); setRecovery(""); })}>{t("privateData.unlockRecovery")}</Button>

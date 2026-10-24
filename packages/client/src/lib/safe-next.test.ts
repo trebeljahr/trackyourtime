@@ -11,6 +11,7 @@ describe("safeNext", () => {
     ["/app/track/", "/app/track/"],
     ["/app/members/", "/app/members/"],
     ["/app/settings/?tab=workspace", "/app/settings/?tab=workspace"],
+    ["/private-device/#invite=public-request", "/private-device/#invite=public-request"],
   ];
 
   it.each(accepted)("accepts %s", (raw, expected) => {
@@ -32,6 +33,7 @@ describe("safeNext", () => {
     ["unlisted path", "/app/reports"],
     ["root", "/"],
     ["prefix look-alike", "/invitee"],
+    ["private-device prefix look-alike", "/private-device-evil/#invite=public-request"],
     ["prefix look-alike with query", "/tracker?x=1"],
     ["dot segments escaping the allowlist", "/app/track/../evil"],
     ["encoded slashes", "/%2F%2Fevil.com"],

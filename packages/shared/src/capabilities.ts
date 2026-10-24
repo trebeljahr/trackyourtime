@@ -17,6 +17,7 @@
  * `capabilities.test.ts` in core fails when a level has no capability.
  */
 export const REQUIRES_API_LEVEL = {
+  "privacy.deviceUnlock": 19,
   "auth.passkeys": 18,
   "privacy.keys": 18,
   "catalog.options": 16,

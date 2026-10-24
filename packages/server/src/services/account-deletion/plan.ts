@@ -24,6 +24,7 @@ export {
  */
 export type DeletionCollection =
   | "privateAccounts"
+  | "privateDeviceRequests"
   | "privateRecords"
   | "privateWorkspaces"
   | "timeEntries"
@@ -209,6 +210,7 @@ export function userScopedSteps(user: { id: string; email?: string | null }): De
     { collection: "importLeases", filter: { _id: JSON.stringify(["user", user.id]) } },
     { collection: "authPasskeys", filter: { userId: user.id } },
     { collection: "privateAccounts", filter: { userId: user.id } },
+    { collection: "privateDeviceRequests", filter: { userId: user.id } },
     ...(email ? [{ collection: "authInvitations" as const, filter: { email } }] : []),
   ];
 }

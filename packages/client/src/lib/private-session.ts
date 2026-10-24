@@ -40,9 +40,16 @@ export function installPrivateSession(userId: string, secrets: UnlockedIdentity)
   session = { userId, origin: getApiOrigin(), secrets }; changed();
   void resumePrivateActivity(userId).catch(() => undefined);
 }
-function assertIdentityKeys(identity: PrivateIdentity, secrets: UnlockedIdentity): void {
+function assertIdentityKeys(identity: Pick<PrivateIdentity, "publicKey" | "signingPublicKey">, secrets: UnlockedIdentity): void {
   const same = (publicKey: PublicKey, privateKey: PublicKey) => publicKey.kty === privateKey.kty && publicKey.crv === privateKey.crv && publicKey.x === privateKey.x && publicKey.y === privateKey.y;
   if (!same(identity.publicKey, secrets.privateKey) || !same(identity.signingPublicKey, secrets.signingPrivateKey)) throw new Error("Private identity public keys do not match its encrypted keys");
+}
+export function checkedPrivateSession(userId: string, identity: Pick<PrivateIdentity, "publicKey" | "signingPublicKey">): UnlockedIdentity {
+  const current = privateSession(userId); if (!current) throw new Error("Unlock private data first");
+  assertIdentityKeys(identity, current); return current;
+}
+export function installVerifiedPrivateSession(userId: string, identity: Pick<PrivateIdentity, "publicKey" | "signingPublicKey">, secrets: UnlockedIdentity): void {
+  assertIdentityKeys(identity, secrets); installPrivateSession(userId, secrets);
 }
 export async function unlockPrivateRecovery(userId: string, identity: PrivateIdentity, recoveryKey: string): Promise<void> {
   const assertCurrent = privateOperationScope(userId), aad = context(userId);
