@@ -48,8 +48,11 @@ history from a new device remains a freshness limit without a newer trusted
 checkpoint or independent transparency/gossip.
 
 Client verification authorizes writes from the signed directory. Entries,
-entry money, favorites and imports require self-authorship; other record kinds
-require owner/admin. Audiences must match verified visibility. Where an existing
+entry money, favorites and imports require self-authorship. Invoice writes need
+owner/admin with full time and money visibility. Member-rate writes need the
+owner or an admin with money visibility. Other configuration writes require
+owner/admin. Business-profile reads retain the existing owner/admin or money-
+trusted-member rule, separately from the stricter invoice gate. Audiences must match verified visibility. Where an existing
 local record is present, its author must match an upsert or removal. An API
 accepting a valid member signature cannot promote that member into a writer
 with broader rights. These checks do not prevent an authorized reader from
@@ -206,6 +209,35 @@ checksum. Other members' private favorites can remain opaque; the count is
 explicit and their plaintext is not claimed as verified. The proof primitive
 is not yet consumed by live migration endpoints.
 
+The owner can verify every shared record plus their own favorites. Other
+members' favorites require a separate `createPrivateFavoritesMigrationProof`.
+It accepts a verified snapshot for that member and a typed, favorites-only
+original source. It compares exact original values after decryption, checks
+authorship and complete counts, and signs source/ciphertext digests bound to
+server, workspace, migration ID, directory and snapshot root. Recipient ownership uses each collection's authoritative field: favorites and
+member data use userId, entries/approvals use authorId, import receipts use
+userId, and batches/invoices use createdBy. Unrelated legacy author fields are
+preserved as data and cannot redirect recipient grants. The receipt contains
+no preference IDs or plaintext values. A stale unlock generation or
+another account's snapshot cannot produce an acknowledgement.
+
+API level 25 adds guarded source/acknowledgement contracts. The source engine
+returns only the authenticated member's original favorites while the workspace
+is migrating. It retains BSON types and refuses converted workspaces. The
+receipt engine verifies the member's directory key, current snapshot and both
+original, staged and frozen-snapshot checksums before recording an idempotent
+receipt in the workspace transaction.
+Changed data or scope fails without changing originals or workspace mode.
+Account deletion removes that user's receipts, including former workspaces;
+cancellation removes the migration's receipts. These primitives are not yet
+connected to a cutover controller. That controller must require private-subset
+verification only for members with favorites not covered by the owner proof;
+zero private records do not need another content check. Plaintext source
+checksums and these temporary proof bodies must be deleted or client-encrypted
+at cutover with the originals. Retaining unkeyed hashes of low-entropy private
+values would permit offline guessing. Public audit commitments may refer to
+randomized ciphertext; they must not retain plaintext source digests.
+
 `privateRecordsToRecovery` reconstructs the original fourteen collections by
 joining the paired time/money records. It preserves IDs, BSON types, operation
 receipts, invoice links and issued XML. Missing, orphaned, overlapping or
@@ -257,6 +289,12 @@ files remain outside account deletion.
 - Durable encryption-mode pins and trusted new-device workspace policy. Missing
   keys, omitted server identity/mode metadata or an older API must never silently
   send private workspace data through standard plaintext adapters.
+- Complete client business-transition validation, including approval submissions
+  versus reviews, invoice links on colleagues' entries and issued-document
+  immutability. Coarse record-kind rights alone do not encode those rules.
+- Audit legacy integration secrets/configuration and every unlisted plaintext
+  collection. The fourteen-collection business backup does not cover auth or
+  webhook credential storage.
 - Journal/storage quota accounting and retention. Tombstones preserve the old
   ciphertext context; this is not cryptographic erasure of historical journal
   records or ciphertext already copied by another authorized client.

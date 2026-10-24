@@ -7,7 +7,8 @@ export function readersForPrivateRecord(kind: PrivateKind, authorId: string | nu
   return members.filter((m) => {
     const visibility = { userId: m.userId, canViewOthersTime: m.role === "owner" || m.canViewOthersTime, canViewOthersMoney: m.role === "owner" || m.canViewOthersMoney };
     if (kind === "favorites") return m.userId === authorId;
-    if (kind === "invoices" || kind === "businessProfile") return canUseInvoices(m.role, visibility);
+    if (kind === "invoices") return canUseInvoices(m.role, visibility);
+    if (kind === "businessProfile") return m.role !== "member" || visibility.canViewOthersMoney;
     if (kind === "entries" || kind === "approvals") return authorId !== null && canSeeEntry(visibility, authorId);
     if (kind === "entryMoney") return authorId !== null && canSeeEntry(visibility, authorId) && canSeeMoneyFor(visibility, authorId);
     if (kind === "memberMoney") return authorId !== null && canSeeMoneyFor(visibility, authorId);
@@ -18,6 +19,13 @@ export function readersForPrivateRecord(kind: PrivateKind, authorId: string | nu
   });
 }
 export const privateRecordContext = (workspace: string, row: Pick<EncryptedRecord, "kind" | "id" | "revision" | "authorId">): string => JSON.stringify(["trackyourtime-record-v1", workspace, row.kind, row.id, row.authorId, row.revision]);
+function privateAuthorField(kind: PrivateKind, id: string): string | null {
+  if (["entries", "entryMoney", "approvals"].includes(kind)) return "authorId";
+  if (kind === "favorites" || kind === "memberMoney") return "userId";
+  if (kind === "invoices") return "createdBy";
+  if (kind === "imports") return id.startsWith("entryoperations:") ? "userId" : id.startsWith("importbatches:") ? "createdBy" : null;
+  return null;
+}
 function assertPrivateValueBinding(workspace: string, plain: PlainPrivateRecord): void {
   const value = plain.value;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Private record value must be an object");
@@ -26,9 +34,10 @@ function assertPrivateValueBinding(workspace: string, plain: PlainPrivateRecord)
     const logicalId = plain.kind === "imports" && /^(entryoperations|importbatches):/.test(plain.id) ? plain.id.slice(plain.id.indexOf(":") + 1) : plain.id;
     if (typeof rawId !== "string" || rawId !== logicalId) throw new Error("Private payload ID does not match its signed record");
   }
-  if (["entries", "entryMoney", "favorites", "imports", "memberMoney", "approvals", "invoices"].includes(plain.kind)) {
-    const author = [value.authorId, value.userId, value.createdBy].map(privateValue).find((id) => typeof id === "string" && id.length > 0);
-    if (author !== undefined && author !== plain.authorId) throw new Error("Private payload author does not match its signed record");
+  const authorField = privateAuthorField(plain.kind, plain.id);
+  if (authorField) {
+    const author = privateValue(value[authorField]);
+    if (typeof author === "string" && author.length > 0 && author !== plain.authorId) throw new Error("Private payload author does not match its signed record");
   }
 }
 export async function encryptPrivateRecord(workspace: string, input: PlainPrivateRecord, members: readonly PrivateRecipient[], revision: number): Promise<EncryptedRecord> {
@@ -83,7 +92,11 @@ export function partitionPrivateRecovery(snapshot: WorkspaceRecovery): PlainPriv
   };
   for (const [kind, rows] of Object.entries(snapshot.collections)) for (const raw of rows) {
     const decoded = privateValue(raw) as Record<string, unknown>;
-    const author = [decoded.authorId, decoded.userId, decoded.createdBy].find((id): id is string => typeof id === "string" && id.length > 0) ?? null;
+    // Authority comes from the collection's actual owner field. An unrelated
+    // legacy authorId/createdBy must not redirect a private preference's key.
+    const authorField = kind === "favorites" || kind === "workspacemembers" || kind === "entryoperations" ? "userId"
+      : kind === "invoices" || kind === "importbatches" ? "createdBy" : "authorId";
+    const author = typeof decoded[authorField] === "string" && decoded[authorField] ? decoded[authorField] as string : null;
     switch (kind) {
       case "timeentries": split("entries", "entryMoney", raw, ["hourlyRate"], author); break;
       case "clients": split("clients", "clientMoney", raw, ["billing"], null); break;

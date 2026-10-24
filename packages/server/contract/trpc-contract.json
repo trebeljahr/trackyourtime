@@ -1,5 +1,5 @@
 {
-  "apiLevel": 24,
+  "apiLevel": 25,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -3923,6 +3923,95 @@
       },
       "type": "mutation"
     },
+    "privacy.acknowledgeMigrationFavorites": {
+      "input": {
+        "properties": {
+          "proof": {
+            "additionalProperties": false,
+            "properties": {
+              "directoryDigest": {
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              },
+              "migrationId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "protocol": {
+                "const": "trackyourtime-private-favorites-proof-v1",
+                "type": "string"
+              },
+              "recordsDigest": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "server": {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string"
+              },
+              "snapshotRoot": {
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              },
+              "sourceRevision": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "userId": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              "v": {
+                "const": 1,
+                "type": "number"
+              },
+              "verifiedRecords": {
+                "maximum": 200000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "workspaceId": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "v",
+              "protocol",
+              "server",
+              "workspaceId",
+              "userId",
+              "migrationId",
+              "directoryDigest",
+              "snapshotRoot",
+              "sourceRevision",
+              "recordsDigest",
+              "verifiedRecords"
+            ],
+            "type": "object"
+          },
+          "signature": {
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "type": "string"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "proof",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
     "privacy.approveDeviceUnlock": {
       "input": {
         "properties": {
@@ -4958,6 +5047,27 @@
       "type": "query"
     },
     "privacy.migrationArchive": {
+      "input": {
+        "properties": {
+          "migrationId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.migrationFavoritesSource": {
       "input": {
         "properties": {
           "migrationId": {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { encryptedRecordSchema, privateKindSchema, publicEncryptionKeySchema, type PrivateKind } from "./privacy.js";
+import { canUseInvoices } from "./visibility.js";
 const id = z.string().min(1).max(100);
 export const privateRecordRefSchema = z.object({ kind: privateKindSchema, id, authorId: id.nullable() }).strict();
 export const privateRemovalSchema = privateRecordRefSchema.extend({ readers: z.array(id).min(1).max(200) }).strict();
@@ -53,8 +54,10 @@ export type SignedPrivateInitialSnapshot = z.infer<typeof signedPrivateInitialSn
 export const PRIVATE_SNAPSHOT_MAX_BYTES = 64 * 1024 * 1024;
 export const PRIVATE_SNAPSHOT_PAGE_MAX_BYTES = 4 * 1024 * 1024;
 
-export function canWritePrivateRecord(kind: PrivateKind, authorId: string | null, actor: Pick<PrivateDirectoryMember, "userId" | "role">): boolean {
+export function canWritePrivateRecord(kind: PrivateKind, authorId: string | null, actor: Pick<PrivateDirectoryMember, "userId" | "role" | "canViewOthersTime" | "canViewOthersMoney">): boolean {
   if (["entries", "entryMoney", "favorites", "imports"].includes(kind)) return authorId === actor.userId;
+  if (kind === "invoices") return canUseInvoices(actor.role, { userId: actor.userId, canViewOthersTime: actor.role === "owner" || actor.canViewOthersTime, canViewOthersMoney: actor.role === "owner" || actor.canViewOthersMoney });
+  if (kind === "memberMoney") return actor.role === "owner" || (actor.role === "admin" && actor.canViewOthersMoney);
   return actor.role === "owner" || actor.role === "admin";
 }
 export const privateWorkspaceChainHeaderSchema = z.object({
@@ -71,3 +74,13 @@ export const privateChainedWorkspaceChangeSchema = privateWorkspaceChangeSchema.
 export type PrivateWorkspaceChain = z.infer<typeof privateWorkspaceChainSchema>;
 export type SignedPrivateChainedEdit = z.infer<typeof signedPrivateChainedEditSchema>;
 export type PrivateChainedWorkspaceChange = z.infer<typeof privateChainedWorkspaceChangeSchema>;
+
+export const privateFavoritesMigrationProofSchema = z.object({
+  v: z.literal(1), protocol: z.literal("trackyourtime-private-favorites-proof-v1"),
+  server: z.string().url().max(2048), workspaceId: id, userId: id, migrationId: z.uuid(),
+  directoryDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/), snapshotRoot: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  sourceRevision: z.string().regex(/^[a-f0-9]{64}$/), recordsDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  verifiedRecords: z.number().int().nonnegative().max(200_000),
+}).strict();
+export const signedPrivateFavoritesMigrationProofSchema = z.object({ proof: privateFavoritesMigrationProofSchema, signature: privateSignatureSchema }).strict();
+export type SignedPrivateFavoritesMigrationProof = z.infer<typeof signedPrivateFavoritesMigrationProofSchema>;

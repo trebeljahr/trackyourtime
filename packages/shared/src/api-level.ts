@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 24;
+export const API_LEVEL = 25;
 
 export type ApiLevelChange = {
   level: number;
@@ -174,6 +174,9 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
   ] },
   { level: 24, release: "0.4.0", added: [
     "Guarded chained workspace edits and history under privacy.chainedWrite and privacy.chainedChanges. Initial snapshot v2 binds every reader to a common history root; private workspaces require the chained protocol without changing standard-client compatibility.",
+  ] },
+  { level: 25, release: "0.4.0", added: [
+    "Guarded member-private favorites source and signed conversion acknowledgements under privacy.migrationFavoritesSource and privacy.acknowledgeMigrationFavorites; no conversion or plaintext deletion is enabled.",
   ] },
 ];
 

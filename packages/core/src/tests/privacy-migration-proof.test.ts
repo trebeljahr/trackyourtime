@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { RECOVERY_KINDS, type PrivateWorkspaceDirectory, type WorkspaceRecovery } from "@starter/shared";
-import { createKeyPair, createSigningPair } from "../privacy/crypto.js";
+import { canonicalJson, createKeyPair, createSigningPair, decodeSecret } from "../privacy/crypto.js";
 import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
 import { emptyRecoveryCollections, recoveryDigest } from "../privacy/recovery.js";
 import { decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery, privateRecordsToRecovery } from "../privacy/records.js";
-import { createPrivateMigrationProof } from "../privacy/migration-proof.js";
+import { createPrivateFavoritesMigrationProof, createPrivateMigrationProof } from "../privacy/migration-proof.js";
+import { privateInitialSnapshotProjection, signPrivateInitialSnapshot, verifyPrivateInitialSnapshot } from "../privacy/initial-snapshot.js";
 async function fixture() {
-  const pair = await createKeyPair(), signing = await createSigningPair(), member = await createKeyPair();
+  const pair = await createKeyPair(), signing = await createSigningPair(), member = await createKeyPair(), memberSigning = await createSigningPair();
   const directory: PrivateWorkspaceDirectory = { v: 1, server: "https://api.example.test", workspaceId: "workspace", revision: 1, previousDigest: null, ownerId: "owner", members: [
     { userId: "owner", role: "owner", canViewOthersTime: true, canViewOthersMoney: true, publicKey: pair.publicKey, signingPublicKey: signing.publicKey },
-    { userId: "member", role: "member", canViewOthersTime: false, canViewOthersMoney: false, publicKey: member.publicKey, signingPublicKey: (await createSigningPair()).publicKey },
+    { userId: "member", role: "member", canViewOthersTime: false, canViewOthersMoney: false, publicKey: member.publicKey, signingPublicKey: memberSigning.publicKey },
   ] };
   const fingerprints = new Map(await Promise.all(directory.members.map(async (row) => [row.userId, await privateMemberKeyFingerprint(directory.server, row)] as const)));
   const signed = await signPrivateWorkspaceDirectory(directory, signing.privateKey, null, fingerprints);
@@ -30,10 +31,48 @@ async function fixture() {
   const recipients = verified.signed.directory.members;
   const records = [];
   for (const row of partitionPrivateRecovery(source)) records.push(await encryptPrivateRecord("workspace", row, recipients, 1));
-  records.push(await encryptPrivateRecord("workspace", { kind: "favorites", id: "private-member-favorite", authorId: "member", value: { _id: "private-member-favorite", workspaceId: "workspace", userId: "member", description: "Not owner-readable" } }, recipients, 1));
+  const favorite = { _id: "private-member-favorite", workspaceId: "workspace", userId: "member", description: "Not owner-readable", originalInteger: { $numberLong: "9007199254740993" } };
+  records.push(await encryptPrivateRecord("workspace", { kind: "favorites", id: "private-member-favorite", authorId: "member", value: favorite }, recipients, 1));
   const options = { source, records, directory: verified, userId: "owner", migrationId: crypto.randomUUID(), secrets: { privateKey: pair.privateKey, signingPrivateKey: signing.privateKey }, current: () => true };
-  return { options, recipients, pair };
+  return { options, recipients, pair, favorite, memberSecrets: { privateKey: member.privateKey, signingPrivateKey: memberSigning.privateKey } };
 }
+async function memberProofFixture() {
+  const f = await fixture(), alive = { value: true };
+  const signed = await signPrivateInitialSnapshot(f.options);
+  const header = signed.readers.find((reader) => reader.manifest.readerId === "member")!;
+  const snapshot = await verifyPrivateInitialSnapshot({ signed: header, records: privateInitialSnapshotProjection(signed.records, "member"), scope: { server: f.options.directory.signed.directory.server, workspaceId: "workspace", userId: "member" }, directory: f.options.directory, secrets: f.memberSecrets, current: () => alive.value });
+  const collections = emptyRecoveryCollections(); collections.favorites.push(f.favorite);
+  const source: WorkspaceRecovery = { v: 1, workspaceId: "workspace", createdAt: f.options.source.createdAt, collections, sourceRevision: await recoveryDigest(collections) };
+  return { f, alive, options: { source, snapshot, directory: f.options.directory, userId: "member", secrets: f.memberSecrets, current: () => alive.value } };
+}
+it("lets a member verify their private favorites without exposing source values to the owner receipt", async () => {
+  const { options } = await memberProofFixture();
+  const signed = await createPrivateFavoritesMigrationProof(options);
+  assert.equal(signed.proof.verifiedRecords, 1);
+  assert.equal(signed.proof.sourceRevision, options.source.sourceRevision);
+  assert.equal(signed.proof.snapshotRoot, options.snapshot.signed.manifest.root);
+  assert.doesNotMatch(JSON.stringify(signed), /Not owner-readable|9007199254740993|private-member-favorite/);
+  const publicKey = options.directory.signed.directory.members.find((member) => member.userId === "member")!.signingPublicKey;
+  const key = await crypto.subtle.importKey("jwk", publicKey, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+  assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, decodeSecret(signed.signature, 64), new TextEncoder().encode(canonicalJson(signed.proof))));
+});
+it("refuses changed, missing, cross-account or non-favorite original source data", async () => {
+  const { f, options } = await memberProofFixture();
+  const changed = structuredClone(options.source); changed.collections.favorites[0]!.description = "Changed source"; changed.sourceRevision = await recoveryDigest(changed.collections);
+  await assert.rejects(createPrivateFavoritesMigrationProof({ ...options, source: changed }), /differ from/);
+  const missing = structuredClone(options.source); missing.collections.favorites = []; missing.sourceRevision = await recoveryDigest(missing.collections);
+  await assert.rejects(createPrivateFavoritesMigrationProof({ ...options, source: missing }), /differ from/);
+  const another = structuredClone(options.source); another.collections.favorites[0]!.userId = "owner"; another.sourceRevision = await recoveryDigest(another.collections);
+  await assert.rejects(createPrivateFavoritesMigrationProof({ ...options, source: another }), /another account/);
+  const mixed = structuredClone(options.source); mixed.collections.invoices = f.options.source.collections.invoices; mixed.sourceRevision = await recoveryDigest(mixed.collections);
+  await assert.rejects(createPrivateFavoritesMigrationProof({ ...options, source: mixed }), /favorites-only/);
+});
+it("does not acknowledge a member's preferences after locking or with another account's snapshot", async () => {
+  const { options, alive, f } = await memberProofFixture();
+  await assert.rejects(createPrivateFavoritesMigrationProof({ ...options, userId: "owner", secrets: f.options.secrets }), /current verified/);
+  const pending = createPrivateFavoritesMigrationProof(options); alive.value = false;
+  await assert.rejects(pending, /changed during|current verified/);
+});
 it("checks all fourteen collections after encryption without losing BSON types, issued XML or links, and reports opaque personal records", async () => {
   const { options } = await fixture();
   const result = await createPrivateMigrationProof(options);

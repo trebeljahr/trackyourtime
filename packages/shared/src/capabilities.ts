@@ -21,6 +21,7 @@ export const REQUIRES_API_LEVEL = {
   "privacy.snapshotPages": 23,
   "privacy.initialSnapshot": 24,
   "privacy.historyChain": 24,
+  "privacy.migrationProofs": 25,
   "privacy.deletionPreview": 21,
   "privacy.deviceUnlock": 19,
   "privacy.journal": 20,

@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { encryptedRecordSchema, type EncryptedRecord, type WorkspaceRecovery } from "@starter/shared";
+import { encryptedRecordSchema, RECOVERY_KINDS, privateFavoritesMigrationProofSchema, type EncryptedRecord, type WorkspaceRecovery, type SignedPrivateFavoritesMigrationProof } from "@starter/shared";
 import { canonicalJson, signPrivateChange, type PublicKey } from "./crypto.js";
 import { privateReplicaIdentityFromDirectory, type VerifiedPrivateDirectory } from "./directory.js";
 import { decryptPrivateRecord, partitionPrivateRecovery, readersForPrivateRecord } from "./records.js";
 import { verifyWorkspaceRecovery } from "./recovery.js";
+import { assertPrivateInitialSnapshot, type VerifiedPrivateInitialSnapshot } from "./initial-snapshot.js";
 const migrationRecordSchema = encryptedRecordSchema.extend({ deleted: z.literal(false).optional() });
 const MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
 const address = (row: { kind: string; id: string }) => JSON.stringify([row.kind, row.id]);
@@ -57,5 +58,48 @@ export async function createPrivateMigrationProof(options: {
   const ordered = [...records].sort((a, b) => address(a) < address(b) ? -1 : address(a) > address(b) ? 1 : 0);
   const proof = { v: 1 as const, protocol: "trackyourtime-private-migration-proof-v1" as const, server, workspaceId, userId: userId, migrationId: migrationId, sourceRevision: source.sourceRevision, directoryDigest: directory.digest, recordsDigest: await digest(ordered), verifiedRecords, opaqueRecords };
   check(); const signature = await signPrivateChange(secrets.signingPrivateKey, proof); check();
+  return { proof, signature };
+}
+
+/** The owner cannot decrypt another member's favorites. That member compares
+ * their independently captured typed source with their verified initial
+ * snapshot and signs only the private subset's checksum and count. No other
+ * person's plaintext or account keys are included in this receipt. */
+export async function createPrivateFavoritesMigrationProof(options: {
+  source: WorkspaceRecovery; snapshot: VerifiedPrivateInitialSnapshot; directory: VerifiedPrivateDirectory;
+  userId: string; secrets: { privateKey: PublicKey; signingPrivateKey: PublicKey }; current: () => boolean;
+}): Promise<SignedPrivateFavoritesMigrationProof> {
+  const { current, directory, userId, secrets, snapshot } = options;
+  const { server, workspaceId } = directory.signed.directory;
+  const check = () => {
+    if (!current()) throw new Error("Private migration changed during favorites verification");
+    assertPrivateInitialSnapshot(snapshot, { server, workspaceId, userId }, directory.digest);
+  };
+  check();
+  const access = privateReplicaIdentityFromDirectory(directory, userId, secrets, current);
+  const source = await verifyWorkspaceRecovery(structuredClone(options.source), workspaceId); check();
+  if (RECOVERY_KINDS.some((kind) => kind !== "favorites" && source.collections[kind].length)) throw new Error("A private favorites proof needs a favorites-only source copy");
+  const originals = partitionPrivateRecovery(source);
+  if (originals.some((row) => row.kind !== "favorites" || row.authorId !== userId)) throw new Error("Favorites source belongs to another account");
+  const expected = new Map(originals.map((row) => [address(row), row]));
+  const records = snapshot.records.filter((row) => row.kind === "favorites");
+  if (records.length !== expected.size) throw new Error("Encrypted favorites differ from the original source copy");
+  for (const record of records) {
+    check();
+    if (record.authorId !== userId || record.grants.length !== 1 || record.grants[0]!.userId !== userId) throw new Error("Encrypted favorites belong to another account");
+    const original = expected.get(address(record));
+    const plain = await decryptPrivateRecord(workspaceId, record, userId, access.privateKey); check();
+    if (!original || canonicalJson(original) !== canonicalJson(plain)) throw new Error("Encrypted favorites differ from the original source copy");
+    expected.delete(address(record));
+  }
+  if (expected.size) throw new Error("Encrypted favorites are missing original records");
+  const manifest = snapshot.signed.manifest;
+  const proof = privateFavoritesMigrationProofSchema.parse({
+    v: 1, protocol: "trackyourtime-private-favorites-proof-v1", server, workspaceId, userId,
+    migrationId: manifest.migrationId, directoryDigest: directory.digest, snapshotRoot: manifest.root,
+    sourceRevision: source.sourceRevision, recordsDigest: await digest(records), verifiedRecords: records.length,
+  });
+  check();
+  const signature = await signPrivateChange(access.signingPrivateKey, proof); check();
   return { proof, signature };
 }
