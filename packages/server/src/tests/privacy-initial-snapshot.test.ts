@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, before, beforeEach, describe, it } from "node:test";
-import { canonicalJson, createKeyPair, createSigningPair, createPrivateWorkspaceReplica, downloadPrivateInitialSnapshot, encryptPrivateRecord, memoryStorage, privateMemberKeyFingerprint, privateReplicaIdentityFromDirectory, randomSecret, seal, signPrivateChange, signPrivateInitialSnapshot, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, type VerifiedPrivateDirectory, type PublicKey } from "@starter/core";
+import { canonicalJson, createKeyPair, createSigningPair, createPrivateWorkspaceReplica, downloadPrivateInitialSnapshot, encryptPrivateRecord, memoryStorage, privateMemberKeyFingerprint, privateReplicaIdentityFromDirectory, randomSecret, seal, signPrivateChange, signPrivateChainedWorkspaceEdit, signPrivateInitialSnapshot, signPrivateWorkspaceDirectory, verifyPrivateChainedWorkspaceChange, verifyPrivateWorkspaceDirectory, type VerifiedPrivateDirectory, type PublicKey } from "@starter/core";
 import type { EncryptedRecord, PrivateDirectoryMember, SignedPrivateInitialSnapshot } from "@starter/shared";
 import { PrivateAccount, PrivateDirectory, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../models/PrivateData.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
 import { commitPrivateDirectory } from "../services/privacy/directories.js";
 import { preparePrivateInitialSnapshot, privateInitialSnapshotManifest, privateInitialSnapshotPage } from "../services/privacy/initial-snapshots.js";
+import { commitPrivateChainedWorkspaceEdit, commitPrivateWorkspaceEdit, privateChainedWorkspaceChanges, privateWorkspaceChanges } from "../services/privacy/workspace-edits.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { privacyRouter } from "../trpc/routers/privacy.js";
 import type { Context } from "../trpc/context.js";
@@ -28,6 +29,16 @@ const storeRecords = async (rows: readonly EncryptedRecord[]) => {
 };
 async function signSnapshot() {
   readers = (await signPrivateInitialSnapshot({ records, migrationId, userId: "owner", directory, secrets: owner, current: () => true })).readers;
+}
+async function activateChainedFixture() {
+  await preparePrivateInitialSnapshot(scope(), readers);
+  const initial = await privateInitialSnapshotManifest(base.workspaceId, "owner");
+  await PrivateWorkspace.updateOne({ workspaceId: base.workspaceId }, { $set: { state: "encrypted", revision: 1, head: initial.manifest.root, directoryDigest: directory.digest } });
+  return initial.manifest.root;
+}
+async function chainedEdit(id: string, expectedRevision: number, previousRoot: string, userId = "owner", favorite = false) {
+  const row = await encryptPrivateRecord(base.workspaceId, { kind: favorite ? "favorites" : "tags", id, authorId: favorite ? userId : null, value: { name: `secret-${id}` } }, people, expectedRevision + 1);
+  return signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId: base.workspaceId, userId, expectedRevision, operationId: crypto.randomUUID(), records: [row], remove: [] }, directory, previousRoot, secrets: userId === "owner" ? owner : member, current: () => true });
 }
 describe("immutable initial snapshot storage", { skip: skipWithoutDatabase }, () => {
   before(() => connectTestDatabase("private-initial-snapshot", [PrivateAccount, PrivateDirectory, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace, PrivateWorkspaceCommit, WorkspaceMember, WorkspaceWriteFence] as never));
@@ -155,5 +166,86 @@ describe("immutable initial snapshot storage", { skip: skipWithoutDatabase }, ()
     const caller = privacyRouter.createCaller({ user: { id: "owner" }, session: { user: { id: "owner" } } } as unknown as Context);
     await assert.rejects(caller.initialSnapshot({ workspaceId: base.workspaceId }), { code: "NOT_IMPLEMENTED" });
     await assert.rejects(caller.initialSnapshotPage({ workspaceId: base.workspaceId, migrationId, offset: 0 }), { code: "NOT_IMPLEMENTED" });
+  });
+  it("round-trips a durable chained outbox through the real journal and advances both readers to one head", async () => {
+    await activateChainedFixture();
+    const storageKey = randomSecret();
+    const replica = await createPrivateWorkspaceReplica({ storage: memoryStorage(), scope: base, exclusive: (task) => task(), resolveStorageKey: () => ({ key: storageKey, current: () => true }), resolveIdentity: () => privateReplicaIdentityFromDirectory(directory, "owner", owner, () => true) });
+    await replica.bootstrap(await downloadPrivateInitialSnapshot(options()));
+    const transport = {
+      commit: async () => { throw new Error("Legacy write downgrade"); }, changes: async () => { throw new Error("Legacy read downgrade"); },
+      chainedCommit: (input: Parameters<typeof commitPrivateChainedWorkspaceEdit>[1]) => commitPrivateChainedWorkspaceEdit("owner", input, base.server),
+      chainedChanges: ({ after, through }: { after: number; through?: number }) => privateChainedWorkspaceChanges(base.workspaceId, "owner", after, through),
+    };
+    await replica.enqueue({ records: [{ kind: "tags", id: "queued", authorId: null, value: { name: "Client-side private label" } }] });
+    await assert.rejects(replica.flushOne({ ...transport, chainedCommit: async (input) => { await transport.chainedCommit(input); throw new Error("Lost reply"); } }), /Lost reply/);
+    assert.equal((await replica.read()).pending, 1);
+    assert.deepEqual(await replica.flushOne(transport), { revision: 2, pending: 0 });
+    await replica.enqueue({ records: [{ kind: "favorites", id: "owner-new-favorite", authorId: "owner", value: { label: "Unshared pin" } }] });
+    await replica.flushOne(transport);
+    const feed = await privateChainedWorkspaceChanges(base.workspaceId, "member", 1);
+    assert.doesNotMatch(JSON.stringify(feed), /owner-new-favorite|Unshared pin|favorites/);
+    let head = (await privateInitialSnapshotManifest(base.workspaceId, "member")).manifest.root;
+    for (let index = 0; index < feed.changes.length; index++) head = (await verifyPrivateChainedWorkspaceChange(feed.changes[index], { ...base, userId: "member", after: index + 1, previousRoot: head, directory })).head;
+    assert.equal(head, (await replica.read()).head);
+    assert.equal(head, (await PrivateWorkspace.findOne().lean())!.head);
+    assert.equal(await PrivateWorkspaceCommit.countDocuments(), 2);
+  });
+  it("atomically chooses one competing root, preserves exact retry receipts and refuses legacy downgrade", async () => {
+    const root = await activateChainedFixture(), first = await chainedEdit("first", 1, root), second = await chainedEdit("second", 1, root);
+    const attempts = await Promise.allSettled([commitPrivateChainedWorkspaceEdit("owner", first, base.server), commitPrivateChainedWorkspaceEdit("owner", second, base.server)]);
+    assert.equal(attempts.filter((result) => result.status === "fulfilled").length, 1);
+    const accepted = attempts[0]!.status === "fulfilled" ? first : second;
+    const receipt = await commitPrivateChainedWorkspaceEdit("owner", accepted, base.server);
+    const later = await chainedEdit("later", 2, receipt.head);
+    await commitPrivateChainedWorkspaceEdit("owner", later, base.server);
+    assert.deepEqual(await commitPrivateChainedWorkspaceEdit("owner", accepted, base.server), receipt);
+    const forgedRetry = structuredClone(accepted); forgedRetry.chain.signature = "A".repeat(86);
+    await assert.rejects(commitPrivateChainedWorkspaceEdit("owner", forgedRetry, base.server), { code: "FORBIDDEN" });
+    const legacy = await chainedEdit("downgrade", 3, (await PrivateWorkspace.findOne().lean())!.head!);
+    await assert.rejects(commitPrivateWorkspaceEdit("owner", { edit: legacy.edit, signature: legacy.signature, readerSignatures: legacy.readerSignatures }), { code: "PRECONDITION_FAILED" });
+    await assert.rejects(privateWorkspaceChanges(base.workspaceId, "owner", 1), { code: "PRECONDITION_FAILED" });
+    const caller = privacyRouter.createCaller({ user: { id: "owner" }, session: { user: { id: "owner" } } } as unknown as Context);
+    await assert.rejects(caller.records({ workspaceId: base.workspaceId }), { code: "PRECONDITION_FAILED" });
+    await assert.rejects(caller.commitMigration({ workspaceId: base.workspaceId, migrationId, backupHash: "0".repeat(64), signature: "A".repeat(86) }), /verified source proof and chained snapshot/);
+    assert.equal(await PrivateWorkspaceCommit.countDocuments(), 2);
+    assert.equal(await PrivateRecord.countDocuments({ id: "downgrade" }), 0);
+  });
+  it("rejects altered full/projection digests, wrong prior roots and forged chain signatures before writes", async () => {
+    const root = await activateChainedFixture(), valid = await chainedEdit("valid", 1, root);
+    const forged = structuredClone(valid); forged.chain.signature = await signPrivateChange(member.signingPrivateKey, forged.chain.header);
+    await assert.rejects(commitPrivateChainedWorkspaceEdit("owner", forged, base.server), { code: "FORBIDDEN" });
+    const wrongRoot = await chainedEdit("wrong-root", 1, "A".repeat(43));
+    await assert.rejects(commitPrivateChainedWorkspaceEdit("owner", wrongRoot, base.server), { code: "CONFLICT" });
+    for (const projection of [false, true]) {
+      const changed = structuredClone(valid);
+      if (projection) changed.chain.header.readers[0]!.digest = "A".repeat(43);
+      else changed.chain.header.manifestDigest = "A".repeat(43);
+      changed.chain.signature = await signPrivateChange(owner.signingPrivateKey, changed.chain.header);
+      await assert.rejects(commitPrivateChainedWorkspaceEdit("owner", changed, base.server), { code: "BAD_REQUEST" });
+    }
+    assert.equal(await PrivateWorkspaceCommit.countDocuments(), 0);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.head, root);
+    assert.equal(await PrivateRecord.countDocuments(), 5);
+    const caller = privacyRouter.createCaller({ user: { id: "owner" }, session: { user: { id: "owner" } } } as unknown as Context);
+    await assert.rejects(caller.chainedWrite({ workspaceId: base.workspaceId, ...valid }), { code: "NOT_IMPLEMENTED" });
+    await assert.rejects(caller.chainedChanges({ workspaceId: base.workspaceId, after: 1 }), { code: "NOT_IMPLEMENTED" });
+  });
+  it("keeps another reader's chained history verifiable after personal ciphertext and reader signatures are erased", async () => {
+    const root = await activateChainedFixture();
+    const mixed = await Promise.all([
+      encryptPrivateRecord(base.workspaceId, { kind: "entries", id: "member-later", authorId: "member", value: { description: "Retained work" } }, people, 2),
+      encryptPrivateRecord(base.workspaceId, { kind: "favorites", id: "member-private", authorId: "member", value: { label: "Private shortcut" } }, people, 2),
+    ]);
+    const signed = await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId: base.workspaceId, userId: "member", expectedRevision: 1, operationId: crypto.randomUUID(), records: mixed, remove: [] }, directory, previousRoot: root, secrets: member, current: () => true });
+    await commitPrivateChainedWorkspaceEdit("member", signed, base.server);
+    const before = await privateChainedWorkspaceChanges(base.workspaceId, "owner", 1);
+    await mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: base.workspaceId, userId: "member" });
+    await mongooseRowStore.erasePrivateUserData("member");
+    const after = await privateChainedWorkspaceChanges(base.workspaceId, "owner", 1);
+    assert.deepEqual(after, before);
+    await verifyPrivateChainedWorkspaceChange(after.changes[0], { ...base, after: 1, previousRoot: root, directory });
+    assert.equal(await PrivateWorkspaceCommit.countDocuments({ "records.id": "member-private" }), 0);
+    assert.equal(await PrivateWorkspaceCommit.countDocuments({ "records.id": "member-later" }), 1);
   });
 });

@@ -5,8 +5,8 @@ import { signedPrivateDirectorySchema } from "@starter/shared";
 import { getAuth } from "../../auth/auth.js";
 import { previewAccountDeletion } from "../../services/account-deletion/delete-account.js";
 import { authRowStore, mongooseRowStore, routedRowStore } from "../../services/account-deletion/stores.js";
-import { commitPrivateWorkspaceEdit, privateWorkspaceChanges } from "../../services/privacy/workspace-edits.js";
-import { signedPrivateWorkspaceEditSchema } from "@starter/shared";
+import { commitPrivateChainedWorkspaceEdit, commitPrivateWorkspaceEdit, privateChainedWorkspaceChanges, privateWorkspaceChanges } from "../../services/privacy/workspace-edits.js";
+import { signedPrivateChainedEditSchema, signedPrivateWorkspaceEditSchema } from "@starter/shared";
 import { requirePrivateWorkspaceRollout, beginPrivateMigration, stagePrivateMigration, privateMigrationArchive, commitPrivateMigration, cancelPrivateMigration } from "../../services/privacy/migration.js";
 import { canonicalJson } from "@starter/core";
 import { z } from "zod";
@@ -109,6 +109,7 @@ export const privacyRouter = router({
   records: privateWorkspaceProcedure.input(scopeSchema.extend({ after: z.number().int().nonnegative().default(0), cursor: z.string().max(100).optional() })).query(async ({ ctx, input }) => {
     const mode = await PrivateWorkspace.findOne({ workspaceId: ctx.workspaceId, state: "encrypted" }).lean();
     if (!mode) throw new TRPCError({ code: "PRECONDITION_FAILED" });
+    if (mode.head || mode.directoryDigest) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Use the verified initial snapshot and chained history for this workspace." });
     const rows = await PrivateRecord.find({ workspaceId: ctx.workspaceId, "grants.userId": ctx.user.id, revision: { $gt: input.after }, ...(input.cursor ? { _id: { $gt: input.cursor } } : {}) }).sort({ _id: 1 }).limit(201).lean();
     const page = rows.slice(0, 200);
     return { revision: mode.revision, next: rows.length > 200 ? String(page.at(-1)!._id) : null, records: page.map((row) => ({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, box: row.box, deleted: row.deleted, grants: row.grants.filter((g) => g.userId === ctx.user.id) })) };
@@ -120,6 +121,7 @@ export const privacyRouter = router({
       await fenceWorkspace(ctx.workspaceId);
       const mode = await PrivateWorkspace.findOne({ workspaceId: ctx.workspaceId, state: "encrypted", revision: input.expectedRevision });
       if (!mode) throw new TRPCError({ code: "CONFLICT", message: "Workspace changed. Reload before saving." });
+      if (mode.head || mode.directoryDigest) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This workspace requires a signed chained edit." });
       const members = await allMembers(ctx.workspaceId);
       const revision = mode.revision + 1;
       for (const record of input.records) {
@@ -143,6 +145,15 @@ export const privacyRouter = router({
     requirePrivateWorkspaceRollout();
     if (input.edit.workspaceId !== ctx.workspaceId) throw new TRPCError({ code: "FORBIDDEN" });
     return commitPrivateWorkspaceEdit(ctx.user.id, { edit: input.edit, signature: input.signature, readerSignatures: input.readerSignatures });
+  }),
+  chainedWrite: privateWorkspaceProcedure.input(scopeSchema.extend(signedPrivateChainedEditSchema.shape)).mutation(({ ctx, input }) => {
+    requirePrivateWorkspaceRollout();
+    if (input.edit.workspaceId !== ctx.workspaceId) throw new TRPCError({ code: "FORBIDDEN" });
+    return commitPrivateChainedWorkspaceEdit(ctx.user.id, { edit: input.edit, signature: input.signature, readerSignatures: input.readerSignatures, chain: input.chain }, privateServerOrigin());
+  }),
+  chainedChanges: privateWorkspaceProcedure.input(scopeSchema.extend({ after: z.number().int().nonnegative(), through: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(20).default(20) })).query(({ ctx, input }) => {
+    requirePrivateWorkspaceRollout();
+    return privateChainedWorkspaceChanges(ctx.workspaceId, ctx.user.id, input.after, input.through, input.limit);
   }),
   changes: privateWorkspaceProcedure.input(scopeSchema.extend({ after: z.number().int().nonnegative(), through: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(20).default(20) })).query(({ ctx, input }) => {
     requirePrivateWorkspaceRollout();

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { canonicalJson, privateInitialSnapshotProjection, privateRecordDigest } from "@starter/core";
+import { canonicalJson, privateInitialSnapshotProjection, privateInitialSnapshotRoot, privateRecordDigest } from "@starter/core";
 import { encryptedRecordSchema, PRIVATE_SNAPSHOT_MAX_BYTES, PRIVATE_SNAPSHOT_PAGE_MAX_BYTES, signedPrivateInitialSnapshotSchema, type EncryptedRecord, type SignedPrivateInitialSnapshot } from "@starter/shared";
 import { PrivateDirectory, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
@@ -74,10 +74,11 @@ export async function preparePrivateInitialSnapshot(scope: Scope, input: readonl
     }
     if (chunk.length) chunks.push(chunk);
     const fullRecordsDigest = createHash("sha256").update(canonicalJson(records)).digest("hex");
+    const root = await privateInitialSnapshotRoot({ server, workspaceId, migrationId, directoryDigest: directory.digest }, Buffer.from(fullRecordsDigest, "hex").toString("base64url"));
     const storedReaders = [];
     for (const signed of readers) {
       const projection = privateInitialSnapshotProjection(records, signed.manifest.readerId);
-      if (projection.length !== signed.manifest.recordCount || await privateRecordDigest(projection) !== signed.manifest.recordsDigest) throw new TRPCError({ code: "BAD_REQUEST", message: "Initial snapshot does not match its signed delivery manifest." });
+      if (signed.manifest.root !== root || projection.length !== signed.manifest.recordCount || await privateRecordDigest(projection) !== signed.manifest.recordsDigest) throw new TRPCError({ code: "BAD_REQUEST", message: "Initial snapshot does not match its signed delivery manifest." });
       let before = 0;
       const locations: { chunk: number; before: number; count: number }[] = [];
       for (let index = 0; index < chunks.length; index++) {

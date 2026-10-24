@@ -4,9 +4,10 @@ export const PrivateAccount = mongoose.model("PrivateAccount", new Schema<{ user
   userId: { type: String, required: true, unique: true }, identity: { type: Schema.Types.Mixed, required: true }, revision: { type: Number, default: 1 },
   deviceSerial: { type: Number, default: 0 }, keySerial: { type: Number, default: 0 },
 }, { timestamps: true }));
-export const PrivateWorkspace = mongoose.model("PrivateWorkspace", new Schema<{ workspaceId: string; state: "migrating" | "encrypted"; ownerId: string; revision: number; leaseUntil: Date; migrationId: string; sourceRevision: string; backupVerified: boolean }>({
+export const PrivateWorkspace = mongoose.model("PrivateWorkspace", new Schema<{ workspaceId: string; state: "migrating" | "encrypted"; ownerId: string; revision: number; head: string | null; directoryDigest: string | null; leaseUntil: Date; migrationId: string; sourceRevision: string; backupVerified: boolean }>({
   workspaceId: { type: String, required: true, unique: true }, state: { type: String, enum: ["migrating", "encrypted"], required: true },
   ownerId: { type: String, required: true }, revision: { type: Number, default: 0 }, leaseUntil: { type: Date, required: true },
+  head: { type: String, default: null }, directoryDigest: { type: String, default: null },
   migrationId: { type: String, required: true }, sourceRevision: { type: String, required: true }, backupVerified: { type: Boolean, default: false },
 }, { timestamps: true }));
 const privateRecordSchema = new Schema<EncryptedRecord & { workspaceId: string; deleted: boolean }>({
@@ -32,9 +33,11 @@ const privateWorkspaceCommitSchema = new Schema<{
   workspaceId: string; userId: string; operationId: string; revision: number;
   manifest: import("@starter/shared").PrivateWorkspaceManifest; signature: string; readerSignatures: { userId: string; signature: string }[];
   records: EncryptedRecord[];
+  chain: import("@starter/shared").PrivateWorkspaceChain | null; head: string | null;
 }>({
   workspaceId: { type: String, required: true }, userId: { type: String, required: true }, operationId: { type: String, required: true }, revision: { type: Number, required: true },
   manifest: { type: Schema.Types.Mixed, required: true }, signature: { type: String, required: true }, readerSignatures: { type: Schema.Types.Mixed, required: true }, records: { type: Schema.Types.Mixed, required: true },
+  chain: { type: Schema.Types.Mixed, default: null }, head: { type: String, default: null },
 }, { timestamps: true });
 privateWorkspaceCommitSchema.index({ workspaceId: 1, revision: 1 }, { unique: true });
 privateWorkspaceCommitSchema.index({ workspaceId: 1, userId: 1, operationId: 1 }, { unique: true });

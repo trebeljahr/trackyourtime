@@ -7,6 +7,9 @@ import type { QueueExclusive } from "../durable-entry.js";
 export type PrivateDirectoryTrust = { ownerId: string; signingPublicKey: PublicKey; revision: number; digest: string | null };
 const verified = Symbol("verified-private-directory");
 export type VerifiedPrivateDirectory = { readonly [verified]: true; readonly signed: SignedPrivateDirectory; readonly digest: string; readonly trust: PrivateDirectoryTrust };
+export function assertVerifiedPrivateDirectory(directory: VerifiedPrivateDirectory): void {
+  if (directory?.[verified] !== true) throw new Error("Verify the private workspace directory first");
+}
 const coordinates = ({ kty, crv, x, y }: PublicKey) => ({ kty, crv, x, y });
 export async function privateMemberKeyFingerprint(server: string, member: Pick<PrivateDirectoryMember, "userId" | "publicKey" | "signingPublicKey">): Promise<string> {
   return privateRecordDigest({ protocol: "trackyourtime-member-keys-v1", server, userId: member.userId, encryption: coordinates(member.publicKey), signing: coordinates(member.signingPublicKey) });
@@ -102,7 +105,7 @@ export function privateReplicaIdentityFromDirectory(directory: VerifiedPrivateDi
   const own = directory.signed.directory.members.find((member) => member.userId === userId);
   if (!own || canonicalJson(coordinates(own.publicKey)) !== canonicalJson(coordinates(secrets.privateKey)) || canonicalJson(coordinates(own.signingPublicKey)) !== canonicalJson(coordinates(secrets.signingPrivateKey)) || !secrets.privateKey.d || !secrets.signingPrivateKey.d) throw new Error("Unlocked account keys do not match this workspace's verified directory");
   return {
-    ...secrets, current, directoryDigest: directory.digest,
+    ...secrets, current, directory, directoryDigest: directory.digest,
     recipients: directory.signed.directory.members.map((member) => ({ userId: member.userId, role: member.role, canViewOthersTime: member.canViewOthersTime, canViewOthersMoney: member.canViewOthersMoney, publicKey: member.publicKey })),
     signingKey: (id) => directory.signed.directory.members.find((member) => member.userId === id)?.signingPublicKey ?? null,
   };

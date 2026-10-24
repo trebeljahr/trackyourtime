@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { encryptedRecordSchema, privateKindSchema, publicEncryptionKeySchema } from "./privacy.js";
+import { encryptedRecordSchema, privateKindSchema, publicEncryptionKeySchema, type PrivateKind } from "./privacy.js";
 const id = z.string().min(1).max(100);
 export const privateRecordRefSchema = z.object({ kind: privateKindSchema, id, authorId: id.nullable() }).strict();
 export const privateRemovalSchema = privateRecordRefSchema.extend({ readers: z.array(id).min(1).max(200) }).strict();
@@ -39,9 +39,10 @@ export type SignedPrivateDirectory = z.infer<typeof signedPrivateDirectorySchema
  * a separately signed complete projection, including an authenticated empty
  * projection. Other members' private record IDs and counts stay out of it. */
 export const privateInitialSnapshotManifestSchema = z.object({
-  v: z.literal(1), protocol: z.literal("trackyourtime-private-initial-snapshot-v1"),
+  v: z.literal(1), protocol: z.literal("trackyourtime-private-initial-snapshot-v2"),
   server: z.string().url().max(2048), workspaceId: id, migrationId: z.uuid(),
   revision: z.literal(1), directoryDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  root: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   signerId: id, readerId: id, recordCount: z.number().int().nonnegative().max(400_000),
   recordsDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
 }).strict();
@@ -51,3 +52,22 @@ export const signedPrivateInitialSnapshotSchema = z.object({
 export type SignedPrivateInitialSnapshot = z.infer<typeof signedPrivateInitialSnapshotSchema>;
 export const PRIVATE_SNAPSHOT_MAX_BYTES = 64 * 1024 * 1024;
 export const PRIVATE_SNAPSHOT_PAGE_MAX_BYTES = 4 * 1024 * 1024;
+
+export function canWritePrivateRecord(kind: PrivateKind, authorId: string | null, actor: Pick<PrivateDirectoryMember, "userId" | "role">): boolean {
+  if (["entries", "entryMoney", "favorites", "imports"].includes(kind)) return authorId === actor.userId;
+  return actor.role === "owner" || actor.role === "admin";
+}
+export const privateWorkspaceChainHeaderSchema = z.object({
+  v: z.literal(1), protocol: z.literal("trackyourtime-private-workspace-chain-v1"),
+  server: z.string().url().max(2048), workspaceId: id, userId: id,
+  operationId: z.uuid(), expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER - 1),
+  directoryDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/), previousRoot: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  manifestDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  readers: z.array(z.object({ userId: id, digest: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict()).min(1).max(200),
+}).strict();
+export const privateWorkspaceChainSchema = z.object({ header: privateWorkspaceChainHeaderSchema, signature: privateSignatureSchema }).strict();
+export const signedPrivateChainedEditSchema = signedPrivateWorkspaceEditSchema.extend({ chain: privateWorkspaceChainSchema }).strict();
+export const privateChainedWorkspaceChangeSchema = privateWorkspaceChangeSchema.extend({ chain: privateWorkspaceChainSchema }).strict();
+export type PrivateWorkspaceChain = z.infer<typeof privateWorkspaceChainSchema>;
+export type SignedPrivateChainedEdit = z.infer<typeof signedPrivateChainedEditSchema>;
+export type PrivateChainedWorkspaceChange = z.infer<typeof privateChainedWorkspaceChangeSchema>;

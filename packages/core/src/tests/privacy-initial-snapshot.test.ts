@@ -5,7 +5,9 @@ import { privateMemberKeyFingerprint, privateReplicaIdentityFromDirectory, signP
 import { assertPrivateInitialSnapshot, downloadPrivateInitialSnapshot, privateInitialSnapshotProjection, signPrivateInitialSnapshot, verifyPrivateInitialSnapshot, type PrivateInitialSnapshotTransport, type VerifiedPrivateInitialSnapshot } from "../privacy/initial-snapshot.js";
 import { createPrivateWorkspaceReplica } from "../privacy/replica.js";
 import { encryptPrivateRecord } from "../privacy/records.js";
-import { privateRecordDigest, privateWorkspaceManifest, privateWorkspaceManifestForReader, signPrivateWorkspaceEdit } from "../privacy/workspace-edits.js";
+import { privateRecordDigest, privateWorkspaceManifest, privateWorkspaceManifestForReader } from "../privacy/workspace-edits.js";
+import { privateWorkspaceChainRoot, signPrivateChainedWorkspaceEdit } from "../privacy/history-chain.js";
+import type { PrivateReplicaTransport } from "../privacy/replica.js";
 import { memoryStorage, type KeyValueStorage } from "../storage.js";
 import type { PrivateDirectoryMember } from "@starter/shared";
 const scope = { server: "https://api.example.test", userId: "owner", workspaceId: "workspace" };
@@ -42,8 +44,9 @@ async function fixture(storage: KeyValueStorage = memoryStorage()) {
     page: async ({ offset }) => { const rows = projection(userId); const end = Math.min(offset + pageSize, rows.length); return { offset, next: end < rows.length ? end : null, records: rows.slice(offset, end) }; },
   });
   const storageKey = randomSecret();
-  const replica = await createPrivateWorkspaceReplica({ storage, scope, exclusive: (task) => task(), resolveStorageKey: () => ({ key: storageKey, current: current() }), resolveIdentity: () => privateReplicaIdentityFromDirectory(directory, "owner", owner, current()) });
-  return { owner, member, directory, signed, reader, projection, options, transport, replica, storage, recipients, lock: () => { unlocked = false; generation++; }, unlock: () => { unlocked = true; generation++; } };
+  const replicaOptions = { storage, scope, exclusive: <T>(task: () => Promise<T>) => task(), resolveStorageKey: () => ({ key: storageKey, current: current() }), resolveIdentity: () => privateReplicaIdentityFromDirectory(directory, "owner", owner, current()) };
+  const replica = await createPrivateWorkspaceReplica(replicaOptions);
+  return { owner, member, directory, signed, reader, projection, options, transport, replica, reopen: () => createPrivateWorkspaceReplica(replicaOptions), storage, recipients, lock: () => { unlocked = false; generation++; }, unlock: () => { unlocked = true; generation++; } };
 }
 it("verifies each complete reader projection without exposing other members' private IDs or counts", async () => {
   const f = await fixture();
@@ -62,9 +65,9 @@ it("installs the verified initial checkpoint durably, then accepts an ordinary s
   assert.deepEqual(await f.replica.bootstrap(snapshot), { revision: 1 });
   assert.equal((await f.replica.read()).records.length, 5);
   const record = await encryptPrivateRecord(scope.workspaceId, { kind: "tags", id: "later", authorId: null, value: { name: "New label" } }, f.recipients, 2);
-  const signed = await signPrivateWorkspaceEdit({ v: 1, workspaceId: scope.workspaceId, userId: "owner", operationId: crypto.randomUUID(), expectedRevision: 1, records: [record], remove: [] }, f.owner.signingPrivateKey, f.recipients.map((row) => row.userId));
-  const change = { revision: 2, manifest: privateWorkspaceManifestForReader(await privateWorkspaceManifest(signed.edit), "owner"), signature: signed.readerSignatures.find((r) => r.userId === "owner")!.signature, records: [record] };
-  await f.replica.pull({ commit: async () => { throw new Error("Unexpected write"); }, changes: async () => ({ through: 2, next: null, changes: [change] }) });
+  const signed = await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId: scope.workspaceId, userId: "owner", operationId: crypto.randomUUID(), expectedRevision: 1, records: [record], remove: [] }, directory: f.directory, previousRoot: snapshot.signed.manifest.root, secrets: f.owner, current: () => true });
+  const change = { revision: 2, manifest: privateWorkspaceManifestForReader(await privateWorkspaceManifest(signed.edit), "owner"), signature: signed.readerSignatures.find((r) => r.userId === "owner")!.signature, records: [record], chain: signed.chain };
+  await f.replica.pull({ commit: async () => { throw new Error("Unexpected write"); }, changes: async () => { throw new Error("Unexpected legacy downgrade"); }, chainedChanges: async () => ({ through: 2, next: null, changes: [change] }) });
   assert.equal((await f.replica.read()).records.length, 6);
   await assert.rejects(f.replica.bootstrap(snapshot), /cannot replace/);
   for (const key of ["replica", "segments:replica:manifest"]) {
@@ -148,4 +151,54 @@ it("never acknowledges an initial checkpoint if encrypted backing writes cannot 
   assert.equal((await f.replica.read()).revision, 0);
   await f.replica.bootstrap(snapshot);
   assert.equal((await f.replica.read()).records.length, 5);
+});
+it("persists exact chained requests across lost replies and restart, and requires a matching journal proof", async () => {
+  const f = await fixture(), snapshot = await downloadPrivateInitialSnapshot({ ...f.options(), transport: f.transport() });
+  await f.replica.bootstrap(snapshot);
+  await f.replica.enqueue({ records: [{ kind: "tags", id: "queued", authorId: null, value: { name: "Private queued label" } }] });
+  const calls: unknown[] = [];
+  const journal: Awaited<ReturnType<NonNullable<PrivateReplicaTransport["chainedChanges"]>>>["changes"] = [];
+  const transport: PrivateReplicaTransport = {
+    commit: async () => { throw new Error("Unexpected legacy write"); }, changes: async () => { throw new Error("Unexpected legacy read"); },
+    chainedCommit: async (input) => {
+      calls.push(structuredClone(input));
+      const prior = journal.find((row) => row.manifest.operationId === input.edit.operationId);
+      if (!prior) journal.push({ revision: 2, manifest: privateWorkspaceManifestForReader(await privateWorkspaceManifest(input.edit), "owner"), signature: input.readerSignatures.find((r) => r.userId === "owner")!.signature, records: input.edit.records, chain: input.chain });
+      return { revision: 2, head: await privateWorkspaceChainRoot(input.chain) };
+    },
+    chainedChanges: async ({ after }) => ({ through: journal.length ? 2 : 1, next: null, changes: journal.filter((row) => row.revision > after) }),
+  };
+  await assert.rejects(f.replica.flushOne({ ...transport, chainedCommit: async (input) => { await transport.chainedCommit!(input); throw new Error("Lost reply"); } }), /Lost reply/);
+  f.lock(); f.unlock();
+  const reopened = await f.reopen();
+  assert.equal((await reopened.read()).pending, 1);
+  await assert.rejects(reopened.flushOne({ ...transport, chainedChanges: async () => ({ through: 1, next: null, changes: [] }) }), /no verified journal record/);
+  assert.equal((await reopened.read()).pending, 1);
+  assert.deepEqual(await reopened.flushOne(transport), { revision: 2, pending: 0 });
+  assert.deepEqual(calls[0], calls[2]);
+  assert.equal(journal.length, 1); assert.equal((await reopened.read()).records.length, 6);
+  assert.equal((await reopened.read()).head, await privateWorkspaceChainRoot(journal[0]!.chain));
+});
+it("refuses another author's record being replaced or removed even by a valid owner signature", async () => {
+  const f = await fixture(), snapshot = await downloadPrivateInitialSnapshot({ ...f.options(), transport: f.transport() });
+  await f.replica.bootstrap(snapshot);
+  const replacement = await encryptPrivateRecord(scope.workspaceId, { kind: "entries", id: "member-entry", authorId: "owner", value: { description: "Forged self-author claim" } }, f.recipients, 2);
+  for (const remove of [false, true]) {
+    const signed = await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId: scope.workspaceId, userId: "owner", operationId: crypto.randomUUID(), expectedRevision: 1, records: remove ? [] : [replacement], remove: remove ? [{ kind: "entries", id: "member-entry", authorId: "owner", readers: ["owner"] }] : [] }, directory: f.directory, previousRoot: snapshot.signed.manifest.root, secrets: f.owner, current: () => true });
+    const change = { revision: 2, manifest: privateWorkspaceManifestForReader(await privateWorkspaceManifest(signed.edit), "owner"), signature: signed.readerSignatures.find((r) => r.userId === "owner")!.signature, records: signed.edit.records, chain: signed.chain };
+    await assert.rejects(f.replica.pull({ commit: async () => { throw new Error("Unexpected write"); }, changes: async () => { throw new Error("Legacy downgrade"); }, chainedChanges: async () => ({ through: 2, next: null, changes: [change] }) }), /another author's record/);
+  }
+  assert.equal((await f.replica.read()).revision, 1);
+  assert.equal((await f.replica.read()).head, snapshot.signed.manifest.root);
+  await assert.rejects(f.replica.enqueue({ records: [{ kind: "entries", id: "member-entry", authorId: "owner", value: {} }] }), /another author's record/);
+});
+it("keeps a headed checkpoint when the transport offers only legacy history", async () => {
+  const f = await fixture();
+  await f.replica.bootstrap(await downloadPrivateInitialSnapshot({ ...f.options(), transport: f.transport() }));
+  const legacy: PrivateReplicaTransport = { commit: async () => { throw new Error("Legacy write reached network"); }, changes: async () => { throw new Error("Legacy read reached network"); } };
+  await assert.rejects(f.replica.pull(legacy), /requires verified chained history/);
+  await f.replica.enqueue({ records: [{ kind: "tags", id: "local", authorId: null, value: {} }] });
+  await assert.rejects(f.replica.flushOne(legacy), /requires verified chained history/);
+  assert.equal((await f.replica.read()).pending, 1);
+  assert.equal((await f.replica.read()).revision, 1);
 });

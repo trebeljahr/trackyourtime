@@ -31,6 +31,46 @@ Missing revisions, unexpected recipients, altered records and unsigned omissions
 fail closed. A newly added member needs a fresh verified snapshot before reading
 history without a signed projection for that account.
 
+## History roots and client authority
+
+API level 24 binds snapshot v2 to a common signed initial history root. The root
+includes server, workspace, migration ID, verified directory digest and the
+complete initial ciphertext digest. Each reader also verifies their own signed
+count and projection digest. Other readers' record metadata remains opaque.
+
+Every later edit has a separately signed chain header naming its exact previous
+root, writer, operation, expected revision and directory digest. It commits to
+the complete manifest digest and the sorted per-reader projection digests. The
+canonical header digest becomes the next root; ECDSA signature randomness does
+not change it. A valid edit from a different snapshot or alternate branch cannot
+continue a locally pinned history. Withholding an entire authentic older
+history from a new device remains a freshness limit without a newer trusted
+checkpoint or independent transparency/gossip.
+
+Client verification authorizes writes from the signed directory. Entries,
+entry money, favorites and imports require self-authorship; other record kinds
+require owner/admin. Audiences must match verified visibility. Where an existing
+local record is present, its author must match an upsert or removal. An API
+accepting a valid member signature cannot promote that member into a writer
+with broader rights. These checks do not prevent an authorized reader from
+copying or sharing plaintext outside the app.
+
+The server verifies the full header binding, pins the directory, compares the
+previous head and commits the next head with revision, rows and journal in one
+transaction. Replay receipts retain their original head after later saves. A
+headed workspace refuses legacy signed/unsigned writes and legacy raw-record or
+journal reads. Public chained routes remain unconditionally guarded. The old
+migration commit has a separate unconditional refusal: opening other routes
+cannot enable its source wipe without the new source-proof/cutover protocol.
+
+The replica persists the exact chain header and request before submission. A
+receipt alone cannot clear it; the matching chained journal proof must arrive.
+Restart and uncertain replies reuse the same request. Bootstrap stores the
+signed initial root, and later pulls verify and durably advance it per revision.
+After bootstrap, a transport lacking chained history is refused without a
+legacy fallback. Headless v1 fixtures remain supported by the library; no live
+workspace has been migrated through that earlier scaffold.
+
 ## Verified sharing directory
 
 The core directory is signed by its previously trusted owner. It binds the
@@ -144,17 +184,18 @@ the internal sparse chunk index. Missing chunks fail, and later ordinary edits
 cannot rewrite the frozen initial snapshot. Account erasure removes personal
 favorites from mixed snapshot chunks and the departing reader's manifests,
 including former workspaces; other readers' signed projections remain valid.
-Canceling migration removes both snapshot collections. API level 23 adds the
-manifest/page contract, still behind the unconditional rollout guard. There is
+Canceling migration removes both snapshot collections. API level 23 introduced
+the guarded manifest/page contract; level 24 requires snapshot v2 and chaining. There is
 no public mutation that can publish snapshots or bypass conversion checks.
 
 This snapshot storage is not connected to conversion yet. Its delivery signature
 does not prove lossless conversion from plaintext; the
 separate migration-content proof and independently verified original backup
 remain mandatory. It cannot detect a server withholding later changes from a
-brand-new device with no newer trusted checkpoint. Before enabling conversion,
-ordinary journal edits also need a cryptographic chain bound to this snapshot;
-revision numbers alone cannot prevent mixing independently signed histories.
+brand-new device with no newer trusted checkpoint. Chained edit/header
+verification now binds later revisions to this root. The cutover controller
+still needs to consume the source proof and pin this root and directory before
+changing the workspace to encrypted mode.
 
 `createPrivateMigrationProof` compares decrypted staged records directly with
 the independently verified source backup. It checks the verified owner and
@@ -204,14 +245,18 @@ files remain outside account deletion.
 
 ## Remaining rollout dependencies
 
-- A client-verified initial snapshot and migration journal, plus a lossless
-  encrypted backup, isolated restore proof and rollback workflow.
+- A source-verified migration controller that publishes snapshot v2, consumes
+  per-member verification for opaque records and pins root/directory at cutover,
+  plus a lossless encrypted backup, isolated restore proof and rollback workflow.
 - Verified member-key onboarding and rotation, including transactional fencing
   against membership/permission changes and every legacy writer.
 - Client CRUD, timers, reports, invoices and import/export adapters, and native
   and extension persistence. Existing clients do not use this replica yet.
 - User-facing conflict review/export of unsent work and recovery after local
   storage corruption or loss. New revisions alone cannot settle a conflict.
+- Durable encryption-mode pins and trusted new-device workspace policy. Missing
+  keys, omitted server identity/mode metadata or an older API must never silently
+  send private workspace data through standard plaintext adapters.
 - Journal/storage quota accounting and retention. Tombstones preserve the old
   ciphertext context; this is not cryptographic erasure of historical journal
   records or ciphertext already copied by another authorized client.

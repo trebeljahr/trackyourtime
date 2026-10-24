@@ -18,7 +18,9 @@
  */
 export const REQUIRES_API_LEVEL = {
   "privacy.directory": 22,
-  "privacy.initialSnapshot": 23,
+  "privacy.snapshotPages": 23,
+  "privacy.initialSnapshot": 24,
+  "privacy.historyChain": 24,
   "privacy.deletionPreview": 21,
   "privacy.deviceUnlock": 19,
   "privacy.journal": 20,

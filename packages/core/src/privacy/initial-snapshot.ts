@@ -44,6 +44,13 @@ export function privateInitialSnapshotProjection(records: readonly EncryptedReco
     ...row, grants: row.grants.filter((grant) => grant.userId === userId),
   }));
 }
+/** A common signed root binds every reader projection to the same initial
+ * history, while the complete ciphertext digest stays opaque to other readers. */
+export function privateInitialSnapshotRoot(scope: { server: string; workspaceId: string; migrationId: string; directoryDigest: string }, recordsDigest: string): Promise<string> {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(recordsDigest)) throw new Error("Invalid initial ciphertext digest");
+  const { server, workspaceId, migrationId, directoryDigest } = scope;
+  return privateRecordDigest({ protocol: "trackyourtime-private-initial-root-v1", server, workspaceId, migrationId, directoryDigest, recordsDigest });
+}
 /** Signs ciphertext already checked against the original recovery copy by the
  * migration proof. This signature proves delivery completeness, not conversion
  * correctness; it never replaces that separate source-content verification. */
@@ -64,11 +71,12 @@ export async function signPrivateInitialSnapshot(options: {
     if (new Set(actual).size !== actual.length || canonicalJson(actual) !== canonicalJson(expected)) throw new Error("Initial snapshot recipients do not match the verified directory");
   }
   const readers: SignedPrivateInitialSnapshot[] = [];
+  const root = await privateInitialSnapshotRoot({ server, workspaceId, migrationId: options.migrationId, directoryDigest: directory.digest }, await privateRecordDigest(records));
   for (const member of directory.signed.directory.members) {
     check();
     const projection = privateInitialSnapshotProjection(records, member.userId);
     const manifest = signedPrivateInitialSnapshotSchema.shape.manifest.parse({
-      v: 1, protocol: "trackyourtime-private-initial-snapshot-v1", server, workspaceId,
+      v: 1, protocol: "trackyourtime-private-initial-snapshot-v2", server, workspaceId, root,
       migrationId: options.migrationId, revision: 1, directoryDigest: directory.digest,
       signerId: userId, readerId: member.userId, recordCount: projection.length,
       recordsDigest: await privateRecordDigest(projection),

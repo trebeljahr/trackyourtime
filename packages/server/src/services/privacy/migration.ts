@@ -14,6 +14,11 @@ export function requirePrivateWorkspaceRollout(): void {
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "Encrypted workspace migration is not available in this build. Existing data is unchanged." });
 }
 const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
+/** The original scaffold has no verified source-content proof or signed
+ * history root. Opening unrelated rollout routes must never enable its wipe. */
+function requireVerifiedMigrationCommit(): void {
+  throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "Migration requires a verified source proof and chained snapshot. Original data is unchanged." });
+}
 export async function privateMigrationAction(workspaceId: string, userId: string, action: unknown, signature: string): Promise<void> {
   requirePrivateWorkspaceRollout();
   if (!await WorkspaceMember.exists({ workspaceId, userId, role: "owner" })) throw new TRPCError({ code: "FORBIDDEN" });
@@ -80,6 +85,7 @@ export async function privateMigrationArchive(workspaceId: string, userId: strin
   return { archive, hash: hash(archive) };
 }
 export async function commitPrivateMigration(workspaceId: string, userId: string, migrationId: string, backupHash: string, signature: string): Promise<void> {
+  requireVerifiedMigrationCommit();
   await privateMigrationAction(workspaceId, userId, { action: "commit-private-migration", workspaceId, userId, migrationId, backupHash }, signature);
   await withBusinessTransaction(async () => {
     await fenceWorkspace(workspaceId);
