@@ -1,10 +1,12 @@
 import { z } from "zod";
-import { encryptedRecordSchema, RECOVERY_KINDS, privateFavoritesMigrationProofSchema, type EncryptedRecord, type WorkspaceRecovery, type SignedPrivateFavoritesMigrationProof } from "@starter/shared";
+import { encryptedRecordSchema, RECOVERY_KINDS, privateFavoritesMigrationProofSchema, privateOwnerMigrationProofSchema, type SignedPrivateOwnerMigrationProof, type EncryptedRecord, type WorkspaceRecovery, type SignedPrivateFavoritesMigrationProof } from "@starter/shared";
 import { canonicalJson, signPrivateChange, type PublicKey } from "./crypto.js";
 import { privateReplicaIdentityFromDirectory, type VerifiedPrivateDirectory } from "./directory.js";
 import { decryptPrivateRecord, partitionPrivateRecovery, readersForPrivateRecord } from "./records.js";
 import { verifyWorkspaceRecovery } from "./recovery.js";
-import { assertPrivateInitialSnapshot, type VerifiedPrivateInitialSnapshot } from "./initial-snapshot.js";
+import { assertPrivateInitialSnapshot, privateInitialSnapshotProjection, privateInitialSnapshotRoot, type VerifiedPrivateInitialSnapshot } from "./initial-snapshot.js";
+import { verifyRecoveryKeyBackup } from "./recovery-backup.js";
+import { privateRecordDigest } from "./workspace-edits.js";
 const migrationRecordSchema = encryptedRecordSchema.extend({ deleted: z.literal(false).optional() });
 const MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
 const address = (row: { kind: string; id: string }) => JSON.stringify([row.kind, row.id]);
@@ -102,4 +104,48 @@ export async function createPrivateFavoritesMigrationProof(options: {
   check();
   const signature = await signPrivateChange(access.signingPrivateKey, proof); check();
   return { proof, signature };
+}
+
+/** Reopen the actual saved encrypted file before signing approval. The reader
+ * must read the user-held destination, never echo the pre-write source object.
+ * A signature attests this client check; the server cannot prove possession of
+ * an offline file. The independent operational restore drill is still needed.
+ * Nothing here changes workspace mode or authorizes source deletion. */
+export async function createPrivateOwnerMigrationProof(options: {
+  readBackup: () => Promise<string>; backupKey: Uint8Array; records: readonly unknown[];
+  snapshot: VerifiedPrivateInitialSnapshot; directory: VerifiedPrivateDirectory;
+  userId: string; secrets: { privateKey: PublicKey; signingPrivateKey: PublicKey }; current: () => boolean;
+}): Promise<SignedPrivateOwnerMigrationProof> {
+  const { snapshot, directory, userId, current, secrets } = options;
+  const { server, workspaceId, ownerId } = directory.signed.directory;
+  const check = () => {
+    if (!current()) throw new Error("Private migration changed during backup verification");
+    assertPrivateInitialSnapshot(snapshot, { server, workspaceId, userId }, directory.digest);
+  };
+  check();
+  if (ownerId !== userId) throw new Error("Only the verified workspace owner can approve migration");
+  // Capture caller-owned inputs before the file read yields control.
+  if (options.records.length > 400_000 || new TextEncoder().encode(JSON.stringify(options.records)).length > MAX_ARCHIVE_BYTES) throw new Error("Encrypted migration archive is too large");
+  const records = options.records.map((row) => {
+    const { deleted: _deleted, ...record } = migrationRecordSchema.parse(row); return record;
+  });
+  const key = new Uint8Array(options.backupKey);
+  try {
+    const raw = await options.readBackup(); check();
+    if (typeof raw !== "string" || raw.length > 36 * 1024 * 1024) throw new Error("Invalid encrypted original backup file");
+    const bytes = new TextEncoder().encode(raw);
+    if (!bytes.length || bytes.length > 36 * 1024 * 1024) throw new Error("Invalid encrypted original backup file");
+    const archive = await verifyRecoveryKeyBackup(JSON.parse(raw), key, { server, ownerId: userId, workspaceId }); check();
+    const content = await createPrivateMigrationProof({ source: archive.snapshot, records, directory, userId, migrationId: snapshot.signed.manifest.migrationId, secrets, current }); check();
+    records.sort((a, b) => address(a) < address(b) ? -1 : address(a) > address(b) ? 1 : 0);
+    const root = await privateInitialSnapshotRoot({ server, workspaceId, migrationId: content.proof.migrationId, directoryDigest: directory.digest }, await privateRecordDigest(records)); check();
+    if (root !== snapshot.signed.manifest.root || await privateRecordDigest(privateInitialSnapshotProjection(records, userId)) !== snapshot.signed.manifest.recordsDigest) throw new Error("Original backup verification belongs to another initial snapshot");
+    const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)); check();
+    const proof = privateOwnerMigrationProofSchema.parse({
+      ...content.proof, protocol: "trackyourtime-private-owner-proof-v1", snapshotRoot: root,
+      backupDigest: [...hash].map((byte) => byte.toString(16).padStart(2, "0")).join(""), backupBytes: bytes.length,
+    });
+    const signature = await signPrivateChange(secrets.signingPrivateKey, proof); check();
+    return { proof, signature };
+  } finally { key.fill(0); }
 }

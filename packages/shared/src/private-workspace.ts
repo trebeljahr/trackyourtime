@@ -84,3 +84,16 @@ export const privateFavoritesMigrationProofSchema = z.object({
 }).strict();
 export const signedPrivateFavoritesMigrationProofSchema = z.object({ proof: privateFavoritesMigrationProofSchema, signature: privateSignatureSchema }).strict();
 export type SignedPrivateFavoritesMigrationProof = z.infer<typeof signedPrivateFavoritesMigrationProofSchema>;
+
+/** Temporary preparation receipt. Plaintext-derived sourceRevision must be
+ * removed with the source at conversion; only ciphertext commitments may stay. */
+export const privateOwnerMigrationProofSchema = z.object({
+  v: z.literal(1), protocol: z.literal("trackyourtime-private-owner-proof-v1"),
+  server: z.string().url().max(2048), workspaceId: id, userId: id, migrationId: z.uuid(),
+  directoryDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/), snapshotRoot: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  sourceRevision: z.string().regex(/^[a-f0-9]{64}$/), recordsDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  backupDigest: z.string().regex(/^[a-f0-9]{64}$/), backupBytes: z.number().int().positive().max(36 * 1024 * 1024),
+  verifiedRecords: z.number().int().nonnegative().max(400_000), opaqueRecords: z.number().int().nonnegative().max(400_000),
+}).strict();
+export const signedPrivateOwnerMigrationProofSchema = z.object({ proof: privateOwnerMigrationProofSchema, signature: privateSignatureSchema }).strict();
+export type SignedPrivateOwnerMigrationProof = z.infer<typeof signedPrivateOwnerMigrationProofSchema>;

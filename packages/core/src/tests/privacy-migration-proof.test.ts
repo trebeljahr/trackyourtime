@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
+import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { RECOVERY_KINDS, type PrivateWorkspaceDirectory, type WorkspaceRecovery } from "@starter/shared";
 import { canonicalJson, createKeyPair, createSigningPair, decodeSecret } from "../privacy/crypto.js";
 import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
 import { emptyRecoveryCollections, recoveryDigest } from "../privacy/recovery.js";
 import { decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery, privateRecordsToRecovery } from "../privacy/records.js";
-import { createPrivateFavoritesMigrationProof, createPrivateMigrationProof } from "../privacy/migration-proof.js";
+import { createPrivateFavoritesMigrationProof, createPrivateMigrationProof, createPrivateOwnerMigrationProof } from "../privacy/migration-proof.js";
+import { deriveRecoveryBackupKey, encryptRecoveryKeyBackup } from "../privacy/recovery-backup.js";
+import { encodeSecret, randomSecret } from "../privacy/crypto.js";
 import { privateInitialSnapshotProjection, signPrivateInitialSnapshot, verifyPrivateInitialSnapshot } from "../privacy/initial-snapshot.js";
 async function fixture() {
   const pair = await createKeyPair(), signing = await createSigningPair(), member = await createKeyPair(), memberSigning = await createSigningPair();
@@ -118,4 +123,60 @@ it("rebuilds the complete owner-readable BSON recovery copy from decrypted recor
   await assert.rejects(privateRecordsToRecovery("workspace", plaintext.filter((row) => row.kind !== "entries")), /orphaned money/);
   const bad = structuredClone(plaintext); bad.find((row) => row.kind === "entryMoney")!.value.authorId = "owner";
   await assert.rejects(privateRecordsToRecovery("workspace", bad), /unexpected data/);
+});
+
+async function ownerProofFixture() {
+  const f = await fixture(), alive = { value: true };
+  const signed = await signPrivateInitialSnapshot(f.options);
+  const scope = { server: f.options.directory.signed.directory.server, workspaceId: "workspace", userId: "owner" };
+  const snapshot = await verifyPrivateInitialSnapshot({ signed: signed.readers.find((reader) => reader.manifest.readerId === "owner"), records: privateInitialSnapshotProjection(signed.records, "owner"), scope, directory: f.options.directory, secrets: f.options.secrets, current: () => alive.value });
+  const key = await deriveRecoveryBackupKey(encodeSecret(randomSecret()), scope);
+  const archive = { format: "trackyourtime-workspace-recovery-v1" as const, server: scope.server, ownerId: "owner", snapshot: f.options.source };
+  const raw = JSON.stringify(await encryptRecoveryKeyBackup(archive, key, () => true));
+  const options = { readBackup: async () => raw, backupKey: key, records: f.options.records, snapshot, directory: f.options.directory, userId: "owner", secrets: f.options.secrets, current: () => alive.value };
+  return { f, alive, archive, raw, options };
+}
+it("reopens an actual encrypted original file before signing the exact migration root and ciphertext commitment", async () => {
+  const { options, raw, f } = await ownerProofFixture();
+  const folder = await mkdtemp(join(tmpdir(), "tyt-owner-proof-"));
+  try {
+    const file = join(folder, "original.tytrecovery"); await writeFile(file, raw, { mode: 0o600 });
+    assert.doesNotMatch(await readFile(file, "utf8"), /Synthetic client|original reference|numberLong/);
+    const result = await createPrivateOwnerMigrationProof({ ...options, readBackup: () => readFile(file, "utf8") });
+    assert.equal(result.proof.sourceRevision, f.options.source.sourceRevision);
+    assert.equal(result.proof.snapshotRoot, options.snapshot.signed.manifest.root);
+    assert.equal(result.proof.verifiedRecords, partitionPrivateRecovery(f.options.source).length);
+    assert.equal(result.proof.opaqueRecords, 1);
+    assert.equal(result.proof.backupBytes, new TextEncoder().encode(raw).length);
+    assert.equal(result.proof.backupDigest, Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw))).toString("hex"));
+    assert.doesNotMatch(JSON.stringify(result), /Synthetic client|original reference|numberLong|private-member-favorite/);
+    const publicKey = options.directory.signed.directory.members.find((member) => member.userId === "owner")!.signingPublicKey;
+    const key = await crypto.subtle.importKey("jwk", publicKey, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+    assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, decodeSecret(result.signature, 64), new TextEncoder().encode(canonicalJson(result.proof))));
+  } finally { await rm(folder, { recursive: true, force: true }); }
+});
+it("refuses unreadable, truncated, corrupted, wrong-key or mismatched original backup files", async () => {
+  const { options, archive } = await ownerProofFixture();
+  await assert.rejects(createPrivateOwnerMigrationProof({ ...options, readBackup: async () => { throw new Error("File missing"); } }), /File missing/);
+  await assert.rejects(createPrivateOwnerMigrationProof({ ...options, readBackup: async () => "{" }));
+  await assert.rejects(createPrivateOwnerMigrationProof({ ...options, backupKey: randomSecret() }));
+  const changed = structuredClone(archive); changed.snapshot.collections.invoices[0]!.xml = "Different saved XML"; changed.snapshot.sourceRevision = await recoveryDigest(changed.snapshot.collections);
+  const raw = JSON.stringify(await encryptRecoveryKeyBackup(changed, options.backupKey, () => true));
+  await assert.rejects(createPrivateOwnerMigrationProof({ ...options, readBackup: async () => raw }), /differs from/);
+  const corrupt = JSON.parse(await options.readBackup()); corrupt.box.nonce = "AAAAAAAAAAAAAAAA";
+  await assert.rejects(createPrivateOwnerMigrationProof({ ...options, readBackup: async () => JSON.stringify(corrupt) }));
+  await assert.rejects(createPrivateOwnerMigrationProof({ ...options, readBackup: async () => "x".repeat(36 * 1024 * 1024 + 1) }), /Invalid encrypted/);
+});
+it("does not approve another valid snapshot, an unverified snapshot or completion after a lock", async () => {
+  const { options, f, alive } = await ownerProofFixture();
+  const changed = [...options.records]; const index = changed.findIndex((row) => row.kind === "favorites" && row.authorId === "member");
+  changed[index] = await encryptPrivateRecord("workspace", { kind: "favorites", id: f.favorite._id, authorId: "member", value: f.favorite }, f.recipients, 1);
+  await assert.rejects(createPrivateOwnerMigrationProof({ ...options, records: changed }), /another initial snapshot/);
+  await assert.rejects(createPrivateOwnerMigrationProof({ ...options, snapshot: JSON.parse(JSON.stringify(options.snapshot)) }), /current verified/);
+  await assert.rejects(createPrivateOwnerMigrationProof({ ...options, readBackup: async () => { alive.value = false; return options.readBackup(); } }), /changed during/);
+});
+it("captures ciphertext and the purpose key before reading the file without wiping caller-owned keys", async () => {
+  const { options } = await ownerProofFixture(), before = new Uint8Array(options.backupKey);
+  const result = await createPrivateOwnerMigrationProof({ ...options, readBackup: async () => { options.records[0]!.box.nonce = "AAAAAAAAAAAAAAAA"; return options.readBackup(); } });
+  assert.equal(result.proof.snapshotRoot, options.snapshot.signed.manifest.root); assert.deepEqual(options.backupKey, before);
 });

@@ -1,9 +1,9 @@
 import { commitPrivateDirectory, privateDirectoryPage } from "../../services/privacy/directories.js";
 import { privateInitialSnapshotManifest, privateInitialSnapshotPage } from "../../services/privacy/initial-snapshots.js";
 import { migrationFavoritesSource } from "../../services/privacy/recovery.js";
-import { recordPrivateFavoritesMigrationProof } from "../../services/privacy/migration-receipts.js";
+import { recordPrivateFavoritesMigrationProof, recordPrivateOwnerMigrationProof } from "../../services/privacy/migration-receipts.js";
 import { env } from "../../config/env.js";
-import { signedPrivateDirectorySchema, signedPrivateFavoritesMigrationProofSchema } from "@starter/shared";
+import { signedPrivateDirectorySchema, signedPrivateFavoritesMigrationProofSchema, signedPrivateOwnerMigrationProofSchema } from "@starter/shared";
 import { getAuth } from "../../auth/auth.js";
 import { previewAccountDeletion } from "../../services/account-deletion/delete-account.js";
 import { authRowStore, mongooseRowStore, routedRowStore } from "../../services/account-deletion/stores.js";
@@ -181,6 +181,10 @@ export const privacyRouter = router({
   acknowledgeMigrationFavorites: privateWorkspaceProcedure.input(scopeSchema.extend(signedPrivateFavoritesMigrationProofSchema.shape)).mutation(({ ctx, input }) => {
     requirePrivateWorkspaceRollout();
     return recordPrivateFavoritesMigrationProof({ server: privateServerOrigin(), workspaceId: ctx.workspaceId, userId: ctx.user.id }, { proof: input.proof, signature: input.signature });
+  }),
+  acknowledgeMigrationOwner: privateWorkspaceProcedure.input(scopeSchema.extend(signedPrivateOwnerMigrationProofSchema.shape)).mutation(({ ctx, input }) => {
+    requirePrivateWorkspaceRollout();
+    return recordPrivateOwnerMigrationProof({ server: privateServerOrigin(), workspaceId: ctx.workspaceId, userId: ctx.user.id }, { proof: input.proof, signature: input.signature });
   }),
   beginMigration: privateWorkspaceProcedure.input(scopeSchema.extend({ sourceRevision: z.string().length(64), signature: signatureSchema })).mutation(({ctx, input}) => beginPrivateMigration(ctx.workspaceId, ctx.user.id, input.sourceRevision, input.signature)),
   stageMigration: privateWorkspaceProcedure.input(scopeSchema.extend({ migrationId: z.string().uuid(), offset: z.number().int().nonnegative().max(400000) })).mutation(({ctx, input}) => stagePrivateMigration(ctx.workspaceId, ctx.user.id, input.migrationId, input.offset)),

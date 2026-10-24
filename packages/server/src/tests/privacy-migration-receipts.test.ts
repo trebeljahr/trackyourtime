@@ -2,21 +2,22 @@ import assert from "node:assert/strict";
 import { before, beforeEach, after, describe, it } from "node:test";
 import mongoose from "mongoose";
 import { Long } from "mongodb";
-import { createKeyPair, createSigningPair, createPrivateFavoritesMigrationProof, encryptPrivateRecord, partitionPrivateRecovery, privateMemberKeyFingerprint, privateInitialSnapshotProjection, randomSecret, seal, signPrivateChange, signPrivateInitialSnapshot, signPrivateWorkspaceDirectory, verifyPrivateInitialSnapshot, verifyPrivateWorkspaceDirectory, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
-import type { PrivateDirectoryMember, SignedPrivateFavoritesMigrationProof } from "@starter/shared";
+import { createKeyPair, createSigningPair, createPrivateFavoritesMigrationProof, createPrivateOwnerMigrationProof, deriveRecoveryBackupKey, encryptRecoveryKeyBackup, encodeSecret, encryptPrivateRecord, partitionPrivateRecovery, privateMemberKeyFingerprint, privateInitialSnapshotProjection, randomSecret, seal, signPrivateChange, signPrivateInitialSnapshot, signPrivateWorkspaceDirectory, verifyPrivateInitialSnapshot, verifyPrivateWorkspaceDirectory, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
+import type { PrivateDirectoryMember, SignedPrivateFavoritesMigrationProof, SignedPrivateOwnerMigrationProof } from "@starter/shared";
 import { PrivateAccount, PrivateDirectory, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../models/PrivateData.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
 import { migrationFavoritesSource, workspaceRecovery } from "../services/privacy/recovery.js";
 import { commitPrivateDirectory } from "../services/privacy/directories.js";
 import { preparePrivateInitialSnapshot } from "../services/privacy/initial-snapshots.js";
-import { recordPrivateFavoritesMigrationProof } from "../services/privacy/migration-receipts.js";
+import { recordPrivateFavoritesMigrationProof, recordPrivateOwnerMigrationProof } from "../services/privacy/migration-receipts.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { privacyRouter } from "../trpc/routers/privacy.js";
 import type { Context } from "../trpc/context.js";
 import { clearTestDatabase, connectTestDatabase, dropTestDatabase, skipWithoutDatabase } from "./support/test-database.js";
 
 const scope = { server: "https://api.example.test", workspaceId: "workspace", userId: "member" };
+let ownerProof: SignedPrivateOwnerMigrationProof;
 let migrationId: string, directory: VerifiedPrivateDirectory, people: PrivateDirectoryMember[], proof: SignedPrivateFavoritesMigrationProof;
 let owner: { privateKey: PublicKey; signingPrivateKey: PublicKey }, member: typeof owner;
 describe("private preferences conversion receipts", { skip: skipWithoutDatabase }, () => {
@@ -52,6 +53,10 @@ describe("private preferences conversion receipts", { skip: skipWithoutDatabase 
     const signed = await signPrivateInitialSnapshot({ records, migrationId, userId: "owner", directory, secrets: owner, current: () => true });
     await preparePrivateInitialSnapshot({ ...scope, userId: "owner", migrationId }, signed.readers);
     const snapshot = await verifyPrivateInitialSnapshot({ signed: signed.readers.find((r) => r.manifest.readerId === "member"), records: privateInitialSnapshotProjection(signed.records, "member"), scope, directory, secrets: member, current: () => true });
+    const ownerSnapshot = await verifyPrivateInitialSnapshot({ signed: signed.readers.find((r) => r.manifest.readerId === "owner"), records: privateInitialSnapshotProjection(signed.records, "owner"), scope: { ...scope, userId: "owner" }, directory, secrets: owner, current: () => true });
+    const key = await deriveRecoveryBackupKey(encodeSecret(randomSecret()), { server: scope.server, userId: "owner" });
+    const raw = JSON.stringify(await encryptRecoveryKeyBackup({ format: "trackyourtime-workspace-recovery-v1", server: scope.server, ownerId: "owner", snapshot: await workspaceRecovery(scope.workspaceId, "owner") }, key, () => true));
+    ownerProof = await createPrivateOwnerMigrationProof({ readBackup: async () => raw, backupKey: key, records, snapshot: ownerSnapshot, directory, userId: "owner", secrets: owner, current: () => true });
     proof = await createPrivateFavoritesMigrationProof({ source: await migrationFavoritesSource(scope.workspaceId, "member", migrationId), snapshot, directory, userId: "member", secrets: member, current: () => true });
   });
   after(dropTestDatabase);
@@ -105,4 +110,46 @@ describe("private preferences conversion receipts", { skip: skipWithoutDatabase 
     await assert.rejects(caller.acknowledgeMigrationFavorites({ workspaceId: scope.workspaceId, ...proof }), { code: "NOT_IMPLEMENTED" });
     await assert.rejects(migrationFavoritesSource(scope.workspaceId, "stranger", migrationId), { code: "NOT_FOUND" });
   });
+  it("records owner approval against the owner-only source and frozen ciphertext without converting or deleting originals", async () => {
+    const ownScope = { ...scope, userId: "owner" };
+    const complete = await workspaceRecovery(scope.workspaceId, "owner", true);
+    assert.notEqual(complete.sourceRevision, ownerProof.proof.sourceRevision);
+    assert.deepEqual(await recordPrivateOwnerMigrationProof(ownScope, ownerProof), { recorded: true });
+    assert.deepEqual(await recordPrivateOwnerMigrationProof(ownScope, ownerProof), { recorded: true });
+    assert.equal(await PrivateMigrationReceipt.countDocuments({ kind: "owner" }), 1);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.state, "migrating");
+    assert.equal((await PrivateWorkspace.findOne().lean())!.backupVerified, false);
+    assert.equal(await mongoose.connection.db!.collection("favorites").countDocuments(), 2);
+    assert.doesNotMatch(JSON.stringify(await PrivateMigrationReceipt.find({ kind: "owner" }).lean()), /Member private pin|Owner private pin|9007199254740993/);
+  });
+  it("refuses forged owner approval, another member, another root, counts and complete-source substitution", async () => {
+    const ownScope = { ...scope, userId: "owner" };
+    const forged = structuredClone(ownerProof); forged.signature = await signPrivateChange(member.signingPrivateKey, forged.proof);
+    await assert.rejects(recordPrivateOwnerMigrationProof(ownScope, forged), { code: "FORBIDDEN" });
+    await assert.rejects(recordPrivateOwnerMigrationProof(scope, ownerProof), { code: "NOT_FOUND" });
+    for (const patch of [{ snapshotRoot: "A".repeat(43) }, { verifiedRecords: 0 }, { opaqueRecords: 0 }, { sourceRevision: (await workspaceRecovery(scope.workspaceId, "owner", true)).sourceRevision }]) {
+      const changed = structuredClone(ownerProof); Object.assign(changed.proof, patch); changed.signature = await signPrivateChange(owner.signingPrivateKey, changed.proof);
+      await assert.rejects(recordPrivateOwnerMigrationProof(ownScope, changed), { code: "CONFLICT" });
+    }
+    assert.equal(await PrivateMigrationReceipt.countDocuments(), 0);
+  });
+  it("invalidates owner approval when another member's opaque original, staged ciphertext or frozen snapshot changes", async () => {
+    const ownScope = { ...scope, userId: "owner" };
+    await recordPrivateOwnerMigrationProof(ownScope, ownerProof);
+    await mongoose.connection.db!.collection("favorites").updateOne({ userId: "member" }, { $set: { description: "Changed opaque preference" } });
+    await assert.rejects(recordPrivateOwnerMigrationProof(ownScope, ownerProof), { code: "CONFLICT" });
+    await mongoose.connection.db!.collection("favorites").updateOne({ userId: "member" }, { $set: { description: "Member private pin" } });
+    const row = (await PrivateRecord.findOne({ authorId: "member" }).lean())!;
+    await PrivateRecord.updateOne({ _id: row._id }, { $set: { "box.nonce": "AAAAAAAAAAAAAAAA" } });
+    await assert.rejects(recordPrivateOwnerMigrationProof(ownScope, ownerProof), { code: "CONFLICT" });
+    await PrivateRecord.updateOne({ _id: row._id }, { $set: { "box.nonce": row.box.nonce } });
+    await PrivateSnapshotChunk.deleteMany({ workspaceId: scope.workspaceId });
+    await assert.rejects(recordPrivateOwnerMigrationProof(ownScope, ownerProof), { code: "CONFLICT" });
+  });
+  it("keeps the new owner endpoint and obsolete complete-archive endpoint closed", async () => {
+    const caller = privacyRouter.createCaller({ user: { id: "owner" }, session: { user: { id: "owner" } } } as unknown as Context);
+    await assert.rejects(caller.acknowledgeMigrationOwner({ workspaceId: scope.workspaceId, ...ownerProof }), { code: "NOT_IMPLEMENTED" });
+    await assert.rejects(caller.migrationArchive({ workspaceId: scope.workspaceId, migrationId }), /Legacy migration archives/);
+  });
+
 });

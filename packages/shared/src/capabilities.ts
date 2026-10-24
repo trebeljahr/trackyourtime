@@ -17,6 +17,7 @@
  * `capabilities.test.ts` in core fails when a level has no capability.
  */
 export const REQUIRES_API_LEVEL = {
+  "privacy.ownerMigrationProof": 26,
   "privacy.directory": 22,
   "privacy.snapshotPages": 23,
   "privacy.initialSnapshot": 24,

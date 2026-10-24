@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { canonicalJson, partitionPrivateRecovery } from "@starter/core";
-import { encryptedRecordSchema, PRIVATE_SNAPSHOT_MAX_BYTES, RECOVERY_MAX_RECORDS, signedPrivateFavoritesMigrationProofSchema, type EncryptedRecord, type SignedPrivateFavoritesMigrationProof } from "@starter/shared";
+import { canonicalJson, partitionPrivateRecovery, readersForPrivateRecord, privateInitialSnapshotRoot } from "@starter/core";
+import { encryptedRecordSchema, PRIVATE_SNAPSHOT_MAX_BYTES, RECOVERY_MAX_RECORDS, signedPrivateFavoritesMigrationProofSchema, signedPrivateOwnerMigrationProofSchema, type SignedPrivateOwnerMigrationProof, type EncryptedRecord, type SignedPrivateFavoritesMigrationProof } from "@starter/shared";
 import { PrivateDirectory, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
-import { migrationFavoritesSource } from "./recovery.js";
+import { migrationFavoritesSource, workspaceRecovery } from "./recovery.js";
 import { verifyPrivateChange } from "./signatures.js";
 
 /** Internal acknowledgement engine; it never changes workspace mode or wipes
@@ -65,6 +65,75 @@ export async function recordPrivateFavoritesMigrationProof(scope: { server: stri
       return { recorded: true as const };
     }
     await PrivateMigrationReceipt.create({ workspaceId, migrationId, userId, kind: "favorites", ...signed });
+    return { recorded: true as const };
+  });
+}
+
+/** Owner content and saved-file attestation, never a cutover operation. The
+ * owner source excludes other members' private preferences. Complete-source
+ * integrity is checked internally and its plaintext checksum is never returned.
+ * A receipt cannot substitute for an independently encrypted operational copy
+ * and isolated restore. Temporary plaintext checksums must retire at cutover. */
+export async function recordPrivateOwnerMigrationProof(scope: { server: string; workspaceId: string; userId: string }, input: SignedPrivateOwnerMigrationProof) {
+  const signed = signedPrivateOwnerMigrationProofSchema.parse(input), { proof } = signed;
+  if (proof.server !== scope.server || proof.workspaceId !== scope.workspaceId || proof.userId !== scope.userId) throw new TRPCError({ code: "NOT_FOUND" });
+  if (!await supportsBusinessTransactions()) throw new TRPCError({ code: "PRECONDITION_FAILED" });
+  return withBusinessTransaction(async () => {
+    const { workspaceId, userId, server } = scope, { migrationId } = proof;
+    await fenceWorkspace(workspaceId);
+    if (!await WorkspaceMember.exists({ workspaceId, userId, role: "owner" })) throw new TRPCError({ code: "FORBIDDEN" });
+    const mode = await PrivateWorkspace.findOne({ workspaceId, migrationId, ownerId: userId, state: "migrating" }).lean();
+    if (!mode) throw new TRPCError({ code: "PRECONDITION_FAILED" });
+    const snapshot = await PrivateSnapshotReader.findOne({ workspaceId, migrationId, userId }).lean();
+    const directory = await PrivateDirectory.findOne({ workspaceId }).sort({ revision: -1 }).lean();
+    const owner = directory?.signed.directory.members.find((row) => row.userId === userId && row.role === "owner");
+    if (!snapshot || !directory || !owner || directory.digest !== proof.directoryDigest || directory.signed.directory.ownerId !== userId || directory.signed.directory.server !== server || snapshot.signed.manifest.root !== proof.snapshotRoot || snapshot.signed.manifest.directoryDigest !== proof.directoryDigest) throw new TRPCError({ code: "CONFLICT", message: "Verify the current initial snapshot and sharing keys before approving migration." });
+    await verifyPrivateChange(owner.signingPublicKey, proof, signed.signature);
+    const complete = await workspaceRecovery(workspaceId, userId, true);
+    const own = await workspaceRecovery(workspaceId, userId);
+    const changed = () => new TRPCError({ code: "CONFLICT", message: "Original data or encrypted snapshot changed. Make and verify a fresh backup. Source data was kept." });
+    if (complete.sourceRevision !== mode.sourceRevision || own.sourceRevision !== proof.sourceRevision) throw changed();
+    const records: EncryptedRecord[] = [], frozen: EncryptedRecord[] = [];
+    let bytes = 2;
+    const staged = PrivateRecord.find({ workspaceId }).lean().cursor({ batchSize: 10 });
+    try {
+      for await (const row of staged) {
+        if (row.deleted || row.revision !== 1) throw changed();
+        const record = encryptedRecordSchema.parse({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, box: row.box, grants: row.grants });
+        bytes += Buffer.byteLength(JSON.stringify(record)) + 1;
+        if (bytes > PRIVATE_SNAPSHOT_MAX_BYTES || records.length >= 400_000) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE" });
+        const readers = readersForPrivateRecord(record.kind, record.authorId, directory.signed.directory.members).map((member) => member.userId).sort();
+        if (canonicalJson(readers) !== canonicalJson(record.grants.map((grant) => grant.userId).sort())) throw changed();
+        records.push(record);
+      }
+    } finally { await staged.close(); }
+    bytes = 2;
+    const chunks = PrivateSnapshotChunk.find({ workspaceId, migrationId }).sort({ index: 1 }).lean().cursor({ batchSize: 1 });
+    let chunkIndex = 0;
+    try {
+      for await (const chunk of chunks) {
+        if (chunk.index !== chunkIndex++ || !chunk.records.length) throw changed();
+        bytes += Buffer.byteLength(JSON.stringify(chunk.records)) + 1;
+        if (bytes > PRIVATE_SNAPSHOT_MAX_BYTES || frozen.length + chunk.records.length > 400_000) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE" });
+        for (const row of chunk.records) frozen.push(encryptedRecordSchema.parse(row));
+      }
+    } finally { await chunks.close(); }
+    const address = (row: { kind: string; id: string }) => JSON.stringify([row.kind, row.id]);
+    const order = (rows: EncryptedRecord[]) => rows.sort((a, b) => address(a) < address(b) ? -1 : address(a) > address(b) ? 1 : 0);
+    const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
+    order(records); order(frozen);
+    const recordsDigest = hash(records);
+    const root = await privateInitialSnapshotRoot({ server, workspaceId, migrationId, directoryDigest: directory.digest }, Buffer.from(recordsDigest, "hex").toString("base64url"));
+    const addresses = (rows: readonly { kind: string; id: string; authorId: string | null }[]) => rows.map((row) => JSON.stringify([row.kind, row.id, row.authorId])).sort();
+    const originals = partitionPrivateRecovery(complete);
+    const verifiedRecords = records.filter((row) => row.grants.some((grant) => grant.userId === userId)).length;
+    if (recordsDigest !== proof.recordsDigest || hash(frozen) !== recordsDigest || snapshot.fullRecordsDigest !== recordsDigest || root !== proof.snapshotRoot || canonicalJson(addresses(records)) !== canonicalJson(addresses(originals)) || verifiedRecords !== proof.verifiedRecords || records.length - verifiedRecords !== proof.opaqueRecords) throw changed();
+    const prior = await PrivateMigrationReceipt.findOne({ workspaceId, migrationId, userId, kind: "owner" }).lean();
+    if (prior) {
+      if (canonicalJson(prior.proof) !== canonicalJson(proof)) throw new TRPCError({ code: "CONFLICT" });
+      return { recorded: true as const };
+    }
+    await PrivateMigrationReceipt.create({ workspaceId, migrationId, userId, kind: "owner", ...signed });
     return { recorded: true as const };
   });
 }

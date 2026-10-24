@@ -209,6 +209,31 @@ checksum. Other members' private favorites can remain opaque; the count is
 explicit and their plaintext is not claimed as verified. The proof primitive
 is not yet consumed by live migration endpoints.
 
+`createPrivateOwnerMigrationProof` adds a separately scoped owner approval. It
+reads the saved `.tytrecovery` file through a caller-supplied destination reader,
+authenticates and decrypts it using the purpose-bound backup key, compares every
+owner-readable typed original with staged ciphertext, and checks the complete
+ciphertext root against a current verified owner snapshot. Its signature binds
+the exact reopened file bytes, full ciphertext digest, snapshot root, directory,
+source checksum and verified/opaque counts. Locking or a scope change cancels
+completion. The file itself and backup key never enter the request.
+
+API level 26 adds guarded `acknowledgeMigrationOwner`. The internal receipt
+engine rechecks both the owner-visible source and the complete frozen source
+inside the workspace transaction. These are distinct checksums when another
+member has favorites; the complete plaintext-source checksum is never returned
+to the owner. Both staged rows and immutable chunks must match the signed full
+ciphertext digest and the current snapshot root. Retries revalidate the source
+before acknowledging the existing receipt. No receipt changes workspace mode,
+marks an operational backup verified or deletes original data.
+
+A client signature attests its file check; a server cannot establish possession
+of an offline file from a signature alone. An independently encrypted complete
+original backup and an isolated exact restoration drill remain separate
+requirements. The obsolete `migrationArchive` endpoint has its own unconditional
+refusal, so enabling other rollout routes cannot expose other identities'
+wrappers or a checksum of their plaintext preferences.
+
 The owner can verify every shared record plus their own favorites. Other
 members' favorites require a separate `createPrivateFavoritesMigrationProof`.
 It accepts a verified snapshot for that member and a typed, favorites-only

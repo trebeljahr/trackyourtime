@@ -1,5 +1,5 @@
 {
-  "apiLevel": 25,
+  "apiLevel": 26,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -3991,6 +3991,112 @@
               "sourceRevision",
               "recordsDigest",
               "verifiedRecords"
+            ],
+            "type": "object"
+          },
+          "signature": {
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "type": "string"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "proof",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.acknowledgeMigrationOwner": {
+      "input": {
+        "properties": {
+          "proof": {
+            "additionalProperties": false,
+            "properties": {
+              "backupBytes": {
+                "exclusiveMinimum": 0,
+                "maximum": 37748736,
+                "type": "integer"
+              },
+              "backupDigest": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "directoryDigest": {
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              },
+              "migrationId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "opaqueRecords": {
+                "maximum": 400000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "protocol": {
+                "const": "trackyourtime-private-owner-proof-v1",
+                "type": "string"
+              },
+              "recordsDigest": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "server": {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string"
+              },
+              "snapshotRoot": {
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              },
+              "sourceRevision": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "userId": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              "v": {
+                "const": 1,
+                "type": "number"
+              },
+              "verifiedRecords": {
+                "maximum": 400000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "workspaceId": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "v",
+              "protocol",
+              "server",
+              "workspaceId",
+              "userId",
+              "migrationId",
+              "directoryDigest",
+              "snapshotRoot",
+              "sourceRevision",
+              "recordsDigest",
+              "backupDigest",
+              "backupBytes",
+              "verifiedRecords",
+              "opaqueRecords"
             ],
             "type": "object"
           },

@@ -68,7 +68,11 @@ export async function stagePrivateMigration(workspaceId: string, userId: string,
   }
   return { next: end >= plain.length ? null : end, total: plain.length };
 }
+function requireVerifiedMigrationArchive(): void {
+  throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "Legacy migration archives are unavailable. Use verified reader snapshots and user-held recovery backups." });
+}
 export async function privateMigrationArchive(workspaceId: string, userId: string, migrationId: string) {
+  requireVerifiedMigrationArchive();
   const mode = await PrivateWorkspace.findOne({ workspaceId, migrationId, ownerId: userId }).lean();
   if (!mode) throw new TRPCError({ code: "NOT_FOUND" });
   const members = await WorkspaceMember.find({ workspaceId }).sort({ userId: 1 }).lean();
