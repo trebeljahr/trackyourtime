@@ -5,6 +5,7 @@ import type { KeyValueStorage } from "../storage.js";
 import { canonicalJson, type PublicKey } from "./crypto.js";
 import { createPrivateStorage, PrivateStorageLockedError, type PrivateStorageKey, type PrivateStorageScope } from "./storage.js";
 import { decryptPrivateRecord, encryptPrivateRecord, readersForPrivateRecord, type PlainPrivateRecord, type PrivateRecipient } from "./records.js";
+import { segmentedPrivateStorage } from "./segmented-storage.js";
 import { privateWorkspaceManifest, privateWorkspaceManifestForReader, signPrivateWorkspaceEdit, verifyPrivateWorkspaceChange } from "./workspace-edits.js";
 const plainSchema = privateRecordRefSchema.extend({ value: z.record(z.string(), z.json()) }).strict();
 const pendingSchema = z.object({ operationId: z.uuid(), basedOn: z.number().int().nonnegative(), records: z.array(plainSchema).max(100), remove: z.array(privateRecordRefSchema).max(100), submitted: signedPrivateWorkspaceEditSchema.nullable() }).strict();
@@ -29,14 +30,15 @@ export type PrivateReplicaTransport = {
  * inter-window lock for the entire operation (Web Locks on web/desktop). Never
  * point this at a legacy shared queue or trust member keys from a feed response.
  * All plaintext views are returned on demand; the replica caches no unlocked
- * values between calls. The encrypted storage size bound applies to the state. */
+ * values between calls. Each bounded part is encrypted; the segmented state size bound applies. */
 export async function createPrivateWorkspaceReplica(options: {
   storage: KeyValueStorage; scope: PrivateStorageScope; exclusive: QueueExclusive;
   resolveStorageKey: () => PrivateStorageKey | null;
   resolveIdentity: () => PrivateReplicaIdentity | null;
 }) {
   const { userId, workspaceId } = options.scope;
-  const storage = await createPrivateStorage({ storage: options.storage, scope: options.scope, resolveKey: options.resolveStorageKey });
+  const encrypted = await createPrivateStorage({ storage: options.storage, scope: options.scope, resolveKey: options.resolveStorageKey });
+  const storage = segmentedPrivateStorage(encrypted, () => identity().check);
   const identity = () => {
     const value = options.resolveIdentity();
     if (!value || !value.current()) throw new PrivateStorageLockedError();
@@ -72,7 +74,7 @@ export async function createPrivateWorkspaceReplica(options: {
     return { revision: state.revision, through: page.through, next: page.next, pending: state.pending.length };
   };
   return {
-    namespace: storage.namespace,
+    namespace: encrypted.namespace,
     enqueue: async (input: { records: PlainPrivateRecord[]; remove?: z.infer<typeof privateRecordRefSchema>[] }) => {
       // Capture user intent synchronously, before waiting on storage or another
       // window's lock. No caller-owned nested object survives into the outbox.

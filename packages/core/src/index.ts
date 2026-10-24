@@ -40,3 +40,4 @@ export * from "./privacy/storage.js";
 export * from "./privacy/device.js";
 export * from "./privacy/workspace-edits.js";
 export * from "./privacy/replica.js";
+export * from "./privacy/segmented-storage.js";

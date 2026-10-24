@@ -35,7 +35,7 @@ it("keeps queued work encrypted, freezes nested inputs before waiting, and survi
   const queued = f.replica.enqueue({ records: [input] }); input.value.description = "later mutation";
   const operationId = await queued;
   assert.equal((await f.replica.read()).records[0]!.value.description, "Sensitive client work");
-  const raw = (await f.backing.getItem(`${f.replica.namespace}replica`))!;
+  const raw = (await f.backing.getItem(`${f.replica.namespace}${encodeURIComponent("segments:replica:manifest")}`))!;
   assert.doesNotMatch(raw, /Sensitive client work|2026-10-24|owner|entries/);
   const lost = { ...f.transport, commit: async (value: SignedPrivateWorkspaceEdit) => { await f.transport.commit(value); throw new Error("Reply lost"); } };
   await assert.rejects(f.replica.flushOne(lost), /Reply lost/);

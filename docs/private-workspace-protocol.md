@@ -46,10 +46,15 @@ late work. Concurrent remote changes keep an offline edit for explicit review;
 there is no automatic overwrite or silent rebasing.
 
 Limits: 100 upserts and 100 removals per edit, 4 MiB serialized edit input,
-200 members, 20 revisions and 8 MiB per feed page, 1,000 queued edits, and the
-private storage adapter's 8 MiB state-value limit. A failed local write stops
-network submission. Larger replicas require a segmented persistence design
-before migration; they are not silently truncated.
+200 members, 20 revisions and 8 MiB per feed page, 1,000 queued edits, and a 64 MiB segmented local state. Encrypted 256 KiB
+parts stage under a new generation; the active pointer changes only after a
+complete reopen and checksum check. Interrupted staging remains tracked for
+cleanup. The earlier single-value encrypted format remains readable until its
+replacement commits. Each operation captures its unlock generation, so locking
+and unlocking cannot resume an old staged save. Backing writes must be atomic;
+there is no special power-loss durability claim. A failed local write stops
+network submission. Host storage capacity still applies; larger web replicas
+need IndexedDB rather than localStorage. No state is silently truncated.
 
 ## Remaining rollout dependencies
 
