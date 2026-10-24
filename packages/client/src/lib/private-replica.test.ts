@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { memoryStorage, privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "@starter/core";
@@ -7,9 +8,9 @@ const state = vi.hoisted(() => ({ origin: "https://api.example.test", changed: n
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiOrigin: (fn: () => void) => { state.changed = fn; return () => {}; } }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 const session = await import("./private-session");
-const { privateDirectoryStore, privateWorkspaceReplica } = await import("./private-replica");
+const { privateDirectoryStore, privateWorkspaceReplica, privateWorkspaceStorageHost } = await import("./private-replica");
 const exclusive = <T,>(task: () => Promise<T>) => task();
-beforeEach(() => { vi.stubGlobal("crypto", webcrypto); state.origin = "https://api.example.test"; session.lockPrivateData(); session.privateAccountChanged(null); });
+beforeEach(() => { vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); state.origin = "https://api.example.test"; session.lockPrivateData(); session.privateAccountChanged(null); });
 afterEach(() => { session.lockPrivateData(); vi.unstubAllGlobals(); });
 async function fixture() {
   const root = await session.newPrivateIdentity("owner"); session.installPrivateSession("owner", root.secrets);
@@ -46,4 +47,22 @@ it("cancels late saves and holds their old recipient grants after verified shari
   const transport = { commit: vi.fn(async () => { directory = next; return { revision: 1 }; }), changes: vi.fn() };
   await expect(replica.flushOne(transport)).rejects.toThrow("Unlock private data"); expect(transport.changes).not.toHaveBeenCalled();
   expect((await replica.read()).pending).toBe(1); await expect(replica.flushOne(transport)).rejects.toThrow("sharing keys changed"); expect(transport.commit).toHaveBeenCalledTimes(1);
+});
+
+
+it("retains an encrypted outbox across lock, host close and fresh unlock", async () => {
+  const f = await fixture();
+  const host = await privateWorkspaceStorageHost("owner", "workspace");
+  const replica = await privateWorkspaceReplica("owner", "workspace", host.storage, host.exclusive, () => f.verified);
+  await replica.enqueue({ records: [{ kind: "entries", id: "durable", authorId: "owner", value: { description: "Keep unsent work after lock" } }] });
+  session.lockPrivateData();
+  await expect(replica.read()).rejects.toThrow();
+  session.installPrivateSession("owner", f.root.secrets);
+  const reopened = await privateWorkspaceStorageHost("owner", "workspace");
+  try {
+    const recovered = await privateWorkspaceReplica("owner", "workspace", reopened.storage, reopened.exclusive, () => f.verified);
+    expect((await recovered.read()).records[0]!.value.description).toBe("Keep unsent work after lock");
+    expect((await recovered.read()).pending).toBe(1);
+    await expect(replica.read()).rejects.toThrow("Private database was closed");
+  } finally { reopened.close(); host.close(); }
 });

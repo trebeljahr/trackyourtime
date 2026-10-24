@@ -276,6 +276,9 @@ importers:
       eslint-config-next:
         specifier: ^16.3.7
         version: 16.3.7(@typescript-eslint/parser@8.71.0(eslint@9.39.4(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint@9.39.4(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3)
+      fake-indexeddb:
+        specifier: ^6.2.5
+        version: 6.2.5
       intl-messageformat:
         specifier: ^11.2.14
         version: 11.2.14

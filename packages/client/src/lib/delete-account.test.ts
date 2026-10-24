@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { IDBFactory } from "fake-indexeddb";
+import { createPrivateStorage, randomSecret } from "@starter/core";
+import { openPrivateIndexedStorage } from "./private-indexed-storage";
 import type { OfflineStartInput } from "@starter/core";
 
 /**
@@ -71,6 +74,7 @@ const startInput = (description: string): OfflineStartInput => ({
 });
 
 beforeEach(async () => {
+  vi.stubGlobal("indexedDB", new IDBFactory());
   vi.clearAllMocks();
   window.localStorage.clear();
   createAppQueryClient();
@@ -143,4 +147,25 @@ describe("accountHasPassword", () => {
     accountsResult = { data: null, error: { code: "UNAUTHORIZED" } };
     expect(await accountHasPassword()).toBe(true);
   });
+});
+
+
+it("erases only the deleted account's encrypted database after confirmed deletion", async () => {
+  const server = window.location.origin, a = await openPrivateIndexedStorage({ server, userId: "user-a" }), b = await openPrivateIndexedStorage({ server, userId: "user-b" });
+  // Hold stable keys across operations, exactly as an unlocked account does.
+  const keyA = randomSecret(), keyB = randomSecret();
+  const data = async (host: typeof a, userId: string, key: Uint8Array) => createPrivateStorage({ storage: host.storage, scope: { server, userId, workspaceId: "workspace" }, resolveKey: () => ({ key, current: () => true }) });
+  const left = await data(a, "user-a", keyA), right = await data(b, "user-b", keyB);
+  try {
+    await left.setItem("replica", "Deleted account private work"); await right.setItem("replica", "Other account private work");
+    deleteResult = { data: null, error: { code: "INVALID_PASSWORD" } };
+    expect((await deleteAccount({ userId: "user-a", password: "wrong" })).ok).toBe(false);
+    expect(await left.getItem("replica")).toBe("Deleted account private work");
+    deleteResult = { data: { success: true }, error: null };
+    expect(await deleteAccount({ userId: "user-a", password: "correct" })).toEqual({ ok: true });
+    await expect(left.getItem("replica")).rejects.toThrow("Private database was closed");
+    expect(await right.getItem("replica")).toBe("Other account private work");
+    const reopened = await openPrivateIndexedStorage({ server, userId: "user-a" });
+    try { expect(await (await data(reopened, "user-a", keyA)).getItem("replica")).toBeNull(); } finally { reopened.close(); }
+  } finally { a.close(); b.close(); }
 });

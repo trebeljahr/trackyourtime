@@ -1,3 +1,4 @@
+import { erasePrivateIndexedStorage } from "./private-indexed-storage";
 import { lockPrivateData, PRIVATE_PRF_INPUT, prfBytes, unlockPrivatePrf } from "./private-session";
 import { passkeyClient } from "@better-auth/passkey/client";
 import { fetchAuthWithTimeout } from "./auth-request";
@@ -438,6 +439,7 @@ export const deleteAccount = async (args: {
   userId: string;
   password?: string;
 }): Promise<{ ok: true } | { ok: false; reason: AccountDeletionRefusal }> => {
+  const deletedServer = getApiOrigin() || (typeof window !== "undefined" ? window.location.origin : "");
   try {
     const { error } = await authClient.deleteUser(
       args.password ? { password: args.password } : {},
@@ -454,6 +456,7 @@ export const deleteAccount = async (args: {
   // must not report the deletion as failed.
   await Promise.allSettled([
     discardDeletedAccountQueue(args.userId),
+    erasePrivateIndexedStorage({ server: deletedServer, userId: args.userId }).catch((error) => { console.warn("[account deletion] Local encrypted database cleanup failed", error); }),
     writeRunningMirror(null),
   ]);
   await clearNativeToken().catch(() => undefined);

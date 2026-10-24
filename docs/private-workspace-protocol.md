@@ -77,7 +77,26 @@ replacement commits. Each operation captures its unlock generation, so locking
 and unlocking cannot resume an old staged save. Backing writes must be atomic;
 there is no special power-loss durability claim. A failed local write stops
 network submission. Host storage capacity still applies; larger web replicas
-need IndexedDB rather than localStorage. No state is silently truncated.
+use the IndexedDB host rather than localStorage. No state is silently truncated.
+
+The client IndexedDB host uses a database scoped by a digest of account and
+server, and Web Locks shared across windows. Each workspace operation holds a
+shared account lock and an exclusive workspace lock. Only authenticated-storage
+envelope shapes can be written through its raw adapter. Writes request strict
+browser durability and acknowledge transaction completion, never merely a put
+request's success. Capacity, aborted transactions, unsupported/newer layouts and
+missing Web Locks fail; there is no memory or localStorage fallback. Browser
+storage eviction and hardware failure still require separate backups.
+
+Locking closes the private host without deleting encrypted unsent work; a fresh
+unlock reopens it. Confirmed account deletion takes the exclusive account lock,
+waits for active workspace operations, invalidates local handles and deletes
+only that account/server database. Other windows close on version change, so a
+stale host cannot recreate it. A refused deletion preserves local data. A blocked
+or failed local cleanup is logged; server deletion cannot be undone and the
+account keys have already been forgotten. The host is connected to the private
+replica adapters and account cleanup; standard app queries still do not use the
+encrypted replica.
 
 ## Client migration verification and recovery reconstruction
 

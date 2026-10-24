@@ -1,5 +1,6 @@
+import { openPrivateIndexedStorage } from "./private-indexed-storage";
 import { createPrivateDirectoryStore, createPrivateWorkspaceReplica, decodeSecret, privateReplicaIdentityFromDirectory, type KeyValueStorage, type PrivateDirectoryTrust, type QueueExclusive, type VerifiedPrivateDirectory } from "@starter/core";
-import { privateDataOrigin, privateOperationScope, privateSession } from "./private-session";
+import { privateDataOrigin, privateOperationScope, privateSession, subscribePrivateSession } from "./private-session";
 function privateStorageAccess(userId: string, server: string) {
   const root = privateSession(userId);
   if (!root || privateDataOrigin() !== server) return null;
@@ -27,4 +28,23 @@ export function privateWorkspaceReplica(userId: string, workspaceId: string, sto
       try { check(); return privateSession(userId) === root && directory()?.digest === verified.digest; } catch { return false; }
     });
   } });
+}
+
+/** One durable host for both encrypted adapters. Closing/locking never deletes
+ * queued work. Reopen after unlocking; stale handles cannot resume a save. */
+export async function privateWorkspaceStorageHost(userId: string, workspaceId: string) {
+  const root = privateSession(userId);
+  if (!root) throw new Error("Unlock private data before opening workspace storage");
+  const server = privateDataOrigin(), check = privateOperationScope(userId);
+  const host = await openPrivateIndexedStorage({ server, userId });
+  let unsubscribe = () => {};
+  const close = () => { unsubscribe(); host.close(); };
+  try {
+    check(); if (privateSession(userId) !== root) throw new Error("Private data changed during this operation");
+    const exclusive = host.exclusive(workspaceId);
+    unsubscribe = subscribePrivateSession(() => {
+      try { check(); if (privateSession(userId) !== root) close(); } catch { close(); }
+    });
+    return { storage: host.storage, exclusive, close };
+  } catch (error) { close(); throw error; }
 }
