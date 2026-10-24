@@ -74,7 +74,7 @@ describe("signed private workspace journal", { skip: skipWithoutDatabase }, () =
   });
   it("round-trips a durable encrypted client outbox through the real database journal", async () => {
     const storageKey = randomSecret();
-    const replica = await createPrivateWorkspaceReplica({ storage: memoryStorage(), scope: { server: "https://api.example.test", userId: OWNER, workspaceId: WS }, exclusive: (task) => task(), resolveStorageKey: () => ({ key: storageKey, current: () => true }), resolveIdentity: () => ({ privateKey: ownerKey.privateKey, signingPrivateKey: signing.privateKey, recipients: members, signingKey: () => signing.publicKey, current: () => true }) });
+    const replica = await createPrivateWorkspaceReplica({ storage: memoryStorage(), scope: { server: "https://api.example.test", userId: OWNER, workspaceId: WS }, exclusive: (task) => task(), resolveStorageKey: () => ({ key: storageKey, current: () => true }), resolveIdentity: () => ({ directoryDigest: "verified-test-directory", privateKey: ownerKey.privateKey, signingPrivateKey: signing.privateKey, recipients: members, signingKey: () => signing.publicKey, current: () => true }) });
     const transport = { commit: (input: Parameters<typeof commitPrivateWorkspaceEdit>[1]) => commitPrivateWorkspaceEdit(OWNER, input), changes: (input: { after: number; through?: number }) => privateWorkspaceChanges(WS, OWNER, input.after, input.through) };
     await replica.enqueue({ records: [{ kind: "entries", id: "roundtrip", authorId: OWNER, value: { description: "Never on server in plaintext" } }] });
     assert.deepEqual(await replica.flushOne(transport), { revision: 1, pending: 0 });

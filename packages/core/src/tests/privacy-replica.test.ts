@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { createPrivateWorkspaceReplica, PrivateReplicaConflictError, type PrivateReplicaTransport } from "../privacy/replica.js";
+import { createPrivateWorkspaceReplica, PrivateReplicaConflictError, PrivateReplicaDirectoryChangedError, type PrivateReplicaTransport } from "../privacy/replica.js";
 import { createKeyPair, createSigningPair, randomSecret, canonicalJson } from "../privacy/crypto.js";
 import { privateWorkspaceManifest, privateWorkspaceManifestForReader, signPrivateWorkspaceEdit } from "../privacy/workspace-edits.js";
 import { encryptPrivateRecord, type PlainPrivateRecord } from "../privacy/records.js";
@@ -11,11 +11,11 @@ const scope = { server: "https://api.example.test", userId: "owner", workspaceId
 const plain = (id: string, description = "Sensitive client work"): PlainPrivateRecord => ({ kind: "entries", id, authorId: "owner", value: { description, start: "2026-10-24T00:00:00.000Z" } });
 async function fixture(backing = memoryStorage()) {
   const pair = await createKeyPair(), signing = await createSigningPair(), storageKey = randomSecret();
-  let open = true, generation = 0, chain = Promise.resolve<unknown>(undefined);
+  let open = true, generation = 0, directoryDigest = "verified-directory-1", chain = Promise.resolve<unknown>(undefined);
   const recipients = [{ userId: "owner", role: "owner" as const, canViewOthersTime: true, canViewOthersMoney: true, publicKey: pair.publicKey }];
   const options = { storage: backing, scope, exclusive: <T>(task: () => Promise<T>) => { const result = chain.then(task); chain = result.catch(() => {}); return result; },
     resolveStorageKey: () => { const at = generation; return open ? { key: storageKey, current: () => open && generation === at } : null; },
-    resolveIdentity: () => { const at = generation; return open ? { privateKey: pair.privateKey, signingPrivateKey: signing.privateKey, recipients, signingKey: () => signing.publicKey, current: () => open && generation === at } : null; } };
+    resolveIdentity: () => { const at = generation, directoryAt = directoryDigest; return open ? { directoryDigest, privateKey: pair.privateKey, signingPrivateKey: signing.privateKey, recipients, signingKey: () => signing.publicKey, current: () => open && generation === at && directoryAt === directoryDigest } : null; } };
   const calls: SignedPrivateWorkspaceEdit[] = [], journal: PrivateWorkspaceChange[] = [];
   const transport: PrivateReplicaTransport = {
     commit: async (input) => {
@@ -28,7 +28,7 @@ async function fixture(backing = memoryStorage()) {
     },
     changes: async ({ after, through = journal.length }) => ({ through, next: null, changes: journal.filter((row) => row.revision > after && row.revision <= through) }),
   };
-  return { replica: await createPrivateWorkspaceReplica(options), reopen: () => createPrivateWorkspaceReplica(options), backing, transport, journal, calls, pair, signing, recipients, lock: () => { open = false; generation++; }, unlock: () => { open = true; generation++; } };
+  return { replica: await createPrivateWorkspaceReplica(options), reopen: () => createPrivateWorkspaceReplica(options), backing, transport, journal, calls, pair, signing, recipients, changeDirectory: () => { directoryDigest = "verified-directory-2"; }, lock: () => { open = false; generation++; }, unlock: () => { open = true; generation++; } };
 }
 it("keeps queued work encrypted, freezes nested inputs before waiting, and survives a lost save reply and restart", async () => {
   const f = await fixture(), input = plain("entry");
@@ -98,4 +98,12 @@ it("does not accept a receipt unless the journal proves that exact outbox operat
   await f.transport.commit(remote);
   await assert.rejects(f.replica.flushOne({ ...f.transport, commit: async () => ({ revision: 1 }) }), /no verified journal record/);
   assert.equal((await f.replica.read()).pending, 1);
+});
+
+it("keeps an uncertain edit local after sharing keys change instead of uploading its old recipient grants", async () => {
+  const f = await fixture(); await f.replica.enqueue({ records: [plain("entry")] });
+  await assert.rejects(f.replica.flushOne({ ...f.transport, commit: async () => { throw new Error("Offline"); } }), /Offline/);
+  f.changeDirectory();
+  await assert.rejects(f.replica.flushOne(f.transport), PrivateReplicaDirectoryChangedError);
+  assert.equal(f.calls.length, 0); assert.equal((await f.replica.read()).pending, 1); assert.equal((await f.replica.read()).conflict, true);
 });

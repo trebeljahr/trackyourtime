@@ -31,6 +31,29 @@ Missing revisions, unexpected recipients, altered records and unsigned omissions
 fail closed. A newly added member needs a fresh verified snapshot before reading
 history without a signed projection for that account.
 
+## Verified sharing directory
+
+The core directory is signed by its previously trusted owner. It binds the
+server origin, workspace, member encryption/signing keys, roles and visibility
+flags to a consecutive revision and previous digest. An ownership transfer
+requires the old owner's signature; later revisions use the new owner's key.
+New or changed member keys require fingerprints checked independently of the
+API response before the owner can sign them. Curve points and public-only keys
+are checked before accepting a checkpoint.
+
+Encrypted, account-scoped local checkpoints pin the initial owner's trusted
+signing key and reject later API substitutions, forks or rollback against the
+known checkpoint. This does not detect replacement of the entire local
+checkpoint with an older authentic filesystem backup. A server can also withhold
+new updates; this is not a global freshness or key-transparency service.
+
+The client adapter derives recipients only from a verified directory whose own
+entry matches the account's unlocked keys. A directory change cancels in-flight
+work. Prepared offline ciphertext is bound to the directory digest and stays
+local for review if sharing keys change before a retry. The sharing UI, trusted
+invitation exchange, server directory transport and rotation workflow are not
+connected yet.
+
 ## Encrypted local replica and outbox
 
 `createPrivateWorkspaceReplica` uses account/server/workspace-bound encrypted

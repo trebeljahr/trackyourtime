@@ -8,14 +8,18 @@ import { decryptPrivateRecord, encryptPrivateRecord, readersForPrivateRecord, ty
 import { segmentedPrivateStorage } from "./segmented-storage.js";
 import { privateWorkspaceManifest, privateWorkspaceManifestForReader, signPrivateWorkspaceEdit, verifyPrivateWorkspaceChange } from "./workspace-edits.js";
 const plainSchema = privateRecordRefSchema.extend({ value: z.record(z.string(), z.json()) }).strict();
-const pendingSchema = z.object({ operationId: z.uuid(), basedOn: z.number().int().nonnegative(), records: z.array(plainSchema).max(100), remove: z.array(privateRecordRefSchema).max(100), submitted: signedPrivateWorkspaceEditSchema.nullable() }).strict();
+const pendingSchema = z.object({ operationId: z.uuid(), basedOn: z.number().int().nonnegative(), records: z.array(plainSchema).max(100), remove: z.array(privateRecordRefSchema).max(100), submitted: signedPrivateWorkspaceEditSchema.nullable(), directoryDigest: z.string().nullable().default(null) }).strict();
 const stateSchema = z.object({ v: z.literal(1), revision: z.number().int().nonnegative(), records: z.array(encryptedRecordSchema), pending: z.array(pendingSchema).max(1000) }).strict();
 type State = z.infer<typeof stateSchema>;
 const address = (row: { kind: string; id: string }) => JSON.stringify([row.kind, row.id]);
 export class PrivateReplicaConflictError extends Error {
   constructor() { super("The workspace changed while this edit was offline. The queued edit was kept for review."); this.name = "PrivateReplicaConflictError"; }
 }
+export class PrivateReplicaDirectoryChangedError extends Error {
+  constructor() { super("Workspace sharing keys changed. The queued edit was kept for review."); this.name = "PrivateReplicaDirectoryChangedError"; }
+}
 export type PrivateReplicaIdentity = {
+  directoryDigest: string;
   privateKey: PublicKey; signingPrivateKey: PublicKey;
   /** Verified recipient directory, independent of the untrusted change feed. */
   recipients: readonly PrivateRecipient[];
@@ -87,7 +91,7 @@ export async function createPrivateWorkspaceReplica(options: {
         for (const row of [...records, ...remove]) { const key = address(row); if (seen.has(key)) throw new Error("Duplicate private workspace record"); seen.add(key); }
         if (state.pending.length >= 1000) throw new Error("Sync or export pending private edits before adding more");
         const operationId = crypto.randomUUID();
-        state.pending.push({ operationId, basedOn: state.revision + state.pending.length, records, remove, submitted: null });
+        state.pending.push({ operationId, basedOn: state.revision + state.pending.length, records, remove, submitted: null, directoryDigest: null });
         access.check(); await save(state); access.check(); return operationId;
       });
     },
@@ -99,7 +103,7 @@ export async function createPrivateWorkspaceReplica(options: {
         for (const row of pending.records) values.set(address(row), row);
         for (const row of pending.remove) values.delete(address(row));
       }
-      return { revision: state.revision, pending: state.pending.length, conflict: !!state.pending.length && state.pending[0]!.basedOn !== state.revision, records: [...values.values()] };
+      return { revision: state.revision, pending: state.pending.length, conflict: !!state.pending.length && (state.pending[0]!.basedOn !== state.revision || (!!state.pending[0]!.submitted && state.pending[0]!.directoryDigest !== access.directoryDigest)), records: [...values.values()] };
     }),
     pull: (transport: PrivateReplicaTransport, through?: number) => options.exclusive(() => pull(transport, through)),
     flushOne: (transport: PrivateReplicaTransport) => options.exclusive(async () => {
@@ -108,11 +112,13 @@ export async function createPrivateWorkspaceReplica(options: {
       // No automatic rebasing: an offline edit must not silently overwrite
       // work made on another device. Keep the exact input for explicit repair.
       if (first.basedOn !== state.revision) throw new PrivateReplicaConflictError();
+      if (first.submitted && first.directoryDigest !== access.directoryDigest) throw new PrivateReplicaDirectoryChangedError();
       if (!first.submitted) {
         const records = [];
         for (const row of first.records) { records.push(await encryptPrivateRecord(workspaceId, row, access.recipients, state.revision + 1)); access.check(); }
         const remove = first.remove.map((row) => ({ ...row, readers: readersForPrivateRecord(row.kind, row.authorId, access.recipients).map((member) => member.userId).sort() }));
         first.submitted = await signPrivateWorkspaceEdit({ v: 1, workspaceId, userId, operationId: first.operationId, expectedRevision: state.revision, records, remove }, access.signingPrivateKey, access.recipients.map((member) => member.userId)); access.check();
+        first.directoryDigest = access.directoryDigest;
         await save(state); access.check();
       }
       // An uncertain HTTP reply never drops the submitted edit. Its operation

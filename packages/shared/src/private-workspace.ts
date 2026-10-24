@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { encryptedRecordSchema, privateKindSchema } from "./privacy.js";
+import { encryptedRecordSchema, privateKindSchema, publicEncryptionKeySchema } from "./privacy.js";
 const id = z.string().min(1).max(100);
 export const privateRecordRefSchema = z.object({ kind: privateKindSchema, id, authorId: id.nullable() }).strict();
 export const privateRemovalSchema = privateRecordRefSchema.extend({ readers: z.array(id).min(1).max(200) }).strict();
@@ -21,3 +21,16 @@ export type PrivateWorkspaceManifest = z.infer<typeof privateWorkspaceManifestSc
 export type SignedPrivateWorkspaceEdit = z.infer<typeof signedPrivateWorkspaceEditSchema>;
 export type PrivateWorkspaceChange = z.infer<typeof privateWorkspaceChangeSchema>;
 export const PRIVATE_EDIT_MAX_BYTES = 4 * 1024 * 1024;
+
+export const privateDirectoryMemberSchema = z.object({
+  userId: id, role: z.enum(["owner", "admin", "member"]), canViewOthersTime: z.boolean(), canViewOthersMoney: z.boolean(),
+  publicKey: publicEncryptionKeySchema, signingPublicKey: publicEncryptionKeySchema,
+}).strict();
+export const privateWorkspaceDirectorySchema = z.object({
+  v: z.literal(1), server: z.string().url().max(2048), workspaceId: id, revision: z.number().int().positive(), previousDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable(), ownerId: id,
+  members: z.array(privateDirectoryMemberSchema).min(1).max(200),
+}).strict();
+export const signedPrivateDirectorySchema = z.object({ directory: privateWorkspaceDirectorySchema, signerId: id, signature: privateSignatureSchema }).strict();
+export type PrivateDirectoryMember = z.infer<typeof privateDirectoryMemberSchema>;
+export type PrivateWorkspaceDirectory = z.infer<typeof privateWorkspaceDirectorySchema>;
+export type SignedPrivateDirectory = z.infer<typeof signedPrivateDirectorySchema>;
