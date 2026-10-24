@@ -150,6 +150,7 @@ export const shell: Translation<typeof source> = {
       subtitle: "Gib deine Zugangsdaten ein, um auf dein Konto zuzugreifen",
       submit: "Anmelden",
       submitting: "Wird angemeldet …",
+      openLocalBackup: "Lokale Sicherung öffnen",
       forgotPassword: "Passwort vergessen?",
       noAccount: "Noch kein Konto? <link>Registrieren</link>",
       challengeExpired: "Die Anmeldung hat zu lange gedauert. Gib dein Passwort noch einmal ein.",

@@ -1,3 +1,5 @@
+import { PrivateWorkspace } from "../../models/PrivateData.js";
+import { PRIVATE_WORKSPACE_REQUIRED } from "@starter/shared";
 import { recoveryDigest } from "@starter/core";
 import mongoose from "mongoose";
 import { BSON } from "mongodb";
@@ -15,6 +17,7 @@ export async function workspaceRecovery(workspaceId: string, ownerId: string, in
   }
   const owner = await WorkspaceMember.findOne({ workspaceId, userId: ownerId, role: "owner" }).lean();
   if (!owner) throw new TRPCError({ code: "FORBIDDEN" });
+  if (await PrivateWorkspace.exists({ workspaceId, state: "encrypted" })) throw new TRPCError({ code: "PRECONDITION_FAILED", message: PRIVATE_WORKSPACE_REQUIRED });
   const db = mongoose.connection.db;
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
   const collections = {} as WorkspaceRecovery["collections"];

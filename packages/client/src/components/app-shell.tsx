@@ -44,6 +44,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { RecoveryBackupDriver } from "@/components/data/recovery-backup-driver";
 import { DesktopAutopilotDriver } from "@/components/activity/autopilot-driver";
 import { DesktopActivityScope } from "@/components/desktop/desktop-activity-scope";
 import { DesktopBridgePublisher } from "@/components/desktop/desktop-bridge-publisher";
@@ -622,6 +623,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
 
         {/* The desktop app's tray and global shortcuts. Inert on the web. */}
         {/* Whose activity the desktop app records. Inert on the web. */}
+        <RecoveryBackupDriver />
         <DesktopActivityScope />
         {/* Autopilot: starts, switches and stops timers from that activity. Inert on the web. */}
         <DesktopAutopilotDriver />

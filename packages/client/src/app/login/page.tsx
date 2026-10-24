@@ -358,6 +358,7 @@ export default function LoginPage() {
           >
             {t("auth.login.forgotPassword")}
           </Link>
+          <Link href="/open-backup" className="mt-2 block text-muted-foreground hover:underline">{t("auth.login.openLocalBackup")}</Link>
         </div>
 
         <div className="text-center text-sm text-muted-foreground">

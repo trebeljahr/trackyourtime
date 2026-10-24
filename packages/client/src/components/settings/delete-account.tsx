@@ -197,6 +197,7 @@ export function DeleteAccountCard({
                     })
                   : t("deleteAccount.dialog.exportHintPlain")}
               </p>
+              <p className="text-muted-foreground">{t("deleteAccount.dialog.localBackups")}</p>
               {pending > 0 ? (
                 <p
                   className="font-medium text-destructive"

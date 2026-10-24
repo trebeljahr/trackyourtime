@@ -8,7 +8,9 @@ let session: { userId: string; origin: string; secrets: UnlockedIdentity } | nul
 let generation = 0;
 let resolvedAccount: string | null | undefined;
 const listeners = new Set<() => void>();
-const changed = () => { for (const listener of listeners) listener(); };
+let version = 0;
+export const privateSessionVersion = (): number => version;
+const changed = () => { version++; for (const listener of listeners) listener(); };
 export function lockPrivateData(): void { generation++; session = null; void desktopActivity()?.lock?.().catch(() => undefined); changed(); }
 subscribeApiOrigin(lockPrivateData);
 export function privateSession(userId: string): UnlockedIdentity | null {

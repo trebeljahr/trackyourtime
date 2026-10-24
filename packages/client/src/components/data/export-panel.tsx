@@ -1,4 +1,6 @@
 "use client";
+import { AutomaticRecoveryBackup } from "./automatic-recovery-backup";
+import { OpenRecoveryBackup } from "./open-recovery-backup";
 
 import { EncryptedBackup } from "./encrypted-backup";
 import * as React from "react";
@@ -219,6 +221,8 @@ export function ExportPanel(): React.JSX.Element {
           </p>
         ) : null}
         <EncryptedBackup />
+        <AutomaticRecoveryBackup />
+        <OpenRecoveryBackup />
       </CardContent>
     </Card>
   );

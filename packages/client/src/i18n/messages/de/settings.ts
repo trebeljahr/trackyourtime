@@ -4,6 +4,34 @@ import type { settings as source } from "../en/settings";
 
 /** German `settings`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const settings: Translation<typeof source> = {
+  automaticBackups: {
+    title: "Automatische lokale Sicherungen",
+    description: "Speichere verschlüsselte Sicherungen dieses Arbeitsbereichs in einem Ordner deiner Wahl. Sie laufen, solange dieser Arbeitsbereich geöffnet und deine privaten Daten entsperrt sind.",
+    limits: "Sicherungen für Inhaber enthalten gespeicherte Serverdaten. Nicht synchronisierte Änderungen und lokale Aktivitätsdaten sind nicht enthalten. Vorhandene Sicherungsdateien bleiben beim Abschalten erhalten.",
+    unavailable: "Automatische Ordnersicherungen brauchen einen Browser mit Schreibzugriff auf Ordner. Manuelle verschlüsselte Downloads bleiben verfügbar.",
+    locked: "Richte private Daten unter Einstellungen → Konto ein und entsperre sie, um automatische Sicherungen einzuschalten.",
+    recoveryKey: "Dein gespeicherter Wiederherstellungsschlüssel",
+    keyHint: "Gib den Wiederherstellungsschlüssel einmal ein, um dieses Gerät einzurichten. Bewahre ihn getrennt vom Sicherungsordner auf.",
+    interval: "Sicherungsintervall",
+    weekly: "Jede Woche",
+    daily: "Jeden Tag",
+    choose: "Sicherungsordner wählen",
+    now: "Jetzt sichern",
+    disable: "Automatische Sicherungen ausschalten",
+    last: "Letzte geprüfte Sicherung: {date}",
+    folder: "Sicherungsordner: {name}",
+    permission: "Sicherungen pausieren. Wähle den Ordner erneut, um den Zugriff zu erlauben.",
+    failed: "Die Sicherung ist fehlgeschlagen. Vorhandene Sicherungsdateien bleiben erhalten. Prüfe den Ordner und versuche es erneut.",
+    file: "Verschlüsselte Wiederherstellungsdatei",
+    openSecret: "Sicherungspasswort oder Wiederherstellungsschlüssel",
+    openedPortable: "Sicherung geprüft. Speichere die entschlüsselte JSON zur Ansicht oder für eine unterstützte Importvorschau.",
+    openTitle: "Lokale Sicherung öffnen",
+    openDetail: "Öffne eine .tytrecovery-Datei mit deinem Wiederherstellungsschlüssel. Für eine .tytbackup-Datei brauchst du ihr Sicherungspasswort. Die Entschlüsselung bleibt auf diesem Gerät und braucht keine Anmeldung.",
+    open: "Lokale Sicherung öffnen",
+    working: "Wird vorbereitet …",
+    openFailed: "Die Sicherung konnte nicht geöffnet werden. Prüfe Datei und Sicherungspasswort oder Wiederherstellungsschlüssel.",
+    opened: "Sicherung geprüft. Du kannst die entschlüsselte Wiederherstellungs-JSON speichern. Das Wiederherstellen auf einem Server ist noch in Entwicklung.",
+  },
   backups: {
     title: "Verschlüsselte Sicherungen", description: "Einen passwortgeschützten Workspace-Export auf deinem Gerät speichern. Das Passwort sicher aufbewahren; wir können es nicht wiederherstellen.",
     password: "Sicherungspasswort (mindestens 12 Zeichen)", confirm: "Sicherungspasswort bestätigen", working: "Vorbereitung…", download: "Verschlüsselten portablen Export speichern",
@@ -289,6 +317,7 @@ export const settings: Translation<typeof source> = {
       encryptedSharedDetail: "Der Arbeitsbereich behält gemeinsame Arbeitsdaten, auch deine Zeiteinträge. Deine privaten Favoriten und die Verschlüsselungsschlüssel deines Kontos werden gelöscht.",
       previewLoading: "Prüfe, welche Daten des Arbeitsbereichs erhalten bleiben …",
       previewFailed: "Die Prüfung ist fehlgeschlagen. Schließe diesen Dialog und versuche es erneut.",
+      localBackups: "Sicherungsdateien auf deinen Geräten bleiben erhalten. Lösche diese Dateien separat, wenn du sie nicht mehr brauchst.",
       exportHint: "Willst du vorher eine Kopie? <link>Exportiere deine Daten als JSON</link>, bevor du weitermachst.",
       exportHintPlain:
         "Willst du vorher eine Kopie? Exportiere deine Daten unter Einstellungen → Daten als JSON, bevor du weitermachst.",

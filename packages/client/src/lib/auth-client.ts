@@ -1,3 +1,4 @@
+import { eraseRecoveryBackupFolders } from "./recovery-backup-folder";
 import { erasePrivateIndexedStorage } from "./private-indexed-storage";
 import { lockPrivateData, PRIVATE_PRF_INPUT, prfBytes, unlockPrivatePrf } from "./private-session";
 import { passkeyClient } from "@better-auth/passkey/client";
@@ -456,6 +457,7 @@ export const deleteAccount = async (args: {
   // must not report the deletion as failed.
   await Promise.allSettled([
     discardDeletedAccountQueue(args.userId),
+    eraseRecoveryBackupFolders({ server: deletedServer, userId: args.userId }).catch((error) => { console.warn("[account deletion] Backup folder cleanup failed", error); }),
     erasePrivateIndexedStorage({ server: deletedServer, userId: args.userId }).catch((error) => { console.warn("[account deletion] Local encrypted database cleanup failed", error); }),
     writeRunningMirror(null),
   ]);

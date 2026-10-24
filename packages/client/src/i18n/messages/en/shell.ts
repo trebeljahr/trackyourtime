@@ -156,6 +156,7 @@ export const shell = {
       subtitle: "Enter your credentials to access your account",
       submit: "Log in",
       submitting: "Logging in…",
+      openLocalBackup: "Open a local backup",
       forgotPassword: "Forgot your password?",
       noAccount: "Don't have an account? <link>Sign up</link>",
       /** The two-factor challenge ran out; the password step starts over. */

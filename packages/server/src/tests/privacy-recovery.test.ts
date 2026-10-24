@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { before, after, beforeEach, describe, it } from "node:test";
 import mongoose from "mongoose";
 import { Binary, Decimal128, Double, Int32, Long, ObjectId } from "mongodb";
-import { createKeyPair, createSigningPair, createPrivateMigrationProof, decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery, privateRecordsToRecovery, privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, decryptBackup, encryptBackup } from "@starter/core";
-import { RECOVERY_KINDS } from "@starter/shared";
+import { createKeyPair, createSigningPair, deriveRecoveryBackupKey, encryptRecoveryKeyBackup, decryptRecoveryKeyBackup, encodeSecret, randomSecret, createPrivateMigrationProof, decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery, privateRecordsToRecovery, privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, decryptBackup, encryptBackup } from "@starter/core";
+import { PRIVATE_WORKSPACE_REQUIRED, RECOVERY_KINDS } from "@starter/shared";
 import { workspaceRecovery } from "../services/privacy/recovery.js";
 import { verifyRecoveryCopy } from "../services/privacy/restore-copy.js";
 import { connectTestDatabase, clearTestDatabase, dropTestDatabase, skipWithoutDatabase, testDatabaseTransactions } from "./support/test-database.js";
@@ -24,6 +24,12 @@ describe("lossless workspace recovery", { skip: skipWithoutDatabase }, () => {
     });
     await db.collection("favorites").insertOne({ workspaceId: "workspace", userId: "other", name: "Another member's private preference" });
   }
+  it("refuses a plaintext recovery request after workspace conversion rather than returning an empty backup", async () => {
+    await seed();
+    await mongoose.connection.db!.collection("privateworkspaces").insertOne({ workspaceId: "workspace", state: "encrypted" });
+    await assert.rejects(workspaceRecovery("workspace", "owner"), { code: "PRECONDITION_FAILED", message: PRIVATE_WORKSPACE_REQUIRED });
+    assert.equal(await mongoose.connection.db!.collection("invoices").countDocuments(), 1);
+  });
   it("restores the decrypted archive into a fresh Mongo database with exact BSON types, IDs, links and XML", async (t) => {
     if (!await testDatabaseTransactions()) return t.skip("Consistent recovery needs a replica set");
     await seed();
@@ -37,6 +43,12 @@ describe("lossless workspace recovery", { skip: skipWithoutDatabase }, () => {
     const encrypted = await encryptBackup(snapshot, "a separate synthetic recovery password");
     assert.doesNotMatch(JSON.stringify(encrypted), /Original issued XML|Synthetic private name/);
     const reopened = await decryptBackup(encrypted, "a separate synthetic recovery password");
+    const recoveryKey = encodeSecret(randomSecret()), key = await deriveRecoveryBackupKey(recoveryKey, { server: "https://api.example.test", userId: "owner" });
+    const file = await encryptRecoveryKeyBackup({ format: "trackyourtime-workspace-recovery-v1", server: "https://api.example.test", ownerId: "owner", snapshot }, key, () => true); key.fill(0);
+    const local = await decryptRecoveryKeyBackup(JSON.parse(JSON.stringify(file)), recoveryKey);
+    assert.deepEqual(local.snapshot, snapshot);
+    const localRestore = await verifyRecoveryCopy(mongoose.connection.getClient(), local.snapshot);
+    assert.equal(localRestore.sourceRevision, snapshot.sourceRevision);
     const result = await verifyRecoveryCopy(mongoose.connection.getClient(), reopened);
     assert.equal(result.records, RECOVERY_KINDS.length);
     assert.equal(result.sourceRevision, snapshot.sourceRevision);
@@ -65,6 +77,12 @@ describe("lossless workspace recovery", { skip: skipWithoutDatabase }, () => {
     assert.deepEqual(recovered, source);
     const encrypted = await encryptBackup(recovered, "separate synthetic migration backup password");
     const reopened = await decryptBackup(encrypted, "separate synthetic migration backup password");
+    const recoveryKey = encodeSecret(randomSecret()), key = await deriveRecoveryBackupKey(recoveryKey, { server: "https://api.example.test", userId: "owner" });
+    const file = await encryptRecoveryKeyBackup({ format: "trackyourtime-workspace-recovery-v1", server: "https://api.example.test", ownerId: "owner", snapshot: recovered }, key, () => true); key.fill(0);
+    const local = await decryptRecoveryKeyBackup(JSON.parse(JSON.stringify(file)), recoveryKey);
+    assert.deepEqual(local.snapshot, recovered);
+    const localRestore = await verifyRecoveryCopy(mongoose.connection.getClient(), local.snapshot);
+    assert.equal(localRestore.sourceRevision, source.sourceRevision);
     const result = await verifyRecoveryCopy(mongoose.connection.getClient(), reopened);
     assert.equal(result.records, RECOVERY_KINDS.length); assert.equal(result.sourceRevision, source.sourceRevision);
     assert.equal(await mongoose.connection.db!.collection("favorites").countDocuments(), 2);

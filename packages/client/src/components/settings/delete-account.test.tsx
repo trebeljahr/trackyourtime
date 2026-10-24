@@ -74,6 +74,7 @@ describe("DeleteAccountCard", () => {
     expect(scope).toHaveTextContent("time entries, clients, projects, tasks, tags");
     expect(scope).toHaveTextContent("In workspaces you share, only your own data is deleted");
     expect(scope).toHaveTextContent("entries already on an invoice");
+    expect(scope).toHaveTextContent("Backup files you saved on your devices stay there");
 
     fireEvent.click(screen.getByTestId("delete-account-export"));
     expect(onShowExport).toHaveBeenCalledOnce();

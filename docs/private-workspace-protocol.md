@@ -142,8 +142,9 @@ needed to verify shared records. Deleting an account cannot revoke ciphertext
 or keys someone already copied; future access changes require key rotation.
 The server cannot sign an ownership transfer or create replacement grants for
 owner-only records. A client-approved directory transfer and regrant workflow
-must precede enabling encrypted owner departure. The account deletion UI must
-show the corresponding mode-specific policy when that mode is enabled.
+must precede enabling encrypted owner departure. The account-scoped deletion preview and confirmation show each applicable
+retention policy, wait for a current preview and state that user-owned backup
+files remain outside account deletion.
 
 ## Remaining rollout dependencies
 

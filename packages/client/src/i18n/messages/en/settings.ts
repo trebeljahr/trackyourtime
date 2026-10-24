@@ -7,6 +7,34 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const settings = {
+  automaticBackups: {
+    title: "Automatic local backups",
+    description: "Save encrypted backups of this workspace to a folder you choose. Backups run while this workspace is open and private data is unlocked.",
+    limits: "Owner backups include saved server records. Unsynced device changes and local activity history are not included. Existing backup files stay when you turn this off.",
+    unavailable: "Automatic folder backups need a browser with writable folder access. Manual encrypted downloads remain available.",
+    locked: "Set up and unlock private data in Settings → Account to enable automatic backups.",
+    recoveryKey: "Your saved recovery key",
+    keyHint: "Enter the recovery key once to set up this device. Keep it separate from your backup folder.",
+    interval: "Backup interval",
+    weekly: "Every week",
+    daily: "Every day",
+    choose: "Choose backup folder",
+    now: "Back up now",
+    disable: "Turn off automatic backups",
+    last: "Last verified backup: {date}",
+    folder: "Backup folder: {name}",
+    permission: "Backups are paused. Choose the folder again to authorize access.",
+    failed: "The backup could not finish. Your existing backup files were kept. Check the folder and try again.",
+    file: "Encrypted recovery file",
+    openSecret: "Backup password or recovery key",
+    openedPortable: "Backup verified. Save its decrypted JSON to inspect it or use a supported import preview.",
+    openTitle: "Open a local backup",
+    openDetail: "Open a .tytrecovery file with your recovery key. For a .tytbackup file, use its backup password. Decryption stays on this device and needs no sign-in.",
+    open: "Open local backup",
+    working: "Preparing…",
+    openFailed: "Could not open this backup. Check the file and its backup password or recovery key.",
+    opened: "Backup verified. You can save its decrypted recovery JSON. Restoring it to a server is still in development.",
+  },
   backups: {
     title: "Encrypted backups", description: "Save a password-protected workspace export on your device. Keep its password somewhere safe; we cannot recover it.",
     password: "Backup password (at least 12 characters)", confirm: "Confirm backup password", working: "Preparing…", download: "Save encrypted portable export",
@@ -299,6 +327,7 @@ export const settings = {
       encryptedSharedDetail: "The workspace keeps shared work records, including your time entries. Your private favorites and account encryption keys are deleted.",
       previewLoading: "Checking which workspace data will stay…",
       previewFailed: "Could not check which workspace data will stay. Close this dialog and try again.",
+      localBackups: "Backup files you saved on your devices stay there. Delete those files separately if you no longer want them.",
       exportHint: "Want a copy first? <link>Export your data as JSON</link> before you continue.",
       exportHintPlain:
         "Want a copy first? Export your data as JSON from Settings → Data before you continue.",
