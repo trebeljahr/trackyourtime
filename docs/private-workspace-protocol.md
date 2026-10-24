@@ -325,6 +325,50 @@ expired or replaced preparation. Snapshot creation and content acknowledgements
 also refuse expired writable preparations. All public rollout guards remain
 closed; the internal stage engine is not a migration entry point.
 
+## Residual plaintext verification
+
+`auditPrivateWorkspaceRetirement` inspects the current database and returns only
+collection/reason/count rows. `assertPrivateWorkspaceRetirement` requires an
+active cutover transaction with pinned encrypted state and verified-backup
+metadata, and must run after its planned source retirement,
+before commit. Any finding aborts that transaction. Neither helper deletes
+anything or enables conversion; a clean report is not rollout authorization.
+
+The check requires all original business collections except the retained
+membership routing table to be empty. This includes entry-operation request
+hashes/results. Webhook subscriptions and queued delivery envelopes must also
+be absent: URLs and signing secrets need a verified encrypted copy, and active
+outbound jobs must drain before retirement. API credential hashes/scopes may
+remain as authentication metadata, but labels must be encrypted and cleared.
+Temporary migration receipts must retire with plaintext source checksums;
+PrivateWorkspace.sourceRevision becomes the explicit non-secret `retired`
+marker. Immutable snapshot/journal commitments hash ciphertext and may remain.
+
+Retained membership names and rates must be cleared after their verified
+ciphertext copy exists. Authentication organization rows need generic routing
+name/slug placeholders and no original logo or metadata; their originals need
+an additional encrypted recovery path before this replacement is safe. The
+helper produces deterministic opaque routing placeholders without changing any
+row. Unknown top-level fields in retained routing/private storage and unknown
+workspace-scoped collections fail the check instead of being assumed harmless.
+
+The existing fourteen-collection recovery format does not yet cover organization
+identity, webhook configuration, token labels, account preferences, profiles or
+avatars. Account data has different ownership/scope and needs its own migration;
+the workspace auditor does not claim to verify it. Authentication email,
+membership/permission relationships, credential verification data, routing IDs,
+record sizes and timing remain server-visible metadata. Global scheduler errors,
+application/proxy logs, old dumps, storage pages, oplogs and database snapshots
+require a separate operational audit and retirement plan. Logical deletion does
+not prove erasure of prior plaintext copies or stop an already-sent webhook.
+
+Catalog enumeration cannot run inside MongoDB transactions. The audit bounds it
+to 256 collections, reads catalog metadata outside the transaction, and performs
+record checks using the caller's snapshot session. The cutover must fence all
+workspace writers and prevent unclassified writers/collection creation through
+maintenance controls. All current rollout guards remain closed until the
+missing encrypted sources, adapters and operational checks exist.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes snapshot v2, consumes
