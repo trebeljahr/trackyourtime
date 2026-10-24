@@ -1,3 +1,4 @@
+import { PRIVATE_USER_ONLY_KINDS } from "@starter/shared";
 import { withPrivateWorkspaceErasure } from "../privacy/plaintext-guard.js";
 // The two real row stores behind `deleteAccountData`.
 import { PrivateAccount, PrivateDirectory, PrivateDeviceRequest, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
@@ -114,26 +115,26 @@ export const mongooseRowStore: DeletionRowStore = {
   async erasePrivateUserData(userId) {
     if (!userId) throw new Error("account deletion: empty user ID");
     const workspaces = new Set([
-      ...await PrivateRecord.distinct("workspaceId", { kind: "favorites", authorId: userId }),
-      ...await PrivateSnapshotChunk.distinct("workspaceId", { records: { $elemMatch: { kind: "favorites", authorId: userId } } }),
+      ...await PrivateRecord.distinct("workspaceId", { kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId }),
+      ...await PrivateSnapshotChunk.distinct("workspaceId", { records: { $elemMatch: { kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId } } }),
       ...await PrivateSnapshotReader.distinct("workspaceId", { userId }),
       ...await PrivateWorkspaceCommit.distinct("workspaceId", { $or: [
-        { records: { $elemMatch: { kind: "favorites", authorId: userId } } },
+        { records: { $elemMatch: { kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId } } },
         { "readerSignatures.userId": userId },
       ] }),
     ]);
     for (const workspaceId of [...workspaces].sort()) {
       await withBusinessTransaction(async () => {
         await fenceWorkspace(workspaceId);
-        await PrivateRecord.deleteMany({ workspaceId, kind: "favorites", authorId: userId });
-        await PrivateSnapshotChunk.updateMany({ workspaceId }, { $pull: { records: { kind: "favorites", authorId: userId } } });
+        await PrivateRecord.deleteMany({ workspaceId, kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId });
+        await PrivateSnapshotChunk.updateMany({ workspaceId }, { $pull: { records: { kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId } } });
         await PrivateSnapshotReader.deleteMany({ workspaceId, userId });
         // Never delete a whole mixed commit: others still need its shared
         // ciphertext. Their separately signed projections excluded these
-        // favorites from the start. Keep immutable manifest commitments and
+        // personal records from the start. Keep immutable manifest commitments and
         // historical public keys/recipient grants for signature verification.
         await PrivateWorkspaceCommit.updateMany({ workspaceId }, { $pull: {
-          records: { kind: "favorites", authorId: userId },
+          records: { kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId },
           readerSignatures: { userId },
         } });
       });

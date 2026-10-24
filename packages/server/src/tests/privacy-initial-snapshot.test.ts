@@ -130,6 +130,8 @@ describe("immutable initial snapshot storage", { skip: skipWithoutDatabase }, ()
     await assert.rejects(privateInitialSnapshotPage(base.workspaceId, "owner", migrationId, 100), { code: "PRECONDITION_FAILED" });
   });
   it("erases a departing member's personal snapshot data while preserving another reader's signed projection", async () => {
+    const integrations = await Promise.all(["owner", "member"].map((userId) => encryptPrivateRecord(base.workspaceId, { kind: "integrations", id: `webhooksubscriptions:${userId}-hook`, authorId: userId, value: { _id: `${userId}-hook`, workspaceId: base.workspaceId, createdBy: userId, secret: `${userId}-private-webhook-secret` } }, people, 1)));
+    await storeRecords(integrations); records.push(...integrations); await signSnapshot();
     await preparePrivateInitialSnapshot(scope(), readers);
     const before = await downloadPrivateInitialSnapshot(options());
     await mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: base.workspaceId, userId: "member" });
@@ -140,6 +142,9 @@ describe("immutable initial snapshot storage", { skip: skipWithoutDatabase }, ()
     assert.deepEqual(after.records, before.records); assert.deepEqual(after.signed, before.signed);
     assert.equal(await PrivateSnapshotReader.countDocuments({ userId: "member" }), 0);
     assert.equal(await PrivateSnapshotChunk.countDocuments({ "records.id": "member-favorite" }), 0);
+    assert.equal(await PrivateSnapshotChunk.countDocuments({ "records.id": "webhooksubscriptions:member-hook" }), 0);
+    assert.equal(await PrivateSnapshotChunk.countDocuments({ "records.id": "webhooksubscriptions:owner-hook" }), 1);
+    assert.equal(await PrivateRecord.countDocuments({ kind: "integrations", authorId: "member" }), 0);
     assert.equal(await PrivateSnapshotChunk.countDocuments({ "records.id": "member-entry" }), 1);
     await assert.rejects(privateInitialSnapshotManifest(base.workspaceId, "member"), { code: "NOT_FOUND" });
   });
@@ -236,6 +241,7 @@ describe("immutable initial snapshot storage", { skip: skipWithoutDatabase }, ()
     const mixed = await Promise.all([
       encryptPrivateRecord(base.workspaceId, { kind: "entries", id: "member-later", authorId: "member", value: { description: "Retained work" } }, people, 2),
       encryptPrivateRecord(base.workspaceId, { kind: "favorites", id: "member-private", authorId: "member", value: { label: "Private shortcut" } }, people, 2),
+      encryptPrivateRecord(base.workspaceId, { kind: "integrations", id: "apitokens:member-token", authorId: "member", value: { _id: "member-token", workspaceId: base.workspaceId, userId: "member", name: "Private token label" } }, people, 2),
     ]);
     const signed = await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId: base.workspaceId, userId: "member", expectedRevision: 1, operationId: crypto.randomUUID(), records: mixed, remove: [] }, directory, previousRoot: root, secrets: member, current: () => true });
     await commitPrivateChainedWorkspaceEdit("member", signed, base.server);
@@ -246,6 +252,7 @@ describe("immutable initial snapshot storage", { skip: skipWithoutDatabase }, ()
     assert.deepEqual(after, before);
     await verifyPrivateChainedWorkspaceChange(after.changes[0], { ...base, after: 1, previousRoot: root, directory });
     assert.equal(await PrivateWorkspaceCommit.countDocuments({ "records.id": "member-private" }), 0);
+    assert.equal(await PrivateWorkspaceCommit.countDocuments({ "records.id": "apitokens:member-token" }), 0);
     assert.equal(await PrivateWorkspaceCommit.countDocuments({ "records.id": "member-later" }), 1);
   });
 });

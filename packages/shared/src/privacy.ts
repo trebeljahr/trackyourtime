@@ -2,7 +2,7 @@ import { z } from "zod";
 export const cipherSchema = z.object({ v: z.literal(1), nonce: z.string().regex(/^[A-Za-z0-9_-]{16}$/), data: z.string().min(22).max(2_000_000).regex(/^[A-Za-z0-9_-]+$/) }).strict();
 export const publicEncryptionKeySchema = z.object({ kty: z.literal("EC"), crv: z.literal("P-256"), x: z.string().regex(/^[A-Za-z0-9_-]{43}$/), y: z.string().regex(/^[A-Za-z0-9_-]{43}$/), ext: z.boolean().optional(), key_ops: z.array(z.string()).optional() }).strict();
 export const recipientBoxSchema = z.object({ v: z.literal(1), ephemeral: publicEncryptionKeySchema, box: cipherSchema }).strict();
-export const PRIVATE_KINDS = ["entries", "entryMoney", "clients", "clientMoney", "projects", "projectMoney", "tasks", "tags", "favorites", "invoices", "settings", "businessProfile", "approvals", "approvalPolicy", "imports", "members", "memberMoney", "settingsMoney"] as const;
+export const PRIVATE_KINDS = ["entries", "entryMoney", "clients", "clientMoney", "projects", "projectMoney", "tasks", "tags", "favorites", "invoices", "settings", "businessProfile", "approvals", "approvalPolicy", "imports", "workspaceIdentity", "integrations", "members", "memberMoney", "settingsMoney"] as const;
 export const privateKindSchema = z.enum(PRIVATE_KINDS);
 export type PrivateKind = typeof PRIVATE_KINDS[number];
 export const encryptedRecordSchema = z.object({
@@ -32,3 +32,10 @@ export const RECOVERY_MAX_BYTES = 23 * 1024 * 1024;
 export const RECOVERY_MAX_RECORDS = 200_000;
 export type WorkspaceRecoveryArchive = { format: "trackyourtime-workspace-recovery-v1"; server: string; ownerId: string; snapshot: WorkspaceRecovery };
 export const PRIVATE_WORKSPACE_REQUIRED = "PRIVATE_WORKSPACE_REQUIRES_UNLOCK";
+
+/** Creator-only records must also be erased from mixed encrypted history on
+ * account deletion. Shared business records remain with the workspace. */
+export const PRIVATE_USER_ONLY_KINDS = ["favorites", "integrations"] as const;
+export const RECOVERY_SUPPLEMENT_KINDS = ["organization", "apitokens", "webhooksubscriptions"] as const;
+export type RecoverySupplementKind = typeof RECOVERY_SUPPLEMENT_KINDS[number];
+export type WorkspaceRecoverySupplement = { v: 1; workspaceId: string; createdAt: string; sourceRevision: string; collections: Record<RecoverySupplementKind, Record<string, unknown>[]> };

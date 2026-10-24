@@ -47,3 +47,5 @@ export * from "./privacy/recovery-backup.js";
 export * from "./privacy/recovery-backup-job.js";
 export * from "./privacy/initial-snapshot.js";
 export * from "./privacy/history-chain.js";
+
+export * from "./privacy/recovery-supplement.js";

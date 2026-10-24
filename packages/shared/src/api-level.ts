@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 27;
+export const API_LEVEL = 28;
 
 export type ApiLevelChange = {
   level: number;
@@ -180,6 +180,7 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
   ] },
   { level: 26, release: "0.4.0", added: ["Guarded owner migration approval bound to a reopened encrypted original backup and exact signed initial snapshot; no source deletion is enabled."] },
   { level: 27, release: "0.4.0", added: ["Encrypted members records separate shared member details from private hourly rates. Guarded private snapshot consumers require this kind; standard-client compatibility is unchanged."] },
+  { level: 28, release: "0.4.0", added: ["Encrypted workspaceIdentity and creator-only integrations kinds for lossless supplemental recovery. Private snapshots require the expanded kind set; no migration or source deletion is enabled."] },
 ];
 
 /**

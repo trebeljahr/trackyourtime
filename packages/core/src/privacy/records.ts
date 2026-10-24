@@ -1,12 +1,14 @@
 import { emptyRecoveryCollections, recoveryDigest, recoveryRecordId, verifyWorkspaceRecovery } from "./recovery.js";
-import { encryptedRecordSchema, canSeeEntry, canSeeMoneyFor, canUseInvoices, type EncryptedRecord, type PrivateKind, type WorkspaceRecovery, type RecoveryKind } from "@starter/shared";
+import { encryptedRecordSchema, PRIVATE_USER_ONLY_KINDS, canSeeEntry, canSeeMoneyFor, canUseInvoices, type EncryptedRecord, type PrivateKind, type WorkspaceRecovery, type RecoveryKind } from "@starter/shared";
 import { canonicalJson, decodeSecret, encodeSecret, randomSecret, seal, sealForRecipient, unseal, unsealForRecipient, type PublicKey } from "./crypto.js";
+import { assertPrivateSupplementRecord } from "./recovery-supplement.js";
+const userOnlyKinds = new Set<string>(PRIVATE_USER_ONLY_KINDS);
 export type PrivateRecipient = { userId: string; role: "owner" | "admin" | "member"; canViewOthersTime: boolean; canViewOthersMoney: boolean; publicKey: PublicKey };
 export type PlainPrivateRecord = { id: string; kind: PrivateKind; authorId: string | null; value: Record<string, unknown> };
 export function readersForPrivateRecord(kind: PrivateKind, authorId: string | null, members: readonly PrivateRecipient[]): PrivateRecipient[] {
   return members.filter((m) => {
     const visibility = { userId: m.userId, canViewOthersTime: m.role === "owner" || m.canViewOthersTime, canViewOthersMoney: m.role === "owner" || m.canViewOthersMoney };
-    if (kind === "favorites") return m.userId === authorId;
+    if (userOnlyKinds.has(kind)) return m.userId === authorId;
     if (kind === "invoices") return canUseInvoices(m.role, visibility);
     if (kind === "businessProfile") return m.role !== "member" || visibility.canViewOthersMoney;
     if (kind === "entries" || kind === "approvals") return authorId !== null && canSeeEntry(visibility, authorId);
@@ -31,10 +33,12 @@ function privateAuthorField(kind: PrivateKind, id: string): string | null {
 const MEMBER_DETAILS = new Set(["_id", "workspaceId", "userId", "name", "role", "canViewOthersTime", "canViewOthersMoney", "createdAt", "updatedAt", "__v"]);
 function assertPrivateValueBinding(workspace: string, plain: PlainPrivateRecord): void {
   const value = plain.value;
+  if (plain.kind === "workspaceIdentity" || plain.kind === "integrations") assertPrivateSupplementRecord(workspace, plain);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Private record value must be an object");
   if (Object.hasOwn(value, "workspaceId") && value.workspaceId !== workspace) throw new Error("Private payload belongs to another workspace");
   for (const rawId of [value._id === undefined ? undefined : privateValue(value._id), value.id]) if (rawId !== undefined) {
-    const logicalId = plain.kind === "imports" && /^(entryoperations|importbatches):/.test(plain.id) ? plain.id.slice(plain.id.indexOf(":") + 1) : plain.id;
+    const prefixed = (plain.kind === "imports" && /^(entryoperations|importbatches):/.test(plain.id)) || (plain.kind === "integrations" && /^(apitokens|webhooksubscriptions):/.test(plain.id));
+    const logicalId = prefixed ? plain.id.slice(plain.id.indexOf(":") + 1) : plain.id;
     if (typeof rawId !== "string" || rawId !== logicalId) throw new Error("Private payload ID does not match its signed record");
   }
   if (plain.kind === "members" && Object.keys(value).some((key) => !MEMBER_DETAILS.has(key))) throw new Error("Member details contain private or unknown fields");

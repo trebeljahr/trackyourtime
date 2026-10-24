@@ -1,5 +1,5 @@
 {
-  "apiLevel": 27,
+  "apiLevel": 28,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -4590,6 +4590,8 @@
                         "approvals",
                         "approvalPolicy",
                         "imports",
+                        "workspaceIdentity",
+                        "integrations",
                         "members",
                         "memberMoney",
                         "settingsMoney"
@@ -4653,6 +4655,8 @@
                         "approvals",
                         "approvalPolicy",
                         "imports",
+                        "workspaceIdentity",
+                        "integrations",
                         "members",
                         "memberMoney",
                         "settingsMoney"
@@ -5619,6 +5623,8 @@
                         "approvals",
                         "approvalPolicy",
                         "imports",
+                        "workspaceIdentity",
+                        "integrations",
                         "members",
                         "memberMoney",
                         "settingsMoney"
@@ -5682,6 +5688,8 @@
                         "approvals",
                         "approvalPolicy",
                         "imports",
+                        "workspaceIdentity",
+                        "integrations",
                         "members",
                         "memberMoney",
                         "settingsMoney"
@@ -6164,6 +6172,8 @@
                     "approvals",
                     "approvalPolicy",
                     "imports",
+                    "workspaceIdentity",
+                    "integrations",
                     "members",
                     "memberMoney",
                     "settingsMoney"
@@ -6216,6 +6226,8 @@
                     "approvals",
                     "approvalPolicy",
                     "imports",
+                    "workspaceIdentity",
+                    "integrations",
                     "members",
                     "memberMoney",
                     "settingsMoney"

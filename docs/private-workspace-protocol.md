@@ -389,6 +389,49 @@ ordinary standard clients keep their existing minimum version. No previously
 converted workspaces exist because rollout is still closed. Original v1 typed
 recovery files continue to open; their raw membership schema is unchanged.
 
+## Supplemental workspace and integration originals
+
+API level 28 adds `workspaceIdentity` and `integrations` encrypted kinds and
+raises the guarded initial-snapshot capability to the expanded kind set. The
+typed recovery supplement contains original authentication organization data,
+API-token records and webhook subscriptions, including raw BSON, URLs, signing
+secrets and unknown legacy fields. It has its own checksum, exact collection
+set, workspace binding and bounded size/count. It supplements the existing
+fourteen-collection snapshot; it is not a replacement for it.
+
+Known organization identity fields are readable by workspace members. Unknown
+legacy organization fields remain in the internal source copy but block ordinary
+source reads and publication until their private audience is explicitly defined.
+Integration records use
+collection-prefixed IDs and the actual creator field (userId for API tokens,
+createdBy for webhook subscriptions). Only that creator receives a grant; the
+workspace owner gains no exception. Unrelated legacy ownership fields cannot
+redirect the ciphertext. The crypto helper checks scope, source ID and creator
+before encryption and after decryption. Recovery reconstructs exact original
+IDs and typed values; duplicate/colliding addresses or orphaned creators refuse
+conversion rather than dropping data or guessing ownership.
+
+The internal normal source reader returns shared organization identity plus
+only the caller's own integrations. `capturePrivateMigrationSupplement` is a
+separately named server-side complete-source engine, restricted to the current
+owner-controlled migration; its output must never be returned from a user API.
+It encrypts others' originals to their keys during staging. Neither reader is
+mounted as a public endpoint, and both refuse an already encrypted workspace.
+
+Account erasure treats integrations like favorites, removing the departing
+creator's ciphertext from current records and mixed initial snapshots/journals,
+while retaining shared work and the immutable commitments needed to verify
+other readers' projections. It does not delete another creator's integrations.
+
+This source is not yet part of the user-held backup file format or combined
+migration proof. Existing v1 backups still cover only fourteen collections and
+the older proof cannot approve supplemental records. A combined encrypted file,
+exact restore drill and per-creator content receipts are required before this
+source can authorize any retirement. Profile/avatar/user-preference encryption
+still needs an account-scoped path. Server-side webhook/REST behavior in private
+mode also requires explicit compatibility handling; copying configuration does
+not make a blind server able to deliver plaintext events.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes snapshot v2, consumes

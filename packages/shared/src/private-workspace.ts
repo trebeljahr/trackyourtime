@@ -55,7 +55,7 @@ export const PRIVATE_SNAPSHOT_MAX_BYTES = 64 * 1024 * 1024;
 export const PRIVATE_SNAPSHOT_PAGE_MAX_BYTES = 4 * 1024 * 1024;
 
 export function canWritePrivateRecord(kind: PrivateKind, authorId: string | null, actor: Pick<PrivateDirectoryMember, "userId" | "role" | "canViewOthersTime" | "canViewOthersMoney">): boolean {
-  if (["entries", "entryMoney", "favorites", "imports"].includes(kind)) return authorId === actor.userId;
+  if (["entries", "entryMoney", "favorites", "imports", "integrations"].includes(kind)) return authorId === actor.userId;
   if (kind === "invoices") return canUseInvoices(actor.role, { userId: actor.userId, canViewOthersTime: actor.role === "owner" || actor.canViewOthersTime, canViewOthersMoney: actor.role === "owner" || actor.canViewOthersMoney });
   if (kind === "memberMoney") return actor.role === "owner" || (actor.role === "admin" && actor.canViewOthersMoney);
   return actor.role === "owner" || actor.role === "admin";
