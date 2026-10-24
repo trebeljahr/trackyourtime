@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 26;
+export const API_LEVEL = 27;
 
 export type ApiLevelChange = {
   level: number;
@@ -179,6 +179,7 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
     "Guarded member-private favorites source and signed conversion acknowledgements under privacy.migrationFavoritesSource and privacy.acknowledgeMigrationFavorites; no conversion or plaintext deletion is enabled.",
   ] },
   { level: 26, release: "0.4.0", added: ["Guarded owner migration approval bound to a reopened encrypted original backup and exact signed initial snapshot; no source deletion is enabled."] },
+  { level: 27, release: "0.4.0", added: ["Encrypted members records separate shared member details from private hourly rates. Guarded private snapshot consumers require this kind; standard-client compatibility is unchanged."] },
 ];
 
 /**

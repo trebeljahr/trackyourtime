@@ -121,6 +121,8 @@ it("rebuilds the complete owner-readable BSON recovery copy from decrypted recor
   assert.deepEqual(restored, options.source);
   await assert.rejects(privateRecordsToRecovery("workspace", plaintext.filter((row) => row.kind !== "entryMoney")), /missing its matching money/);
   await assert.rejects(privateRecordsToRecovery("workspace", plaintext.filter((row) => row.kind !== "entries")), /orphaned money/);
+  await assert.rejects(privateRecordsToRecovery("workspace", plaintext.filter((row) => row.kind !== "memberMoney")), /missing its matching money/);
+  await assert.rejects(privateRecordsToRecovery("workspace", plaintext.filter((row) => row.kind !== "members")), /orphaned money/);
   const bad = structuredClone(plaintext); bad.find((row) => row.kind === "entryMoney")!.value.authorId = "owner";
   await assert.rejects(privateRecordsToRecovery("workspace", bad), /unexpected data/);
 });

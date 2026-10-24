@@ -369,6 +369,26 @@ workspace writers and prevent unclassified writers/collection creation through
 maintenance controls. All current rollout guards remain closed until the
 missing encrypted sources, adapters and operational checks exist.
 
+## Member details and rates
+
+API level 27 adds the `members` encrypted kind. Lossless partitioning separates
+an original membership into shared member details (including the display name)
+and a `memberMoney` row containing its original ID, hourlyRate and any unknown
+legacy fields. Unknown fields retain the earlier restricted audience instead of
+becoming visible to all colleagues. Member details accept an explicit field
+allowlist; rate/unknown fields cannot be placed there through the crypto helper.
+All members can decrypt the details; rate grants retain the existing per-person
+money visibility. Names no longer depend on permission to view a colleague's
+rate. The signed directory remains the authority for roles and permissions;
+clients must not grant access from descriptive membership payload fields.
+
+Recovery reconstruction requires each details/rate pair and preserves exact
+EJSON values. Missing or orphaned parts fail instead of producing a partial
+backup. The guarded private initial-snapshot capability now requires level 27;
+ordinary standard clients keep their existing minimum version. No previously
+converted workspaces exist because rollout is still closed. Original v1 typed
+recovery files continue to open; their raw membership schema is unchanged.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes snapshot v2, consumes

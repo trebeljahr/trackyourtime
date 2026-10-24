@@ -38,7 +38,10 @@ describe("private record boundaries", () => {
     assert.deepEqual({ ...project.value, ...money.value }, original);
     assert.equal(project.id, "00112233445566778899aabb");
     assert.equal(project.value.hourlyRate, undefined); assert.equal(project.value.budgetAmount, undefined);
-    assert.deepEqual(records.find((r) => r.kind === "memberMoney")?.value, membership);
+    const details = records.find((r) => r.kind === "members")!, rate = records.find((r) => r.kind === "memberMoney")!;
+    assert.deepEqual({ ...details.value, ...rate.value }, membership);
+    assert.equal(details.value.hourlyRate, undefined);
+    assert.deepEqual(rate.value, { _id: "member", hourlyRate: 75 });
   });
 });
 
@@ -80,4 +83,22 @@ it("uses authoritative collection fields rather than unrelated legacy author met
   assert.deepEqual((await decryptPrivateRecord("workspace", encrypted, "author", pair.privateKey)).value, preference);
   await assert.rejects(decryptPrivateRecord("workspace", encrypted, "owner", pair.privateKey), /cannot decrypt/);
   await assert.rejects(encryptPrivateRecord("workspace", { ...favorite, authorId: "owner" }, members, 1), /Private payload author/);
+});
+
+it("shares member details without disclosing rates to colleagues without money access", async () => {
+  const collections = Object.fromEntries(RECOVERY_KINDS.map((kind) => [kind, []])) as unknown as WorkspaceRecovery["collections"];
+  collections.workspacemembers.push({ _id: "membership", workspaceId: "workspace", userId: "author", name: "Private colleague name", legacyPrivateField: "Old restricted metadata", hourlyRate: { $numberDecimal: "123.4500" } });
+  const records = partitionPrivateRecovery({ v: 1, workspaceId: "workspace", createdAt: "now", sourceRevision: "synthetic", collections });
+  const details = await encryptPrivateRecord("workspace", records.find((row) => row.kind === "members")!, members, 1);
+  const money = await encryptPrivateRecord("workspace", records.find((row) => row.kind === "memberMoney")!, members, 1);
+  const read = await decryptPrivateRecord("workspace", details, "time", pair.privateKey);
+  assert.equal(read.value.name, "Private colleague name"); assert.equal(read.value.hourlyRate, undefined);
+  assert.doesNotMatch(JSON.stringify(read), /123\.4500|Old restricted metadata/);
+  await assert.rejects(decryptPrivateRecord("workspace", money, "time", pair.privateKey), /cannot decrypt/);
+  const rate = await decryptPrivateRecord("workspace", money, "author", pair.privateKey);
+  assert.deepEqual(rate.value.hourlyRate, { $numberDecimal: "123.4500" });
+  assert.equal(rate.value.legacyPrivateField, "Old restricted metadata");
+  const original = records.find((row) => row.kind === "members")!;
+  await assert.rejects(encryptPrivateRecord("workspace", { ...original, value: { ...original.value, hourlyRate: 100 } }, members, 1), /private or unknown fields/);
+  await assert.rejects(encryptPrivateRecord("workspace", { ...original, value: { ...original.value, unknownNote: "Do not share this" } }, members, 1), /private or unknown fields/);
 });

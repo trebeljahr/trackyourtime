@@ -21,11 +21,14 @@ export function readersForPrivateRecord(kind: PrivateKind, authorId: string | nu
 export const privateRecordContext = (workspace: string, row: Pick<EncryptedRecord, "kind" | "id" | "revision" | "authorId">): string => JSON.stringify(["trackyourtime-record-v1", workspace, row.kind, row.id, row.authorId, row.revision]);
 function privateAuthorField(kind: PrivateKind, id: string): string | null {
   if (["entries", "entryMoney", "approvals"].includes(kind)) return "authorId";
-  if (kind === "favorites" || kind === "memberMoney") return "userId";
+  if (kind === "favorites" || kind === "members" || kind === "memberMoney") return "userId";
   if (kind === "invoices") return "createdBy";
   if (kind === "imports") return id.startsWith("entryoperations:") ? "userId" : id.startsWith("importbatches:") ? "createdBy" : null;
   return null;
 }
+// Only these existing member fields become readable by all colleagues.
+// Unknown legacy fields retain the original restricted memberMoney audience.
+const MEMBER_DETAILS = new Set(["_id", "workspaceId", "userId", "name", "role", "canViewOthersTime", "canViewOthersMoney", "createdAt", "updatedAt", "__v"]);
 function assertPrivateValueBinding(workspace: string, plain: PlainPrivateRecord): void {
   const value = plain.value;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Private record value must be an object");
@@ -34,6 +37,8 @@ function assertPrivateValueBinding(workspace: string, plain: PlainPrivateRecord)
     const logicalId = plain.kind === "imports" && /^(entryoperations|importbatches):/.test(plain.id) ? plain.id.slice(plain.id.indexOf(":") + 1) : plain.id;
     if (typeof rawId !== "string" || rawId !== logicalId) throw new Error("Private payload ID does not match its signed record");
   }
+  if (plain.kind === "members" && Object.keys(value).some((key) => !MEMBER_DETAILS.has(key))) throw new Error("Member details contain private or unknown fields");
+  if (plain.kind === "memberMoney" && Object.keys(value).some((key) => key !== "_id" && MEMBER_DETAILS.has(key))) throw new Error("Member money overlaps shared member details");
   const authorField = privateAuthorField(plain.kind, plain.id);
   if (authorField) {
     const author = privateValue(value[authorField]);
@@ -102,7 +107,11 @@ export function partitionPrivateRecovery(snapshot: WorkspaceRecovery): PlainPriv
       case "clients": split("clients", "clientMoney", raw, ["billing"], null); break;
       case "projects": split("projects", "projectMoney", raw, ["hourlyRate", "budgetAmount", "budgetCurrency"], null); break;
       case "workspacesettings": split("settings", "settingsMoney", raw, ["defaultHourlyRate"], null); break;
-      case "workspacemembers": add("memberMoney", raw, author); break;
+      case "workspacemembers": {
+        const details = Object.fromEntries(Object.entries(raw).filter(([key]) => MEMBER_DETAILS.has(key)));
+        const money = { _id: raw._id, ...Object.fromEntries(Object.entries(raw).filter(([key]) => !MEMBER_DETAILS.has(key))) };
+        add("members", details, author); add("memberMoney", money, author); break;
+      }
       case "tasks": add("tasks", raw, null); break;
       case "tags": add("tags", raw, null); break;
       case "favorites": add("favorites", raw, author); break;
@@ -130,9 +139,10 @@ export async function privateRecordsToRecovery(workspaceId: string, input: reado
     entries: { money: "entryMoney", collection: "timeentries", fields: ["hourlyRate"] },
     clients: { money: "clientMoney", collection: "clients", fields: ["billing"] },
     projects: { money: "projectMoney", collection: "projects", fields: ["hourlyRate", "budgetAmount", "budgetCurrency"] },
+    members: { money: "memberMoney", collection: "workspacemembers", fields: ["hourlyRate"] },
     settings: { money: "settingsMoney", collection: "workspacesettings", fields: ["defaultHourlyRate"] },
   } as const;
-  const whole: Partial<Record<PrivateKind, RecoveryKind>> = { tasks: "tasks", tags: "tags", favorites: "favorites", invoices: "invoices", businessProfile: "businessprofiles", approvals: "timesheetapprovals", approvalPolicy: "timesheetpolicies", memberMoney: "workspacemembers" };
+  const whole: Partial<Record<PrivateKind, RecoveryKind>> = { tasks: "tasks", tags: "tags", favorites: "favorites", invoices: "invoices", businessProfile: "businessprofiles", approvals: "timesheetapprovals", approvalPolicy: "timesheetpolicies" };
   const collectionRows = emptyRecoveryCollections();
   const moneyKinds = new Set<string>(Object.values(splits).map((split) => split.money));
   const usedMoney = new Set<string>();
@@ -156,7 +166,9 @@ export async function privateRecordsToRecovery(workspaceId: string, input: reado
     if (split) {
       const money = byAddress.get(JSON.stringify([split.money, row.id]));
       if (!money || money.authorId !== row.authorId || canonicalJson(money.value._id) !== canonicalJson(raw._id)) throw new Error("Private recovery is missing its matching money record");
-      if (Object.keys(money.value).some((key) => key !== "_id" && !(split.fields as readonly string[]).includes(key)) || split.fields.some((key) => Object.hasOwn(raw, key))) throw new Error("Private recovery money fields overlap or contain unexpected data");
+      if (row.kind === "members") {
+        if (Object.keys(money.value).some((key) => key !== "_id" && MEMBER_DETAILS.has(key))) throw new Error("Private recovery member fields overlap");
+      } else if (Object.keys(money.value).some((key) => key !== "_id" && !(split.fields as readonly string[]).includes(key)) || split.fields.some((key) => Object.hasOwn(raw, key))) throw new Error("Private recovery money fields overlap or contain unexpected data");
       usedMoney.add(JSON.stringify([money.kind, money.id])); raw = { ...raw, ...money.value };
     }
     collectionRows[collection].push(raw);

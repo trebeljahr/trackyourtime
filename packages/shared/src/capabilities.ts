@@ -18,9 +18,10 @@
  */
 export const REQUIRES_API_LEVEL = {
   "privacy.ownerMigrationProof": 26,
+  "privacy.memberDetails": 27,
   "privacy.directory": 22,
   "privacy.snapshotPages": 23,
-  "privacy.initialSnapshot": 24,
+  "privacy.initialSnapshot": 27,
   "privacy.historyChain": 24,
   "privacy.migrationProofs": 25,
   "privacy.deletionPreview": 21,
