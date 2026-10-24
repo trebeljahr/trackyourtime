@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 19;
+export const API_LEVEL = 20;
 
 export type ApiLevelChange = {
   level: number;
@@ -159,6 +159,9 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
   },
   { level: 19, release: "0.4.0", added: [
     "Private device unlocking through an encrypted relay: privacy.createDeviceUnlock, deviceUnlockStatus, approveDeviceUnlock and cancelDeviceUnlock.",
+  ] },
+  { level: 20, release: "0.4.0", added: [
+    "Signed encrypted workspace edits and immutable revision feeds under privacy.signedWrite and privacy.changes; both remain behind the workspace rollout guard.",
   ] },
 ];
 

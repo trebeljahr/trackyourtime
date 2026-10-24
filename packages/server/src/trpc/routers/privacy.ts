@@ -1,3 +1,5 @@
+import { commitPrivateWorkspaceEdit, privateWorkspaceChanges } from "../../services/privacy/workspace-edits.js";
+import { signedPrivateWorkspaceEditSchema } from "@starter/shared";
 import { requirePrivateWorkspaceRollout, beginPrivateMigration, stagePrivateMigration, privateMigrationArchive, commitPrivateMigration, cancelPrivateMigration } from "../../services/privacy/migration.js";
 import { canonicalJson } from "@starter/core";
 import { z } from "zod";
@@ -109,6 +111,15 @@ export const privacyRouter = router({
       mode.revision = revision; await mode.save();
       return { revision };
     });
+  }),
+  signedWrite: privateWorkspaceProcedure.input(scopeSchema.extend(signedPrivateWorkspaceEditSchema.shape)).mutation(({ ctx, input }) => {
+    requirePrivateWorkspaceRollout();
+    if (input.edit.workspaceId !== ctx.workspaceId) throw new TRPCError({ code: "FORBIDDEN" });
+    return commitPrivateWorkspaceEdit(ctx.user.id, { edit: input.edit, signature: input.signature, readerSignatures: input.readerSignatures });
+  }),
+  changes: privateWorkspaceProcedure.input(scopeSchema.extend({ after: z.number().int().nonnegative(), through: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(20).default(20) })).query(({ ctx, input }) => {
+    requirePrivateWorkspaceRollout();
+    return privateWorkspaceChanges(ctx.workspaceId, ctx.user.id, input.after, input.through, input.limit);
   }),
   beginMigration: privateWorkspaceProcedure.input(scopeSchema.extend({ sourceRevision: z.string().length(64), signature: signatureSchema })).mutation(({ctx, input}) => beginPrivateMigration(ctx.workspaceId, ctx.user.id, input.sourceRevision, input.signature)),
   stageMigration: privateWorkspaceProcedure.input(scopeSchema.extend({ migrationId: z.string().uuid(), offset: z.number().int().nonnegative().max(400000) })).mutation(({ctx, input}) => stagePrivateMigration(ctx.workspaceId, ctx.user.id, input.migrationId, input.offset)),

@@ -1,5 +1,5 @@
 // The two real row stores behind `deleteAccountData`.
-import { PrivateAccount, PrivateDeviceRequest, PrivateRecord, PrivateWorkspace } from "../../models/PrivateData.js";
+import { PrivateAccount, PrivateDeviceRequest, PrivateRecord, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
 import type { Model } from "mongoose";
 import { withStorageOwnershipAdoption } from "../storage-quota.js";
 import { withBusinessTransaction } from "../business-transaction.js";
@@ -48,6 +48,7 @@ const APP_MODELS: Record<AppCollection, Model<any, {}, {}, any>> = {
   privateAccounts: PrivateAccount,
   privateDeviceRequests: PrivateDeviceRequest,
   privateRecords: PrivateRecord,
+  privateWorkspaceCommits: PrivateWorkspaceCommit,
   privateWorkspaces: PrivateWorkspace,
   timeEntries: TimeEntry,
   entryOperations: EntryOperation,

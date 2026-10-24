@@ -18,6 +18,7 @@
  */
 export const REQUIRES_API_LEVEL = {
   "privacy.deviceUnlock": 19,
+  "privacy.journal": 20,
   "auth.passkeys": 18,
   "privacy.keys": 18,
   "catalog.options": 16,

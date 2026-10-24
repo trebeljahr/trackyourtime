@@ -1,5 +1,5 @@
 {
-  "apiLevel": 19,
+  "apiLevel": 20,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -4085,6 +4085,38 @@
       },
       "type": "mutation"
     },
+    "privacy.changes": {
+      "input": {
+        "properties": {
+          "after": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "through": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "after"
+        ],
+        "type": "object"
+      },
+      "type": "query"
+    },
     "privacy.commitMigration": {
       "input": {
         "properties": {
@@ -4432,6 +4464,340 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.signedWrite": {
+      "input": {
+        "properties": {
+          "edit": {
+            "additionalProperties": false,
+            "properties": {
+              "expectedRevision": {
+                "maximum": 9007199254740990,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "operationId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "records": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "authorId": {
+                      "anyOf": [
+                        {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "box": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "data": {
+                          "maxLength": 2000000,
+                          "minLength": 22,
+                          "pattern": "^[A-Za-z0-9_-]+$",
+                          "type": "string"
+                        },
+                        "nonce": {
+                          "pattern": "^[A-Za-z0-9_-]{16}$",
+                          "type": "string"
+                        },
+                        "v": {
+                          "const": 1,
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "v",
+                        "nonce",
+                        "data"
+                      ],
+                      "type": "object"
+                    },
+                    "grants": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "envelope": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "box": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "data": {
+                                    "maxLength": 2000000,
+                                    "minLength": 22,
+                                    "pattern": "^[A-Za-z0-9_-]+$",
+                                    "type": "string"
+                                  },
+                                  "nonce": {
+                                    "pattern": "^[A-Za-z0-9_-]{16}$",
+                                    "type": "string"
+                                  },
+                                  "v": {
+                                    "const": 1,
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "v",
+                                  "nonce",
+                                  "data"
+                                ],
+                                "type": "object"
+                              },
+                              "ephemeral": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "crv": {
+                                    "const": "P-256",
+                                    "type": "string"
+                                  },
+                                  "ext": {
+                                    "type": "boolean"
+                                  },
+                                  "key_ops": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "kty": {
+                                    "const": "EC",
+                                    "type": "string"
+                                  },
+                                  "x": {
+                                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                                    "type": "string"
+                                  },
+                                  "y": {
+                                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kty",
+                                  "crv",
+                                  "x",
+                                  "y"
+                                ],
+                                "type": "object"
+                              },
+                              "v": {
+                                "const": 1,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "v",
+                              "ephemeral",
+                              "box"
+                            ],
+                            "type": "object"
+                          },
+                          "userId": {
+                            "maxLength": 100,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "envelope"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 200,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "id": {
+                      "maxLength": 100,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "entries",
+                        "entryMoney",
+                        "clients",
+                        "clientMoney",
+                        "projects",
+                        "projectMoney",
+                        "tasks",
+                        "tags",
+                        "favorites",
+                        "invoices",
+                        "settings",
+                        "businessProfile",
+                        "approvals",
+                        "approvalPolicy",
+                        "imports",
+                        "memberMoney",
+                        "settingsMoney"
+                      ],
+                      "type": "string"
+                    },
+                    "revision": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "authorId",
+                    "revision",
+                    "box",
+                    "grants"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              "remove": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "authorId": {
+                      "anyOf": [
+                        {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "maxLength": 100,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "entries",
+                        "entryMoney",
+                        "clients",
+                        "clientMoney",
+                        "projects",
+                        "projectMoney",
+                        "tasks",
+                        "tags",
+                        "favorites",
+                        "invoices",
+                        "settings",
+                        "businessProfile",
+                        "approvals",
+                        "approvalPolicy",
+                        "imports",
+                        "memberMoney",
+                        "settingsMoney"
+                      ],
+                      "type": "string"
+                    },
+                    "readers": {
+                      "items": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "maxItems": 200,
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "id",
+                    "authorId",
+                    "readers"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              "userId": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              "v": {
+                "const": 1,
+                "type": "number"
+              },
+              "workspaceId": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "v",
+              "workspaceId",
+              "userId",
+              "operationId",
+              "expectedRevision",
+              "records",
+              "remove"
+            ],
+            "type": "object"
+          },
+          "readerSignatures": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "signature": {
+                  "pattern": "^[A-Za-z0-9_-]{86}$",
+                  "type": "string"
+                },
+                "userId": {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userId",
+                "signature"
+              ],
+              "type": "object"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "type": "array"
+          },
+          "signature": {
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "type": "string"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "edit",
+          "signature",
+          "readerSignatures"
+        ],
         "type": "object"
       },
       "type": "mutation"

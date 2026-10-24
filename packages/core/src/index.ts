@@ -38,3 +38,5 @@ export * from "./privacy/records.js";
 export * from "./privacy/recovery.js";
 export * from "./privacy/storage.js";
 export * from "./privacy/device.js";
+export * from "./privacy/workspace-edits.js";
+export * from "./privacy/replica.js";

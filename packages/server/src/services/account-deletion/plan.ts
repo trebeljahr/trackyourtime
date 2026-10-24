@@ -25,6 +25,7 @@ export {
 export type DeletionCollection =
   | "privateAccounts"
   | "privateDeviceRequests"
+  | "privateWorkspaceCommits"
   | "privateRecords"
   | "privateWorkspaces"
   | "timeEntries"
@@ -98,6 +99,7 @@ export function workspaceDeletionSteps(workspaceId: string): DeletionStep[] {
     // Refuse locked time before removing the workspace's other records.
     scoped("timeEntries"),
     scoped("privateRecords"),
+    scoped("privateWorkspaceCommits"),
     scoped("privateWorkspaces"),
     scoped("entryOperations"),
     scoped("timesheetApprovals"),

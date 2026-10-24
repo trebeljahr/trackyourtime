@@ -25,3 +25,17 @@ const privateDeviceRequestSchema = new Schema<{ _id: string; userId: string; pub
 privateDeviceRequestSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 privateDeviceRequestSchema.index({ userId: 1, expiresAt: 1 });
 export const PrivateDeviceRequest = mongoose.model("PrivateDeviceRequest", privateDeviceRequestSchema);
+
+/** Immutable ciphertext journal and replay receipt. One revision per workspace
+ * edit; no TTL, so a client that was offline cannot miss a deletion. */
+const privateWorkspaceCommitSchema = new Schema<{
+  workspaceId: string; userId: string; operationId: string; revision: number;
+  manifest: import("@starter/shared").PrivateWorkspaceManifest; signature: string; readerSignatures: { userId: string; signature: string }[];
+  records: EncryptedRecord[];
+}>({
+  workspaceId: { type: String, required: true }, userId: { type: String, required: true }, operationId: { type: String, required: true }, revision: { type: Number, required: true },
+  manifest: { type: Schema.Types.Mixed, required: true }, signature: { type: String, required: true }, readerSignatures: { type: Schema.Types.Mixed, required: true }, records: { type: Schema.Types.Mixed, required: true },
+}, { timestamps: true });
+privateWorkspaceCommitSchema.index({ workspaceId: 1, revision: 1 }, { unique: true });
+privateWorkspaceCommitSchema.index({ workspaceId: 1, userId: 1, operationId: 1 }, { unique: true });
+export const PrivateWorkspaceCommit = mongoose.model("PrivateWorkspaceCommit", privateWorkspaceCommitSchema);
