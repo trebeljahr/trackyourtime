@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createKeyPair } from "../privacy/crypto.js";
-import { decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery, readersForPrivateRecord, type PrivateRecipient } from "../privacy/records.js";
+import { createKeyPair, randomSecret, seal, sealForRecipient, encodeSecret } from "../privacy/crypto.js";
+import { decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery, readersForPrivateRecord, privateRecordContext, type PrivateRecipient } from "../privacy/records.js";
 import { RECOVERY_KINDS, type PrivateKind, type WorkspaceRecovery } from "@starter/shared";
 const pair = await createKeyPair();
 const member = (userId: string, role: PrivateRecipient["role"], time: boolean, money: boolean): PrivateRecipient => ({ userId, role, canViewOthersTime: time, canViewOthersMoney: money, publicKey: pair.publicKey });
@@ -39,4 +39,15 @@ describe("private record boundaries", () => {
     assert.equal(project.value.hourlyRate, undefined); assert.equal(project.value.budgetAmount, undefined);
     assert.deepEqual(records.find((r) => r.kind === "memberMoney")?.value, membership);
   });
+});
+
+it("binds decrypted payload identities to the signed routing metadata even for an authenticated ciphertext", async () => {
+  const row = { id: "entry", kind: "entries" as const, authorId: "author", revision: 1 };
+  const secret = randomSecret(), context = privateRecordContext("workspace", row);
+  for (const value of [{ workspaceId: "other", authorId: "author" }, { workspaceId: "workspace", authorId: "impersonated" }, { workspaceId: "workspace", authorId: "author", _id: "wrong-record" }]) {
+    const ciphertext = { ...row, box: await seal(secret, value, context), grants: [{ userId: "author", envelope: await sealForRecipient(pair.publicKey, encodeSecret(secret), `${context}:author`) }] };
+    await assert.rejects(decryptPrivateRecord("workspace", ciphertext, "author", pair.privateKey), /Private payload/);
+    await assert.rejects(encryptPrivateRecord("workspace", { ...row, value }, members, 1), /Private payload/);
+  }
+  secret.fill(0);
 });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, after, beforeEach, describe, it } from "node:test";
 import mongoose from "mongoose";
 import { Binary, Decimal128, Double, Int32, Long, ObjectId } from "mongodb";
-import { decryptBackup, encryptBackup } from "@starter/core";
+import { createKeyPair, createSigningPair, createPrivateMigrationProof, decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery, privateRecordsToRecovery, privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, decryptBackup, encryptBackup } from "@starter/core";
 import { RECOVERY_KINDS } from "@starter/shared";
 import { workspaceRecovery } from "../services/privacy/recovery.js";
 import { verifyRecoveryCopy } from "../services/privacy/restore-copy.js";
@@ -46,6 +46,28 @@ describe("lossless workspace recovery", { skip: skipWithoutDatabase }, () => {
     const full = await workspaceRecovery("workspace", "owner", true);
     assert.equal(full.collections.favorites.length, 2);
     assert.equal((await verifyRecoveryCopy(mongoose.connection.getClient(), full)).records, RECOVERY_KINDS.length + 1);
+  });
+  it("restores a client-verified encrypted migration copy with all original BSON types intact", async (t) => {
+    if (!await testDatabaseTransactions()) return t.skip("Consistent recovery needs a replica set");
+    await seed();
+    const source = await workspaceRecovery("workspace", "owner"), pair = await createKeyPair(), signing = await createSigningPair();
+    const member = { userId: "owner", role: "owner" as const, canViewOthersTime: true, canViewOthersMoney: true, publicKey: pair.publicKey, signingPublicKey: signing.publicKey };
+    const directory = { v: 1 as const, server: "https://api.example.test", workspaceId: "workspace", revision: 1, previousDigest: null, ownerId: "owner", members: [member] };
+    const signed = await signPrivateWorkspaceDirectory(directory, signing.privateKey, null, new Map([["owner", await privateMemberKeyFingerprint(directory.server, member)]]));
+    const verified = await verifyPrivateWorkspaceDirectory(signed, directory, { ownerId: "owner", signingPublicKey: signing.publicKey, revision: 0, digest: null });
+    const records = [];
+    for (const plain of partitionPrivateRecovery(source)) records.push(await encryptPrivateRecord("workspace", plain, verified.signed.directory.members, 1));
+    const { proof } = await createPrivateMigrationProof({ source, records, directory: verified, userId: "owner", migrationId: crypto.randomUUID(), secrets: { privateKey: pair.privateKey, signingPrivateKey: signing.privateKey }, current: () => true });
+    assert.equal(proof.sourceRevision, source.sourceRevision); assert.equal(proof.opaqueRecords, 0);
+    const plaintext = [];
+    for (const row of records) plaintext.push(await decryptPrivateRecord("workspace", row, "owner", pair.privateKey));
+    const recovered = await privateRecordsToRecovery("workspace", plaintext, source.createdAt);
+    assert.deepEqual(recovered, source);
+    const encrypted = await encryptBackup(recovered, "separate synthetic migration backup password");
+    const reopened = await decryptBackup(encrypted, "separate synthetic migration backup password");
+    const result = await verifyRecoveryCopy(mongoose.connection.getClient(), reopened);
+    assert.equal(result.records, RECOVERY_KINDS.length); assert.equal(result.sourceRevision, source.sourceRevision);
+    assert.equal(await mongoose.connection.db!.collection("favorites").countDocuments(), 2);
   });
   it("refuses another member's recovery request and a modified archive without changing source records", async (t) => {
     if (!await testDatabaseTransactions()) return t.skip("Consistent recovery needs a replica set");

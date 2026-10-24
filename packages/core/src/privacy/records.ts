@@ -1,5 +1,6 @@
-import { canSeeEntry, canSeeMoneyFor, canUseInvoices, type EncryptedRecord, type PrivateKind, type WorkspaceRecovery } from "@starter/shared";
-import { decodeSecret, encodeSecret, randomSecret, seal, sealForRecipient, unseal, unsealForRecipient, type PublicKey } from "./crypto.js";
+import { emptyRecoveryCollections, recoveryDigest, recoveryRecordId, verifyWorkspaceRecovery } from "./recovery.js";
+import { encryptedRecordSchema, canSeeEntry, canSeeMoneyFor, canUseInvoices, type EncryptedRecord, type PrivateKind, type WorkspaceRecovery, type RecoveryKind } from "@starter/shared";
+import { canonicalJson, decodeSecret, encodeSecret, randomSecret, seal, sealForRecipient, unseal, unsealForRecipient, type PublicKey } from "./crypto.js";
 export type PrivateRecipient = { userId: string; role: "owner" | "admin" | "member"; canViewOthersTime: boolean; canViewOthersMoney: boolean; publicKey: PublicKey };
 export type PlainPrivateRecord = { id: string; kind: PrivateKind; authorId: string | null; value: Record<string, unknown> };
 export function readersForPrivateRecord(kind: PrivateKind, authorId: string | null, members: readonly PrivateRecipient[]): PrivateRecipient[] {
@@ -17,7 +18,22 @@ export function readersForPrivateRecord(kind: PrivateKind, authorId: string | nu
   });
 }
 export const privateRecordContext = (workspace: string, row: Pick<EncryptedRecord, "kind" | "id" | "revision" | "authorId">): string => JSON.stringify(["trackyourtime-record-v1", workspace, row.kind, row.id, row.authorId, row.revision]);
-export async function encryptPrivateRecord(workspace: string, plain: PlainPrivateRecord, members: readonly PrivateRecipient[], revision: number): Promise<EncryptedRecord> {
+function assertPrivateValueBinding(workspace: string, plain: PlainPrivateRecord): void {
+  const value = plain.value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Private record value must be an object");
+  if (Object.hasOwn(value, "workspaceId") && value.workspaceId !== workspace) throw new Error("Private payload belongs to another workspace");
+  for (const rawId of [value._id === undefined ? undefined : privateValue(value._id), value.id]) if (rawId !== undefined) {
+    const logicalId = plain.kind === "imports" && /^(entryoperations|importbatches):/.test(plain.id) ? plain.id.slice(plain.id.indexOf(":") + 1) : plain.id;
+    if (typeof rawId !== "string" || rawId !== logicalId) throw new Error("Private payload ID does not match its signed record");
+  }
+  if (["entries", "entryMoney", "favorites", "imports", "memberMoney", "approvals", "invoices"].includes(plain.kind)) {
+    const author = [value.authorId, value.userId, value.createdBy].map(privateValue).find((id) => typeof id === "string" && id.length > 0);
+    if (author !== undefined && author !== plain.authorId) throw new Error("Private payload author does not match its signed record");
+  }
+}
+export async function encryptPrivateRecord(workspace: string, input: PlainPrivateRecord, members: readonly PrivateRecipient[], revision: number): Promise<EncryptedRecord> {
+  const plain = structuredClone(input);
+  assertPrivateValueBinding(workspace, plain);
   const recipients = readersForPrivateRecord(plain.kind, plain.authorId, members);
   if (!recipients.length) throw new Error("No authorized recipient for private data");
   const secret = randomSecret();
@@ -30,12 +46,16 @@ export async function encryptPrivateRecord(workspace: string, plain: PlainPrivat
     return { ...record, box, grants };
   } finally { secret.fill(0); }
 }
-export async function decryptPrivateRecord(workspace: string, row: EncryptedRecord, userId: string, privateKey: PublicKey): Promise<PlainPrivateRecord> {
+export async function decryptPrivateRecord(workspace: string, input: EncryptedRecord, userId: string, privateKey: PublicKey): Promise<PlainPrivateRecord> {
+  const row = encryptedRecordSchema.parse(input);
   const grant = row.grants.find((g) => g.userId === userId);
   if (!grant) throw new Error("This account cannot decrypt this record");
   const context = privateRecordContext(workspace, row);
   const secret = decodeSecret(await unsealForRecipient<string>(privateKey, grant.envelope, `${context}:${userId}`), 32);
-  try { return { id: row.id, kind: row.kind, authorId: row.authorId, value: await unseal<Record<string, unknown>>(secret, row.box, context) }; } finally { secret.fill(0); }
+  try {
+    const plain = { id: row.id, kind: row.kind, authorId: row.authorId, value: await unseal<Record<string, unknown>>(secret, row.box, context) };
+    assertPrivateValueBinding(workspace, plain); return plain;
+  } finally { secret.fill(0); }
 }
 /** Decode Mongo Extended JSON only at the client boundary; ciphertext and
  * recovery archives keep the complete typed representation. */
@@ -63,7 +83,7 @@ export function partitionPrivateRecovery(snapshot: WorkspaceRecovery): PlainPriv
   };
   for (const [kind, rows] of Object.entries(snapshot.collections)) for (const raw of rows) {
     const decoded = privateValue(raw) as Record<string, unknown>;
-    const author = typeof decoded.authorId === "string" ? decoded.authorId : typeof decoded.userId === "string" ? decoded.userId : typeof decoded.createdBy === "string" ? decoded.createdBy : null;
+    const author = [decoded.authorId, decoded.userId, decoded.createdBy].find((id): id is string => typeof id === "string" && id.length > 0) ?? null;
     switch (kind) {
       case "timeentries": split("entries", "entryMoney", raw, ["hourlyRate"], author); break;
       case "clients": split("clients", "clientMoney", raw, ["billing"], null); break;
@@ -81,5 +101,55 @@ export function partitionPrivateRecovery(snapshot: WorkspaceRecovery): PlainPriv
       default: throw new Error(`Unsupported recovery collection: ${kind}`);
     }
   }
+  const addresses = records.map((row) => JSON.stringify([row.kind, row.id]));
+  if (new Set(addresses).size !== addresses.length) throw new Error("Recovery IDs collide in the encrypted record namespace");
+  if (records.some((row) => !row.id || row.id.length > 100)) throw new Error("Recovery ID exceeds the encrypted record namespace limit");
   return records;
+}
+
+/** Rebuild an owner-readable lossless recovery copy from a complete decrypted
+ * replica. Other members' private favorites remain outside the owner's copy.
+ * Every money/base pair must be present; a restricted/partial view must never
+ * masquerade as a lossless backup. Raw BSON EJSON remains untouched. */
+export async function privateRecordsToRecovery(workspaceId: string, input: readonly PlainPrivateRecord[], createdAt = new Date().toISOString()): Promise<WorkspaceRecovery> {
+  const rows = structuredClone(input), seen = new Set<string>();
+  const splits = {
+    entries: { money: "entryMoney", collection: "timeentries", fields: ["hourlyRate"] },
+    clients: { money: "clientMoney", collection: "clients", fields: ["billing"] },
+    projects: { money: "projectMoney", collection: "projects", fields: ["hourlyRate", "budgetAmount", "budgetCurrency"] },
+    settings: { money: "settingsMoney", collection: "workspacesettings", fields: ["defaultHourlyRate"] },
+  } as const;
+  const whole: Partial<Record<PrivateKind, RecoveryKind>> = { tasks: "tasks", tags: "tags", favorites: "favorites", invoices: "invoices", businessProfile: "businessprofiles", approvals: "timesheetapprovals", approvalPolicy: "timesheetpolicies", memberMoney: "workspacemembers" };
+  const collectionRows = emptyRecoveryCollections();
+  const moneyKinds = new Set<string>(Object.values(splits).map((split) => split.money));
+  const usedMoney = new Set<string>();
+  const byAddress = new Map(rows.map((row) => [JSON.stringify([row.kind, row.id]), row]));
+  for (const row of rows) {
+    const address = JSON.stringify([row.kind, row.id]);
+    if (seen.has(address)) throw new Error("Duplicate private recovery record"); seen.add(address);
+    assertPrivateValueBinding(workspaceId, row);
+  }
+  const idOf = (raw: Record<string, unknown>) => recoveryRecordId(raw).slice(2);
+  for (const row of rows) {
+    if (moneyKinds.has(row.kind)) continue;
+    const split = Object.hasOwn(splits, row.kind) ? splits[row.kind as keyof typeof splits] : undefined;
+    let collection: RecoveryKind | undefined = split?.collection ?? (Object.hasOwn(whole, row.kind) ? whole[row.kind] : undefined);
+    if (row.kind === "imports") {
+      collection = row.id.startsWith("entryoperations:") ? "entryoperations" : row.id.startsWith("importbatches:") ? "importbatches" : undefined;
+      if (!collection || row.id !== `${collection}:${idOf(row.value)}`) throw new Error("Invalid private operation/import receipt ID");
+    } else if (row.id !== idOf(row.value)) throw new Error("Private record ID differs from its BSON ID");
+    if (!collection || row.value.workspaceId !== workspaceId) throw new Error("Private recovery record belongs to another workspace or kind");
+    let raw = row.value;
+    if (split) {
+      const money = byAddress.get(JSON.stringify([split.money, row.id]));
+      if (!money || money.authorId !== row.authorId || canonicalJson(money.value._id) !== canonicalJson(raw._id)) throw new Error("Private recovery is missing its matching money record");
+      if (Object.keys(money.value).some((key) => key !== "_id" && !(split.fields as readonly string[]).includes(key)) || split.fields.some((key) => Object.hasOwn(raw, key))) throw new Error("Private recovery money fields overlap or contain unexpected data");
+      usedMoney.add(JSON.stringify([money.kind, money.id])); raw = { ...raw, ...money.value };
+    }
+    collectionRows[collection].push(raw);
+  }
+  for (const row of rows) if (moneyKinds.has(row.kind) && !usedMoney.has(JSON.stringify([row.kind, row.id]))) throw new Error("Private recovery contains an orphaned money record");
+  for (const records of Object.values(collectionRows)) records.sort((a, b) => recoveryRecordId(a) < recoveryRecordId(b) ? -1 : recoveryRecordId(a) > recoveryRecordId(b) ? 1 : 0);
+  const sourceRevision = await recoveryDigest(collectionRows);
+  return verifyWorkspaceRecovery({ v: 1, workspaceId, createdAt, sourceRevision, collections: collectionRows }, workspaceId);
 }

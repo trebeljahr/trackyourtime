@@ -79,6 +79,27 @@ there is no special power-loss durability claim. A failed local write stops
 network submission. Host storage capacity still applies; larger web replicas
 need IndexedDB rather than localStorage. No state is silently truncated.
 
+## Client migration verification and recovery reconstruction
+
+`createPrivateMigrationProof` compares decrypted staged records directly with
+the independently verified source backup. It checks the verified owner and
+member directory, audiences, authorship, initial revisions, duplicate IDs,
+missing source records, and exact typed EJSON values. Its signed proof binds
+the source checksum, directory digest, migration ID and complete ciphertext
+checksum. Other members' private favorites can remain opaque; the count is
+explicit and their plaintext is not claimed as verified. The proof primitive
+is not yet consumed by live migration endpoints.
+
+`privateRecordsToRecovery` reconstructs the original fourteen collections by
+joining the paired time/money records. It preserves IDs, BSON types, operation
+receipts, invoice links and issued XML. Missing, orphaned, overlapping or
+unexpected money fields fail instead of producing an incomplete lossless copy.
+Mongo string/ObjectId values that collide in the encrypted record namespace
+also block conversion. Payload workspace, ID and authorship fields must match
+the signed record metadata, including when ciphertext authentication succeeds.
+The host must supply a complete owner-readable replica; other users' private
+favorites remain outside that owner's recovery copy.
+
 ## Remaining rollout dependencies
 
 - A client-verified initial snapshot and migration journal, plus a lossless
