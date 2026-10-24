@@ -1,5 +1,5 @@
 {
-  "apiLevel": 22,
+  "apiLevel": 23,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -4444,6 +4444,46 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "type": "query"
+    },
+    "privacy.initialSnapshot": {
+      "input": {
+        "properties": {
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "query"
+    },
+    "privacy.initialSnapshotPage": {
+      "input": {
+        "properties": {
+          "migrationId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "offset": {
+            "maximum": 400000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "migrationId",
+          "offset"
+        ],
         "type": "object"
       },
       "type": "query"

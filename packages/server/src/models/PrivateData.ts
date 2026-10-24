@@ -52,3 +52,25 @@ const privateDirectorySchema = new Schema<{
 }, { timestamps: true });
 privateDirectorySchema.index({ workspaceId: 1, revision: 1 }, { unique: true });
 export const PrivateDirectory = mongoose.model("PrivateDirectory", privateDirectorySchema);
+
+/** Immutable initial ciphertext, split below MongoDB's document size limit.
+ * Reader-specific indexes stay server-side; public pages expose logical offsets
+ * only, so sparse private records do not reveal other readers' chunk counts. */
+const privateSnapshotChunkSchema = new Schema<{
+  workspaceId: string; migrationId: string; index: number; records: EncryptedRecord[];
+}>({
+  workspaceId: { type: String, required: true }, migrationId: { type: String, required: true },
+  index: { type: Number, required: true }, records: { type: Schema.Types.Mixed, required: true },
+}, { timestamps: true });
+privateSnapshotChunkSchema.index({ workspaceId: 1, migrationId: 1, index: 1 }, { unique: true });
+export const PrivateSnapshotChunk = mongoose.model("PrivateSnapshotChunk", privateSnapshotChunkSchema);
+const privateSnapshotReaderSchema = new Schema<{
+  workspaceId: string; migrationId: string; userId: string; fullRecordsDigest: string;
+  signed: import("@starter/shared").SignedPrivateInitialSnapshot;
+  locations: { chunk: number; before: number; count: number }[];
+}>({
+  workspaceId: { type: String, required: true }, migrationId: { type: String, required: true }, userId: { type: String, required: true },
+  fullRecordsDigest: { type: String, required: true }, signed: { type: Schema.Types.Mixed, required: true }, locations: { type: Schema.Types.Mixed, required: true },
+}, { timestamps: true });
+privateSnapshotReaderSchema.index({ workspaceId: 1, migrationId: 1, userId: 1 }, { unique: true });
+export const PrivateSnapshotReader = mongoose.model("PrivateSnapshotReader", privateSnapshotReaderSchema);

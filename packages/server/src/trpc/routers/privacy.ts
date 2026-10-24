@@ -1,4 +1,5 @@
 import { commitPrivateDirectory, privateDirectoryPage } from "../../services/privacy/directories.js";
+import { privateInitialSnapshotManifest, privateInitialSnapshotPage } from "../../services/privacy/initial-snapshots.js";
 import { env } from "../../config/env.js";
 import { signedPrivateDirectorySchema } from "@starter/shared";
 import { getAuth } from "../../auth/auth.js";
@@ -151,6 +152,14 @@ export const privacyRouter = router({
   prepareDirectory: privateWorkspaceProcedure.input(scopeSchema.extend({ signed: signedPrivateDirectorySchema })).mutation(({ ctx, input }) => {
     requirePrivateWorkspaceRollout();
     return commitPrivateDirectory({ server: privateServerOrigin(), workspaceId: ctx.workspaceId, userId: ctx.user.id }, input.signed);
+  }),
+  initialSnapshot: privateWorkspaceProcedure.input(scopeSchema).query(({ ctx }) => {
+    requirePrivateWorkspaceRollout();
+    return privateInitialSnapshotManifest(ctx.workspaceId, ctx.user.id);
+  }),
+  initialSnapshotPage: privateWorkspaceProcedure.input(scopeSchema.extend({ migrationId: z.uuid(), offset: z.number().int().nonnegative().max(400_000) })).query(({ ctx, input }) => {
+    requirePrivateWorkspaceRollout();
+    return privateInitialSnapshotPage(ctx.workspaceId, ctx.user.id, input.migrationId, input.offset);
   }),
   beginMigration: privateWorkspaceProcedure.input(scopeSchema.extend({ sourceRevision: z.string().length(64), signature: signatureSchema })).mutation(({ctx, input}) => beginPrivateMigration(ctx.workspaceId, ctx.user.id, input.sourceRevision, input.signature)),
   stageMigration: privateWorkspaceProcedure.input(scopeSchema.extend({ migrationId: z.string().uuid(), offset: z.number().int().nonnegative().max(400000) })).mutation(({ctx, input}) => stagePrivateMigration(ctx.workspaceId, ctx.user.id, input.migrationId, input.offset)),

@@ -79,6 +79,8 @@ const seed = (): NonNullable<Parameters<typeof memoryRowStore>[0]> => ({
   ],
   privateAccounts: [{ id: "vault-a", userId: ALICE }, { id: "vault-b", userId: BOB }],
   privateDeviceRequests: [{ id: "unlock-a", userId: ALICE }, { id: "unlock-b", userId: BOB }],
+  privateSnapshotChunks: [{ id: "chunk-solo", workspaceId: SOLO }, { id: "chunk-team", workspaceId: TEAM }, { id: "chunk-bob", workspaceId: BOBS }],
+  privateSnapshotReaders: [{ id: "reader-solo", workspaceId: SOLO, userId: ALICE }, { id: "reader-team-alice", workspaceId: TEAM, userId: ALICE }, { id: "reader-team-bob", workspaceId: TEAM, userId: BOB }, { id: "reader-bob", workspaceId: BOBS, userId: BOB }, { id: "reader-former", workspaceId: "former", userId: ALICE }],
   privateDirectories: [{ id: "directory-solo", workspaceId: SOLO }, { id: "directory-team", workspaceId: TEAM }, { id: "directory-bob", workspaceId: BOBS }],
   privateWorkspaceCommits: [{ id: "commit-solo", workspaceId: SOLO }, { id: "commit-team", workspaceId: TEAM }, { id: "commit-bob", workspaceId: BOBS }],
   privateRecords: [{ id: "cipher-solo", workspaceId: SOLO }, { id: "cipher-team", workspaceId: TEAM }, { id: "cipher-bob", workspaceId: BOBS }],
@@ -320,6 +322,8 @@ describe("deleteAccountData", () => {
     assert.deepEqual(ids(store, "authPasskeys"), ["pk-b"]);
     assert.deepEqual(ids(store, "privateAccounts"), ["vault-b"]);
     assert.deepEqual(ids(store, "privateDeviceRequests"), ["unlock-b"]);
+    assert.deepEqual(ids(store, "privateSnapshotChunks"), ["chunk-bob", "chunk-team"]);
+    assert.deepEqual(ids(store, "privateSnapshotReaders"), ["reader-bob", "reader-team-bob"]);
     assert.deepEqual(ids(store, "privateDirectories"), ["directory-bob", "directory-team"]);
     assert.deepEqual(ids(store, "privateWorkspaceCommits"), ["commit-bob", "commit-team"]);
     assert.deepEqual(ids(store, "privateRecords"), ["cipher-bob", "cipher-team"]);
@@ -481,10 +485,13 @@ test("encrypted deletion erases personal ciphertext, including former workspaces
   const fixture = seed();
   fixture.privateRecords = [shared, mine, other].map((row) => ({ ...row, workspaceId: TEAM }));
   fixture.privateRecords.push({ ...mine, workspaceId: "former-team" });
+  fixture.privateSnapshotChunks = [{ id: "snapshot-mixed", workspaceId: TEAM, records: [shared, mine, other] }, { id: "snapshot-former", workspaceId: "former-team", records: [mine] }];
   fixture.privateWorkspaceCommits = [{ id: "mixed", workspaceId: TEAM, records: [shared, mine, other], readerSignatures: [{ userId: ALICE }, { userId: BOB }], manifest: { immutable: true } }, { id: "former", workspaceId: "former-team", records: [mine], readerSignatures: [{ userId: ALICE }] }];
   const store = memoryRowStore(fixture);
   await deleteAccountData(store, alice);
   assert.deepEqual(store.rows.privateRecords?.map((row) => row.id), ["shared", "other"]);
+  assert.deepEqual(store.rows.privateSnapshotChunks?.[0]?.records, [shared, other]);
+  assert.deepEqual(store.rows.privateSnapshotChunks?.[1]?.records, []);
   assert.deepEqual(store.rows.privateWorkspaceCommits?.[0]?.records, [shared, other]);
   assert.deepEqual(store.rows.privateWorkspaceCommits?.[0]?.manifest, { immutable: true });
   assert.deepEqual(store.rows.privateWorkspaceCommits?.[0]?.readerSignatures, [{ userId: BOB }]);

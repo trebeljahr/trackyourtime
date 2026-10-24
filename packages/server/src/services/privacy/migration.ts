@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { TRPCError } from "@trpc/server";
 import { canonicalJson, encryptPrivateRecord, partitionPrivateRecovery, type PrivateRecipient } from "@starter/core";
 import { RECOVERY_KINDS } from "@starter/shared";
-import { PrivateAccount, PrivateRecord, PrivateWorkspace } from "../../models/PrivateData.js";
+import { PrivateAccount, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { workspaceRecovery } from "./recovery.js";
 import { verifyPrivateChange } from "./signatures.js";
@@ -108,6 +108,9 @@ export async function cancelPrivateMigration(workspaceId: string, userId: string
     await fenceWorkspace(workspaceId);
     const mode = await PrivateWorkspace.findOne({ workspaceId, ownerId: userId, state: "migrating", migrationId });
     if (!mode) throw new TRPCError({ code: "CONFLICT" });
-    await PrivateRecord.deleteMany({ workspaceId }); await mode.deleteOne();
+    await PrivateRecord.deleteMany({ workspaceId });
+    await PrivateSnapshotChunk.deleteMany({ workspaceId, migrationId });
+    await PrivateSnapshotReader.deleteMany({ workspaceId, migrationId });
+    await mode.deleteOne();
   });
 }

@@ -135,11 +135,26 @@ discarding unsent work is refused. A receipt from an earlier unlock generation
 is invalid. Verified segmented storage must acknowledge installation before use.
 Ordinary signed changes start at revision 2 after bootstrap.
 
-This snapshot foundation is not connected to server storage or conversion yet.
-Its delivery signature does not prove lossless conversion from plaintext; the
+The internal server preparation engine stores immutable bounded ciphertext
+chunks and a separate signed manifest/index for each reader in one workspace
+transaction. It checks every reader signature, current directory/permissions,
+audience, initial revision, signed count and digest. Exact retries retain their
+original receipt even after current records change. Logical page offsets hide
+the internal sparse chunk index. Missing chunks fail, and later ordinary edits
+cannot rewrite the frozen initial snapshot. Account erasure removes personal
+favorites from mixed snapshot chunks and the departing reader's manifests,
+including former workspaces; other readers' signed projections remain valid.
+Canceling migration removes both snapshot collections. API level 23 adds the
+manifest/page contract, still behind the unconditional rollout guard. There is
+no public mutation that can publish snapshots or bypass conversion checks.
+
+This snapshot storage is not connected to conversion yet. Its delivery signature
+does not prove lossless conversion from plaintext; the
 separate migration-content proof and independently verified original backup
 remain mandatory. It cannot detect a server withholding later changes from a
-brand-new device with no newer trusted checkpoint.
+brand-new device with no newer trusted checkpoint. Before enabling conversion,
+ordinary journal edits also need a cryptographic chain bound to this snapshot;
+revision numbers alone cannot prevent mixing independently signed histories.
 
 `createPrivateMigrationProof` compares decrypted staged records directly with
 the independently verified source backup. It checks the verified owner and
