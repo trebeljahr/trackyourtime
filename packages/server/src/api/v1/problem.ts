@@ -1,3 +1,4 @@
+import { PRIVATE_WORKSPACE_REQUIRED } from "@starter/shared";
 // Errors, as RFC 9457 `application/problem+json`.
 //
 // The REST surface answers its OWN errors rather than throwing into the global
@@ -158,6 +159,7 @@ export function problemFromTRPCError(err: unknown, instance: string): Problem {
   }
 
   if (err instanceof TRPCError) {
+    if (err.code === "PRECONDITION_FAILED" && err.message === PRIVATE_WORKSPACE_REQUIRED) return problem({ slug: "encrypted-workspace", status: 412, detail: "Use an updated, unlocked client for this private workspace. Queued work must be kept.", instance });
     const status = STATUS_BY_TRPC_CODE[err.code] ?? 500;
     return problem({
       slug: SLUG_BY_STATUS[status] ?? "internal-error",

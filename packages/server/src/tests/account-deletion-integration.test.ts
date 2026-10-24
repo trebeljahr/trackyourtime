@@ -29,6 +29,7 @@ import { organization } from "better-auth/plugins/organization";
 import { ACCOUNT_DELETION_PASSWORD_REQUIRED } from "@starter/shared";
 
 import { accountDeletionOptions } from "../auth/account-deletion.js";
+import { passkeyPlugin } from "../auth/passkeys.js";
 import { twoFactorPlugin } from "../auth/account-security.js";
 import { authBeforeHook } from "../services/membership/organization-lockdown.js";
 import type { DeletionRowStore } from "../services/account-deletion/delete-account.js";
@@ -45,7 +46,8 @@ type MemoryDb = Record<
   | "member"
   | "invitation"
   | "deviceCode"
-  | "twoFactor",
+  | "twoFactor"
+  | "passkey",
   Row[]
 >;
 
@@ -62,6 +64,7 @@ let auth: any;
 
 const failingAware = (store: MemoryRowStore): DeletionRowStore => ({
   find: (...args) => store.find(...args),
+  erasePrivateUserData: (...args) => store.erasePrivateUserData(...args),
   updateMany: (...args) => store.updateMany(...args),
   deleteMany: async (...args) => {
     if (failApp) throw new Error("database unavailable");
@@ -80,6 +83,7 @@ beforeEach(() => {
     invitation: [],
     deviceCode: [],
     twoFactor: [],
+    passkey: [],
   };
   appRows = memoryRowStore();
   failApp = false;
@@ -112,6 +116,7 @@ beforeEach(() => {
     // the organization, device-authorization and two-factor plugins.
     plugins: [
       twoFactorPlugin(),
+      passkeyPlugin(BASE),
       bearer(),
       organization({ creatorRole: "owner" }),
       deviceAuthorization({ expiresIn: "10m", interval: "5s" }),
@@ -215,12 +220,14 @@ describe("POST /delete-user with a bearer token", () => {
     await workspaceFor(alice);
     // Her TOTP secret. Mongo has no foreign-key cascade, so better-auth's own
     // deleteUser would leave it behind.
+    db.passkey.push({ id: "pk-alice", userId: alice.id, credentialID: "synthetic-credential" });
     db.twoFactor.push({ id: "tf-alice", userId: alice.id, secret: "s", backupCodes: "b", verified: true });
 
     const result = await deleteAccount(alice.token, { password: PASSWORD });
 
     assert.equal(result.status, 200, JSON.stringify(result.json));
     assert.deepEqual(db.twoFactor, []);
+    assert.deepEqual(db.passkey, []);
     assert.deepEqual(db.user, []);
     assert.deepEqual(db.account, []);
     assert.deepEqual(db.session, []);

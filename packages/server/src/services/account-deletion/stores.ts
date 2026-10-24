@@ -1,8 +1,9 @@
+import { withPrivateWorkspaceErasure } from "../privacy/plaintext-guard.js";
 // The two real row stores behind `deleteAccountData`.
 import { PrivateAccount, PrivateDeviceRequest, PrivateRecord, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
 import type { Model } from "mongoose";
 import { withStorageOwnershipAdoption } from "../storage-quota.js";
-import { withBusinessTransaction } from "../business-transaction.js";
+import { fenceWorkspace, withBusinessTransaction } from "../business-transaction.js";
 import { StorageUsage, StorageFence } from "../../models/StorageUsage.js";
 import { ImportLease } from "../../models/ImportBudget.js";
 import { ApiToken } from "../../models/ApiToken.js";
@@ -106,6 +107,30 @@ const appModel = (
 
 /** App-owned collections, through mongoose. `_id` is surfaced as `id`. */
 export const mongooseRowStore: DeletionRowStore = {
+  async erasePrivateUserData(userId) {
+    if (!userId) throw new Error("account deletion: empty user ID");
+    const workspaces = new Set([
+      ...await PrivateRecord.distinct("workspaceId", { kind: "favorites", authorId: userId }),
+      ...await PrivateWorkspaceCommit.distinct("workspaceId", { $or: [
+        { records: { $elemMatch: { kind: "favorites", authorId: userId } } },
+        { "readerSignatures.userId": userId },
+      ] }),
+    ]);
+    for (const workspaceId of [...workspaces].sort()) {
+      await withBusinessTransaction(async () => {
+        await fenceWorkspace(workspaceId);
+        await PrivateRecord.deleteMany({ workspaceId, kind: "favorites", authorId: userId });
+        // Never delete a whole mixed commit: others still need its shared
+        // ciphertext. Their separately signed projections excluded these
+        // favorites from the start. Keep immutable manifest commitments and
+        // historical public keys/recipient grants for signature verification.
+        await PrivateWorkspaceCommit.updateMany({ workspaceId }, { $pull: {
+          records: { kind: "favorites", authorId: userId },
+          readerSignatures: { userId },
+        } });
+      });
+    }
+  },
   async find(collection, filter) {
     const model = appModel(collection, filter);
     const rows: Array<Record<string, unknown>> = await model.find(filter).lean();
@@ -113,7 +138,10 @@ export const mongooseRowStore: DeletionRowStore = {
   },
   async updateMany(collection, filter, set) {
     const model = appModel(collection, filter);
-    const write = async () => await model.updateMany(filter, { $set: set });
+    const write = async () => {
+      const workspaces = typeof filter.workspaceId === "string" ? [filter.workspaceId] : await model.distinct("workspaceId", filter);
+      return withPrivateWorkspaceErasure(workspaces, async () => await model.updateMany(filter, { $set: set }));
+    };
     const result = collection === "workspaceMembers" && set.role === "owner"
       ? await withStorageOwnershipAdoption(write) : await write();
     return result.modifiedCount;
@@ -121,7 +149,8 @@ export const mongooseRowStore: DeletionRowStore = {
   async deleteMany(collection, filter) {
     const model = appModel(collection, filter);
     return withBusinessTransaction(async () => {
-      const result = await model.deleteMany(filter);
+      const workspaces = typeof filter.workspaceId === "string" ? [filter.workspaceId] : await model.distinct("workspaceId", filter);
+      const result = await withPrivateWorkspaceErasure(workspaces, async () => await model.deleteMany(filter));
       // Removing the final mirror row also removes the locator needed to
       // retry account erasure. Clean any ledger re-seeded by that last guarded
       // write in the same transaction, before that locator can disappear.
@@ -184,6 +213,7 @@ export function authRowStore(adapter: AuthAdapterLike): DeletionRowStore {
     return where;
   };
   return {
+    async erasePrivateUserData() { throw new Error("account deletion: private data is not an auth table"); },
     async find(collection, filter) {
       const rows = await adapter.findMany({
         model: modelFor(collection),
@@ -216,6 +246,7 @@ export function routedRowStore(
   const pick = (collection: DeletionCollection): DeletionRowStore =>
     AUTH_COLLECTIONS.has(collection) ? auth : app;
   return {
+    erasePrivateUserData: (userId) => app.erasePrivateUserData(userId),
     find: (collection, filter) => pick(collection).find(collection, filter),
     updateMany: (collection, filter, set) =>
       pick(collection).updateMany(collection, filter, set),

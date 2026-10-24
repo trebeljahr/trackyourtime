@@ -378,6 +378,10 @@ describe("deleteAccountData", () => {
     let writes = 0;
     const counting = {
       ...clean,
+      erasePrivateUserData: (...args: Parameters<typeof clean.erasePrivateUserData>) => {
+        writes += 1;
+        return clean.erasePrivateUserData(...args);
+      },
       updateMany: (...args: Parameters<typeof clean.updateMany>) => {
         writes += 1;
         return clean.updateMany(...args);
@@ -465,4 +469,23 @@ test("account deletion removes retained operation results without touching anoth
   ] });
   await deleteAccountData(store, alice);
   assert.deepEqual(store.rows.entryOperations?.map((row) => row.id), ["other"]);
+});
+
+
+test("encrypted deletion erases personal ciphertext, including former workspaces, and keeps shared work", async () => {
+  const shared = { id: "shared", kind: "entries", authorId: ALICE, box: { ciphertext: "shared-work" } };
+  const mine = { id: "mine", kind: "favorites", authorId: ALICE, box: { ciphertext: "personal-favorite" } };
+  const other = { id: "other", kind: "favorites", authorId: BOB, box: { ciphertext: "bob-favorite" } };
+  const fixture = seed();
+  fixture.privateRecords = [shared, mine, other].map((row) => ({ ...row, workspaceId: TEAM }));
+  fixture.privateRecords.push({ ...mine, workspaceId: "former-team" });
+  fixture.privateWorkspaceCommits = [{ id: "mixed", workspaceId: TEAM, records: [shared, mine, other], readerSignatures: [{ userId: ALICE }, { userId: BOB }], manifest: { immutable: true } }, { id: "former", workspaceId: "former-team", records: [mine], readerSignatures: [{ userId: ALICE }] }];
+  const store = memoryRowStore(fixture);
+  await deleteAccountData(store, alice);
+  assert.deepEqual(store.rows.privateRecords?.map((row) => row.id), ["shared", "other"]);
+  assert.deepEqual(store.rows.privateWorkspaceCommits?.[0]?.records, [shared, other]);
+  assert.deepEqual(store.rows.privateWorkspaceCommits?.[0]?.manifest, { immutable: true });
+  assert.deepEqual(store.rows.privateWorkspaceCommits?.[0]?.readerSignatures, [{ userId: BOB }]);
+  assert.deepEqual(store.rows.privateWorkspaceCommits?.[1]?.records, []);
+  assert.doesNotMatch(JSON.stringify(store.rows), /personal-favorite/);
 });

@@ -23,6 +23,8 @@ export type StoredRow = Readonly<Record<string, unknown>>;
 
 export interface DeletionRowStore {
   find(collection: DeletionCollection, filter: DeletionFilter): Promise<StoredRow[]>;
+  /** Erase personal ciphertext from current records and mixed shared journals. */
+  erasePrivateUserData(userId: string): Promise<void>;
   updateMany(
     collection: DeletionCollection,
     filter: DeletionFilter,
@@ -112,6 +114,11 @@ export async function deleteAccountData(
     }
     report.workspacesLeft.push(workspaceId);
   }
+
+  // Membership is already gone, so a concurrent encrypted write now fails
+  // its workspace fence. Sweep former workspaces too; retain shared records
+  // and signed commitments, removing only personal favorites ciphertext.
+  await store.erasePrivateUserData(user.id);
 
   for (const step of userScopedSteps(user)) {
     await store.deleteMany(step.collection, step.filter);

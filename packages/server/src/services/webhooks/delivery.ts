@@ -1,3 +1,4 @@
+import { PrivateWorkspace } from "../../models/PrivateData.js";
 // Sending one webhook: claim, project, re-check the target, sign, POST, record.
 //
 // Nothing in here is on a user's request path. `emitWebhookEvent` writes a
@@ -515,11 +516,12 @@ export async function claimDueDeliveries(
   limit: number,
 ): Promise<string[]> {
   const claimed: string[] = [];
+  const privateWorkspaces = await PrivateWorkspace.distinct("workspaceId");
   const leaseUntil = new Date(now.getTime() + WEBHOOK_CLAIM_LEASE_MS);
 
   for (let i = 0; i < limit; i += 1) {
     const row = await WebhookDelivery.findOneAndUpdate(
-      { status: "pending", nextAttemptAt: { $ne: null, $lte: now } },
+      { status: "pending", nextAttemptAt: { $ne: null, $lte: now }, ...(privateWorkspaces.length ? { workspaceId: { $nin: privateWorkspaces } } : {}) },
       { $set: { nextAttemptAt: leaseUntil } },
       { sort: { nextAttemptAt: 1 }, returnDocument: "after", projection: { _id: 1 } },
     ).lean();

@@ -1,3 +1,4 @@
+import { guardPlaintextWorkspaceWrites } from "./privacy/plaintext-guard.js";
 import mongoose, { type Model } from "mongoose";
 import { TRPCError } from "@trpc/server";
 import { env } from "../config/env.js";
@@ -32,6 +33,7 @@ type StorageQuery = {
   getOptions(): { sort?: unknown; upsert?: boolean };
   getUpdate(): unknown;
   setUpdate(update: Record<string, unknown>): void;
+  setQuery(filter: Record<string, unknown>): void;
 };
 // Mongoose overloads vary by model. This boundary describes only the runtime
 // methods the wrappers forward, without changing the caller's model types.
@@ -128,6 +130,7 @@ function quotaState(): State {
 async function prepare(workspaces: string[], members: string[] = []): Promise<void> {
   const state = quotaState();
   const ids = [...new Set(workspaces)].sort();
+  await guardPlaintextWorkspaceWrites(ids);
   const owners = await database().collection("workspacemembers").find(
     { workspaceId: { $in: ids }, role: "owner" },
     { session: transactionSession(), projection: { userId: 1 } },
@@ -205,7 +208,10 @@ export function installStorageQuota(mongooseModel: ModelIdentity): void {
       const update = query.getUpdate();
       if (Array.isArray(update) || op.includes("Replace") || op === "replaceOne") throw new TRPCError({ code: "BAD_REQUEST", message: "Unsupported storage update" });
       const before = await snapshot(model, filter, !op.endsWith("Many"), options.sort);
-      const proposed = { ...record(filter), ...record(record(update).$setOnInsert), ...record(record(update).$set) };
+      // Pin a single write to the row chosen for accounting and privacy
+      // fencing. A later query plan must not select a different workspace.
+      if (before.length && !op.endsWith("Many")) query.setQuery({ ...filter, _id: before[0]!._id });
+      const proposed = { ...record(filter), ...record(update), ...record(record(update).$setOnInsert), ...record(record(update).$set) };
       const ids = before.map((row) => row._id);
       if (!before.length && options.upsert) {
         const id = proposed._id ?? new mongoose.Types.ObjectId();

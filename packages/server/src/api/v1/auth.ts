@@ -1,3 +1,4 @@
+import { assertStandardWorkspace } from "../../services/privacy/access.js";
 // Who is calling, and what they are allowed to ask for.
 //
 // This is the whole boundary between an HTTP request and a `WorkspaceScope`.
@@ -169,6 +170,8 @@ export const requireApiToken: RequestHandler = (
       unauthorized(res, instance);
       return;
     }
+
+    await assertStandardWorkspace(auth.workspaceId);
 
     const limit = await consumeRateLimit({
       tokenId: auth.tokenId,

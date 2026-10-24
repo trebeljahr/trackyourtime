@@ -4,6 +4,7 @@ import { createKeyPair, createSigningPair, createPrivateWorkspaceReplica, memory
 import { PrivateAccount, PrivateRecord, PrivateWorkspace, PrivateWorkspaceCommit } from "../models/PrivateData.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
+import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { commitPrivateWorkspaceEdit, privateWorkspaceChanges } from "../services/privacy/workspace-edits.js";
 import { connectTestDatabase, clearTestDatabase, dropTestDatabase, skipWithoutDatabase } from "./support/test-database.js";
 import { privacyRouter } from "../trpc/routers/privacy.js";
@@ -82,6 +83,31 @@ describe("signed private workspace journal", { skip: skipWithoutDatabase }, () =
     assert.doesNotMatch(JSON.stringify(await PrivateRecord.find().lean()), /Never on server in plaintext/);
     await replica.enqueue({ records: [], remove: [{ kind: "entries", id: "roundtrip", authorId: OWNER }] });
     await replica.flushOne(transport); assert.equal((await replica.read()).records.length, 0);
+  });
+  it("erases favorites from mixed journals without invalidating another member's signed feed", async () => {
+    const records = await Promise.all([
+      encryptPrivateRecord(WS, { kind: "tags", id: "shared", authorId: null, value: { name: "Shared tag" } }, members, 1),
+      encryptPrivateRecord(WS, { kind: "entries", id: "work", authorId: OWNER, value: { description: "Retained shared work" } }, members, 1),
+      encryptPrivateRecord(WS, { kind: "favorites", id: "private", authorId: OWNER, value: { label: "Private pin" } }, members, 1),
+    ]);
+    const signed = await signPrivateWorkspaceEdit({ v: 1, workspaceId: WS, userId: OWNER, operationId: crypto.randomUUID(), expectedRevision: 0, records, remove: [] }, signing.privateKey, members.map((row) => row.userId));
+    await commitPrivateWorkspaceEdit(OWNER, signed);
+    const before = await privateWorkspaceChanges(WS, MEMBER, 0);
+    const manifest = (await PrivateWorkspaceCommit.findOne().lean())!.manifest;
+    await mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: WS, userId: OWNER });
+    await mongooseRowStore.erasePrivateUserData(OWNER);
+    await mongooseRowStore.deleteMany("privateAccounts", { userId: OWNER });
+    await mongooseRowStore.erasePrivateUserData(OWNER); // idempotent retry
+    assert.deepEqual((await PrivateRecord.find().lean()).map((row) => row.id).sort(), ["shared", "work"]);
+    const journal = (await PrivateWorkspaceCommit.findOne().lean())!;
+    assert.deepEqual(journal.records.map((row) => row.id).sort(), ["shared", "work"]);
+    assert.deepEqual(journal.manifest, manifest);
+    assert.equal(journal.readerSignatures.some((row) => row.userId === OWNER), false);
+    const after = await privateWorkspaceChanges(WS, MEMBER, 0);
+    assert.deepEqual(after, before);
+    await verifyPrivateWorkspaceChange(after.changes[0]!, { workspaceId: WS, userId: MEMBER, after: 0 }, signing.publicKey);
+    assert.equal(await PrivateAccount.countDocuments({ userId: OWNER }), 0);
+    await assert.rejects(commitPrivateWorkspaceEdit(OWNER, signed), { code: "NOT_FOUND" });
   });
   it("keeps the public journal endpoints closed during the unfinished rollout", async () => {
     const caller = privacyRouter.createCaller({ user: { id: OWNER }, session: { user: { id: OWNER } } } as unknown as Context);

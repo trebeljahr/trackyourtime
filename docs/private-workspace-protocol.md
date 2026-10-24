@@ -100,6 +100,32 @@ the signed record metadata, including when ciphertext authentication succeeds.
 The host must supply a complete owner-readable replica; other users' private
 favorites remain outside that owner's recovery copy.
 
+## Legacy write barrier and account erasure
+
+Every quota-backed plaintext model write takes the same workspace transaction
+fence as migration, then refuses a migrating or encrypted workspace. Single-row
+queries are pinned to the row selected for accounting. Stored webhook envelopes
+have their own fence without changing standard quota charges. The global webhook
+claimer skips private workspaces. Legacy workspace tRPC and REST requests refuse
+private mode; REST returns a retryable 412 so clients can retain queued work.
+An outbound webhook already in flight still needs a cutover drain before rollout.
+These guards do not make an arbitrary raw Mongo writer safe.
+
+Account deletion keeps encrypted shared work records, including the departing
+member's time entries. It deletes solo workspaces, the account's encrypted root
+envelopes, passkeys and pending device approvals. Personal favorites are erased
+from current ciphertext records and mixed journal bodies, including workspaces
+the account left earlier. Other members' separately signed projections remain
+verifiable. Standard workspace deletion keeps its existing policy.
+
+Historical public keys, recipient grants and manifest commitments remain where
+needed to verify shared records. Deleting an account cannot revoke ciphertext
+or keys someone already copied; future access changes require key rotation.
+The server cannot sign an ownership transfer or create replacement grants for
+owner-only records. A client-approved directory transfer and regrant workflow
+must precede enabling encrypted owner departure. The account deletion UI must
+show the corresponding mode-specific policy when that mode is enabled.
+
 ## Remaining rollout dependencies
 
 - A client-verified initial snapshot and migration journal, plus a lossless

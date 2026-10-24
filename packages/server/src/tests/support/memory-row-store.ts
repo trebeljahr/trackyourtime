@@ -54,6 +54,14 @@ export function memoryRowStore(
 
   return {
     rows,
+    async erasePrivateUserData(userId) {
+      tick();
+      rows.privateRecords = (rows.privateRecords ?? []).filter((row) => !(row.kind === "favorites" && row.authorId === userId));
+      for (const row of rows.privateWorkspaceCommits ?? []) {
+        if (Array.isArray(row.records)) row.records = row.records.filter((record: Row) => !(record.kind === "favorites" && record.authorId === userId));
+        if (Array.isArray(row.readerSignatures)) row.readerSignatures = row.readerSignatures.filter((reader: Row) => reader.userId !== userId);
+      }
+    },
     failOnWrite(n) {
       failAt = n;
       writes = 0;

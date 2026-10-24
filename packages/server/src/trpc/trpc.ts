@@ -1,3 +1,4 @@
+import { assertStandardWorkspace } from "../services/privacy/access.js";
 import { APPROVAL_REFUSALS } from "@starter/shared";
 import { withBusinessTransaction } from "../services/business-transaction.js";
 import { timeServerWork } from "../middleware/server-timing.js";
@@ -130,6 +131,7 @@ export const workspaceProcedure = protectedProcedure.use(
       : await resolve();
 
     if (!resolved) throw new TRPCError({ code: "NOT_FOUND" });
+    await assertStandardWorkspace(resolved.workspaceId);
 
     const data = () => next({
       ctx: {

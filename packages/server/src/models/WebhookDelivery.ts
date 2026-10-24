@@ -1,3 +1,4 @@
+import { installPlaintextDeliveryGuard } from "../services/privacy/delivery-guard.js";
 // One attempt-tracked push of one event to one subscription.
 //
 // The FULL envelope is stored on the row rather than a reference to whatever
@@ -121,3 +122,5 @@ export function toClientWebhookDelivery(
     updatedAt: doc.updatedAt.toISOString(),
   };
 }
+
+installPlaintextDeliveryGuard(WebhookDelivery);
