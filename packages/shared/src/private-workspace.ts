@@ -34,3 +34,20 @@ export const signedPrivateDirectorySchema = z.object({ directory: privateWorkspa
 export type PrivateDirectoryMember = z.infer<typeof privateDirectoryMemberSchema>;
 export type PrivateWorkspaceDirectory = z.infer<typeof privateWorkspaceDirectorySchema>;
 export type SignedPrivateDirectory = z.infer<typeof signedPrivateDirectorySchema>;
+
+/** Initial encrypted state is larger than one ordinary edit. Each reader gets
+ * a separately signed complete projection, including an authenticated empty
+ * projection. Other members' private record IDs and counts stay out of it. */
+export const privateInitialSnapshotManifestSchema = z.object({
+  v: z.literal(1), protocol: z.literal("trackyourtime-private-initial-snapshot-v1"),
+  server: z.string().url().max(2048), workspaceId: id, migrationId: z.uuid(),
+  revision: z.literal(1), directoryDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  signerId: id, readerId: id, recordCount: z.number().int().nonnegative().max(400_000),
+  recordsDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+}).strict();
+export const signedPrivateInitialSnapshotSchema = z.object({
+  manifest: privateInitialSnapshotManifestSchema, signature: privateSignatureSchema,
+}).strict();
+export type SignedPrivateInitialSnapshot = z.infer<typeof signedPrivateInitialSnapshotSchema>;
+export const PRIVATE_SNAPSHOT_MAX_BYTES = 64 * 1024 * 1024;
+export const PRIVATE_SNAPSHOT_PAGE_MAX_BYTES = 4 * 1024 * 1024;

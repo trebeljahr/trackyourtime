@@ -7,6 +7,7 @@ import { createPrivateStorage, PrivateStorageLockedError, type PrivateStorageKey
 import { decryptPrivateRecord, encryptPrivateRecord, readersForPrivateRecord, type PlainPrivateRecord, type PrivateRecipient } from "./records.js";
 import { segmentedPrivateStorage } from "./segmented-storage.js";
 import { privateWorkspaceManifest, privateWorkspaceManifestForReader, signPrivateWorkspaceEdit, verifyPrivateWorkspaceChange } from "./workspace-edits.js";
+import { assertPrivateInitialSnapshot, type VerifiedPrivateInitialSnapshot } from "./initial-snapshot.js";
 const plainSchema = privateRecordRefSchema.extend({ value: z.record(z.string(), z.json()) }).strict();
 const pendingSchema = z.object({ operationId: z.uuid(), basedOn: z.number().int().nonnegative(), records: z.array(plainSchema).max(100), remove: z.array(privateRecordRefSchema).max(100), submitted: signedPrivateWorkspaceEditSchema.nullable(), directoryDigest: z.string().nullable().default(null) }).strict();
 const stateSchema = z.object({ v: z.literal(1), revision: z.number().int().nonnegative(), records: z.array(encryptedRecordSchema), pending: z.array(pendingSchema).max(1000) }).strict();
@@ -40,8 +41,9 @@ export async function createPrivateWorkspaceReplica(options: {
   resolveStorageKey: () => PrivateStorageKey | null;
   resolveIdentity: () => PrivateReplicaIdentity | null;
 }) {
-  const { userId, workspaceId } = options.scope;
-  const encrypted = await createPrivateStorage({ storage: options.storage, scope: options.scope, resolveKey: options.resolveStorageKey });
+  const scope = { ...options.scope };
+  const { userId, workspaceId } = scope;
+  const encrypted = await createPrivateStorage({ storage: options.storage, scope, resolveKey: options.resolveStorageKey });
   const storage = segmentedPrivateStorage(encrypted, () => identity().check);
   const identity = () => {
     const value = options.resolveIdentity();
@@ -79,6 +81,15 @@ export async function createPrivateWorkspaceReplica(options: {
   };
   return {
     namespace: encrypted.namespace,
+    bootstrap: (snapshot: VerifiedPrivateInitialSnapshot) => options.exclusive(async () => {
+      const access = identity(), state = await load(); access.check();
+      assertPrivateInitialSnapshot(snapshot, scope, access.directoryDigest);
+      if (state.pending.length) throw new Error("Keep or export pending edits before installing an initial snapshot");
+      if (state.revision === 1 && canonicalJson(state.records) === canonicalJson(snapshot.records)) return { revision: 1 as const };
+      if (state.revision !== 0 || state.records.length) throw new Error("An initial snapshot cannot replace an existing private checkpoint");
+      await save({ v: 1, revision: 1, records: [...snapshot.records], pending: [] }); access.check();
+      return { revision: 1 as const };
+    }),
     enqueue: async (input: { records: PlainPrivateRecord[]; remove?: z.infer<typeof privateRecordRefSchema>[] }) => {
       // Capture user intent synchronously, before waiting on storage or another
       // window's lock. No caller-owned nested object survives into the outbox.

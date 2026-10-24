@@ -117,6 +117,30 @@ encrypted replica.
 
 ## Client migration verification and recovery reconstruction
 
+Initial snapshots have their own owner-signed delivery manifest per reader.
+It binds server, workspace, reader, migration ID, revision 1, verified directory
+digest, complete projected record count and canonical ciphertext digest. Empty
+projections are signed too. Only the reader's own grant is delivered. Other
+readers' private IDs and counts are absent from their projection; the migration
+owner's preparation input can still include opaque metadata for others' records.
+
+The downloader fixes that signed boundary, accumulates bounded pages, rejects
+duplicate IDs, omissions, mixed ciphertext and unauthorized audiences, then
+authenticates every delivered record before returning a verified receipt. No
+partial download becomes a checkpoint. The complete ciphertext input is limited
+to 64 MiB and 400,000 records; each page is limited to 100 records and 4 MiB.
+The replica installs revision 1 only into an empty checkpoint with no pending
+edits. Repeating the same installation is safe; replacing a later checkpoint or
+discarding unsent work is refused. A receipt from an earlier unlock generation
+is invalid. Verified segmented storage must acknowledge installation before use.
+Ordinary signed changes start at revision 2 after bootstrap.
+
+This snapshot foundation is not connected to server storage or conversion yet.
+Its delivery signature does not prove lossless conversion from plaintext; the
+separate migration-content proof and independently verified original backup
+remain mandatory. It cannot detect a server withholding later changes from a
+brand-new device with no newer trusted checkpoint.
+
 `createPrivateMigrationProof` compares decrypted staged records directly with
 the independently verified source backup. It checks the verified owner and
 member directory, audiences, authorship, initial revisions, duplicate IDs,
