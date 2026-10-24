@@ -295,6 +295,10 @@ export const settings = {
       sharedTitle: "In workspaces you share, only your own data is deleted:",
       sharedDetail:
         "your time entries, pins, API tokens, webhooks and imports. The workspace, its clients, projects, tasks, tags and invoices stay, and so do entries already on an invoice. If you are its last owner, ownership passes to an admin, or else to the longest-standing member.",
+      encryptedSharedTitle: "In encrypted workspaces you share, shared work records stay:",
+      encryptedSharedDetail: "The workspace keeps shared work records, including your time entries. Your private favorites and account encryption keys are deleted.",
+      previewLoading: "Checking which workspace data will stay…",
+      previewFailed: "Could not check which workspace data will stay. Close this dialog and try again.",
       exportHint: "Want a copy first? <link>Export your data as JSON</link> before you continue.",
       exportHintPlain:
         "Want a copy first? Export your data as JSON from Settings → Data before you continue.",

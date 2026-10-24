@@ -285,6 +285,10 @@ export const settings: Translation<typeof source> = {
       sharedTitle: "In Arbeitsbereichen, die du mit anderen teilst, werden nur deine eigenen Daten gelöscht:",
       sharedDetail:
         "deine Zeiteinträge, angehefteten Schnellstarts, API-Tokens, Webhooks und Importe. Der Arbeitsbereich mit seinen Kunden, Projekten, Tätigkeiten, Schlagwörtern und Rechnungen bleibt bestehen, ebenso Einträge, die schon in einer Rechnung stehen. Bist du der letzte Inhaber, geht der Arbeitsbereich an einen Admin über, sonst an das Mitglied, das am längsten dabei ist.",
+      encryptedSharedTitle: "In verschlüsselten Arbeitsbereichen mit anderen bleiben gemeinsame Arbeitsdaten erhalten:",
+      encryptedSharedDetail: "Der Arbeitsbereich behält gemeinsame Arbeitsdaten, auch deine Zeiteinträge. Deine privaten Favoriten und die Verschlüsselungsschlüssel deines Kontos werden gelöscht.",
+      previewLoading: "Prüfe, welche Daten des Arbeitsbereichs erhalten bleiben …",
+      previewFailed: "Die Prüfung ist fehlgeschlagen. Schließe diesen Dialog und versuche es erneut.",
       exportHint: "Willst du vorher eine Kopie? <link>Exportiere deine Daten als JSON</link>, bevor du weitermachst.",
       exportHintPlain:
         "Willst du vorher eine Kopie? Exportiere deine Daten unter Einstellungen → Daten als JSON, bevor du weitermachst.",

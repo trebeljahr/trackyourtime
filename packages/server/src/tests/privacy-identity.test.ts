@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { before, after, beforeEach, describe, it } from "node:test";
+import { before, after, beforeEach, describe, it, test } from "node:test";
 import { createKeyPair, createSigningPair, encodeSecret, randomSecret, seal, signPrivateChange } from "@starter/core";
 import { PrivateAccount } from "../models/PrivateData.js";
 import { privacyRouter } from "../trpc/routers/privacy.js";
@@ -52,4 +52,10 @@ describe("private identity enrollment and recovery boundaries", { skip: skipWith
     assert.equal(await PrivateAccount.countDocuments(), 0);
     await assert.rejects(privacyRouter.createCaller({ user: null, session: null } as unknown as Context).identity(), { code: "UNAUTHORIZED" });
   });
+});
+
+
+test("account deletion preview refuses another account before reading metadata", async () => {
+  const caller = privacyRouter.createCaller({ user: { id: "owner" }, session: { user: { id: "owner" } } } as unknown as Context);
+  await assert.rejects(caller.deletionPreview({ userId: "someone-else" }), { code: "NOT_FOUND" });
 });

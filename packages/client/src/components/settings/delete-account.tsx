@@ -31,6 +31,8 @@ import {
   deleteAccount,
   type AccountDeletionRefusal,
 } from "@/lib/auth-client";
+import { trpc } from "@/lib/trpc";
+import { useServerSupports } from "@/lib/server-level";
 import { useOfflineQueueState } from "@/providers/offline-queue-provider";
 
 /** Catalog key per refusal, read when the refusal is shown. */
@@ -70,6 +72,13 @@ export function DeleteAccountCard({
   const [answer, setAnswer] = React.useState("");
   const [error, setError] = React.useState<AccountDeletionRefusal | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  const previewSupported = useServerSupports("privacy.deletionPreview");
+  const preview = trpc.privacy.deletionPreview.useQuery({ userId: user?.id ?? "" }, {
+    enabled: open && !!user && previewSupported, retry: false, staleTime: 0,
+  });
+  const previewReady = !previewSupported || (!!preview.data && !preview.isFetching && !preview.isError);
+  const standardShared = !previewSupported || (preview.data?.standardSharedWorkspaces ?? 0) > 0;
+  const encryptedShared = previewSupported && (preview.data?.encryptedSharedWorkspaces ?? 0) > 0;
 
   React.useEffect(() => {
     if (!open) return;
@@ -101,7 +110,7 @@ export function DeleteAccountCard({
 
   const submit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
-    if (!user || !confirmed || deleting) return;
+    if (!user || !confirmed || !previewReady || deleting) return;
     setDeleting(true);
     setError(null);
     const result = await deleteAccount({
@@ -156,12 +165,19 @@ export function DeleteAccountCard({
                   {t("deleteAccount.dialog.soloDetail")}
                 </p>
               </div>
-              <div>
+              {standardShared && <div>
                 <p className="font-medium">{t("deleteAccount.dialog.sharedTitle")}</p>
                 <p className="text-muted-foreground">
                   {t("deleteAccount.dialog.sharedDetail")}
                 </p>
-              </div>
+              </div>}
+              {encryptedShared && <div data-testid="delete-account-encrypted-shared">
+                <p className="font-medium">{t("deleteAccount.dialog.encryptedSharedTitle")}</p>
+                <p className="text-muted-foreground">{t("deleteAccount.dialog.encryptedSharedDetail")}</p>
+              </div>}
+              {previewSupported && !previewReady && <p role={preview.isError ? "alert" : "status"} className="text-muted-foreground" data-testid="delete-account-preview-status">
+                {t(preview.isError ? "deleteAccount.dialog.previewFailed" : "deleteAccount.dialog.previewLoading")}
+              </p>}
               <p className="text-muted-foreground">
                 {onShowExport
                   ? t.rich("deleteAccount.dialog.exportHint", {
@@ -254,7 +270,7 @@ export function DeleteAccountCard({
               <Button
                 type="submit"
                 variant="destructive"
-                disabled={!confirmed || deleting}
+                disabled={!confirmed || !previewReady || deleting}
                 data-testid="delete-account-confirm"
               >
                 {deleting ? <Loader2 className="size-4 animate-spin" /> : null}

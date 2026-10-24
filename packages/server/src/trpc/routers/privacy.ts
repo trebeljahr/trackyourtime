@@ -1,3 +1,6 @@
+import { getAuth } from "../../auth/auth.js";
+import { previewAccountDeletion } from "../../services/account-deletion/delete-account.js";
+import { authRowStore, mongooseRowStore, routedRowStore } from "../../services/account-deletion/stores.js";
 import { commitPrivateWorkspaceEdit, privateWorkspaceChanges } from "../../services/privacy/workspace-edits.js";
 import { signedPrivateWorkspaceEditSchema } from "@starter/shared";
 import { requirePrivateWorkspaceRollout, beginPrivateMigration, stagePrivateMigration, privateMigrationArchive, commitPrivateMigration, cancelPrivateMigration } from "../../services/privacy/migration.js";
@@ -35,6 +38,11 @@ function validateRecordAudience(record: EncryptedRecord, members: Awaited<Return
 }
 const allMembers = (workspaceId: string) => WorkspaceMember.find({ workspaceId }).lean();
 export const privacyRouter = router({
+  deletionPreview: privateAccountProcedure.input(z.object({ userId: z.string().min(1).max(100) })).query(async ({ ctx, input }) => {
+    if (input.userId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND" });
+    const { adapter } = await getAuth().$context;
+    return previewAccountDeletion(routedRowStore(mongooseRowStore, authRowStore(adapter)), ctx.user.id);
+  }),
   identity: privateAccountProcedure.input(z.object({ userId: z.string().min(1).max(100).optional() }).optional()).query(async ({ ctx, input }) => {
     if (input?.userId && input.userId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND" });
     const doc = await PrivateAccount.findOne({ userId: ctx.user.id }).lean();

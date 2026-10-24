@@ -1,5 +1,5 @@
 {
-  "apiLevel": 20,
+  "apiLevel": 21,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -4202,6 +4202,22 @@
         "type": "object"
       },
       "type": "mutation"
+    },
+    "privacy.deletionPreview": {
+      "input": {
+        "properties": {
+          "userId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId"
+        ],
+        "type": "object"
+      },
+      "type": "query"
     },
     "privacy.deviceUnlockStatus": {
       "input": {

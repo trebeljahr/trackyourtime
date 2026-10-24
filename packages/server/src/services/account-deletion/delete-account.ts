@@ -64,6 +64,22 @@ async function workspaceIdsOf(
   return [...ids].sort();
 }
 
+/** Read-only confirmation copy. Both membership records decide whether a
+ * workspace is shared, exactly as in the deletion plan. No record content or
+ * other member's identity is returned. This is not authorization to delete. */
+export async function previewAccountDeletion(store: DeletionRowStore, userId: string): Promise<{
+  soloWorkspaces: number; standardSharedWorkspaces: number; encryptedSharedWorkspaces: number;
+}> {
+  const result = { soloWorkspaces: 0, standardSharedWorkspaces: 0, encryptedSharedWorkspaces: 0 };
+  for (const workspaceId of await workspaceIdsOf(store, userId)) {
+    const shared = (await membersOf(store, workspaceId)).some((member) => member.userId !== userId);
+    if (!shared) { result.soloWorkspaces++; continue; }
+    const encrypted = (await store.find("privateWorkspaces", { workspaceId })).some((row) => row.state === "encrypted");
+    if (encrypted) result.encryptedSharedWorkspaces++; else result.standardSharedWorkspaces++;
+  }
+  return result;
+}
+
 /**
  * Delete everything `user` owns, leaving shared workspaces intact.
  *

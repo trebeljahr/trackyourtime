@@ -10,7 +10,7 @@
 // running it again.
 import assert from "node:assert/strict";
 import { describe, it, test } from "node:test";
-import { deleteAccountData } from "../services/account-deletion/delete-account.js";
+import { deleteAccountData, previewAccountDeletion } from "../services/account-deletion/delete-account.js";
 import {
   planWorkspaceExit,
   type DeletionCollection,
@@ -488,4 +488,16 @@ test("encrypted deletion erases personal ciphertext, including former workspaces
   assert.deepEqual(store.rows.privateWorkspaceCommits?.[0]?.readerSignatures, [{ userId: BOB }]);
   assert.deepEqual(store.rows.privateWorkspaceCommits?.[1]?.records, []);
   assert.doesNotMatch(JSON.stringify(store.rows), /personal-favorite/);
+});
+
+
+test("deletion preview counts only the caller's workspaces and reconciles both membership records", async () => {
+  const fixture = seed();
+  fixture.privateWorkspaces = [{ workspaceId: TEAM, state: "encrypted" }, { workspaceId: BOBS, state: "encrypted" }];
+  fixture.authMembers!.push({ organizationId: "auth-only-team", userId: ALICE, role: "member" }, { organizationId: "auth-only-team", userId: BOB, role: "owner" });
+  fixture.privateWorkspaces.push({ workspaceId: "auth-only-team", state: "encrypted" });
+  fixture.workspaceMembers!.push({ workspaceId: "standard-team", userId: ALICE, role: "member" }, { workspaceId: "standard-team", userId: CAROL, role: "owner" });
+  const store = memoryRowStore(fixture); store.failOnWrite(1);
+  assert.deepEqual(await previewAccountDeletion(store, ALICE), { soloWorkspaces: 1, standardSharedWorkspaces: 1, encryptedSharedWorkspaces: 2 });
+  assert.deepEqual(await previewAccountDeletion(store, "non-member"), { soloWorkspaces: 0, standardSharedWorkspaces: 0, encryptedSharedWorkspaces: 0 });
 });

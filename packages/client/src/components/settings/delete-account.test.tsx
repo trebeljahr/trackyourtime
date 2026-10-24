@@ -21,6 +21,10 @@ import type { AccountDeletionRefusal } from "@/lib/auth-client";
 
 const replace = vi.fn();
 const state = { pending: 0 };
+const preview = { data: { soloWorkspaces: 1, standardSharedWorkspaces: 0, encryptedSharedWorkspaces: 1 }, isFetching: false, isError: false };
+let previewSupported = false;
+vi.mock("@/lib/server-level", () => ({ useServerSupports: () => previewSupported }));
+vi.mock("@/lib/trpc", () => ({ trpc: { privacy: { deletionPreview: { useQuery: () => preview } } } }));
 const auth = { user: { id: "user-a", name: "Alice", email: "alice@example.com" } };
 let hasPassword = true;
 let outcome: { ok: true } | { ok: false; reason: AccountDeletionRefusal } = { ok: true };
@@ -49,6 +53,7 @@ const openDialog = async (): Promise<void> => {
 };
 
 beforeEach(() => {
+  previewSupported = false; preview.isFetching = false; preview.isError = false; preview.data.standardSharedWorkspaces = 0; preview.data.encryptedSharedWorkspaces = 1;
   replace.mockClear();
   deleteAccount.mockClear();
   state.pending = 0;
@@ -155,4 +160,27 @@ describe("DeleteAccountCard", () => {
       "2 changes on this device have not synced yet",
     );
   });
+});
+
+
+it("explains encrypted shared retention without promising to erase shared time entries", async () => {
+  previewSupported = true; render(<DeleteAccountCard />); await openDialog();
+  expect(screen.getByTestId("delete-account-encrypted-shared")).toHaveTextContent("including your time entries");
+  expect(screen.getByTestId("delete-account-encrypted-shared")).toHaveTextContent("account encryption keys are deleted");
+  expect(screen.getByTestId("delete-account-scope")).not.toHaveTextContent("only your own data is deleted");
+});
+it("shows both retention policies when an account belongs to both workspace modes", async () => {
+  previewSupported = true; preview.data.standardSharedWorkspaces = 1; render(<DeleteAccountCard />); await openDialog();
+  expect(screen.getByTestId("delete-account-scope")).toHaveTextContent("entries already on an invoice");
+  expect(screen.getByTestId("delete-account-encrypted-shared")).toBeInTheDocument();
+});
+it("holds confirmation until the workspace policy is current, including failed refreshes", async () => {
+  previewSupported = true; preview.isFetching = true; const { rerender } = render(<DeleteAccountCard />); await openDialog();
+  fireEvent.change(await screen.findByTestId("delete-account-password"), { target: { value: "correct password" } });
+  expect(screen.getByTestId("delete-account-confirm")).toBeDisabled();
+  preview.isFetching = false; preview.isError = true; rerender(<DeleteAccountCard />);
+  expect(screen.getByTestId("delete-account-preview-status")).toHaveTextContent("Could not check");
+  expect(screen.getByTestId("delete-account-confirm")).toBeDisabled();
+  expect(deleteAccount).not.toHaveBeenCalled();
+  preview.isError = false; rerender(<DeleteAccountCard />); expect(screen.getByTestId("delete-account-confirm")).toBeEnabled();
 });
