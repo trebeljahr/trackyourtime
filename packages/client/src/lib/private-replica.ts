@@ -1,5 +1,5 @@
 import { openPrivateIndexedStorage } from "./private-indexed-storage";
-import { createPrivateDirectoryStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, type KeyValueStorage, type PrivateDirectoryTrust, type PrivateProjectionTransport, type QueueExclusive, type VerifiedPrivateDirectory } from "@starter/core";
+import { createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, signPrivateWorkspacePolicy, type KeyValueStorage, type PrivateDirectoryTrust, type PrivateProjectionTransport, type PrivateWorkspacePolicyCheckpoint, type QueueExclusive, type VerifiedPrivateDirectory, type VerifiedPrivateProjectionSnapshot } from "@starter/core";
 import { privateDataOrigin, privateOperationScope, privateSession, subscribePrivateSession } from "./private-session";
 function privateStorageAccess(userId: string, server: string) {
   const root = privateSession(userId);
@@ -8,6 +8,25 @@ function privateStorageAccess(userId: string, server: string) {
   return { key, current: () => {
     try { check(); return privateSession(userId) === root; } catch { return false; }
   }, release: () => key.fill(0) };
+}
+/** A trusted activation/device/recovery checkpoint is required. This adapter
+ * never treats missing metadata as standard storage or trusts an API mode to
+ * pick its initial root. App-wide mode/old-client readiness is still separate. */
+export async function privateWorkspacePolicyStore(userId: string, workspaceId: string, storage: KeyValueStorage, exclusive: QueueExclusive, expected: PrivateWorkspacePolicyCheckpoint) {
+  const root = privateSession(userId), server = privateDataOrigin(), captured = privateOperationScope(userId);
+  if (!root) throw new Error("Unlock private data before opening workspace policy");
+  const check = () => { captured(); if (privateSession(userId) !== root || privateDataOrigin() !== server) throw new Error("Private data changed during this operation"); };
+  const { kty, crv, x, y } = root.signingPrivateKey;
+  const store = await createPrivateWorkspacePolicyStore({ storage, exclusive, scope: { server, userId, workspaceId }, signingPublicKey: { kty, crv, x, y }, expected,
+    resolveStorageKey: () => privateStorageAccess(userId, server), capture: () => { check(); return check; },
+  }); check(); return store;
+}
+export function signPrivateWorkspaceDevicePolicy(userId: string, snapshot: VerifiedPrivateProjectionSnapshot, directory: VerifiedPrivateDirectory) {
+  const root = privateSession(userId), check = privateOperationScope(userId), server = privateDataOrigin();
+  if (!root || snapshot.scope.userId !== userId || snapshot.scope.server !== server) throw new Error("Use this account's current private snapshot");
+  return signPrivateWorkspacePolicy({ snapshot, directory, secrets: root, current: () => {
+    try { check(); return privateSession(userId) === root && privateDataOrigin() === server; } catch { return false; }
+  } });
 }
 /** Hosts supply the same account/workspace Web Lock to both adapters. A trusted
  * owner key comes from the unlocked identity or an independently checked invite. */

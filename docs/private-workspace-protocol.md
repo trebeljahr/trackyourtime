@@ -862,6 +862,35 @@ metadata and must retire at cutover, as enforced by the residual audit. Operator
 key provisioning/rotation, the operational controller and complete installation
 rollback remain unimplemented; this code supplies no network bypass.
 
+## Device workspace-mode pins (adapter foundation)
+
+A device can now sign an encrypted-workspace policy only from a current,
+fully verified initial projection and directory matching its unlocked account
+keys. The pin binds account/server/workspace, the initial root and directory,
+and the initial owner's public signing key/revision. Its account signature
+allows verification after trusted device/recovery transfer without trusting a
+new API response to select the initial checkpoint.
+
+The durable store authenticates/encrypts the pin under scoped account storage,
+reopens writes and keeps the first accepted activation. There is no downgrade
+or remove API. Missing, locked, corrupt or differently scoped policy refuses
+selection of a data adapter. A verified pin refuses an omitted, standard or
+preparing API mode. The client wrapper binds every operation and returned pin
+to the current account unlock generation and server. Locking invalidates old
+handles and pins even after unlocking the same account again.
+
+The expected root/directory must come from verified activation or trusted
+device/recovery state; accepting those values from the same server response
+would defeat the check. A new device without that trusted state requires a
+separate enrollment decision. Complete local filesystem rollback is also not
+detected by this store alone. It is not a complete signed account inventory,
+sharing/rotation workflow or old-client retirement mechanism. Existing client
+tabs may transmit their old plaintext queues before any server refusal. The
+future activation controller must preserve those queues and establish client
+readiness before conversion. App-wide routing, cache teardown and all private
+CRUD/timer/report adapters still need integration. Existing standard behavior
+is unchanged and no workspace activation route is enabled.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes the separated initial root, consumes
@@ -873,9 +902,9 @@ rollback remain unimplemented; this code supplies no network bypass.
   and extension persistence. Existing clients do not use this replica yet.
 - User-facing conflict review/export of unsent work and recovery after local
   storage corruption or loss. New revisions alone cannot settle a conflict.
-- Durable encryption-mode pins and trusted new-device workspace policy. Missing
-  keys, omitted server identity/mode metadata or an older API must never silently
-  send private workspace data through standard plaintext adapters.
+- Integrate the device mode-pin adapter with a complete signed account inventory,
+  trusted new-device policy and every content/queue path. Missing keys, omitted
+  metadata or an older API must never silently select plaintext adapters.
 - Complete client business-transition validation, including approval submissions
   versus reviews, invoice links on colleagues' entries and issued-document
   immutability. Coarse record-kind rights alone do not encode those rules.

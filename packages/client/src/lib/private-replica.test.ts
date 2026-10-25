@@ -2,13 +2,13 @@
 import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { encryptPrivateRecord, privateRecordDigest, privateInitialSnapshotProjection, signPrivateInitialProjectionRoot, memoryStorage, privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "@starter/core";
+import { encryptPrivateRecord, privateRecordDigest, privateInitialSnapshotProjection, signPrivateInitialProjectionRoot, memoryStorage, privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, requirePrivateWorkspacePolicy } from "@starter/core";
 import type { PrivateWorkspaceDirectory } from "@starter/shared";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", changed: null as (() => void) | null }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiOrigin: (fn: () => void) => { state.changed = fn; return () => {}; } }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 const session = await import("./private-session");
-const { privateDirectoryStore, privateWorkspaceReplica, privateWorkspaceStorageHost, loadPrivateWorkspaceProjection } = await import("./private-replica");
+const { privateDirectoryStore, privateWorkspaceReplica, privateWorkspaceStorageHost, loadPrivateWorkspaceProjection, privateWorkspacePolicyStore, signPrivateWorkspaceDevicePolicy } = await import("./private-replica");
 const exclusive = <T,>(task: () => Promise<T>) => task();
 beforeEach(() => { vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); state.origin = "https://api.example.test"; session.lockPrivateData(); session.privateAccountChanged(null); });
 afterEach(() => { session.lockPrivateData(); vi.unstubAllGlobals(); });
@@ -75,9 +75,17 @@ it("binds separated projection downloads and durable installation to the live ac
   const host = await privateWorkspaceStorageHost("owner", "workspace");
   try {
     const snapshot = await loadPrivateWorkspaceProjection("owner", "workspace", f.verified, root, transport);
+    const policies = await privateWorkspacePolicyStore("owner", "workspace", host.storage, host.exclusive, { activationRoot: root, directoryDigest: f.verified.digest });
+    await expect(policies.read()).rejects.toThrow("Trusted workspace policy is missing");
+    const signedPolicy = await signPrivateWorkspaceDevicePolicy("owner", snapshot, f.verified);
+    const pin = await policies.accept(signedPolicy);
+    expect(requirePrivateWorkspacePolicy(pin, snapshot.scope, "encrypted").activationRoot).toBe(root);
+    expect(() => requirePrivateWorkspacePolicy(pin, snapshot.scope, "standard")).toThrow("Plaintext access is refused");
     const replica = await privateWorkspaceReplica("owner", "workspace", host.storage, host.exclusive, () => f.verified);
     await replica.bootstrapProjection(snapshot); expect((await replica.read()).records[0]!.value.name).toBe("Private original tag");
     session.lockPrivateData(); session.installPrivateSession("owner", f.root.secrets);
+    expect(() => requirePrivateWorkspacePolicy(pin, snapshot.scope, "encrypted")).toThrow("current verified");
+    await expect(policies.read()).rejects.toThrow();
     await expect(replica.bootstrapProjection(snapshot)).rejects.toThrow();
     const late = loadPrivateWorkspaceProjection("owner", "workspace", f.verified, root, { ...transport, page: async (input) => { const page = await transport.page(input); session.lockPrivateData(); return page; } });
     await expect(late).rejects.toThrow("changed during delivery");

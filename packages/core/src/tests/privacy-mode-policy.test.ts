@@ -1,0 +1,74 @@
+import assert from "node:assert/strict";
+import { it } from "node:test";
+import { createKeyPair, createSigningPair, randomSecret, signPrivateChange } from "../privacy/crypto.js";
+import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
+import { signPrivateInitialProjectionRoot, verifyPrivateInitialProjection } from "../privacy/projection-snapshot.js";
+import { privateRecordDigest } from "../privacy/workspace-edits.js";
+import { createPrivateWorkspacePolicyStore, PrivateWorkspacePolicyMissingError, requirePrivateWorkspacePolicy, signPrivateWorkspacePolicy } from "../privacy/mode-policy.js";
+import { PrivateStorageIntegrityError, PrivateStorageLockedError } from "../privacy/storage.js";
+import { memoryStorage } from "../storage.js";
+const scope = { server: "https://api.example.test", workspaceId: "workspace", userId: "owner" };
+async function fixture() {
+  const encryption = await createKeyPair(), signing = await createSigningPair(), key = randomSecret();
+  const member = { userId: scope.userId, role: "owner" as const, canViewOthersTime: true, canViewOthersMoney: true, publicKey: encryption.publicKey, signingPublicKey: signing.publicKey };
+  const signedDirectory = await signPrivateWorkspaceDirectory({ v: 1, server: scope.server, workspaceId: scope.workspaceId, ownerId: scope.userId, revision: 1, previousDigest: null, members: [member] }, signing.privateKey, null, new Map([[scope.userId, await privateMemberKeyFingerprint(scope.server, member)]]));
+  const directory = await verifyPrivateWorkspaceDirectory(signedDirectory, scope, { ownerId: scope.userId, signingPublicKey: signing.publicKey, revision: 0, digest: null });
+  const secrets = { privateKey: encryption.privateKey, signingPrivateKey: signing.privateKey }, state = { open: true };
+  const current = () => state.open;
+  const signedRoot = await signPrivateInitialProjectionRoot({ directory, secrets, userId: scope.userId, migrationId: crypto.randomUUID(), sharedRecords: [], ownerPersonalRecords: [], personalDigests: new Map([[scope.userId, await privateRecordDigest([])]]), current });
+  const snapshot = await verifyPrivateInitialProjection({ signed: signedRoot, sharedRecords: [], personalRecords: [], scope, directory, secrets, current });
+  const signed = await signPrivateWorkspacePolicy({ snapshot, directory, secrets, current });
+  const backing = memoryStorage(), writes = new Map<string, string>();
+  const storage = { ...backing, setItem: async (name: string, value: string) => { writes.set(name, value); await backing.setItem(name, value); } };
+  const options = { storage, scope, signingPublicKey: signing.publicKey, expected: { activationRoot: snapshot.root, directoryDigest: directory.digest }, exclusive: <T>(task: () => Promise<T>) => task(), resolveStorageKey: () => state.open ? { key, current } : null, capture: () => () => { if (!state.open) throw new PrivateStorageLockedError(); } };
+  return { signing, secrets, state, directory, snapshot, signed, storage, writes, options };
+}
+it("persists a signed encrypted device policy and refuses omitted, standard or preparing server mode before choosing an adapter", async () => {
+  const f = await fixture(), store = await createPrivateWorkspacePolicyStore(f.options);
+  await assert.rejects(store.read(), PrivateWorkspacePolicyMissingError);
+  const pin = await store.accept(f.signed);
+  assert.deepEqual(requirePrivateWorkspacePolicy(pin, scope, "encrypted"), f.options.expected);
+  assert.ok(Object.isFrozen(pin.signed.policy.ownerSigningPublicKey));
+  for (const mode of [undefined, null, "standard", "migrating", {}, false]) assert.throws(() => requirePrivateWorkspacePolicy(pin, scope, mode), /Plaintext access is refused/);
+  const restarted = await createPrivateWorkspacePolicyStore(f.options);
+  assert.deepEqual((await restarted.read()).signed, pin.signed);
+  for (const value of f.writes.values()) assert.doesNotMatch(value, /ownerSigningPublicKey|activationRoot|workspace-policy|"mode":"encrypted"/);
+  assert.throws(() => requirePrivateWorkspacePolicy({ ...pin }, scope, "encrypted"), /current verified/);
+});
+it("rejects forged account signatures, another scope and substituted activation roots without changing the persisted pin", async () => {
+  const f = await fixture(), store = await createPrivateWorkspacePolicyStore(f.options), other = await createSigningPair();
+  const forged = structuredClone(f.signed); forged.signature = await signPrivateChange(other.privateKey, forged.policy);
+  await assert.rejects(store.accept(forged), /signature/);
+  await store.accept(f.signed);
+  const changed = structuredClone(f.signed); changed.policy.activationRoot = "A".repeat(43); changed.signature = await signPrivateChange(f.signing.privateKey, changed.policy);
+  await assert.rejects(store.accept(changed), /trusted activation/);
+  const crossScope = structuredClone(f.signed); crossScope.policy.userId = "other"; crossScope.signature = await signPrivateChange(f.signing.privateKey, crossScope.policy);
+  await assert.rejects(store.accept(crossScope), /another scope/);
+  const changedKey = await createPrivateWorkspacePolicyStore({ ...f.options, signingPublicKey: other.publicKey });
+  await assert.rejects(changedKey.read(), /account key changed/);
+  const changedTrust = await createPrivateWorkspacePolicyStore({ ...f.options, expected: { ...f.options.expected, activationRoot: "A".repeat(43) } });
+  await assert.rejects(changedTrust.read(), /trusted activation/);
+  assert.deepEqual((await store.read()).signed, f.signed);
+});
+it("keeps the first valid activation pin and refuses stale, locked, corrupt or missing policy instead of falling back", async () => {
+  const f = await fixture(), store = await createPrivateWorkspacePolicyStore(f.options), pin = await store.accept(f.signed);
+  const replay = structuredClone(f.signed); replay.policy.createdAt = new Date(0).toISOString(); replay.signature = await signPrivateChange(f.signing.privateKey, replay.policy);
+  assert.deepEqual((await store.accept(replay)).signed, f.signed);
+  f.state.open = false;
+  assert.throws(() => requirePrivateWorkspacePolicy(pin, scope, "encrypted"), /current verified/);
+  await assert.rejects(store.read(), PrivateStorageLockedError);
+  f.state.open = true;
+  const file = [...f.writes.keys()][0]!;
+  await f.storage.setItem(file, "corrupted ciphertext");
+  await assert.rejects(store.read(), PrivateStorageIntegrityError);
+  await assert.rejects(store.accept(f.signed), PrivateStorageIntegrityError);
+  await f.storage.removeItem(file);
+  await assert.rejects(store.read(), PrivateWorkspacePolicyMissingError);
+});
+it("requires a current fully verified snapshot and matching account keys before signing a policy", async () => {
+  const f = await fixture();
+  await assert.rejects(signPrivateWorkspacePolicy({ snapshot: JSON.parse(JSON.stringify(f.snapshot)), directory: f.directory, secrets: f.secrets, current: () => true }), /current verified/);
+  await assert.rejects(signPrivateWorkspacePolicy({ snapshot: f.snapshot, directory: f.directory, secrets: { ...f.secrets, signingPrivateKey: (await createSigningPair()).privateKey }, current: () => true }), /do not match/);
+  f.state.open = false;
+  await assert.rejects(signPrivateWorkspacePolicy({ snapshot: f.snapshot, directory: f.directory, secrets: f.secrets, current: () => true }), /current verified/);
+});
