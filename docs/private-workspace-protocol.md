@@ -842,6 +842,26 @@ storage erasure. Operator storage/copies join the required retirement inventory.
 No customer archive, live restore, cutover or server-side backup approval has
 been performed by these synthetic checks.
 
+The saved-file result now has a process-local, frozen verification brand. An
+independent operator signing key can attest only a fresh branded result, not a
+JSON report or caller-provided success flag. Existing files can be reopened and
+drilled again after restart without rewriting them. The signed, one-hour proof
+binds both complete-source digests, the encrypted file SHA-256, exact checkpoint,
+operator fingerprint and verification time. Neither the backup key nor signing
+private key is saved by this library.
+
+An internal recorder verifies against an independently pinned operator public
+key supplied by operational policy, never by the submitted request or workspace
+owner's account identity. It repeats current content/source verification in the
+workspace transaction before storing the proof. Exact replay rechecks current
+data; renewal requires a newer verification by the same pinned operator. Older
+proofs cannot replace newer ones. Future cutover can revalidate the stored proof
+inside its own transaction; expiry/lease checks also run before commit. No mode
+or `backupVerified` flag changes. The source-bound proof is temporary migration
+metadata and must retire at cutover, as enforced by the residual audit. Operator
+key provisioning/rotation, the operational controller and complete installation
+rollback remain unimplemented; this code supplies no network bypass.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes the separated initial root, consumes

@@ -4,8 +4,8 @@ import { mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:f
 import { dirname, join } from "node:path";
 import mongoose from "mongoose";
 import { BSON, Long, MongoClient } from "mongodb";
-import { canonicalJson, emptyRecoveryCollections, emptyRecoverySupplementCollections, randomSecret, recoveryDigest, recoverySupplementDigest, verifyCombinedWorkspaceRecoveryArchive, verifyCombinedRecoveryKeyBackup } from "@starter/core";
-import { encryptOperatorRecoveryArchive, openOperatorRecoveryArchive, saveOperatorRecoveryCopy, verifyOperatorRecoveryArchive, verifyOperatorRecoveryCopy, type OperatorRecoveryScope } from "../services/privacy/operator-recovery.js";
+import { canonicalJson, createSigningPair, emptyRecoveryCollections, emptyRecoverySupplementCollections, randomSecret, recoveryDigest, recoverySupplementDigest, verifyCombinedWorkspaceRecoveryArchive, verifyCombinedRecoveryKeyBackup } from "@starter/core";
+import { encryptOperatorRecoveryArchive, openOperatorRecoveryArchive, saveOperatorRecoveryCopy, signOperatorRecoveryProof, verifySavedOperatorRecoveryCopy, verifyOperatorRecoveryArchive, verifyOperatorRecoveryCopy, type OperatorRecoveryScope } from "../services/privacy/operator-recovery.js";
 import { withOperatorRestoreSandbox } from "../services/privacy/operator-restore-sandbox.js";
 import { connectTestDatabase, clearTestDatabase, dropTestDatabase, skipWithoutDatabase } from "./support/test-database.js";
 const mongodPath = process.env.TEST_MONGOD_PATH ?? "";
@@ -64,6 +64,13 @@ describe("operator-only encrypted originals and isolated restoration", { skip: s
       assert.equal(canonicalJson(reopened), canonicalJson(archive));
       assert.equal(reopened.snapshot.collections.favorites.length, 2); assert.equal(reopened.supplement.collections.webhooksubscriptions.length, 2);
       assert.equal(await mongoose.connection.db!.collection("favorites").countDocuments({ workspaceId: "source-sentinel" }), 1);
+      const operator = await createSigningPair();
+      const signed = await signOperatorRecoveryProof(saved, operator.privateKey, operator.publicKey);
+      assert.equal(signed.proof.fileSha256, saved.fileSha256); assert.equal(signed.proof.sourceRevision, saved.sourceRevision);
+      await assert.rejects(signOperatorRecoveryProof(JSON.parse(JSON.stringify(saved)), operator.privateKey, operator.publicKey), /verified saved operator file/);
+      await assert.rejects(signOperatorRecoveryProof(Object.freeze({ ...saved }), operator.privateKey, operator.publicKey), /verified saved operator file/);
+      const rechecked = await verifySavedOperatorRecoveryCopy(path, key, scope, mongodPath);
+      assert.equal((await signOperatorRecoveryProof(rechecked, operator.privateKey, operator.publicKey)).proof.fileSha256, saved.fileSha256);
       await assert.rejects(saveOperatorRecoveryCopy(path, archive, key, mongodPath), { code: "EEXIST" });
       assert.equal(await readFile(path, "utf8"), raw);
     } finally { key.fill(0); await rm(directory, { recursive: true, force: true }); }

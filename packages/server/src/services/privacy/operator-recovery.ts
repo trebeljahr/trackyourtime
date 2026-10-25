@@ -5,7 +5,7 @@ import { isAbsolute } from "node:path";
 import { BSON } from "mongodb";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { canonicalJson, deriveSecret, emptyRecoveryCollections, emptyRecoverySupplementCollections, recoveryDigest, recoverySupplementDigest, seal, unseal, verifyWorkspaceRecovery, verifyWorkspaceRecoverySupplement } from "@starter/core";
+import { canonicalJson, deriveSecret, emptyRecoveryCollections, emptyRecoverySupplementCollections, fingerprint, recoveryDigest, recoverySupplementDigest, seal, signPrivateChange, unseal, verifyWorkspaceRecovery, verifyWorkspaceRecoverySupplement, type PublicKey } from "@starter/core";
 import { RECOVERY_KINDS, RECOVERY_SUPPLEMENT_KINDS, RECOVERY_MAX_BYTES, RECOVERY_MAX_RECORDS } from "@starter/shared";
 import { PrivateWorkspace } from "../../models/PrivateData.js";
 import { fenceWorkspace, withBusinessTransaction } from "../business-transaction.js";
@@ -14,6 +14,7 @@ import { workspaceRecovery } from "./recovery.js";
 import { capturePrivateMigrationSupplement } from "./recovery-supplement.js";
 import type { OriginalStageScope } from "./original-staging.js";
 import { withOperatorRestoreSandbox } from "./operator-restore-sandbox.js";
+import { verifyPrivateChange } from "./signatures.js";
 
 const checkpoint = z.object({
   server: z.string().min(1).max(2048), workspaceId: z.string().min(1).max(100), ownerId: z.string().min(1).max(100),
@@ -25,6 +26,16 @@ const headerSchema = checkpoint.extend({ format: z.literal("trackyourtime-operat
 const fileSchema = z.object({ header: headerSchema, box: z.object({ v: z.literal(1), nonce: z.string().regex(/^[A-Za-z0-9_-]{16}$/), data: z.string().min(22).max(36 * 1024 * 1024).regex(/^[A-Za-z0-9_-]+$/) }).strict() }).strict();
 type Checkpoint = z.infer<typeof checkpoint>;
 export type OperatorRecoveryScope = Omit<Checkpoint, "createdAt">;
+const hex = z.string().regex(/^[a-f0-9]{64}$/);
+export const signedOperatorRecoveryProofSchema = z.object({ proof: checkpoint.omit({ createdAt: true }).extend({
+  protocol: z.literal("trackyourtime-operator-backup-proof-v1"), v: z.literal(1),
+  sourceRevision: hex, supplementRevision: hex, fileSha256: hex,
+  operatorFingerprint: z.string().regex(/^[A-Za-z0-9_-]{43}$/), verifiedAt: z.number().int().nonnegative(), expiresAt: z.number().int().nonnegative(),
+}).strict(), signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) }).strict();
+export type SignedOperatorRecoveryProof = z.infer<typeof signedOperatorRecoveryProofSchema>;
+const verified = Symbol("verified-operator-recovery-file");
+type VerifiedOperatorRecoveryFile = Readonly<OperatorRecoveryScope & { sourceRevision: string; supplementRevision: string; fileSha256: string; verifiedAt: number; [verified]: true }>;
+const verifiedFiles = new WeakSet<object>();
 export async function verifyOperatorRecoveryArchive(input: unknown, expected?: OperatorRecoveryScope) {
   const archive = archiveSchema.parse(structuredClone(input));
   const origin = new URL(archive.server);
@@ -119,14 +130,36 @@ export async function saveOperatorRecoveryCopy(path: string, input: unknown, ind
   const bytes = Buffer.from(JSON.stringify(file));
   const handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
   try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+  return verifySavedCopy(path, independentKey, expected, mongodPath, bytes);
+}
+/** Recheck an existing operator file after restart without overwriting it.
+ * A restored JSON report is never treated as verification of saved bytes. */
+export function verifySavedOperatorRecoveryCopy(path: string, independentKey: Uint8Array, expected: OperatorRecoveryScope, mongodPath: string) {
+  return verifySavedCopy(path, independentKey, checkpoint.omit({ createdAt: true }).strict().parse(expected), mongodPath);
+}
+async function verifySavedCopy(path: string, independentKey: Uint8Array, expected: OperatorRecoveryScope, mongodPath: string, expectedBytes?: Buffer): Promise<VerifiedOperatorRecoveryFile> {
+  if (!isAbsolute(path)) throw new Error("Choose an absolute operator backup path");
   const saved = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   let read: Buffer;
   try {
     const stat = await saved.stat();
-    if (!stat.isFile() || stat.size !== bytes.length || stat.size > 36 * 1024 * 1024) throw new Error("Operator backup readback size differs");
+    if (!stat.isFile() || (expectedBytes && stat.size !== expectedBytes.length) || stat.size > 36 * 1024 * 1024) throw new Error("Operator backup readback size differs");
     read = await saved.readFile();
   } finally { await saved.close(); }
-  if (!read.equals(bytes)) throw new Error("Operator backup readback differs");
-  const verified = await verifyOperatorRecoveryCopy(JSON.parse(read.toString("utf8")), independentKey, expected, mongodPath);
-  return { ...verified, fileSha256: createHash("sha256").update(read).digest("hex") };
+  if (expectedBytes && !read.equals(expectedBytes)) throw new Error("Operator backup readback differs");
+  const checked = await verifyOperatorRecoveryCopy(JSON.parse(read.toString("utf8")), independentKey, expected, mongodPath);
+  const result = Object.freeze({ ...checked, fileSha256: createHash("sha256").update(read).digest("hex"), verifiedAt: Date.now(), [verified]: true as const });
+  verifiedFiles.add(result); return result;
+}
+/** Sign only a current in-process saved-file/readback/isolated-drill result.
+ * JSON copies and caller-created "verified" objects are refused. Keep the
+ * independent operator signing key off the application host too. */
+export async function signOperatorRecoveryProof(file: VerifiedOperatorRecoveryFile, privateKey: PublicKey, publicKey: PublicKey): Promise<SignedOperatorRecoveryProof> {
+  if (!verifiedFiles.has(file) || !Object.isFrozen(file)) throw new Error("A verified saved operator file is required");
+  const now = Date.now();
+  if (file.verifiedAt > now + 30_000 || file.verifiedAt < now - 300_000) throw new Error("Recheck the saved operator file before signing");
+  const proof = signedOperatorRecoveryProofSchema.shape.proof.parse({ ...file, protocol: "trackyourtime-operator-backup-proof-v1", v: 1, expiresAt: file.verifiedAt + 3_600_000, operatorFingerprint: await fingerprint(publicKey) });
+  const signature = await signPrivateChange(privateKey, proof);
+  await verifyPrivateChange(publicKey, proof, signature);
+  return signedOperatorRecoveryProofSchema.parse({ proof, signature });
 }

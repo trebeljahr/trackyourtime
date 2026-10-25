@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { before, beforeEach, after, describe, it, mock } from "node:test";
 import mongoose from "mongoose";
 import { createKeyPair, createSigningPair, createPrivatePreparationRequest, createPrivateOriginalStageRequest, createPrivateProjectionOwnerProof, createPrivateProjectionPersonalProof, deriveRecoveryBackupKey, encryptCombinedRecoveryKeyBackup, encodeSecret, randomSecret, canonicalJson, decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery, partitionPrivateRecoverySupplement, privateInitialSnapshotProjection, privateMemberKeyFingerprint, privateSourceSessionBinding, signPrivateChange, signPrivateInitialProjectionRoot, signPrivateWorkspaceDirectory, verifyPrivateInitialProjection, verifyPrivateWorkspaceDirectory, type PlainPrivateRecord, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
@@ -18,10 +20,12 @@ import { captureCompleteProjectionPreparation, privateProjectionProposal } from 
 import { preparePrivateProjectionSnapshot } from "../services/privacy/projection-snapshots.js";
 import { privateProjectionPreparationReadiness, recordPrivateProjectionOwnerProof, recordPrivateProjectionPersonalProof } from "../services/privacy/projection-receipts.js";
 import { personalMigrationSource } from "../services/privacy/personal-migration.js";
-import { captureOperatorRecoveryArchive } from "../services/privacy/operator-recovery.js";
+import { captureOperatorRecoveryArchive, saveOperatorRecoveryCopy, signOperatorRecoveryProof, verifySavedOperatorRecoveryCopy } from "../services/privacy/operator-recovery.js";
+import { recordOperatorRecoveryProof, verifyStoredOperatorRecoveryProof } from "../services/privacy/operator-proof.js";
 import { stagePrivateMigrationBatch, runVerifiedPrivateOriginalStage } from "../services/privacy/migration.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { auditPrivateWorkspaceRetirement } from "../services/privacy/retirement-audit.js";
+import { beforeBusinessCommit, withBusinessTransaction } from "../services/business-transaction.js";
 import { clearTestDatabase, connectTestDatabase, dropTestDatabase, skipWithoutDatabase } from "./support/test-database.js";
 const scope = { server: "https://api.example.test", workspaceId: "workspace", userId: "owner", sessionId: "current-session" };
 let owner: { privateKey: PublicKey; signingPrivateKey: PublicKey }, member: typeof owner, directory: VerifiedPrivateDirectory;
@@ -126,6 +130,49 @@ describe("signed client preparation lease", { skip: skipWithoutDatabase }, () =>
     assert.notEqual(own.supplement.sourceRevision, archive.supplement.sourceRevision);
     await assert.rejects(captureOperatorRecoveryArchive({ ...f.workerScope, userId: "member" }, f.root), { code: "NOT_FOUND" });
     await assert.rejects(captureOperatorRecoveryArchive(f.workerScope, "A".repeat(43)), { code: "CONFLICT" });
+  });
+  it("records and revalidates only a current independently signed saved-file/restore proof for the exact preparation", { skip: !process.env.TEST_MONGOD_PATH && "TEST_MONGOD_PATH needs an operator-local mongod binary" }, async () => {
+    const f = await contentVerification(), operator = await createSigningPair(), key = randomSecret();
+    const directory = await mkdtemp("/private/tmp/trackyourtime-operator-attestation-test-");
+    try {
+      await assert.rejects(verifyStoredOperatorRecoveryProof(f.workerScope, f.root, operator.publicKey), /independently signed operator backup proof/);
+      await recordPrivateProjectionOwnerProof(scope, await f.proof("owner"));
+      await recordPrivateProjectionPersonalProof({ ...scope, userId: "member" }, await f.proof("member"));
+      const path = join(directory, "originals.tytoperator"), archive = await captureOperatorRecoveryArchive(f.workerScope, f.root);
+      const saved = await saveOperatorRecoveryCopy(path, archive, key, process.env.TEST_MONGOD_PATH!);
+      const signed = await signOperatorRecoveryProof(saved, operator.privateKey, operator.publicKey);
+      const forged = structuredClone(signed); forged.signature = await signPrivateChange(owner.signingPrivateKey, forged.proof);
+      await assert.rejects(recordOperatorRecoveryProof(f.workerScope, forged, operator.publicKey), { code: "FORBIDDEN" });
+      await assert.rejects(recordOperatorRecoveryProof(f.workerScope, signed, (await createSigningPair()).publicKey), { code: "FORBIDDEN" });
+      const wrong = structuredClone(signed); wrong.proof.sourceRevision = "a".repeat(64); wrong.signature = await signPrivateChange(operator.privateKey, wrong.proof);
+      await assert.rejects(recordOperatorRecoveryProof(f.workerScope, wrong, operator.publicKey), { code: "CONFLICT" });
+      const expired = structuredClone(signed); expired.proof.verifiedAt -= 3_600_001; expired.proof.expiresAt -= 3_600_001; expired.signature = await signPrivateChange(operator.privateKey, expired.proof);
+      await assert.rejects(recordOperatorRecoveryProof(f.workerScope, expired, operator.publicKey), /expired/);
+      await assert.rejects(recordOperatorRecoveryProof({ ...f.workerScope, userId: "member" }, signed, operator.publicKey), { code: "NOT_FOUND" });
+      assert.equal((await PrivateWorkspace.findOne().lean())!.operatorBackup, null);
+      assert.deepEqual(await recordOperatorRecoveryProof(f.workerScope, signed, operator.publicKey), { recorded: true });
+      assert.deepEqual(await recordOperatorRecoveryProof(f.workerScope, signed, operator.publicKey), { recorded: true });
+      assert.deepEqual(await verifyStoredOperatorRecoveryProof(f.workerScope, f.root, operator.publicKey), { recorded: true });
+      const rechecked = await verifySavedOperatorRecoveryCopy(path, key, { server: archive.server, workspaceId: archive.workspaceId, ownerId: archive.ownerId, migrationId: archive.migrationId, modeId: archive.modeId, directoryDigest: archive.directoryDigest, snapshotRoot: archive.snapshotRoot }, process.env.TEST_MONGOD_PATH!);
+      const renewed = await signOperatorRecoveryProof(rechecked, operator.privateKey, operator.publicKey);
+      assert.deepEqual(await recordOperatorRecoveryProof(f.workerScope, renewed, operator.publicKey), { recorded: true });
+      await assert.rejects(recordOperatorRecoveryProof(f.workerScope, signed, operator.publicKey), { code: "CONFLICT" });
+      let restoreClock: (() => void) | undefined;
+      try {
+        await assert.rejects(withBusinessTransaction(async () => {
+          beforeBusinessCommit(async () => { const clock = mock.method(Date, "now", () => renewed.proof.expiresAt + 1); restoreClock = () => clock.mock.restore(); });
+          await verifyStoredOperatorRecoveryProof(f.workerScope, f.root, operator.publicKey);
+        }), /Operator backup proof expired/);
+      } finally { restoreClock?.(); }
+      const mode = (await PrivateWorkspace.findOne().lean())!;
+      assert.equal(mode.state, "migrating"); assert.equal(mode.backupVerified, false); assert.equal(mode.head, null);
+      await assert.rejects(verifyStoredOperatorRecoveryProof(f.workerScope, "A".repeat(43), operator.publicKey), { code: "CONFLICT" });
+      await PrivateWorkspace.updateOne({}, { $set: { "operatorBackup.signature": forged.signature } });
+      await assert.rejects(verifyStoredOperatorRecoveryProof(f.workerScope, f.root, operator.publicKey), { code: "FORBIDDEN" });
+      await PrivateWorkspace.updateOne({}, { $set: { operatorBackup: renewed } });
+      await mongoose.connection.db!.collection("webhooksubscriptions").updateOne({ createdBy: "member" }, { $set: { secret: "Changed after operator verification" } });
+      await assert.rejects(recordOperatorRecoveryProof(f.workerScope, signed, operator.publicKey), /Original data changed/);
+    } finally { key.fill(0); await rm(directory, { recursive: true, force: true }); }
   });
   it("revalidates saved receipt signatures and source bindings instead of trusting row presence", async () => {
     const f = await contentVerification();
