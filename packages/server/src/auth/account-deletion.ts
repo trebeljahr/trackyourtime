@@ -96,6 +96,8 @@ export const hasPasswordAccount = (accounts: readonly AccountRow[]): boolean =>
 export function accountDeletionOptions(deps: {
   context: () => Promise<DeletionAuthContext>;
   appRows: DeletionRowStore;
+  /** One-way key-write barrier, committed before deleting any account data. */
+  beginPrivateErasure: (userId: string) => Promise<void>;
   /** Called once the account is gone — drops the person's live sockets. */
   onDeleted?: (user: DeletedUser) => void;
   log?: (message: string, error: unknown) => void;
@@ -122,6 +124,7 @@ export function accountDeletionOptions(deps: {
           message: "Enter your password to delete your account.",
         });
       }
+      await deps.beginPrivateErasure(user.id);
       await cascade(user);
     },
     async afterDelete(user) {

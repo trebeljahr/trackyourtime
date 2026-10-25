@@ -1,4 +1,5 @@
 import { createStandardBackupChallenge, readStandardBackupOriginals } from "../../services/privacy/standard-backup.js";
+import { fencePrivateAccount } from "../../services/privacy/account-erasure-fence.js";
 import { commitPrivateDirectory, privateDirectoryPage } from "../../services/privacy/directories.js";
 import { privateInitialSnapshotManifest, privateInitialSnapshotPage } from "../../services/privacy/initial-snapshots.js";
 import { migrationFavoritesSource } from "../../services/privacy/recovery.js";
@@ -14,6 +15,7 @@ import { signedPrivateChainedEditSchema, signedPrivateWorkspaceEditSchema } from
 import { requirePrivateClientProtocol, requirePrivateWorkspaceRollout, beginPrivateMigration, stagePrivateMigration, privateMigrationArchive, commitPrivateMigration, cancelPrivateMigration } from "../../services/privacy/migration.js";
 import { canonicalJson } from "@starter/core";
 import { z } from "zod";
+import mongoose from "mongoose";
 import { TRPCError } from "@trpc/server";
 import { encryptedRecordSchema, privateIdentitySchema, privateDeviceApprovalSchema, publicEncryptionKeySchema, type PrivateIdentity, type EncryptedRecord } from "@starter/shared";
 import { approvePrivateDevice, cancelPrivateDevice, createPrivateDeviceRequest, privateDeviceStatus } from "../../services/privacy/devices.js";
@@ -26,9 +28,16 @@ import { verifyPrivateChange } from "../../services/privacy/signatures.js";
 import { workspaceRecovery } from "../../services/privacy/recovery.js";
 import { protectedProcedure, router } from "../trpc.js";
 const scopeSchema = z.object({ workspaceId: z.string().min(1).max(100).optional() });
-const privateAccountProcedure = protectedProcedure.use(({ ctx, next }) => {
+const privateAccountProcedure = protectedProcedure.use(async ({ ctx, next, type }) => {
   if (ctx.res && !ctx.res.headersSent) ctx.res.setHeader("Cache-Control", "no-store");
-  return next();
+  if (type !== "mutation") return next();
+  if (!await supportsBusinessTransactions()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Private account writes require MongoDB transactions." });
+  return withBusinessTransaction(async () => {
+    await fencePrivateAccount(ctx.user.id);
+    const result = await next();
+    if (!result.ok) throw result.error;
+    return result;
+  });
 });
 const privateWorkspaceProcedure = privateAccountProcedure.use(async ({ ctx, next, getRawInput }) => {
   const found = await resolveWorkspace({ user: ctx.user, requested: workspaceIdFromInput(await getRawInput()), activeWorkspaceId: ctx.activeWorkspaceId });
@@ -75,6 +84,7 @@ export const privacyRouter = router({
     try { await PrivateAccount.create({ userId: ctx.user.id, identity: input.identity, revision: 1 }); }
     catch (error) {
       if ((error as { code?: number }).code !== 11000) throw error;
+      if (transactionSession() && error instanceof mongoose.mongo.MongoServerError) { error.addErrorLabel("TransientTransactionError"); throw error; }
       const raced = await PrivateAccount.findOne({ userId: ctx.user.id }).lean();
       if (raced && canonicalJson(raced.identity) === canonicalJson(input.identity)) return { revision: raced.revision };
       throw new TRPCError({ code: "CONFLICT" });

@@ -59,6 +59,7 @@ let appRows: MemoryRowStore;
 /** Lets a test make the app half of the cascade fail. */
 let failApp: boolean;
 let deleted: string[];
+let privateErasure: string[];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let auth: any;
 
@@ -88,6 +89,7 @@ beforeEach(() => {
   appRows = memoryRowStore();
   failApp = false;
   deleted = [];
+  privateErasure = [];
   auth = betterAuth({
     database: memoryAdapter(db as never),
     secret: "account-deletion-integration-secret-0123456789",
@@ -105,6 +107,7 @@ beforeEach(() => {
       deleteUser: accountDeletionOptions({
         context: () => auth.$context,
         appRows: failingAware(appRows),
+        beginPrivateErasure: async (userId) => { privateErasure.push(userId); },
         onDeleted: (user) => deleted.push(user.id),
         log: () => undefined,
       }),
@@ -193,6 +196,7 @@ describe("POST /delete-user with a bearer token", () => {
     assert.equal(result.json?.code, ACCOUNT_DELETION_PASSWORD_REQUIRED);
     assert.equal(db.user.length, 1);
     assert.equal(appRows.rows.timeEntries?.length, 1);
+    assert.deepEqual(privateErasure, []);
     assert.ok(await sessionFor(alice.token), "still signed in");
   });
 
@@ -207,6 +211,7 @@ describe("POST /delete-user with a bearer token", () => {
     assert.equal(db.user.length, 1);
     assert.equal(db.organization.length, 1);
     assert.equal(appRows.rows.timeEntries?.length, 1);
+    assert.deepEqual(privateErasure, []);
   });
 
   it("with the password, deletes the user, every session and everything they own", async () => {
@@ -238,6 +243,7 @@ describe("POST /delete-user with a bearer token", () => {
     assert.equal(await sessionFor(alice.token), null);
     assert.equal(await sessionFor(otherDevice), null, "the other device is signed out too");
     assert.deepEqual(deleted, [alice.id]);
+    assert.deepEqual(privateErasure, [alice.id]);
   });
 
   it("leaves a shared workspace to the colleague, promoted in better-auth's member row", async () => {
@@ -281,12 +287,14 @@ describe("POST /delete-user with a bearer token", () => {
     assert.ok(failed.status >= 500, `expected a server error, got ${failed.status}`);
     assert.equal(db.user.length, 1, "the user row survives a failed cascade");
     assert.ok(await sessionFor(alice.token), "and so does the session to retry with");
+    assert.deepEqual(privateErasure, [alice.id]);
 
     failApp = false;
     const retried = await deleteAccount(alice.token, { password: PASSWORD });
     assert.equal(retried.status, 200, JSON.stringify(retried.json));
     assert.deepEqual(db.user, []);
     assert.deepEqual(appRows.rows.timeEntries, []);
+    assert.deepEqual(privateErasure, [alice.id, alice.id]);
   });
 
   describe("an account with no password (social sign-in only)", () => {
@@ -305,6 +313,7 @@ describe("POST /delete-user with a bearer token", () => {
 
       assert.equal(result.status, 200, JSON.stringify(result.json));
       assert.deepEqual(db.user, []);
+      assert.deepEqual(privateErasure, [alice.id]);
     });
 
     it("must sign in again once the session is more than a day old", async () => {
@@ -321,6 +330,7 @@ describe("POST /delete-user with a bearer token", () => {
       assert.equal(result.json?.code, "SESSION_EXPIRED");
       assert.equal(db.user.length, 1);
       assert.equal(appRows.rows.timeEntries?.length, 1);
+      assert.deepEqual(privateErasure, []);
     });
   });
 });

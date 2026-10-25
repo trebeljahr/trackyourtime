@@ -3,6 +3,7 @@ import { canonicalJson } from "@starter/core";
 import { PRIVATE_DEVICE_TTL_MS, type PrivateDeviceApproval, type PrivateDeviceInvite } from "@starter/shared";
 import { PrivateAccount, PrivateDeviceRequest } from "../../models/PrivateData.js";
 import { supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
+import { fencePrivateAccount } from "./account-erasure-fence.js";
 
 /** The relay stores only a public receiving key and an encrypted response.
  * Authentication alone cannot make the receiver accept a substituted key:
@@ -11,6 +12,7 @@ export async function createPrivateDeviceRequest(userId: string, requestId: stri
   if (Buffer.byteLength(JSON.stringify(publicKey)) > 2048) throw new TRPCError({ code: "BAD_REQUEST", message: "Device public key metadata is too large." });
   if (!await supportsBusinessTransactions()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Private-device requests require a MongoDB replica set." });
   return withBusinessTransaction(async () => {
+    await fencePrivateAccount(userId);
     // Contend on this account before counting, so concurrent requests cannot
     // bypass the bound. This counter is separate from signed identity revisions.
     if (!await PrivateAccount.findOneAndUpdate({ userId }, { $inc: { deviceSerial: 1 } }).lean()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Set up private data keys first." });

@@ -948,6 +948,31 @@ it cannot enroll an empty device merely because an API supplied valid ciphertext
 This is an internal primitive, with no mounted endpoint/capability change or
 durable transport outbox yet. Workspace rollout remains disabled.
 
+## Account erasure versus delayed private writes
+
+A confirmed account deletion now commits a one-way account erasure fence before
+its data cascade. Its key is a domain-separated SHA-256 commitment to the random
+account ID. The retained row contains only that commitment, an erasure flag and
+concurrency counter: no email, key material or ciphertext. A new account using
+the same email gets a different ID and is unaffected.
+
+Private account mutations hold the same fence in their MongoDB transaction. A
+writer already holding it finishes before deletion marks the account and its
+result is swept by cleanup. A delayed/stale transaction retries against the
+erased marker and refuses instead of recreating keys after cleanup. Marker
+creation/mutation rolls back with failed private requests; erasure never resets
+on retry and the marker survives both account cleanup passes. The private-device
+request service also holds the fence when called directly. Standard deletion
+can set its single-document marker on standalone MongoDB; private mutations
+require a replica set. Password/fresh-session validation happens before marking.
+
+This closes the encryption-key enrollment retry race and protects future
+inventory mutations; it is not erasure of content/keys already copied by a
+formerly authorized device, a physical-storage wipe, or an old-client plaintext
+transport policy. Queries and existing standard account behavior retain their
+existing rules. No live account has been marked by the synthetic regression
+checks.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes the separated initial root, consumes

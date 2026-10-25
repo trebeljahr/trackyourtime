@@ -21,6 +21,7 @@ import {
   organizationPluginOptions,
 } from "../services/membership/organization-lockdown.js";
 import { accountDeletionOptions } from "./account-deletion.js";
+import { beginPrivateAccountErasure } from "../services/privacy/account-erasure-fence.js";
 import { authRateLimitEnabled } from "./auth-rate-limit.js";
 import { trustedOriginsForRequest } from "./extension-origins.js";
 import {
@@ -180,6 +181,7 @@ export async function initAuth(): Promise<void> {
       deleteUser: accountDeletionOptions({
         context: () => getAuth().$context,
         appRows: mongooseRowStore,
+        beginPrivateErasure: beginPrivateAccountErasure,
         /**
          * Every session is gone by now, so HTTP is already refused on every
          * device. Sweeping at once closes the sockets too, instead of leaving
