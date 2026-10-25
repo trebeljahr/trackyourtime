@@ -423,11 +423,14 @@ creator's ciphertext from current records and mixed initial snapshots/journals,
 while retaining shared work and the immutable commitments needed to verify
 other readers' projections. It does not delete another creator's integrations.
 
-This source is not yet part of the user-held backup file format or combined
-migration proof. Existing v1 backups still cover only fourteen collections and
-the older proof cannot approve supplemental records. A combined encrypted file,
-exact restore drill and per-creator content receipts are required before this
-source can authorize any retirement. Profile/avatar/user-preference encryption
+The combined v2 user-held backup includes both typed datasets, scoped to the
+owner's readable originals. Its authenticated format cannot downgrade to v1.
+An isolated restore drill verifies all seventeen collections and both checksums;
+it is not the complete operational backup required for retirement. Existing v1
+backups still cover only fourteen collections, and the older migration proof
+cannot approve supplemental records. Combined migration approval, per-creator
+content receipts and a complete operational restore proof remain required before
+this source can authorize any retirement. Profile/avatar/user-preference encryption
 still needs an account-scoped path. Server-side webhook/REST behavior in private
 mode also requires explicit compatibility handling; copying configuration does
 not make a blind server able to deliver plaintext events.

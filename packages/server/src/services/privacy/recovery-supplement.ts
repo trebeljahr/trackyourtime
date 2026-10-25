@@ -34,7 +34,7 @@ async function readSupplement(workspaceId: string, userId: string, includeOtherP
   for (const kind of RECOVERY_SUPPLEMENT_KINDS) {
     const filter = kind === "organization" ? { $or: [{ _id: { $in: ids } }, { id: workspaceId }] }
       : { workspaceId, ...(!includeOtherPrivate ? kind === "apitokens" ? { userId } : { createdBy: userId } : {}) };
-    const cursor = db.collection<{ _id: string | ObjectId }>(kind).find(filter, { session: transactionSession(), promoteValues: false, promoteLongs: false }).sort({ _id: 1 });
+    const cursor = db.collection<{ _id: string | ObjectId }>(kind).find(filter, { session: transactionSession(), promoteValues: false, promoteLongs: false }).collation({ locale: "simple" }).sort({ _id: 1 });
     try {
       for await (const row of cursor) {
         const typed = BSON.EJSON.serialize(row, { relaxed: false }) as Record<string, unknown>;

@@ -39,3 +39,6 @@ export const PRIVATE_USER_ONLY_KINDS = ["favorites", "integrations"] as const;
 export const RECOVERY_SUPPLEMENT_KINDS = ["organization", "apitokens", "webhooksubscriptions"] as const;
 export type RecoverySupplementKind = typeof RECOVERY_SUPPLEMENT_KINDS[number];
 export type WorkspaceRecoverySupplement = { v: 1; workspaceId: string; createdAt: string; sourceRevision: string; collections: Record<RecoverySupplementKind, Record<string, unknown>[]> };
+/** User-held original backup. Supplemental private records belong only to the
+ * file owner; complete server-side capture must never be exported through it. */
+export type CombinedWorkspaceRecoveryArchive = { format: "trackyourtime-workspace-recovery-v2"; server: string; ownerId: string; snapshot: WorkspaceRecovery; supplement: WorkspaceRecoverySupplement };

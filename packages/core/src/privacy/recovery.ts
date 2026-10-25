@@ -13,6 +13,15 @@ export function recoveryRecordId(row: Record<string, unknown>): string {
   if (isRecord(row._id) && exactKeys(row._id, ["$oid"]) && typeof row._id.$oid === "string" && /^[a-f0-9]{24}$/.test(row._id.$oid)) return `o:${row._id.$oid}`;
   throw new Error("Recovery record has an unsupported ID");
 }
+/** Match MongoDB's explicit simple-collation BSON ID order: strings precede
+ * ObjectIds, and strings compare as UTF-8 bytes rather than JS UTF-16 units. */
+export function compareRecoveryRecordIds(a: Record<string, unknown>, b: Record<string, unknown>): number {
+  const left = recoveryRecordId(a), right = recoveryRecordId(b);
+  if (left[0] !== right[0]) return left[0] === "s" ? -1 : 1;
+  const x = encoder.encode(left.slice(2)), y = encoder.encode(right.slice(2));
+  for (let index = 0; index < Math.min(x.length, y.length); index++) if (x[index] !== y[index]) return x[index]! - y[index]!;
+  return x.length - y.length;
+}
 /** Validate before restoring anything. Extended JSON stays intact; ordinary
  * export/import normalization would lose IDs, BSON types and invoice links. */
 export async function verifyWorkspaceRecovery(value: unknown, workspaceId?: string): Promise<WorkspaceRecovery> {

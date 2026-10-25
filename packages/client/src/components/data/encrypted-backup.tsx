@@ -3,7 +3,7 @@ import { useActiveWorkspace } from "@/components/members/use-active-workspace";
 import { useAuth } from "@/hooks/use-auth";
 import { privateDataOrigin } from "@/lib/private-session";
 import * as React from "react";
-import { decryptBackup, encryptBackup, verifyWorkspaceRecoveryArchive, type PasswordCiphertext, type WorkspaceRecoveryArchive } from "@starter/core";
+import { decryptBackup, encryptBackup, verifyCombinedWorkspaceRecoveryArchive, verifyWorkspaceRecoveryArchive, type PasswordCiphertext, type WorkspaceRecoveryArchive } from "@starter/core";
 import { useServerSupports } from "@/lib/server-level";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,7 @@ export function EncryptedBackup(): React.JSX.Element {
   const [confirm, setConfirm] = React.useState("");
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState(false);
-  const [restored, setRestored] = React.useState<{ json: string; recovery: boolean } | null>(null);
+  const [restored, setRestored] = React.useState<{ json: string; recovery: boolean; combined: boolean } | null>(null);
   const [lastBackup, setLastBackup] = React.useState<string | null>(null);
   const [remindDays, setRemindDays] = React.useState(0);
   // A backup of A must never make B's reminder look up to date.
@@ -96,19 +96,22 @@ export function EncryptedBackup(): React.JSX.Element {
           const scope = preferenceKey;
           const box = JSON.parse(await file.text()) as PasswordCiphertext;
           const value = await decryptBackup<unknown>(box, password);
-          const recovery = value !== null && typeof value === "object" && "format" in value && value.format === "trackyourtime-workspace-recovery-v1";
-          if (recovery) await verifyWorkspaceRecoveryArchive(value);
+          const combined = value !== null && typeof value === "object" && "format" in value && value.format === "trackyourtime-workspace-recovery-v2";
+          const legacyRecovery = value !== null && typeof value === "object" && "format" in value && value.format === "trackyourtime-workspace-recovery-v1";
+          if (combined) await verifyCombinedWorkspaceRecoveryArchive(value);
+          else if (legacyRecovery) await verifyWorkspaceRecoveryArchive(value);
+          const recovery = combined || legacyRecovery;
           // This action saves plaintext only at the person's explicit request.
           // It does not send the password or the encrypted file to the server.
           if (currentScope.current !== scope) return;
-          setRestored({ json: JSON.stringify(value, null, 2), recovery });
+          setRestored({ json: JSON.stringify(value, null, 2), recovery, combined });
           setPassword(""); setConfirm("");
         });
         event.target.value = "";
       }} />
-      {restored?.recovery && <p role="status" className="text-xs text-muted-foreground">{t("backups.recoveryOpened")}</p>}
+      {restored?.recovery && <p role="status" className="text-xs text-muted-foreground">{t(restored.combined ? "automaticBackups.openedCombined" : "backups.recoveryOpened")}</p>}
       {restored !== null && <Button variant="outline" onClick={() => {
-        downloadBlob(restored.recovery ? "trackyourtime-workspace-recovery.json" : "trackyourtime-restored-export.json", new Blob([restored.json], { type: "application/json" })); setRestored(null);
+        downloadBlob(restored.combined ? "trackyourtime-combined-recovery.json" : restored.recovery ? "trackyourtime-workspace-recovery.json" : "trackyourtime-restored-export.json", new Blob([restored.json], { type: "application/json" })); setRestored(null);
       }}>{t(restored.recovery ? "backups.saveRecoveryJson" : "backups.saveRestored")}</Button>}
     </div>
     {error && <p role="alert" className="text-sm text-destructive">{t("backups.failed")}</p>}

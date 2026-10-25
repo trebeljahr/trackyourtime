@@ -1,6 +1,6 @@
 import { RECOVERY_MAX_BYTES, RECOVERY_MAX_RECORDS, RECOVERY_SUPPLEMENT_KINDS, type RecoverySupplementKind, type WorkspaceRecoverySupplement } from "@starter/shared";
 import { canonicalJson } from "./crypto.js";
-import { recoveryRecordId } from "./recovery.js";
+import { compareRecoveryRecordIds, recoveryRecordId } from "./recovery.js";
 import type { PlainPrivateRecord } from "./records.js";
 const encoder = new TextEncoder();
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -79,6 +79,6 @@ export async function privateRecordsToRecoverySupplement(workspaceId: string, in
     const kind: RecoverySupplementKind = row.kind === "workspaceIdentity" ? "organization" : row.id.startsWith("apitokens:") ? "apitokens" : "webhooksubscriptions";
     collections[kind].push(row.kind === "workspaceIdentity" ? row.value.organization as Record<string, unknown> : row.value);
   }
-  for (const rows of Object.values(collections)) rows.sort((a, b) => recoveryRecordId(a) < recoveryRecordId(b) ? -1 : recoveryRecordId(a) > recoveryRecordId(b) ? 1 : 0);
+  for (const rows of Object.values(collections)) rows.sort(compareRecoveryRecordIds);
   return verifyWorkspaceRecoverySupplement({ v: 1, workspaceId, createdAt, sourceRevision: await recoverySupplementDigest(collections), collections }, workspaceId);
 }

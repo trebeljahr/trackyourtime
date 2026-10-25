@@ -25,7 +25,7 @@ export async function verifyRecoveryCopy(client: MongoClient, value: unknown): P
         const typed = rows.slice(offset, offset + 100).map((row) => BSON.EJSON.deserialize(row, { relaxed: false }));
         await copy.collection(kind).insertMany(typed);
       }
-      const read = await copy.collection(kind).find({}, { promoteValues: false, promoteLongs: false }).sort({ _id: 1 }).toArray();
+      const read = await copy.collection(kind).find({}, { promoteValues: false, promoteLongs: false }).collation({ locale: "simple" }).sort({ _id: 1 }).toArray();
       restored[kind] = BSON.EJSON.serialize(read, { relaxed: false }) as WorkspaceRecovery["collections"][typeof kind];
       counts[kind] = read.length; records += read.length;
     }

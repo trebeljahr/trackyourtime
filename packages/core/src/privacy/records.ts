@@ -1,4 +1,4 @@
-import { emptyRecoveryCollections, recoveryDigest, recoveryRecordId, verifyWorkspaceRecovery } from "./recovery.js";
+import { emptyRecoveryCollections, compareRecoveryRecordIds, recoveryDigest, recoveryRecordId, verifyWorkspaceRecovery } from "./recovery.js";
 import { encryptedRecordSchema, PRIVATE_USER_ONLY_KINDS, canSeeEntry, canSeeMoneyFor, canUseInvoices, type EncryptedRecord, type PrivateKind, type WorkspaceRecovery, type RecoveryKind } from "@starter/shared";
 import { canonicalJson, decodeSecret, encodeSecret, randomSecret, seal, sealForRecipient, unseal, unsealForRecipient, type PublicKey } from "./crypto.js";
 import { assertPrivateSupplementRecord } from "./recovery-supplement.js";
@@ -178,7 +178,7 @@ export async function privateRecordsToRecovery(workspaceId: string, input: reado
     collectionRows[collection].push(raw);
   }
   for (const row of rows) if (moneyKinds.has(row.kind) && !usedMoney.has(JSON.stringify([row.kind, row.id]))) throw new Error("Private recovery contains an orphaned money record");
-  for (const records of Object.values(collectionRows)) records.sort((a, b) => recoveryRecordId(a) < recoveryRecordId(b) ? -1 : recoveryRecordId(a) > recoveryRecordId(b) ? 1 : 0);
+  for (const records of Object.values(collectionRows)) records.sort(compareRecoveryRecordIds);
   const sourceRevision = await recoveryDigest(collectionRows);
   return verifyWorkspaceRecovery({ v: 1, workspaceId, createdAt, sourceRevision, collections: collectionRows }, workspaceId);
 }

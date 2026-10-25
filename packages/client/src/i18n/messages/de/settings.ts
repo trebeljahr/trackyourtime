@@ -30,6 +30,7 @@ export const settings: Translation<typeof source> = {
     open: "Lokale Sicherung öffnen",
     working: "Wird vorbereitet …",
     openFailed: "Die Sicherung konnte nicht geöffnet werden. Prüfe Datei und Sicherungspasswort oder Wiederherstellungsschlüssel.",
+    openedCombined: "Sicherung geprüft, einschließlich Integrationseinstellungen und geheimer Schlüssel. Beim Speichern der JSON entsteht eine unverschlüsselte Kopie. Die Wiederherstellung auf dem Server ist noch in Entwicklung.",
     opened: "Sicherung geprüft. Du kannst die entschlüsselte Wiederherstellungs-JSON speichern. Das Wiederherstellen auf einem Server ist noch in Entwicklung.",
   },
   backups: {

@@ -27,6 +27,32 @@ saves decrypted recovery JSON; server restoration remains a separate unfinished
 workflow. The public page is available without login and can decrypt after
 loading even when the browser is offline.
 
+## Combined original files
+
+The separate authenticated `trackyourtime-recovery-key-backup-v2` header opens
+an encrypted `trackyourtime-workspace-recovery-v2` archive. It contains the
+fourteen-collection typed snapshot plus a three-collection supplement:
+organization identity, the owner's API tokens and the owner's webhook settings.
+Other creators' integrations and favorites are refused. Both datasets share one
+server/account/workspace scope and aggregate 23 MiB / 200,000-record limits.
+Checksums and integration secrets remain inside ciphertext. The outer header
+is authenticated; relabeling a combined file as v1 cannot discard its supplement.
+
+The offline opener and password-file opener recognize the combined payload and
+warn that a requested JSON export contains unencrypted integration secrets.
+Older files remain readable. A server-internal builder captures both datasets
+in one transaction. No combined-source public endpoint is mounted, and the
+recurring scheduler still creates v1 files. Combined migration approval and
+per-creator verification remain separate unfinished work.
+
+The isolated combined restore checker writes and reads all seventeen typed
+collections in one fresh disposable database, compares both checksums and drops
+the copy. Source reads and reconstruction use MongoDB simple collation: strings
+sort by UTF-8 bytes before ObjectIds. This preserves exact mixed BSON ID order.
+A typed value that normalizes during database insertion fails verification.
+This user-held file excludes other creators' private originals and is not a
+complete installation backup or an operational rollback proof.
+
 ## Scheduling and file permissions
 
 An owner explicitly chooses a writable directory and a daily or weekly interval.

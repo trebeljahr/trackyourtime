@@ -24,7 +24,7 @@ export async function workspaceRecovery(workspaceId: string, ownerId: string, in
   let bytes = 1024, count = 0;
   // Sequential to stay valid inside Mongo transaction sessions.
   for (const kind of RECOVERY_KINDS) {
-    const cursor = db.collection(kind).find({ workspaceId, ...(kind === "favorites" && !includeOtherPreferences ? { userId: ownerId } : {}) }, { session: transactionSession(), promoteValues: false, promoteLongs: false }).sort({ _id: 1 });
+    const cursor = db.collection(kind).find({ workspaceId, ...(kind === "favorites" && !includeOtherPreferences ? { userId: ownerId } : {}) }, { session: transactionSession(), promoteValues: false, promoteLongs: false }).collation({ locale: "simple" }).sort({ _id: 1 });
     collections[kind] = [];
     try {
       for await (const row of cursor) {
@@ -52,7 +52,7 @@ export async function migrationFavoritesSource(workspaceId: string, userId: stri
   const db = mongoose.connection.db;
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
   const collections = emptyRecoveryCollections();
-  const cursor = db.collection("favorites").find({ workspaceId, userId }, { session: transactionSession(), promoteValues: false, promoteLongs: false }).sort({ _id: 1 });
+  const cursor = db.collection("favorites").find({ workspaceId, userId }, { session: transactionSession(), promoteValues: false, promoteLongs: false }).collation({ locale: "simple" }).sort({ _id: 1 });
   let bytes = 1024;
   try {
     for await (const row of cursor) {

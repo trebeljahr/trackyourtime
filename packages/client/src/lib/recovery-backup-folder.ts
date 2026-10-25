@@ -1,4 +1,4 @@
-import { parseRecoveryKeyBackup, type RecoveryBackupFolder } from "@starter/core";
+import { parseCombinedRecoveryKeyBackup, parseRecoveryKeyBackup, type RecoveryBackupFolder } from "@starter/core";
 import { privateDatabaseName } from "./private-indexed-storage";
 export type BackupDirectory = FileSystemDirectoryHandle & {
   queryPermission: (options: { mode: "readwrite" }) => Promise<PermissionState>;
@@ -56,7 +56,9 @@ export function backupFolderWriter(directory: BackupDirectory): RecoveryBackupFo
     async write(name, contents, current) {
       nameCheck(name);
       if (contents.length > 36 * 1024 * 1024) throw new Error("Backup exceeds its file limit");
-      parseRecoveryKeyBackup(JSON.parse(contents));
+      const parsed = JSON.parse(contents);
+      if (parsed?.header?.format === "trackyourtime-recovery-key-backup-v2") parseCombinedRecoveryKeyBackup(parsed);
+      else parseRecoveryKeyBackup(parsed);
       if (!current()) throw new Error("Private data changed during backup");
       const file = await directory.getFileHandle(name, { create: true });
       if (!current()) throw new Error("Private data changed during backup");

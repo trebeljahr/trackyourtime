@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { decryptBackup, decryptRecoveryKeyBackup, verifyWorkspaceRecoveryArchive, type PasswordCiphertext } from "@starter/core";
+import { decryptBackup, decryptCombinedRecoveryKeyBackup, decryptRecoveryKeyBackup, verifyCombinedWorkspaceRecoveryArchive, verifyWorkspaceRecoveryArchive, type PasswordCiphertext } from "@starter/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import { downloadBlob } from "@/lib/download";
 export function OpenRecoveryBackup({ standalone = false }: { standalone?: boolean } = {}): React.JSX.Element {
   const t = useT("settings");
   const [file, setFile] = React.useState<File | null>(null), [secret, setSecret] = React.useState("");
-  const [pending, setPending] = React.useState(false), [failed, setFailed] = React.useState(false), [opened, setOpened] = React.useState<{ json: string; recovery: boolean } | null>(null);
+  const [pending, setPending] = React.useState(false), [failed, setFailed] = React.useState(false), [opened, setOpened] = React.useState<{ json: string; recovery: boolean; combined: boolean } | null>(null);
   const generation = React.useRef(0);
   React.useEffect(() => () => { generation.current++; }, []);
   const open = async () => {
@@ -21,12 +21,17 @@ export function OpenRecoveryBackup({ standalone = false }: { standalone?: boolea
     try {
       if (file.size > 36 * 1024 * 1024) throw new Error("Backup exceeds its file limit");
       const parsed = JSON.parse(await file.text());
-      const value = parsed?.header?.format === "trackyourtime-recovery-key-backup-v1"
+      const value = parsed?.header?.format === "trackyourtime-recovery-key-backup-v2"
+        ? await decryptCombinedRecoveryKeyBackup(parsed, secret)
+        : parsed?.header?.format === "trackyourtime-recovery-key-backup-v1"
         ? await decryptRecoveryKeyBackup(parsed, secret)
         : await decryptBackup<unknown>(parsed as PasswordCiphertext, secret);
-      const recovery = value !== null && typeof value === "object" && "format" in value && value.format === "trackyourtime-workspace-recovery-v1";
-      if (recovery) await verifyWorkspaceRecoveryArchive(value);
-      if (at === generation.current) setOpened({ json: JSON.stringify(value, null, 2), recovery });
+      const combined = value !== null && typeof value === "object" && "format" in value && value.format === "trackyourtime-workspace-recovery-v2";
+      const legacyRecovery = value !== null && typeof value === "object" && "format" in value && value.format === "trackyourtime-workspace-recovery-v1";
+      if (combined) await verifyCombinedWorkspaceRecoveryArchive(value);
+      else if (legacyRecovery) await verifyWorkspaceRecoveryArchive(value);
+      const recovery = combined || legacyRecovery;
+      if (at === generation.current) setOpened({ json: JSON.stringify(value, null, 2), recovery, combined });
     } catch { if (at === generation.current) setFailed(true); }
     finally { if (at === generation.current) { setSecret(""); setPending(false); } }
   };
@@ -42,8 +47,8 @@ export function OpenRecoveryBackup({ standalone = false }: { standalone?: boolea
     </div>
     {failed && <p role="alert" className="text-sm text-destructive">{t("automaticBackups.openFailed")}</p>}
     {opened !== null && <div className="space-y-2">
-      <p role="status" className="text-sm">{t(opened.recovery ? "automaticBackups.opened" : "automaticBackups.openedPortable")}</p>
-      <Button variant="outline" onClick={() => { downloadBlob(opened.recovery ? "trackyourtime-workspace-recovery.json" : "trackyourtime-restored-export.json", new Blob([opened.json], { type: "application/json" })); setOpened(null); }}>{t(opened.recovery ? "backups.saveRecoveryJson" : "backups.saveRestored")}</Button>
+      <p role="status" className="text-sm">{t(opened.combined ? "automaticBackups.openedCombined" : opened.recovery ? "automaticBackups.opened" : "automaticBackups.openedPortable")}</p>
+      <Button variant="outline" onClick={() => { downloadBlob(opened.combined ? "trackyourtime-combined-recovery.json" : opened.recovery ? "trackyourtime-workspace-recovery.json" : "trackyourtime-restored-export.json", new Blob([opened.json], { type: "application/json" })); setOpened(null); }}>{t(opened.recovery ? "backups.saveRecoveryJson" : "backups.saveRestored")}</Button>
     </div>}
   </section>;
 }

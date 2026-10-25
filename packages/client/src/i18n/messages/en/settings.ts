@@ -33,6 +33,7 @@ export const settings = {
     open: "Open local backup",
     working: "Preparing…",
     openFailed: "Could not open this backup. Check the file and its backup password or recovery key.",
+    openedCombined: "Backup verified, including integration settings and secrets. Saving JSON creates an unencrypted copy. Server restoration is still in development.",
     opened: "Backup verified. You can save its decrypted recovery JSON. Restoring it to a server is still in development.",
   },
   backups: {

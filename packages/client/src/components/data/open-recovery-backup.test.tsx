@@ -4,7 +4,7 @@ import { webcrypto } from "node:crypto";
 import { Blob as NodeBlob } from "node:buffer";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
-import { encryptBackup, deriveRecoveryBackupKey, emptyRecoveryCollections, encodeSecret, encryptRecoveryKeyBackup, randomSecret, recoveryDigest } from "@starter/core";
+import { encryptBackup, encryptCombinedRecoveryKeyBackup, emptyRecoverySupplementCollections, recoverySupplementDigest, deriveRecoveryBackupKey, emptyRecoveryCollections, encodeSecret, encryptRecoveryKeyBackup, randomSecret, recoveryDigest } from "@starter/core";
 const { download } = vi.hoisted(() => ({ download: vi.fn() }));
 vi.mock("@/lib/download", () => ({ downloadBlob: download }));
 const { OpenRecoveryBackup } = await import("./open-recovery-backup");
@@ -54,4 +54,22 @@ it("opens older password-protected exports without account access", async () => 
   await screen.findByText(/Save its decrypted JSON to inspect/); fireEvent.click(screen.getByText("Save decrypted JSON"));
   expect(download.mock.calls[0]![0]).toBe("trackyourtime-restored-export.json");
   expect(JSON.parse(await (download.mock.calls[0]![1] as NodeBlob).text())).toEqual(value);
+});
+
+it("opens a combined file without network, warns about plaintext secrets and exports both verified datasets only on request", async () => {
+  const f = await fixture(), collections = emptyRecoverySupplementCollections();
+  collections.organization.push({ _id: "workspace", name: "Original studio" });
+  collections.webhooksubscriptions.push({ _id: "hook", workspaceId: "workspace", createdBy: "owner", secret: "Original integration secret" });
+  const archive = { ...f.archive, format: "trackyourtime-workspace-recovery-v2" as const, supplement: { v: 1 as const, workspaceId: "workspace", createdAt: f.archive.snapshot.createdAt, sourceRevision: await recoverySupplementDigest(collections), collections } };
+  const key = await deriveRecoveryBackupKey(f.secret, { server: archive.server, userId: archive.ownerId });
+  const text = JSON.stringify(await encryptCombinedRecoveryKeyBackup(archive, key, () => true)); key.fill(0);
+  const fetcher = vi.fn(() => { throw new Error("No network allowed"); }); vi.stubGlobal("fetch", fetcher);
+  render(<OpenRecoveryBackup standalone />);
+  fireEvent.change(screen.getByLabelText("Encrypted recovery file"), { target: { files: [{ size: text.length, text: async () => text }] } });
+  fireEvent.change(screen.getByLabelText("Backup password or recovery key"), { target: { value: f.secret } }); fireEvent.click(screen.getByText("Open local backup"));
+  expect(await screen.findByRole("status")).toHaveTextContent("Saving JSON creates an unencrypted copy");
+  expect(fetcher).not.toHaveBeenCalled(); expect(download).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("Save decrypted recovery JSON"));
+  expect(download.mock.calls[0]![0]).toBe("trackyourtime-combined-recovery.json");
+  expect(JSON.parse(await (download.mock.calls[0]![1] as NodeBlob).text())).toEqual(archive);
 });
