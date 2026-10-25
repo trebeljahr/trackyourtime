@@ -636,6 +636,22 @@ existing actor/business rights and obtain any additional required source/content
 attestations; the owner root alone cannot create authority to edit peers' work.
 Neither proof replaces complete operational backup/restore or permits deletion.
 
+## Bounded owner proposal (internal)
+
+`privateProjectionProposal` captures a complete staged set under the workspace
+transaction fence, checks active v2-source preparation, current directory roles
+and both public account keys, frozen complete-source checksums, exact original
+addresses/authorship, audiences, revision and key commitments, and size/count
+bounds. It refuses incomplete or changed staging before returning a proposal.
+
+The owner response contains shared ciphertext with full authorized grants, only
+the owner's personal ciphertext, and per-reader opaque personal digests. Complete
+source checksums, other identities' recovery wrappers, foreign personal IDs and
+exact personal counts never enter that response. The separately named complete
+capture engine is server-internal only and must not be returned from a user API.
+The proposal does not freeze or publish a root. It is a transaction snapshot;
+the later storage/receipt controller must recheck state before accepting it.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes snapshot v2, consumes

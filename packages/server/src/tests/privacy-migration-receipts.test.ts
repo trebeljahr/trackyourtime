@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, beforeEach, after, describe, it } from "node:test";
 import mongoose from "mongoose";
 import { Long } from "mongodb";
-import { createKeyPair, createSigningPair, createPrivateFavoritesMigrationProof, createPrivateOwnerMigrationProof, createPrivateCombinedOwnerMigrationProof, createPrivatePersonalMigrationProof, encryptCombinedRecoveryKeyBackup, deriveRecoveryBackupKey, encryptRecoveryKeyBackup, encodeSecret, encryptPrivateRecord, partitionPrivateRecovery, privateMemberKeyFingerprint, privateInitialSnapshotProjection, randomSecret, seal, signPrivateChange, signPrivateInitialSnapshot, signPrivateWorkspaceDirectory, verifyPrivateInitialSnapshot, verifyPrivateWorkspaceDirectory, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
+import { createKeyPair, createSigningPair, createPrivateFavoritesMigrationProof, createPrivateOwnerMigrationProof, createPrivateCombinedOwnerMigrationProof, createPrivatePersonalMigrationProof, createPrivateProjectionOwnerProof, signPrivateInitialProjectionRoot, verifyPrivateInitialProjection, encryptCombinedRecoveryKeyBackup, deriveRecoveryBackupKey, encryptRecoveryKeyBackup, encodeSecret, encryptPrivateRecord, partitionPrivateRecovery, privateMemberKeyFingerprint, privateInitialSnapshotProjection, randomSecret, seal, signPrivateChange, signPrivateInitialSnapshot, signPrivateWorkspaceDirectory, verifyPrivateInitialSnapshot, verifyPrivateWorkspaceDirectory, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
 import type { PrivateDirectoryMember, SignedPrivateFavoritesMigrationProof, SignedPrivateOwnerMigrationProof } from "@starter/shared";
 import { PrivateAccount, PrivateDirectory, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../models/PrivateData.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
@@ -12,6 +12,7 @@ import { commitPrivateDirectory } from "../services/privacy/directories.js";
 import { preparePrivateInitialSnapshot } from "../services/privacy/initial-snapshots.js";
 import { recordPrivateFavoritesMigrationProof, recordPrivateOwnerMigrationProof, recordPrivateCombinedOwnerMigrationProof } from "../services/privacy/migration-receipts.js";
 import { personalMigrationSource, recordPrivatePersonalMigrationProof } from "../services/privacy/personal-migration.js";
+import { privateProjectionProposal } from "../services/privacy/projection-proposal.js";
 import { combinedWorkspaceRecovery } from "../services/privacy/combined-recovery.js";
 import { capturePrivateMigrationSupplement } from "../services/privacy/recovery-supplement.js";
 import { stagePrivateMigrationBatch } from "../services/privacy/migration.js";
@@ -94,6 +95,44 @@ describe("private preferences conversion receipts", { skip: skipWithoutDatabase 
     const personalProof = await createPrivatePersonalMigrationProof({ readBackup: async () => memberRaw, backupKey: memberKey, snapshot: memberSnapshot, directory, userId: "member", secrets: member, current: () => true }); memberKey.fill(0);
     return { combinedProof, ownScope, complete, personalProof, personal };
   }
+  it("delivers a bounded owner proposal without peer private IDs, source checksums or root wrappers and verifies its saved-file approval", async () => {
+    const { ownScope } = await combinedFixture();
+    const proposal = await privateProjectionProposal({ ...ownScope, migrationId });
+    const foreign = await PrivateRecord.find({ workspaceId: scope.workspaceId, authorId: "member", kind: { $in: ["favorites", "integrations"] } }).lean();
+    for (const row of foreign) assert.equal(JSON.stringify(proposal).includes(row.id), false);
+    assert.equal(Object.hasOwn(proposal, "sourceRevision"), false); assert.equal(Object.hasOwn(proposal, "fullRecordsDigest"), false);
+    assert.doesNotMatch(JSON.stringify(proposal), /Member original integration|Member private pin|"recovery"|"passkeys"/);
+    assert.equal(proposal.personalDigests.length, 2);
+    const signed = await signPrivateInitialProjectionRoot({ ...proposal, personalDigests: new Map(proposal.personalDigests.map((row) => [row.userId, row.digest])), directory, userId: "owner", secrets: owner, current: () => true });
+    const snapshot = await verifyPrivateInitialProjection({ signed, sharedRecords: privateInitialSnapshotProjection(proposal.sharedRecords, "owner"), personalRecords: proposal.ownerPersonalRecords, scope: ownScope, directory, secrets: owner, current: () => true });
+    const key = await deriveRecoveryBackupKey(encodeSecret(randomSecret()), ownScope);
+    const archive = await combinedWorkspaceRecovery(scope.workspaceId, "owner", scope.server);
+    const raw = JSON.stringify(await encryptCombinedRecoveryKeyBackup(archive, key, () => true));
+    const approval = await createPrivateProjectionOwnerProof({ readBackup: async () => raw, backupKey: key, snapshot, directory, userId: "owner", secrets: owner, current: () => true }); key.fill(0);
+    assert.equal(approval.proof.snapshotRoot, snapshot.root);
+    assert.equal(approval.proof.sourceRevision, archive.snapshot.sourceRevision);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.state, "migrating");
+    assert.equal(await mongoose.connection.db!.collection("webhooksubscriptions").countDocuments(), 2);
+  });
+  it("refuses proposal access for another actor and changed original integration data", async () => {
+    const { ownScope } = await combinedFixture();
+    await assert.rejects(privateProjectionProposal({ ...scope, migrationId }), { code: "FORBIDDEN" });
+    await assert.rejects(privateProjectionProposal({ ...ownScope, migrationId: crypto.randomUUID() }), { code: "PRECONDITION_FAILED" });
+    await mongoose.connection.db!.collection("webhooksubscriptions").updateOne({ createdBy: "member" }, { $set: { secret: "Changed private original" } });
+    await assert.rejects(privateProjectionProposal({ ...ownScope, migrationId }), { code: "CONFLICT" });
+  });
+  it("rejects incomplete staged records, stale account keys and changed directory permissions without publishing a partial proposal", async () => {
+    const { ownScope } = await combinedFixture();
+    const row = (await PrivateRecord.findOne().lean())!; await PrivateRecord.deleteOne({ _id: row._id });
+    await assert.rejects(privateProjectionProposal({ ...ownScope, migrationId }), /incomplete/);
+    await PrivateRecord.create(row);
+    const original = (await PrivateAccount.findOne({ userId: "member" }).lean())!.identity.publicKey;
+    await PrivateAccount.updateOne({ userId: "member" }, { $set: { "identity.publicKey": (await createKeyPair()).publicKey } });
+    await assert.rejects(privateProjectionProposal({ ...ownScope, migrationId }), /account keys changed/);
+    await PrivateAccount.updateOne({ userId: "member" }, { $set: { "identity.publicKey": original } });
+    await WorkspaceMember.collection.updateOne({ workspaceId: scope.workspaceId, userId: "member" }, { $set: { canViewOthersTime: true } });
+    await assert.rejects(privateProjectionProposal({ ...ownScope, migrationId }), /sharing changed/);
+  });
   it("backs up and verifies only the member's private originals, keeping them out of owner receipts", async () => {
     const { personalProof, personal } = await combinedFixture();
     assert.equal(personal.snapshot.collections.favorites.length, 1); assert.equal(personal.supplement.collections.webhooksubscriptions.length, 1);
