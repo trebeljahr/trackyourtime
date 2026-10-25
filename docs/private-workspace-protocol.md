@@ -610,7 +610,7 @@ This primitive authenticates initial content, not global freshness after every
 device/checkpoint is lost. Durable mode/root pins remain required.
 
 Separate internal v3 storage/reader transport now exists below. Public transport,
-receipts and replica bootstrap still use the guarded v2 path. Source correctness still needs the reopened original backup proof;
+migration controllers and public transport still use the guarded v2 path. Source correctness still needs the reopened original backup proof;
 owner signatures alone cannot authorize retirement. The future public migration
 should stage shared data in the owner's client and each creator's personal data
 in that creator's client. Bind staging to the current source/preparation/directory
@@ -673,7 +673,7 @@ Cancellation/expiry and solo workspace deletion remove both new collections.
 Shared account deletion removes only that account's reader index and personal
 ciphertext; the common root and other readers' projections remain verifiable.
 Quota ledger version 3 includes the root and reader indexes. No public v3 route,
-replica bootstrap or live activation is enabled by these internal helpers.
+live activation is enabled by these internal helpers.
 
 ## Separated-projection receipts (internal)
 
@@ -692,6 +692,28 @@ handlers reject the new schemas. A receipt never sets `backupVerified`, changes
 mode or deletes source data. It attests the client's reopened saved-file/content
 check; complete independent operational backup/isolated restoration, additional
 shared-source attestations and the cutover controller remain separate obligations.
+
+## Verified v3 download and encrypted replica bootstrap
+
+`loadPrivateInitialProjection` requires an expected common root supplied from
+trusted activation/device/recovery state. The same untrusted response must not
+choose that root. It authenticates scope/directory/owner signature before any
+record pages, then independently downloads shared/personal pages with strict
+progress, count, size and unlock-generation limits. Both complete ciphertext
+lists, audiences and decrypted record bindings must verify before it returns a
+branded snapshot. Partial or mixed downloads are never persisted.
+
+`bootstrapProjection` accepts only that current branded snapshot for the same
+account/server/workspace/directory. It installs the common root and both sorted
+ciphertext lists into the segmented encrypted replica with confirmed writes.
+It preserves pending work and refuses to replace an existing checkpoint; exact
+initial retries are idempotent. Subsequent edits extend the root using the same
+signed chained history/outbox path. A headed checkpoint refuses legacy history.
+The client wrapper binds downloads to the live private session and API origin.
+
+This is a delivery/bootstrap adapter, not a public activation UI or a durable
+mode-pin policy. Trusted initial-root provisioning, full app adapters, safe
+new-device policy and operational migration/rollback remain required.
 
 ## Remaining rollout dependencies
 

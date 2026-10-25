@@ -71,6 +71,20 @@ export async function signPrivateInitialProjectionRoot(options: {
   const signature = await signPrivateChange(access.signingPrivateKey, manifest); check();
   return { manifest, signature };
 }
+/** Authenticate the common root before downloading any reader pages. The
+ * return value is not a verified snapshot and cannot bootstrap a replica. */
+export async function verifyPrivateInitialProjectionRoot(options: {
+  signed: unknown; scope: PrivateStorageScope; directory: VerifiedPrivateDirectory; secrets: Secrets; current: () => boolean;
+}): Promise<SignedPrivateInitialProjectionRoot> {
+  const { directory, secrets, current } = options, scope = { ...options.scope };
+  const check = () => { if (!current()) throw new Error("Private projection changed during verification"); };
+  check(); privateReplicaIdentityFromDirectory(directory, scope.userId, secrets, current);
+  const signed = signedPrivateInitialProjectionRootSchema.parse(options.signed), manifest = checkRoot(signed.manifest, directory, scope);
+  const owner = directory.signed.directory.members.find((member) => member.userId === manifest.signerId)!;
+  const key = await crypto.subtle.importKey("jwk", owner.signingPublicKey, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+  if (!await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, decodeSecret(signed.signature, 64), new TextEncoder().encode(canonicalJson(manifest)))) throw new Error("Initial projection root signature does not match the verified owner");
+  check(); return signed;
+}
 /** Verify exact shared and personal projections independently against one
  * owner-signed root. No other reader's personal IDs/counts are needed. */
 export async function verifyPrivateInitialProjection(options: {
@@ -83,9 +97,7 @@ export async function verifyPrivateInitialProjection(options: {
   const signed = signedPrivateInitialProjectionRootSchema.parse(options.signed), manifest = checkRoot(signed.manifest, directory, scope);
   const sharedRecords = rows(options.sharedRecords, false), personalRecords = rows(options.personalRecords, true);
   if (sharedRecords.length + personalRecords.length > 400_000 || new TextEncoder().encode(JSON.stringify([sharedRecords, personalRecords])).length > PRIVATE_SNAPSHOT_MAX_BYTES) throw new Error("Initial projection exceeds its size bound");
-  const owner = directory.signed.directory.members.find((member) => member.userId === manifest.signerId)!;
-  const key = await crypto.subtle.importKey("jwk", owner.signingPublicKey, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
-  if (!await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, decodeSecret(signed.signature, 64), new TextEncoder().encode(canonicalJson(manifest)))) throw new Error("Initial projection root signature does not match the verified owner");
+  await verifyPrivateInitialProjectionRoot({ signed, scope, directory, secrets, current });
   check(); const own = manifest.readers.find((reader) => reader.userId === scope.userId);
   if (!own || own.sharedDigest !== await privateRecordDigest(sharedRecords) || own.personalDigest !== await privateRecordDigest(personalRecords)) throw new Error("Initial projection is incomplete or differs from its signed root");
   check();

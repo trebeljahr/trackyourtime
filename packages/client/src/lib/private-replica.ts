@@ -1,5 +1,5 @@
 import { openPrivateIndexedStorage } from "./private-indexed-storage";
-import { createPrivateDirectoryStore, createPrivateWorkspaceReplica, decodeSecret, privateReplicaIdentityFromDirectory, type KeyValueStorage, type PrivateDirectoryTrust, type QueueExclusive, type VerifiedPrivateDirectory } from "@starter/core";
+import { createPrivateDirectoryStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, type KeyValueStorage, type PrivateDirectoryTrust, type PrivateProjectionTransport, type QueueExclusive, type VerifiedPrivateDirectory } from "@starter/core";
 import { privateDataOrigin, privateOperationScope, privateSession, subscribePrivateSession } from "./private-session";
 function privateStorageAccess(userId: string, server: string) {
   const root = privateSession(userId);
@@ -27,6 +27,18 @@ export function privateWorkspaceReplica(userId: string, workspaceId: string, sto
     return privateReplicaIdentityFromDirectory(verified, userId, root, () => {
       try { check(); return privateSession(userId) === root && directory()?.digest === verified.digest; } catch { return false; }
     });
+  } });
+}
+
+/** The caller supplies a root from trusted activation/device/recovery state.
+ * A feed response cannot select or downgrade that root. No public migration
+ * controller is mounted yet; this only binds core delivery to the live unlock. */
+export function loadPrivateWorkspaceProjection(userId: string, workspaceId: string, directory: VerifiedPrivateDirectory, expectedRoot: string, transport: PrivateProjectionTransport) {
+  const server = privateDataOrigin(), root = privateSession(userId), check = privateOperationScope(userId);
+  if (!root) throw new Error("Unlock private data before loading workspace projections");
+  if (directory.signed.directory.server !== server || directory.signed.directory.workspaceId !== workspaceId) throw new Error("Private directory belongs to another server or workspace");
+  return loadPrivateInitialProjection({ transport, expectedRoot, directory, secrets: root, scope: { server, workspaceId, userId }, current: () => {
+    try { check(); return privateSession(userId) === root && privateDataOrigin() === server; } catch { return false; }
   } });
 }
 

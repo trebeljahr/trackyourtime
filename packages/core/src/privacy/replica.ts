@@ -7,6 +7,7 @@ import { createPrivateStorage, PrivateStorageLockedError, type PrivateStorageKey
 import { decryptPrivateRecord, encryptPrivateRecord, readersForPrivateRecord, type PlainPrivateRecord, type PrivateRecipient } from "./records.js";
 import { segmentedPrivateStorage } from "./segmented-storage.js";
 import { privateWorkspaceManifest, privateWorkspaceManifestForReader, signPrivateWorkspaceEdit, verifyPrivateWorkspaceChange } from "./workspace-edits.js";
+import { assertPrivateProjectionSnapshot, type VerifiedPrivateProjectionSnapshot } from "./projection-snapshot.js";
 import { assertPrivateInitialSnapshot, type VerifiedPrivateInitialSnapshot } from "./initial-snapshot.js";
 import { privateWorkspaceChainRoot, signPrivateChainedWorkspaceEdit, verifyPrivateChainedWorkspaceChange } from "./history-chain.js";
 import type { VerifiedPrivateDirectory } from "./directory.js";
@@ -93,16 +94,26 @@ export async function createPrivateWorkspaceReplica(options: {
     state.records = [...records.values()]; access.check(); await save(state); access.check();
     return { revision: state.revision, through: page.through, next: page.next, pending: state.pending.length };
   };
+  const installInitial = async (state: State, root: string, records: readonly z.infer<typeof encryptedRecordSchema>[]) => {
+    const access = identity(); access.check();
+    if (state.pending.length) throw new Error("Keep or export pending edits before installing an initial snapshot");
+    if (state.revision === 1 && state.head === root && canonicalJson(state.records) === canonicalJson(records)) return { revision: 1 as const };
+    if (state.revision !== 0 || state.records.length) throw new Error("An initial snapshot cannot replace an existing private checkpoint");
+    await save({ v: 1, revision: 1, head: root, records: [...records], pending: [] }); access.check();
+    return { revision: 1 as const };
+  };
   return {
     namespace: encrypted.namespace,
     bootstrap: (snapshot: VerifiedPrivateInitialSnapshot) => options.exclusive(async () => {
       const access = identity(), state = await load(); access.check();
       assertPrivateInitialSnapshot(snapshot, scope, access.directoryDigest);
-      if (state.pending.length) throw new Error("Keep or export pending edits before installing an initial snapshot");
-      if (state.revision === 1 && state.head === snapshot.signed.manifest.root && canonicalJson(state.records) === canonicalJson(snapshot.records)) return { revision: 1 as const };
-      if (state.revision !== 0 || state.records.length) throw new Error("An initial snapshot cannot replace an existing private checkpoint");
-      await save({ v: 1, revision: 1, head: snapshot.signed.manifest.root, records: [...snapshot.records], pending: [] }); access.check();
-      return { revision: 1 as const };
+      return installInitial(state, snapshot.signed.manifest.root, snapshot.records);
+    }),
+    bootstrapProjection: (snapshot: VerifiedPrivateProjectionSnapshot) => options.exclusive(async () => {
+      const access = identity(), state = await load(); access.check();
+      assertPrivateProjectionSnapshot(snapshot, scope, access.directoryDigest);
+      const records = [...snapshot.sharedRecords, ...snapshot.personalRecords].sort((a, b) => address(a) < address(b) ? -1 : address(a) > address(b) ? 1 : 0);
+      return installInitial(state, snapshot.root, records);
     }),
     enqueue: async (input: { records: PlainPrivateRecord[]; remove?: z.infer<typeof privateRecordRefSchema>[] }) => {
       // Capture user intent synchronously, before waiting on storage or another
