@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import type { Request, Response } from "express";
 import { PRIVATE_WORKSPACE_REQUIRED } from "@starter/shared";
 import { Client } from "../models/Client.js";
+import { TimeEntry } from "../models/TimeEntry.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { WebhookDelivery } from "../models/WebhookDelivery.js";
 import { ApiToken } from "../models/ApiToken.js";
@@ -13,6 +14,9 @@ import { StorageFence, StorageUsage } from "../models/StorageUsage.js";
 import { withBusinessTransaction, fenceWorkspace } from "../services/business-transaction.js";
 import { withPrivateWorkspaceErasure } from "../services/privacy/plaintext-guard.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
+import { deleteAccountData, type DeletionRowStore } from "../services/account-deletion/delete-account.js";
+import { AUTH_COLLECTIONS } from "../services/account-deletion/plan.js";
+import { memoryRowStore } from "./support/memory-row-store.js";
 import { claimDueDeliveries } from "../services/webhooks/delivery.js";
 import { clientsRouter } from "../trpc/routers/clients.js";
 import type { Context } from "../trpc/context.js";
@@ -30,7 +34,7 @@ async function freeze(workspaceId = WS, state: "migrating" | "encrypted" = "migr
 }
 const delivery = (workspaceId: string) => ({ workspaceId, subscriptionId: "subscription", event: "entry.created" as const, envelope: { workspaceId, description: "synthetic private payload" }, nextAttemptAt: new Date(0) });
 describe("plaintext workspace migration barrier", { skip: skipWithoutDatabase }, () => {
-  before(() => connectTestDatabase("private-plaintext-guard", [Client, WorkspaceMember, WebhookDelivery, ApiToken, PrivateWorkspace, WorkspaceWriteFence, StorageFence, StorageUsage] as never));
+  before(() => connectTestDatabase("private-plaintext-guard", [Client, TimeEntry, WorkspaceMember, WebhookDelivery, ApiToken, PrivateWorkspace, WorkspaceWriteFence, StorageFence, StorageUsage] as never));
   beforeEach(async () => {
     await clearTestDatabase();
     await WorkspaceMember.create([{ workspaceId: WS, userId: USER, role: "owner", name: "Owner" }, { workspaceId: OTHER, userId: USER, role: "owner", name: "Owner" }]);
@@ -70,6 +74,36 @@ describe("plaintext workspace migration barrier", { skip: skipWithoutDatabase },
     await assert.rejects(withPrivateWorkspaceErasure([WS], () => Client.deleteMany({ workspaceId: OTHER }).then((value) => value)), refused);
     assert.equal(await mongooseRowStore.deleteMany("clients", { workspaceId: WS }), 1);
     assert.equal(await Client.countDocuments({ workspaceId: OTHER }), 1);
+  });
+  it("cancels a shared preparation during account deletion while retaining colleagues' and invoiced work", async () => {
+    await WorkspaceMember.create({ workspaceId: WS, userId: "colleague", role: "member", name: "Colleague" });
+    await WorkspaceMember.deleteMany({ workspaceId: OTHER });
+    const catalog = await Client.create({ workspaceId: WS, name: "Shared client" });
+    const [mine, invoiced, theirs] = await TimeEntry.create([
+      { workspaceId: WS, authorId: USER, start: new Date(0), end: new Date(1000), durationSec: 1 },
+      { workspaceId: WS, authorId: USER, start: new Date(2000), end: new Date(3000), durationSec: 1, invoiceId: "issued-invoice" },
+      { workspaceId: WS, authorId: "colleague", start: new Date(0), end: new Date(1000), durationSec: 1 },
+    ]);
+    await freeze();
+    const auth = memoryRowStore({ authMembers: [
+      { id: "auth-owner", organizationId: WS, userId: USER, role: "owner" },
+      { id: "auth-colleague", organizationId: WS, userId: "colleague", role: "member" },
+    ] });
+    const store: DeletionRowStore = {
+      find: (collection, filter) => (AUTH_COLLECTIONS.has(collection) ? auth : mongooseRowStore).find(collection, filter),
+      updateMany: (collection, filter, set) => (AUTH_COLLECTIONS.has(collection) ? auth : mongooseRowStore).updateMany(collection, filter, set),
+      deleteMany: (collection, filter) => (AUTH_COLLECTIONS.has(collection) ? auth : mongooseRowStore).deleteMany(collection, filter),
+      erasePrivateUserData: (id) => mongooseRowStore.erasePrivateUserData(id),
+    };
+    const report = await deleteAccountData(store, { id: USER });
+    assert.deepEqual(report.workspacesLeft, [WS]); assert.equal(report.promoted[WS], "colleague");
+    assert.equal(await PrivateWorkspace.countDocuments(), 0);
+    assert.equal(await TimeEntry.exists({ _id: mine._id }), null);
+    assert.ok(await TimeEntry.exists({ _id: invoiced._id })); assert.ok(await TimeEntry.exists({ _id: theirs._id }));
+    assert.ok(await Client.exists({ _id: catalog._id }));
+    assert.equal(await WorkspaceMember.countDocuments({ workspaceId: WS, userId: USER }), 0);
+    assert.equal((await WorkspaceMember.findOne({ workspaceId: WS }).lean())!.role, "owner");
+    await Client.create({ workspaceId: WS, name: "Standard access restored" });
   });
   it("fences stored webhook envelopes and skips private workspaces when claiming due deliveries", async () => {
     const privateRow = await WebhookDelivery.create(delivery(WS)), standardRow = await WebhookDelivery.create(delivery(OTHER)); await freeze();

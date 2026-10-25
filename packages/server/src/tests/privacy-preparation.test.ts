@@ -18,6 +18,7 @@ import { privacyRouter } from "../trpc/routers/privacy.js";
 import type { Context } from "../trpc/context.js";
 import { assertStandardWorkspace } from "../services/privacy/access.js";
 import { withBusinessTransaction } from "../services/business-transaction.js";
+import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { connectTestDatabase, clearTestDatabase, dropTestDatabase, skipWithoutDatabase } from "./support/test-database.js";
 const scope = { server: "https://api.example.test", workspaceId: "preparation", userId: "owner" };
 let migrationId: string;
@@ -115,6 +116,41 @@ describe("bounded private workspace preparation", { skip: skipWithoutDatabase },
     assert.equal(await PrivateWorkspace.countDocuments(), 1); assert.equal(await PrivateRecord.countDocuments(), 50); assert.equal(await Client.countDocuments(), 0);
     await Client.create({ workspaceId: scope.workspaceId, name: "Committed" });
     assert.equal(await PrivateWorkspace.countDocuments(), 0); assert.equal(await PrivateRecord.countDocuments(), 0); assert.equal(await Client.countDocuments(), 1);
+  });
+  it("cancels live preparation on account departure and promptly restores standard access", async () => {
+    await batch();
+    assert.equal(await mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: scope.workspaceId, userId: "owner" }), 1);
+    assert.equal(await PrivateWorkspace.countDocuments(), 0); assert.equal(await PrivateRecord.countDocuments(), 0);
+    assert.equal(await PrivateDirectory.countDocuments(), 1); assert.equal(await PrivateAccount.countDocuments(), 1);
+    assert.equal(await mongoose.connection.db!.collection("tags").countDocuments(), 55);
+    await assertStandardWorkspace(scope.workspaceId);
+    await Client.create({ workspaceId: scope.workspaceId, name: "Available immediately" });
+  });
+  it("rolls preparation cancellation back with a failed account-erasure write", async () => {
+    await batch();
+    await assert.rejects(withBusinessTransaction(async () => {
+      await mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: scope.workspaceId, userId: "owner" });
+      throw new Error("Injected erasure failure");
+    }), /Injected erasure failure/);
+    assert.equal(await PrivateWorkspace.countDocuments(), 1); assert.equal(await PrivateRecord.countDocuments(), 50);
+    assert.equal(await WorkspaceMember.countDocuments(), 1);
+    await assert.rejects(assertStandardWorkspace(scope.workspaceId), { code: "PRECONDITION_FAILED" });
+    assert.equal(await mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: scope.workspaceId, userId: "owner" }), 1);
+    assert.equal(await PrivateWorkspace.countDocuments(), 0); assert.equal(await PrivateRecord.countDocuments(), 0);
+  });
+  it("preserves encrypted shared ciphertext and refuses erasure of inconsistent preparation before deleting membership", async () => {
+    await batch();
+    await PrivateWorkspaceCommit.collection.insertOne({ workspaceId: scope.workspaceId, revision: 1 });
+    await assert.rejects(mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: scope.workspaceId, userId: "owner" }), { code: "CONFLICT" });
+    assert.equal(await WorkspaceMember.countDocuments(), 1); assert.equal(await PrivateRecord.countDocuments(), 50);
+    await PrivateWorkspaceCommit.deleteMany({ workspaceId: scope.workspaceId });
+    await PrivateWorkspace.updateOne({}, { $set: { head: "unexpected" } });
+    await assert.rejects(mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: scope.workspaceId, userId: "owner" }), { code: "CONFLICT" });
+    assert.equal(await WorkspaceMember.countDocuments(), 1); assert.equal(await PrivateRecord.countDocuments(), 50);
+    await PrivateWorkspace.updateOne({}, { $set: { state: "encrypted", revision: 1 } });
+    assert.equal(await mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: scope.workspaceId, userId: "owner" }), 1);
+    assert.equal(await PrivateWorkspace.countDocuments(), 1); assert.equal(await PrivateRecord.countDocuments(), 50);
+    assert.equal(await PrivateDirectory.countDocuments(), 1);
   });
   it("never expires encrypted workspaces, live preparations or unexpected committed history", async () => {
     assert.equal(await discardPrivatePreparation(scope.workspaceId, migrationId, true), false);
