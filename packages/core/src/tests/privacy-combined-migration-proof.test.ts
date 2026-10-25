@@ -8,10 +8,11 @@ import { canonicalJson, createKeyPair, createSigningPair, decodeSecret, encodeSe
 import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
 import { emptyRecoveryCollections, recoveryDigest } from "../privacy/recovery.js";
 import { emptyRecoverySupplementCollections, partitionPrivateRecoverySupplement, recoverySupplementDigest } from "../privacy/recovery-supplement.js";
-import { encryptPrivateRecord, partitionPrivateRecovery } from "../privacy/records.js";
+import { decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery } from "../privacy/records.js";
 import { privateInitialSnapshotProjection, signPrivateInitialSnapshot, verifyPrivateInitialSnapshot } from "../privacy/initial-snapshot.js";
 import { deriveRecoveryBackupKey, encryptRecoveryKeyBackup } from "../privacy/recovery-backup.js";
 import { encryptCombinedRecoveryKeyBackup } from "../privacy/combined-recovery-backup.js";
+import { createPrivatePersonalMigrationProof } from "../privacy/personal-migration-proof.js";
 import { createPrivateCombinedOwnerMigrationProof } from "../privacy/combined-migration-proof.js";
 
 async function fixture() {
@@ -42,7 +43,7 @@ async function fixture() {
   const key = await deriveRecoveryBackupKey(encodeSecret(randomSecret()), scope);
   const raw = JSON.stringify(await encryptCombinedRecoveryKeyBackup(archive, key, current));
   const options = { readBackup: async () => raw, backupKey: key, records, snapshot, directory: verified, userId: "owner", secrets, current };
-  return { archive, raw, options, alive, originals, signing, scope };
+  return { archive, raw, options, alive, originals, signing, scope, memberSecrets: { privateKey: member.privateKey, signingPrivateKey: memberSigning.privateKey }, initial };
 }
 it("reopens the actual combined file and signs both exact source checksums, ciphertext root and encrypted file bytes", async () => {
   const f = await fixture(), folder = await mkdtemp(join(tmpdir(), "tyt-combined-proof-"));
@@ -99,4 +100,45 @@ it("rejects forged snapshot brands and invalidation after file I/O; captures cal
   const proof = await createPrivateCombinedOwnerMigrationProof({ ...f.options, records: [...f.options.records].reverse(), readBackup: async () => { f.options.records[0]!.box.nonce = "AAAAAAAAAAAAAAAA"; return f.raw; } });
   assert.equal(proof.proof.snapshotRoot, f.options.snapshot.signed.manifest.root); assert.deepEqual(f.options.backupKey, before);
   await assert.rejects(createPrivateCombinedOwnerMigrationProof({ ...f.options, readBackup: async () => { f.alive.value = false; return f.raw; } }), /changed during/);
+});
+
+async function personalFixture() {
+  const f = await fixture(), scope = { ...f.scope, userId: "member" };
+  const snapshot = await verifyPrivateInitialSnapshot({ signed: f.initial.readers.find((r) => r.manifest.readerId === "member"), records: privateInitialSnapshotProjection(f.initial.records, "member"), scope, directory: f.options.directory, secrets: f.memberSecrets, current: () => f.alive.value });
+  const favorites = await decryptPrivateRecord("workspace", f.options.records.find((r) => r.kind === "favorites")!, "member", f.memberSecrets.privateKey);
+  const hook = await decryptPrivateRecord("workspace", f.options.records.find((r) => r.kind === "integrations" && r.authorId === "member")!, "member", f.memberSecrets.privateKey);
+  const collections = emptyRecoveryCollections(), supplemental = emptyRecoverySupplementCollections();
+  collections.favorites.push(favorites.value); supplemental.webhooksubscriptions.push(hook.value);
+  const archive = { ...f.archive, ownerId: "member", snapshot: { ...f.archive.snapshot, collections, sourceRevision: await recoveryDigest(collections) }, supplement: { ...f.archive.supplement, collections: supplemental, sourceRevision: await recoverySupplementDigest(supplemental) } };
+  const backupKey = await deriveRecoveryBackupKey(encodeSecret(randomSecret()), scope);
+  const raw = JSON.stringify(await encryptCombinedRecoveryKeyBackup(archive, backupKey, () => true));
+  const options = { ...f.options, userId: "member", secrets: f.memberSecrets, snapshot, backupKey, readBackup: async () => raw };
+  return { f, options, archive };
+}
+it("verifies a member's saved favorites and integration originals without full workspace ciphertext or other creators' data", async () => {
+  const { options, archive } = await personalFixture();
+  const proof = await createPrivatePersonalMigrationProof(options);
+  assert.equal(proof.proof.verifiedRecords, 2); assert.equal(proof.proof.supplementRevision, archive.supplement.sourceRevision);
+  assert.equal(proof.proof.snapshotRoot, options.snapshot.signed.manifest.root);
+  assert.doesNotMatch(JSON.stringify(proof), /Other creator secret|member-hook|Other private favorite|Owner original/);
+});
+it("refuses missing, changed or shared originals in a personal backup", async () => {
+  const { options, archive } = await personalFixture();
+  for (const change of [
+    (a: CombinedWorkspaceRecoveryArchive) => { a.supplement.collections.webhooksubscriptions = []; },
+    (a: CombinedWorkspaceRecoveryArchive) => { a.supplement.collections.webhooksubscriptions[0]!.secret = "Changed saved secret"; },
+    (a: CombinedWorkspaceRecoveryArchive) => { a.supplement.collections.organization.push({ _id: "workspace", name: "Shared originals do not belong here" }); },
+  ]) {
+    const changed = structuredClone(archive); change(changed); changed.supplement.sourceRevision = await recoverySupplementDigest(changed.supplement.collections);
+    const raw = JSON.stringify(await encryptCombinedRecoveryKeyBackup(changed, options.backupKey, () => true));
+    await assert.rejects(createPrivatePersonalMigrationProof({ ...options, readBackup: async () => raw }), /differ from|only this account/);
+  }
+});
+it("refuses another account's snapshot, old files, wrong keys and locking during personal file verification", async () => {
+  const { f, options, archive } = await personalFixture();
+  await assert.rejects(createPrivatePersonalMigrationProof({ ...options, snapshot: f.options.snapshot }), /current verified/);
+  await assert.rejects(createPrivatePersonalMigrationProof({ ...options, backupKey: randomSecret() }));
+  const old = await encryptRecoveryKeyBackup({ format: "trackyourtime-workspace-recovery-v1", server: f.scope.server, ownerId: "member", snapshot: archive.snapshot }, options.backupKey, () => true);
+  await assert.rejects(createPrivatePersonalMigrationProof({ ...options, readBackup: async () => JSON.stringify(old) }));
+  await assert.rejects(createPrivatePersonalMigrationProof({ ...options, readBackup: async () => { f.alive.value = false; return options.readBackup(); } }), /changed during/);
 });

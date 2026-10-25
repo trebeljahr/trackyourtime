@@ -256,7 +256,7 @@ Changed data or scope fails without changing originals or workspace mode.
 Account deletion removes that user's receipts, including former workspaces;
 cancellation removes the migration's receipts. These primitives are not yet
 connected to a cutover controller. That controller must require private-subset
-verification only for members with favorites not covered by the owner proof;
+verification only for members with favorites or integrations not covered by the owner proof;
 zero private records do not need another content check. Plaintext source
 checksums and these temporary proof bodies must be deleted or client-encrypted
 at cutover with the originals. Retaining unkeyed hashes of low-entropy private
@@ -463,6 +463,32 @@ still prepares only v1 and remains guarded. A receipt does not change mode,
 set operational backup verification or delete originals. Per-creator content
 receipts, bounded encrypted quota accounting, complete operational backup and
 isolated restoration, app adapters and atomic source retirement remain required.
+
+## Personal subset approval (internal)
+
+A member's v2 encrypted container may contain a favorites-only business source
+and an integrations-only supplement. Organization and all other shared source
+collections must be empty. The account/server/workspace-bound file key belongs
+to that member; the `ownerId` archive field identifies the file's account, not
+a workspace role. The offline opener remains compatible with this container.
+
+`createPrivatePersonalMigrationProof` reopens the saved file, verifies exact
+source checksums and typed content against only the member's branded snapshot
+projection, and signs its root, private ciphertext digest and file commitment.
+It never requires complete workspace ciphertext or other creators' private IDs.
+The server-internal source reader returns only the caller's favorites and
+integrations during an active v2 preparation. The internal acknowledgement checks
+membership, directory/signature, current snapshot root, originals, addresses,
+single-creator grants, staged ciphertext and frozen chunks before storing an
+idempotent `personal` receipt. Replays repeat those checks. Account deletion and
+preparation cancellation remove these receipts with the existing scoped cleanup.
+
+These source/proof functions are not mounted publicly. A trusted root/device
+challenge still must authorize sensitive original reads before that happens.
+The cutover controller must require personal receipts only for non-owner members
+with private originals; no records means no content approval to wait for. Neither
+a personal nor owner receipt replaces complete operational restoration or permits
+source deletion. All plaintext checksums and temporary receipts must retire.
 
 ## Remaining rollout dependencies
 

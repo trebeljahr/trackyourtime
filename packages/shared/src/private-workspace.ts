@@ -106,3 +106,10 @@ export const privateCombinedOwnerMigrationProofSchema = privateOwnerMigrationPro
 }).strict();
 export const signedPrivateCombinedOwnerMigrationProofSchema = z.object({ proof: privateCombinedOwnerMigrationProofSchema, signature: privateSignatureSchema }).strict();
 export type SignedPrivateCombinedOwnerMigrationProof = z.infer<typeof signedPrivateCombinedOwnerMigrationProofSchema>;
+
+export const privatePersonalMigrationProofSchema = privateCombinedOwnerMigrationProofSchema.omit({ opaqueRecords: true }).extend({
+  v: z.literal(1), protocol: z.literal("trackyourtime-private-personal-proof-v1"),
+  verifiedRecords: z.number().int().nonnegative().max(200_000),
+}).strict();
+export const signedPrivatePersonalMigrationProofSchema = z.object({ proof: privatePersonalMigrationProofSchema, signature: privateSignatureSchema }).strict();
+export type SignedPrivatePersonalMigrationProof = z.infer<typeof signedPrivatePersonalMigrationProofSchema>;

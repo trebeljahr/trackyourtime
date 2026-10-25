@@ -81,11 +81,11 @@ export const PrivateSnapshotReader = mongoose.model("PrivateSnapshotReader", pri
 /** Signed content-verification receipts contain checksums and counts only,
  * never the member's original plaintext preferences or private keys. */
 const privateMigrationReceiptSchema = new Schema<{
-  workspaceId: string; migrationId: string; userId: string; kind: "owner" | "favorites";
+  workspaceId: string; migrationId: string; userId: string; kind: "owner" | "favorites" | "personal";
   proof: Record<string, unknown>; signature: string;
 }>({
   workspaceId: { type: String, required: true }, migrationId: { type: String, required: true }, userId: { type: String, required: true },
-  kind: { type: String, enum: ["owner", "favorites"], required: true }, proof: { type: Schema.Types.Mixed, required: true }, signature: { type: String, required: true },
+  kind: { type: String, enum: ["owner", "favorites", "personal"], required: true }, proof: { type: Schema.Types.Mixed, required: true }, signature: { type: String, required: true },
 }, { timestamps: true });
 privateMigrationReceiptSchema.index({ workspaceId: 1, migrationId: 1, userId: 1, kind: 1 }, { unique: true });
 export const PrivateMigrationReceipt = mongoose.model("PrivateMigrationReceipt", privateMigrationReceiptSchema);
