@@ -590,6 +590,33 @@ is retained. Initial-snapshot capability now requires API 29. Standard minimum
 client level remains 1; workspace rollout remains closed. Complete migration
 proof/delivery and private app adapter dependencies below still apply.
 
+## Separated initial projections (internal v3 primitive)
+
+The new core-only initial root signs two ciphertext digests per verified reader:
+a shared projection and a personal projection. The owner receives every shared
+record with its full authorized grants, plus only the owner's personal records.
+The signer validates all shared audiences and decryptability, then computes each
+shared-reader digest locally. It accepts opaque personal digests for other
+creators only; it refuses exposed foreign personal records. The root contains
+membership and opaque digests, not other creators' personal record IDs/counts.
+An empty personal digest can still indicate that no personal records exist.
+
+Every reader verifies the owner signature, directory/scope, exact independent
+shared/personal digests, record namespaces/audiences, committed keys and decrypted
+payload bindings. Truncated/substituted shared data cannot hide under an opaque
+personal digest. Validated results are frozen and branded to distinguish them
+from unverified persisted/network objects; unlock invalidation revokes their use.
+This primitive authenticates initial content, not global freshness after every
+device/checkpoint is lost. Durable mode/root pins remain required.
+
+This does not yet replace v2 storage, transport, file-content receipts or replica
+bootstrap. Source correctness still needs the reopened original backup proof;
+owner signatures alone cannot authorize retirement. The future public migration
+should stage shared data in the owner's client and each creator's personal data
+in that creator's client. Bind staging to the current source/preparation/directory
+and preserve first accepted ciphertext on retries. Keep old raw/unsigned and
+server-staging entry points separately disabled when enabling new controllers.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes snapshot v2, consumes

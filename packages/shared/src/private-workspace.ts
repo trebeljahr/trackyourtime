@@ -125,3 +125,15 @@ export const privateSourceChallengeSchema = z.object({
 export const signedPrivateSourceChallengeSchema = z.object({ challenge: privateSourceChallengeSchema, signature: privateSignatureSchema }).strict();
 export type PrivateSourceChallenge = z.infer<typeof privateSourceChallengeSchema>;
 export type SignedPrivateSourceChallenge = z.infer<typeof signedPrivateSourceChallengeSchema>;
+
+/** Proposed initial delivery format: shared projections are computed by the
+ * owner from visible shared ciphertext; opaque personal digests disclose no
+ * other creator's private record IDs or exact counts. Not publicly mounted. */
+export const privateInitialProjectionRootSchema = z.object({
+  v: z.literal(1), protocol: z.literal("trackyourtime-private-initial-projections-v3"),
+  server: z.string().url().max(2048), workspaceId: id, migrationId: z.uuid(), revision: z.literal(1),
+  directoryDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/), signerId: id,
+  readers: z.array(z.object({ userId: id, sharedDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/), personalDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict()).min(1).max(200),
+}).strict();
+export const signedPrivateInitialProjectionRootSchema = z.object({ manifest: privateInitialProjectionRootSchema, signature: privateSignatureSchema }).strict();
+export type SignedPrivateInitialProjectionRoot = z.infer<typeof signedPrivateInitialProjectionRootSchema>;
