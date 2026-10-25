@@ -51,3 +51,4 @@ export * from "./privacy/history-chain.js";
 export * from "./privacy/recovery-supplement.js";
 export * from "./privacy/combined-recovery.js";
 export * from "./privacy/combined-recovery-backup.js";
+export * from "./privacy/combined-migration-proof.js";

@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 import { TRPCError } from "@trpc/server";
-import { canonicalJson, encryptPrivateRecord, partitionPrivateRecovery, type PrivateRecipient } from "@starter/core";
-import { RECOVERY_KINDS, type EncryptedRecord } from "@starter/shared";
+import { canonicalJson, encryptPrivateRecord, partitionPrivateRecovery, partitionPrivateRecoverySupplement, type PrivateRecipient } from "@starter/core";
+import { RECOVERY_KINDS, RECOVERY_MAX_BYTES, RECOVERY_MAX_RECORDS, type EncryptedRecord } from "@starter/shared";
 import { PrivateAccount, PrivateDirectory, PrivateRecord, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { workspaceRecovery } from "./recovery.js";
+import { capturePrivateMigrationSupplement } from "./recovery-supplement.js";
 import { verifyPrivateChange } from "./signatures.js";
 import { fenceWorkspace, supportsBusinessTransactions, transactionSession, withBusinessTransaction } from "../business-transaction.js";
 import { discardPrivatePreparation, requireActivePrivatePreparation } from "./preparation.js";
@@ -74,9 +75,12 @@ export async function stagePrivateMigrationBatch(workspaceId: string, userId: st
     const coordinates = ({ kty, crv, x, y }: PrivateRecipient["publicKey"]) => ({ kty, crv, x, y });
     const normalized = (rows: PrivateRecipient[]) => rows.map((m) => ({ userId: m.userId, role: m.role, canViewOthersTime: m.role === "owner" || m.canViewOthersTime, canViewOthersMoney: m.role === "owner" || m.canViewOthersMoney, publicKey: coordinates(m.publicKey) })).sort((a, b) => a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0);
     if (canonicalJson(normalized(members)) !== canonicalJson(normalized(directory.signed.directory.members))) throw new TRPCError({ code: "CONFLICT", message: "Sharing keys or permissions changed." });
-    const plain = partitionPrivateRecovery(source);
+    const supplement = mode.supplementRevision ? await capturePrivateMigrationSupplement(workspaceId, userId) : null;
+    if (supplement && supplement.sourceRevision !== mode.supplementRevision) throw new TRPCError({ code: "CONFLICT", message: "Supplemental originals changed. Cancel and prepare a new migration." });
+    if (supplement && (Buffer.byteLength(JSON.stringify({ source, supplement })) > RECOVERY_MAX_BYTES || [...Object.values(source.collections), ...Object.values(supplement.collections)].reduce((count, rows) => count + rows.length, 0) > RECOVERY_MAX_RECORDS)) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Combined originals exceed recovery limits. Source data was kept." });
+    const plain = [...partitionPrivateRecovery(source), ...(supplement ? partitionPrivateRecoverySupplement(supplement) : [])];
     if (offset > plain.length) throw new TRPCError({ code: "BAD_REQUEST" });
-    return { sourceRevision: source.sourceRevision, directoryDigest: directory.digest, records: plain.slice(offset, offset + 50), total: plain.length, recipients: directory.signed.directory.members };
+    return { sourceRevision: source.sourceRevision, supplementRevision: supplement?.sourceRevision ?? null, directoryDigest: directory.digest, records: plain.slice(offset, offset + 50), total: plain.length, recipients: directory.signed.directory.members };
   });
   const encrypted: EncryptedRecord[] = [];
   for (const row of prepared.records) encrypted.push(await encrypt(workspaceId, row, prepared.recipients, 1));
@@ -88,7 +92,8 @@ export async function stagePrivateMigrationBatch(workspaceId: string, userId: st
     if (!await WorkspaceMember.exists({ workspaceId, userId, role: "owner" })) throw new TRPCError({ code: "FORBIDDEN" });
     const directory = await PrivateDirectory.findOne({ workspaceId }).sort({ revision: -1 }).lean();
     const source = await workspaceRecovery(workspaceId, userId, true);
-    if (directory?.digest !== prepared.directoryDigest || mode.sourceRevision !== prepared.sourceRevision || source.sourceRevision !== prepared.sourceRevision) throw new TRPCError({ code: "CONFLICT", message: "Preparation changed while encrypting. Source data was kept." });
+    const supplement = mode.supplementRevision ? await capturePrivateMigrationSupplement(workspaceId, userId) : null;
+    if ((mode.supplementRevision ?? null) !== prepared.supplementRevision || (supplement?.sourceRevision ?? null) !== prepared.supplementRevision || directory?.digest !== prepared.directoryDigest || mode.sourceRevision !== prepared.sourceRevision || source.sourceRevision !== prepared.sourceRevision) throw new TRPCError({ code: "CONFLICT", message: "Preparation changed while encrypting. Source data was kept." });
     const frozen = await PrivateSnapshotReader.exists({ workspaceId, migrationId });
     for (const record of encrypted) {
       const existing = await PrivateRecord.findOne({ workspaceId, kind: record.kind, id: record.id }).lean();

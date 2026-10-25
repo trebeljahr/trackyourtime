@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { canonicalJson, partitionPrivateRecovery, readersForPrivateRecord, privateInitialSnapshotRoot } from "@starter/core";
-import { encryptedRecordSchema, PRIVATE_SNAPSHOT_MAX_BYTES, RECOVERY_MAX_RECORDS, signedPrivateFavoritesMigrationProofSchema, signedPrivateOwnerMigrationProofSchema, type SignedPrivateOwnerMigrationProof, type EncryptedRecord, type SignedPrivateFavoritesMigrationProof } from "@starter/shared";
+import { canonicalJson, partitionPrivateRecovery, partitionPrivateRecoverySupplement, readersForPrivateRecord, privateInitialSnapshotRoot } from "@starter/core";
+import { encryptedRecordSchema, PRIVATE_SNAPSHOT_MAX_BYTES, RECOVERY_MAX_RECORDS, signedPrivateFavoritesMigrationProofSchema, signedPrivateOwnerMigrationProofSchema, signedPrivateCombinedOwnerMigrationProofSchema, type SignedPrivateCombinedOwnerMigrationProof, type SignedPrivateOwnerMigrationProof, type EncryptedRecord, type SignedPrivateFavoritesMigrationProof } from "@starter/shared";
 import { PrivateDirectory, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
 import { migrationFavoritesSource, workspaceRecovery } from "./recovery.js";
+import { capturePrivateMigrationSupplement, workspaceRecoverySupplement } from "./recovery-supplement.js";
 import { requireActivePrivatePreparation } from "./preparation.js";
 import { verifyPrivateChange } from "./signatures.js";
 
@@ -78,7 +79,14 @@ export async function recordPrivateFavoritesMigrationProof(scope: { server: stri
  * A receipt cannot substitute for an independently encrypted operational copy
  * and isolated restore. Temporary plaintext checksums must retire at cutover. */
 export async function recordPrivateOwnerMigrationProof(scope: { server: string; workspaceId: string; userId: string }, input: SignedPrivateOwnerMigrationProof) {
-  const signed = signedPrivateOwnerMigrationProofSchema.parse(input), { proof } = signed;
+  return recordOwnerProof(scope, signedPrivateOwnerMigrationProofSchema.parse(input));
+}
+/** Internal only; no public submission route or source deletion is enabled. */
+export async function recordPrivateCombinedOwnerMigrationProof(scope: { server: string; workspaceId: string; userId: string }, input: SignedPrivateCombinedOwnerMigrationProof) {
+  return recordOwnerProof(scope, signedPrivateCombinedOwnerMigrationProofSchema.parse(input));
+}
+async function recordOwnerProof(scope: { server: string; workspaceId: string; userId: string }, signed: SignedPrivateOwnerMigrationProof | SignedPrivateCombinedOwnerMigrationProof) {
+  const { proof } = signed;
   if (proof.server !== scope.server || proof.workspaceId !== scope.workspaceId || proof.userId !== scope.userId) throw new TRPCError({ code: "NOT_FOUND" });
   if (!await supportsBusinessTransactions()) throw new TRPCError({ code: "PRECONDITION_FAILED" });
   return withBusinessTransaction(async () => {
@@ -95,8 +103,15 @@ export async function recordPrivateOwnerMigrationProof(scope: { server: string; 
     await verifyPrivateChange(owner.signingPublicKey, proof, signed.signature);
     const complete = await workspaceRecovery(workspaceId, userId, true);
     const own = await workspaceRecovery(workspaceId, userId);
+    const supplement = await capturePrivateMigrationSupplement(workspaceId, userId);
+    const ownSupplement = await workspaceRecoverySupplement(workspaceId, userId);
     const changed = () => new TRPCError({ code: "CONFLICT", message: "Original data or encrypted snapshot changed. Make and verify a fresh backup. Source data was kept." });
     if (complete.sourceRevision !== mode.sourceRevision || own.sourceRevision !== proof.sourceRevision) throw changed();
+    if (proof.v === 2) {
+      if (supplement.sourceRevision !== mode.supplementRevision || ownSupplement.sourceRevision !== proof.supplementRevision) throw changed();
+    } else if (mode.supplementRevision || Object.values(supplement.collections).some((rows) => rows.length)) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Supplemental originals require a verified combined recovery backup. Source data was kept." });
+    }
     const records: EncryptedRecord[] = [], frozen: EncryptedRecord[] = [];
     let bytes = 2;
     const staged = PrivateRecord.find({ workspaceId }).lean().cursor({ batchSize: 10 });
@@ -129,7 +144,7 @@ export async function recordPrivateOwnerMigrationProof(scope: { server: string; 
     const recordsDigest = hash(records);
     const root = await privateInitialSnapshotRoot({ server, workspaceId, migrationId, directoryDigest: directory.digest }, Buffer.from(recordsDigest, "hex").toString("base64url"));
     const addresses = (rows: readonly { kind: string; id: string; authorId: string | null }[]) => rows.map((row) => JSON.stringify([row.kind, row.id, row.authorId])).sort();
-    const originals = partitionPrivateRecovery(complete);
+    const originals = [...partitionPrivateRecovery(complete), ...(proof.v === 2 ? partitionPrivateRecoverySupplement(supplement) : [])];
     const verifiedRecords = records.filter((row) => row.grants.some((grant) => grant.userId === userId)).length;
     if (recordsDigest !== proof.recordsDigest || hash(frozen) !== recordsDigest || snapshot.fullRecordsDigest !== recordsDigest || root !== proof.snapshotRoot || canonicalJson(addresses(records)) !== canonicalJson(addresses(originals)) || verifiedRecords !== proof.verifiedRecords || records.length - verifiedRecords !== proof.opaqueRecords) throw changed();
     const prior = await PrivateMigrationReceipt.findOne({ workspaceId, migrationId, userId, kind: "owner" }).lean();

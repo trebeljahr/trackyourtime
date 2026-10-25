@@ -97,3 +97,12 @@ export const privateOwnerMigrationProofSchema = z.object({
 }).strict();
 export const signedPrivateOwnerMigrationProofSchema = z.object({ proof: privateOwnerMigrationProofSchema, signature: privateSignatureSchema }).strict();
 export type SignedPrivateOwnerMigrationProof = z.infer<typeof signedPrivateOwnerMigrationProofSchema>;
+
+/** A v1 owner receipt never covers integration/organization originals. These
+ * temporary plaintext checksums must also retire when conversion completes. */
+export const privateCombinedOwnerMigrationProofSchema = privateOwnerMigrationProofSchema.extend({
+  v: z.literal(2), protocol: z.literal("trackyourtime-private-owner-proof-v2"),
+  supplementRevision: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+export const signedPrivateCombinedOwnerMigrationProofSchema = z.object({ proof: privateCombinedOwnerMigrationProofSchema, signature: privateSignatureSchema }).strict();
+export type SignedPrivateCombinedOwnerMigrationProof = z.infer<typeof signedPrivateCombinedOwnerMigrationProofSchema>;

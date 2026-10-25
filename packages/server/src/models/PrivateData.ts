@@ -4,11 +4,11 @@ export const PrivateAccount = mongoose.model("PrivateAccount", new Schema<{ user
   userId: { type: String, required: true, unique: true }, identity: { type: Schema.Types.Mixed, required: true }, revision: { type: Number, default: 1 },
   deviceSerial: { type: Number, default: 0 }, keySerial: { type: Number, default: 0 },
 }, { timestamps: true }));
-export const PrivateWorkspace = mongoose.model("PrivateWorkspace", new Schema<{ workspaceId: string; state: "migrating" | "encrypted"; ownerId: string; revision: number; head: string | null; directoryDigest: string | null; leaseUntil: Date; migrationId: string; sourceRevision: string; backupVerified: boolean }>({
+export const PrivateWorkspace = mongoose.model("PrivateWorkspace", new Schema<{ workspaceId: string; state: "migrating" | "encrypted"; ownerId: string; revision: number; head: string | null; directoryDigest: string | null; leaseUntil: Date; migrationId: string; sourceRevision: string; supplementRevision?: string | null; backupVerified: boolean }>({
   workspaceId: { type: String, required: true, unique: true }, state: { type: String, enum: ["migrating", "encrypted"], required: true },
   ownerId: { type: String, required: true }, revision: { type: Number, default: 0 }, leaseUntil: { type: Date, required: true },
   head: { type: String, default: null }, directoryDigest: { type: String, default: null },
-  migrationId: { type: String, required: true }, sourceRevision: { type: String, required: true }, backupVerified: { type: Boolean, default: false },
+  migrationId: { type: String, required: true }, sourceRevision: { type: String, required: true }, supplementRevision: { type: String, default: null }, backupVerified: { type: Boolean, default: false },
 }, { timestamps: true }));
 const privateRecordSchema = new Schema<EncryptedRecord & { workspaceId: string; deleted: boolean }>({
   workspaceId: { type: String, required: true }, id: { type: String, required: true }, kind: { type: String, required: true }, authorId: { type: String, default: null },

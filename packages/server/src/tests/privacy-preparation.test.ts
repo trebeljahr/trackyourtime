@@ -9,6 +9,7 @@ import { Client } from "../models/Client.js";
 import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
 import { StorageFence, StorageUsage } from "../models/StorageUsage.js";
 import { commitPrivateDirectory } from "../services/privacy/directories.js";
+import { capturePrivateMigrationSupplement } from "../services/privacy/recovery-supplement.js";
 import { workspaceRecovery } from "../services/privacy/recovery.js";
 import { stagePrivateMigrationBatch } from "../services/privacy/migration.js";
 import { discardPrivatePreparation } from "../services/privacy/preparation.js";
@@ -68,6 +69,16 @@ describe("bounded private workspace preparation", { skip: skipWithoutDatabase },
     const h = gate(), changed = batch(0, h.encrypt); await h.entered;
     try { await mongoose.connection.db!.collection("tags").updateOne({ _id: "tag-0" } as never, { $set: { name: "Changed original" } }); } finally { h.release(); }
     await assert.rejects(changed, { code: "CONFLICT" }); assert.equal(await PrivateRecord.countDocuments(), 0);
+  });
+  it("rejects supplemental changes during encryption and never commits a partial stale batch", async () => {
+    const db = mongoose.connection.db!;
+    await db.collection("webhooksubscriptions").insertOne({ workspaceId: scope.workspaceId, createdBy: "owner", secret: "Original signing secret" });
+    const source = await capturePrivateMigrationSupplement(scope.workspaceId, "owner");
+    await PrivateWorkspace.updateOne({}, { $set: { supplementRevision: source.sourceRevision } });
+    const g = gate(), pending = batch(0, g.encrypt); await g.entered;
+    try { await db.collection("webhooksubscriptions").updateOne({ workspaceId: scope.workspaceId }, { $set: { secret: "Changed signing secret" } }); } finally { g.release(); }
+    await assert.rejects(pending, { code: "CONFLICT" }); assert.equal(await PrivateRecord.countDocuments(), 0);
+    assert.equal(await db.collection("webhooksubscriptions").countDocuments(), 1);
   });
   it("expires preparation on ordinary access without deleting originals, keys or public directory history", async () => {
     await batch(); await PrivateWorkspace.updateOne({}, { $set: { leaseUntil: new Date(0) } });

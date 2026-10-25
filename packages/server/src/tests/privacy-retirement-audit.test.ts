@@ -57,4 +57,14 @@ describe("private workspace residual plaintext audit", { skip: skipWithoutDataba
     await withBusinessTransaction(() => assertPrivateWorkspaceRetirement(db(), workspaceId, transactionSession()!));
   });
 
+  it("refuses a supplemental plaintext checksum after the primary checksum was retired", async () => {
+    await db().collection("privateworkspaces").insertOne({ workspaceId, state: "encrypted", revision: 1, head: "A".repeat(43), directoryDigest: "B".repeat(43), backupVerified: true, sourceRevision: "retired", supplementRevision: "c".repeat(64) });
+    const report = await auditPrivateWorkspaceRetirement(db(), workspaceId);
+    assert.deepEqual(report.leaks, [{ collection: "privateworkspaces", reason: "source-checksums", records: 1 }]);
+    assert.doesNotMatch(JSON.stringify(report), /cccccccc/);
+    await assert.rejects(withBusinessTransaction(() => assertPrivateWorkspaceRetirement(db(), workspaceId, transactionSession()!)), /Residual plaintext/);
+    await db().collection("privateworkspaces").updateOne({ workspaceId }, { $set: { supplementRevision: "retired" } });
+    await withBusinessTransaction(() => assertPrivateWorkspaceRetirement(db(), workspaceId, transactionSession()!));
+  });
+
 });

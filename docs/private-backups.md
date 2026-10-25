@@ -42,8 +42,9 @@ The offline opener and password-file opener recognize the combined payload and
 warn that a requested JSON export contains unencrypted integration secrets.
 Older files remain readable. A server-internal builder captures both datasets
 in one transaction. No combined-source public endpoint is mounted, and the
-recurring scheduler still creates v1 files. Combined migration approval and
-per-creator verification remain separate unfinished work.
+recurring scheduler still creates v1 files. The internal combined owner proof
+reopens the actual saved file before signing a snapshot-bound approval. Public
+migration flow and per-creator verification remain separate unfinished work.
 
 The isolated combined restore checker writes and reads all seventeen typed
 collections in one fresh disposable database, compares both checksums and drops

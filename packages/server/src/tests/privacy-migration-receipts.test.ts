@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, beforeEach, after, describe, it } from "node:test";
 import mongoose from "mongoose";
 import { Long } from "mongodb";
-import { createKeyPair, createSigningPair, createPrivateFavoritesMigrationProof, createPrivateOwnerMigrationProof, deriveRecoveryBackupKey, encryptRecoveryKeyBackup, encodeSecret, encryptPrivateRecord, partitionPrivateRecovery, privateMemberKeyFingerprint, privateInitialSnapshotProjection, randomSecret, seal, signPrivateChange, signPrivateInitialSnapshot, signPrivateWorkspaceDirectory, verifyPrivateInitialSnapshot, verifyPrivateWorkspaceDirectory, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
+import { createKeyPair, createSigningPair, createPrivateFavoritesMigrationProof, createPrivateOwnerMigrationProof, createPrivateCombinedOwnerMigrationProof, encryptCombinedRecoveryKeyBackup, deriveRecoveryBackupKey, encryptRecoveryKeyBackup, encodeSecret, encryptPrivateRecord, partitionPrivateRecovery, privateMemberKeyFingerprint, privateInitialSnapshotProjection, randomSecret, seal, signPrivateChange, signPrivateInitialSnapshot, signPrivateWorkspaceDirectory, verifyPrivateInitialSnapshot, verifyPrivateWorkspaceDirectory, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
 import type { PrivateDirectoryMember, SignedPrivateFavoritesMigrationProof, SignedPrivateOwnerMigrationProof } from "@starter/shared";
 import { PrivateAccount, PrivateDirectory, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../models/PrivateData.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
@@ -10,7 +10,10 @@ import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
 import { migrationFavoritesSource, workspaceRecovery } from "../services/privacy/recovery.js";
 import { commitPrivateDirectory } from "../services/privacy/directories.js";
 import { preparePrivateInitialSnapshot } from "../services/privacy/initial-snapshots.js";
-import { recordPrivateFavoritesMigrationProof, recordPrivateOwnerMigrationProof } from "../services/privacy/migration-receipts.js";
+import { recordPrivateFavoritesMigrationProof, recordPrivateOwnerMigrationProof, recordPrivateCombinedOwnerMigrationProof } from "../services/privacy/migration-receipts.js";
+import { combinedWorkspaceRecovery } from "../services/privacy/combined-recovery.js";
+import { capturePrivateMigrationSupplement } from "../services/privacy/recovery-supplement.js";
+import { stagePrivateMigrationBatch } from "../services/privacy/migration.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { privacyRouter } from "../trpc/routers/privacy.js";
 import type { Context } from "../trpc/context.js";
@@ -60,6 +63,69 @@ describe("private preferences conversion receipts", { skip: skipWithoutDatabase 
     proof = await createPrivateFavoritesMigrationProof({ source: await migrationFavoritesSource(scope.workspaceId, "member", migrationId), snapshot, directory, userId: "member", secrets: member, current: () => true });
   });
   after(dropTestDatabase);
+  async function combinedFixture() {
+    const db = mongoose.connection.db!;
+    await db.collection<{ _id: string; name: string; slug: string }>("organization").insertOne({ _id: scope.workspaceId, name: "Original workspace", slug: "original-workspace" });
+    await db.collection("apitokens").insertOne({ workspaceId: scope.workspaceId, userId: "owner", name: "Original API label", tokenHash: "Original token hash" });
+    await db.collection("webhooksubscriptions").insertMany([
+      { workspaceId: scope.workspaceId, createdBy: "owner", url: "https://private.example.test/owner", secret: "Owner original integration secret" },
+      { workspaceId: scope.workspaceId, createdBy: "member", url: "https://private.example.test/member", secret: "Member original integration secret" },
+    ]);
+    const complete = await capturePrivateMigrationSupplement(scope.workspaceId, "owner");
+    await PrivateWorkspace.updateOne({}, { $set: { supplementRevision: complete.sourceRevision } });
+    await PrivateRecord.deleteMany({}); await PrivateSnapshotChunk.deleteMany({}); await PrivateSnapshotReader.deleteMany({});
+    let offset: number | null = 0;
+    do { offset = (await stagePrivateMigrationBatch(scope.workspaceId, "owner", migrationId, offset)).next; } while (offset !== null);
+    const records = (await PrivateRecord.find().lean()).map(({ id, kind, authorId, revision, box, grants }) => ({ id, kind, authorId, revision, box, grants }));
+    const signed = await signPrivateInitialSnapshot({ records, migrationId, userId: "owner", directory, secrets: owner, current: () => true });
+    await preparePrivateInitialSnapshot({ ...scope, userId: "owner", migrationId }, signed.readers);
+    const ownScope = { ...scope, userId: "owner" };
+    const snapshot = await verifyPrivateInitialSnapshot({ signed: signed.readers.find((r) => r.manifest.readerId === "owner"), records: privateInitialSnapshotProjection(signed.records, "owner"), scope: ownScope, directory, secrets: owner, current: () => true });
+    const key = await deriveRecoveryBackupKey(encodeSecret(randomSecret()), ownScope);
+    const archive = await combinedWorkspaceRecovery(scope.workspaceId, "owner", scope.server);
+    const raw = JSON.stringify(await encryptCombinedRecoveryKeyBackup(archive, key, () => true));
+    const combinedProof = await createPrivateCombinedOwnerMigrationProof({ readBackup: async () => raw, backupKey: key, records, snapshot, directory, userId: "owner", secrets: owner, current: () => true });
+    key.fill(0);
+    return { combinedProof, ownScope, complete };
+  }
+  it("stages supplemental originals and records an idempotent combined receipt without changing mode or originals", async () => {
+    const { combinedProof, ownScope, complete } = await combinedFixture();
+    assert.notEqual(combinedProof.proof.supplementRevision, complete.sourceRevision);
+    assert.equal(combinedProof.proof.opaqueRecords, 2);
+    assert.deepEqual(await recordPrivateCombinedOwnerMigrationProof(ownScope, combinedProof), { recorded: true });
+    assert.deepEqual(await recordPrivateCombinedOwnerMigrationProof(ownScope, combinedProof), { recorded: true });
+    assert.equal(await PrivateMigrationReceipt.countDocuments({ kind: "owner" }), 1);
+    const mode = (await PrivateWorkspace.findOne().lean())!; assert.equal(mode.state, "migrating"); assert.equal(mode.backupVerified, false);
+    assert.equal(await mongoose.connection.db!.collection("webhooksubscriptions").countDocuments(), 2);
+    assert.doesNotMatch(JSON.stringify(await PrivateMigrationReceipt.find().lean()), /Original API label|original integration secret|private.example/);
+  });
+  it("revalidates opaque integration originals and frozen ciphertext even when replaying a combined receipt", async () => {
+    const { combinedProof, ownScope } = await combinedFixture();
+    await recordPrivateCombinedOwnerMigrationProof(ownScope, combinedProof);
+    await mongoose.connection.db!.collection("webhooksubscriptions").updateOne({ createdBy: "member" }, { $set: { secret: "Changed member original" } });
+    await assert.rejects(recordPrivateCombinedOwnerMigrationProof(ownScope, combinedProof), { code: "CONFLICT" });
+    await mongoose.connection.db!.collection("webhooksubscriptions").updateOne({ createdBy: "member" }, { $set: { secret: "Member original integration secret" } });
+    const chunk = (await PrivateSnapshotChunk.findOne({}).lean())!;
+    const records = structuredClone(chunk.records); records.find((r) => r.kind === "integrations" && r.authorId === "member")!.box.nonce = "AAAAAAAAAAAAAAAA";
+    await PrivateSnapshotChunk.updateOne({ _id: chunk._id }, { $set: { records } });
+    await assert.rejects(recordPrivateCombinedOwnerMigrationProof(ownScope, combinedProof), { code: "CONFLICT" });
+  });
+  it("refuses a forged signature, another account, changed supplement proof and missing frozen source marker", async () => {
+    const { combinedProof, ownScope } = await combinedFixture();
+    const forged = structuredClone(combinedProof); forged.signature = await signPrivateChange(member.signingPrivateKey, forged.proof);
+    await assert.rejects(recordPrivateCombinedOwnerMigrationProof(ownScope, forged), { code: "FORBIDDEN" });
+    await assert.rejects(recordPrivateCombinedOwnerMigrationProof(scope, combinedProof), { code: "NOT_FOUND" });
+    const changed = structuredClone(combinedProof); changed.proof.supplementRevision = "a".repeat(64); changed.signature = await signPrivateChange(owner.signingPrivateKey, changed.proof);
+    await assert.rejects(recordPrivateCombinedOwnerMigrationProof(ownScope, changed), { code: "CONFLICT" });
+    await PrivateWorkspace.updateOne({}, { $set: { supplementRevision: null } });
+    await assert.rejects(recordPrivateCombinedOwnerMigrationProof(ownScope, combinedProof), { code: "CONFLICT" });
+    assert.equal(await PrivateMigrationReceipt.countDocuments(), 0);
+  });
+  it("refuses a v1 approval once supplemental originals exist, even without a v2 preparation marker", async () => {
+    await mongoose.connection.db!.collection("webhooksubscriptions").insertOne({ workspaceId: scope.workspaceId, createdBy: "member", secret: "Uncovered original" });
+    await assert.rejects(recordPrivateOwnerMigrationProof({ ...scope, userId: "owner" }, ownerProof), /combined recovery backup/);
+    assert.equal(await PrivateMigrationReceipt.countDocuments(), 0);
+  });
   it("returns only the member's typed original favorites, records one idempotent receipt and preserves plaintext source", async () => {
     const source = await migrationFavoritesSource(scope.workspaceId, "member", migrationId);
     assert.equal(source.collections.favorites.length, 1);

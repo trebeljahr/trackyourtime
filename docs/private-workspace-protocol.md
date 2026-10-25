@@ -428,12 +428,41 @@ owner's readable originals. Its authenticated format cannot downgrade to v1.
 An isolated restore drill verifies all seventeen collections and both checksums;
 it is not the complete operational backup required for retirement. Existing v1
 backups still cover only fourteen collections, and the older migration proof
-cannot approve supplemental records. Combined migration approval, per-creator
+cannot approve supplemental records. Public combined migration flow, per-creator
 content receipts and a complete operational restore proof remain required before
 this source can authorize any retirement. Profile/avatar/user-preference encryption
 still needs an account-scoped path. Server-side webhook/REST behavior in private
 mode also requires explicit compatibility handling; copying configuration does
 not make a blind server able to deliver plaintext events.
+
+## Combined owner approval (internal)
+
+`createPrivateCombinedOwnerMigrationProof` requires a branded verified reader
+snapshot and reopens the actual saved v2 encrypted file. It compares both exact
+typed datasets to decrypted owner-readable records, checks every grant against
+the verified directory and binds the signed v2 receipt to the complete snapshot
+root, full ciphertext digest and exact encrypted file bytes. Other creators'
+favorites/integrations stay opaque; this approval never claims their plaintext
+was checked. Missing, changed, duplicated or tombstoned records refuse approval.
+Generation invalidation after I/O or crypto prevents a late signature.
+
+The internal server receipt path checks both owner-readable source checksums
+and the complete frozen source checksums inside the workspace transaction fence.
+It verifies current owner/directory/signature, original addresses/authorship,
+recipient sets, materialized ciphertext, immutable chunks, reader manifest/root
+and counts before recording an idempotent temporary receipt. Replays recheck
+source and ciphertext. The complete supplement checksum stays server-side.
+An optional preparation `supplementRevision` binds supplemental staging before
+and after encryption; lossless aggregate source limits still apply. Its
+plaintext-derived checksum must be removed or set to `retired` at conversion;
+the residual audit rejects it otherwise. v1 receipts cannot approve a workspace
+that contains supplemental originals, even if a marker was not created.
+
+No v2 source/receipt/begin controller is mounted publicly. Existing begin flow
+still prepares only v1 and remains guarded. A receipt does not change mode,
+set operational backup verification or delete originals. Per-creator content
+receipts, bounded encrypted quota accounting, complete operational backup and
+isolated restoration, app adapters and atomic source retirement remain required.
 
 ## Remaining rollout dependencies
 
