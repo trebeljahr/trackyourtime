@@ -81,12 +81,12 @@ async function fence(key: string, state: State): Promise<void> {
   state.fences.add(key);
 }
 
-async function baseline(workspaceId: string, state: State): Promise<number> {
+async function baseline(workspaceId: string, state: State, refresh = false): Promise<number> {
   const cached = state.usage.get(workspaceId);
-  if (cached !== undefined) return cached;
+  if (!refresh && cached !== undefined) return cached;
   await fence(`workspace:${workspaceId}`, state);
   const stored = await StorageUsage.findById(workspaceId).lean();
-  if (stored?.version === 2) { state.usage.set(workspaceId, stored.bytes); return stored.bytes; }
+  if (!refresh && stored?.version === 2) { state.usage.set(workspaceId, stored.bytes); return stored.bytes; }
   let bytes = 0;
   // One scan on adoption, never one scan per timer tick. All later writes use deltas.
   for (const [modelName, collection] of Object.entries(quotaCollections())) {
@@ -188,6 +188,26 @@ export async function withStorageOwnershipAdoption<T>(work: () => Promise<T>): P
   return guarded(async () => {
     quotaState().adopting = true;
     return work();
+  });
+}
+
+/** Internal migration preflight. Checks currently available workspace/account
+ * headroom without reserving it across later transactions. Actual model writes
+ * repeat the enforced limits; competing work can still consume capacity later.
+ * Original data is never changed by this check. */
+export async function assertPrivateStorageHeadroom(workspaceId: string, additionalBytes: number): Promise<void> {
+  if (!workspaceId || !Number.isSafeInteger(additionalBytes) || additionalBytes < 0) throw new Error("Invalid private storage estimate");
+  return guarded(async () => {
+    await prepare([workspaceId], [], true);
+    const state = quotaState();
+    const owners = await database().collection("workspacemembers").find({ workspaceId, role: "owner" }, { session: transactionSession(), projection: { userId: 1 } }).toArray();
+    // A migration is also a maintenance boundary: do not trust even a v2
+    // ledger if earlier native writers bypassed normal model accounting.
+    const affected = new Set([workspaceId]);
+    for (const owner of owners) for (const id of await ownedWorkspaces(String(owner.userId))) affected.add(id);
+    for (const id of [...affected].sort()) await baseline(id, state, true);
+    if (await baseline(workspaceId, state) + additionalBytes > env.STORAGE_QUOTA_BYTES) throw storageLimitError();
+    for (const owner of owners) if (await accountBytes(String(owner.userId), state) + additionalBytes > env.STORAGE_QUOTA_BYTES) throw storageLimitError();
   });
 }
 

@@ -461,7 +461,7 @@ that contains supplemental originals, even if a marker was not created.
 No v2 source/receipt/begin controller is mounted publicly. Existing begin flow
 still prepares only v1 and remains guarded. A receipt does not change mode,
 set operational backup verification or delete originals. Per-creator content
-receipts, encrypted-storage preflight, complete operational backup and
+receipts, preflight before the v2 begin controller, complete operational backup and
 isolated restoration, app adapters and atomic source retirement remain required.
 
 ## Personal subset approval (internal)
@@ -511,9 +511,32 @@ account erasure retain their existing scoped cleanup behavior.
 This is logical application storage, not physical disk usage or accounting for
 account-key envelopes, auth records, organization uploads, database indexes,
 logs/oplogs and external backups. Raw native collection writes require explicit
-maintenance accounting. Full grant-expansion preflight before the future v2 begin
-controller, signed checkpoint/retention design and migration headroom remain
-unfinished; this accounting change does not enable public migration.
+maintenance accounting. Signed checkpoint/retention design and durable migration headroom reservations
+remain unfinished; this accounting change does not enable public migration.
+
+## Migration sizing and current headroom
+
+Before the first staging batch encrypts a record, a conservative estimator checks
+UTF-8 JSON payload sizes, GCM tags/base64url expansion, every authorized recipient
+envelope, individual record/page bounds and the complete 64 MiB snapshot bound.
+It estimates materialized BSON (including the 4 KiB floor), immutable snapshot
+copies, a worst-case chunk count and reader/temporary-receipt/mode overhead.
+Opaque originals are sized internally without returning values or source hashes.
+The estimate is not a source-content or restoration proof.
+
+The headroom check recounts actual registered collections across the current
+workspace and its owners' other workspaces under the shared account storage
+fences. It does not trust cached v2 ledgers when legacy/native maintenance may
+have bypassed accounting. Insufficient temporary capacity rejects before record
+encryption; original rows stay intact. Existing staged batches still face the
+actual transactional limits on each later write.
+
+This check does not reserve capacity between transactions. Concurrent later work
+can consume space and require cancellation/retry; conservative estimates can
+refuse work near the bound even if a tighter packing might fit. The future v2
+begin controller must run the same preflight before creating its mode/lease.
+Maintenance/raw-writer fencing, a durable reservation policy and retention still
+need completion before public conversion is enabled.
 
 ## Remaining rollout dependencies
 
@@ -535,7 +558,7 @@ unfinished; this accounting change does not enable public migration.
 - Audit legacy integration secrets/configuration and every unlisted plaintext
   collection. The fourteen-collection business backup does not cover auth or
   webhook credential storage.
-- Grant-expansion/migration-headroom preflight and journal retention. Tombstones preserve the old
+- Preflight before v2 begin, durable migration-headroom reservations and journal retention. Tombstones preserve the old
   ciphertext context; this is not cryptographic erasure of historical journal
   records or ciphertext already copied by another authorized client.
 

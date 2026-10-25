@@ -11,6 +11,7 @@ import { StorageFence, StorageUsage } from "../models/StorageUsage.js";
 import { commitPrivateDirectory } from "../services/privacy/directories.js";
 import { capturePrivateMigrationSupplement } from "../services/privacy/recovery-supplement.js";
 import { workspaceRecovery } from "../services/privacy/recovery.js";
+import { env } from "../config/env.js";
 import { stagePrivateMigrationBatch } from "../services/privacy/migration.js";
 import { discardPrivatePreparation } from "../services/privacy/preparation.js";
 import { privacyRouter } from "../trpc/routers/privacy.js";
@@ -43,6 +44,18 @@ describe("bounded private workspace preparation", { skip: skipWithoutDatabase },
   });
   after(dropTestDatabase);
   const batch = (offset = 0, encrypt = encryptPrivateRecord) => stagePrivateMigrationBatch(scope.workspaceId, "owner", migrationId, offset, encrypt);
+  it("refuses insufficient temporary headroom before invoking encryption and keeps all source records", async () => {
+    const previous = env.STORAGE_QUOTA_BYTES; let calls = 0;
+    // Native legacy originals must be counted even with a current ledger.
+    const encrypt: typeof encryptPrivateRecord = async (...args) => { calls++; return encryptPrivateRecord(...args); };
+    try {
+      Object.defineProperty(env, "STORAGE_QUOTA_BYTES", { value: 384 * 1024 });
+      await assert.rejects(batch(0, encrypt), /Storage limit reached/);
+      assert.equal(calls, 0); assert.equal(await PrivateRecord.countDocuments(), 0);
+      assert.equal(await mongoose.connection.db!.collection("tags").countDocuments(), 55);
+    } finally { Object.defineProperty(env, "STORAGE_QUOTA_BYTES", { value: previous }); }
+    await batch(); assert.equal(await PrivateRecord.countDocuments(), 50);
+  });
   it("stages bounded pages and preserves exact ciphertext on lost replies and concurrent retries", async () => {
     const total = partitionPrivateRecovery(await workspaceRecovery(scope.workspaceId, "owner", true)).length;
     assert.deepEqual(await batch(), { next: 50, total });

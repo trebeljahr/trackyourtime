@@ -10,6 +10,8 @@ import { capturePrivateMigrationSupplement } from "./recovery-supplement.js";
 import { verifyPrivateChange } from "./signatures.js";
 import { fenceWorkspace, supportsBusinessTransactions, transactionSession, withBusinessTransaction } from "../business-transaction.js";
 import { discardPrivatePreparation, requireActivePrivatePreparation } from "./preparation.js";
+import { estimatePrivateMigrationStorage } from "./migration-preflight.js";
+import { assertPrivateStorageHeadroom } from "../storage-quota.js";
 /** Kept closed until encrypted clients, restore drills, and legacy-write
  * fencing have passed end-to-end validation. Never enable through an env var. */
 export function requirePrivateWorkspaceRollout(): void {
@@ -79,6 +81,10 @@ export async function stagePrivateMigrationBatch(workspaceId: string, userId: st
     if (supplement && supplement.sourceRevision !== mode.supplementRevision) throw new TRPCError({ code: "CONFLICT", message: "Supplemental originals changed. Cancel and prepare a new migration." });
     if (supplement && (Buffer.byteLength(JSON.stringify({ source, supplement })) > RECOVERY_MAX_BYTES || [...Object.values(source.collections), ...Object.values(supplement.collections)].reduce((count, rows) => count + rows.length, 0) > RECOVERY_MAX_RECORDS)) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Combined originals exceed recovery limits. Source data was kept." });
     const plain = [...partitionPrivateRecovery(source), ...(supplement ? partitionPrivateRecoverySupplement(supplement) : [])];
+    // Refuse an impossible initial preparation before doing any encryption.
+    // Later batches still obey actual transactional storage limits. The future
+    // v2 begin controller must also run this before creating its mode/lease.
+    if (!await PrivateRecord.exists({ workspaceId })) await assertPrivateStorageHeadroom(workspaceId, estimatePrivateMigrationStorage(workspaceId, plain, directory.signed.directory.members).additionalBytes);
     if (offset > plain.length) throw new TRPCError({ code: "BAD_REQUEST" });
     return { sourceRevision: source.sourceRevision, supplementRevision: supplement?.sourceRevision ?? null, directoryDigest: directory.digest, records: plain.slice(offset, offset + 50), total: plain.length, recipients: directory.signed.directory.members };
   });
