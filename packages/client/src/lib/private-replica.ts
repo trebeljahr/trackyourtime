@@ -1,5 +1,5 @@
 import { openPrivateIndexedStorage } from "./private-indexed-storage";
-import { createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, signPrivateWorkspacePolicy, type KeyValueStorage, type PrivateDirectoryTrust, type PrivateProjectionTransport, type PrivateWorkspacePolicyCheckpoint, type QueueExclusive, type VerifiedPrivateDirectory, type VerifiedPrivateProjectionSnapshot } from "@starter/core";
+import { createPrivateAccountInventoryStore, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateInitialProjection, PRIVATE_ACCOUNT_INVENTORY_SCOPE, privateReplicaIdentityFromDirectory, signPrivateAccountInventory, signPrivateWorkspacePolicy, type KeyValueStorage, type PrivateAccountWorkspace, type PrivateDirectoryTrust, type PrivateProjectionTransport, type PrivateWorkspacePolicyCheckpoint, type QueueExclusive, type VerifiedPrivateAccountInventory, type VerifiedPrivateDirectory, type VerifiedPrivateProjectionSnapshot } from "@starter/core";
 import { privateDataOrigin, privateOperationScope, privateSession, subscribePrivateSession } from "./private-session";
 function privateStorageAccess(userId: string, server: string) {
   const root = privateSession(userId);
@@ -8,6 +8,25 @@ function privateStorageAccess(userId: string, server: string) {
   return { key, current: () => {
     try { check(); return privateSession(userId) === root; } catch { return false; }
   }, release: () => key.fill(0) };
+}
+/** Use the account-wide lock from privateAccountInventoryStorageHost, including
+ * when several workspace windows share one encrypted account inventory. */
+export async function privateAccountWorkspaceInventoryStore(userId: string, storage: KeyValueStorage, exclusive: QueueExclusive) {
+  const root = privateSession(userId), server = privateDataOrigin(), captured = privateOperationScope(userId);
+  if (!root) throw new Error("Unlock private data before opening account workspace inventory");
+  const check = () => { captured(); if (privateSession(userId) !== root || privateDataOrigin() !== server) throw new Error("Private data changed during this operation"); };
+  const { kty, crv, x, y } = root.signingPrivateKey;
+  const store = await createPrivateAccountInventoryStore({ server, userId, storage, exclusive, signingPublicKey: { kty, crv, x, y }, resolveStorageKey: () => privateStorageAccess(userId, server), capture: () => { check(); return check; } });
+  check(); return store;
+}
+/** An explicit local enrollment/update, never an automatic response to absent
+ * server/local state. A new device normally restores a trusted checkpoint. */
+export function signPrivateAccountWorkspaceInventory(userId: string, workspaces: readonly PrivateAccountWorkspace[], previous: VerifiedPrivateAccountInventory | null) {
+  const root = privateSession(userId), check = privateOperationScope(userId), server = privateDataOrigin();
+  if (!root) throw new Error("Unlock private data before signing account workspace inventory");
+  return signPrivateAccountInventory({ server, userId, workspaces, previous, signingPrivateKey: root.signingPrivateKey, current: () => {
+    try { check(); return privateSession(userId) === root && privateDataOrigin() === server; } catch { return false; }
+  } });
 }
 /** A trusted activation/device/recovery checkpoint is required. This adapter
  * never treats missing metadata as standard storage or trusts an API mode to
@@ -63,7 +82,9 @@ export function loadPrivateWorkspaceProjection(userId: string, workspaceId: stri
 
 /** One durable host for both encrypted adapters. Closing/locking never deletes
  * queued work. Reopen after unlocking; stale handles cannot resume a save. */
-export async function privateWorkspaceStorageHost(userId: string, workspaceId: string) {
+export function privateWorkspaceStorageHost(userId: string, workspaceId: string) { return privateStorageHost(userId, workspaceId); }
+export function privateAccountInventoryStorageHost(userId: string) { return privateStorageHost(userId, PRIVATE_ACCOUNT_INVENTORY_SCOPE); }
+async function privateStorageHost(userId: string, workspaceId: string) {
   const root = privateSession(userId);
   if (!root) throw new Error("Unlock private data before opening workspace storage");
   const server = privateDataOrigin(), check = privateOperationScope(userId);

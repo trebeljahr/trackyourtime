@@ -15,6 +15,7 @@ const policySchema = z.object({
   directoryRevision: z.number().int().positive(), createdAt: z.iso.datetime(),
 }).strict();
 const signedSchema = z.object({ policy: policySchema, signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) }).strict();
+export const signedPrivateWorkspacePolicySchema = signedSchema;
 export type SignedPrivateWorkspacePolicy = z.infer<typeof signedSchema>;
 export type PrivateWorkspacePolicyCheckpoint = { activationRoot: string; directoryDigest: string };
 const verified = Symbol("verified-private-workspace-policy");
@@ -44,7 +45,7 @@ export async function signPrivateWorkspacePolicy(options: {
   const signature = await signPrivateChange(secrets.signingPrivateKey, policy); check();
   return signedSchema.parse({ policy, signature });
 }
-async function verifyPolicy(input: unknown, scope: PrivateStorageScope, signingPublicKey: PublicKey, expected: PrivateWorkspacePolicyCheckpoint, current: () => boolean): Promise<VerifiedPrivateWorkspacePolicy> {
+export async function verifyPrivateWorkspacePolicy(input: unknown, scope: PrivateStorageScope, signingPublicKey: PublicKey, expected: PrivateWorkspacePolicyCheckpoint, current: () => boolean): Promise<VerifiedPrivateWorkspacePolicy> {
   const signed = signedSchema.parse(input), { policy } = signed;
   if (!current()) throw new Error("Private workspace policy changed during verification");
   if (policy.server !== scope.server || policy.userId !== scope.userId || policy.workspaceId !== scope.workspaceId || new URL(policy.server).origin !== policy.server || !["https:", "http:"].includes(new URL(policy.server).protocol)) throw new Error("Private workspace policy belongs to another scope");
@@ -67,7 +68,7 @@ export async function createPrivateWorkspacePolicyStore(options: {
   const scope = { ...options.scope }, signingPublicKey = publicEncryptionKeySchema.parse(options.signingPublicKey);
   const expected = z.object({ activationRoot: digest, directoryDigest: digest }).strict().parse(options.expected);
   const storage = await createPrivateStorage({ storage: options.storage, scope, resolveKey: options.resolveStorageKey });
-  const checked = (raw: string, check: () => void) => verifyPolicy(JSON.parse(raw), scope, signingPublicKey, expected, () => { try { check(); return true; } catch { return false; } });
+  const checked = (raw: string, check: () => void) => verifyPrivateWorkspacePolicy(JSON.parse(raw), scope, signingPublicKey, expected, () => { try { check(); return true; } catch { return false; } });
   return {
     read: () => options.exclusive(async () => {
       const check = options.capture(); check(); const raw = await storage.getItem("mode-policy"); check();
@@ -78,7 +79,7 @@ export async function createPrivateWorkspacePolicyStore(options: {
       const signed = signedSchema.parse(input);
       return options.exclusive(async () => {
         const check = options.capture(); check();
-        const next = await verifyPolicy(signed, scope, signingPublicKey, expected, () => { try { check(); return true; } catch { return false; } }); check();
+        const next = await verifyPrivateWorkspacePolicy(signed, scope, signingPublicKey, expected, () => { try { check(); return true; } catch { return false; } }); check();
         const prior = await storage.getItem("mode-policy"); check();
         if (prior !== null) { const value = await checked(prior, check); check(); return value; }
         await storage.setItem("mode-policy", JSON.stringify(next.signed)); check();

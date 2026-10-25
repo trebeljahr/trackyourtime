@@ -891,6 +891,39 @@ readiness before conversion. App-wide routing, cache teardown and all private
 CRUD/timer/report adapters still need integration. Existing standard behavior
 is unchanged and no workspace activation route is enabled.
 
+## Signed account workspace inventory (adapter foundation)
+
+The account now has a versioned signed inventory of explicit standard entries
+and encrypted workspace pins. It contains no workspace names or content. An
+unknown workspace is a trust/enrollment decision; it never defaults to standard.
+Each encrypted entry retains its account-signed initial policy, verified against
+the same account/server/workspace. Consecutive revisions bind the prior digest.
+Private entries cannot disappear, downgrade or replace their initial pin, even
+after membership ends. Standard entries may be updated or removed normally.
+Ordinary updates cannot rotate the account signing key.
+
+Its encrypted local store requires an account-wide lock shared by workspace
+windows, verifies persisted writes and rechecks signatures when loading. It
+distinguishes three operations: explicit fresh in-process local enrollment,
+consecutive server/history update, and new-device restoration against an exact
+checkpoint obtained independently from device/recovery. A server replay of an
+old signed initial inventory cannot enroll a device automatically. Enrollment
+results expire with their signing session; lock/unlock cannot revive one. A
+restore cannot replace newer local state. Missing, corrupt or locked inventory
+is an error. The inventory is bounded by 1000 entries/512 KiB and refuses excess
+without truncation.
+
+The client adapters and account-wide durable host bind this state to the current
+account/server/unlock generation. This remains a local library foundation:
+there is no account-inventory server transport, profile/device/recovery transfer,
+initial enrollment UI, active data routing or conversion controller yet. A new
+device without an independently trusted checkpoint still needs an explicit
+decision. Callers must never start fresh enrollment automatically after stored
+or server metadata disappears. A complete local filesystem rollback or a stale
+recovery checkpoint cannot prove that the server has no newer history. Old-client
+retirement, preservation of unsent work, and private CRUD/timer/report adapters
+remain mandatory before conversion can be enabled.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes the separated initial root, consumes
@@ -902,9 +935,9 @@ is unchanged and no workspace activation route is enabled.
   and extension persistence. Existing clients do not use this replica yet.
 - User-facing conflict review/export of unsent work and recovery after local
   storage corruption or loss. New revisions alone cannot settle a conflict.
-- Integrate the device mode-pin adapter with a complete signed account inventory,
-  trusted new-device policy and every content/queue path. Missing keys, omitted
-  metadata or an older API must never silently select plaintext adapters.
+- Connect the signed account inventory and device mode-pin adapters to trusted
+  profile/device/recovery transport and every content/queue path. Missing keys,
+  omitted metadata or an older API must never silently select plaintext adapters.
 - Complete client business-transition validation, including approval submissions
   versus reviews, invoice links on colleagues' entries and issued-document
   immutability. Coarse record-kind rights alone do not encode those rules.
