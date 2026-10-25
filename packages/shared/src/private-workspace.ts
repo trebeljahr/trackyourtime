@@ -137,3 +137,14 @@ export const privateInitialProjectionRootSchema = z.object({
 }).strict();
 export const signedPrivateInitialProjectionRootSchema = z.object({ manifest: privateInitialProjectionRootSchema, signature: privateSignatureSchema }).strict();
 export type SignedPrivateInitialProjectionRoot = z.infer<typeof signedPrivateInitialProjectionRootSchema>;
+
+export const privateProjectionOwnerProofSchema = privateCombinedOwnerMigrationProofSchema.omit({ opaqueRecords: true }).extend({
+  v: z.literal(3), protocol: z.literal("trackyourtime-private-owner-proof-v3"),
+}).strict();
+export const signedPrivateProjectionOwnerProofSchema = z.object({ proof: privateProjectionOwnerProofSchema, signature: privateSignatureSchema }).strict();
+export type SignedPrivateProjectionOwnerProof = z.infer<typeof signedPrivateProjectionOwnerProofSchema>;
+export const privateProjectionPersonalProofSchema = privatePersonalMigrationProofSchema.extend({
+  v: z.literal(2), protocol: z.literal("trackyourtime-private-personal-proof-v2"),
+}).strict();
+export const signedPrivateProjectionPersonalProofSchema = z.object({ proof: privateProjectionPersonalProofSchema, signature: privateSignatureSchema }).strict();
+export type SignedPrivateProjectionPersonalProof = z.infer<typeof signedPrivateProjectionPersonalProofSchema>;

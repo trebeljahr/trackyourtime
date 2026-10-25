@@ -609,13 +609,32 @@ from unverified persisted/network objects; unlock invalidation revokes their use
 This primitive authenticates initial content, not global freshness after every
 device/checkpoint is lost. Durable mode/root pins remain required.
 
-This does not yet replace v2 storage, transport, file-content receipts or replica
+This does not yet replace v2 server storage, transport, receipts or replica
 bootstrap. Source correctness still needs the reopened original backup proof;
 owner signatures alone cannot authorize retirement. The future public migration
 should stage shared data in the owner's client and each creator's personal data
 in that creator's client. Bind staging to the current source/preparation/directory
 and preserve first accepted ciphertext on retries. Keep old raw/unsigned and
 server-staging entry points separately disabled when enabling new controllers.
+
+## Saved-file proofs for separated projections (internal)
+
+The new owner v3 content proof reopens a saved combined v2 file, compares both
+exact typed original datasets to the owner's branded shared/personal projections
+and signs their common root, own ciphertext digest, both own source checksums
+and exact encrypted file bytes. No complete opaque record archive, foreign
+personal IDs or foreign record counts are passed to this helper. The personal
+v2 proof similarly checks only that creator's favorites/integrations and refuses
+shared originals in a personal file. Both enforce current unlock/provenance,
+account/server/workspace binding and separate copies of caller-owned purpose keys.
+
+These statements are distinct from older v2 owner/v1 personal receipt protocols;
+no existing server endpoint accepts them yet. Their temporary plaintext-derived
+source checksums must retire at cutover. Personal approval does not claim to
+validate all of a member's shared originals. Client-side staging must preserve
+existing actor/business rights and obtain any additional required source/content
+attestations; the owner root alone cannot create authority to edit peers' work.
+Neither proof replaces complete operational backup/restore or permits deletion.
 
 ## Remaining rollout dependencies
 
